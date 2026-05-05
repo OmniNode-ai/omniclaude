@@ -64,7 +64,7 @@ skills:
     canonical_path: onex_run_node
     canonical_target: node_pr_review_bot
   delegate:
-    canonical_path: direct_topic_publish
+    canonical_path: runtime_skill_client
     canonical_target: node_delegation_orchestrator
 """.strip()
         + "\n",
@@ -201,7 +201,7 @@ class TestTopicPublishInventory:
         observed = {f.observed_path for f in findings}
         assert PATH_DIRECT_TOPIC_PUBLISH in observed
 
-    def test_delegate_direct_topic_publish_is_canonical(
+    def test_delegate_direct_topic_publish_is_flagged(
         self, tmp_path: Path, manifest_path: Path
     ) -> None:
         skill_dir = _write_skill(
@@ -212,6 +212,24 @@ class TestTopicPublishInventory:
                     "Publish to onex.cmd.omniclaude.delegate-task.v1 via the emit daemon.\n"
                     "The skill publishes via the omniclaude emit daemon (`EmitClient`).\n"
                     "emitted = emit_event('delegate.task', envelope)\n"
+                )
+            },
+        )
+        manifest = load_manifest(manifest_path)
+        findings = scan_skill(skill_dir, manifest["delegate"])
+        observed = {f.observed_path for f in findings}
+        assert PATH_DIRECT_TOPIC_PUBLISH in observed
+
+    def test_delegate_runtime_skill_client_is_canonical(
+        self, tmp_path: Path, manifest_path: Path
+    ) -> None:
+        skill_dir = _write_skill(
+            tmp_path,
+            "delegate",
+            {
+                "SKILL.md": (
+                    "Dispatch via LocalRuntimeSkillClient and ModelRuntimeSkillRequest "
+                    "through local runtime ingress.\n"
                 )
             },
         )
@@ -334,8 +352,8 @@ class TestCliInterface:
             "delegate",
             {
                 "SKILL.md": (
-                    "Publish to onex.cmd.omniclaude.delegate-task.v1 via the emit daemon.\n"
-                    "emitted = emit_event('delegate.task', envelope)\n"
+                    "Dispatch via LocalRuntimeSkillClient and ModelRuntimeSkillRequest "
+                    "through local runtime ingress.\n"
                 )
             },
         )

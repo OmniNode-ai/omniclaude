@@ -1,14 +1,13 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit test: every /onex:delegate invocation publishes to the delegate-task topic.
+"""Unit tests for /onex:delegate runtime ingress dispatch.
 
-DoD evidence for OMN-8746, OMN-10050:
-- classify_and_publish() calls emit_event("delegate.task", ...) with a
-  valid UUID correlation_id whenever the intent is delegatable.
-- Topic aligned with node_delegation_orchestrator contract (OMN-10050).
-- No fallback to delegation_orchestrator.py prose path.
-- emit_event is asserted via a mocked Kafka producer (emit_client_wrapper mock),
-  NOT a function-call mock on classify_and_publish itself.
+DoD evidence for OMN-10206:
+- classify_and_publish() builds a ModelRuntimeSkillRequest for
+  node_delegation_orchestrator whenever the intent is delegatable.
+- The skill uses LocalRuntimeSkillClient, not emit_event or EmitClient.
+- Recipient and wait options are threaded into the delegation payload for the
+  runtime-owned Pattern B broker path.
 """
 
 from __future__ import annotations
@@ -18,82 +17,83 @@ import sys
 import uuid
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
 
 import pytest
+from omnibase_core.models.dispatch import ModelDispatchBusTerminalResult
+from omnibase_core.models.runtime import (
+    ModelRuntimeSkillError,
+    ModelRuntimeSkillResponse,
+)
 
-# Ensure delegate/_lib/ and hooks/lib/ are on sys.path
 _TESTS_DIR = Path(__file__).parent
 _REPO_ROOT = _TESTS_DIR.parent.parent.parent.parent
 _DELEGATE_LIB = _REPO_ROOT / "plugins" / "onex" / "skills" / "delegate" / "_lib"
-_HOOKS_LIB = _REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"
 
-for _p in (_DELEGATE_LIB, _HOOKS_LIB):
-    if _p.exists() and str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-# Module-level keys to save/restore — only the modules we inject/reload.
-_MANAGED_KEYS = frozenset({"emit_client_wrapper", "run"})
+if _DELEGATE_LIB.exists() and str(_DELEGATE_LIB) not in sys.path:
+    sys.path.insert(0, str(_DELEGATE_LIB))
 
 
-def _make_delegate_run(emit_return: bool) -> tuple[ModuleType, MagicMock]:
-    """Load delegate run.py with a mocked emit_client_wrapper."""
-    mock_emit = MagicMock(return_value=emit_return)
-    mock_module = MagicMock()
-    mock_module.emit_event = mock_emit
+class FakeRuntimeSkillClient:
+    requests: list[object] = []
+    response: ModelRuntimeSkillResponse = ModelRuntimeSkillResponse(
+        ok=True,
+        command_name="node_delegation_orchestrator",
+        resolved_node_name="node_delegation_orchestrator",
+        contract_name="node_delegation_orchestrator",
+        command_topic="onex.cmd.omniclaude.delegate-task.v1",
+        terminal_event="onex.evt.omniclaude.delegation-completed.v1",
+        correlation_id=uuid.uuid4(),
+        dispatch_result=ModelDispatchBusTerminalResult(
+            status="completed",
+            correlation_id=uuid.uuid4(),
+            payload={"result": "queued"},
+        ),
+        output_payloads=[{"result": "queued"}],
+    )
 
-    # Snapshot only the managed keys
-    saved = {k: sys.modules.get(k) for k in _MANAGED_KEYS}
+    def dispatch_sync(self, request: object) -> ModelRuntimeSkillResponse:
+        self.requests.append(request)
+        return self.response.model_copy(
+            update={"correlation_id": request.correlation_id}
+        )
 
-    sys.modules["emit_client_wrapper"] = mock_module
+
+@pytest.fixture(autouse=True)
+def reset_fake_client() -> None:
+    FakeRuntimeSkillClient.requests = []
+    FakeRuntimeSkillClient.response = ModelRuntimeSkillResponse(
+        ok=True,
+        command_name="node_delegation_orchestrator",
+        resolved_node_name="node_delegation_orchestrator",
+        contract_name="node_delegation_orchestrator",
+        command_topic="onex.cmd.omniclaude.delegate-task.v1",
+        terminal_event="onex.evt.omniclaude.delegation-completed.v1",
+        correlation_id=uuid.uuid4(),
+        dispatch_result=ModelDispatchBusTerminalResult(
+            status="completed",
+            correlation_id=uuid.uuid4(),
+            payload={"result": "queued"},
+        ),
+        output_payloads=[{"result": "queued"}],
+    )
+
+
+@pytest.fixture
+def delegate_run() -> ModuleType:
     sys.modules.pop("run", None)
+    import run as delegate_run_module  # noqa: PLC0415
 
-    import run as delegate_run  # noqa: PLC0415
-
-    importlib.reload(delegate_run)
-
-    return delegate_run, mock_emit, saved
-
-
-def _restore(saved: dict) -> None:
-    """Restore only the managed keys in sys.modules."""
-    for k in _MANAGED_KEYS:
-        if saved[k] is None:
-            sys.modules.pop(k, None)
-        else:
-            sys.modules[k] = saved[k]
+    imported = importlib.reload(delegate_run_module)
+    imported.LocalRuntimeSkillClient = FakeRuntimeSkillClient
+    return imported
 
 
-@pytest.fixture
-def delegate_run_with_mock_emit() -> pytest.Generator[
-    tuple[ModuleType, MagicMock], None, None
-]:
-    """Load delegate run.py with a mocked emit_client_wrapper (returns True)."""
-    delegate_run, mock_emit, saved = _make_delegate_run(emit_return=True)
-    yield delegate_run, mock_emit
-    _restore(saved)
-
-
-@pytest.fixture
-def delegate_run_with_failing_emit() -> pytest.Generator[
-    tuple[ModuleType, MagicMock], None, None
-]:
-    """Load delegate run.py with an emit_client_wrapper that returns False."""
-    delegate_run, mock_emit, saved = _make_delegate_run(emit_return=False)
-    yield delegate_run, mock_emit
-    _restore(saved)
-
-
-class TestDelegateKafkaPublish:
-    """Assert that classify_and_publish publishes to Kafka — no prose fallback."""
-
-    def test_delegatable_prompt_publishes_typed_delegate_command(
+class TestDelegateRuntimeDispatch:
+    def test_delegatable_prompt_dispatches_runtime_skill_request(
         self,
-        delegate_run_with_mock_emit: tuple[ModuleType, MagicMock],
+        delegate_run: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A delegatable prompt must publish a ModelDelegationCommand-compatible payload."""
-        delegate_run, mock_emit = delegate_run_with_mock_emit
         monkeypatch.setenv("CLAUDE_SESSION_ID", "session-test-123")
         prompt = "write unit tests for handler_event_emitter.py"
 
@@ -101,67 +101,42 @@ class TestDelegateKafkaPublish:
             prompt=prompt,
             source_file="src/omniclaude/hooks/handler_event_emitter.py",
             max_tokens=4096,
+            recipient="codex",
+            wait_for_result=True,
+            working_directory="/tmp/work",
+            codex_sandbox_mode="workspace-write",
         )
 
         assert result.get("success") is True, f"Expected success, got: {result}"
+        assert result["command_name"] == "node_delegation_orchestrator"
+        assert result["dispatch_status"] == "completed"
 
-        mock_emit.assert_called_once()
-        call_args = mock_emit.call_args
-        assert call_args is not None
+        assert len(FakeRuntimeSkillClient.requests) == 1
+        request = FakeRuntimeSkillClient.requests[0]
+        assert request.command_name == "node_delegation_orchestrator"
+        assert request.correlation_id is not None
 
-        event_type = (
-            call_args.args[0] if call_args.args else call_args.kwargs.get("event_type")
+        payload = request.payload
+        assert payload["prompt"] == prompt
+        assert payload["session_id"] == "session-test-123"
+        assert payload["prompt_length"] == len(prompt)
+        assert payload["source_file_path"] == (
+            "src/omniclaude/hooks/handler_event_emitter.py"
         )
-        assert event_type == "delegate.task", (
-            f"Expected event_type='delegate.task', got {event_type!r}"
-        )
-
-        envelope = (
-            call_args.args[1]
-            if len(call_args.args) > 1
-            else call_args.kwargs.get("payload")
-        )
-        assert isinstance(envelope, dict), (
-            f"Expected dict envelope, got {type(envelope)}"
-        )
-        assert envelope.get("event_type") == "DelegateTaskCommand"
-
-        correlation_id = envelope.get("correlation_id") or (
-            envelope.get("payload", {}).get("correlation_id")
-        )
-        assert correlation_id is not None, "correlation_id missing from envelope"
-        try:
-            uuid.UUID(str(correlation_id))
-        except ValueError:
-            pytest.fail(f"correlation_id {correlation_id!r} is not a valid UUID")
-
-        from omnibase_core.models.events.model_event_envelope import (
-            ModelEventEnvelope,
-        )
+        assert payload["max_tokens"] == 4096
+        assert payload["recipient"] == "codex"
+        assert payload["wait_for_result"] is True
+        assert payload["working_directory"] == "/tmp/work"
+        assert payload["codex_sandbox_mode"] == "workspace-write"
 
         from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
             ModelDelegationCommand,
         )
 
-        validated_envelope = ModelEventEnvelope[object].model_validate(envelope)
-        assert validated_envelope.event_type == "DelegateTaskCommand"
-        assert validated_envelope.metadata.tags["intent"] == "test"
-        command = ModelDelegationCommand.model_validate(envelope["payload"])
+        command = ModelDelegationCommand.model_validate(payload)
         assert command.prompt == prompt
-        assert command.correlation_id == correlation_id
-        assert command.session_id == "session-test-123"
-        assert command.prompt_length == len(prompt)
-        assert str(command.source_file_path) == (
-            "src/omniclaude/hooks/handler_event_emitter.py"
-        )
-        assert command.max_tokens == 4096
 
-    def test_correlation_id_is_valid_uuid(
-        self, delegate_run_with_mock_emit: tuple[ModuleType, MagicMock]
-    ) -> None:
-        """correlation_id in published envelope must be a valid UUID4."""
-        delegate_run, _mock_emit = delegate_run_with_mock_emit
-
+    def test_correlation_id_is_valid_uuid(self, delegate_run: ModuleType) -> None:
         result = delegate_run.classify_and_publish(
             prompt="document the routing architecture",
         )
@@ -169,13 +144,11 @@ class TestDelegateKafkaPublish:
         assert result.get("success") is True, f"Expected success, got: {result}"
         corr = result.get("correlation_id")
         assert corr is not None
-        uuid.UUID(str(corr))  # raises ValueError if not a valid UUID
+        uuid.UUID(str(corr))
 
     def test_explicit_correlation_id_is_threaded_through(
-        self, delegate_run_with_mock_emit: tuple[ModuleType, MagicMock]
+        self, delegate_run: ModuleType
     ) -> None:
-        """When correlation_id is provided, it must appear in the Kafka envelope."""
-        delegate_run, mock_emit = delegate_run_with_mock_emit
         expected_corr = str(uuid.uuid4())
 
         result = delegate_run.classify_and_publish(
@@ -185,42 +158,39 @@ class TestDelegateKafkaPublish:
 
         assert result.get("success") is True, f"Expected success, got: {result}"
         assert result.get("correlation_id") == expected_corr
+        request = FakeRuntimeSkillClient.requests[0]
+        assert str(request.correlation_id) == expected_corr
+        assert request.payload["correlation_id"] == expected_corr
 
-        call_args = mock_emit.call_args
-        envelope = (
-            call_args.args[1]
-            if len(call_args.args) > 1
-            else call_args.kwargs.get("payload")
-        )
-        published_corr = envelope.get("correlation_id") or (
-            envelope.get("payload", {}).get("correlation_id")
-        )
-        assert published_corr == expected_corr, (
-            f"Expected correlation_id={expected_corr!r} in envelope, got {published_corr!r}"
-        )
-
-    def test_non_delegatable_intent_does_not_publish(
-        self, delegate_run_with_mock_emit: tuple[ModuleType, MagicMock]
+    def test_non_delegatable_intent_does_not_dispatch(
+        self, delegate_run: ModuleType
     ) -> None:
-        """Non-delegatable prompts must NOT call emit_event."""
-        delegate_run, mock_emit = delegate_run_with_mock_emit
-
         result = delegate_run.classify_and_publish(
             prompt="debug the database connection failure",
         )
 
-        mock_emit.assert_not_called()
+        assert FakeRuntimeSkillClient.requests == []
         assert result.get("success") is False
 
-    def test_emit_failure_returns_error_result(
-        self, delegate_run_with_failing_emit: tuple[ModuleType, MagicMock]
+    def test_runtime_failure_returns_error_result(
+        self, delegate_run: ModuleType
     ) -> None:
-        """When emit_event returns falsy, result must be success=False."""
-        delegate_run, _mock_emit = delegate_run_with_failing_emit
+        FakeRuntimeSkillClient.response = ModelRuntimeSkillResponse(
+            ok=False,
+            command_name="node_delegation_orchestrator",
+            correlation_id=uuid.uuid4(),
+            error=ModelRuntimeSkillError(
+                code="runtime_unavailable",
+                message="runtime socket unavailable",
+                retryable=True,
+            ),
+        )
 
         result = delegate_run.classify_and_publish(
             prompt="write unit tests for verify_registration.py",
         )
 
         assert result.get("success") is False
-        assert "error" in result
+        assert result["error"] == "runtime socket unavailable"
+        assert result["error_code"] == "runtime_unavailable"
+        assert result["retryable"] is True

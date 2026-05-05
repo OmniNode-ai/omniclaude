@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Delegate skill — classify prompt and publish to delegate-task topic.
+"""Delegate skill - classify prompt and dispatch through local runtime ingress.
 
 Invoked when the user runs /onex:delegate.  Classifies the prompt via
-TaskClassifier, wraps it in a ModelEventEnvelope-compatible dict, and publishes
-to onex.cmd.omniclaude.delegate-task.v1 via the omniclaude emit daemon.
+TaskClassifier, wraps it in a ModelRuntimeSkillRequest, and sends it to the
+runtime-owned Pattern B broker path via LocalRuntimeSkillClient.
 
-Wire schema (plain dict — runtime-side validation by ModelDelegationCommand):
+Wire schema (plain dict - runtime-side validation by ModelDelegationCommand):
   {
-    "payload": {
-      "prompt": str,
-      "correlation_id": str (UUID4),
-      "session_id": str,
-      "prompt_length": int,
-      "source_file_path": str | None,
-      "max_tokens": int,
-    },
-    "correlation_id": str,
-    "event_type": "DelegateTaskCommand",
-    "source_tool": "omniclaude.delegate-skill",
+    "prompt": str,
+    "correlation_id": str (UUID4),
+    "session_id": str,
+    "prompt_length": int,
+    "source_file_path": str | None,
+    "max_tokens": int,
+    "recipient": "auto" | "claude" | "opencode" | "codex",
+    "wait_for_result": bool,
+    "working_directory": str | None,
+    "codex_sandbox_mode": str | None,
   }
 """
 
@@ -28,8 +27,8 @@ from __future__ import annotations
 import os
 import sys
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 # ---------------------------------------------------------------------------
 # sys.path setup
@@ -56,9 +55,19 @@ except ImportError:
     _HAS_CLASSIFIER = False
 
 try:
+    from omnibase_core.models.runtime import ModelRuntimeSkillRequest
+    from omnibase_infra.clients.runtime_skill_client import LocalRuntimeSkillClient
+
+    _RUNTIME_IMPORT_ERROR: ImportError | None = None
+except ImportError as exc:
+    ModelRuntimeSkillRequest = None  # type: ignore[assignment]
+    LocalRuntimeSkillClient = None  # type: ignore[assignment]
+    _RUNTIME_IMPORT_ERROR = exc
+
+try:
     from omniclaude.hooks.topics import TopicBase as _TopicBase
 
-    # Use DELEGATE_TASK — the canonical topic that node_delegation_orchestrator
+    # Use DELEGATE_TASK - the canonical topic that node_delegation_orchestrator
     # subscribes to (contract.yaml:39). Aligned in OMN-10050.
     _DELEGATION_REQUEST_TOPIC: str = _TopicBase.DELEGATE_TASK
 except (ImportError, AttributeError):
@@ -68,8 +77,31 @@ DELEGATABLE: frozenset[object] = (
     TaskClassifier.DELEGATABLE_INTENTS if _HAS_CLASSIFIER else frozenset()
 )
 
+_DELEGATION_COMMAND_NAME = "node_delegation_orchestrator"
+
+
+def _resolve_correlation_id(correlation_id: str | None) -> uuid.UUID:
+    raw_correlation_id = correlation_id or os.environ.get("ONEX_RUN_ID")
+    if raw_correlation_id:
+        try:
+            return uuid.UUID(str(raw_correlation_id))
+        except ValueError:
+            pass
+    return uuid.uuid4()
+
+
+def _runtime_import_error(exc: ImportError) -> dict:
+    return {
+        "success": False,
+        "error": (
+            "Runtime skill client unavailable - install omnibase_core and "
+            f"omnibase_infra in the plugin environment: {exc}"
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
-# Core publish function
+# Core dispatch function
 # ---------------------------------------------------------------------------
 
 
@@ -78,16 +110,22 @@ def classify_and_publish(
     source_file: str | None = None,
     max_tokens: int = 2048,
     correlation_id: str | None = None,
+    recipient: Literal["auto", "claude", "opencode", "codex"] = "auto",
+    wait_for_result: bool = False,
+    working_directory: str | None = None,
+    codex_sandbox_mode: Literal["read-only", "workspace-write", "danger-full-access"]
+    | None = None,
+    timeout_ms: int = 300_000,
 ) -> dict:
-    """Classify *prompt* and publish a delegation request via the emit daemon.
+    """Classify *prompt* and dispatch a delegation request through runtime ingress.
 
-    Returns a result dict with keys: success, correlation_id, task_type, topic.
+    Returns a result dict with keys: success, correlation_id, task_type, command_name.
     On failure, returns success=False with an error message.
     """
     if not _HAS_CLASSIFIER:
         return {
             "success": False,
-            "error": "TaskClassifier unavailable — omniclaude package not on sys.path",
+            "error": "TaskClassifier unavailable - omniclaude package not on sys.path",
         }
 
     classifier = TaskClassifier()
@@ -103,10 +141,8 @@ def classify_and_publish(
             ),
         }
 
-    correlation_id = (
-        correlation_id or os.environ.get("ONEX_RUN_ID") or str(uuid.uuid4())
-    )
-    now_iso = datetime.now(UTC).isoformat()
+    correlation_uuid = _resolve_correlation_id(correlation_id)
+    correlation_id = str(correlation_uuid)
 
     delegation_payload = {
         "prompt": prompt,
@@ -115,42 +151,53 @@ def classify_and_publish(
         "prompt_length": len(prompt),
         "source_file_path": source_file,
         "max_tokens": max_tokens,
+        "recipient": recipient,
+        "wait_for_result": wait_for_result,
+        "working_directory": working_directory,
+        "codex_sandbox_mode": codex_sandbox_mode,
     }
 
-    envelope = {
-        "payload": delegation_payload,
-        "correlation_id": correlation_id,
-        "event_type": "DelegateTaskCommand",
-        "source_tool": "omniclaude.delegate-skill",
-        "metadata": {
-            "tags": {
-                "emitted_at": now_iso,
-                "intent": intent.value,
-            },
-        },
-    }
+    if (
+        _RUNTIME_IMPORT_ERROR is not None
+        or ModelRuntimeSkillRequest is None
+        or LocalRuntimeSkillClient is None
+    ):
+        return _runtime_import_error(
+            _RUNTIME_IMPORT_ERROR or ImportError("runtime client import failed")
+        )
 
-    emitted = False
-    try:
-        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
+    request = ModelRuntimeSkillRequest(
+        command_name=_DELEGATION_COMMAND_NAME,
+        payload=delegation_payload,
+        correlation_id=correlation_uuid,
+        timeout_ms=timeout_ms,
+    )
+    response = LocalRuntimeSkillClient().dispatch_sync(request)
 
-        emitted = bool(emit_event("delegate.task", envelope))
-    except ImportError:
-        pass
-
-    if not emitted:
+    if not response.ok:
+        error = response.error
         return {
             "success": False,
-            "error": "emit_event returned falsy — delegation request not queued",
+            "error": error.message if error else "runtime dispatch failed",
+            "error_code": error.code if error else "dispatch_error",
+            "retryable": error.retryable if error else False,
             "correlation_id": correlation_id,
-            "topic": _DELEGATION_REQUEST_TOPIC,
+            "command_name": _DELEGATION_COMMAND_NAME,
+            "topic": response.command_topic or _DELEGATION_REQUEST_TOPIC,
         }
 
     return {
         "success": True,
         "correlation_id": correlation_id,
         "task_type": intent.value,
-        "topic": _DELEGATION_REQUEST_TOPIC,
+        "command_name": response.command_name,
+        "resolved_node_name": response.resolved_node_name,
+        "topic": response.command_topic or _DELEGATION_REQUEST_TOPIC,
+        "terminal_event": response.terminal_event,
+        "dispatch_status": response.dispatch_result.status
+        if response.dispatch_result
+        else None,
+        "output_payloads": response.output_payloads,
     }
 
 
@@ -160,17 +207,30 @@ def classify_and_publish(
 
 
 def main() -> None:
-    """CLI entry point: python run.py <prompt> [--source-file <path>] [--max-tokens <n>]"""
+    """CLI entry point for /onex:delegate."""
     import argparse
     import json
 
     parser = argparse.ArgumentParser(
-        description="Delegate skill — publish to delegation topic"
+        description="Delegate skill - dispatch through local runtime ingress"
     )
     parser.add_argument("prompt", nargs="+", help="The task to delegate")
     parser.add_argument("--source-file", default=None)
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--correlation-id", default=None)
+    parser.add_argument(
+        "--recipient",
+        choices=("auto", "claude", "opencode", "codex"),
+        default="auto",
+    )
+    parser.add_argument("--wait", action="store_true")
+    parser.add_argument("--working-directory", default=None)
+    parser.add_argument(
+        "--codex-sandbox-mode",
+        choices=("read-only", "workspace-write", "danger-full-access"),
+        default=None,
+    )
+    parser.add_argument("--timeout-ms", type=int, default=300_000)
     args = parser.parse_args()
 
     prompt = " ".join(args.prompt)
@@ -179,15 +239,21 @@ def main() -> None:
         source_file=args.source_file,
         max_tokens=args.max_tokens,
         correlation_id=args.correlation_id,
+        recipient=args.recipient,
+        wait_for_result=args.wait,
+        working_directory=args.working_directory,
+        codex_sandbox_mode=args.codex_sandbox_mode,
+        timeout_ms=args.timeout_ms,
     )
 
     print(json.dumps(result, indent=2))
 
     if result.get("success"):
         print(
-            f"\nDelegation queued — correlation_id={result['correlation_id']}\n"
+            f"\nDelegation dispatched - correlation_id={result['correlation_id']}\n"
             f"task_type={result['task_type']}\n"
-            f"topic={result['topic']}",
+            f"command_name={result['command_name']}\n"
+            f"dispatch_status={result['dispatch_status']}",
             file=sys.stderr,
         )
     else:

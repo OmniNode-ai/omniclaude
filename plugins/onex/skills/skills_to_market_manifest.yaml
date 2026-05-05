@@ -32,6 +32,6 @@ skills:
     notes: Legacy direct workflow_runner.run_review references remain advisory until the skill routes only through run-node.
 
   delegate:
-    canonical_path: direct_topic_publish
+    canonical_path: runtime_skill_client
     canonical_target: node_delegation_orchestrator
-    notes: Delegate is an event-bus command producer for node_delegation_orchestrator, not a run-node shim.
+    notes: Delegate dispatches to node_delegation_orchestrator through LocalRuntimeSkillClient and the runtime-owned Pattern B broker path; direct emit-daemon publish is legacy-only.

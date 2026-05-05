@@ -16,6 +16,7 @@ Current path classes:
   - repo-local omnimarket runtime path references
   - direct handler imports / ``run_review(...)`` calls
   - direct Kafka / event-bus publish references in skill surfaces
+  - canonical local runtime skill client references
 
 The source of truth is ``plugins/onex/skills/skills_to_market_manifest.yaml``.
 Each manifest entry declares the canonical path the skill should converge on.
@@ -62,6 +63,7 @@ class EnumPathKind(StrEnum):
     DIRECT_HANDLER_IMPORT = "direct_handler_import"
     DIRECT_HANDLER_CALL = "direct_handler_call"
     DIRECT_TOPIC_PUBLISH = "direct_topic_publish"
+    RUNTIME_SKILL_CLIENT = "runtime_skill_client"
 
 
 SEVERITY_WARNING = EnumSeverity.WARNING
@@ -76,6 +78,7 @@ PATH_REPO_LOCAL_RUNTIME_PATH = EnumPathKind.REPO_LOCAL_RUNTIME_PATH
 PATH_DIRECT_HANDLER_IMPORT = EnumPathKind.DIRECT_HANDLER_IMPORT
 PATH_DIRECT_HANDLER_CALL = EnumPathKind.DIRECT_HANDLER_CALL
 PATH_DIRECT_TOPIC_PUBLISH = EnumPathKind.DIRECT_TOPIC_PUBLISH
+PATH_RUNTIME_SKILL_CLIENT = EnumPathKind.RUNTIME_SKILL_CLIENT
 
 DEFAULT_MANIFEST = Path("plugins/onex/skills/skills_to_market_manifest.yaml")
 DEFAULT_SKILLS_ROOT = Path("plugins/onex/skills")
@@ -181,6 +184,14 @@ PATH_PATTERNS: tuple[PathPattern, ...] = (
             "Avoid direct WorkflowRunner/handler invocation in skill surfaces; route "
             "through the manifest-declared canonical dispatch path."
         ),
+    ),
+    PathPattern(
+        path_kind=PATH_RUNTIME_SKILL_CLIENT,
+        regex=re.compile(
+            r"\b(?:LocalRuntimeSkillClient|ModelRuntimeSkillRequest|runtime skill client|runtime ingress)\b",
+            re.IGNORECASE,
+        ),
+        suggestion="Keep runtime-backed skills on the shared LocalRuntimeSkillClient ingress path.",
     ),
     PathPattern(
         path_kind=PATH_DIRECT_TOPIC_PUBLISH,

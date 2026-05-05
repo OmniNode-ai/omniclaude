@@ -1,6 +1,6 @@
 ---
-version: 1.0.2
-description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps a typed command envelope, publishes to delegate-task topic. Requires Kafka to be reachable — no local prose fallback.
+version: 1.0.3
+description: Delegate tasks to the ONEX node-based delegation pipeline through local runtime ingress and the Pattern B broker. Classifies prompt, wraps a typed runtime request, and lets the runtime own event-bus dispatch and terminal correlation.
 mode: full
 level: advanced
 debug: true
@@ -15,21 +15,31 @@ args:
   - name: --max-tokens
     description: "Maximum tokens for the LLM response (default: 2048)"
     required: false
+  - name: --recipient
+    description: "Target CLI recipient: auto, claude, opencode, or codex"
+    required: false
+  - name: --wait
+    description: "Request runtime terminal-result correlation instead of fire-and-forget routing"
+    required: false
 ---
 
 # Delegate
 
-Thin skill that classifies a user prompt and publishes a typed delegation command to the ONEX
-runtime event bus. The runtime pipeline handles routing, LLM inference, quality gating, and
-baseline comparison — this skill only classifies and publishes.
+Thin skill that classifies a user prompt and submits a typed runtime request to
+`node_delegation_orchestrator`. The skill does not publish directly to Kafka and
+does not depend on the Claude hook emit daemon. Runtime ingress and the Pattern B
+broker own route resolution, event-bus dispatch, terminal-result correlation,
+serialization, and transport errors.
 
 ## How It Works
 
-1. Parse the user's prompt
-2. Classify the task type using the existing `TaskClassifier` (heuristic keyword matching)
-3. Construct a `ModelDelegationCommand`-compatible payload (plain dict, no infrastructure model imports)
-4. Publish to `onex.cmd.omniclaude.delegate-task.v1` via the emit daemon
-5. Return immediately with the correlation ID
+1. Parse the user's prompt.
+2. Classify the task type using `TaskClassifier`.
+3. Construct a `ModelDelegationCommand`-compatible payload.
+4. Submit `ModelRuntimeSkillRequest(command_name="node_delegation_orchestrator")`
+   through `LocalRuntimeSkillClient`.
+5. Return the runtime response with the correlation ID, broker dispatch status,
+   resolved node, command topic, and terminal event when available.
 
 ## Task Types
 
@@ -41,13 +51,9 @@ Classification maps to three delegatable intents from `TaskClassifier`:
 | `document` | document, docstring, README, explain | "add docstrings to the handler module" |
 | `research` | what, how, explain, investigate, analyze | "what does the routing reducer do?" |
 
-Non-delegatable intents (debug, refactor, database, unknown) are rejected with a message
-explaining that only test/document/research tasks can be delegated.
+Non-delegatable intents are rejected before runtime dispatch.
 
-## Wire Schema
-
-The published payload is a plain dict compatible with `ModelDelegationCommand`.
-Runtime-side validation occurs on the consuming `node_delegation_orchestrator`.
+## Runtime Request Payload
 
 ```json
 {
@@ -56,162 +62,48 @@ Runtime-side validation occurs on the consuming `node_delegation_orchestrator`.
   "session_id": "session-abc123",
   "prompt_length": 43,
   "source_file_path": "/path/to/verify_registration.py",
-  "max_tokens": 2048
+  "max_tokens": 2048,
+  "recipient": "auto",
+  "wait_for_result": false,
+  "working_directory": null,
+  "codex_sandbox_mode": null
 }
 ```
 
-## Kafka Topic
+The payload remains compatible with `ModelDelegationCommand`; runtime-side
+validation occurs on the consuming `node_delegation_orchestrator`.
 
-- **Command topic**: `onex.cmd.omniclaude.delegate-task.v1`
-- **Producer**: this skill (via omniclaude emit daemon)
-- **Consumer**: `node_delegation_orchestrator` (omniclaude runtime)
+## Runtime Path
+
+- **Skill client**: `LocalRuntimeSkillClient`
+- **Request model**: `ModelRuntimeSkillRequest`
+- **Command name**: `node_delegation_orchestrator`
+- **Runtime ingress**: `ONEX_LOCAL_RUNTIME_SOCKET_PATH` or `/tmp/onex-runtime.sock`
+- **Broker route**: Pattern B broker resolves the command topic from the node contract
+- **Legacy topic**: `onex.cmd.omniclaude.delegate-task.v1` is runtime-owned, not skill-owned
 
 ## Usage
 
 ```
 /delegate write unit tests for verify_registration.py
 /delegate --source-file src/omniclaude/hooks/handler_event_emitter.py add docstrings
-/delegate --max-tokens 4096 analyze the routing architecture
+/delegate --max-tokens 4096 --recipient codex analyze the routing architecture
+/delegate --wait research the cross-CLI bridge terminal-result flow
 ```
 
 ## What This Skill Does NOT Do
 
-- Wait for the delegation result (fire-and-forget)
+- Publish through the legacy hook emission client
+- Require the Claude hook emit daemon
+- Open a Kafka producer or consumer
+- Run skill-local terminal-result waits
 - Call any LLM directly
 - Run quality gates
-- Import omnibase_infra models (wire schema is a plain dict)
-- Contain business logic beyond classification + publish
-
-## Emit Mechanism
-
-The skill publishes via the omniclaude emit daemon (`EmitClient`), the same mechanism
-used by all hook event emitters. The emit daemon handles Kafka producer lifecycle,
-serialization, and circuit breaking.
-
-To publish from a skill script:
-
-```python
-#!/usr/bin/env python3
-import os
-import sys
-import uuid
-from datetime import UTC, datetime
-from pathlib import Path
-
-# Add plugin hooks/lib to path for emit_client_wrapper (no omnibase_infra dep)
-_HOOKS_LIB = Path(__file__).parent.parent.parent / "hooks" / "lib"
-if _HOOKS_LIB.exists() and str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
-
-# Add src/ to path for omniclaude imports
-_SRC_PATH = Path(__file__).parent.parent.parent.parent.parent / "src"
-if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(_SRC_PATH))
-
-from omniclaude.lib.task_classifier import TaskClassifier, TaskIntent
-
-DELEGATABLE = frozenset({TaskIntent.TEST, TaskIntent.DOCUMENT, TaskIntent.RESEARCH})
-
-
-def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens: int = 2048) -> dict:
-    """Classify prompt and publish a delegation request via the emit daemon.
-
-    The payload is wrapped in a ModelEventEnvelope-compatible dict so the
-    runtime Kafka consumer (event_bus_subcontract_wiring) can deserialize it
-    with ModelEventEnvelope[object].model_validate(data).
-    """
-    classifier = TaskClassifier()
-    result = classifier.classify(prompt)
-
-    intent = result.primary_intent
-    if intent not in DELEGATABLE:
-        return {
-            "success": False,
-            "error": f"Task type '{intent.value}' is not delegatable. Only test/document/research tasks can be delegated.",
-        }
-
-    correlation_id = str(uuid.uuid4())
-
-    # Inner payload: ModelDelegationCommand-compatible command fields.
-    delegation_payload = {
-        "prompt": prompt,
-        "correlation_id": correlation_id,
-        "session_id": os.environ.get("CLAUDE_SESSION_ID") or "",
-        "prompt_length": len(prompt),
-        "source_file_path": source_file,
-        "max_tokens": max_tokens,
-    }
-
-    # Outer envelope: ModelEventEnvelope-compatible structure.
-    # The daemon publishes this dict as the raw Kafka message value.
-    # The runtime consumer calls ModelEventEnvelope[object].model_validate()
-    # on it. Registry validation requires both 'payload' and 'correlation_id'.
-    envelope = {
-        "payload": delegation_payload,
-        "correlation_id": correlation_id,
-        "event_type": "DelegateTaskCommand",
-        "source_tool": "omniclaude.delegate-skill",
-        "metadata": {
-            "tags": {
-                "emitted_at": datetime.now(UTC).isoformat(),
-                "intent": intent.value,
-            },
-        },
-    }
-
-    # Publish via emit daemon.
-    # The emit daemon is started by the hook system. If unavailable, the request
-    # is dropped — this skill is fire-and-forget with no local fallback.
-    emitted = False
-    try:
-        from emit_client_wrapper import emit_event
-        emitted = emit_event("delegate.task", envelope)
-    except ImportError:
-        pass
-
-    if not emitted:
-        return {
-            "success": False,
-            "error": "emit_event returned falsy — delegation request not queued",
-            "correlation_id": correlation_id,
-            "topic": "onex.cmd.omniclaude.delegate-task.v1",
-        }
-
-    return {
-        "success": True,
-        "correlation_id": correlation_id,
-        "task_type": intent.value,
-        "topic": "onex.cmd.omniclaude.delegate-task.v1",
-    }
-```
-
-## Pipeline Architecture
-
-```
-/delegate "write tests for X"
-  |
-  v
-TaskClassifier.classify() --> task_type = "test"
-  |
-  v
-Construct plain dict envelope
-  |
-  v
-Publish to onex.cmd.omniclaude.delegate-task.v1
-  |
-  v
-[RUNTIME SIDE - not in this skill]
-node_delegation_orchestrator --> node_delegation_routing_reducer
-  --> node_llm_inference_effect --> node_delegation_quality_gate_reducer
-  --> node_baseline_comparison_compute
-  |
-  v
-onex.evt.omniclaude.delegation-completed.v1 --> omnidash
-```
 
 ## Related
 
 - **Bridge implementation**: `plugins/onex/skills/delegate/_lib/run.py`
 - **TaskClassifier**: `src/omniclaude/lib/task_classifier.py`
-- **Topics**: `src/omniclaude/hooks/topics.py` (`TopicBase.DELEGATE_TASK`)
-- **Architecture**: `docs/architecture/DELEGATION_ARCHITECTURE.md`
+- **Runtime client**: `omnibase_infra.clients.runtime_skill_client.LocalRuntimeSkillClient`
+- **Request model**: `omnibase_core.models.runtime.ModelRuntimeSkillRequest`
+- **Orchestrator contract**: `src/omniclaude/nodes/node_delegation_orchestrator/contract.yaml`
