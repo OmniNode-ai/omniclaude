@@ -129,21 +129,74 @@ def group_by_label(tickets):
 Tickets not matching Rule 1 or 2 are presented to the user for manual grouping or
 individual epic creation. Never auto-create a single-ticket epic.
 
-### Phase 3: Classify Auto-Create vs Human Gate
+### Phase 3: Classify Auto-Create vs Human Gate vs Structural Violation
+
+Each proposed group is run through the structural guards in
+`omniclaude.epic_org.guards` (canonical implementation, OMN-10544). The guard
+returns one of three verdicts:
 
 ```
-Auto-create:  group size ≥ 2 AND single repo AND clear naming prefix
-Human gate:   anything else (ambiguous repo, single ticket, cross-repo mix)
+auto_create:           group size ≥ 2 AND single repo AND clear naming prefix
+human_gate:            anything else (ambiguous repo, single ticket, cross-repo mix)
+structural_violation:  every member of the group is itself an epic — REFUSED
 ```
+
+`structural_violation` MUST cause the skill to refuse the group entirely. It
+is not a "flag and then proceed" verdict — auto-creating a parent over
+existing epics is structurally wrong. Detection rule:
+
+* every member has a Linear `Epic` label, OR
+* every member's title starts with `[Epic]` or `Epic:` (after stripping a
+  leading `[<repo>]` bracket if present).
+
+Algorithm (must be invoked exactly as `classify_proposed_group` from
+`omniclaude.epic_org.guards` — do not re-implement inline):
+
+```python
+from omniclaude.epic_org.guards import classify_proposed_group
+from omniclaude.epic_org.models import EnumProposedGroupVerdict
+
+verdict = classify_proposed_group(group)
+if verdict.verdict is EnumProposedGroupVerdict.STRUCTURAL_VIOLATION:
+    # REFUSE — emit under report.structural_violations
+    # do NOT auto-create, do NOT prompt the user to override
+    ...
+```
+
+### Phase 3b: Secondary clustering pass within each group
+
+For every group that survives the structural-violation refusal, run
+`secondary_cluster_pass` over its members (same module). This surfaces
+sub-cohorts the primary prefix/label rules missed:
+
+* `phase` — titles containing `Phase <N>` (e.g. `OmniStudio Phase 1`).
+* `prefix-nn` — short ALL-CAPS prefix + dash + digit (e.g. `SEAM-1`,
+  `DB-SPLIT-3`).
+* `multi-word-prefix` — hyphenated multi-word prefix (e.g. `Cross-CLI`).
+
+Sub-cohorts surfaced inside a group whose parent verdict is `human_gate`
+are emitted as separate proposed groups in the report, but they are NOT
+auto-applied — they inherit the parent's human-review requirement.
 
 ### Phase 4: Present Proposed Groupings
 
-Always show the full plan before creating anything:
+Always show the full plan before creating anything. The report MUST include
+a top-level `structural_violations` block whenever the guard returned that
+verdict for any group.
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Epic Organization Proposal
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STRUCTURAL VIOLATIONS (refused — no action taken):
+
+⛔ EPIC  (10 tickets — all members are themselves epics)
+   OMN-10482, OMN-8286, OMN-5083, OMN-9469, OMN-2223, OMN-3823,
+   OMN-3827, OMN-8771, OMN-9801, OMN-5257
+   → Reason: cannot create a parent over existing epics.
+   → Action: leave as top-level epics; group manually if a meta-initiative
+     is genuinely needed.
 
 AUTO-CREATE (obvious groupings):
 
@@ -160,9 +213,11 @@ AUTO-CREATE (obvious groupings):
 
 NEEDS HUMAN INPUT (ambiguous groupings):
 
-❓ 4 uncategorized omniintelligence tickets (no clear prefix)
-   OMN-1452, OMN-1578, OMN-1583, OMN-1584
-   → Options: (a) add to existing OMN-2353 epic  (b) new epic  (c) leave unparented
+❓ ambiguous  (13 tickets) — secondary clustering pass surfaced 3 sub-cohorts:
+   • OmniStudio Phase (4 tickets, pattern=phase): OMN-9908, OMN-9909, OMN-9910, OMN-9911
+   • SEAM (4 tickets, pattern=prefix-nn): OMN-10170, OMN-10172, OMN-10174, OMN-10176
+   • Cross-CLI (3 tickets, pattern=multi-word-prefix): OMN-10135, OMN-10152, OMN-10179
+   → Each sub-cohort proposed as a separate group; not auto-applied.
 
 ❓ 2 cross-repo tickets
    OMN-2166 (omninode_infra), OMN-2167 (onex_change_control)
@@ -171,6 +226,29 @@ NEEDS HUMAN INPUT (ambiguous groupings):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Proceed? [y/n/edit]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+The on-disk EpicOrgReport YAML must include the corresponding sections:
+
+```yaml
+structural_violations:
+  - group: "EPIC"
+    count: 10
+    tickets: ["OMN-10482", "OMN-8286", ...]
+    reason: "All 10 members are themselves epics. Refused per OMN-10544 guard."
+proposed_epic_groups:
+  - group: "ambiguous"
+    count: 13
+    sub_cohorts:
+      - cohort_key: "OmniStudio Phase"
+        pattern: "phase"
+        members: ["OMN-9908", "OMN-9909", "OMN-9910", "OMN-9911"]
+      - cohort_key: "SEAM"
+        pattern: "prefix-nn"
+        members: ["OMN-10170", "OMN-10172", "OMN-10174", "OMN-10176"]
+      - cohort_key: "Cross-CLI"
+        pattern: "multi-word-prefix"
+        members: ["OMN-10135", "OMN-10152", "OMN-10179"]
 ```
 
 **If user says `y`:** proceed with auto-create only; leave ambiguous for next step.
