@@ -250,6 +250,15 @@ def orchestrate(
     """
     effective_run_id = run_id or _generate_run_id()
     tickets = parse_ticket_ids(ticket_ids)
+    if not tickets:
+        log_event(
+            "orchestration_rejected",
+            run_id=effective_run_id,
+            epic_id=epic_id,
+            reason="no_ticket_ids",
+        )
+        raise ValueError("No ticket IDs provided for orchestration")
+
     groups = group_by_repo(tickets, repo_hints)
 
     log_event(

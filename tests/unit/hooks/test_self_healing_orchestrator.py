@@ -242,6 +242,25 @@ class TestOrchestrate:
         with pytest.raises(ValueError):
             orchestrate(["NOT-A-TICKET"])
 
+    def test_empty_ticket_list_raises_and_logs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
+            with pytest.raises(ValueError, match="No ticket IDs provided"):
+                orchestrate([], run_id="test-run-empty")
+
+            log_files = list(Path(tmpdir, "dispatch-log").glob("*.ndjson"))
+            assert log_files, "Expected rejected orchestration to be logged"
+            entries = [
+                json.loads(line)
+                for line in log_files[0].read_text().splitlines()
+                if line
+            ]
+        assert entries[0]["event"] == "orchestration_rejected"
+        assert entries[0]["run_id"] == "test-run-empty"
+        assert entries[0]["reason"] == "no_ticket_ids"
+
 
 @pytest.mark.unit
 class TestLogEvent:
