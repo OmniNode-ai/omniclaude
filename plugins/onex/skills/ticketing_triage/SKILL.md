@@ -297,7 +297,7 @@ list. A truncated report silently drops work and is a bug. Phrases like
 the emitted YAML.
 
 Before writing the report, assert these invariants and fail loudly if any list
-is shorter than its corresponding summary count.
+length does not exactly match its corresponding summary count.
 
 Print summary to stdout:
 
