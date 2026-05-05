@@ -75,12 +75,12 @@ class TestDodEnforcementHardMode:
         assert result.returncode == 0
 
     def test_hard_mode_passes_with_valid_evidence(self) -> None:
-        """Hard mode exits 0 when evidence exists and passes."""
+        """Hard mode exits 0 when ModelDodReceipt has status=PASS."""
         with tempfile.TemporaryDirectory() as tmpdir:
             evidence_dir = Path(tmpdir) / "evidence" / "OMN-9999"
             evidence_dir.mkdir(parents=True)
             receipt = evidence_dir / "dod_report.json"
-            receipt.write_text(json.dumps({"result": {"failed": 0, "passed": 3}}))
+            receipt.write_text(json.dumps({"status": "PASS"}))
 
             result = _run_check(
                 enforcement="hard",
@@ -93,12 +93,12 @@ class TestDodEnforcementHardMode:
             )
 
     def test_hard_mode_fails_with_failed_evidence(self) -> None:
-        """Hard mode exits 1 when evidence has failed checks."""
+        """Hard mode exits 1 when ModelDodReceipt has status=FAIL."""
         with tempfile.TemporaryDirectory() as tmpdir:
             evidence_dir = Path(tmpdir) / "evidence" / "OMN-9999"
             evidence_dir.mkdir(parents=True)
             receipt = evidence_dir / "dod_report.json"
-            receipt.write_text(json.dumps({"result": {"failed": 2, "passed": 1}}))
+            receipt.write_text(json.dumps({"status": "FAIL"}))
 
             result = _run_check(
                 enforcement="hard",
@@ -107,6 +107,43 @@ class TestDodEnforcementHardMode:
             )
             assert result.returncode == 1, (
                 f"Expected exit 1 with failed evidence, got {result.returncode}. "
+                f"stderr={result.stderr}"
+            )
+
+    def test_hard_mode_fails_with_legacy_schema(self) -> None:
+        """Hard mode exits 1 when receipt uses pre-OMN-9792 schema."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            evidence_dir = Path(tmpdir) / "evidence" / "OMN-9999"
+            evidence_dir.mkdir(parents=True)
+            receipt = evidence_dir / "dod_report.json"
+            # Legacy: {result: {failed, passed}} with no top-level status.
+            receipt.write_text(json.dumps({"result": {"failed": 0, "passed": 3}}))
+
+            result = _run_check(
+                enforcement="hard",
+                branch="jonah/omn-9999-test-branch",
+                evidence_dir=tmpdir,
+            )
+            assert result.returncode == 1, (
+                f"Expected exit 1 for legacy schema, got {result.returncode}. "
+                f"stderr={result.stderr} stdout={result.stdout}"
+            )
+
+    def test_hard_mode_fails_with_status_advisory(self) -> None:
+        """Hard mode exits 1 when status is ADVISORY (fail-closed, OMN-10541)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            evidence_dir = Path(tmpdir) / "evidence" / "OMN-9999"
+            evidence_dir.mkdir(parents=True)
+            receipt = evidence_dir / "dod_report.json"
+            receipt.write_text(json.dumps({"status": "ADVISORY"}))
+
+            result = _run_check(
+                enforcement="hard",
+                branch="jonah/omn-9999-test-branch",
+                evidence_dir=tmpdir,
+            )
+            assert result.returncode == 1, (
+                f"Expected exit 1 for ADVISORY status, got {result.returncode}. "
                 f"stderr={result.stderr}"
             )
 

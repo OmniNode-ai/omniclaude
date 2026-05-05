@@ -41,18 +41,35 @@ fi
 RECEIPT_PATH="${EVIDENCE_DIR}/${TICKET_ID}/dod_report.json"
 
 if [[ -f "$RECEIPT_PATH" ]]; then
-  # Evidence exists — check if it passed
+  # Evidence exists — verify ModelDodReceipt schema (OMN-9792, OMN-10540).
+  # Fail-closed semantics: only `status == "PASS"` permits success in hard mode.
   if command -v jq &>/dev/null; then
-    FAILED=$(jq -r '.result.failed // 0' "$RECEIPT_PATH" 2>/dev/null || echo "0")
-    if [[ "$FAILED" != "0" ]]; then
-      echo "WARNING: DoD evidence for ${TICKET_ID} has ${FAILED} failed check(s)"
+    STATUS=$(jq -r '.status // ""' "$RECEIPT_PATH" 2>/dev/null || echo "")
+    if [[ -z "$STATUS" ]]; then
+      # Detect legacy pre-OMN-9792 receipts and fail loudly so they get
+      # regenerated rather than silently bypassing the gate.
+      LEGACY_FAILED=$(jq -r '.result.failed // empty' "$RECEIPT_PATH" 2>/dev/null || echo "")
+      if [[ -n "$LEGACY_FAILED" ]]; then
+        echo "WARNING: DoD evidence for ${TICKET_ID} uses pre-OMN-9792 schema (legacy 'result.failed')"
+        echo "  Receipt: ${RECEIPT_PATH}"
+        echo "  Run /dod-verify ${TICKET_ID} to regenerate as ModelDodReceipt"
+      else
+        echo "WARNING: DoD evidence for ${TICKET_ID} is missing required 'status' field"
+        echo "  Receipt: ${RECEIPT_PATH}"
+        echo "  Run /dod-verify ${TICKET_ID} to re-check"
+      fi
+      if [[ "$ENFORCEMENT" == "hard" ]]; then
+        exit 1
+      fi
+    elif [[ "$STATUS" == "PASS" ]]; then
+      echo "DoD evidence verified for ${TICKET_ID} (status=PASS)"
+    else
+      echo "WARNING: DoD evidence for ${TICKET_ID} has status=${STATUS}, only 'PASS' permits push"
       echo "  Receipt: ${RECEIPT_PATH}"
       echo "  Run /dod-verify ${TICKET_ID} to re-check"
       if [[ "$ENFORCEMENT" == "hard" ]]; then
         exit 1
       fi
-    else
-      echo "DoD evidence verified for ${TICKET_ID}"
     fi
   else
     echo "DoD evidence receipt found for ${TICKET_ID} (jq not available for detailed check)"

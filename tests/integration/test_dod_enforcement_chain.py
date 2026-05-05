@@ -74,18 +74,16 @@ def _make_non_linear_input() -> str:
 def _write_receipt(
     evidence_dir: Path,
     *,
-    failed: int = 0,
-    verified: int = 3,
-    timestamp: str | None = None,
+    status: str = "PASS",
+    run_timestamp: str | None = None,
     raw_content: str | None = None,
 ) -> Path:
-    """Write a DoD evidence receipt to the expected location.
+    """Write a ModelDodReceipt-shaped DoD evidence receipt (OMN-9792 schema).
 
     Args:
         evidence_dir: The .evidence/<ticket_id>/ directory.
-        failed: Number of failed checks.
-        verified: Number of verified checks.
-        timestamp: ISO timestamp (defaults to now).
+        status: ModelDodReceipt status — PASS, FAIL, ADVISORY, or PENDING.
+        run_timestamp: ISO timestamp (defaults to now in UTC).
         raw_content: If provided, write this verbatim instead of generating JSON.
 
     Returns:
@@ -98,23 +96,24 @@ def _write_receipt(
         receipt_path.write_text(raw_content)
         return receipt_path
 
-    if timestamp is None:
-        timestamp = datetime.now(tz=UTC).isoformat()
+    if run_timestamp is None:
+        run_timestamp = datetime.now(tz=UTC).isoformat()
 
     receipt = {
+        "schema_version": "1.0.0",
         "ticket_id": _TICKET_ID,
-        "timestamp": timestamp,
-        "git_sha": "abc123",
+        "evidence_item_id": "dod-run",
+        "check_type": "command",
+        "check_value": "contract.yaml",
+        "status": status,
+        "run_timestamp": run_timestamp,
+        "commit_sha": "abc1234",
+        "runner": "test-runner",
+        "verifier": "test-verifier",
+        "probe_command": "echo test",
+        "probe_stdout": "ok",
         "branch": "test-branch",
         "working_dir": str(evidence_dir.parent.parent),
-        "contract_path": "contract.yaml",
-        "result": {
-            "total": verified + failed,
-            "verified": verified,
-            "failed": failed,
-            "skipped": 0,
-            "details": [],
-        },
     }
     receipt_path.write_text(json.dumps(receipt, indent=2))
     return receipt_path
@@ -144,6 +143,15 @@ def _run_guard(
     env["DOD_ENFORCEMENT_MODE"] = enforcement_mode
     env["OMNICLAUDE_MODE"] = "full"
     env["CLAUDE_PLUGIN_ROOT"] = str(_REPO_ROOT / "plugins" / "onex")
+    # Isolate HOME so common.sh doesn't source the developer's
+    # ~/.omnibase/.env — that file's ONEX_EVIDENCE_ROOT would otherwise
+    # override the test fixture path below.
+    env["HOME"] = cwd
+    # Pin evidence root to the test workdir so the guard reads test fixtures,
+    # not whatever ambient ONEX_EVIDENCE_ROOT the host shell happens to export.
+    evidence_root = os.path.join(cwd, ".evidence")
+    os.makedirs(evidence_root, exist_ok=True)
+    env["ONEX_EVIDENCE_ROOT"] = evidence_root
     # Prevent emit_client_wrapper from trying to connect to Kafka
     env.pop("KAFKA_BOOTSTRAP_SERVERS", None)
 
@@ -199,9 +207,9 @@ class TestDoDCompletionGuardHardMode:
         assert "block" in result.stderr.lower()
 
     def test_guard_allows_with_clean_receipt(self, work_dir: Path) -> None:
-        """Hard mode allows Done status when receipt exists, is fresh, and has 0 failures."""
+        """Hard mode allows Done when ModelDodReceipt is fresh and status=PASS."""
         evidence_dir = work_dir / ".evidence" / _TICKET_ID
-        _write_receipt(evidence_dir, failed=0, verified=3)
+        _write_receipt(evidence_dir, status="PASS")
 
         result = _run_guard(
             _make_linear_done_input(),
@@ -214,9 +222,9 @@ class TestDoDCompletionGuardHardMode:
         )
 
     def test_guard_blocks_with_failed_receipt(self, work_dir: Path) -> None:
-        """Hard mode blocks Done status when receipt has failed checks."""
+        """Hard mode blocks Done when ModelDodReceipt has status=FAIL."""
         evidence_dir = work_dir / ".evidence" / _TICKET_ID
-        _write_receipt(evidence_dir, failed=2, verified=1)
+        _write_receipt(evidence_dir, status="FAIL")
 
         result = _run_guard(
             _make_linear_done_input(),
@@ -227,7 +235,7 @@ class TestDoDCompletionGuardHardMode:
             f"Expected exit 2 (block), got {result.returncode}.\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        assert "fail" in result.stderr.lower()
+        assert "FAIL" in result.stderr
 
     def test_guard_rejects_malformed_receipt(self, work_dir: Path) -> None:
         """Hard mode blocks when receipt file contains invalid JSON."""
@@ -248,7 +256,7 @@ class TestDoDCompletionGuardHardMode:
         """Hard mode blocks when receipt is older than 30 minutes."""
         evidence_dir = work_dir / ".evidence" / _TICKET_ID
         stale_ts = (datetime.now(tz=UTC) - timedelta(minutes=45)).isoformat()
-        _write_receipt(evidence_dir, failed=0, verified=3, timestamp=stale_ts)
+        _write_receipt(evidence_dir, status="PASS", run_timestamp=stale_ts)
 
         result = _run_guard(
             _make_linear_done_input(),
@@ -260,6 +268,44 @@ class TestDoDCompletionGuardHardMode:
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
         assert "stale" in result.stderr.lower()
+
+    def test_guard_rejects_legacy_schema(self, work_dir: Path) -> None:
+        """Hard mode blocks pre-OMN-9792 receipts (legacy timestamp/result keys)."""
+        evidence_dir = work_dir / ".evidence" / _TICKET_ID
+        legacy = json.dumps(
+            {
+                "ticket_id": _TICKET_ID,
+                "timestamp": datetime.now(tz=UTC).isoformat(),
+                "result": {"failed": 0, "verified": 3},
+            }
+        )
+        _write_receipt(evidence_dir, raw_content=legacy)
+
+        result = _run_guard(
+            _make_linear_done_input(),
+            str(work_dir),
+            enforcement_mode="hard",
+        )
+        assert result.returncode == 2, (
+            f"Expected exit 2 (block for legacy schema), got {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    def test_guard_rejects_status_advisory(self, work_dir: Path) -> None:
+        """Hard mode blocks when receipt status is ADVISORY (fail-closed, OMN-10541)."""
+        evidence_dir = work_dir / ".evidence" / _TICKET_ID
+        _write_receipt(evidence_dir, status="ADVISORY")
+
+        result = _run_guard(
+            _make_linear_done_input(),
+            str(work_dir),
+            enforcement_mode="hard",
+        )
+        assert result.returncode == 2, (
+            f"Expected exit 2 (block for ADVISORY), got {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "ADVISORY" in result.stderr
 
 
 @pytest.mark.integration
