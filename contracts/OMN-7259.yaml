@@ -6,7 +6,7 @@ summary: "Adds self_healing_dispatch orchestration and generated backing node."
 is_seam_ticket: false
 interface_change: true
 interfaces_touched:
-  - runtime_node
+  - public_api
 evidence_requirements:
   - kind: tests
     description: "Self-healing orchestrator unit tests pass"
