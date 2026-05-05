@@ -1,0 +1,52 @@
+# Verification transcript for OMN-10539
+# Date: 2026-05-05
+# Ran the exact invocation documented in the corrected SKILL.md
+# against a real ticket contract on disk.
+# local-path-ok: verification transcript captures real invocation paths
+
+$ PAYLOAD=$(mktemp -t dod_verify_input.XXXXXX.json)
+$ cat > "$PAYLOAD" <<JSON
+{
+  "correlation_id": "eb3ab1b2-8d59-4021-98ac-86897b9d0178",
+  "ticket_id": "OMN-6238",
+  "requested_at": "2026-05-05T18:37:39Z",
+  "contract_path": "<OMNI_HOME>/onex_change_control/contracts/OMN-6238.yaml",
+  "dry_run": false
+}
+JSON
+
+$ uv run onex node node_dod_verify --input "$PAYLOAD"
+14:37:43 INFO RuntimeLocal: loaded contract contract.yaml, terminal_event=onex.evt.omnimarket.dod-verify-completed.v1
+14:37:43 INFO RuntimeLocal: instantiated handler HandlerDodVerify
+14:37:43 INFO Running command check: gh pr view --json state -q .state
+14:37:44 INFO Running command check: gh pr view --json mergedAt -q .mergedAt
+14:37:45 INFO Running command check: gh pr checks --watch
+14:37:46 INFO Running command check: pre-commit run --all-files
+14:38:16 INFO RuntimeLocal: terminal event received (status=success)
+14:38:16 INFO RuntimeLocal: handler returned, result=completed
+14:38:16 INFO RuntimeLocal: wrote state to .onex_state/workflow_result.json
+14:38:16 INFO RuntimeLocal: result=completed
+
+# Output: .onex_state/workflow_result.json (handler did NOT write .evidence/<ticket_id>/dod_report.json)
+$ head -20 .onex_state/workflow_result.json
+{
+  "result": "completed",
+  "exit_code": 0,
+  "workflow": ".../node_dod_verify/contract.yaml",
+  "terminal_payload": {
+    "status": "success",
+    "correlation_id": "87a3fcd0-2f3c-4f5e-be97-86017655a24d",
+    "source": "runtime_local"
+  },
+  "handler_result": {
+    "correlation_id": "eb3ab1b2-8d59-4021-98ac-86897b9d0178",
+    "ticket_id": "OMN-6238",
+    "status": "failed",
+    "checks": [...]
+  }
+}
+
+# Confirms the corrected SKILL.md:
+# - CLI form `onex node node_dod_verify --input <file>` is correct
+# - JSON payload requires correlation_id + requested_at (ModelDodVerifyStartCommand)
+# - Output is workflow_result.json under state-root, NOT .evidence/<ticket>/dod_report.json
