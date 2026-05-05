@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
+from uuid import uuid4
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -216,7 +217,7 @@ def log_event(event: str, **fields: object) -> None:
         }
         with log_file.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
-    except OSError:
+    except (OSError, TypeError, ValueError):
         pass
 
 
@@ -310,7 +311,7 @@ def record_stall_recovery(
 
 def _generate_run_id() -> str:
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return f"orch-{ts}"
+    return f"orch-{ts}-{uuid4().hex[:8]}"
 
 
 __all__ = [

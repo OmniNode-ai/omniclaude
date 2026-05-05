@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -199,9 +198,9 @@ class TestRedispatchAccounting:
 
 @pytest.mark.unit
 class TestOrchestrate:
-    def test_returns_orchestrator_result(self) -> None:
+    def test_returns_orchestrator_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["ONEX_STATE_DIR"] = tmpdir
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
             result = orchestrate(["OMN-1234", "OMN-5678"], run_id="test-run-1")
         assert isinstance(result, OrchestratorResult)
         assert result.run_id == "test-run-1"
@@ -209,9 +208,9 @@ class TestOrchestrate:
         assert result.stalls_recovered == 0
         assert result.escalated == []
 
-    def test_emits_ndjson_log_entry(self) -> None:
+    def test_emits_ndjson_log_entry(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["ONEX_STATE_DIR"] = tmpdir
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
             orchestrate(["OMN-1234"], run_id="test-run-log")
             log_files = list(Path(tmpdir, "dispatch-log").glob("*.ndjson"))
             assert log_files, "Expected at least one NDJSON log file"
@@ -223,9 +222,9 @@ class TestOrchestrate:
             events = [e["event"] for e in entries]
             assert "orchestration_planned" in events
 
-    def test_with_repo_hints(self) -> None:
+    def test_with_repo_hints(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["ONEX_STATE_DIR"] = tmpdir
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
             result = orchestrate(
                 ["OMN-1", "OMN-2"],
                 repo_hints={"OMN-1": "omniclaude", "OMN-2": "omnibase_core"},
@@ -233,9 +232,9 @@ class TestOrchestrate:
         repos = {g.repo for g in result.groups}
         assert repos == {"omniclaude", "omnibase_core"}
 
-    def test_with_epic_id(self) -> None:
+    def test_with_epic_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["ONEX_STATE_DIR"] = tmpdir
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
             result = orchestrate(["OMN-99"], epic_id="OMN-7253")
         assert result.epic_id == "OMN-7253"
 
@@ -246,9 +245,9 @@ class TestOrchestrate:
 
 @pytest.mark.unit
 class TestLogEvent:
-    def test_log_event_writes_ndjson(self) -> None:
+    def test_log_event_writes_ndjson(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["ONEX_STATE_DIR"] = tmpdir
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
             log_event("test_event", run_id="run-x", ticket_id="OMN-1")
             log_files = list(Path(tmpdir, "dispatch-log").glob("*.ndjson"))
             assert log_files
@@ -267,9 +266,16 @@ class TestLogEvent:
         # Should not raise
         log_event("safe_event", run_id="x")
 
-    def test_multiple_events_append(self) -> None:
+    def test_log_event_never_raises_on_unserializable_field(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["ONEX_STATE_DIR"] = tmpdir
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
+            log_event("bad_field", callback=lambda: None)
+
+    def test_multiple_events_append(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monkeypatch.setenv("ONEX_STATE_DIR", tmpdir)
             log_event("event_a", run_id="r1")
             log_event("event_b", run_id="r1")
             log_files = list(Path(tmpdir, "dispatch-log").glob("*.ndjson"))
