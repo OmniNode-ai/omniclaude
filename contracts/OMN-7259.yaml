@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-7259
+title: "Self-healing orchestration wrapper"
+summary: "Adds self_healing_dispatch orchestration and generated backing node."
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - runtime_node
+evidence_requirements:
+  - kind: tests
+    description: "Self-healing orchestrator unit tests pass"
+    command: "uv run pytest tests/unit/hooks/test_self_healing_orchestrator.py -v"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "gh pr checks --repo OmniNode-ai/omniclaude 1516"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Self-healing orchestrator unit tests pass"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_self_healing_orchestrator.py -v"
+  - id: dod-deploy
+    description: "Post-merge runtime deploy validation command is recorded for the generated backing node"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "after approved deploy, verify node_skill_self_healing_dispatch_orchestrator loads and its contract parses"
