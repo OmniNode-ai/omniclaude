@@ -388,25 +388,27 @@ start_emit_daemon_if_needed() {
     local daemon_pid=$!
     log "Publisher started with PID $daemon_pid"
 
-    # Wait briefly for publisher to create socket (max 200ms in 20ms increments)
+    # Wait for publisher to create socket (max 2s in 100ms increments).
+    # Python cold start takes 50-150ms; 200ms was insufficient on cold sessions.
     local wait_count=0
-    local max_wait=10
+    local max_wait=20
     while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
-        sleep 0.02
+        sleep 0.1
         ((wait_count++)) || true  # || true: post-increment returns old value (0) when starting from 0; prevents set -e from triggering
     done
 
     # Retry-based socket verification after file appears.
+    # Socket existence does not guarantee the daemon is accepting connections yet;
+    # warm pings confirm the daemon is actually listening.
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         local verify_attempt=0
-        # 2 attempts x 0.2s timeout + 10ms gap = ~0.41s worst-case on sync path.
-        # The daemon should be responsive almost immediately after creating the
-        # socket file; 2 retries is sufficient. Previously 5 (~1.05s worst-case)
-        # which violated the <50ms SessionStart budget even in the async portion.
-        local max_verify_attempts=2
+        # 5 attempts x 0.5s timeout + 10ms gap = ~2.55s worst-case on sync path.
+        # Increased from 2x0.2s to handle slow cold starts without false UNHEALTHY
+        # warnings (OMN-10621).
+        local max_verify_attempts=5
 
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
-            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.2; then
+            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.5; then
                 log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
                 # Write PID file so future sessions can skip the Python ping via kill -0
                 echo "$daemon_pid" > "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
@@ -421,7 +423,7 @@ start_emit_daemon_if_needed() {
 
         log "WARNING: Publisher socket exists but not responsive after $max_verify_attempts verification attempts"
     else
-        log "WARNING: Publisher startup timed out after ${max_wait}x20ms, continuing without publisher"
+        log "WARNING: Publisher startup timed out after ${max_wait}x100ms, continuing without publisher"
     fi
 
     # Publisher failed to start properly - write warning file and continue
