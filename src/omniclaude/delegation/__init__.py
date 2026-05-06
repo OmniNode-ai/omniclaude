@@ -13,6 +13,11 @@ from omniclaude.delegation.evidence_bundle import (
     hash_prompt,
     new_bundle_id,
 )
+from omniclaude.delegation.runner import (
+    DelegationRunner,
+    ModelBifrostRunnerResult,
+    ModelDelegationAuditEvent,
+)
 from omniclaude.delegation.sensitivity_gate import (
     EnumSensitivityPolicy,
     ModelSensitivityResult,
@@ -20,12 +25,15 @@ from omniclaude.delegation.sensitivity_gate import (
 )
 
 __all__ = [
+    "DelegationRunner",
     "EnumBundleArtifact",
     "EnumSensitivityPolicy",
     "EvidenceBundleWriter",
     "ModelBifrostResponse",
+    "ModelBifrostRunnerResult",
     "ModelBundleReceipt",
     "ModelCostEvent",
+    "ModelDelegationAuditEvent",
     "ModelQualityGateArtifact",
     "ModelRunManifest",
     "ModelSensitivityResult",
