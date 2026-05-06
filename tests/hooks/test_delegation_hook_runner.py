@@ -3,7 +3,7 @@
 """Unit tests for delegation_hook_runner (OMN-10607).
 
 Tests the stdin→stdout contract of the delegation hook runner:
-  - Sensitive inputs produce not_delegatable:sensitive:...
+  - Sensitive inputs produce not_delegatable:sensitive without raw reasons
   - Delegatable prompts produce DELEGATED: ...
   - Non-delegatable (tool-call signals) produce not_delegatable
   - Malformed JSON is handled gracefully (not_delegatable)
@@ -18,7 +18,7 @@ import io
 import json
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -133,6 +133,18 @@ def test_invalid_json_returns_not_delegatable() -> None:
     assert out == "not_delegatable"
 
 
+@pytest.mark.unit
+def test_non_object_json_returns_not_delegatable() -> None:
+    with (
+        patch.object(_runner, "_import_gate", return_value=None),
+        patch.object(_runner, "_import_classifier", return_value=None),
+    ):
+        out, code = _run_main("[]")
+
+    assert code == 0
+    assert out == "not_delegatable"
+
+
 # ---------------------------------------------------------------------------
 # Tests — fail-open when imports unavailable
 # ---------------------------------------------------------------------------
@@ -162,6 +174,40 @@ def test_fail_open_when_classifier_unavailable() -> None:
 
 
 @pytest.mark.unit
+def test_fail_open_when_gate_instantiation_fails() -> None:
+    original_import = __import__
+
+    class BrokenGate:
+        def __init__(self) -> None:
+            raise RuntimeError("gate init exploded")
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "omniclaude.delegation.sensitivity_gate":
+            return SimpleNamespace(SensitivityGate=BrokenGate)
+        return original_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=fake_import):
+        assert _runner._import_gate() is None
+
+
+@pytest.mark.unit
+def test_fail_open_when_classifier_instantiation_fails() -> None:
+    original_import = __import__
+
+    class BrokenClassifier:
+        def __init__(self) -> None:
+            raise RuntimeError("classifier init exploded")
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "omniclaude.lib.task_classifier":
+            return SimpleNamespace(TaskClassifier=BrokenClassifier)
+        return original_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=fake_import):
+        assert _runner._import_classifier() is None
+
+
+@pytest.mark.unit
 def test_gate_exception_falls_through_to_classifier() -> None:
     """An exception in gate.check() must not crash — fall through to classifier."""
     mock_gate = MagicMock()
@@ -187,3 +233,20 @@ def test_classifier_exception_returns_not_delegatable() -> None:
         out, code = _run_main(payload)
     assert code == 0
     assert out == "not_delegatable"
+
+
+@pytest.mark.unit
+def test_sensitive_reasons_are_not_emitted() -> None:
+    mock_gate = MagicMock()
+    mock_gate.check.return_value = SimpleNamespace(
+        is_sensitive=True,
+        reasons=["raw password=supersecret123"],
+    )
+
+    payload = _tool_json("password=supersecret123")
+    with patch.object(_runner, "_import_gate", return_value=mock_gate):
+        out, code = _run_main(payload)
+
+    assert code == 0
+    assert out == "not_delegatable:sensitive"
+    assert "supersecret123" not in out

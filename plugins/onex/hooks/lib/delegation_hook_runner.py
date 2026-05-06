@@ -40,7 +40,7 @@ def _import_gate():  # type: ignore[return]
         from omniclaude.delegation.sensitivity_gate import SensitivityGate
 
         return SensitivityGate()
-    except ImportError:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -49,7 +49,7 @@ def _import_classifier():  # type: ignore[return]
         from omniclaude.lib.task_classifier import TaskClassifier
 
         return TaskClassifier()
-    except ImportError:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -61,7 +61,9 @@ def main() -> int:
         payload = {}
 
     # Flatten tool_input to a string for gate + classifier
-    tool_input = payload.get("tool_input", payload)
+    tool_input = (
+        payload.get("tool_input", payload) if isinstance(payload, dict) else payload
+    )
     if isinstance(tool_input, dict):
         tool_text = json.dumps(tool_input)
     else:
@@ -73,8 +75,7 @@ def main() -> int:
         try:
             result = gate.check(tool_text)
             if result.is_sensitive:
-                reasons = "; ".join(result.reasons[:2])
-                print(f"not_delegatable:sensitive:{reasons}")
+                print("not_delegatable:sensitive")
                 return 0
         except Exception:  # noqa: BLE001
             pass  # Fail open — proceed to classifier

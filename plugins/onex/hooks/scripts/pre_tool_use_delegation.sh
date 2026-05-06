@@ -25,7 +25,10 @@ _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 # Resolve paths before cd $HOME
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
-onex_hook_gate PRE_TOOL_USE_DELEGATION || exit 0
+if ! onex_hook_gate PRE_TOOL_USE_DELEGATION; then
+    cat
+    exit 0
+fi
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
