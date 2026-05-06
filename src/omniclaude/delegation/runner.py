@@ -36,7 +36,7 @@ import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Literal
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 import httpx
@@ -682,7 +682,13 @@ def _extract_response_text(inference_response: object) -> str:
 # HTTP timeouts: connect fast, allow generous read for slow local models.
 _HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)
 
-TaskType = Literal["test", "document", "research"]
+
+class EnumDelegationTaskType(StrEnum):
+    """Task types accepted by the delegation runner."""
+
+    TEST = "test"
+    DOCUMENT = "document"
+    RESEARCH = "research"
 
 
 def _call_llm(
@@ -786,7 +792,7 @@ class InProcessDelegationRunner:
     def run(
         self,
         *,
-        task_type: TaskType,
+        task_type: EnumDelegationTaskType | str,
         prompt: str,
         tool_input: dict[str, object] | None = None,
         source_session_id: str | None = None,
@@ -906,6 +912,7 @@ class InProcessDelegationRunner:
 __all__: list[str] = [
     "DelegationRunner",
     "DelegationRunnerError",
+    "EnumDelegationTaskType",
     "InProcessDelegationRunner",
     "ModelBifrostRunnerResult",
     "ModelDelegationAuditEvent",

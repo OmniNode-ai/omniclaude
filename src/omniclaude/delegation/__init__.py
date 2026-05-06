@@ -17,6 +17,7 @@ from omniclaude.delegation.evidence_bundle import (
 from omniclaude.delegation.runner import (
     DelegationRunner,
     DelegationRunnerError,
+    EnumDelegationTaskType,
     InProcessDelegationRunner,
     ModelBifrostRunnerResult,
     ModelDelegationAuditEvent,
@@ -39,6 +40,7 @@ __all__: list[str] = [
     "DelegationRunnerError",
     "EnumBundleArtifact",
     "EnumDelegationTransport",
+    "EnumDelegationTaskType",
     "EnumSensitivityPolicy",
     "EvidenceBundleWriter",
     "InProcessDelegationRunner",
