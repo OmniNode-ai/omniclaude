@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from omniclaude.delegation.sqlite_adapter import (
     ModelDelegationEvent,
@@ -117,6 +119,10 @@ class TestMigration:
 
 
 class TestDelegationEvent:
+    def test_rejects_unknown_input_fields(self) -> None:
+        with pytest.raises(ValidationError):
+            _delegation_event(unexpected_field="drift")
+
     def test_write_and_query(self, adapter: SQLiteProjectionAdapter) -> None:
         ok = adapter.write_delegation_event(_delegation_event())
         assert ok is True
@@ -150,6 +156,18 @@ class TestDelegationEvent:
         adapter.write_delegation_event(_delegation_event(quality_gate_passed=True))
         row = adapter.query_delegation_events()[0]
         assert row.quality_gate_passed == 1
+
+    def test_concurrent_writes_are_serialized(
+        self, adapter: SQLiteProjectionAdapter
+    ) -> None:
+        def write(index: int) -> bool:
+            return adapter.write_delegation_event(_delegation_event(f"corr-{index}"))
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(executor.map(write, range(20)))
+
+        assert all(results)
+        assert len(adapter.query_delegation_events(limit=25)) == 20
 
 
 class TestLlmCallMetric:
