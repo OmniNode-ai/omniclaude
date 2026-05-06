@@ -388,54 +388,55 @@ start_emit_daemon_if_needed() {
     local daemon_pid=$!
     log "Publisher started with PID $daemon_pid"
 
-    # Wait for publisher to create socket (max 2s in 100ms increments).
-    # Python cold start takes 50-150ms; 200ms was insufficient on cold sessions.
-    local wait_count=0
-    local max_wait=20
-    while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
-        sleep 0.1
-        ((wait_count++)) || true  # || true: post-increment returns old value (0) when starting from 0; prevents set -e from triggering
-    done
+    # All readiness verification runs in background to keep SessionStart under 50ms.
+    # Waits for socket to appear, then pings to confirm the daemon is accepting connections,
+    # then writes PID file + health marker. Main hook returns immediately (OMN-10621).
+    local _verify_socket="$EMIT_DAEMON_SOCKET"
+    local _verify_pid="$daemon_pid"
+    (
+        # Phase 1: wait for socket file to appear (max 2s in 100ms increments)
+        local wait_count=0
+        local max_wait=20
+        while [[ ! -S "$_verify_socket" && $wait_count -lt $max_wait ]]; do
+            sleep 0.1
+            ((wait_count++)) || true
+        done
 
-    # Retry-based socket verification after file appears.
-    # Socket existence does not guarantee the daemon is accepting connections yet;
-    # warm pings confirm the daemon is actually listening.
-    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
+        if [[ ! -S "$_verify_socket" ]]; then
+            log "WARNING: Publisher startup timed out after ${max_wait}x100ms, continuing without publisher"
+            mkdir -p "${ONEX_STATE_DIR}/hooks/logs/emit-health" 2>/dev/null || true
+            local _tmp="${ONEX_STATE_DIR}/hooks/logs/emit-health/warning.tmp.$$"
+            printf 'EVENT EMISSION UNHEALTHY: The emit daemon did not create socket within 2s. Socket: %s. Check: %s/hooks/logs/emit-daemon.log\n' \
+                "$_verify_socket" "${ONEX_STATE_DIR}" > "$_tmp" 2>/dev/null
+            mv -f "$_tmp" "${ONEX_STATE_DIR}/hooks/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
+            exit 0
+        fi
+
+        # Phase 2: ping to confirm the daemon accepts connections
         local verify_attempt=0
-        # 5 attempts x 0.5s timeout + 10ms gap = ~2.55s worst-case on sync path.
-        # Increased from 2x0.2s to handle slow cold starts without false UNHEALTHY
-        # warnings (OMN-10621).
         local max_verify_attempts=5
-
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
-            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.5; then
+            if check_socket_responsive "$_verify_socket" 0.5; then
                 log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
-                # Write PID file so future sessions can skip the Python ping via kill -0
-                echo "$daemon_pid" > "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
+                echo "$_verify_pid" > "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
                 write_daemon_status "running"
                 mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
                 rm -f "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true
-                return 0
+                exit 0
             fi
-            ((verify_attempt++)) || true  # || true: post-increment from 0 returns exit code 1 under set -e
+            ((verify_attempt++)) || true
             sleep 0.01
         done
 
         log "WARNING: Publisher socket exists but not responsive after $max_verify_attempts verification attempts"
-    else
-        log "WARNING: Publisher startup timed out after ${max_wait}x100ms, continuing without publisher"
-    fi
-
-    # Publisher failed to start properly - write warning file and continue
-    mkdir -p "${ONEX_STATE_DIR}/hooks/logs/emit-health" 2>/dev/null || true
-    local _tmp="${ONEX_STATE_DIR}/hooks/logs/emit-health/warning.tmp.$$"
-    cat > "$_tmp" <<WARN  # Note: unquoted delimiter -- variable expansion is intentional
-EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: ${EMIT_DAEMON_SOCKET}. Check: ${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log
-WARN
-    mv -f "$_tmp" "${ONEX_STATE_DIR}/hooks/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
-    # Alert on daemon startup failure (backgrounded, non-blocking)
-    ( slack_notify "daemon_startup" "[omniclaude][${_SLACK_HOST}] Emit daemon failed to start. Intelligence gathering is down. repo=${PROJECT_ROOT:-$PWD} socket=${EMIT_DAEMON_SOCKET} log=${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" ) &
-    log "Continuing without publisher (session startup not blocked)"
+        mkdir -p "${ONEX_STATE_DIR}/hooks/logs/emit-health" 2>/dev/null || true
+        local _tmp2="${ONEX_STATE_DIR}/hooks/logs/emit-health/warning.tmp.$$"
+        printf 'EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: %s. Check: %s/hooks/logs/emit-daemon.log\n' \
+            "$_verify_socket" "${ONEX_STATE_DIR}" > "$_tmp2" 2>/dev/null
+        mv -f "$_tmp2" "${ONEX_STATE_DIR}/hooks/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp2"
+        ( slack_notify "daemon_startup" "[omniclaude][${_SLACK_HOST}] Emit daemon failed to start. Intelligence gathering is down. repo=${PROJECT_ROOT:-$PWD} socket=${_verify_socket} log=${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" ) &
+    ) &
+    log "Publisher readiness verification started in background (PID: $!) — hook returns immediately"
     return 0
 }
 
