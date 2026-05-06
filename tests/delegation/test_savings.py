@@ -17,7 +17,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omniclaude.delegation.savings import ModelSavingsEstimate, SavingsCalculator
+from omniclaude.delegation.savings import (
+    EnumSavingsMethod,
+    EnumTokenProvenance,
+    ModelSavingsEstimate,
+    SavingsCalculator,
+)
 
 
 @pytest.fixture
@@ -66,7 +71,7 @@ def test_local_model_savings_equals_baseline_cost(
         token_provenance="measured",
     )
 
-    assert estimate.savings_method == "zero_marginal_api_cost"
+    assert estimate.savings_method is EnumSavingsMethod.ZERO_MARGINAL_API_COST
     assert estimate.local_cost_usd == 0.0
     # cloud_cost = (1000/1000)*0.015 + (500/1000)*0.075 = 0.015 + 0.0375 = 0.0525
     assert estimate.cloud_cost_usd == pytest.approx(0.0525)
@@ -83,7 +88,7 @@ def test_cheap_cloud_model_savings_is_delta(calculator: SavingsCalculator) -> No
         token_provenance="measured",
     )
 
-    assert estimate.savings_method == "pricing_manifest_delta"
+    assert estimate.savings_method is EnumSavingsMethod.PRICING_MANIFEST_DELTA
     # local = (1000/1000)*0.0008 + (500/1000)*0.004 = 0.0008 + 0.002 = 0.0028
     assert estimate.local_cost_usd == pytest.approx(0.0028)
     # cloud baseline same as above = 0.0525
@@ -101,7 +106,7 @@ def test_estimated_token_provenance_preserved(calculator: SavingsCalculator) -> 
         token_provenance="estimated",
     )
 
-    assert estimate.token_provenance == "estimated"
+    assert estimate.token_provenance is EnumTokenProvenance.ESTIMATED
 
 
 def test_measured_token_provenance_preserved(calculator: SavingsCalculator) -> None:
@@ -114,7 +119,7 @@ def test_measured_token_provenance_preserved(calculator: SavingsCalculator) -> N
         token_provenance="measured",
     )
 
-    assert estimate.token_provenance == "measured"
+    assert estimate.token_provenance is EnumTokenProvenance.MEASURED
 
 
 def test_offline_model_returns_unavailable(calculator: SavingsCalculator) -> None:
@@ -127,11 +132,47 @@ def test_offline_model_returns_unavailable(calculator: SavingsCalculator) -> Non
         token_provenance="unknown",
     )
 
-    assert estimate.savings_method == "offline_unavailable"
+    assert estimate.savings_method is EnumSavingsMethod.OFFLINE_UNAVAILABLE
     assert estimate.local_cost_usd is None
     assert estimate.cloud_cost_usd is None
     assert estimate.savings_usd is None
-    assert estimate.token_provenance == "unknown"
+    assert estimate.token_provenance is EnumTokenProvenance.UNKNOWN
+
+
+def test_negative_token_counts_are_rejected(
+    calculator: SavingsCalculator,
+) -> None:
+    with pytest.raises(
+        ValueError, match="prompt_tokens and completion_tokens must be non-negative"
+    ):
+        calculator.calculate(
+            session_id="sess-negative",
+            correlation_id="corr-negative",
+            model_local="qwen3-coder-30b-a3b",
+            prompt_tokens=-1,
+            completion_tokens=500,
+            token_provenance=EnumTokenProvenance.MEASURED,
+        )
+
+
+def test_unknown_baseline_returns_unavailable(
+    calculator: SavingsCalculator,
+) -> None:
+    estimate = calculator.calculate(
+        session_id="sess-baseline",
+        correlation_id="corr-baseline",
+        model_local="qwen3-coder-30b-a3b",
+        prompt_tokens=1000,
+        completion_tokens=500,
+        token_provenance=EnumTokenProvenance.MEASURED,
+        baseline_model="unknown-baseline",
+    )
+
+    assert estimate.savings_method is EnumSavingsMethod.OFFLINE_UNAVAILABLE
+    assert estimate.local_cost_usd is None
+    assert estimate.cloud_cost_usd is None
+    assert estimate.savings_usd is None
+    assert estimate.baseline_model == "unknown-baseline"
 
 
 def test_round_trip_serialization(calculator: SavingsCalculator) -> None:
