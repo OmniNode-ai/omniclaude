@@ -826,6 +826,16 @@ class InProcessDelegationRunner:
         correlation_id = uuid.uuid4()
         started_ns = time.monotonic_ns()
 
+        # Normalize task_type to enum; raise on unknown values.
+        if not isinstance(task_type, EnumDelegationTaskType):
+            try:
+                task_type = EnumDelegationTaskType(task_type)
+            except ValueError:
+                valid = [e.value for e in EnumDelegationTaskType]
+                raise DelegationRunnerError(
+                    f"Unknown task_type={task_type!r}. Valid values: {valid}"
+                )
+
         # Embed tool_input as JSON comment in prompt when present.
         full_prompt = prompt
         if tool_input:
@@ -863,12 +873,12 @@ class InProcessDelegationRunner:
         )
 
         # Step 2: LLM inference
-        _TASK_TEMPERATURE: dict[str, float] = {
-            "test": 0.3,
-            "document": 0.5,
-            "research": 0.7,
+        _TASK_TEMPERATURE: dict[EnumDelegationTaskType, float] = {
+            EnumDelegationTaskType.TEST: 0.3,
+            EnumDelegationTaskType.DOCUMENT: 0.5,
+            EnumDelegationTaskType.RESEARCH: 0.7,
         }
-        temperature = _TASK_TEMPERATURE.get(task_type, 0.3)
+        temperature = _TASK_TEMPERATURE[task_type]
 
         content, usage, _inference_latency_ms, model_used = _call_llm(
             endpoint_url=routing_decision.endpoint_url,
