@@ -69,12 +69,11 @@ except ImportError as exc:
     _RUNTIME_IMPORT_ERROR = exc
 
 try:
-    from omniclaude.delegation.runner import DelegationRunner, DelegationRunnerError
+    from omniclaude.delegation.runner import InProcessDelegationRunner
 
     _HAS_DELEGATION_RUNNER = True
 except ImportError:
-    DelegationRunner = None  # type: ignore[assignment,misc]
-    DelegationRunnerError = Exception  # type: ignore[assignment,misc]
+    InProcessDelegationRunner = None  # type: ignore[assignment,misc]
     _HAS_DELEGATION_RUNNER = False
 
 try:
@@ -121,22 +120,23 @@ def _inprocess_fallback(
     source_file: str | None,
     max_tokens: int,
 ) -> dict:
-    """Run delegation pipeline in-process via DelegationRunner.
+    """Run delegation pipeline in-process via InProcessDelegationRunner.
 
     Used when runtime socket is unavailable or --local is requested.
     """
-    if not _HAS_DELEGATION_RUNNER or DelegationRunner is None:
+    if not _HAS_DELEGATION_RUNNER or InProcessDelegationRunner is None:
         return {
             "success": False,
             "error": (
-                "DelegationRunner unavailable - omniclaude.delegation.runner "
-                "not importable (branch jonah/omn-10610 may not be merged)"
+                "InProcessDelegationRunner unavailable - "
+                "omniclaude.delegation.runner not importable "
+                "(branch jonah/omn-10610 may not be merged)"
             ),
             "correlation_id": correlation_id,
         }
 
     try:
-        runner = DelegationRunner()
+        runner = InProcessDelegationRunner()
         result = runner.run(
             task_type=intent_value,
             prompt=prompt,
@@ -144,7 +144,7 @@ def _inprocess_fallback(
             source_session_id=os.environ.get("CLAUDE_SESSION_ID"),
             max_tokens=max_tokens,
         )
-    except DelegationRunnerError as exc:
+    except Exception as exc:  # noqa: BLE001
         return {
             "success": False,
             "error": str(exc),

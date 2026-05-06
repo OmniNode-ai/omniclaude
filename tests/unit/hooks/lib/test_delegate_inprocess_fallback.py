@@ -80,7 +80,9 @@ def delegate_run_with_runner(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
 
     fake_runner_instance = FakeDelegationRunner()
     monkeypatch.setattr(imported, "_HAS_DELEGATION_RUNNER", True)
-    monkeypatch.setattr(imported, "DelegationRunner", lambda: fake_runner_instance)
+    monkeypatch.setattr(
+        imported, "InProcessDelegationRunner", lambda: fake_runner_instance
+    )
     return imported
 
 
@@ -91,7 +93,7 @@ def delegate_run_no_runner(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
 
     imported = importlib.reload(delegate_run_module)
     monkeypatch.setattr(imported, "_HAS_DELEGATION_RUNNER", False)
-    monkeypatch.setattr(imported, "DelegationRunner", None)
+    monkeypatch.setattr(imported, "InProcessDelegationRunner", None)
     return imported
 
 
@@ -191,7 +193,7 @@ class TestDelegateInprocessFallback:
         )
 
         assert result.get("success") is False
-        assert "DelegationRunner unavailable" in result["error"]
+        assert "InProcessDelegationRunner unavailable" in result["error"]
 
     def test_correlation_id_propagates_in_inprocess_path(
         self,
@@ -234,7 +236,7 @@ class TestDelegateInprocessFallback:
             return r
 
         monkeypatch.setattr(
-            delegate_run_with_runner, "DelegationRunner", _failing_runner
+            delegate_run_with_runner, "InProcessDelegationRunner", _failing_runner
         )
 
         result = delegate_run_with_runner.classify_and_publish(
