@@ -18,13 +18,14 @@ from omniclaude.delegation.runner import (
     ModelBifrostRunnerResult,
     ModelDelegationAuditEvent,
 )
+from omniclaude.delegation.savings import ModelSavingsEstimate, SavingsCalculator
 from omniclaude.delegation.sensitivity_gate import (
     EnumSensitivityPolicy,
     ModelSensitivityResult,
     SensitivityGate,
 )
 
-__all__ = [
+__all__: list[str] = [
     "DelegationRunner",
     "EnumBundleArtifact",
     "EnumSensitivityPolicy",
@@ -36,7 +37,9 @@ __all__ = [
     "ModelDelegationAuditEvent",
     "ModelQualityGateArtifact",
     "ModelRunManifest",
+    "ModelSavingsEstimate",
     "ModelSensitivityResult",
+    "SavingsCalculator",
     "SensitivityGate",
     "hash_prompt",
     "new_bundle_id",
