@@ -7,6 +7,10 @@ Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, wraps it in a ModelRuntimeSkillRequest, and sends it to the
 runtime-owned Pattern B broker path via LocalRuntimeSkillClient.
 
+When the runtime socket is unavailable (no Docker, no Kafka), the skill falls
+back to running the delegation pipeline in-process via DelegationRunner.  The
+``--local`` flag forces this in-process path without attempting the runtime.
+
 Wire schema (plain dict - runtime-side validation by ModelDelegationCommand):
   {
     "prompt": str,
@@ -65,6 +69,15 @@ except ImportError as exc:
     _RUNTIME_IMPORT_ERROR = exc
 
 try:
+    from omniclaude.delegation.runner import DelegationRunner, DelegationRunnerError
+
+    _HAS_DELEGATION_RUNNER = True
+except ImportError:
+    DelegationRunner = None  # type: ignore[assignment,misc]
+    DelegationRunnerError = Exception  # type: ignore[assignment,misc]
+    _HAS_DELEGATION_RUNNER = False
+
+try:
     from omniclaude.hooks.topics import TopicBase as _TopicBase
 
     # Use DELEGATE_TASK - the canonical topic that node_delegation_orchestrator
@@ -100,6 +113,64 @@ def _runtime_import_error(exc: ImportError) -> dict:
     }
 
 
+def _inprocess_fallback(
+    *,
+    prompt: str,
+    intent_value: str,
+    correlation_id: str,
+    source_file: str | None,
+    max_tokens: int,
+) -> dict:
+    """Run delegation pipeline in-process via DelegationRunner.
+
+    Used when runtime socket is unavailable or --local is requested.
+    """
+    if not _HAS_DELEGATION_RUNNER or DelegationRunner is None:
+        return {
+            "success": False,
+            "error": (
+                "DelegationRunner unavailable - omniclaude.delegation.runner "
+                "not importable (branch jonah/omn-10610 may not be merged)"
+            ),
+            "correlation_id": correlation_id,
+        }
+
+    try:
+        runner = DelegationRunner()
+        result = runner.run(
+            task_type=intent_value,
+            prompt=prompt,
+            source_file_path=source_file,
+            source_session_id=os.environ.get("CLAUDE_SESSION_ID"),
+            max_tokens=max_tokens,
+        )
+    except DelegationRunnerError as exc:
+        return {
+            "success": False,
+            "error": str(exc),
+            "correlation_id": correlation_id,
+            "path": "inprocess",
+        }
+
+    return {
+        "success": True,
+        "correlation_id": str(result.correlation_id),
+        "task_type": result.task_type,
+        "model_used": result.model_used,
+        "endpoint_url": result.endpoint_url,
+        "content": result.content,
+        "quality_passed": result.quality_passed,
+        "quality_score": result.quality_score,
+        "latency_ms": result.latency_ms,
+        "prompt_tokens": result.prompt_tokens,
+        "completion_tokens": result.completion_tokens,
+        "total_tokens": result.total_tokens,
+        "fallback_to_claude": result.fallback_to_claude,
+        "failure_reason": result.failure_reason,
+        "path": "inprocess",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Core dispatch function
 # ---------------------------------------------------------------------------
@@ -116,10 +187,17 @@ def classify_and_publish(
     codex_sandbox_mode: Literal["read-only", "workspace-write", "danger-full-access"]
     | None = None,
     timeout_ms: int = 300_000,
+    force_local: bool = False,
 ) -> dict:
-    """Classify *prompt* and dispatch a delegation request through runtime ingress.
+    """Classify *prompt* and dispatch a delegation request.
 
-    Returns a result dict with keys: success, correlation_id, task_type, command_name.
+    Primary path: LocalRuntimeSkillClient (Unix socket → runtime → Kafka).
+    Fallback path: DelegationRunner in-process (no Docker/Kafka required).
+
+    Set ``force_local=True`` (or pass ``--local`` via CLI) to skip the
+    runtime attempt and run in-process directly.
+
+    Returns a result dict with keys: success, correlation_id, task_type, path.
     On failure, returns success=False with an error message.
     """
     if not _HAS_CLASSIFIER:
@@ -144,6 +222,15 @@ def classify_and_publish(
     correlation_uuid = _resolve_correlation_id(correlation_id)
     correlation_id = str(correlation_uuid)
 
+    if force_local:
+        return _inprocess_fallback(
+            prompt=prompt,
+            intent_value=intent.value,
+            correlation_id=correlation_id,
+            source_file=source_file,
+            max_tokens=max_tokens,
+        )
+
     delegation_payload = {
         "prompt": prompt,
         "correlation_id": correlation_id,
@@ -162,8 +249,12 @@ def classify_and_publish(
         or ModelRuntimeSkillRequest is None
         or LocalRuntimeSkillClient is None
     ):
-        return _runtime_import_error(
-            _RUNTIME_IMPORT_ERROR or ImportError("runtime client import failed")
+        return _inprocess_fallback(
+            prompt=prompt,
+            intent_value=intent.value,
+            correlation_id=correlation_id,
+            source_file=source_file,
+            max_tokens=max_tokens,
         )
 
     request = ModelRuntimeSkillRequest(
@@ -172,18 +263,39 @@ def classify_and_publish(
         correlation_id=correlation_uuid,
         timeout_ms=timeout_ms,
     )
-    response = LocalRuntimeSkillClient().dispatch_sync(request)
+
+    try:
+        response = LocalRuntimeSkillClient().dispatch_sync(request)
+    except Exception:
+        return _inprocess_fallback(
+            prompt=prompt,
+            intent_value=intent.value,
+            correlation_id=correlation_id,
+            source_file=source_file,
+            max_tokens=max_tokens,
+        )
 
     if not response.ok:
         error = response.error
+        error_code = error.code if error else "dispatch_error"
+        # Connection errors indicate runtime is down — fall back in-process.
+        if error_code in ("socket_unavailable", "connection_refused", "timeout"):
+            return _inprocess_fallback(
+                prompt=prompt,
+                intent_value=intent.value,
+                correlation_id=correlation_id,
+                source_file=source_file,
+                max_tokens=max_tokens,
+            )
         return {
             "success": False,
             "error": error.message if error else "runtime dispatch failed",
-            "error_code": error.code if error else "dispatch_error",
+            "error_code": error_code,
             "retryable": error.retryable if error else False,
             "correlation_id": correlation_id,
             "command_name": _DELEGATION_COMMAND_NAME,
             "topic": response.command_topic or _DELEGATION_REQUEST_TOPIC,
+            "path": "runtime",
         }
 
     return {
@@ -198,6 +310,7 @@ def classify_and_publish(
         if response.dispatch_result
         else None,
         "output_payloads": response.output_payloads,
+        "path": "runtime",
     }
 
 
@@ -231,6 +344,11 @@ def main() -> None:
         default=None,
     )
     parser.add_argument("--timeout-ms", type=int, default=300_000)
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Force in-process DelegationRunner (skip runtime socket attempt)",
+    )
     args = parser.parse_args()
 
     prompt = " ".join(args.prompt)
@@ -244,18 +362,31 @@ def main() -> None:
         working_directory=args.working_directory,
         codex_sandbox_mode=args.codex_sandbox_mode,
         timeout_ms=args.timeout_ms,
+        force_local=args.local,
     )
 
     print(json.dumps(result, indent=2))
 
     if result.get("success"):
+        path = result.get("path", "runtime")
         print(
-            f"\nDelegation dispatched - correlation_id={result['correlation_id']}\n"
-            f"task_type={result['task_type']}\n"
-            f"command_name={result['command_name']}\n"
-            f"dispatch_status={result['dispatch_status']}",
+            f"\nDelegation dispatched ({path}) - correlation_id={result['correlation_id']}\n"
+            f"task_type={result['task_type']}",
             file=sys.stderr,
         )
+        if path == "runtime":
+            print(
+                f"command_name={result.get('command_name')}\n"
+                f"dispatch_status={result.get('dispatch_status')}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"model_used={result.get('model_used')}\n"
+                f"quality_passed={result.get('quality_passed')}\n"
+                f"latency_ms={result.get('latency_ms')}",
+                file=sys.stderr,
+            )
     else:
         print(f"\nDelegation failed: {result.get('error')}", file=sys.stderr)
         sys.exit(1)
