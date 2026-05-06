@@ -13,6 +13,7 @@ import pytest
 from omniclaude.delegation.runner import (
     DelegationRunnerError,
     InProcessDelegationRunner,
+    _call_llm,
 )
 
 
@@ -206,3 +207,93 @@ class TestInProcessDelegationRunnerRoutingAndGate:
         routing_call_args = mock_routing_delta.call_args[0][0]
         assert routing_call_args.source_session_id == "sess-abc123"
         assert routing_call_args.source_file_path == "/src/module.py"
+
+    @patch(
+        "omniclaude.delegation.runner.routing_delta",
+    )
+    @patch(
+        "omniclaude.delegation.runner._call_llm",
+    )
+    @patch(
+        "omniclaude.delegation.runner.quality_gate_delta",
+    )
+    def test_run_wraps_quality_gate_failure(
+        self,
+        mock_quality_gate_delta: MagicMock,
+        mock_call_llm: MagicMock,
+        mock_routing_delta: MagicMock,
+    ) -> None:
+        """Quality gate reducer exceptions stay inside DelegationRunnerError."""
+        corr_id = uuid.uuid4()
+        mock_routing_delta.return_value = self._make_routing_decision(corr_id)
+        mock_call_llm.return_value = (
+            "Research result: " + "x" * 100,
+            {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+            40,
+            "test-model",
+        )
+        mock_quality_gate_delta.side_effect = RuntimeError("gate unavailable")
+
+        runner = InProcessDelegationRunner()
+        with pytest.raises(DelegationRunnerError, match="Quality gate failed"):
+            runner.run(task_type="research", prompt="Analyze this.")
+
+
+@pytest.mark.unit
+class TestCallLlmErrorHandling:
+    """Tests for LLM response parsing error normalization."""
+
+    def _mock_response(
+        self, json_result: Any = None, json_error: Exception | None = None
+    ) -> MagicMock:
+        response = MagicMock()
+        response.status_code = 200
+        if json_error is not None:
+            response.json.side_effect = json_error
+        else:
+            response.json.return_value = json_result
+        return response
+
+    @patch("omniclaude.delegation.runner.httpx.Client")
+    def test_call_llm_wraps_invalid_json(
+        self,
+        mock_client_cls: MagicMock,
+    ) -> None:
+        """Malformed JSON responses raise DelegationRunnerError."""
+        mock_client = mock_client_cls.return_value.__enter__.return_value
+        mock_client.post.return_value = self._mock_response(
+            json_error=ValueError("bad json")
+        )
+
+        with pytest.raises(DelegationRunnerError, match="invalid JSON"):
+            _call_llm(
+                endpoint_url="http://localhost:8000",
+                model="test-model",
+                system_prompt="system",
+                prompt="prompt",
+                max_tokens=100,
+                temperature=0.3,
+                correlation_id=uuid.uuid4(),
+            )
+
+    @patch("omniclaude.delegation.runner.httpx.Client")
+    def test_call_llm_rejects_non_dict_json(
+        self,
+        mock_client_cls: MagicMock,
+    ) -> None:
+        """Non-object JSON responses raise DelegationRunnerError."""
+        mock_client = mock_client_cls.return_value.__enter__.return_value
+        mock_client.post.return_value = self._mock_response(
+            json_result=["not", "a", "dict"]
+        )
+
+        with pytest.raises(DelegationRunnerError, match="unexpected JSON type list"):
+            _call_llm(
+                endpoint_url="http://localhost:8000",
+                model="test-model",
+                system_prompt="system",
+                prompt="prompt",
+                max_tokens=100,
+                temperature=0.3,
+                correlation_id=uuid.uuid4(),
+            )

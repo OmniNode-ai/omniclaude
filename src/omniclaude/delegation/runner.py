@@ -737,7 +737,16 @@ def _call_llm(
             f"LLM endpoint returned HTTP {response.status_code} for {url}"
         )
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise DelegationRunnerError(
+            f"LLM endpoint returned invalid JSON for {url}: {exc}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise DelegationRunnerError(
+            f"LLM endpoint returned unexpected JSON type {type(data).__name__} for {url}"
+        )
     try:
         content: str = data["choices"][0]["message"]["content"] or ""
         model_used: str = data.get("model", model)
@@ -896,7 +905,13 @@ class InProcessDelegationRunner:
             task_type=task_type,
             llm_response_content=content,
         )
-        gate_result = quality_gate_delta(gate_input)
+        try:
+            gate_result = quality_gate_delta(gate_input)
+        except Exception as exc:
+            raise DelegationRunnerError(
+                f"Quality gate failed for task_type={task_type!r}, "
+                f"correlation_id={correlation_id}: {exc}"
+            ) from exc
 
         elapsed_ms = (time.monotonic_ns() - started_ns) // 1_000_000
 
