@@ -11,7 +11,7 @@ from enum import StrEnum
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SOCKET_PATH = "/tmp/onex-emit.sock"  # noqa: S108
+_DEFAULT_SOCKET_PATH = "/tmp/onex-emit.sock"  # noqa: S108  # nosec B108 — fixed socket path required by daemon contract
 _PING_TIMEOUT_S = 1.0
 
 
