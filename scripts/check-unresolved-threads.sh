@@ -7,8 +7,9 @@
 # comment body matches CodeRabbit authorship patterns (coderabbitai bot or CR
 # signature lines).
 # Threads where a human rebuttal exists AND CR's last reply is a concession
-# (you're right / apologize / correct behavior / retract) are excluded from
-# the count and logged to stderr as cr_concession_ack lines.
+# (you're right / apologize / correct behavior / retract / understood + defer /
+# reasonable pragmatic tradeoff) are excluded from the count and logged to
+# stderr as cr_concession_ack lines.
 # Threads with more comments than fetched (totalCount > fetched) are skipped
 # and counted as blocking (conservative: never wrongly exclude on partial data).
 set -euo pipefail
@@ -67,7 +68,7 @@ CONCESSION_JQ='[
   | select(
       ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
       and
-      ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
+      ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct|understood.{0,20}(reasonable|pragmatic|tradeoff|defer|pre-existing|intentional)|i.?ll defer|reasonable pragmatic|reasonable tradeoff"; "i"))
     )
   | "cr_concession_ack path=\(.comments.nodes[0].body[:40] // "unknown" | gsub("\\n";" ")) line=\([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | .[:80] | gsub("\\n";" "))"
 ][]'
@@ -91,7 +92,7 @@ BLOCKING_JQ='[
         (
           ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
           and
-          ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
+          ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct|understood.{0,20}(reasonable|pragmatic|tradeoff|defer|pre-existing|intentional)|i.?ll defer|reasonable pragmatic|reasonable tradeoff"; "i"))
         ) | not
       )
     )
