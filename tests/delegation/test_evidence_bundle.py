@@ -205,6 +205,44 @@ class TestEvidenceBundleWrite:
 
 
 @pytest.mark.unit
+class TestPathTraversalDefence:
+    """correlation_id must never escape the bundle root."""
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "../escape",
+            "..",
+            ".",
+            "/abs/path",
+            "nested/segment",
+            "back\\slash",
+            "..\\windows",
+        ],
+    )
+    def test_model_rejects_traversal_in_correlation_id(self, bad_id: str) -> None:
+        with pytest.raises(ValidationError):
+            ModelRunManifest(
+                correlation_id=bad_id,
+                bundle_id=_BUNDLE_ID,
+                task_type="research",
+                prompt_hash=_PROMPT_HASH,
+                started_at=_T0,
+                completed_at=_T1,
+                runner="inprocess",
+            )
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        ["../escape", "..", ".", "/abs/path", "nested/segment", "back\\slash"],
+    )
+    def test_bundle_path_rejects_traversal(self, tmp_path: Path, bad_id: str) -> None:
+        writer = EvidenceBundleWriter(tmp_path)
+        with pytest.raises(ValueError, match="invalid correlation_id"):
+            writer.bundle_path(bad_id)
+
+
+@pytest.mark.unit
 class TestEvidenceBundleErrors:
     def test_correlation_id_mismatch_raises(self, tmp_path: Path) -> None:
         writer = EvidenceBundleWriter(tmp_path)

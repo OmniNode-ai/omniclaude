@@ -67,7 +67,16 @@ class ModelRunManifest(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    correlation_id: str = Field(min_length=1, max_length=128)
+    correlation_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+        description=(
+            "Path-safe identifier; must start with alphanumeric and contain only "
+            "alphanumerics, dot, hyphen, underscore. Prevents directory traversal "
+            "when joined into the bundle path."
+        ),
+    )
     bundle_id: str = Field(min_length=1, max_length=128)
     bundle_schema_version: str = _BUNDLE_SCHEMA_VERSION
     ticket_id: str | None = None
@@ -226,7 +235,20 @@ class EvidenceBundleWriter:
         self._root_dir = root_dir
 
     def bundle_path(self, correlation_id: str) -> Path:
-        """Return the directory the bundle for ``correlation_id`` lives in."""
+        """Return the directory the bundle for ``correlation_id`` lives in.
+
+        Defence-in-depth against directory traversal: ``ModelRunManifest``
+        already enforces a regex pattern on ``correlation_id``, but this
+        method may be called with values that bypass model validation (e.g.
+        callers passing a raw string). Reject anything that contains a path
+        separator or is a relative-traversal segment.
+        """
+        if (
+            "/" in correlation_id
+            or "\\" in correlation_id
+            or correlation_id in {".", ".."}
+        ):
+            raise ValueError(f"invalid correlation_id path segment: {correlation_id!r}")
         return self._root_dir / correlation_id
 
     def write(
