@@ -395,6 +395,8 @@ class DelegationRunner:
                     temperature=temperature,
                 )
             )
+            if result and result.success:
+                self._persist_to_sqlite(result, corr_id, session_id, prompt)
             return result
         except RuntimeError:
             # asyncio.run() raises RuntimeError when called from within a
@@ -603,6 +605,87 @@ class DelegationRunner:
             logger.warning(
                 "DelegationRunner: on_audit_event callback failed", exc_info=True
             )
+
+    # ------------------------------------------------------------------
+    # SQLite projection persistence
+    # ------------------------------------------------------------------
+
+    def _persist_to_sqlite(
+        self,
+        result: ModelBifrostRunnerResult,
+        correlation_id: str,
+        session_id: str,
+        prompt: str,
+    ) -> None:
+        """Write delegation result to the local SQLite projection DB."""
+        try:
+            from omniclaude.delegation.sqlite_adapter import (
+                ModelDelegationEvent,
+                ModelLlmCallMetric,
+                ModelSavingsEstimate,
+                SQLiteProjectionAdapter,
+            )
+
+            db_path = Path.home() / ".omninode" / "delegation" / "delegation.sqlite"
+            adapter = SQLiteProjectionAdapter(db_path)
+
+            from omniclaude.lib.task_classifier import TaskClassifier
+
+            ctx = TaskClassifier().classify(prompt)
+            task_type = (
+                ctx.primary_intent.value
+                if hasattr(ctx, "primary_intent")
+                else "unknown"
+            )
+
+            prompt_tokens = 0
+            completion_tokens = 0
+
+            adapter.write_delegation_event(
+                ModelDelegationEvent(
+                    correlation_id=correlation_id,
+                    session_id=session_id or "interactive",
+                    tool_use_id=correlation_id[:8],
+                    hook_name="DelegationRunner",
+                    task_type=task_type,
+                    delegated_to=result.backend_selected,
+                    model_name=result.backend_selected,
+                    quality_gate_passed=True,
+                    quality_gate_detail="deterministic:pass",
+                    latency_ms=int(result.latency_ms),
+                    input_hash=str(hash(prompt))[:16],
+                    contract_version=result.config_version or "1.0.0",
+                )
+            )
+            adapter.write_llm_call_metric(
+                ModelLlmCallMetric(
+                    input_hash=f"{correlation_id[:8]}-metric",
+                    model_id=result.backend_selected,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    estimated_cost_usd=0.0,
+                    usage_source="api",
+                    token_provenance="measured" if prompt_tokens > 0 else "estimated",
+                )
+            )
+            cloud_baseline_cost = (prompt_tokens + completion_tokens) * 0.000015
+            adapter.write_savings_estimate(
+                ModelSavingsEstimate(
+                    session_id=session_id or "interactive",
+                    event_timestamp=time.time(),
+                    model_local=result.backend_selected,
+                    model_cloud_baseline="claude-opus-4-6",
+                    local_cost_usd=0.0,
+                    cloud_cost_usd=cloud_baseline_cost,
+                    savings_usd=cloud_baseline_cost,
+                    baseline_model="claude-opus-4-6",
+                    pricing_manifest_version="2026-05-07",
+                    savings_method="zero_marginal_api_cost",
+                    usage_source="api",
+                )
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("SQLite persistence failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
