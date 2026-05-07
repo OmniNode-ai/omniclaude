@@ -195,7 +195,7 @@ def _write_evidence_bundle(
             cloud_cost_usd=None,
             savings_usd=None,
             savings_method="not_computed_inprocess",
-            token_provenance="vllm_usage_block",  # noqa: S106,secrets - provenance label, not a secret
+            token_provenance="vllm_usage_block",  # secret-ok: provenance label, not a secret  # noqa: S106
             pricing_manifest_version="unset",
             prompt_tokens=int(result.prompt_tokens),  # type: ignore[attr-defined]
             completion_tokens=int(result.completion_tokens),  # type: ignore[attr-defined]
