@@ -41,6 +41,7 @@ import logging
 import os
 import time
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -561,15 +562,18 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
     except (ImportError, SyntaxError):
         return None
 
-    try:
-        delegation_config = load_bifrost_delegation_config()
-    except (FileNotFoundError, ValueError):
-        logger.warning(
-            "bifrost_delegation.yaml not found or invalid, delegation disabled"
-        )
-        return None
+    local_config_path = Path(__file__).parent / "bifrost_delegation.yaml"
+    delegation_config = None
+    for path in (local_config_path, None):
+        try:
+            delegation_config = load_bifrost_delegation_config(config_path=path)
+            break
+        except (FileNotFoundError, ValueError):
+            continue
 
-    hmac_secret = os.environ.get("LOCAL_LLM_SHARED_SECRET", "").strip() or None
+    if delegation_config is None:
+        logger.warning("bifrost_delegation.yaml not found, delegation disabled")
+        return None
 
     backends: dict[str, ModelBifrostBackendConfig] = {}
     for backend in delegation_config.backends:
@@ -583,7 +587,6 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
             backend_id=backend.backend_id,
             base_url=url,
             model_name=backend.model_name,
-            hmac_secret=hmac_secret,
             timeout_ms=backend.timeout_ms,
         )
 

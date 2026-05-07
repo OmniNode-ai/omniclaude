@@ -1,0 +1,149 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# bifrost_delegation.yaml — Delegation routing rules for Claude Code task classes.
+#
+# Maps task-class contracts to bifrost backend routing policies.
+# Every gateway response MUST include the selected rule_id and config_version
+# to make provenance auditable (OMN-10637 requirement R1).
+#
+# Backend URLs are resolved from env vars at runtime — never hardcoded here.
+# See model_registry.yaml for model capabilities and hardware assignments.
+# See routing_tiers.yaml for tier escalation ladder.
+#
+# Tickets: OMN-10637
+config_version: "1.0.0"
+schema_version: "bifrost_delegation.v1"
+# Backend definitions — URLs resolved from env vars at runtime.
+# IP addresses annotated per aislop-sweep rule (OMN-8573).
+backends:
+  # Local backends on 192.168.86.201 (AIPC)  # onex-allow-internal-ip
+  - backend_id: local-qwen-coder-30b
+    base_url_env: LLM_CODER_URL
+    # cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit — RTX 5090, 112K ctx
+    model_name: cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit
+    tier: local
+    timeout_ms: 30000
+    capabilities:
+      - code_generation
+      - refactoring
+      - documentation
+  - backend_id: local-deepseek-r1-14b
+    base_url_env: LLM_CODER_FAST_URL
+    # Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ — RTX 4090, 24K ctx
+    model_name: Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ
+    tier: local
+    timeout_ms: 30000
+    capabilities:
+      - deep_reasoning
+      - research
+      - classification
+  # Cloud fallback backends
+  - backend_id: cloud-sonnet
+    # Claude Sonnet via OAuth — no API key required (Claude Code uses OAuth)
+    model_name: claude-sonnet-4-6
+    tier: frontier_api
+    timeout_ms: 60000
+    capabilities:
+      - code_generation
+      - reasoning
+      - documentation
+      - research
+  - backend_id: cloud-haiku
+    # Claude Haiku — cheapest frontier model for documentation/simple tasks
+    model_name: claude-haiku-4-5-20251001
+    tier: frontier_api
+    timeout_ms: 30000
+    capabilities:
+      - documentation
+      - summarization
+      - simple_tasks
+# Routing rules — evaluated in ascending priority order.
+# First matching rule wins. Each rule maps a task_class to an ordered
+# list of backends to try.
+#
+# Required fields per rule (OMN-10637):
+#   rule_id: stable UUID for audit provenance
+#   task_class_contract_version: version of the contract this rule targets
+#   backend_policy_version: version of the backend policy applied
+#   fallback_policy: what to do when all backends in backend_ids fail
+#   shadow_policy_id: UUID of the shadow policy used for A/B evaluation
+routing_rules:
+  # ── code_generation ──────────────────────────────────────────────────────
+  # Route code generation to local Qwen coder first (zero API cost),
+  # fall back to cloud Sonnet for reliability.
+  - rule_id: "d4e5f6a7-0001-4000-8000-000000000001"
+    priority: 10
+    task_class: code_generation
+    task_class_contract_version: "1.0.0"
+    backend_policy_version: "1.0.0"
+    match_operation_types:
+      - chat_completion
+      - completion
+    match_capabilities:
+      - code_generation
+    latency_sla_ms: 30000
+    backend_ids:
+      - local-qwen-coder-30b
+      - cloud-sonnet
+    fallback_policy:
+      action: escalate_to_next_tier
+      max_retries: 2
+      on_exhaust: return_error
+    shadow_policy_id: "e5f6a7b8-0001-4000-8000-000000000001"
+  # ── documentation ────────────────────────────────────────────────────────
+  # Documentation tasks: local Qwen coder is capable; haiku is cheaper
+  # cloud fallback for cost-sensitive runs.
+  - rule_id: "d4e5f6a7-0002-4000-8000-000000000002"
+    priority: 20
+    task_class: documentation
+    task_class_contract_version: "1.0.0"
+    backend_policy_version: "1.0.0"
+    match_operation_types:
+      - chat_completion
+      - completion
+    match_capabilities:
+      - documentation
+    cost_ceiling_usd_per_1k_tokens: 0.004
+    backend_ids:
+      - local-qwen-coder-30b
+      - cloud-haiku
+    fallback_policy:
+      action: escalate_to_next_tier
+      max_retries: 1
+      on_exhaust: return_error
+    shadow_policy_id: "e5f6a7b8-0002-4000-8000-000000000002"
+  # ── research ─────────────────────────────────────────────────────────────
+  # Research tasks require deep reasoning; route to DeepSeek-R1 locally
+  # (reasoning-optimized), fall back to Sonnet for complex analysis.
+  - rule_id: "d4e5f6a7-0003-4000-8000-000000000003"
+    priority: 30
+    task_class: research
+    task_class_contract_version: "1.0.0"
+    backend_policy_version: "1.0.0"
+    match_operation_types:
+      - chat_completion
+      - reasoning
+    match_capabilities:
+      - deep_reasoning
+    backend_ids:
+      - local-deepseek-r1-14b
+      - cloud-sonnet
+    fallback_policy:
+      action: escalate_to_next_tier
+      max_retries: 2
+      on_exhaust: return_error
+    shadow_policy_id: "e5f6a7b8-0003-4000-8000-000000000003"
+# Default fallback when no routing rule matches.
+# Attempts backends in order.
+default_backends:
+  - local-qwen-coder-30b
+  - cloud-sonnet
+# Gateway-level circuit breaker settings (apply to all backends).
+circuit_breaker:
+  failure_threshold: 5
+  window_seconds: 30
+# Gateway-level failover settings.
+failover:
+  max_attempts: 3
+  backoff_base_ms: 500
