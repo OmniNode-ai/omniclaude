@@ -14,11 +14,13 @@ from omniclaude.delegation.evidence_bundle import (
     hash_prompt,
     new_bundle_id,
 )
-from omniclaude.delegation.runner import (
-    DelegationRunner,
+from omniclaude.delegation.inprocess_runner import (
     DelegationRunnerError,
     EnumDelegationTaskType,
     InProcessDelegationRunner,
+)
+from omniclaude.delegation.runner import (
+    DelegationRunner,
     ModelBifrostRunnerResult,
     ModelDelegationAuditEvent,
 )

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from omniclaude.delegation.runner import (
+from omniclaude.delegation.inprocess_runner import (
     DelegationRunnerError,
     InProcessDelegationRunner,
     _call_llm,
@@ -55,10 +55,10 @@ class TestInProcessDelegationRunnerRoutingAndGate:
         }
 
     @patch(
-        "omniclaude.delegation.runner.routing_delta",
+        "omniclaude.delegation.inprocess_runner.routing_delta",
     )
     @patch(
-        "omniclaude.delegation.runner._call_llm",
+        "omniclaude.delegation.inprocess_runner._call_llm",
     )
     def test_run_returns_result_on_quality_pass(
         self,
@@ -93,10 +93,10 @@ class TestInProcessDelegationRunnerRoutingAndGate:
         assert result.failure_reason == ""
 
     @patch(
-        "omniclaude.delegation.runner.routing_delta",
+        "omniclaude.delegation.inprocess_runner.routing_delta",
     )
     @patch(
-        "omniclaude.delegation.runner._call_llm",
+        "omniclaude.delegation.inprocess_runner._call_llm",
     )
     def test_run_returns_result_on_quality_fail(
         self,
@@ -123,7 +123,7 @@ class TestInProcessDelegationRunnerRoutingAndGate:
         assert result.failure_reason != ""
 
     @patch(
-        "omniclaude.delegation.runner.routing_delta",
+        "omniclaude.delegation.inprocess_runner.routing_delta",
     )
     def test_run_raises_on_routing_failure(
         self,
@@ -139,10 +139,10 @@ class TestInProcessDelegationRunnerRoutingAndGate:
             runner.run(task_type="test", prompt="Write a test.")
 
     @patch(
-        "omniclaude.delegation.runner.routing_delta",
+        "omniclaude.delegation.inprocess_runner.routing_delta",
     )
     @patch(
-        "omniclaude.delegation.runner._call_llm",
+        "omniclaude.delegation.inprocess_runner._call_llm",
     )
     def test_tool_input_embedded_in_prompt(
         self,
@@ -174,10 +174,10 @@ class TestInProcessDelegationRunnerRoutingAndGate:
         assert '"tool": "Read"' in routing_call_args.prompt
 
     @patch(
-        "omniclaude.delegation.runner.routing_delta",
+        "omniclaude.delegation.inprocess_runner.routing_delta",
     )
     @patch(
-        "omniclaude.delegation.runner._call_llm",
+        "omniclaude.delegation.inprocess_runner._call_llm",
     )
     def test_source_metadata_propagated(
         self,
@@ -209,13 +209,13 @@ class TestInProcessDelegationRunnerRoutingAndGate:
         assert routing_call_args.source_file_path == "/src/module.py"
 
     @patch(
-        "omniclaude.delegation.runner.routing_delta",
+        "omniclaude.delegation.inprocess_runner.routing_delta",
     )
     @patch(
-        "omniclaude.delegation.runner._call_llm",
+        "omniclaude.delegation.inprocess_runner._call_llm",
     )
     @patch(
-        "omniclaude.delegation.runner.quality_gate_delta",
+        "omniclaude.delegation.inprocess_runner.quality_gate_delta",
     )
     def test_run_wraps_quality_gate_failure(
         self,
@@ -254,7 +254,7 @@ class TestCallLlmErrorHandling:
             response.json.return_value = json_result
         return response
 
-    @patch("omniclaude.delegation.runner.httpx.Client")
+    @patch("omniclaude.delegation.inprocess_runner.httpx.Client")
     def test_call_llm_wraps_invalid_json(
         self,
         mock_client_cls: MagicMock,
@@ -276,7 +276,7 @@ class TestCallLlmErrorHandling:
                 correlation_id=uuid.uuid4(),
             )
 
-    @patch("omniclaude.delegation.runner.httpx.Client")
+    @patch("omniclaude.delegation.inprocess_runner.httpx.Client")
     def test_call_llm_rejects_non_dict_json(
         self,
         mock_client_cls: MagicMock,

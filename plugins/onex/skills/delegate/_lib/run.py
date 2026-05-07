@@ -69,7 +69,7 @@ except ImportError as exc:
     _RUNTIME_IMPORT_ERROR = exc
 
 try:
-    from omniclaude.delegation.runner import InProcessDelegationRunner
+    from omniclaude.delegation.inprocess_runner import InProcessDelegationRunner
 
     _HAS_DELEGATION_RUNNER = True
 except ImportError:
