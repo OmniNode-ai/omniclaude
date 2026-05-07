@@ -313,26 +313,27 @@ _CODER_FAST_URL = (
 
 @pytest.mark.unit
 def test_build_env_config_builds_config_from_single_var(monkeypatch) -> None:
-    """_build_env_config builds a valid config when one endpoint is set."""
+    """_build_env_config loads from contract and resolves env var URLs."""
     monkeypatch.setenv("LLM_CODER_FAST_URL", _CODER_FAST_URL)
-    for var in ("LLM_CODER_URL", "LLM_DEEPSEEK_R1_URL", "LLM_GLM_URL"):
-        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("LLM_CODER_URL", raising=False)
 
     cfg = _build_env_config()
 
     assert cfg is not None
-    assert "coder-fast" in cfg.backends
-    assert cfg.backends["coder-fast"].base_url == _CODER_FAST_URL
-    assert len(cfg.routing_rules) == 1
-    assert "coder-fast" in cfg.routing_rules[0].backend_ids
+    assert "local-deepseek-r1-14b" in cfg.backends
+    assert cfg.backends["local-deepseek-r1-14b"].base_url == _CODER_FAST_URL
+    assert (
+        cfg.backends["local-deepseek-r1-14b"].model_name
+        == "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"
+    )
+    assert len(cfg.routing_rules) >= 1
 
 
 @pytest.mark.unit
 def test_build_env_config_stable_rule_id_across_calls(monkeypatch) -> None:
-    """The env-derived rule_id is deterministic — same env produces same UUID."""
+    """Contract-derived rule_ids are stable across loads."""
     monkeypatch.setenv("LLM_CODER_FAST_URL", _CODER_FAST_URL)
-    for var in ("LLM_CODER_URL", "LLM_DEEPSEEK_R1_URL", "LLM_GLM_URL"):
-        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("LLM_CODER_URL", raising=False)
 
     cfg1 = _build_env_config()
     cfg2 = _build_env_config()
@@ -344,17 +345,16 @@ def test_build_env_config_stable_rule_id_across_calls(monkeypatch) -> None:
 
 @pytest.mark.unit
 def test_build_env_config_multiple_backends(monkeypatch) -> None:
-    """_build_env_config includes all configured backends in priority order."""
+    """_build_env_config includes all backends whose env vars are set."""
     monkeypatch.setenv("LLM_CODER_FAST_URL", "http://host:8001")
     monkeypatch.setenv("LLM_CODER_URL", "http://host:8000")
-    monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
-    monkeypatch.delenv("LLM_GLM_URL", raising=False)
 
     cfg = _build_env_config()
 
     assert cfg is not None
-    assert set(cfg.backends.keys()) == {"coder-fast", "coder"}
-    assert cfg.failover_attempts == 2
+    assert "local-qwen-coder-30b" in cfg.backends
+    assert "local-deepseek-r1-14b" in cfg.backends
+    assert cfg.failover_attempts == 3
 
 
 # ---------------------------------------------------------------------------

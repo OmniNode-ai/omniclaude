@@ -541,13 +541,16 @@ def _delegation_tenant_id() -> UUID:
 
 
 def _build_env_config() -> object | None:  # ModelBifrostConfig | None
-    """Build a minimal ModelBifrostConfig from environment variables.
+    """Build a ModelBifrostConfig from the bifrost_delegation.yaml contract.
 
-    Reads the same env vars as ``select_backend()`` in
-    ``handler_delegation_dispatch.py``. Returns None if no endpoints
-    are configured.
+    Loads the delegation routing contract and converts it to the gateway's
+    ModelBifrostConfig, resolving backend URLs from env vars declared in the
+    contract (base_url_env field). Backends whose env var is unset are skipped.
     """
     try:
+        from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.config_loader_bifrost_delegation import (
+            load_bifrost_delegation_config,
+        )
         from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
             ModelBifrostBackendConfig,
             ModelBifrostConfig,
@@ -556,67 +559,70 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
             ModelBifrostRoutingRule,
         )
     except (ImportError, SyntaxError):
-        # SyntaxError guards against broken/partial omnibase_infra installs
-        # (e.g. merge-conflict markers in the canonical clone during development).
         return None
 
-    _ENDPOINT_ENV = [
-        (
-            "LLM_CODER_FAST_URL",
-            "LLM_CODER_FAST_MODEL_NAME",
-            "Qwen/Qwen3-14B-AWQ",
-            "coder-fast",
-        ),
-        (
-            "LLM_CODER_URL",
-            "LLM_CODER_MODEL_NAME",
-            "Qwen3-Coder-30B-A3B-Instruct",
-            "coder",
-        ),
-        (
-            "LLM_DEEPSEEK_R1_URL",
-            "LLM_DEEPSEEK_R1_MODEL_NAME",
-            "DeepSeek-R1-Distill",
-            "deepseek-r1",
-        ),
-        ("LLM_GLM_URL", "LLM_GLM_MODEL_NAME", "glm-4.5", "glm"),
-    ]
+    try:
+        delegation_config = load_bifrost_delegation_config()
+    except (FileNotFoundError, ValueError):
+        logger.warning(
+            "bifrost_delegation.yaml not found or invalid, delegation disabled"
+        )
+        return None
+
+    hmac_secret = os.environ.get("LOCAL_LLM_SHARED_SECRET", "").strip() or None
 
     backends: dict[str, ModelBifrostBackendConfig] = {}
-    for url_var, model_var, default_model, backend_id in _ENDPOINT_ENV:
-        url = os.environ.get(url_var, "").strip()
-        if not url:
+    for backend in delegation_config.backends:
+        if backend.base_url_env:
+            url = os.environ.get(backend.base_url_env, "").strip()
+            if not url:
+                continue
+        else:
             continue
-        model_name = os.environ.get(model_var, default_model).strip() or default_model
-        backends[backend_id] = ModelBifrostBackendConfig(
-            backend_id=backend_id,
+        backends[backend.backend_id] = ModelBifrostBackendConfig(
+            backend_id=backend.backend_id,
             base_url=url,
-            model_name=model_name,
+            model_name=backend.model_name,
+            hmac_secret=hmac_secret,
+            timeout_ms=backend.timeout_ms,
         )
 
     if not backends:
         return None
 
-    priority_order = tuple(backends.keys())
-    # Stable rule_id: deterministic UUID based on the sorted backend_id set
-    # so that the same env config always produces the same rule_id in audit logs.
-    import uuid as _uuid_mod
+    rules: list[ModelBifrostRoutingRule] = []
+    for rule in delegation_config.routing_rules:
+        available_ids = tuple(bid for bid in rule.backend_ids if bid in backends)
+        if not available_ids:
+            continue
+        rules.append(
+            ModelBifrostRoutingRule(
+                rule_id=rule.rule_id,
+                priority=rule.priority,
+                backend_ids=available_ids,
+            )
+        )
 
-    rule_id = _uuid_mod.uuid5(
-        _uuid_mod.NAMESPACE_OID,
-        "delegation-env-rule:" + ",".join(sorted(priority_order)),
-    )
-    rule = ModelBifrostRoutingRule(
-        rule_id=rule_id,
-        priority=100,
-        backend_ids=priority_order,
+    default_ids = tuple(
+        bid for bid in delegation_config.default_backends if bid in backends
     )
 
     return ModelBifrostConfig(
         backends=backends,
-        routing_rules=(rule,),
-        default_backends=priority_order,
-        failover_attempts=len(backends),
+        routing_rules=tuple(rules)
+        if rules
+        else (
+            ModelBifrostRoutingRule(
+                rule_id=uuid4(),
+                priority=100,
+                backend_ids=tuple(backends.keys()),
+            ),
+        ),
+        default_backends=default_ids or tuple(backends.keys()),
+        failover_attempts=delegation_config.failover.max_attempts,
+        failover_backoff_base_ms=delegation_config.failover.backoff_base_ms,
+        circuit_breaker_failure_threshold=delegation_config.circuit_breaker.failure_threshold,
+        circuit_breaker_window_seconds=delegation_config.circuit_breaker.window_seconds,
     )
 
 
