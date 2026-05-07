@@ -120,6 +120,84 @@ class ModelBifrostRunnerResult(BaseModel):
     error_message: str = Field(default="", description="Structured error on failure")
 
 
+class ModelDelegationBackendContract(BaseModel):
+    """Backend entry from the packaged delegation routing contract."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    backend_id: str
+    base_url_env: str | None = None
+    model_name: str
+    tier: str
+    timeout_ms: int = Field(default=30000, gt=0)
+    capabilities: tuple[str, ...] = ()
+
+
+class ModelDelegationFallbackPolicyContract(BaseModel):
+    """Fallback policy entry from the packaged delegation routing contract."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    action: str
+    max_retries: int = Field(default=0, ge=0)
+    on_exhaust: str
+
+
+class ModelDelegationRoutingRuleContract(BaseModel):
+    """Routing rule entry from the packaged delegation routing contract."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: UUID
+    priority: int
+    task_class: str
+    task_class_contract_version: str
+    backend_policy_version: str
+    match_operation_types: tuple[str, ...] = ()
+    match_capabilities: tuple[str, ...] = ()
+    latency_sla_ms: int | None = Field(default=None, gt=0)
+    cost_ceiling_usd_per_1k_tokens: float | None = Field(default=None, gt=0)  # noqa: secrets
+    backend_ids: tuple[str, ...]
+    fallback_policy: ModelDelegationFallbackPolicyContract
+    shadow_policy_id: UUID
+
+
+class ModelDelegationFailoverContract(BaseModel):
+    """Failover settings from the packaged delegation routing contract."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_attempts: int = Field(default=3, gt=0)
+    backoff_base_ms: int = Field(default=500, ge=0)
+
+
+class ModelDelegationCircuitBreakerContract(BaseModel):
+    """Circuit breaker settings from the packaged delegation routing contract."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    failure_threshold: int = Field(default=5, gt=0)
+    window_seconds: int = Field(default=30, gt=0)
+
+
+class ModelDelegationBifrostContract(BaseModel):
+    """Packaged delegation routing contract consumed by DelegationRunner."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    config_version: str
+    schema_version: str
+    backends: tuple[ModelDelegationBackendContract, ...]
+    routing_rules: tuple[ModelDelegationRoutingRuleContract, ...]
+    default_backends: tuple[str, ...] = ()
+    failover: ModelDelegationFailoverContract = Field(
+        default_factory=ModelDelegationFailoverContract
+    )
+    circuit_breaker: ModelDelegationCircuitBreakerContract = Field(
+        default_factory=ModelDelegationCircuitBreakerContract
+    )
+
+
 # ---------------------------------------------------------------------------
 # Minimal HTTP transport for in-process Bifrost use
 # ---------------------------------------------------------------------------
@@ -549,9 +627,6 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
     contract (base_url_env field). Backends whose env var is unset are skipped.
     """
     try:
-        from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.config_loader_bifrost_delegation import (
-            load_bifrost_delegation_config,
-        )
         from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
             ModelBifrostBackendConfig,
             ModelBifrostConfig,
@@ -563,16 +638,17 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
         return None
 
     local_config_path = Path(__file__).parent / "bifrost_delegation.yaml"
-    delegation_config = None
-    for path in (local_config_path, None):
-        try:
-            delegation_config = load_bifrost_delegation_config(config_path=path)
-            break
-        except (FileNotFoundError, ValueError):
-            continue
-
-    if delegation_config is None:
+    if not local_config_path.exists():
         logger.warning("bifrost_delegation.yaml not found, delegation disabled")
+        return None
+
+    try:
+        import yaml
+
+        raw_config: object = yaml.safe_load(local_config_path.read_text())
+        delegation_config = ModelDelegationBifrostContract.model_validate(raw_config)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        logger.warning("bifrost_delegation.yaml invalid: %s", exc)
         return None
 
     backends: dict[str, ModelBifrostBackendConfig] = {}
