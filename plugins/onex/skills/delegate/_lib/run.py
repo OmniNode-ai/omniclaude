@@ -77,6 +77,21 @@ except ImportError:
     _HAS_DELEGATION_RUNNER = False
 
 try:
+    from omniclaude.delegation.evidence_bundle import (
+        EvidenceBundleWriter,
+        ModelBifrostResponse,
+        ModelCostEvent,
+        ModelQualityGateArtifact,
+        ModelRunManifest,
+        hash_prompt,
+        new_bundle_id,
+    )
+
+    _HAS_EVIDENCE_BUNDLE = True
+except ImportError:
+    _HAS_EVIDENCE_BUNDLE = False
+
+try:
     from omniclaude.hooks.topics import TopicBase as _TopicBase
 
     # Use DELEGATE_TASK - the canonical topic that node_delegation_orchestrator
@@ -112,6 +127,92 @@ def _runtime_import_error(exc: ImportError) -> dict:
     }
 
 
+def _write_evidence_bundle(
+    *,
+    result: object,
+    prompt: str,
+    started_at: object,
+    completed_at: object,
+) -> str | None:
+    """Write the 5-artifact delegation evidence bundle. Returns bundle dir or None.
+
+    Fail-soft: any error (bundle module missing, ONEX_STATE_DIR unset, write
+    failure) returns None without raising. The user-facing delegation result
+    must not be broken by an evidence-bundle problem.
+    """
+    if not _HAS_EVIDENCE_BUNDLE:
+        return None
+    state_dir = os.environ.get("ONEX_STATE_DIR")
+    if not state_dir:
+        return None
+
+    try:
+        from datetime import UTC, datetime  # noqa: PLC0415
+        from pathlib import Path as _Path  # noqa: PLC0415
+
+        cid = str(result.correlation_id)  # type: ignore[attr-defined]
+        bundle_root = _Path(state_dir) / "delegation" / "bundles"
+        bundle_root.mkdir(parents=True, exist_ok=True)
+
+        manifest = ModelRunManifest(
+            correlation_id=cid,
+            bundle_id=new_bundle_id(),
+            ticket_id=os.environ.get("ONEX_TICKET_ID"),
+            session_id=os.environ.get("CLAUDE_SESSION_ID"),
+            task_type=str(result.task_type),  # type: ignore[attr-defined]
+            prompt_hash=hash_prompt(prompt),
+            started_at=started_at,  # type: ignore[arg-type]
+            completed_at=completed_at,  # type: ignore[arg-type]
+            runner="inprocess",
+        )
+        bifrost = ModelBifrostResponse(
+            correlation_id=cid,
+            backend_selected=str(result.endpoint_url),  # type: ignore[attr-defined]
+            model_used=str(result.model_used),  # type: ignore[attr-defined]
+            latency_ms=int(result.latency_ms),  # type: ignore[attr-defined]
+            prompt_tokens=int(result.prompt_tokens),  # type: ignore[attr-defined]
+            completion_tokens=int(result.completion_tokens),  # type: ignore[attr-defined]
+            total_tokens=int(result.total_tokens),  # type: ignore[attr-defined]
+            response_content=str(result.content),  # type: ignore[attr-defined]
+        )
+        gate = ModelQualityGateArtifact(
+            correlation_id=cid,
+            passed=bool(result.quality_passed),  # type: ignore[attr-defined]
+            quality_score=result.quality_score,  # type: ignore[attr-defined]
+            failure_reasons=(
+                (result.failure_reason,)  # type: ignore[attr-defined]
+                if result.failure_reason  # type: ignore[attr-defined]
+                else ()
+            ),
+            fallback_to_claude=bool(result.fallback_to_claude),  # type: ignore[attr-defined]
+        )
+        cost = ModelCostEvent(
+            correlation_id=cid,
+            session_id=os.environ.get("CLAUDE_SESSION_ID"),
+            model_local=str(result.model_used),  # type: ignore[attr-defined]
+            baseline_model="claude-sonnet-4-6",
+            local_cost_usd=None,
+            cloud_cost_usd=None,
+            savings_usd=None,
+            savings_method="not_computed_inprocess",
+            token_provenance="vllm_usage_block",  # noqa: S106 - provenance label, not a secret
+            pricing_manifest_version="unset",
+            prompt_tokens=int(result.prompt_tokens),  # type: ignore[attr-defined]
+            completion_tokens=int(result.completion_tokens),  # type: ignore[attr-defined]
+        )
+        writer = EvidenceBundleWriter(root_dir=bundle_root)
+        writer.write(
+            manifest=manifest,
+            bifrost_response=bifrost,
+            quality_gate=gate,
+            cost_event=cost,
+            issued_at=datetime.now(UTC),
+        )
+        return str(bundle_root / cid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _inprocess_fallback(
     *,
     prompt: str,
@@ -135,6 +236,9 @@ def _inprocess_fallback(
             "correlation_id": correlation_id,
         }
 
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    started_at = datetime.now(UTC)
     try:
         runner = InProcessDelegationRunner()
         result = runner.run(
@@ -151,6 +255,14 @@ def _inprocess_fallback(
             "correlation_id": correlation_id,
             "path": "inprocess",
         }
+    completed_at = datetime.now(UTC)
+
+    bundle_path = _write_evidence_bundle(
+        result=result,
+        prompt=prompt,
+        started_at=started_at,
+        completed_at=completed_at,
+    )
 
     return {
         "success": True,
@@ -167,6 +279,7 @@ def _inprocess_fallback(
         "total_tokens": result.total_tokens,
         "fallback_to_claude": result.fallback_to_claude,
         "failure_reason": result.failure_reason,
+        "evidence_bundle_path": bundle_path,
         "path": "inprocess",
     }
 
