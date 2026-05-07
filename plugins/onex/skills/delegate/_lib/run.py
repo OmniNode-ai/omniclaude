@@ -213,6 +213,80 @@ def _write_evidence_bundle(
         return None
 
 
+def _persist_to_sqlite(
+    *,
+    correlation_id: str,
+    session_id: str,
+    task_type: str,
+    model_name: str,
+    latency_ms: int,
+    quality_gate_passed: bool,
+    prompt_tokens: int,
+    completion_tokens: int,
+) -> None:
+    """Write delegation result to the local SQLite projection DB."""
+    try:
+        import time as _time
+
+        from omniclaude.delegation.sqlite_adapter import (
+            ModelDelegationEvent,
+            ModelLlmCallMetric,
+            ModelSavingsEstimate,
+            SQLiteProjectionAdapter,
+        )
+
+        db_path = Path.home() / ".omninode" / "delegation" / "delegation.sqlite"
+        adapter = SQLiteProjectionAdapter(db_path)
+
+        adapter.write_delegation_event(
+            ModelDelegationEvent(
+                correlation_id=correlation_id,
+                session_id=session_id,
+                tool_use_id=correlation_id[:8],
+                hook_name="delegate-skill",
+                task_type=task_type,
+                delegated_to=model_name,
+                model_name=model_name,
+                quality_gate_passed=quality_gate_passed,
+                quality_gate_detail="deterministic:pass"
+                if quality_gate_passed
+                else "deterministic:fail",
+                latency_ms=latency_ms,
+                input_hash=correlation_id[:16],
+                contract_version="1.0.0",
+            )
+        )
+        adapter.write_llm_call_metric(
+            ModelLlmCallMetric(
+                input_hash=f"{correlation_id[:8]}-metric",
+                model_id=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                estimated_cost_usd=0.0,
+                usage_source="api",
+                token_provenance="measured" if prompt_tokens > 0 else "estimated",
+            )
+        )
+        cloud_baseline_cost = (prompt_tokens + completion_tokens) * 0.000015
+        adapter.write_savings_estimate(
+            ModelSavingsEstimate(
+                session_id=session_id,
+                event_timestamp=_time.time(),
+                model_local=model_name,
+                model_cloud_baseline="claude-opus-4-6",
+                local_cost_usd=0.0,
+                cloud_cost_usd=cloud_baseline_cost,
+                savings_usd=cloud_baseline_cost,
+                baseline_model="claude-opus-4-6",
+                pricing_manifest_version="2026-05-07",
+                savings_method="zero_marginal_api_cost",
+                usage_source="api",
+            )
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _inprocess_fallback(
     *,
     prompt: str,
@@ -262,6 +336,17 @@ def _inprocess_fallback(
         prompt=prompt,
         started_at=started_at,
         completed_at=completed_at,
+    )
+
+    _persist_to_sqlite(
+        correlation_id=correlation_id,
+        session_id=os.environ.get("CLAUDE_SESSION_ID", "interactive"),
+        task_type=result.task_type,
+        model_name=result.model_used,
+        latency_ms=int(result.latency_ms),
+        quality_gate_passed=result.quality_passed,
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
     )
 
     return {
