@@ -393,9 +393,21 @@ def test_extract_response_text_from_response_content_attr() -> None:
     """Extracts content from response.content when choices is absent."""
     resp = MagicMock()
     resp.choices = []
+    resp.generated_text = None
     resp.content = "toplevel"
 
     assert _extract_response_text(resp) == "toplevel"
+
+
+@pytest.mark.unit
+def test_extract_response_text_from_generated_text() -> None:
+    """Extracts from generated_text (ModelLlmInferenceResponse field)."""
+    resp = MagicMock()
+    resp.choices = None
+    resp.content = None
+    resp.generated_text = "fibonacci code"
+
+    assert _extract_response_text(resp) == "fibonacci code"
 
 
 @pytest.mark.unit
@@ -404,6 +416,7 @@ def test_extract_response_text_returns_empty_on_no_content() -> None:
     resp = MagicMock()
     resp.choices = []
     resp.content = None
+    resp.generated_text = None
 
     assert _extract_response_text(resp) == ""
 

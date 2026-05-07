@@ -646,6 +646,11 @@ def _extract_response_text(inference_response: object) -> str:
             if text:
                 return str(text)
 
+    # ModelLlmInferenceResponse uses generated_text
+    generated = getattr(inference_response, "generated_text", None)
+    if generated:
+        return str(generated)
+
     # Direct content attribute on the response itself
     content = getattr(inference_response, "content", None)
     if content:
