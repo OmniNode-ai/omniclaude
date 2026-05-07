@@ -571,6 +571,30 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
 
+  arch-no-direct-adapter-in-business-logic:
+    name: "Arch: No direct adapter imports in business logic (check 13)"
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check no direct adapter imports in runners/skills
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/validation/validate_no_direct_adapter_in_business_logic.py
+
   arch-cost-ledger-isolation:
     name: "Arch: ModelCostLedger confined to effects (check 5)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
@@ -2114,6 +2138,7 @@ jobs:
       - arch-no-git-outside-effects
       - arch-no-linear-outside-effects
       - arch-no-repo-adapter-in-orchestrator
+      - arch-no-direct-adapter-in-business-logic
       - arch-cost-ledger-isolation
       - arch-topic-naming
       - arch-omnidash-db-role
@@ -2165,6 +2190,7 @@ jobs:
             "arch-no-git-outside-effects=${{ needs.arch-no-git-outside-effects.result }}" \
             "arch-no-linear-outside-effects=${{ needs.arch-no-linear-outside-effects.result }}" \
             "arch-no-repo-adapter-in-orchestrator=${{ needs.arch-no-repo-adapter-in-orchestrator.result }}" \
+            "arch-no-direct-adapter-in-business-logic=${{ needs.arch-no-direct-adapter-in-business-logic.result }}" \
             "arch-cost-ledger-isolation=${{ needs.arch-cost-ledger-isolation.result }}" \
             "arch-topic-naming=${{ needs.arch-topic-naming.result }}" \
             "arch-omnidash-db-role=${{ needs.arch-omnidash-db-role.result }}" \

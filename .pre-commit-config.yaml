@@ -137,6 +137,16 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-10604: block direct adapter imports in runners/skills —
+      # adapters must be injected via DI, not constructed inline.
+      - id: no-direct-adapter-in-business-logic
+        name: reject direct adapter imports in business logic
+        entry: python3 scripts/validation/validate_no_direct_adapter_in_business_logic.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'
