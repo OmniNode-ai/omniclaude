@@ -278,7 +278,7 @@ def step_3_evidence_bundle() -> None:
             cloud_cost_usd=0.00045,
             savings_usd=0.00045,
             savings_method="counterfactual_baseline",
-            token_provenance="vllm_usage_block",  # noqa: S106 - provenance label, not a secret
+            token_provenance="vllm_usage_block",  # noqa: S106,secrets - provenance label, not a secret
             pricing_manifest_version="v1",
             prompt_tokens=10,
             completion_tokens=20,
