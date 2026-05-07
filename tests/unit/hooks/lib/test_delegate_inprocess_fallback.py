@@ -97,6 +97,20 @@ def delegate_run_no_runner(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return imported
 
 
+@pytest.fixture
+def emitted_events(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    fake_emit_module = ModuleType("emit_client_wrapper")
+
+    def emit_event(event_type: str, payload: object) -> bool:
+        events.append({"event_type": event_type, "payload": payload})
+        return True
+
+    fake_emit_module.emit_event = emit_event  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "emit_client_wrapper", fake_emit_module)
+    return events
+
+
 class TestDelegateInprocessFallback:
     def test_force_local_bypasses_runtime(
         self,
@@ -130,6 +144,34 @@ class TestDelegateInprocessFallback:
         assert "completion_tokens" in result
         assert "total_tokens" in result
         assert result["quality_passed"] is True
+
+    def test_inprocess_fallback_emits_task_delegated_event(
+        self,
+        delegate_run_with_runner: ModuleType,
+        emitted_events: list[dict[str, object]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "session-123")
+
+        result = delegate_run_with_runner.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            force_local=True,
+        )
+
+        assert result.get("success") is True
+        assert result["task_delegated_emitted"] is True
+        assert len(emitted_events) == 1
+        emitted = emitted_events[0]
+        assert emitted["event_type"] == "task.delegated"
+        payload = emitted["payload"]
+        assert isinstance(payload, dict)
+        assert payload["session_id"] == "session-123"
+        assert payload["task_type"] == "test"
+        assert payload["delegated_to"] == "local-model"
+        assert payload["delegated_by"] == "onex.delegate-skill.inprocess"
+        assert payload["quality_gate_passed"] is True
+        assert payload["delegation_success"] is True
+        assert payload["delegation_latency_ms"] == 1234
 
     def test_runtime_exception_triggers_inprocess_fallback(
         self,

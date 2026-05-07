@@ -213,6 +213,46 @@ def _write_evidence_bundle(
         return None
 
 
+def _emit_task_delegated_event(
+    *,
+    result: object,
+    fallback_correlation_id: str,
+    session_id: str | None,
+) -> bool:
+    """Emit the canonical task.delegated event for projection consumers."""
+    try:
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        from emit_client_wrapper import (
+            emit_event,  # type: ignore[import-not-found] # noqa: PLC0415
+        )
+
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload  # noqa: PLC0415
+
+        raw_correlation_id = getattr(result, "correlation_id", fallback_correlation_id)
+        correlation_uuid = uuid.UUID(str(raw_correlation_id))
+        quality_passed = bool(getattr(result, "quality_passed", False))
+        failure_reason = str(getattr(result, "failure_reason", "") or "")
+        model_used = str(getattr(result, "model_used", "") or "local-delegation-runner")
+
+        payload = ModelTaskDelegatedPayload(
+            session_id=session_id or "local-inprocess",
+            correlation_id=correlation_uuid,
+            emitted_at=datetime.now(UTC),
+            task_type=str(getattr(result, "task_type", "") or "delegation"),
+            delegated_to=model_used,
+            delegated_by="onex.delegate-skill.inprocess",
+            quality_gate_passed=quality_passed,
+            quality_gate_reason=None if quality_passed else failure_reason,
+            delegation_success=bool(getattr(result, "content", "")) and quality_passed,
+            cost_savings_usd=0.0,
+            delegation_latency_ms=int(getattr(result, "latency_ms", 0) or 0),
+        )
+        return bool(emit_event("task.delegated", payload.model_dump(mode="json")))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _inprocess_fallback(
     *,
     prompt: str,
@@ -263,6 +303,11 @@ def _inprocess_fallback(
         started_at=started_at,
         completed_at=completed_at,
     )
+    task_delegated_emitted = _emit_task_delegated_event(
+        result=result,
+        fallback_correlation_id=correlation_id,
+        session_id=os.environ.get("CLAUDE_SESSION_ID"),
+    )
 
     return {
         "success": True,
@@ -280,6 +325,7 @@ def _inprocess_fallback(
         "fallback_to_claude": result.fallback_to_claude,
         "failure_reason": result.failure_reason,
         "evidence_bundle_path": bundle_path,
+        "task_delegated_emitted": task_delegated_emitted,
         "path": "inprocess",
     }
 
