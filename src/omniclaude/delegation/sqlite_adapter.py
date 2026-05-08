@@ -185,9 +185,14 @@ class SQLiteProjectionAdapter:
                 ).fetchall()
             }
             if "002" not in applied:
-                for stmt in _MIGRATION_002_SQL.read_text().strip().split(";"):
+                migration_sql = "\n".join(
+                    line
+                    for line in _MIGRATION_002_SQL.read_text().splitlines()
+                    if not line.lstrip().startswith("--")
+                )
+                for stmt in migration_sql.strip().split(";"):
                     stmt = stmt.strip()
-                    if not stmt or stmt.startswith("--"):
+                    if not stmt:
                         continue
                     try:
                         self._conn.execute(stmt)
@@ -439,11 +444,42 @@ class SQLiteProjectionAdapter:
             ).fetchall()
         return [r["version"] for r in rows]
 
+    _ALLOWED_TABLES: dict[str, set[str]] = {
+        "delegation_events": {
+            "id",
+            "correlation_id",
+            "session_id",
+            "tool_use_id",
+            "hook_name",
+            "task_type",
+            "delegated_to",
+            "model_name",
+            "quality_gate_passed",
+            "quality_gate_detail",
+            "latency_ms",
+            "input_hash",
+            "input_redaction_policy",
+            "contract_version",
+            "created_at",
+            "timestamp",
+            "delegated_by",
+            "quality_gates_checked",
+            "quality_gates_failed",
+            "delegation_latency_ms",
+            "repo",
+            "is_shadow",
+            "llm_call_id",
+            "tokens_input",
+            "tokens_output",
+            "cost_savings_usd",
+        },
+    }
+
     _DELEGATION_EVENTS_DEFAULTS: dict[str, object] = {
         "created_at": 0.0,
         "quality_gates_checked": 0,
         "quality_gates_failed": 0,
-        "delegation_latency_ms": 0,
+        "delegation_latency_ms": None,
         "is_shadow": 0,
         "tokens_input": 0,
         "tokens_output": 0,
@@ -464,6 +500,16 @@ class SQLiteProjectionAdapter:
         row: dict[str, object],
     ) -> bool:
         """Generic upsert satisfying ProtocolProjectionDatabaseSync."""
+        allowed_cols = self._ALLOWED_TABLES.get(table)
+        if allowed_cols is None:
+            raise ValueError(f"Unsupported table: {table!r}")
+        if conflict_key not in allowed_cols:
+            raise ValueError(
+                f"Unsupported conflict key {conflict_key!r} for table {table!r}"
+            )
+        invalid = [c for c in row if c not in allowed_cols]
+        if invalid:
+            raise ValueError(f"Unsupported columns for {table!r}: {invalid}")
         row = dict(row)
         if table == "delegation_events":
             if "created_at" not in row:
@@ -488,6 +534,7 @@ class SQLiteProjectionAdapter:
                 return True
             except sqlite3.Error:
                 logger.exception("upsert into %s failed", table)
+                self._conn.rollback()
                 return False
 
     def query(
@@ -496,6 +543,13 @@ class SQLiteProjectionAdapter:
         filters: dict[str, object] | None = None,
     ) -> list[dict[str, object]]:
         """Generic query satisfying ProtocolProjectionDatabaseSync."""
+        allowed_cols = self._ALLOWED_TABLES.get(table)
+        if allowed_cols is None:
+            raise ValueError(f"Unsupported table: {table!r}")
+        if filters:
+            invalid = [k for k in filters if k not in allowed_cols]
+            if invalid:
+                raise ValueError(f"Unsupported filter keys for {table!r}: {invalid}")
         sql = f"SELECT * FROM {table}"  # noqa: S608  # nosec B608
         params: list[object] = []
         if filters:
