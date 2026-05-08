@@ -47,6 +47,7 @@ SOURCE_HOOK_SCRIPTS="${REPO_ROOT}/plugins/onex/hooks/scripts"
 PACKAGE_NAME="omninode-claude"
 
 DRY_RUN=true
+APPLY=false
 UNINSTALL=false
 FROM_SOURCE=""
 PYTHON_BIN=""
@@ -117,7 +118,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --apply)        DRY_RUN=false; shift ;;
+    --apply)        APPLY=true; DRY_RUN=false; shift ;;
     --uninstall)    UNINSTALL=true; DRY_RUN=false; shift ;;
     --from-source)
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
@@ -143,6 +144,12 @@ while [[ $# -gt 0 ]]; do
     *)              log_err "unknown argument: $1"; usage >&2; exit 2 ;;
   esac
 done
+
+if "${APPLY}" && "${UNINSTALL}"; then
+  log_err "--apply and --uninstall are mutually exclusive"
+  usage >&2
+  exit 2
+fi
 
 # ---------------------------------------------------------------------------
 # Prerequisite checks
@@ -249,7 +256,7 @@ except PackageNotFoundError:
     raise SystemExit(1)
 PY
 )"
-  if [[ "${installed_version}" == "${desired_version}" ]]; then
+  if [[ -z "${FROM_SOURCE}" && "${installed_version}" == "${desired_version}" ]]; then
     log_info "${PACKAGE_NAME} ${installed_version} already installed — skipping pip install"
     return 0
   fi
@@ -457,18 +464,55 @@ uninstall() {
   log_step "rolling back via ${ROLLBACK_MANIFEST}"
   resolve_python
   "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" <<'PY'
-import json, pathlib, sys, shutil
+import json, pathlib, sys
 manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
 backup = manifest.get("settings_backup")
 settings = manifest.get("claude_settings")
-if backup and pathlib.Path(backup).exists() and settings:
-    shutil.copy(backup, settings)
-    print(f"restored {settings} ← {backup}")
-elif settings:
-    p = pathlib.Path(settings)
-    if p.exists():
-        p.unlink()
-        print(f"removed {settings} (no prior backup recorded)")
+hooks_config = manifest.get("installed_hook_config")
+settings_path = pathlib.Path(settings) if settings else None
+if settings_path is None:
+    raise SystemExit("rollback manifest missing claude_settings")
+if not settings_path.exists():
+    if backup and pathlib.Path(backup).exists():
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(pathlib.Path(backup).read_text())
+        print(f"restored missing {settings} from {backup}")
+    raise SystemExit(0)
+current = json.loads(settings_path.read_text())
+hook_cfg = {}
+if hooks_config and pathlib.Path(hooks_config).exists():
+    hook_cfg = json.loads(pathlib.Path(hooks_config).read_text()).get("hooks", {})
+delegation_commands = {
+    hook.get("command")
+    for groups in hook_cfg.values()
+    for group in groups
+    for hook in group.get("hooks", [])
+    if hook.get("command")
+}
+hooks = current.get("hooks", {})
+for event in list(hooks):
+    filtered_groups = []
+    for group in hooks.get(event, []):
+        filtered_hooks = [
+            hook for hook in group.get("hooks", [])
+            if hook.get("command") not in delegation_commands
+        ]
+        if filtered_hooks:
+            filtered_groups.append({**group, "hooks": filtered_hooks})
+    if filtered_groups:
+        hooks[event] = filtered_groups
+    else:
+        hooks.pop(event, None)
+if hooks:
+    current["hooks"] = hooks
+else:
+    current.pop("hooks", None)
+if current:
+    settings_path.write_text(json.dumps(current, indent=2) + "\n")
+    print(f"removed delegation hooks from {settings}")
+else:
+    settings_path.unlink()
+    print(f"removed {settings} after clearing installer-managed hooks")
 PY
   rm -f "${INSTALL_HOOKS_JSON}"
   rm -rf "${INSTALL_SCRIPTS_DIR}"
