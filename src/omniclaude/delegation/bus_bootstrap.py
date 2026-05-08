@@ -82,6 +82,15 @@ async def bootstrap_delegation_bus(
         Started EventBusInmemory instance with the projection handler subscribed
         on ``onex.evt.omniclaude.task-delegated.v1``.
     """
+    if db_adapter is not None and not isinstance(
+        db_adapter,
+        ProtocolProjectionDatabaseSync,
+    ):
+        raise TypeError(
+            "db_adapter must implement ProtocolProjectionDatabaseSync "
+            "(upsert and query methods)"
+        )
+
     bus = EventBusInmemory(environment=environment, group=group)
     await bus.start()
 
@@ -103,6 +112,13 @@ async def bootstrap_delegation_bus(
             data = json.loads(msg.value) if msg.value else {}
         except json.JSONDecodeError:
             logger.exception("task-delegated event has invalid JSON value")
+            return
+
+        if not isinstance(data, dict):
+            logger.warning(
+                "task-delegated event must be a JSON object, got %s",
+                type(data).__name__,
+            )
             return
 
         if isinstance(data.get("payload"), dict):

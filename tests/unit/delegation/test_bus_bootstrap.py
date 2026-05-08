@@ -65,6 +65,10 @@ class TestBootstrapDelegationBus:
         adapter = _CapturingAdapter()
         assert isinstance(adapter, ProtocolProjectionDatabaseSync)
 
+    def test_bootstrap_rejects_invalid_adapter_shape(self) -> None:
+        with pytest.raises(TypeError, match="ProtocolProjectionDatabaseSync"):
+            asyncio.run(bootstrap_delegation_bus(db_adapter=object()))  # type: ignore[arg-type]
+
     def test_environment_and_group_propagate(self) -> None:
         bus = asyncio.run(bootstrap_delegation_bus(environment="test", group="custom"))
         try:
@@ -72,3 +76,18 @@ class TestBootstrapDelegationBus:
             assert bus.group == "custom"
         finally:
             asyncio.run(bus.close())
+
+    def test_non_object_json_event_is_ignored_without_subscriber_failure(self) -> None:
+        async def _run() -> None:
+            bus = await bootstrap_delegation_bus()
+            try:
+                await bus.publish(
+                    topic=str(TopicBase.TASK_DELEGATED),
+                    key=None,
+                    value=b'["not", "an", "object"]',
+                )
+                assert bus._subscriber_failures == {}  # noqa: SLF001
+            finally:
+                await bus.close()
+
+        asyncio.run(_run())
