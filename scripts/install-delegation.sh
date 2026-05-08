@@ -293,6 +293,7 @@ deploy_bifrost_contract() {
   local search_paths=(
     "${REPO_ROOT}/../omnibase_infra/src/omnibase_infra/configs/bifrost_delegation.yaml"
     "${REPO_ROOT}/configs/bifrost_delegation.yaml"
+    "${REPO_ROOT}/src/omniclaude/delegation/bifrost_delegation.yaml"
   )
   for p in "${search_paths[@]}"; do
     if [[ -f "$p" ]]; then

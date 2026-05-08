@@ -667,6 +667,13 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
     for backend in delegation_config.backends:
         url = backend.endpoint_url.strip()
         if not url:
+            # frontier_api tier backends (e.g. cloud-sonnet, cloud-haiku) use OAuth
+            # and have no HTTP endpoint_url — they cannot be included in Bifrost config.
+            logger.debug(
+                "skipping backend %s (tier=%s): no endpoint_url configured",
+                backend.backend_id,
+                backend.tier,
+            )
             continue
         backends[backend.backend_id] = ModelBifrostBackendConfig(
             backend_id=backend.backend_id,
