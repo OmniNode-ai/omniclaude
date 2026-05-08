@@ -160,10 +160,11 @@ class TestRouteViaEventsWithMockedRouter:
 
     @pytest.fixture(autouse=True)
     def _disable_onex_routing(self, monkeypatch):
-        """Force legacy AgentRouter path; ONEX node routing tested separately."""
+        """Force legacy AgentRouter path; ONEX node routing and LLM routing tested separately."""
         monkeypatch.setattr(
             "route_via_events_wrapper._use_onex_routing_nodes", lambda: False
         )
+        monkeypatch.setattr("route_via_events_wrapper._use_llm_routing", lambda: False)
 
     def test_high_confidence_match_uses_recommended_agent(self):
         """High confidence match should route to the recommended agent."""
@@ -435,10 +436,11 @@ class TestCandidateListFormatting:
 
     @pytest.fixture(autouse=True)
     def _disable_onex_routing(self, monkeypatch):
-        """Force legacy AgentRouter path; ONEX node routing tested separately."""
+        """Force legacy AgentRouter path; ONEX node routing and LLM routing tested separately."""
         monkeypatch.setattr(
             "route_via_events_wrapper._use_onex_routing_nodes", lambda: False
         )
+        monkeypatch.setattr("route_via_events_wrapper._use_llm_routing", lambda: False)
 
     def test_candidates_array_is_always_present(self):
         """Candidates array must always exist in routing result, even if empty."""
@@ -664,10 +666,11 @@ class TestConfidenceThreshold:
 
     @pytest.fixture(autouse=True)
     def _disable_onex_routing(self, monkeypatch):
-        """Force legacy AgentRouter path; ONEX node routing tested separately."""
+        """Force legacy AgentRouter path; ONEX node routing and LLM routing tested separately."""
         monkeypatch.setattr(
             "route_via_events_wrapper._use_onex_routing_nodes", lambda: False
         )
+        monkeypatch.setattr("route_via_events_wrapper._use_llm_routing", lambda: False)
 
     def test_confidence_threshold_is_defined(self):
         """Confidence threshold constant should be defined."""

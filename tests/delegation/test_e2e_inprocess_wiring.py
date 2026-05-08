@@ -179,20 +179,12 @@ class TestInprocessWiringEndToEnd:
             pytest.skip("evidence_bundle module not importable in this venv")
 
         monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
-        # Write a bifrost contract with test endpoints (OMN-10657: contract-driven)
-        bifrost_path = tmp_path / "bifrost.yaml"
-        bifrost_path.write_text(
-            "config_version: '1.1.0'\nschema_version: bifrost_delegation.v1\nbackends:\n"
-            '  - backend_id: local-qwen-coder-30b\n    endpoint_url: "http://test-backend.invalid:8000"\n'
-            '    model_name: ""\n    tier: local\n    timeout_ms: 30000\n    capabilities: []\n'
-            '  - backend_id: local-deepseek-r1-14b\n    endpoint_url: "http://test-backend.invalid:8001"\n'
-            '    model_name: ""\n    tier: local\n    timeout_ms: 30000\n    capabilities: []\n'
-        )
-        monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(bifrost_path))
+        # Routing delta reads endpoint from LLM_CODER_* env vars (OMN-10657)
+        monkeypatch.setenv("LLM_CODER_URL", "http://test-backend.invalid:8000")
+        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://test-backend.invalid:8001")
         import omnibase_infra.nodes.node_delegation_routing_reducer.handlers.handler_delegation_routing as _h
 
         _h._config = None
-        _h._load_bifrost_endpoints.cache_clear()
 
         with patch(
             "omniclaude.delegation.inprocess_runner._call_llm",
@@ -204,7 +196,6 @@ class TestInprocessWiringEndToEnd:
             )
 
         _h._config = None
-        _h._load_bifrost_endpoints.cache_clear()
 
         bundle_dir = Path(result["evidence_bundle_path"])
         bifrost = json.loads((bundle_dir / "bifrost_response.json").read_text())

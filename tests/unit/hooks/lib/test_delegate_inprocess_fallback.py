@@ -173,11 +173,13 @@ class TestDelegateInprocessFallback:
         assert payload["delegation_success"] is True
         assert payload["delegation_latency_ms"] == 1234
 
-    def test_runtime_exception_triggers_inprocess_fallback(
+    def test_runtime_exception_returns_explicit_error(
         self,
         delegate_run_with_runner: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """OMN-10657: runtime failure returns explicit error, no silent fallback."""
+
         def _bad_client() -> None:
             raise ConnectionRefusedError("socket unavailable")
 
@@ -190,16 +192,16 @@ class TestDelegateInprocessFallback:
             prompt="write unit tests for handler_event_emitter.py",
         )
 
-        assert result.get("success") is True, (
-            f"Expected fallback success, got: {result}"
-        )
-        assert result["path"] == "inprocess"
+        assert result.get("success") is False
+        assert "socket unavailable" in result["error"]
+        assert result.get("path") == "runtime"
 
-    def test_runtime_import_error_triggers_inprocess_fallback(
+    def test_runtime_import_error_returns_explicit_error(
         self,
         delegate_run_with_runner: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """OMN-10657: import error returns explicit error, no silent fallback."""
         monkeypatch.setattr(
             delegate_run_with_runner,
             "_RUNTIME_IMPORT_ERROR",
@@ -212,16 +214,15 @@ class TestDelegateInprocessFallback:
             prompt="write unit tests for handler_event_emitter.py",
         )
 
-        assert result.get("success") is True, (
-            f"Expected fallback success, got: {result}"
-        )
-        assert result["path"] == "inprocess"
+        assert result.get("success") is False
+        assert "omnibase_infra not installed" in result["error"]
 
-    def test_inprocess_unavailable_returns_error(
+    def test_runtime_import_error_no_runner_returns_error(
         self,
         delegate_run_no_runner: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """OMN-10657: import error with no runner returns explicit error."""
         monkeypatch.setattr(
             delegate_run_no_runner,
             "_RUNTIME_IMPORT_ERROR",
@@ -235,7 +236,7 @@ class TestDelegateInprocessFallback:
         )
 
         assert result.get("success") is False
-        assert "InProcessDelegationRunner unavailable" in result["error"]
+        assert "omnibase_infra not installed" in result["error"]
 
     def test_correlation_id_propagates_in_inprocess_path(
         self,
