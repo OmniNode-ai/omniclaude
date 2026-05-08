@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: MIT
 """Delegation routing package for omniclaude."""
 
+from omniclaude.delegation.bus_bootstrap import (
+    ProtocolProjectionDatabaseSync,
+    bootstrap_delegation_bus,
+)
 from omniclaude.delegation.daemon_fallback import is_daemon_available
+from omniclaude.delegation.emitter import emit_task_delegated
 from omniclaude.delegation.evidence_bundle import (
     EnumBundleArtifact,
     EvidenceBundleWriter,
@@ -40,6 +45,9 @@ __all__: list[str] = [
     "DelegationRunner",
     "DelegationTransportSelector",
     "DelegationRunnerError",
+    "ProtocolProjectionDatabaseSync",
+    "bootstrap_delegation_bus",
+    "emit_task_delegated",
     "EnumBundleArtifact",
     "EnumDelegationTransport",
     "EnumDelegationTaskType",
