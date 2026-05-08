@@ -1,0 +1,248 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Hook activation contract for the omniclaude package (OMN-9745).
+# Declares every hook bit this package requires active, with default
+# on/off state and a short rationale.
+# Parsed via ModelHookActivation (omnibase_core.models.contracts.subcontracts).
+
+package: "omniclaude"
+
+hook_activations:
+  # --- top-level hooks (plugins/onex/hooks/) ---
+  - hook_bit: CI_REMINDER
+    enabled_by_default: true
+    description: "Reminds the agent to check CI status before marking work done."
+
+  - hook_bit: RUFF_FIX
+    enabled_by_default: true
+    description: "Auto-runs ruff format+fix after every file write."
+
+  - hook_bit: CONVENTION_INJECTOR
+    enabled_by_default: true
+    description: "Injects repo naming/architecture conventions into context."
+
+  # --- scripts/ GATE wrappers ---
+  - hook_bit: EPIC_POSTACTION_GATE
+    enabled_by_default: true
+    description: "Blocks post-epic actions until DoD evidence is present."
+
+  - hook_bit: EPIC_PREFLIGHT_GATE
+    enabled_by_default: true
+    description: "Validates epic preconditions before dispatch begins."
+
+  - hook_bit: FILE_PATH_CONVENTION_INJECT
+    enabled_by_default: true
+    description: "Injects file-path convention checks on every tool write."
+
+  - hook_bit: HOOK_DISPATCH_CLAIM_POSTTOOL
+    enabled_by_default: true
+    description: "Records post-tool dispatch claims for claim-chain auditing."
+
+  - hook_bit: HOOK_DISPATCH_CLAIM_PRETOOL
+    enabled_by_default: true
+    description: "Records pre-tool dispatch claims for claim-chain auditing."
+
+  - hook_bit: HOOK_IDLE_NOTIFICATION_RATELIMIT
+    enabled_by_default: true
+    description: "Rate-limits idle-notification hooks to prevent loop noise."
+
+  - hook_bit: HOOK_VERIFIER_ROLE_GUARD
+    enabled_by_default: true
+    description: "Blocks verifier-role actions from being executed by builders."
+
+  - hook_bit: PERMISSION_DENIED_LOGGER
+    enabled_by_default: true
+    description: "Logs every permission-denied event to the friction log."
+
+  - hook_bit: POST_SKILL_DELEGATION_ENFORCER
+    enabled_by_default: true
+    description: "Enforces that skills delegate to nodes, not inline logic."
+
+  - hook_bit: POST_TOOL_DELEGATION_COUNTER
+    enabled_by_default: true
+    description: "Counts delegations per turn to enforce per-turn limits."
+
+  - hook_bit: POST_TOOL_USE_QUALITY
+    enabled_by_default: true
+    description: "Runs quality checks after every tool use."
+
+  - hook_bit: TEST_REMINDER
+    enabled_by_default: true
+    description: "Reminds the agent to run tests after editing test files."
+
+  - hook_bit: POST_TOOL_AGENT_RESULT_VERIFIER
+    enabled_by_default: true
+    description: "Verifies agent result claims against observable evidence."
+
+  - hook_bit: AUTO_CHECKPOINT
+    enabled_by_default: true
+    description: "Auto-saves session checkpoint after long-running tool calls."
+
+  - hook_bit: AUTO_HOSTILE_REVIEW
+    enabled_by_default: true
+    description: "Triggers adversarial review pass when PR is ready."
+
+  - hook_bit: CHANGESET_GUARD_POST
+    enabled_by_default: true
+    description: "Post-tool guard that blocks commits with oversized changesets."
+
+  - hook_bit: POST_TOOL_COMMIT_VERIFY
+    enabled_by_default: true
+    description: "Verifies commit integrity (hooks, signing) after git commits."
+
+  - hook_bit: POST_TOOL_CRON_ACTION_GUARD
+    enabled_by_default: true
+    description: "Prevents cron scripts from taking actions outside their scope."
+
+  - hook_bit: ENV_SYNC
+    enabled_by_default: true
+    description: "Syncs env vars from Infisical after session-start."
+
+  - hook_bit: POST_TOOL_KAFKA_POISON_MESSAGE_GUARD
+    enabled_by_default: true
+    description: "Drops Kafka messages that fail envelope schema validation."
+
+  - hook_bit: POST_TOOL_OUTPUT_SUPPRESSOR
+    enabled_by_default: true
+    description: "Suppresses excessive tool output before it fills context."
+
+  - hook_bit: POST_TOOL_RETURN_PATH_AUDITOR
+    enabled_by_default: true
+    description: "Audits that tool return paths match declared contract shapes."
+
+  - hook_bit: POST_TOOL_STATE_VERIFY
+    enabled_by_default: true
+    description: "Verifies state files are consistent after mutating tool calls."
+
+  - hook_bit: POST_TOOL_SUBAGENT_TOOL_LOG
+    enabled_by_default: true
+    description: "Logs subagent tool calls to the observability pipeline."
+
+  - hook_bit: TEAM_OBSERVABILITY
+    enabled_by_default: true
+    description: "Emits team-level coordination events for observability."
+
+  - hook_bit: POST_TOOL_TSC_CHECK
+    enabled_by_default: true
+    description: "Runs TypeScript type-check after frontend file edits."
+
+  - hook_bit: PRE_COMPACT
+    enabled_by_default: true
+    description: "Saves checkpoint and flushes state before context compaction."
+
+  - hook_bit: PRE_TOOL_USE_QUALITY
+    enabled_by_default: true
+    description: "Runs quality checks before every tool invocation."
+
+  - hook_bit: PRE_TOOL_AGENT_DISPATCH_GATE
+    enabled_by_default: true
+    description: "Validates dispatch envelope before any Agent() call is made."
+
+  - hook_bit: PRE_TOOL_AGENT_TOOL_GATE
+    enabled_by_default: true
+    description: "Blocks agent tool calls that violate role boundaries."
+
+  - hook_bit: PRE_TOOL_AUTHORIZATION_SHIM
+    enabled_by_default: true
+    description: "Injects authorization context before sensitive tool calls."
+
+  - hook_bit: BASH_GUARD
+    enabled_by_default: true
+    description: "Blocks dangerous bash patterns (rm -rf, force-push, etc.)."
+
+  - hook_bit: BRANCH_PROTECTION_GUARD
+    enabled_by_default: true
+    description: "Prevents direct commits to protected branches."
+
+  - hook_bit: CHANGESET_GUARD_PRE
+    enabled_by_default: true
+    description: "Pre-tool guard that warns on oversized changesets before commit."
+
+  - hook_bit: CONTEXT_SCOPE_AUDITOR
+    enabled_by_default: true
+    description: "Detects when the agent is operating outside its authorized scope."
+
+  - hook_bit: DISPATCH_GUARD
+    enabled_by_default: true
+    description: "Validates that dispatches cite a ticket and DoD evidence."
+
+  - hook_bit: DISPATCH_GUARD_TICKET_EVIDENCE
+    enabled_by_default: true
+    description: "Requires dod_evidence block on every implementation dispatch."
+
+  - hook_bit: DISPATCH_MODE_GUARDRAIL
+    enabled_by_default: true
+    description: "Prevents build-mode actions when session is in close-out mode."
+
+  - hook_bit: DOD_COMPLETION_GUARD
+    enabled_by_default: true
+    description: "Blocks ticket Done transitions without a verified dod_evidence receipt."
+
+  - hook_bit: HOSTILE_REVIEW_GATE
+    enabled_by_default: true
+    description: "Requires adversarial review to pass before PR auto-merge."
+
+  - hook_bit: LINEAR_DONE_VERIFY
+    enabled_by_default: true
+    description: "Verifies ticket state in Linear before marking as Done."
+
+  - hook_bit: MODEL_ROUTER
+    enabled_by_default: true
+    description: "Routes LLM calls to contract-declared model policy."
+
+  - hook_bit: OVERSEER_FOREGROUND_BLOCK
+    enabled_by_default: true
+    description: "Blocks foreground overseer actions that should be delegated."
+
+  - hook_bit: PIPELINE_GATE
+    enabled_by_default: true
+    description: "Enforces pipeline phase ordering and gate requirements."
+
+  - hook_bit: PLAN_EXISTENCE_GATE
+    enabled_by_default: true
+    description: "Requires an approved plan before epic dispatch begins."
+
+  - hook_bit: POLY_ENFORCER
+    enabled_by_default: true
+    description: "Enforces polymorphic dispatch through DI container."
+
+  - hook_bit: PREPUSH_VALIDATOR
+    enabled_by_default: true
+    description: "Runs full pre-commit suite before every git push."
+
+  - hook_bit: SCOPE_GATE
+    enabled_by_default: true
+    description: "Blocks operations that exceed the authorized ticket scope."
+
+  - hook_bit: SWEEP_PREFLIGHT
+    enabled_by_default: true
+    description: "Validates sweep preconditions before any sweep skill runs."
+
+  - hook_bit: TDD_DISPATCH_GATE
+    enabled_by_default: true
+    description: "Requires a failing test before implementation dispatch."
+
+  - hook_bit: TEAM_LEAD_GUARD
+    enabled_by_default: true
+    description: "Prevents worker agents from taking team-lead-only actions."
+
+  - hook_bit: WORKFLOW_GUARD
+    enabled_by_default: true
+    description: "Enforces workflow phase constraints across skill invocations."
+
+  - hook_bit: SESSION_START
+    enabled_by_default: true
+    description: "Runs session-start initialization (daemon start, env sync)."
+
+  - hook_bit: SESSION_START_ONEX_CLI_PIN_CHECK
+    enabled_by_default: true
+    description: "Checks onex CLI version pin at session start."
+
+  - hook_bit: HANDOFF_NUDGE
+    enabled_by_default: true
+    description: "Nudges the agent to save a handoff before /clear."
+
+  - hook_bit: TASK_BOUNDARY_TESTS
+    enabled_by_default: true
+    description: "Reminds agent to run tests at task boundaries."
