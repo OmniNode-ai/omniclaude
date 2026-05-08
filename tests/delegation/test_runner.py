@@ -15,6 +15,7 @@ Tests verify:
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
@@ -292,15 +293,9 @@ def test_runner_returns_none_on_unexpected_exception_from_run_async() -> None:
 
 
 @pytest.mark.unit
-def test_build_env_config_returns_none_when_no_env_vars(monkeypatch) -> None:
-    """_build_env_config returns None when no LLM env vars are set."""
-    for var in (
-        "LLM_CODER_FAST_URL",
-        "LLM_CODER_URL",
-        "LLM_DEEPSEEK_R1_URL",
-        "LLM_GLM_URL",
-    ):
-        monkeypatch.delenv(var, raising=False)
+def test_build_env_config_returns_none_when_no_contract(monkeypatch, tmp_path) -> None:
+    """_build_env_config returns None when no bifrost contract is available."""
+    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(tmp_path / "nonexistent.yaml"))
 
     result = _build_env_config()
     assert result is None
@@ -311,11 +306,38 @@ _CODER_FAST_URL = (
 )
 
 
+def _write_bifrost_with_endpoints(tmp_path, endpoints: dict[str, str]):
+    """Write a bifrost contract with endpoint_url populated for given backends."""
+    import shutil
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "omniclaude"
+        / "delegation"
+        / "bifrost_delegation.yaml"
+    )
+    dst = tmp_path / "bifrost_delegation.yaml"
+    shutil.copy2(src, dst)
+
+    import yaml
+
+    data = yaml.safe_load(dst.read_text())
+    for backend in data.get("backends", []):
+        bid = backend.get("backend_id", "")
+        if bid in endpoints:
+            backend["endpoint_url"] = endpoints[bid]
+    dst.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+    return dst
+
+
 @pytest.mark.unit
-def test_build_env_config_builds_config_from_single_var(monkeypatch) -> None:
-    """_build_env_config loads from contract and resolves env var URLs."""
-    monkeypatch.setenv("LLM_CODER_FAST_URL", _CODER_FAST_URL)
-    monkeypatch.delenv("LLM_CODER_URL", raising=False)
+def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -> None:
+    """_build_env_config loads from contract and reads endpoint_url directly."""
+    dst = _write_bifrost_with_endpoints(
+        tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
+    )
+    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
 
     cfg = _build_env_config()
 
@@ -330,10 +352,12 @@ def test_build_env_config_builds_config_from_single_var(monkeypatch) -> None:
 
 
 @pytest.mark.unit
-def test_build_env_config_stable_rule_id_across_calls(monkeypatch) -> None:
+def test_build_env_config_stable_rule_id_across_calls(monkeypatch, tmp_path) -> None:
     """Contract-derived rule_ids are stable across loads."""
-    monkeypatch.setenv("LLM_CODER_FAST_URL", _CODER_FAST_URL)
-    monkeypatch.delenv("LLM_CODER_URL", raising=False)
+    dst = _write_bifrost_with_endpoints(
+        tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
+    )
+    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
 
     cfg1 = _build_env_config()
     cfg2 = _build_env_config()
@@ -344,10 +368,16 @@ def test_build_env_config_stable_rule_id_across_calls(monkeypatch) -> None:
 
 
 @pytest.mark.unit
-def test_build_env_config_multiple_backends(monkeypatch) -> None:
-    """_build_env_config includes all backends whose env vars are set."""
-    monkeypatch.setenv("LLM_CODER_FAST_URL", "http://host:8001")
-    monkeypatch.setenv("LLM_CODER_URL", "http://host:8000")
+def test_build_env_config_multiple_backends(monkeypatch, tmp_path) -> None:
+    """_build_env_config includes all backends with populated endpoint_url."""
+    dst = _write_bifrost_with_endpoints(
+        tmp_path,
+        {
+            "local-qwen-coder-30b": "http://host:8000",
+            "local-deepseek-r1-14b": "http://host:8001",
+        },
+    )
+    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
 
     cfg = _build_env_config()
 

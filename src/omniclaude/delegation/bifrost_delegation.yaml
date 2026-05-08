@@ -7,19 +7,19 @@
 # Every gateway response MUST include the selected rule_id and config_version
 # to make provenance auditable (OMN-10637 requirement R1).
 #
-# Backend URLs are resolved from env vars at runtime — never hardcoded here.
-# See model_registry.yaml for model capabilities and hardware assignments.
-# See routing_tiers.yaml for tier escalation ladder.
+# Backend endpoint URLs are declared here and populated by the installer
+# (install-delegation.sh --apply). The source version has empty endpoint_url
+# fields; the deployed copy at ~/.omninode/delegation/bifrost_delegation.yaml
+# has actual URLs written by the installer.
 #
-# Tickets: OMN-10637
-config_version: "1.0.0"
+# Tickets: OMN-10637, OMN-10657
+config_version: "1.1.0"
 schema_version: "bifrost_delegation.v1"
-# Backend definitions — URLs resolved from env vars at runtime.
-# IP addresses annotated per aislop-sweep rule (OMN-8573).
+# Backend definitions — endpoint_url populated by installer at deploy time.
 backends:
   # Local backends on 192.168.86.201 (AIPC)  # onex-allow-internal-ip
   - backend_id: local-qwen-coder-30b
-    base_url_env: LLM_CODER_URL
+    endpoint_url: ""
     # cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit — RTX 5090, 112K ctx
     model_name: cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit
     tier: local
@@ -29,7 +29,7 @@ backends:
       - refactoring
       - documentation
   - backend_id: local-deepseek-r1-14b
-    base_url_env: LLM_CODER_FAST_URL
+    endpoint_url: ""
     # Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ — RTX 4090, 24K ctx
     model_name: Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ
     tier: local

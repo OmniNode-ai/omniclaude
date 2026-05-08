@@ -46,11 +46,17 @@ SOURCE_HOOK_CONFIG="${REPO_ROOT}/plugins/onex/hooks/hooks-delegation.v1.json"
 SOURCE_HOOK_SCRIPTS="${REPO_ROOT}/plugins/onex/hooks/scripts"
 PACKAGE_NAME="omninode-claude"
 
+# Bifrost contract: source template and deployed location (OMN-10657).
+# The handler reads endpoint_url from the deployed copy; the installer
+# populates it from --endpoint-url or interactive prompt.
+INSTALL_BIFROST="${INSTALL_ROOT}/bifrost_delegation.yaml"
+
 DRY_RUN=true
 APPLY=false
 UNINSTALL=false
 FROM_SOURCE=""
 PYTHON_BIN=""
+ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
 
@@ -100,6 +106,9 @@ Usage:
 Options:
   --apply                 Execute changes (default is dry-run preview).
   --uninstall             Restore prior state using the rollback manifest.
+  --endpoint-url <url>    LLM endpoint URL to write into the deployed bifrost
+                          contract (e.g. http://192.168.86.201:8000). If omitted
+                          during --apply, an interactive prompt will ask for it.
   --from-source <path>    Install the omniclaude package from a local repo
                           (default: install ${PACKAGE_NAME} from package index).
   --python <bin>          Python interpreter to use for pip install
@@ -112,6 +121,7 @@ Options:
 Examples:
   $0                      Preview the install plan (no changes).
   $0 --apply              Run the install for real.
+  $0 --apply --endpoint-url http://192.168.86.201:8000
   $0 --uninstall          Roll back the install.
 EOF
 }
@@ -136,6 +146,15 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       PYTHON_BIN="$2"
+      shift 2
+      ;;
+    --endpoint-url)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        log_err "--endpoint-url requires a URL"
+        usage >&2
+        exit 2
+      fi
+      ENDPOINT_URL="$2"
       shift 2
       ;;
     --skip-pip)     SKIP_PIP=true; shift ;;
@@ -262,6 +281,80 @@ PY
   fi
   "${PYTHON_BIN}" -m pip install --user --upgrade "${install_target}"
   log_ok "installed ${install_target}"
+}
+
+deploy_bifrost_contract() {
+  log_step "deploy bifrost delegation contract to ${INSTALL_BIFROST}"
+
+  # Locate the source bifrost contract. When --from-source is used, look in
+  # the omnibase_infra sibling directory (monorepo layout) or fall back to
+  # a bundled copy shipped alongside this script.
+  local bifrost_source=""
+  local search_paths=(
+    "${REPO_ROOT}/../omnibase_infra/src/omnibase_infra/configs/bifrost_delegation.yaml"
+    "${REPO_ROOT}/configs/bifrost_delegation.yaml"
+  )
+  for p in "${search_paths[@]}"; do
+    if [[ -f "$p" ]]; then
+      bifrost_source="$(cd "$(dirname "$p")" && pwd)/$(basename "$p")"
+      break
+    fi
+  done
+
+  if [[ -z "${bifrost_source}" ]]; then
+    log_warn "bifrost_delegation.yaml not found in source tree — skipping contract deploy"
+    log_warn "The routing handler will fall back to the source copy in omnibase_infra"
+    return 0
+  fi
+
+  log_info "source: ${bifrost_source}"
+
+  # Prompt for endpoint URL if not provided via --endpoint-url (interactive only).
+  if [[ -z "${ENDPOINT_URL}" ]] && ! "${DRY_RUN}" && [[ -t 0 ]]; then
+    printf '\n%sEnter the LLM endpoint URL%s (e.g. http://192.168.86.201:8000): ' \
+      "${C_BOLD}" "${C_RESET}"
+    read -r ENDPOINT_URL
+    if [[ -z "${ENDPOINT_URL}" ]]; then
+      log_warn "no endpoint URL provided — deploying contract with empty endpoints"
+    fi
+  fi
+
+  if "${DRY_RUN}"; then
+    log_dry "would copy ${bifrost_source} → ${INSTALL_BIFROST}"
+    if [[ -n "${ENDPOINT_URL}" ]]; then
+      log_dry "would write endpoint_url=${ENDPOINT_URL} into local backends"
+    fi
+    return 0
+  fi
+
+  cp "${bifrost_source}" "${INSTALL_BIFROST}"
+  log_ok "copied bifrost contract to ${INSTALL_BIFROST}"
+
+  # Write endpoint URL into the deployed contract if provided.
+  if [[ -n "${ENDPOINT_URL}" ]]; then
+    "${PYTHON_BIN}" - "${INSTALL_BIFROST}" "${ENDPOINT_URL}" <<'PY'
+import pathlib, sys, yaml
+
+bifrost_path = pathlib.Path(sys.argv[1])
+endpoint_url = sys.argv[2]
+
+data = yaml.safe_load(bifrost_path.read_text())
+if not isinstance(data, dict):
+    raise SystemExit("invalid bifrost contract")
+
+for backend in data.get("backends", []):
+    if not isinstance(backend, dict):
+        continue
+    tier = backend.get("tier", "")
+    if tier == "local":
+        backend["endpoint_url"] = endpoint_url
+
+# Preserve comments as much as possible by writing back through yaml.dump.
+bifrost_path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+print(f"wrote endpoint_url={endpoint_url} to local backends")
+PY
+    log_ok "populated local backend endpoints with ${ENDPOINT_URL}"
+  fi
 }
 
 install_hook_config() {
@@ -542,6 +635,7 @@ print_next_steps() {
 ${C_GREEN}${C_BOLD}Installation complete.${C_RESET}
 
   Database:       ${INSTALL_DB}
+  Bifrost:        ${INSTALL_BIFROST}
   Hook config:    ${INSTALL_HOOKS_JSON}
   Hook scripts:   ${INSTALL_SCRIPTS_DIR}
   Rollback:       ${ROLLBACK_MANIFEST}
@@ -573,6 +667,7 @@ main() {
 
   ensure_install_dir
   install_python_package
+  deploy_bifrost_contract
   install_hook_config
   merge_user_settings
   write_rollback_manifest

@@ -126,7 +126,7 @@ class ModelDelegationBackendContract(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     backend_id: str
-    base_url_env: str | None = None
+    endpoint_url: str = ""
     model_name: str
     tier: str
     timeout_ms: int = Field(default=30000, gt=0)
@@ -620,11 +620,12 @@ def _delegation_tenant_id() -> UUID:
 
 
 def _build_env_config() -> object | None:  # ModelBifrostConfig | None
-    """Build a ModelBifrostConfig from the bifrost_delegation.yaml contract.
+    """Build a ModelBifrostConfig from the deployed bifrost delegation contract.
 
     Loads the delegation routing contract and converts it to the gateway's
-    ModelBifrostConfig, resolving backend URLs from env vars declared in the
-    contract (base_url_env field). Backends whose env var is unset are skipped.
+    ModelBifrostConfig. Backend URLs are read directly from the contract's
+    endpoint_url field (populated by install-delegation.sh). Backends with
+    empty endpoint_url are skipped.
     """
     try:
         from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
@@ -637,7 +638,18 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
     except (ImportError, SyntaxError):
         return None
 
-    local_config_path = Path(__file__).parent / "bifrost_delegation.yaml"
+    env_override = os.environ.get("BIFROST_CONTRACT_PATH", "")
+    if env_override:
+        local_config_path = Path(env_override)
+    else:
+        deployed_path = (
+            Path.home() / ".omninode" / "delegation" / "bifrost_delegation.yaml"
+        )
+        local_config_path = (
+            deployed_path
+            if deployed_path.exists()
+            else Path(__file__).parent / "bifrost_delegation.yaml"
+        )
     if not local_config_path.exists():
         logger.warning("bifrost_delegation.yaml not found, delegation disabled")
         return None
@@ -653,11 +665,8 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
 
     backends: dict[str, ModelBifrostBackendConfig] = {}
     for backend in delegation_config.backends:
-        if backend.base_url_env:
-            url = os.environ.get(backend.base_url_env, "").strip()
-            if not url:
-                continue
-        else:
+        url = backend.endpoint_url.strip()
+        if not url:
             continue
         backends[backend.backend_id] = ModelBifrostBackendConfig(
             backend_id=backend.backend_id,

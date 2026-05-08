@@ -100,6 +100,7 @@ try:
 except (ImportError, AttributeError):
     _DELEGATION_REQUEST_TOPIC = ""  # fallback; emit still works via event_type key
 
+
 DELEGATABLE: frozenset[object] = (
     TaskClassifier.DELEGATABLE_INTENTS if _HAS_CLASSIFIER else frozenset()
 )
@@ -408,12 +409,8 @@ def classify_and_publish(
         or ModelRuntimeSkillRequest is None
         or LocalRuntimeSkillClient is None
     ):
-        return _inprocess_fallback(
-            prompt=prompt,
-            intent_value=intent.value,
-            correlation_id=correlation_id,
-            source_file=source_file,
-            max_tokens=max_tokens,
+        return _runtime_import_error(
+            _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
         )
 
     request = ModelRuntimeSkillRequest(
@@ -425,27 +422,17 @@ def classify_and_publish(
 
     try:
         response = LocalRuntimeSkillClient().dispatch_sync(request)
-    except Exception:
-        return _inprocess_fallback(
-            prompt=prompt,
-            intent_value=intent.value,
-            correlation_id=correlation_id,
-            source_file=source_file,
-            max_tokens=max_tokens,
-        )
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"Runtime dispatch failed: {exc}. Use --local for in-process delegation.",
+            "correlation_id": correlation_id,
+            "path": "runtime",
+        }
 
     if not response.ok:
         error = response.error
         error_code = error.code if error else "dispatch_error"
-        # Connection errors indicate runtime is down — fall back in-process.
-        if error_code in ("socket_unavailable", "connection_refused", "timeout"):
-            return _inprocess_fallback(
-                prompt=prompt,
-                intent_value=intent.value,
-                correlation_id=correlation_id,
-                source_file=source_file,
-                max_tokens=max_tokens,
-            )
         return {
             "success": False,
             "error": error.message if error else "runtime dispatch failed",
