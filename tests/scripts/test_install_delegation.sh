@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Tests for install-delegation.sh [OMN-10626]:
+#   1. --help prints usage and exits 0
+#   2. dry-run by default (no files created in sandbox HOME)
+#   3. dry-run names every install step in its plan output
+#   4. --apply creates the install layout in a sandbox HOME
+#   5. --apply merges hooks into a pre-existing settings.json without dropping
+#      existing entries, and stores a backup
+#   6. --apply is idempotent (second run does not duplicate hook commands)
+#   7. --uninstall restores the prior settings.json from the recorded backup
+# Portable to bash 3.2 (macOS default) and bash 5+ (Linux CI).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+INSTALL_SCRIPT="${REPO_ROOT}/scripts/install-delegation.sh"
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+pass() { echo "PASS: $*"; }
+
+[[ -x "${INSTALL_SCRIPT}" ]] || fail "install script missing or not executable: ${INSTALL_SCRIPT}"
+
+TMPDIR_SANDBOX="$(mktemp -d)"
+trap 'rm -rf "${TMPDIR_SANDBOX}"' EXIT
+
+SANDBOX_HOME="${TMPDIR_SANDBOX}/home"
+mkdir -p "${SANDBOX_HOME}/.claude"
+
+# Stub claude CLI so the prereq check passes.
+STUB_BIN="${TMPDIR_SANDBOX}/bin"
+mkdir -p "${STUB_BIN}"
+cat > "${STUB_BIN}/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "claude 1.0.0-stub"
+EOF
+chmod +x "${STUB_BIN}/claude"
+
+PY_BIN="$(command -v python3)"
+[[ -x "${PY_BIN}" ]] || fail "python3 not on PATH"
+
+run_install() {
+  HOME="${SANDBOX_HOME}" PATH="${STUB_BIN}:${PATH}" \
+    bash "${INSTALL_SCRIPT}" --python "${PY_BIN}" "$@"
+}
+
+# --- Test 1: --help exits 0 and prints usage --------------------------------
+HELP_OUT="$(run_install --help 2>&1)"
+echo "${HELP_OUT}" | grep -q "Usage" || fail "--help must print usage (got: ${HELP_OUT})"
+pass "--help exits 0 and prints usage"
+
+# --- Test 2: dry-run does not create install root ---------------------------
+rm -rf "${SANDBOX_HOME}/.omninode"
+DRY_OUT="$(run_install 2>&1)" || fail "dry-run must exit 0"
+[[ ! -d "${SANDBOX_HOME}/.omninode/delegation" ]] \
+  || fail "dry-run must not create ${SANDBOX_HOME}/.omninode/delegation"
+pass "dry-run does not create install root"
+
+# --- Test 3: dry-run plan covers every step ---------------------------------
+for needle in \
+  "ensure install dirs" \
+  "install Python package" \
+  "install hook config" \
+  "merge delegation hooks" \
+  "write rollback manifest" \
+  "smoke test"; do
+  echo "${DRY_OUT}" | grep -q "${needle}" \
+    || fail "dry-run plan missing step: ${needle}"
+done
+echo "${DRY_OUT}" | grep -qi "dry-run complete" \
+  || fail "dry-run must print completion banner"
+pass "dry-run plan covers every install step"
+
+# --- Test 4: --apply creates the install layout in sandbox HOME -------------
+# Write a pre-existing settings.json with an unrelated hook so we can prove
+# the merge does not clobber it.
+cat > "${SANDBOX_HOME}/.claude/settings.json" <<'EOF'
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {"USER_VAR": "1"},
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {"type": "command", "command": "/usr/local/bin/my-existing-hook.sh"}
+        ]
+      }
+    ]
+  }
+}
+EOF
+
+# Run with --skip-pip so we don't need network or omninode-* packages to test
+# the install layout. The pip install path is independently exercised in CI by
+# the project's normal test suite (pyproject.toml install + import check).
+run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply.log" 2>&1 \
+  || { cat "${TMPDIR_SANDBOX}/apply.log" >&2; fail "--apply must exit 0"; }
+
+[[ -d "${SANDBOX_HOME}/.omninode/delegation" ]] || fail "install root not created"
+[[ -f "${SANDBOX_HOME}/.omninode/delegation/hooks-delegation.json" ]] \
+  || fail "hook config not written"
+[[ -f "${SANDBOX_HOME}/.omninode/delegation/rollback-manifest.json" ]] \
+  || fail "rollback manifest not written"
+[[ -d "${SANDBOX_HOME}/.omninode/delegation/hook-scripts" ]] \
+  || fail "hook scripts dir not created"
+pass "--apply creates the install layout"
+
+# --- Test 5: existing settings.json hooks are preserved + backed up ---------
+"${PY_BIN}" - "${SANDBOX_HOME}/.claude/settings.json" <<'PY'
+import json, pathlib, sys
+data = json.loads(pathlib.Path(sys.argv[1]).read_text())
+hooks = data.get("hooks", {})
+pre = hooks.get("PreToolUse", [])
+# Existing user hook must still be there.
+existing_cmds = [
+    h.get("command") for g in pre for h in g.get("hooks", [])
+]
+assert "/usr/local/bin/my-existing-hook.sh" in existing_cmds, (
+    f"existing user hook lost during merge: {existing_cmds}"
+)
+# Delegation hook must have been added.
+session_start = hooks.get("SessionStart", [])
+ss_cmds = [
+    h.get("command") for g in session_start for h in g.get("hooks", [])
+]
+assert any("session-start.sh" in (c or "") for c in ss_cmds), (
+    f"delegation SessionStart hook missing after merge: {ss_cmds}"
+)
+PY
+ls "${SANDBOX_HOME}/.omninode/delegation/backups"/settings.json.*.bak >/dev/null \
+  || fail "settings.json backup not stored"
+pass "settings.json merge preserves existing hooks + writes backup"
+
+# --- Test 6: idempotent — second --apply does not duplicate hooks -----------
+BEFORE_HASH="$(shasum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1}')"
+run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply2.log" 2>&1 \
+  || { cat "${TMPDIR_SANDBOX}/apply2.log" >&2; fail "second --apply must exit 0"; }
+AFTER_HASH="$(shasum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1}')"
+[[ "${BEFORE_HASH}" == "${AFTER_HASH}" ]] \
+  || fail "second --apply mutated settings.json (idempotency violated)"
+pass "--apply is idempotent"
+
+# --- Test 7: --uninstall restores prior settings ----------------------------
+run_install --uninstall >"${TMPDIR_SANDBOX}/uninstall.log" 2>&1 \
+  || { cat "${TMPDIR_SANDBOX}/uninstall.log" >&2; fail "--uninstall must exit 0"; }
+"${PY_BIN}" - "${SANDBOX_HOME}/.claude/settings.json" <<'PY'
+import json, pathlib, sys
+data = json.loads(pathlib.Path(sys.argv[1]).read_text())
+hooks = data.get("hooks", {})
+ss = hooks.get("SessionStart", [])
+ss_cmds = [h.get("command") for g in ss for h in g.get("hooks", [])]
+assert all("session-start.sh" not in (c or "") for c in ss_cmds), (
+    f"delegation hook still present after uninstall: {ss_cmds}"
+)
+pre = hooks.get("PreToolUse", [])
+pre_cmds = [h.get("command") for g in pre for h in g.get("hooks", [])]
+assert "/usr/local/bin/my-existing-hook.sh" in pre_cmds, (
+    f"original user hook lost after uninstall: {pre_cmds}"
+)
+PY
+[[ ! -f "${SANDBOX_HOME}/.omninode/delegation/hooks-delegation.json" ]] \
+  || fail "uninstall must remove installed hook config"
+pass "--uninstall restores prior settings.json + removes hook config"
+
+echo ""
+echo "ALL TESTS PASSED"
