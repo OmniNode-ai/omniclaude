@@ -100,7 +100,7 @@ Options:
   --apply                 Execute changes (default is dry-run preview).
   --uninstall             Restore prior state using the rollback manifest.
   --from-source <path>    Install the omniclaude package from a local repo
-                          (default: <repo containing this script>).
+                          (default: install ${PACKAGE_NAME} from package index).
   --python <bin>          Python interpreter to use for pip install
                           (default: python3 from PATH; must be 3.12+).
   --skip-pip              Skip pip install (assume omniclaude is already
@@ -119,8 +119,24 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)        DRY_RUN=false; shift ;;
     --uninstall)    UNINSTALL=true; DRY_RUN=false; shift ;;
-    --from-source)  FROM_SOURCE="$2"; shift 2 ;;
-    --python)       PYTHON_BIN="$2"; shift 2 ;;
+    --from-source)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        log_err "--from-source requires a path"
+        usage >&2
+        exit 2
+      fi
+      FROM_SOURCE="$2"
+      shift 2
+      ;;
+    --python)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        log_err "--python requires an interpreter path"
+        usage >&2
+        exit 2
+      fi
+      PYTHON_BIN="$2"
+      shift 2
+      ;;
     --skip-pip)     SKIP_PIP=true; shift ;;
     --skip-smoke)   SKIP_SMOKE=true; shift ;;
     -h|--help)      usage; exit 0 ;;
@@ -201,17 +217,44 @@ install_python_package() {
     log_info "--skip-pip set: assuming package already importable"
     return 0
   fi
+  local desired_version install_target installed_version
+  desired_version="${OMNICLAUDE_INSTALL_VERSION:-}"
+  if [[ -z "${desired_version}" ]]; then
+    desired_version="$("${PYTHON_BIN}" - "${REPO_ROOT}/pyproject.toml" <<'PY'
+import pathlib
+import sys
+import tomllib
+
+data = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())
+print(data["project"]["version"])
+PY
+)"
+  fi
+  if [[ -n "${FROM_SOURCE}" ]]; then
+    install_target="${REPO_ROOT}"
+  else
+    install_target="${PACKAGE_NAME}==${desired_version}"
+  fi
   if "${DRY_RUN}"; then
-    log_dry "would: ${PYTHON_BIN} -m pip install --user '${REPO_ROOT}'"
+    log_dry "would: ${PYTHON_BIN} -m pip install --user --upgrade '${install_target}'"
     return 0
   fi
-  # Verify package not already importable at the right version before reinstalling.
-  if "${PYTHON_BIN}" -c "import omniclaude.delegation.sqlite_adapter" 2>/dev/null; then
-    log_info "omniclaude.delegation already importable — skipping pip install"
+  installed_version="$("${PYTHON_BIN}" - "${PACKAGE_NAME}" <<'PY' 2>/dev/null || true
+from importlib.metadata import PackageNotFoundError, version
+import sys
+
+try:
+    print(version(sys.argv[1]))
+except PackageNotFoundError:
+    raise SystemExit(1)
+PY
+)"
+  if [[ "${installed_version}" == "${desired_version}" ]]; then
+    log_info "${PACKAGE_NAME} ${installed_version} already installed — skipping pip install"
     return 0
   fi
-  "${PYTHON_BIN}" -m pip install --user "${REPO_ROOT}"
-  log_ok "installed package from ${REPO_ROOT}"
+  "${PYTHON_BIN}" -m pip install --user --upgrade "${install_target}"
+  log_ok "installed ${install_target}"
 }
 
 install_hook_config() {

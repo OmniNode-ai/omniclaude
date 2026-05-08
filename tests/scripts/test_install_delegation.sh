@@ -3,13 +3,14 @@
 # SPDX-License-Identifier: MIT
 # Tests for install-delegation.sh [OMN-10626]:
 #   1. --help prints usage and exits 0
-#   2. dry-run by default (no files created in sandbox HOME)
-#   3. dry-run names every install step in its plan output
-#   4. --apply creates the install layout in a sandbox HOME
-#   5. --apply merges hooks into a pre-existing settings.json without dropping
+#   2. options that require values fail clearly when missing values
+#   3. dry-run by default (no files created in sandbox HOME)
+#   4. dry-run names every install step in its plan output
+#   5. --apply creates the install layout in a sandbox HOME
+#   6. --apply merges hooks into a pre-existing settings.json without dropping
 #      existing entries, and stores a backup
-#   6. --apply is idempotent (second run does not duplicate hook commands)
-#   7. --uninstall restores the prior settings.json from the recorded backup
+#   7. --apply is idempotent (second run does not duplicate hook commands)
+#   8. --uninstall restores the prior settings.json from the recorded backup
 # Portable to bash 3.2 (macOS default) and bash 5+ (Linux CI).
 set -euo pipefail
 
@@ -50,14 +51,31 @@ HELP_OUT="$(run_install --help 2>&1)"
 echo "${HELP_OUT}" | grep -q "Usage" || fail "--help must print usage (got: ${HELP_OUT})"
 pass "--help exits 0 and prints usage"
 
-# --- Test 2: dry-run does not create install root ---------------------------
+# --- Test 2: options requiring values fail clearly --------------------------
+set +e
+MISSING_FROM_SOURCE_OUT="$(run_install --from-source 2>&1)"
+MISSING_FROM_SOURCE_RC=$?
+MISSING_PYTHON_OUT="$(run_install --python 2>&1)"
+MISSING_PYTHON_RC=$?
+set -e
+[[ "${MISSING_FROM_SOURCE_RC}" -eq 2 ]] \
+  || fail "--from-source without path must exit 2 (got ${MISSING_FROM_SOURCE_RC})"
+echo "${MISSING_FROM_SOURCE_OUT}" | grep -q -- "--from-source requires a path" \
+  || fail "--from-source missing value error not clear: ${MISSING_FROM_SOURCE_OUT}"
+[[ "${MISSING_PYTHON_RC}" -eq 2 ]] \
+  || fail "--python without interpreter must exit 2 (got ${MISSING_PYTHON_RC})"
+echo "${MISSING_PYTHON_OUT}" | grep -q -- "--python requires an interpreter path" \
+  || fail "--python missing value error not clear: ${MISSING_PYTHON_OUT}"
+pass "missing option values fail clearly"
+
+# --- Test 3: dry-run does not create install root ---------------------------
 rm -rf "${SANDBOX_HOME}/.omninode"
 DRY_OUT="$(run_install 2>&1)" || fail "dry-run must exit 0"
 [[ ! -d "${SANDBOX_HOME}/.omninode/delegation" ]] \
   || fail "dry-run must not create ${SANDBOX_HOME}/.omninode/delegation"
 pass "dry-run does not create install root"
 
-# --- Test 3: dry-run plan covers every step ---------------------------------
+# --- Test 4: dry-run plan covers every step ---------------------------------
 for needle in \
   "ensure install dirs" \
   "install Python package" \
@@ -70,9 +88,11 @@ for needle in \
 done
 echo "${DRY_OUT}" | grep -qi "dry-run complete" \
   || fail "dry-run must print completion banner"
+echo "${DRY_OUT}" | grep -q "pip install --user --upgrade '${PACKAGE_NAME:-omninode-claude}==" \
+  || fail "dry-run should install package name by default, not repo path"
 pass "dry-run plan covers every install step"
 
-# --- Test 4: --apply creates the install layout in sandbox HOME -------------
+# --- Test 5: --apply creates the install layout in sandbox HOME -------------
 # Write a pre-existing settings.json with an unrelated hook so we can prove
 # the merge does not clobber it.
 cat > "${SANDBOX_HOME}/.claude/settings.json" <<'EOF'
@@ -107,7 +127,7 @@ run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply.log" 2>&1 \
   || fail "hook scripts dir not created"
 pass "--apply creates the install layout"
 
-# --- Test 5: existing settings.json hooks are preserved + backed up ---------
+# --- Test 6: existing settings.json hooks are preserved + backed up ---------
 "${PY_BIN}" - "${SANDBOX_HOME}/.claude/settings.json" <<'PY'
 import json, pathlib, sys
 data = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -133,7 +153,7 @@ ls "${SANDBOX_HOME}/.omninode/delegation/backups"/settings.json.*.bak >/dev/null
   || fail "settings.json backup not stored"
 pass "settings.json merge preserves existing hooks + writes backup"
 
-# --- Test 6: idempotent — second --apply does not duplicate hooks -----------
+# --- Test 7: idempotent — second --apply does not duplicate hooks -----------
 BEFORE_HASH="$(shasum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1}')"
 run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply2.log" 2>&1 \
   || { cat "${TMPDIR_SANDBOX}/apply2.log" >&2; fail "second --apply must exit 0"; }
@@ -142,7 +162,7 @@ AFTER_HASH="$(shasum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1}')
   || fail "second --apply mutated settings.json (idempotency violated)"
 pass "--apply is idempotent"
 
-# --- Test 7: --uninstall restores prior settings ----------------------------
+# --- Test 8: --uninstall restores prior settings ----------------------------
 run_install --uninstall >"${TMPDIR_SANDBOX}/uninstall.log" 2>&1 \
   || { cat "${TMPDIR_SANDBOX}/uninstall.log" >&2; fail "--uninstall must exit 0"; }
 "${PY_BIN}" - "${SANDBOX_HOME}/.claude/settings.json" <<'PY'
