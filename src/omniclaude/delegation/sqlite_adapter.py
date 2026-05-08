@@ -478,7 +478,7 @@ class SQLiteProjectionAdapter:
             f"{c} = excluded.{c}" for c in columns if c != conflict_key
         )
         sql = (
-            f"INSERT INTO {table} ({col_names}) VALUES ({placeholders}) "  # noqa: S608
+            f"INSERT INTO {table} ({col_names}) VALUES ({placeholders}) "  # noqa: S608  # nosec B608
             f"ON CONFLICT({conflict_key}) DO UPDATE SET {update_clause}"
         )
         with self._lock:
@@ -496,7 +496,7 @@ class SQLiteProjectionAdapter:
         filters: dict[str, object] | None = None,
     ) -> list[dict[str, object]]:
         """Generic query satisfying ProtocolProjectionDatabaseSync."""
-        sql = f"SELECT * FROM {table}"  # noqa: S608
+        sql = f"SELECT * FROM {table}"  # noqa: S608  # nosec B608
         params: list[object] = []
         if filters:
             clauses = [f"{k} = ?" for k in filters]
