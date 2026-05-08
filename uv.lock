@@ -2335,6 +2335,15 @@ dependencies = [
 discord = [
     { name = "discord-py" },
 ]
+full = [
+    { name = "aiokafka" },
+    { name = "confluent-kafka" },
+    { name = "discord-py" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+    { name = "valkey" },
+]
 hooks = [
     { name = "valkey" },
 ]
@@ -2343,6 +2352,13 @@ kafka = [
     { name = "confluent-kafka" },
 ]
 otel = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+]
+skills = [
+    { name = "aiokafka" },
+    { name = "confluent-kafka" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -2374,28 +2390,40 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiokafka", marker = "extra == 'full'", specifier = ">=0.11.0,<0.15.0" },
     { name = "aiokafka", marker = "extra == 'kafka'", specifier = ">=0.11.0,<0.15.0" },
+    { name = "aiokafka", marker = "extra == 'skills'", specifier = ">=0.11.0,<0.15.0" },
     { name = "cachetools", specifier = ">=5.0.0" },
     { name = "click", specifier = ">=8.1.0" },
+    { name = "confluent-kafka", marker = "extra == 'full'", specifier = ">=2.12.0,<3.0.0" },
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
+    { name = "confluent-kafka", marker = "extra == 'skills'", specifier = ">=2.12.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
+    { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = "==0.40.1" },
     { name = "omnibase-infra", specifier = "==0.34.2" },
     { name = "omnibase-spi", specifier = "==0.20.6" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.23.0" },
+    { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
+    { name = "opentelemetry-api", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0,<3.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
+    { name = "valkey", marker = "extra == 'full'", specifier = ">=6.0" },
     { name = "valkey", marker = "extra == 'hooks'", specifier = ">=6.0" },
 ]
-provides-extras = ["kafka", "otel", "hooks", "discord"]
+provides-extras = ["kafka", "otel", "hooks", "discord", "skills", "full"]
 
 [package.metadata.requires-dev]
 dev = [

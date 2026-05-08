@@ -52,6 +52,27 @@ discord = [
     "discord.py>=2.3.0,<3.0.0",
 ]
 
+# skills is optional: runtime event pipeline for skill dispatch (Kafka + OTEL).
+# R-class skills that dispatch via onex run require kafka; OTEL adds observability.
+skills = [
+    "aiokafka>=0.11.0,<0.15.0",
+    "confluent-kafka>=2.12.0,<3.0.0",
+    "opentelemetry-api>=1.23.0,<2.0.0",
+    "opentelemetry-sdk>=1.23.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
+]
+
+# full bundles all optional feature sets for a complete local development install.
+full = [
+    "aiokafka>=0.11.0,<0.15.0",
+    "confluent-kafka>=2.12.0,<3.0.0",
+    "opentelemetry-api>=1.23.0,<2.0.0",
+    "opentelemetry-sdk>=1.23.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
+    "valkey>=6.0",
+    "discord.py>=2.3.0,<3.0.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
