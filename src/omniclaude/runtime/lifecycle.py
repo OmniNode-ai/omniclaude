@@ -128,8 +128,9 @@ class _OmnimarketEmitDaemon:
         await self._claim_pid_file()
 
         try:
-            from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
             from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
+
+            from omniclaude.runtime.lifecycle_bootstrapper import create_kafka_event_bus
 
             environment = os.environ.get("OMNICLAUDE_PUBLISHER_ENVIRONMENT", "")
             config = ModelKafkaEventBusConfig(
@@ -137,9 +138,7 @@ class _OmnimarketEmitDaemon:
                 environment=environment,
                 timeout_seconds=int(self._config.kafka_timeout_seconds),
             ).apply_environment_overrides()
-            event_bus = EventBusKafka(
-                config=config
-            )  # bus-ok: runtime lifecycle bootstrap, DI resolution pending OMN-10718
+            event_bus = create_kafka_event_bus(config)
             await event_bus.start()
             self._event_bus = event_bus
 
