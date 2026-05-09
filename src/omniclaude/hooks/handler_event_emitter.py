@@ -47,7 +47,6 @@ from omnibase_core.models.hooks.claude_code import (
     ModelClaudeCodeHookEvent,
     ModelClaudeCodeHookEventPayload,
 )
-from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
 from omniclaude.hooks._helpers import normalize_action_description
@@ -68,6 +67,7 @@ from omniclaude.hooks.topics import TopicBase, build_topic
 
 if TYPE_CHECKING:
     from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+    from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 
     from omniclaude.hooks.schemas import ModelHookPayload
 
@@ -549,9 +549,7 @@ async def emit_hook_event(
 
         # Create Kafka config and bus
         config = create_kafka_config()
-        bus = EventBusKafka(
-            config=config
-        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
+        bus = create_kafka_event_bus(config)
 
         # Start producer
         await bus.start()
@@ -1181,9 +1179,7 @@ async def emit_claude_hook_event(
 
         # Create Kafka config and bus
         kafka_config = create_kafka_config()
-        bus = EventBusKafka(
-            config=kafka_config
-        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
+        bus = create_kafka_event_bus(kafka_config)
 
         # Start producer
         await bus.start()
@@ -1331,9 +1327,7 @@ async def emit_session_outcome_from_config(
         # A shared bus would halve connection overhead at teardown but would
         # require lifetime management across independently-failable emitters.
         kafka_config = create_kafka_config()
-        bus = EventBusKafka(
-            config=kafka_config
-        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
+        bus = create_kafka_event_bus(kafka_config)
         await bus.start()
 
         # Publish to both topics (fan-out) with per-topic error handling

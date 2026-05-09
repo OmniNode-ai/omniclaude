@@ -38,6 +38,7 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import click
@@ -57,8 +58,11 @@ except (ImportError, PackageNotFoundError):
 
 from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.intelligence import ModelToolExecutionContent
-from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 
+if TYPE_CHECKING:
+    from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
+
+from omniclaude.hooks.bus_bootstrap import create_kafka_event_bus
 from omniclaude.hooks.handler_event_emitter import (
     ModelClaudeHookEventConfig,
     create_kafka_config,
@@ -647,9 +651,7 @@ async def _emit_tool_content(
         config = create_kafka_config()
         # New bus per call is intentional - each invocation runs in an isolated
         # subshell from the shell hook, so connection pooling isn't beneficial
-        bus = EventBusKafka(
-            config=config
-        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
+        bus = create_kafka_event_bus(config)
 
         # Start producer
         await bus.start()
