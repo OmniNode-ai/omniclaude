@@ -35,7 +35,9 @@ class DedupStore:
 
     def __init__(self, db_path: Path | None = None) -> None:
         self._db_path = db_path or _DEFAULT_DB_PATH
-        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(
+            str(self._db_path), check_same_thread=False
+        )  # di-ok: dedup store is the adapter itself, DI refactor pending OMN-10718
         self._init_schema()
 
     def _init_schema(self) -> None:

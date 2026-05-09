@@ -157,6 +157,26 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-10725: block direct EventBus instantiation outside DI bootstrap —
+      # handlers/skills/runners must receive bus via DI or select_event_bus().
+      - id: no-direct-bus-instantiation
+        name: No direct EventBus instantiation (must use DI/select_event_bus)
+        entry: python3 scripts/validation/validate_no_direct_bus_instantiation.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      # OMN-10725: block raw sqlite3.connect() outside adapter definitions —
+      # DB access must go through injected adapter, not direct connection.
+      - id: no-raw-sqlite3-in-handlers
+        name: No raw sqlite3.connect in handler/skill code (must use adapter)
+        entry: python3 scripts/validation/validate_no_raw_sqlite3.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'

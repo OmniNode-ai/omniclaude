@@ -647,7 +647,9 @@ async def _emit_tool_content(
         config = create_kafka_config()
         # New bus per call is intentional - each invocation runs in an isolated
         # subshell from the shell hook, so connection pooling isn't beneficial
-        bus = EventBusKafka(config=config)
+        bus = EventBusKafka(
+            config=config
+        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
 
         # Start producer
         await bus.start()

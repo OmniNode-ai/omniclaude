@@ -137,7 +137,9 @@ class _OmnimarketEmitDaemon:
                 environment=environment,
                 timeout_seconds=int(self._config.kafka_timeout_seconds),
             ).apply_environment_overrides()
-            event_bus = EventBusKafka(config=config)
+            event_bus = EventBusKafka(
+                config=config
+            )  # bus-ok: runtime lifecycle bootstrap, DI resolution pending OMN-10718
             await event_bus.start()
             self._event_bus = event_bus
 

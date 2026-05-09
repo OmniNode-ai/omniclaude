@@ -306,6 +306,7 @@ def scan_opencode_cost_payloads(
         return []
 
     payloads: list[dict[str, object]] = []
+    # di-ok: read-only access to external opencode DB, no adapter abstraction applies
     with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as connection:
         for session in _query_sessions(connection):
             records = _query_usage_records(connection, session.session_id)

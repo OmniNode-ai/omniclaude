@@ -78,7 +78,7 @@ class RoutingEventClient:
                 environment=kafka_env,
                 timeout_seconds=max(30, self.request_timeout_ms // 1000 + 10),
             )
-            self._event_bus = EventBusKafka(config)
+            self._event_bus = EventBusKafka(config)  # bus-ok: client bootstrap factory, DI resolution pending OMN-10718
             await self._event_bus.start()
 
             self._wiring = RequestResponseWiring(

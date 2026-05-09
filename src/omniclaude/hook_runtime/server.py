@@ -166,7 +166,7 @@ class HookRuntimeServer:
         # Wire EventBusInmemory for future node registration (OMN-5312)
         # No handlers registered yet — this makes the bus available for
         # future agent routing, LLM delegation, etc.
-        self._event_bus = EventBusInmemory(
+        self._event_bus = EventBusInmemory(  # bus-ok: server bootstrap factory, DI resolution pending OMN-10718
             environment="hook-runtime",
             group="hook-handlers",
         )

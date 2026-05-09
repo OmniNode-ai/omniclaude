@@ -198,7 +198,9 @@ def _write_record(record: dict[str, Any]) -> None:
     # Fallback: direct SQLite write
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(str(db)) as conn:
+        with sqlite3.connect(
+            str(db)
+        ) as conn:  # di-ok: fallback direct write, adapter refactor pending OMN-10718
             _ensure_schema(conn)
             conn.execute(
                 """

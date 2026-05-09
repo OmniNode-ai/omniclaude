@@ -549,7 +549,9 @@ async def emit_hook_event(
 
         # Create Kafka config and bus
         config = create_kafka_config()
-        bus = EventBusKafka(config=config)
+        bus = EventBusKafka(
+            config=config
+        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
 
         # Start producer
         await bus.start()
@@ -1179,7 +1181,9 @@ async def emit_claude_hook_event(
 
         # Create Kafka config and bus
         kafka_config = create_kafka_config()
-        bus = EventBusKafka(config=kafka_config)
+        bus = EventBusKafka(
+            config=kafka_config
+        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
 
         # Start producer
         await bus.start()
@@ -1327,7 +1331,9 @@ async def emit_session_outcome_from_config(
         # A shared bus would halve connection overhead at teardown but would
         # require lifetime management across independently-failable emitters.
         kafka_config = create_kafka_config()
-        bus = EventBusKafka(config=kafka_config)
+        bus = EventBusKafka(
+            config=kafka_config
+        )  # bus-ok: hook emitter bootstrap, DI resolution pending OMN-10718
         await bus.start()
 
         # Publish to both topics (fan-out) with per-topic error handling

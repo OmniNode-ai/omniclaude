@@ -87,7 +87,7 @@ class IntelligenceEventClient:
             config = ModelKafkaEventBusConfig(
                 bootstrap_servers=self.bootstrap_servers, environment=self._environment
             )
-            self._event_bus = EventBusKafka(config)
+            self._event_bus = EventBusKafka(config)  # bus-ok: client bootstrap factory, DI resolution pending OMN-10718
             await self._event_bus.start()
             self._wiring = RequestResponseWiring(
                 event_bus=self._event_bus,
