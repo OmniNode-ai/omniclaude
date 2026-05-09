@@ -27,7 +27,7 @@ from pathlib import Path
 from omnibase_infra.event_bus.event_bus_inmemory import EventBusInmemory  # noqa: TC002
 
 from omniclaude.delegation.bus_bootstrap import bootstrap_delegation_bus
-from omniclaude.delegation.sqlite_adapter import SQLiteProjectionAdapter
+from omniclaude.delegation.sqlite_adapter import make_adapter
 from omniclaude.hook_runtime.delegation_state import DelegationConfig, DelegationState
 from omniclaude.hook_runtime.protocol import (
     HookRuntimeRequest,
@@ -168,7 +168,7 @@ class HookRuntimeServer:
         # Wire EventBusInmemory with delegation projection handler (OMN-10718).
         # bootstrap_delegation_bus() creates the bus, starts it, and subscribes
         # HandlerProjectionDelegation on task-delegated events backed by SQLite.
-        db_adapter = SQLiteProjectionAdapter()
+        db_adapter = make_adapter()
         self._event_bus = await bootstrap_delegation_bus(
             db_adapter=db_adapter,
             environment="hook-runtime",

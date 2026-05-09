@@ -113,25 +113,27 @@ async def test_server_reset_session() -> None:
 @pytest.mark.asyncio
 async def test_publish_delegation_event_writes_to_sqlite(tmp_path: object) -> None:
     """publish_delegation_event action projects a row to SQLite via the bus (OMN-10718)."""
+    import sqlite3 as _sqlite3  # noqa: PLC0415
     from pathlib import Path as _Path  # noqa: PLC0415
 
     from omniclaude.delegation.sqlite_adapter import (
         SQLiteProjectionAdapter,  # noqa: PLC0415
+        make_adapter,  # noqa: PLC0415
     )
 
     socket_path = _short_socket_path()
     db_path = _Path(str(tmp_path)) / "test_proj.sqlite"  # type: ignore[arg-type]
 
-    # Patch SQLiteProjectionAdapter.__init__ to use the temp db_path.
+    # Patch make_adapter to return an adapter backed by the temp db_path.
     import omniclaude.hook_runtime.server as _server_mod  # noqa: PLC0415
 
-    _orig_cls = _server_mod.SQLiteProjectionAdapter
+    _orig_make_adapter = _server_mod.make_adapter
 
-    class _PatchedAdapter(SQLiteProjectionAdapter):
-        def __init__(self) -> None:
-            super().__init__(db_path=db_path)
+    def _patched_make_adapter(path: object = None) -> SQLiteProjectionAdapter:
+        conn = _sqlite3.connect(str(db_path), check_same_thread=False)
+        return SQLiteProjectionAdapter(conn)
 
-    _server_mod.SQLiteProjectionAdapter = _PatchedAdapter  # type: ignore[assignment]
+    _server_mod.make_adapter = _patched_make_adapter  # type: ignore[assignment]
     server = HookRuntimeServer(config=default_server_config(socket_path))
     try:
         await server.start()
@@ -167,7 +169,7 @@ async def test_publish_delegation_event_writes_to_sqlite(tmp_path: object) -> No
         await asyncio.sleep(0.1)
 
         # Verify the row landed in SQLite.
-        adapter = SQLiteProjectionAdapter(db_path=db_path)
+        adapter = make_adapter(db_path)
         try:
             rows = adapter.query(
                 "delegation_events", filters={"correlation_id": "pub-evt-001"}
@@ -180,7 +182,7 @@ async def test_publish_delegation_event_writes_to_sqlite(tmp_path: object) -> No
             adapter.close()
     finally:
         await server.stop()
-        _server_mod.SQLiteProjectionAdapter = _orig_cls  # type: ignore[assignment]
+        _server_mod.make_adapter = _orig_make_adapter  # type: ignore[assignment]
 
 
 @pytest.mark.unit
