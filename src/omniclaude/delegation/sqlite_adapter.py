@@ -538,12 +538,28 @@ class SQLiteProjectionAdapter:
                 self._conn.rollback()
                 return False
 
+    _ALLOWED_QUERY_TABLES: frozenset[str] = frozenset({"delegation_events"})
+
     def query(
         self,
         table: str,
         filters: dict[str, object] | None = None,
     ) -> list[dict[str, object]]:
         """Generic query implementing ProtocolProjectionDatabaseSync."""
+        if table not in self._ALLOWED_QUERY_TABLES:
+            logger.warning("query() called for unsupported table %r — skipping", table)
+            return []
+        if filters:
+            invalid_keys = [
+                k for k in filters if k not in self._DELEGATION_EVENTS_COLUMNS
+            ]
+            if invalid_keys:
+                logger.warning(
+                    "query() called with invalid filter keys %r for table %r — skipping",
+                    invalid_keys,
+                    table,
+                )
+                return []
         with self._lock:
             try:
                 if filters:
