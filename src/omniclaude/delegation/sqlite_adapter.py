@@ -550,12 +550,12 @@ class SQLiteProjectionAdapter:
                     where_clause = " AND ".join(f"{k} = ?" for k in filters)
                     values = list(filters.values())
                     rows = self._conn.execute(
-                        f"SELECT * FROM {table} WHERE {where_clause}",  # noqa: S608
+                        f"SELECT * FROM {table} WHERE {where_clause}",  # noqa: S608  # nosec B608
                         values,
                     ).fetchall()
                 else:
                     rows = self._conn.execute(
-                        f"SELECT * FROM {table}",  # noqa: S608
+                        f"SELECT * FROM {table}",  # noqa: S608  # nosec B608
                     ).fetchall()
                 return [dict(r) for r in rows]
             except Exception:
