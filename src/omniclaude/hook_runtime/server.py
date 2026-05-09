@@ -342,18 +342,10 @@ class HookRuntimeServer:
                 _latency: int = (
                     int(_latency_val) if isinstance(_latency_val, (int, float)) else 0
                 )
-                _tokens_in_val = payload.get("tokens_input", 0)
-                _tokens_in: int = (
-                    int(_tokens_in_val)
-                    if isinstance(_tokens_in_val, (int, float))
-                    else 0
-                )
-                _tokens_out_val = payload.get("tokens_output", 0)
-                _tokens_out: int = (
-                    int(_tokens_out_val)
-                    if isinstance(_tokens_out_val, (int, float))
-                    else 0
-                )
+                _ti = payload.get("tokens_input", 0)
+                _tokens_in: int = int(_ti) if isinstance(_ti, (int, float)) else 0
+                _to = payload.get("tokens_output", 0)
+                _tokens_out: int = int(_to) if isinstance(_to, (int, float)) else 0
                 _cost_val = payload.get("cost_savings_usd", 0.0)
                 _cost: float = (
                     float(_cost_val) if isinstance(_cost_val, (int, float)) else 0.0

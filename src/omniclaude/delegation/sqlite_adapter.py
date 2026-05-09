@@ -517,8 +517,9 @@ class SQLiteProjectionAdapter:
         cols = list(filtered.keys())
         placeholders = ", ".join(f":{c}" for c in cols)
         update_set = ", ".join(f"{c} = excluded.{c}" for c in cols if c != conflict_key)
-        sql = (  # nosec B608 — table/conflict_key are validated against allowlist above
-            f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
+        col_list = ", ".join(cols)
+        sql = (
+            f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) "  # noqa: S608  # nosec B608
             f"ON CONFLICT({conflict_key}) DO UPDATE SET {update_set}"
         )
 
