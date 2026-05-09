@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -17,12 +18,14 @@ from omniclaude.delegation.sqlite_adapter import (
     ModelLlmCallMetric,
     ModelSavingsEstimate,
     SQLiteProjectionAdapter,
+    make_adapter,
 )
 
 
 @pytest.fixture
-def adapter(tmp_path: Path) -> SQLiteProjectionAdapter:
-    db = SQLiteProjectionAdapter(db_path=tmp_path / "test_delegation.sqlite")
+def adapter() -> SQLiteProjectionAdapter:
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    db = SQLiteProjectionAdapter(conn)
     yield db
     db.close()
 
@@ -110,12 +113,18 @@ class TestMigration:
 
     def test_migration_idempotent(self, tmp_path: Path) -> None:
         db_path = tmp_path / "idempotent.sqlite"
-        a1 = SQLiteProjectionAdapter(db_path=db_path)
+        a1 = make_adapter(db_path)
         a1.close()
-        a2 = SQLiteProjectionAdapter(db_path=db_path)
+        a2 = make_adapter(db_path)
         versions = a2.get_applied_migrations()
         a2.close()
         assert versions.count("001") == 1
+
+    def test_make_adapter_creates_on_disk_db(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "smoke.sqlite"
+        adapter = make_adapter(db_path)
+        adapter.close()
+        assert db_path.exists()
 
 
 class TestDelegationEvent:

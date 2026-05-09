@@ -156,14 +156,13 @@ class SQLiteProjectionAdapter:
     append_event_log, query_delegation_events, query_savings_summary.
 
     Thread-safe via an internal lock around the shared SQLite connection.
-    Each instance owns one connection.
+    The connection lifecycle is owned by the caller — inject via DI or use
+    ``make_adapter()`` for the standard on-disk path.
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path or _DEFAULT_DB_PATH
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        conn.row_factory = sqlite3.Row
+        self._conn = conn
         self._lock = threading.Lock()
         self._apply_migrations()
 
@@ -594,6 +593,19 @@ class SQLiteProjectionAdapter:
             self._conn.close()
 
 
+def make_adapter(db_path: Path | None = None) -> SQLiteProjectionAdapter:
+    """Create a ``SQLiteProjectionAdapter`` backed by an on-disk (or in-memory) file.
+
+    This is the authorised call site for ``sqlite3.connect()`` — callers that need
+    the standard customer-deployable path use this factory; code under test passes
+    ``sqlite3.connect(":memory:")`` directly to the constructor.
+    """
+    resolved = db_path or _DEFAULT_DB_PATH
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(resolved), check_same_thread=False)  # di-ok
+    return SQLiteProjectionAdapter(conn)
+
+
 __all__: list[str] = [
     "ModelDelegationEvent",
     "ModelDelegationEventRow",
@@ -602,4 +614,5 @@ __all__: list[str] = [
     "ModelSavingsEstimate",
     "ModelSavingsSummary",
     "SQLiteProjectionAdapter",
+    "make_adapter",
 ]
