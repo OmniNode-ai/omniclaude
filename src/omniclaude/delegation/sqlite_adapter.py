@@ -444,9 +444,14 @@ class SQLiteProjectionAdapter:
             ).fetchall()
         return [r["version"] for r in rows]
 
-    _ALLOWED_TABLES: dict[str, set[str]] = {
-        "delegation_events": {
-            "id",
+    # ------------------------------------------------------------------
+    # ProtocolProjectionDatabaseSync — generic upsert/query
+    # ------------------------------------------------------------------
+
+    # Maps from the projection handler's row field names to the SQLite column names.
+    # Fields present in handler row but absent from the SQLite schema are dropped.
+    _DELEGATION_EVENTS_COLUMNS: frozenset[str] = frozenset(
+        {
             "correlation_id",
             "session_id",
             "tool_use_id",
@@ -461,37 +466,8 @@ class SQLiteProjectionAdapter:
             "input_redaction_policy",
             "contract_version",
             "created_at",
-            "timestamp",
-            "delegated_by",
-            "quality_gates_checked",
-            "quality_gates_failed",
-            "delegation_latency_ms",
-            "repo",
-            "is_shadow",
-            "llm_call_id",
-            "tokens_input",
-            "tokens_output",
-            "cost_savings_usd",
-        },
-    }
-
-    _DELEGATION_EVENTS_DEFAULTS: dict[str, object] = {
-        "created_at": 0.0,
-        "quality_gates_checked": 0,
-        "quality_gates_failed": 0,
-        "delegation_latency_ms": None,
-        "is_shadow": 0,
-        "tokens_input": 0,
-        "tokens_output": 0,
-        "cost_savings_usd": 0.0,
-        "delegated_by": "",
-        "quality_gate_passed": 0,
-        "task_type": "",
-        "delegated_to": "",
-        "model_name": "",
-        "input_redaction_policy": "hash_only",
-        "contract_version": "v1",
-    }
+        }
+    )
 
     def upsert(
         self,
@@ -499,41 +475,65 @@ class SQLiteProjectionAdapter:
         conflict_key: str,
         row: dict[str, object],
     ) -> bool:
-        """Generic upsert satisfying ProtocolProjectionDatabaseSync."""
-        allowed_cols = self._ALLOWED_TABLES.get(table)
-        if allowed_cols is None:
-            raise ValueError(f"Unsupported table: {table!r}")
-        if conflict_key not in allowed_cols:
-            raise ValueError(
-                f"Unsupported conflict key {conflict_key!r} for table {table!r}"
+        """Generic UPSERT implementing ProtocolProjectionDatabaseSync.
+
+        Only `delegation_events` is supported; other tables return False.
+        Extra fields not present in the SQLite schema are silently dropped.
+        Fields absent from the schema but present in the row (e.g.
+        `delegated_by`, `timestamp`, `quality_gates_*`, `delegation_latency_ms`,
+        `repo`, `is_shadow`, `llm_call_id`) are mapped where possible:
+          - delegation_latency_ms → latency_ms
+        """
+        if table != "delegation_events":
+            logger.warning("upsert() called for unsupported table %r — skipping", table)
+            return False
+
+        # Map handler field names → SQLite column names.
+        mapped: dict[str, object] = dict(row)
+        if "delegation_latency_ms" in mapped and "latency_ms" not in mapped:
+            mapped["latency_ms"] = mapped.pop("delegation_latency_ms")
+        else:
+            mapped.pop("delegation_latency_ms", None)
+
+        # Drop fields absent from the SQLite schema.
+        filtered = {
+            k: v for k, v in mapped.items() if k in self._DELEGATION_EVENTS_COLUMNS
+        }
+
+        # Ensure required fields have defaults.
+        filtered.setdefault("task_type", "")
+        filtered.setdefault("delegated_to", "")
+        filtered.setdefault("model_name", "")
+        filtered.setdefault("quality_gate_passed", False)
+        filtered.setdefault("input_redaction_policy", "hash_only")
+        filtered.setdefault("contract_version", "v1")
+        filtered.setdefault("created_at", time.time())
+
+        if "quality_gate_passed" in filtered:
+            filtered["quality_gate_passed"] = (
+                1 if filtered["quality_gate_passed"] else 0
             )
-        invalid = [c for c in row if c not in allowed_cols]
-        if invalid:
-            raise ValueError(f"Unsupported columns for {table!r}: {invalid}")
-        row = dict(row)
-        if table == "delegation_events":
-            if "created_at" not in row:
-                row["created_at"] = time.time()
-            for col, default in self._DELEGATION_EVENTS_DEFAULTS.items():
-                if row.get(col) is None:
-                    row[col] = default
-        columns = list(row.keys())
-        placeholders = ", ".join("?" for _ in columns)
-        col_names = ", ".join(columns)
-        update_clause = ", ".join(
-            f"{c} = excluded.{c}" for c in columns if c != conflict_key
-        )
+
+        cols = list(filtered.keys())
+        placeholders = ", ".join(f":{c}" for c in cols)
+        update_set = ", ".join(f"{c} = excluded.{c}" for c in cols if c != conflict_key)
         sql = (
-            f"INSERT INTO {table} ({col_names}) VALUES ({placeholders}) "  # noqa: S608  # nosec B608
-            f"ON CONFLICT({conflict_key}) DO UPDATE SET {update_clause}"
+            f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
+            f"ON CONFLICT({conflict_key}) DO UPDATE SET {update_set}"
         )
+
         with self._lock:
             try:
-                self._conn.execute(sql, list(row.values()))
+                self._conn.execute(sql, filtered)
                 self._conn.commit()
                 return True
-            except sqlite3.Error:
-                logger.exception("upsert into %s failed", table)
+            except Exception:
+                logger.exception(
+                    "upsert() failed for table=%r conflict_key=%r correlation_id=%r",
+                    table,
+                    conflict_key,
+                    filtered.get("correlation_id"),
+                )
                 self._conn.rollback()
                 return False
 
@@ -542,23 +542,26 @@ class SQLiteProjectionAdapter:
         table: str,
         filters: dict[str, object] | None = None,
     ) -> list[dict[str, object]]:
-        """Generic query satisfying ProtocolProjectionDatabaseSync."""
-        allowed_cols = self._ALLOWED_TABLES.get(table)
-        if allowed_cols is None:
-            raise ValueError(f"Unsupported table: {table!r}")
-        if filters:
-            invalid = [k for k in filters if k not in allowed_cols]
-            if invalid:
-                raise ValueError(f"Unsupported filter keys for {table!r}: {invalid}")
-        sql = f"SELECT * FROM {table}"  # noqa: S608  # nosec B608
-        params: list[object] = []
-        if filters:
-            clauses = [f"{k} = ?" for k in filters]
-            sql += " WHERE " + " AND ".join(clauses)
-            params = list(filters.values())
+        """Generic query implementing ProtocolProjectionDatabaseSync."""
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
-        return [dict(r) for r in rows]
+            try:
+                if filters:
+                    where_clause = " AND ".join(f"{k} = ?" for k in filters)
+                    values = list(filters.values())
+                    rows = self._conn.execute(
+                        f"SELECT * FROM {table} WHERE {where_clause}",  # noqa: S608
+                        values,
+                    ).fetchall()
+                else:
+                    rows = self._conn.execute(
+                        f"SELECT * FROM {table}",  # noqa: S608
+                    ).fetchall()
+                return [dict(r) for r in rows]
+            except Exception:
+                logger.exception(
+                    "query() failed for table=%r filters=%r", table, filters
+                )
+                return []
 
     def close(self) -> None:
         """Close the underlying SQLite connection."""

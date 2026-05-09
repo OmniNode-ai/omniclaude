@@ -251,3 +251,129 @@ class TestEventLog:
         parsed = json.loads(row[0])
         assert parsed["type"] == "test"
         assert parsed["nested"]["a"] == 1
+
+
+@pytest.mark.unit
+class TestUpsertQuery:
+    """ProtocolProjectionDatabaseSync generic upsert/query API (OMN-10718)."""
+
+    def test_upsert_writes_row_to_delegation_events(
+        self, adapter: SQLiteProjectionAdapter
+    ) -> None:
+        row: dict[str, object] = {
+            "correlation_id": "upsert-001",
+            "session_id": "sess-u1",
+            "task_type": "test",
+            "delegated_to": "Qwen3-Coder-30B",
+            "model_name": "Qwen3-Coder-30B",
+            "quality_gate_passed": True,
+            "delegation_latency_ms": 350,
+        }
+        ok = adapter.upsert("delegation_events", "correlation_id", row)
+        assert ok is True
+        rows = adapter._conn.execute(
+            "SELECT * FROM delegation_events WHERE correlation_id = 'upsert-001'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["task_type"] == "test"
+        assert rows[0]["delegated_to"] == "Qwen3-Coder-30B"
+        assert rows[0]["latency_ms"] == 350
+
+    def test_upsert_deduplicates_on_correlation_id(
+        self, adapter: SQLiteProjectionAdapter
+    ) -> None:
+        row: dict[str, object] = {
+            "correlation_id": "dedup-001",
+            "task_type": "document",
+            "delegated_to": "ModelA",
+            "model_name": "ModelA",
+            "quality_gate_passed": False,
+            "delegation_latency_ms": 100,
+        }
+        adapter.upsert("delegation_events", "correlation_id", row)
+        row_updated = {**row, "delegated_to": "ModelB", "model_name": "ModelB"}
+        adapter.upsert("delegation_events", "correlation_id", row_updated)
+        rows = adapter._conn.execute(
+            "SELECT * FROM delegation_events WHERE correlation_id = 'dedup-001'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["delegated_to"] == "ModelB"
+
+    def test_upsert_unknown_table_returns_false(
+        self, adapter: SQLiteProjectionAdapter
+    ) -> None:
+        ok = adapter.upsert("nonexistent_table", "id", {"id": "x"})
+        assert ok is False
+
+    def test_query_returns_all_rows_without_filter(
+        self, adapter: SQLiteProjectionAdapter
+    ) -> None:
+        for i in range(3):
+            adapter.upsert(
+                "delegation_events",
+                "correlation_id",
+                {
+                    "correlation_id": f"q-{i}",
+                    "task_type": "test",
+                    "delegated_to": "ModelX",
+                    "model_name": "ModelX",
+                    "quality_gate_passed": True,
+                    "delegation_latency_ms": 10,
+                },
+            )
+        rows = adapter.query("delegation_events")
+        assert len(rows) == 3
+
+    def test_query_with_filter(self, adapter: SQLiteProjectionAdapter) -> None:
+        adapter.upsert(
+            "delegation_events",
+            "correlation_id",
+            {
+                "correlation_id": "filter-a",
+                "session_id": "sess-x",
+                "task_type": "test",
+                "delegated_to": "ModelX",
+                "model_name": "ModelX",
+                "quality_gate_passed": True,
+                "delegation_latency_ms": 10,
+            },
+        )
+        adapter.upsert(
+            "delegation_events",
+            "correlation_id",
+            {
+                "correlation_id": "filter-b",
+                "session_id": "sess-y",
+                "task_type": "test",
+                "delegated_to": "ModelX",
+                "model_name": "ModelX",
+                "quality_gate_passed": True,
+                "delegation_latency_ms": 10,
+            },
+        )
+        rows = adapter.query("delegation_events", filters={"session_id": "sess-x"})
+        assert len(rows) == 1
+        assert rows[0]["correlation_id"] == "filter-a"
+
+    def test_upsert_extra_fields_are_silently_dropped(
+        self, adapter: SQLiteProjectionAdapter
+    ) -> None:
+        row: dict[str, object] = {
+            "correlation_id": "extra-001",
+            "task_type": "research",
+            "delegated_to": "ModelQ",
+            "model_name": "ModelQ",
+            "quality_gate_passed": True,
+            "delegation_latency_ms": 200,
+            "delegated_by": "onex.delegate-skill.inprocess",  # not in SQLite schema
+            "repo": "omniclaude",  # not in SQLite schema
+            "is_shadow": False,  # not in SQLite schema
+            "timestamp": "2026-05-09T00:00:00Z",  # not in SQLite schema
+        }
+        ok = adapter.upsert("delegation_events", "correlation_id", row)
+        assert ok is True
+        rows = adapter._conn.execute(
+            "SELECT * FROM delegation_events WHERE correlation_id = 'extra-001'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["latency_ms"] == 200

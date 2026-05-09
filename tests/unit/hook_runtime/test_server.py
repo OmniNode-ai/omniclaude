@@ -111,6 +111,80 @@ async def test_server_reset_session() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_publish_delegation_event_writes_to_sqlite(tmp_path: object) -> None:
+    """publish_delegation_event action projects a row to SQLite via the bus (OMN-10718)."""
+    from pathlib import Path as _Path  # noqa: PLC0415
+
+    from omniclaude.delegation.sqlite_adapter import (
+        SQLiteProjectionAdapter,  # noqa: PLC0415
+    )
+
+    socket_path = _short_socket_path()
+    db_path = _Path(str(tmp_path)) / "test_proj.sqlite"  # type: ignore[arg-type]
+
+    # Patch SQLiteProjectionAdapter.__init__ to use the temp db_path.
+    import omniclaude.hook_runtime.server as _server_mod  # noqa: PLC0415
+
+    _orig_cls = _server_mod.SQLiteProjectionAdapter
+
+    class _PatchedAdapter(SQLiteProjectionAdapter):
+        def __init__(self) -> None:
+            super().__init__(db_path=db_path)
+
+    _server_mod.SQLiteProjectionAdapter = _PatchedAdapter  # type: ignore[assignment]
+    server = HookRuntimeServer(config=default_server_config(socket_path))
+    try:
+        await server.start()
+
+        reader, writer = await asyncio.open_unix_connection(socket_path)
+        request = {
+            "action": "publish_delegation_event",
+            "session_id": "test-session",
+            "payload": {
+                "correlation_id": "pub-evt-001",
+                "session_id": "test-session",
+                "task_type": "test",
+                "delegated_to": "Qwen3-Coder-30B",
+                "model_name": "Qwen3-Coder-30B",
+                "delegated_by": "onex.delegate-skill.inprocess",
+                "quality_gate_passed": True,
+                "delegation_latency_ms": 500,
+                "cost_savings_usd": 0.01,
+                "tokens_input": 100,
+                "tokens_output": 50,
+                "delegation_success": True,
+            },
+        }
+        writer.write((json.dumps(request) + "\n").encode())
+        await writer.drain()
+        line = await asyncio.wait_for(reader.readline(), timeout=3.0)
+        resp = json.loads(line)
+        assert resp["decision"] == "ack"
+        writer.close()
+        await writer.wait_closed()
+
+        # Allow the async bus subscriber handler to complete.
+        await asyncio.sleep(0.1)
+
+        # Verify the row landed in SQLite.
+        adapter = SQLiteProjectionAdapter(db_path=db_path)
+        try:
+            rows = adapter.query(
+                "delegation_events", filters={"correlation_id": "pub-evt-001"}
+            )
+            assert len(rows) == 1
+            assert rows[0]["task_type"] == "test"
+            assert rows[0]["delegated_to"] == "Qwen3-Coder-30B"
+            assert rows[0]["latency_ms"] == 500
+        finally:
+            adapter.close()
+    finally:
+        await server.stop()
+        _server_mod.SQLiteProjectionAdapter = _orig_cls  # type: ignore[assignment]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_server_stale_socket_cleaned() -> None:
     """Starting a server should clean up a stale socket file."""
     socket_path = _short_socket_path()

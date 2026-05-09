@@ -24,8 +24,10 @@ import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from omnibase_infra.event_bus.event_bus_inmemory import EventBusInmemory
+from omnibase_infra.event_bus.event_bus_inmemory import EventBusInmemory  # noqa: TC002
 
+from omniclaude.delegation.bus_bootstrap import bootstrap_delegation_bus
+from omniclaude.delegation.sqlite_adapter import SQLiteProjectionAdapter
 from omniclaude.hook_runtime.delegation_state import DelegationConfig, DelegationState
 from omniclaude.hook_runtime.protocol import (
     HookRuntimeRequest,
@@ -163,10 +165,12 @@ class HookRuntimeServer:
         )
         self._running = True
 
-        # Wire EventBusInmemory for future node registration (OMN-5312)
-        # No handlers registered yet — this makes the bus available for
-        # future agent routing, LLM delegation, etc.
-        self._event_bus = EventBusInmemory(  # bus-ok: server bootstrap factory, DI resolution pending OMN-10718
+        # Wire EventBusInmemory with delegation projection handler (OMN-10718).
+        # bootstrap_delegation_bus() creates the bus, starts it, and subscribes
+        # HandlerProjectionDelegation on task-delegated events backed by SQLite.
+        db_adapter = SQLiteProjectionAdapter()
+        self._event_bus = await bootstrap_delegation_bus(
+            db_adapter=db_adapter,
             environment="hook-runtime",
             group="hook-handlers",
         )
@@ -318,6 +322,82 @@ class HookRuntimeServer:
                 decision="ack",
                 additional_context=rule,
             ).model_dump_json()
+
+        if req.action == "publish_delegation_event":
+            # Forward a task-delegated event to the inmemory bus so the
+            # projection handler writes it to SQLite. This is the in-process
+            # path (no Kafka required). The payload must be a valid
+            # task-delegated event dict; extra fields are ignored by the handler.
+            if self._event_bus is not None:
+                from omniclaude.delegation.emitter import (
+                    emit_task_delegated,  # noqa: PLC0415
+                )
+
+                payload = req.payload
+                _qgr_raw = payload.get("quality_gate_reason")
+                _qgr: str | None = str(_qgr_raw) if _qgr_raw else None
+                _repo_raw = payload.get("repo")
+                _repo: str | None = str(_repo_raw) if _repo_raw else None
+                _latency_raw = payload.get("delegation_latency_ms", 0)
+                _latency: int = (
+                    int(_latency_raw) if isinstance(_latency_raw, (int, float)) else 0
+                )
+                _tokens_in_raw = payload.get("tokens_input", 0)
+                _tokens_in: int = (
+                    int(_tokens_in_raw)
+                    if isinstance(_tokens_in_raw, (int, float))
+                    else 0
+                )
+                _tokens_out_raw = payload.get("tokens_output", 0)
+                _tokens_out: int = (
+                    int(_tokens_out_raw)
+                    if isinstance(_tokens_out_raw, (int, float))
+                    else 0
+                )
+                _cost_raw = payload.get("cost_savings_usd", 0.0)
+                _cost: float = (
+                    float(_cost_raw) if isinstance(_cost_raw, (int, float)) else 0.0
+                )
+                try:
+                    await emit_task_delegated(
+                        bus=self._event_bus,
+                        correlation_id=str(payload.get("correlation_id", "")),
+                        session_id=str(payload.get("session_id", "") or ""),
+                        task_type=str(payload.get("task_type", "") or ""),
+                        delegated_to=str(payload.get("delegated_to", "") or ""),
+                        delegated_by=str(payload.get("delegated_by", "") or ""),
+                        quality_gate_passed=bool(
+                            payload.get("quality_gate_passed", False)
+                        ),
+                        delegation_latency_ms=_latency,
+                        cost_savings_usd=_cost,
+                        quality_gate_reason=_qgr,
+                        delegation_success=bool(
+                            payload.get("delegation_success", True)
+                        ),
+                        model_name=str(payload.get("model_name", "") or ""),
+                        tokens_input=_tokens_in,
+                        tokens_output=_tokens_out,
+                        repo=_repo,
+                        is_shadow=bool(payload.get("is_shadow", False)),
+                        llm_call_id=str(payload.get("llm_call_id", "") or ""),
+                    )
+                    return HookRuntimeResponse(decision="ack").model_dump_json()
+                except Exception:
+                    logger.exception(
+                        "publish_delegation_event failed for correlation_id=%s",
+                        payload.get("correlation_id"),
+                    )
+                    return HookRuntimeResponse(
+                        decision="ack",
+                        message="publish failed — logged",
+                    ).model_dump_json()
+            else:
+                logger.warning("publish_delegation_event: bus not ready — skipping")
+                return HookRuntimeResponse(
+                    decision="ack",
+                    message="bus not ready",
+                ).model_dump_json()
 
         # Unknown action — pass through
         logger.warning("Unknown action: %s", req.action)
