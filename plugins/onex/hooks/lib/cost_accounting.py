@@ -186,39 +186,11 @@ def _write_record(record: dict[str, Any]) -> None:
     if db is None:
         return
 
-    # Try sqlite_adapter first (may not be available until OMN-10618 lands)
     try:
-        from plugins.onex.hooks.lib import sqlite_adapter  # type: ignore[import]
+        from plugins.onex.hooks.lib.cost_accounting_adapter import insert_cost_record
 
-        sqlite_adapter.insert_cost_record(record)
-        return
-    except ImportError:
-        pass
-
-    # Fallback: direct SQLite write
-    try:
         db.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(
-            str(db)
-        ) as conn:  # di-ok: fallback direct write, adapter refactor pending OMN-10718
-            _ensure_schema(conn)
-            conn.execute(
-                """
-                INSERT INTO cost_records (
-                    recorded_at, session_id, tool_name, is_delegated,
-                    actual_model, baseline_model, input_tokens, output_tokens,
-                    token_provenance, actual_cost_usd, baseline_cost_usd,
-                    savings_usd, savings_method, pricing_manifest_version
-                ) VALUES (
-                    :recorded_at, :session_id, :tool_name, :is_delegated,
-                    :actual_model, :baseline_model, :input_tokens, :output_tokens,
-                    :token_provenance, :actual_cost_usd, :baseline_cost_usd,
-                    :savings_usd, :savings_method, :pricing_manifest_version
-                )
-                """,
-                record,
-            )
-            conn.commit()
+        insert_cost_record(str(db), _ensure_schema, record)
     except Exception:
         pass
 
