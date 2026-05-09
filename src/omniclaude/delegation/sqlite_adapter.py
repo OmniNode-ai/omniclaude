@@ -488,6 +488,14 @@ class SQLiteProjectionAdapter:
             logger.warning("upsert() called for unsupported table %r — skipping", table)
             return False
 
+        if conflict_key not in self._DELEGATION_EVENTS_COLUMNS:
+            logger.warning(
+                "upsert() called with invalid conflict_key %r for table %r — skipping",
+                conflict_key,
+                table,
+            )
+            return False
+
         # Map handler field names → SQLite column names.
         mapped: dict[str, object] = dict(row)
         if "delegation_latency_ms" in mapped and "latency_ms" not in mapped:
