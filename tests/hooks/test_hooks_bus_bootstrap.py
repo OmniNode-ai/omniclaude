@@ -17,9 +17,9 @@ def test_create_kafka_event_bus_returns_event_bus_kafka() -> None:
     mock_bus = MagicMock()
 
     with patch(
-        "omniclaude.hooks.bus_bootstrap.EventBusKafka", return_value=mock_bus
+        "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka", return_value=mock_bus
     ) as mock_cls:
-        from omniclaude.hooks.bus_bootstrap import create_kafka_event_bus
+        from omniclaude.hooks.emit_bus_bootstrapper import create_kafka_event_bus
 
         result = create_kafka_event_bus(mock_config)
 

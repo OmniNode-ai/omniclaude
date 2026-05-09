@@ -62,7 +62,7 @@ from omnibase_core.models.intelligence import ModelToolExecutionContent
 if TYPE_CHECKING:
     from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 
-from omniclaude.hooks.bus_bootstrap import create_kafka_event_bus
+from omniclaude.hooks.emit_bus_bootstrapper import create_kafka_event_bus
 from omniclaude.hooks.handler_event_emitter import (
     ModelClaudeHookEventConfig,
     create_kafka_config,

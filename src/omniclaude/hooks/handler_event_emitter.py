@@ -50,6 +50,7 @@ from omnibase_core.models.hooks.claude_code import (
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
 from omniclaude.hooks._helpers import normalize_action_description
+from omniclaude.hooks.emit_bus_bootstrapper import create_kafka_event_bus
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     HookEventType,
