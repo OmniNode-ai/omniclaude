@@ -491,6 +491,13 @@ def emit_event(
         if _task_id:
             payload["task_id"] = _task_id
 
+    # Inject session_id from CLAUDE_CODE_SESSION_ID if not already in payload (OMN-10753).
+    # CLAUDE_CODE_SESSION_ID is the canonical native env var from Claude Code.
+    if isinstance(payload, dict) and not payload.get("session_id"):
+        _session_id = os.getenv("CLAUDE_CODE_SESSION_ID")
+        if _session_id:
+            payload["session_id"] = _session_id
+
     client = _get_client()
     if client is None:
         logger.debug("EmitClient not available, event dropped")

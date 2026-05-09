@@ -68,7 +68,7 @@ def emit_trace_span(
         span_id: Unique identifier for this span. Defaults to a new UUID.
         parent_span_id: ID of the parent span (None for root spans).
         correlation_id: Correlation ID for distributed tracing. Defaults to trace_id.
-        session_id: Session ID. Defaults to SESSION_ID env var or "unknown".
+        session_id: Session ID. Defaults to CLAUDE_CODE_SESSION_ID env var or "unknown".
         ended_at: When the span ended (UTC, None if still in progress).
         duration_ms: Duration in milliseconds (None if still in progress).
         metadata: Key-value metadata for the span. Must not contain secrets.
@@ -117,7 +117,7 @@ def emit_trace_span(
         resolved_session_id = (
             session_id
             if session_id is not None
-            else os.environ.get("SESSION_ID", "unknown")
+            else os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown")
         )
 
         # Build validated payload -- Pydantic enforces all constraints

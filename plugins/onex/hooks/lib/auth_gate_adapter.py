@@ -175,7 +175,7 @@ def main() -> None:
         tool_input = data.get("tool_input", {})
         file_path = tool_input.get("file_path", tool_input.get("path", ""))
         session_id = os.environ.get(
-            "SESSION_ID", data.get("session_id", data.get("sessionId", ""))
+            "CLAUDE_CODE_SESSION_ID", data.get("session_id", data.get("sessionId", ""))
         )
         result = decide(tool_name, file_path, session_id, mode)
         print(json.dumps(_build_output(result["decision"], result["reason"])))

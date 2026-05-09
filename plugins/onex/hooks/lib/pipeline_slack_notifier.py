@@ -558,7 +558,7 @@ class PipelineSlackNotifier:
             payload: dict[str, object] = {
                 "ticket_id": self.ticket_id,
                 "repo": os.path.basename(os.getcwd()),
-                "session_id": os.environ.get("CLAUDE_SESSION_ID", "unknown"),
+                "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown"),
                 "run_id": self.run_id,
             }
 

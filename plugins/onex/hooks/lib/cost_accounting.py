@@ -133,7 +133,9 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
     Returns None when no delegation result is pending.
     """
     tool_name = hook_event.get("tool_name", "unknown")
-    session_id = hook_event.get("session_id", os.environ.get("CLAUDE_SESSION_ID", ""))
+    session_id = hook_event.get(
+        "session_id", os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    )
 
     # Load pending delegation result if one exists
     delegation_result: dict[str, Any] | None = None
