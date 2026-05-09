@@ -87,7 +87,7 @@ class IntelligenceEventClient:
             config = ModelKafkaEventBusConfig(
                 bootstrap_servers=self.bootstrap_servers, environment=self._environment
             )
-            self._event_bus = EventBusKafka(config)  # bus-ok: client bootstrap factory, DI resolution pending OMN-10718
+            self._event_bus = create_kafka_event_bus(config)
             await self._event_bus.start()
             self._wiring = RequestResponseWiring(
                 event_bus=self._event_bus,
@@ -103,7 +103,9 @@ class IntelligenceEventClient:
                         reply_topics=ModelReplyTopics(
                             completed=self.TOPIC_COMPLETED, failed=self.TOPIC_FAILED
                         ),
-                        timeout_seconds=max(1, math.ceil(self.request_timeout_ms / 1000)),
+                        timeout_seconds=max(
+                            1, math.ceil(self.request_timeout_ms / 1000)
+                        ),
                     )
                 ]
             )
@@ -173,7 +175,9 @@ class IntelligenceEventClient:
                 details={"component": "IntelligenceEventClient"},
             )
         # Ceiling division: 500ms → 1s, 1500ms → 2s. Floor would silently truncate caller intent.
-        timeout_seconds = max(1, math.ceil((timeout_ms or self.request_timeout_ms) / 1000))
+        timeout_seconds = max(
+            1, math.ceil((timeout_ms or self.request_timeout_ms) / 1000)
+        )
         correlation_id = str(uuid4())
         timestamp = (
             emitted_at if emitted_at is not None else datetime.now(UTC)
@@ -207,17 +211,18 @@ class IntelligenceEventClient:
         try:
             # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2367).
             # Feature flag: DUAL_PUBLISH_LEGACY_TOPICS=1 — see CLAUDE.md canonical env-var table.
-            if (
-                settings.dual_publish_legacy_topics
-                and self._event_bus is not None
-            ):
+            if settings.dual_publish_legacy_topics and self._event_bus is not None:
                 try:
                     legacy_payload = {
                         **payload,
                         "event_type": self.TOPIC_REQUEST_LEGACY,
-                        "event_id": str(uuid4()),  # distinct id; avoids broker-side dedup conflicts
+                        "event_id": str(
+                            uuid4()
+                        ),  # distinct id; avoids broker-side dedup conflicts
                     }
-                    await self._event_bus.publish(self.TOPIC_REQUEST_LEGACY, legacy_payload)
+                    await self._event_bus.publish(
+                        self.TOPIC_REQUEST_LEGACY, legacy_payload
+                    )
                 except Exception as legacy_err:
                     self.logger.warning(
                         f"Dual-publish to legacy topic failed (non-fatal): {legacy_err}"
