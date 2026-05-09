@@ -334,29 +334,29 @@ class HookRuntimeServer:
                 )
 
                 payload = req.payload
-                _qgr_raw = payload.get("quality_gate_reason")
-                _qgr: str | None = str(_qgr_raw) if _qgr_raw else None
-                _repo_raw = payload.get("repo")
-                _repo: str | None = str(_repo_raw) if _repo_raw else None
-                _latency_raw = payload.get("delegation_latency_ms", 0)
+                _qgr_val = payload.get("quality_gate_reason")
+                _qgr: str | None = str(_qgr_val) if _qgr_val else None
+                _repo_val = payload.get("repo")
+                _repo: str | None = str(_repo_val) if _repo_val else None
+                _latency_val = payload.get("delegation_latency_ms", 0)
                 _latency: int = (
-                    int(_latency_raw) if isinstance(_latency_raw, (int, float)) else 0
+                    int(_latency_val) if isinstance(_latency_val, (int, float)) else 0
                 )
-                _tokens_in_raw = payload.get("tokens_input", 0)
+                _tokens_in_val = payload.get("tokens_input", 0)
                 _tokens_in: int = (
-                    int(_tokens_in_raw)
-                    if isinstance(_tokens_in_raw, (int, float))
+                    int(_tokens_in_val)
+                    if isinstance(_tokens_in_val, (int, float))
                     else 0
                 )
-                _tokens_out_raw = payload.get("tokens_output", 0)
+                _tokens_out_val = payload.get("tokens_output", 0)
                 _tokens_out: int = (
-                    int(_tokens_out_raw)
-                    if isinstance(_tokens_out_raw, (int, float))
+                    int(_tokens_out_val)
+                    if isinstance(_tokens_out_val, (int, float))
                     else 0
                 )
-                _cost_raw = payload.get("cost_savings_usd", 0.0)
+                _cost_val = payload.get("cost_savings_usd", 0.0)
                 _cost: float = (
-                    float(_cost_raw) if isinstance(_cost_raw, (int, float)) else 0.0
+                    float(_cost_val) if isinstance(_cost_val, (int, float)) else 0.0
                 )
                 try:
                     await emit_task_delegated(
