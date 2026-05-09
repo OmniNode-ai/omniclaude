@@ -372,7 +372,8 @@ class TestEnvironmentVariableFallback:
 
         with (
             patch.dict(
-                os.environ, {"AGENT_NAME": "env-agent", "SESSION_ID": "env-sess"}
+                os.environ,
+                {"AGENT_NAME": "env-agent", "CLAUDE_CODE_SESSION_ID": "env-sess"},
             ),
             patch(
                 "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
@@ -386,7 +387,7 @@ class TestEnvironmentVariableFallback:
         assert captured_payload["session_id"] == "env-sess"
 
     def test_session_id_falls_back_to_env_var(self) -> None:
-        """When session_id is None, falls back to SESSION_ID env var."""
+        """When session_id is None, falls back to CLAUDE_CODE_SESSION_ID env var."""
         from plugins.onex.hooks.lib.agent_status_emitter import emit_agent_status
 
         captured_payload = {}
@@ -396,7 +397,7 @@ class TestEnvironmentVariableFallback:
             return True
 
         with (
-            patch.dict(os.environ, {"SESSION_ID": "from-env-session"}),
+            patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "from-env-session"}),
             patch(
                 "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
                 side_effect=capture_emit,
@@ -425,7 +426,7 @@ class TestEnvironmentVariableFallback:
 
         # Use monkeypatch to safely remove env vars; automatically restored after test
         monkeypatch.delenv("AGENT_NAME", raising=False)
-        monkeypatch.delenv("SESSION_ID", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
         with patch(
             "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
@@ -444,7 +445,7 @@ class TestEnvironmentVariableFallback:
         from plugins.onex.hooks.lib import agent_status_emitter
 
         monkeypatch.delenv("AGENT_NAME", raising=False)
-        monkeypatch.delenv("SESSION_ID", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
         with (
             patch(
@@ -471,7 +472,7 @@ class TestEnvironmentVariableFallback:
         from plugins.onex.hooks.lib import agent_status_emitter
 
         monkeypatch.delenv("AGENT_NAME", raising=False)
-        monkeypatch.delenv("SESSION_ID", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
         with (
             patch(
@@ -526,7 +527,7 @@ class TestEnvironmentVariableFallback:
         with (
             patch.dict(
                 os.environ,
-                {"AGENT_NAME": "env-agent", "SESSION_ID": "env-session"},
+                {"AGENT_NAME": "env-agent", "CLAUDE_CODE_SESSION_ID": "env-session"},
             ),
             patch(
                 "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",

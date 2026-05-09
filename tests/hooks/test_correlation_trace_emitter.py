@@ -125,12 +125,12 @@ class TestEmitTraceSpan:
         assert payload["correlation_id"] == payload["trace_id"]
 
     def test_session_id_from_env(self, _mock_emit_event) -> None:
-        """session_id falls back to SESSION_ID env var."""
+        """session_id falls back to CLAUDE_CODE_SESSION_ID env var."""
         from plugins.onex.hooks.lib.correlation_trace_emitter import emit_trace_span
 
         now = datetime.now(UTC)
 
-        with patch.dict(os.environ, {"SESSION_ID": "env-session-42"}):
+        with patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "env-session-42"}):
             emit_trace_span(
                 span_kind="hook",
                 operation_name="PostToolUse",
@@ -148,7 +148,7 @@ class TestEmitTraceSpan:
         now = datetime.now(UTC)
 
         with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("SESSION_ID", None)
+            os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
             emit_trace_span(
                 span_kind="hook",
                 operation_name="PostToolUse",
