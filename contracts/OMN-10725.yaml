@@ -1,0 +1,49 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-10725
+title: "Add CI gates blocking direct bus instantiation and raw sqlite3 in handlers"
+summary: "AST-based pre-commit and CI required validators for EventBus DI enforcement and sqlite3 adapter gating"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Validation scripts pass green on the repo"
+    command: "uv run python scripts/validation/validate_no_direct_bus_instantiation.py && uv run python scripts/validation/validate_no_raw_sqlite3.py"
+  - kind: ci
+    description: "omniclaude PR #1546 CI green across required gates"
+    command: "gh pr checks 1546 --repo OmniNode-ai/omniclaude --watch"
+  - kind: manual
+    description: "Post-merge deploy smoke: omninode-runtime container picks up updated pre-commit hooks and CI gates"
+    command: "docker exec omninode-runtime uv run python -c 'import omniclaude; print(omniclaude.__version__)' && gh pr checks 1546 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Both AST validators pass green locally — no false positives on annotated violation sites"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run python scripts/validation/validate_no_direct_bus_instantiation.py"
+      - check_type: command
+        check_value: "uv run python scripts/validation/validate_no_raw_sqlite3.py"
+  - id: dod-002
+    description: "Pre-commit hooks include both new validators and pass on full file scan"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pre-commit run validate-no-direct-bus-instantiation --all-files && uv run pre-commit run validate-no-raw-sqlite3 --all-files"
+  - id: dod-003
+    description: "CI required status checks include arch-no-direct-bus-instantiation and arch-no-raw-sqlite3-in-handlers"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "gh pr checks 1546 --repo OmniNode-ai/omniclaude | grep -E 'arch-no-direct-bus|arch-no-raw-sqlite3'"
+  - id: dod-004
+    description: "Post-merge deploy verification: omninode-runtime container has the updated enforcement gates active"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "docker exec omninode-runtime uv run python scripts/validation/validate_no_direct_bus_instantiation.py && docker exec omninode-runtime uv run python scripts/validation/validate_no_raw_sqlite3.py"

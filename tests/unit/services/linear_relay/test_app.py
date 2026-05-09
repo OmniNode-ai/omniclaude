@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from omniclaude.services.linear_relay.app import _reset_dedup_store, create_app
-from omniclaude.services.linear_relay.dedup import DedupStore
+from omniclaude.services.linear_relay.dedup_adapter import DedupStore
 
 # ---------------------------------------------------------------------------
 # Fixture payloads — representative Linear webhook bodies

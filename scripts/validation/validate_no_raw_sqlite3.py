@@ -74,6 +74,7 @@ class RawSqlite3Visitor(ast.NodeVisitor):
         self.source_lines = source_lines
         self.violations: list[str] = []
         self._sqlite3_aliases: set[str] = set()
+        self._sqlite3_connect_aliases: set[str] = set()
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
@@ -84,8 +85,8 @@ class RawSqlite3Visitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         if node.module == FORBIDDEN_MODULE:
             for alias in node.names:
-                if alias.name == "connect":
-                    self._sqlite3_aliases.add("__connect_direct__")
+                if alias.name == FORBIDDEN_CALL:
+                    self._sqlite3_connect_aliases.add(alias.asname or alias.name)
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
@@ -100,11 +101,10 @@ class RawSqlite3Visitor(ast.NodeVisitor):
         ):
             matched = True
 
-        # from sqlite3 import connect; connect(...)
+        # from sqlite3 import connect [as alias]; connect(...) / alias(...)
         if (
             isinstance(node.func, ast.Name)
-            and node.func.id == FORBIDDEN_CALL
-            and "__connect_direct__" in self._sqlite3_aliases
+            and node.func.id in self._sqlite3_connect_aliases
         ):
             matched = True
 

@@ -82,18 +82,27 @@ class BusInstantiationVisitor(ast.NodeVisitor):
         self.filepath = filepath
         self.source_lines = source_lines
         self.violations: list[str] = []
+        self._forbidden_aliases: set[str] = set(FORBIDDEN_CALL_NAMES)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+        for alias in node.names:
+            if alias.name in FORBIDDEN_CALL_NAMES:
+                self._forbidden_aliases.add(alias.asname or alias.name)
+        self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
-        name = None
+        matched_name = None
         if isinstance(node.func, ast.Name):
-            name = node.func.id
+            if node.func.id in self._forbidden_aliases:
+                matched_name = node.func.id
         elif isinstance(node.func, ast.Attribute):
-            name = node.func.attr
+            if node.func.attr in FORBIDDEN_CALL_NAMES:
+                matched_name = node.func.attr
 
-        if name in FORBIDDEN_CALL_NAMES:
+        if matched_name is not None:
             if not _call_has_annotation(self.source_lines, node):
                 self.violations.append(
-                    f"{self.filepath}:{node.lineno}: direct {name}() construction — "
+                    f"{self.filepath}:{node.lineno}: direct {matched_name}() construction — "
                     f"bus must come from DI container or select_event_bus(). "
                     f"Add '# bus-ok: <reason>' to suppress for legitimate bootstrap sites."
                 )

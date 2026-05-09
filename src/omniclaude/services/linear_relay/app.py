@@ -19,7 +19,7 @@ from typing import Any  # any-ok: external API boundary
 
 from fastapi import FastAPI, HTTPException, Request
 
-from omniclaude.services.linear_relay.dedup import DedupStore
+from omniclaude.services.linear_relay.dedup_adapter import DedupStore
 from omniclaude.services.linear_relay.models import LinearWebhookPayload
 from omniclaude.services.linear_relay.publisher import build_command, close_producer
 from omniclaude.services.linear_relay.verifier import (
