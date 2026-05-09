@@ -292,12 +292,15 @@ def classify_and_publish(
     correlation_id = str(correlation_uuid)
 
     if force_local:
+        runtime_socket_path = os.environ.get(
+            "ONEX_LOCAL_RUNTIME_SOCKET_PATH", "<unset>"
+        )
         return {
             "success": False,
             "error": (
                 "In-process fallback removed (OMN-10723). "
                 "Use the runtime path: start the runtime and ensure "
-                "ONEX_LOCAL_RUNTIME_SOCKET_PATH is set."
+                f"ONEX_LOCAL_RUNTIME_SOCKET_PATH is set (current value: {runtime_socket_path})."
             ),
             "correlation_id": correlation_id,
         }

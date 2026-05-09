@@ -62,7 +62,7 @@ class TestDelegateRuntimeOnly:
         )
 
         assert result.get("success") is False
-        assert result.get("correlation_id") is not None
+        assert result.get("correlation_id") == corr
 
     def test_runtime_socket_failure_returns_explicit_error(
         self,

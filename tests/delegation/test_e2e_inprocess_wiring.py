@@ -1,37 +1,21 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""End-to-end integration test for the in-process delegation pipeline (OMN-10610).
+"""Tests for delegate skill runtime-only dispatch (OMN-10723).
 
-Drives the full chain that ships with PR #1523:
-    delegate skill (force_local=True)
-        → TaskClassifier
-        → InProcessDelegationRunner.run
-            → routing_delta (real, reads env vars)
-            → _call_llm (patched — the only HTTP boundary)
-            → quality_gate_delta (real)
-        → _write_evidence_bundle (real)
-            → EvidenceBundleWriter.write (real, writes 5 artifacts to disk)
+The in-process path (force_local=True) was removed in OMN-10723. These tests
+verify the removal is complete: force_local returns an explicit error and the
+runtime path is the only supported dispatch route.
 
-No live LLM, no .201, no Kafka, no Docker. The pipeline runs in-process with
-the only mock at the HTTP transport boundary, so every other layer
-(classifier → routing config → quality gate → evidence bundle writer) is
-exercised against real production code.
-
-What this test proves the corrected scope (per team-lead 2026-05-07):
-    - WIRING is end-to-end correct: delegate → runner → quality gate → bundle
-    - Real evidence artifacts are produced on disk with the right shape
-    - ONEX_STATE_DIR controls bundle emission (set → bundle, unset → no bundle)
-    - The result dict surfaces evidence_bundle_path back to the caller
+Non-delegatable intent rejection is tested here as well since it runs before
+any dispatch attempt and is not affected by the removal.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 import uuid
 from pathlib import Path
 from types import ModuleType
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -58,207 +42,104 @@ def delegate_run_module() -> ModuleType:
     return importlib.reload(_run)
 
 
-_MOCK_LLM_CONTENT = (
-    "@pytest.mark.unit\n"
-    "def test_add_happy_path() -> None:\n"
-    "    assert add(2, 3) == 5\n"
-    "    assert add(0, 0) == 0\n"
-    "    assert add(-1, 1) == 0\n"
-)
-_MOCK_LLM_USAGE: dict[str, int] = {
-    "prompt_tokens": 50,
-    "completion_tokens": 80,
-    "total_tokens": 130,
-}
-_MOCK_LATENCY_MS = 42
-_MOCK_MODEL_USED = "cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"
-
-
-def _patched_call_llm(**_: Any) -> tuple[str, dict[str, int], int, str]:
-    """Drop-in replacement for the runner's HTTP boundary.
-
-    Same return contract as inprocess_runner._call_llm so quality_gate_delta
-    and result-construction code paths are exercised normally.
-    """
-    return (_MOCK_LLM_CONTENT, _MOCK_LLM_USAGE, _MOCK_LATENCY_MS, _MOCK_MODEL_USED)
-
-
 @pytest.mark.unit
 class TestInprocessWiringEndToEnd:
-    """Full chain: delegate skill → runner → quality gate → evidence bundle."""
+    """OMN-10723: force_local returns explicit error; runtime is the only path."""
 
-    def test_force_local_writes_evidence_bundle_with_all_artifacts(
+    def test_force_local_returns_error_not_success(
         self,
         delegate_run_module: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        if not getattr(delegate_run_module, "_HAS_EVIDENCE_BUNDLE", False):
-            pytest.skip("evidence_bundle module not importable in this venv")
-
+        """force_local=True returns success=False, not in-process execution."""
         monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
         monkeypatch.setenv("LLM_CODER_URL", "http://test-backend.invalid:8000")
-        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://test-backend.invalid:8001")
 
-        with patch(
-            "omniclaude.delegation.inprocess_runner._call_llm",
-            side_effect=_patched_call_llm,
-        ):
-            result = delegate_run_module.classify_and_publish(
-                prompt="write unit tests for handler_event_emitter.py",
-                source_file="src/foo.py",
-                max_tokens=512,
-                force_local=True,
-            )
+        result = delegate_run_module.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            source_file="src/foo.py",
+            max_tokens=512,
+            force_local=True,
+        )
 
-        assert result["success"] is True, f"expected success, got {result}"
-        assert result["path"] == "inprocess"
-        assert result["task_type"] == "test"
-        assert result["model_used"] == _MOCK_MODEL_USED
-        assert result["content"] == _MOCK_LLM_CONTENT
-        assert result["prompt_tokens"] == _MOCK_LLM_USAGE["prompt_tokens"]
-        assert result["completion_tokens"] == _MOCK_LLM_USAGE["completion_tokens"]
-        assert result["total_tokens"] == _MOCK_LLM_USAGE["total_tokens"]
-        assert result["quality_passed"] is True
+        assert result["success"] is False
+        assert "OMN-10723" in result["error"]
+        assert "runtime" in result["error"].lower()
 
-        bundle_path = result["evidence_bundle_path"]
-        assert bundle_path is not None
-        bundle_dir = Path(bundle_path)
-        assert bundle_dir.is_dir()
-        assert bundle_dir.parent == tmp_path / "delegation" / "bundles"
-        uuid.UUID(bundle_dir.name)  # path segment is the correlation_id
+    def test_force_local_error_includes_socket_path(
+        self,
+        delegate_run_module: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Error message includes the resolved ONEX_LOCAL_RUNTIME_SOCKET_PATH value."""
+        monkeypatch.setenv("ONEX_LOCAL_RUNTIME_SOCKET_PATH", "/tmp/onex-runtime.sock")
 
-        artifact_names = {p.name for p in bundle_dir.iterdir()}
-        assert artifact_names == {
-            "run_manifest.json",
-            "bifrost_response.json",
-            "quality_gate_result.json",
-            "cost_event.json",
-            "receipt.json",
-        }
+        result = delegate_run_module.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            force_local=True,
+        )
 
-    def test_run_manifest_has_correct_fields(
+        assert result["success"] is False
+        assert "/tmp/onex-runtime.sock" in result["error"]
+
+    def test_force_local_error_shows_unset_when_socket_not_configured(
+        self,
+        delegate_run_module: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Error message includes <unset> when ONEX_LOCAL_RUNTIME_SOCKET_PATH is absent."""
+        monkeypatch.delenv("ONEX_LOCAL_RUNTIME_SOCKET_PATH", raising=False)
+
+        result = delegate_run_module.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            force_local=True,
+        )
+
+        assert result["success"] is False
+        assert "<unset>" in result["error"]
+
+    def test_force_local_error_includes_correlation_id(
+        self,
+        delegate_run_module: ModuleType,
+    ) -> None:
+        """force_local error dict includes the caller-supplied correlation_id."""
+        corr = str(uuid.uuid4())
+        result = delegate_run_module.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            force_local=True,
+            correlation_id=corr,
+        )
+
+        assert result["success"] is False
+        assert result.get("correlation_id") == corr
+
+    def test_force_local_does_not_write_evidence_bundle(
         self,
         delegate_run_module: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        if not getattr(delegate_run_module, "_HAS_EVIDENCE_BUNDLE", False):
-            pytest.skip("evidence_bundle module not importable in this venv")
-
+        """force_local=True returns before any bundle write — no artifacts on disk."""
         monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
-        monkeypatch.setenv("LLM_CODER_URL", "http://test-backend.invalid:8000")
-        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://test-backend.invalid:8001")
 
-        with patch(
-            "omniclaude.delegation.inprocess_runner._call_llm",
-            side_effect=_patched_call_llm,
-        ):
-            result = delegate_run_module.classify_and_publish(
-                prompt="write unit tests for handler_event_emitter.py",
-                force_local=True,
-            )
+        result = delegate_run_module.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            force_local=True,
+        )
 
-        assert result["success"] is True
-        bundle_dir = Path(result["evidence_bundle_path"])
-        manifest = json.loads((bundle_dir / "run_manifest.json").read_text())
-        assert manifest["correlation_id"] == result["correlation_id"]
-        assert manifest["task_type"] == "test"
-        assert manifest["runner"] == "inprocess"
-        assert manifest["bundle_schema_version"] == "1.0.0"
-        assert len(manifest["prompt_hash"]) == 64
-        assert manifest["started_at"] <= manifest["completed_at"]
+        assert result["success"] is False
+        bundles_dir = tmp_path / "delegation" / "bundles"
+        assert not bundles_dir.exists() or not any(bundles_dir.iterdir())
 
-    def test_bifrost_response_captures_routing_decision(
+    def test_no_inprocess_runner_attribute(
         self,
         delegate_run_module: ModuleType,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
     ) -> None:
-        if not getattr(delegate_run_module, "_HAS_EVIDENCE_BUNDLE", False):
-            pytest.skip("evidence_bundle module not importable in this venv")
-
-        monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
-        # Routing delta reads endpoint from LLM_CODER_* env vars (OMN-10657)
-        monkeypatch.setenv("LLM_CODER_URL", "http://test-backend.invalid:8000")
-        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://test-backend.invalid:8001")
-        import omnibase_infra.nodes.node_delegation_routing_reducer.handlers.handler_delegation_routing as _h
-
-        _h._config = None
-
-        with patch(
-            "omniclaude.delegation.inprocess_runner._call_llm",
-            side_effect=_patched_call_llm,
-        ):
-            result = delegate_run_module.classify_and_publish(
-                prompt="write unit tests for handler_event_emitter.py",
-                force_local=True,
-            )
-
-        _h._config = None
-
-        bundle_dir = Path(result["evidence_bundle_path"])
-        bifrost = json.loads((bundle_dir / "bifrost_response.json").read_text())
-        assert bifrost["backend_selected"].startswith("http://test-backend.invalid:")
-        assert bifrost["model_used"] == _MOCK_MODEL_USED
-        assert bifrost["prompt_tokens"] == _MOCK_LLM_USAGE["prompt_tokens"]
-        assert bifrost["response_content"] == _MOCK_LLM_CONTENT
-
-    def test_receipt_hashes_cover_all_four_other_artifacts(
-        self,
-        delegate_run_module: ModuleType,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        if not getattr(delegate_run_module, "_HAS_EVIDENCE_BUNDLE", False):
-            pytest.skip("evidence_bundle module not importable in this venv")
-
-        monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
-        monkeypatch.setenv("LLM_CODER_URL", "http://test-backend.invalid:8000")
-        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://test-backend.invalid:8001")
-
-        with patch(
-            "omniclaude.delegation.inprocess_runner._call_llm",
-            side_effect=_patched_call_llm,
-        ):
-            result = delegate_run_module.classify_and_publish(
-                prompt="write unit tests for handler_event_emitter.py",
-                force_local=True,
-            )
-
-        bundle_dir = Path(result["evidence_bundle_path"])
-        receipt = json.loads((bundle_dir / "receipt.json").read_text())
-        assert set(receipt["artifact_hashes"]) == {
-            "run_manifest.json",
-            "bifrost_response.json",
-            "quality_gate_result.json",
-            "cost_event.json",
-        }
-        for digest in receipt["artifact_hashes"].values():
-            assert len(digest) == 64
-        assert len(receipt["bundle_root_hash"]) == 64
-        assert receipt["correlation_id"] == result["correlation_id"]
-
-    def test_no_bundle_when_state_dir_unset(
-        self,
-        delegate_run_module: ModuleType,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.delenv("ONEX_STATE_DIR", raising=False)
-        monkeypatch.setenv("LLM_CODER_URL", "http://test-backend.invalid:8000")
-        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://test-backend.invalid:8001")
-
-        with patch(
-            "omniclaude.delegation.inprocess_runner._call_llm",
-            side_effect=_patched_call_llm,
-        ):
-            result = delegate_run_module.classify_and_publish(
-                prompt="write unit tests for handler_event_emitter.py",
-                force_local=True,
-            )
-
-        assert result["success"] is True
-        assert result["evidence_bundle_path"] is None
+        """InProcessDelegationRunner must not be importable from the skill module."""
+        assert not hasattr(delegate_run_module, "InProcessDelegationRunner")
+        assert not hasattr(delegate_run_module, "_HAS_DELEGATION_RUNNER")
+        assert not hasattr(delegate_run_module, "_inprocess_fallback")
 
     def test_non_delegatable_intent_returns_error_no_bundle(
         self,
@@ -271,7 +152,6 @@ class TestInprocessWiringEndToEnd:
 
         with patch(
             "omniclaude.delegation.inprocess_runner._call_llm",
-            side_effect=_patched_call_llm,
         ) as mock_call:
             result = delegate_run_module.classify_and_publish(
                 prompt="debug the broken database connection",
