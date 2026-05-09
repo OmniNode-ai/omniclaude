@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# scripts/ci/test_selection_adjacency.yaml
+# Static adjacency map from src/omniclaude/<module> to dependent modules.
+# When a key module changes, every module in `reverse_deps` ALSO has its tests run.
+# Treated as CI contract data — manually curated, reviewed in PRs that change it.
+
+schema_version: 1
+
+# `shared_modules` is a FULL-SUITE ESCALATION POLICY, not an architectural ontology.
+# Listing a module here means "if this module changes, run the full suite".
+# Curate based on operational risk + import fan-out.
+shared_modules:
+  - hooks
+  - lib
+  - runtime
+  - config
+
+# Per-repo full-suite escalation threshold.
+thresholds:
+  modules_changed_for_full_suite: 5
+
+# Test infrastructure — any change forces the full suite.
+test_infrastructure_paths:
+  - tests/conftest.py
+  - tests/fixtures/
+  - pytest.ini
+  - pyproject.toml
+
+# Reverse dependency edges. Key = changed module; value = modules that import it.
+# When `hooks` changes, also run tests for everything in `hooks.reverse_deps`.
+# Note: shared_modules entries are not consulted at runtime (they trigger full suite
+# first), but kept here for completeness/documentation.
+adjacency:
+  # Core foundation — broad reverse deps
+  hooks:
+    reverse_deps: [aggregators, delegation, nodes, publisher, routing, runtime, services, shared, verification]
+  lib:
+    reverse_deps: [aggregators, delegation, hooks, nodes, publisher, routing, runtime, services, shared, verification]
+  runtime:
+    reverse_deps: [aggregators, delegation, hooks, nodes, services]
+  config:
+    reverse_deps: [hooks, runtime, services, delegation]
+
+  # Mid-layer modules
+  delegation:
+    reverse_deps: [nodes, routing]
+  routing:
+    reverse_deps: [nodes]
+  routing_models:
+    reverse_deps: [routing, hooks, delegation]
+  contracts:
+    reverse_deps: [hooks, nodes, runtime, services]
+  enums:
+    reverse_deps: [hooks, delegation, routing_models, contracts]
+  services:
+    reverse_deps: [nodes]
+  publisher:
+    reverse_deps: [hooks, runtime]
+  shared:
+    reverse_deps: [hooks, delegation, routing, services]
+
+  # Leaf modules with no or minimal reverse deps
+  aggregators: {reverse_deps: []}
+  app: {reverse_deps: []}
+  cli: {reverse_deps: []}
+  coverage: {reverse_deps: []}
+  epic_org: {reverse_deps: []}
+  hook_runtime: {reverse_deps: [runtime]}
+  nodes: {reverse_deps: []}
+  quirks: {reverse_deps: [hooks]}
+  skills: {reverse_deps: []}
+  trace: {reverse_deps: [hooks, runtime]}
+  verification: {reverse_deps: []}

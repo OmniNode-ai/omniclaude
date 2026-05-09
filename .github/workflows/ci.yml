@@ -1240,8 +1240,15 @@ jobs:
   # TEST SUITES
   # ============================================================================
 
-  test:
-    name: Tests (Split ${{ matrix.group }}/5)
+  # ---------------------------------------------------------------------------
+  # Detect Changes (OMN-10760) — maps changed files to test directories.
+  # Outputs consumed by the test job: matrix, split_count, is_full_suite,
+  # selected_paths. When ENABLE_SMART_TESTS is off (or unset), emits a 5-shard
+  # full-suite matrix so behavior is identical to the previous fixed split.
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: Detect Changes
+    needs: [quality-gate]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1250,11 +1257,101 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
+    if: always() && needs.quality-gate.result == 'success'
+    outputs:
+      is_full_suite: ${{ steps.detect.outputs.is_full_suite }}
+      full_suite_reason: ${{ steps.detect.outputs.full_suite_reason }}
+      split_count: ${{ steps.detect.outputs.split_count }}
+      matrix: ${{ steps.detect.outputs.matrix }}
+      selected_paths: ${{ steps.detect.outputs.selected_paths }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen
+
+      - name: Compute changed files
+        id: diff
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            git fetch --no-tags --depth=1 origin "$base" || true
+            git diff --name-only "$base"...HEAD > changed.txt
+          else
+            git diff --name-only HEAD~1 HEAD > changed.txt || echo "" > changed.txt
+          fi
+          echo "Changed files:"
+          cat changed.txt
+
+      - name: Resolve test selection
+        id: detect
+        working-directory: ${{ github.workspace }}
+        env:
+          FLAG: ${{ vars.ENABLE_SMART_TESTS == 'true' && 'on' || 'off' }}
+        run: |
+          uv run python -m scripts.ci.detect_test_paths \
+            --changed-files-from changed.txt \
+            --ref-name "${{ github.ref_name }}" \
+            --event-name "${{ github.event_name }}" \
+            --feature-flag "$FLAG" \
+            > selection.json
+          cat selection.json
+          is_full=$(jq -r '.is_full_suite' selection.json)
+          reason=$(jq -r '.full_suite_reason // ""' selection.json)
+          split_count=$(jq -r '.split_count' selection.json)
+          matrix=$(jq -c '.matrix' selection.json)
+          paths=$(jq -c '.selected_paths' selection.json)
+          echo "is_full_suite=$is_full" >> "$GITHUB_OUTPUT"
+          echo "full_suite_reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "split_count=$split_count" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "selected_paths=$paths" >> "$GITHUB_OUTPUT"
+
+      - name: Upload selection artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-selection
+          path: selection.json
+          retention-days: 7
+
+  # Parallel test execution — matrix shape driven by detect-changes output (OMN-10760).
+  # When ENABLE_SMART_TESTS is off (default), detect-changes emits a 5-shard full-suite
+  # matrix so behavior is identical to the previous fixed split.
+  # When the flag is on and the change set is small, a smaller matrix and
+  # selected_paths activate the smart-selection pytest step.
+  test:
+    name: Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
+    needs: [quality-gate, detect-changes]
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    if: always() && needs.quality-gate.result == 'success'
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5]
+        split: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -1334,19 +1431,21 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/generate_skill_node.py --all
 
-      - name: Run tests
+      - name: Run tests (smart selection)
+        if: vars.ENABLE_SMART_TESTS == 'true' && needs.detect-changes.outputs.is_full_suite == 'false'
         working-directory: ${{ github.workspace }}
         run: |
-          # Run all tests across both directories, split into 5 groups
           # Exit code 5 = no tests collected (expected for some splits)
           set +e
-          uv run pytest -o addopts="" tests/ \
-            --splits 5 \
-            --group ${{ matrix.group }} \
+          paths=$(echo '${{ needs.detect-changes.outputs.selected_paths }}' | jq -r '.[]')
+          uv run pytest -o addopts="" $paths \
+            --ignore=tests/integration \
+            --splits ${{ needs.detect-changes.outputs.split_count }} \
+            --group ${{ matrix.split }} \
             -v -m "not integration" \
             --cov=src/omniclaude \
             --cov-report=term-missing \
-            --junitxml=junit-test-${{ matrix.group }}.xml
+            --junitxml=junit-test-${{ matrix.split }}.xml
           EXIT_CODE=$?
           set -e
 
@@ -1355,16 +1454,38 @@ jobs:
             exit 1
           fi
 
-          # Rename coverage file to be unique for this group
-          mv .coverage .coverage.${{ matrix.group }} 2>/dev/null || true
+          mv .coverage .coverage.${{ matrix.split }} 2>/dev/null || true
+
+      - name: Run tests (full suite)
+        if: vars.ENABLE_SMART_TESTS != 'true' || needs.detect-changes.outputs.is_full_suite == 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          # Run all tests split into groups. Exit code 5 = no tests collected.
+          set +e
+          uv run pytest -o addopts="" tests/ \
+            --splits ${{ needs.detect-changes.outputs.split_count }} \
+            --group ${{ matrix.split }} \
+            -v -m "not integration" \
+            --cov=src/omniclaude \
+            --cov-report=term-missing \
+            --junitxml=junit-test-${{ matrix.split }}.xml
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 5 ]; then
+            echo "::error::Tests failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          mv .coverage .coverage.${{ matrix.split }} 2>/dev/null || true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true
         with:
-          name: coverage-test-group-${{ matrix.group }}
-          path: .coverage.${{ matrix.group }}
+          name: coverage-test-group-${{ matrix.split }}
+          path: .coverage.${{ matrix.split }}
           retention-days: 1
 
       - name: Upload test results
@@ -1372,8 +1493,8 @@ jobs:
         if: always()
         continue-on-error: true
         with:
-          name: test-results-${{ matrix.group }}
-          path: junit-test-${{ matrix.group }}.xml
+          name: test-results-${{ matrix.split }}
+          path: junit-test-${{ matrix.split }}.xml
 
   hooks-tests:
     name: Hooks System Tests
