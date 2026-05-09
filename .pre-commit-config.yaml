@@ -147,6 +147,16 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-10723: block silent inprocess fallback patterns in skill code.
+      # Skills must dispatch through the event bus, not bypass it.
+      - id: no-inprocess-fallback-in-skills
+        name: No silent inprocess fallback in skills (OMN-10723)
+        entry: bash plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'

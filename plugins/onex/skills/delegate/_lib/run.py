@@ -7,9 +7,8 @@ Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, wraps it in a ModelRuntimeSkillRequest, and sends it to the
 runtime-owned Pattern B broker path via LocalRuntimeSkillClient.
 
-When the runtime socket is unavailable (no Docker, no Kafka), the skill falls
-back to running the delegation pipeline in-process via DelegationRunner.  The
-``--local`` flag forces this in-process path without attempting the runtime.
+If the runtime socket is unavailable, the skill returns an explicit error.
+There is no silent in-process fallback (OMN-10723).
 
 Wire schema (plain dict - runtime-side validation by ModelDelegationCommand):
   {
@@ -67,14 +66,6 @@ except ImportError as exc:
     ModelRuntimeSkillRequest = None  # type: ignore[assignment]
     LocalRuntimeSkillClient = None  # type: ignore[assignment]
     _RUNTIME_IMPORT_ERROR = exc
-
-try:
-    from omniclaude.delegation.inprocess_runner import InProcessDelegationRunner
-
-    _HAS_DELEGATION_RUNNER = True
-except ImportError:
-    InProcessDelegationRunner = None  # type: ignore[assignment,misc]
-    _HAS_DELEGATION_RUNNER = False
 
 try:
     from omniclaude.delegation.evidence_bundle import (
@@ -254,83 +245,6 @@ def _emit_task_delegated_event(
         return False
 
 
-def _inprocess_fallback(
-    *,
-    prompt: str,
-    intent_value: str,
-    correlation_id: str,
-    source_file: str | None,
-    max_tokens: int,
-) -> dict:
-    """Run delegation pipeline in-process via InProcessDelegationRunner.
-
-    Used when runtime socket is unavailable or --local is requested.
-    """
-    if not _HAS_DELEGATION_RUNNER or InProcessDelegationRunner is None:
-        return {
-            "success": False,
-            "error": (
-                "InProcessDelegationRunner unavailable - "
-                "omniclaude.delegation.runner not importable "
-                "(branch jonah/omn-10610 may not be merged)"
-            ),
-            "correlation_id": correlation_id,
-        }
-
-    from datetime import UTC, datetime  # noqa: PLC0415
-
-    started_at = datetime.now(UTC)
-    try:
-        runner = InProcessDelegationRunner()
-        result = runner.run(
-            task_type=intent_value,
-            prompt=prompt,
-            source_file_path=source_file,
-            source_session_id=os.environ.get("CLAUDE_SESSION_ID"),
-            max_tokens=max_tokens,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "success": False,
-            "error": str(exc),
-            "correlation_id": correlation_id,
-            "path": "inprocess",
-        }
-    completed_at = datetime.now(UTC)
-
-    bundle_path = _write_evidence_bundle(
-        result=result,
-        prompt=prompt,
-        started_at=started_at,
-        completed_at=completed_at,
-    )
-    task_delegated_emitted = _emit_task_delegated_event(
-        result=result,
-        fallback_correlation_id=correlation_id,
-        session_id=os.environ.get("CLAUDE_SESSION_ID"),
-    )
-
-    return {
-        "success": True,
-        "correlation_id": str(result.correlation_id),
-        "task_type": result.task_type,
-        "model_used": result.model_used,
-        "endpoint_url": result.endpoint_url,
-        "content": result.content,
-        "quality_passed": result.quality_passed,
-        "quality_score": result.quality_score,
-        "latency_ms": result.latency_ms,
-        "prompt_tokens": result.prompt_tokens,
-        "completion_tokens": result.completion_tokens,
-        "total_tokens": result.total_tokens,
-        "fallback_to_claude": result.fallback_to_claude,
-        "failure_reason": result.failure_reason,
-        "evidence_bundle_path": bundle_path,
-        "task_delegated_emitted": task_delegated_emitted,
-        "path": "inprocess",
-    }
-
-
 # ---------------------------------------------------------------------------
 # Core dispatch function
 # ---------------------------------------------------------------------------
@@ -349,16 +263,11 @@ def classify_and_publish(
     timeout_ms: int = 300_000,
     force_local: bool = False,
 ) -> dict:
-    """Classify *prompt* and dispatch a delegation request.
-
-    Primary path: LocalRuntimeSkillClient (Unix socket → runtime → Kafka).
-    Fallback path: DelegationRunner in-process (no Docker/Kafka required).
-
-    Set ``force_local=True`` (or pass ``--local`` via CLI) to skip the
-    runtime attempt and run in-process directly.
+    """Classify *prompt* and dispatch a delegation request via runtime socket.
 
     Returns a result dict with keys: success, correlation_id, task_type, path.
     On failure, returns success=False with an error message.
+    The ``--local`` flag (force_local=True) is no longer supported (OMN-10723).
     """
     if not _HAS_CLASSIFIER:
         return {
@@ -383,13 +292,15 @@ def classify_and_publish(
     correlation_id = str(correlation_uuid)
 
     if force_local:
-        return _inprocess_fallback(
-            prompt=prompt,
-            intent_value=intent.value,
-            correlation_id=correlation_id,
-            source_file=source_file,
-            max_tokens=max_tokens,
-        )
+        return {
+            "success": False,
+            "error": (
+                "In-process fallback removed (OMN-10723). "
+                "Use the runtime path: start the runtime and ensure "
+                "ONEX_LOCAL_RUNTIME_SOCKET_PATH is set."
+            ),
+            "correlation_id": correlation_id,
+        }
 
     delegation_payload = {
         "prompt": prompt,
@@ -425,7 +336,7 @@ def classify_and_publish(
     except Exception as exc:
         return {
             "success": False,
-            "error": f"Runtime dispatch failed: {exc}. Use --local for in-process delegation.",
+            "error": f"Runtime socket unavailable: {exc}. Start the runtime or set ONEX_LOCAL_RUNTIME_SOCKET_PATH.",
             "correlation_id": correlation_id,
             "path": "runtime",
         }
@@ -493,7 +404,7 @@ def main() -> None:
     parser.add_argument(
         "--local",
         action="store_true",
-        help="Force in-process DelegationRunner (skip runtime socket attempt)",
+        help="[removed] In-process fallback removed (OMN-10723). Returns an error.",
     )
     args = parser.parse_args()
 
@@ -514,25 +425,13 @@ def main() -> None:
     print(json.dumps(result, indent=2))
 
     if result.get("success"):
-        path = result.get("path", "runtime")
         print(
-            f"\nDelegation dispatched ({path}) - correlation_id={result['correlation_id']}\n"
-            f"task_type={result['task_type']}",
+            f"\nDelegation dispatched (runtime) - correlation_id={result['correlation_id']}\n"
+            f"task_type={result['task_type']}\n"
+            f"command_name={result.get('command_name')}\n"
+            f"dispatch_status={result.get('dispatch_status')}",
             file=sys.stderr,
         )
-        if path == "runtime":
-            print(
-                f"command_name={result.get('command_name')}\n"
-                f"dispatch_status={result.get('dispatch_status')}",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"model_used={result.get('model_used')}\n"
-                f"quality_passed={result.get('quality_passed')}\n"
-                f"latency_ms={result.get('latency_ms')}",
-                file=sys.stderr,
-            )
     else:
         print(f"\nDelegation failed: {result.get('error')}", file=sys.stderr)
         sys.exit(1)
