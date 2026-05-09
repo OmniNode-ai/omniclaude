@@ -120,7 +120,7 @@ class TestGoldenPathSessionLifecycle:
     """Golden path: session start → injection → work → end → outcome emission."""
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_full_lifecycle_success_path(self, mock_bus_cls) -> None:
         """Exercise the complete session lifecycle for a successful session.
 
@@ -218,7 +218,7 @@ class TestGoldenPathSessionLifecycle:
             assert "emitted_at" in payload
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_full_lifecycle_failed_path(self, mock_bus_cls) -> None:
         """Exercise the complete session lifecycle for a failed session."""
         mock_bus = AsyncMock()
@@ -244,7 +244,7 @@ class TestGoldenPathSessionLifecycle:
         assert mock_bus.publish.call_count == 2
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_full_lifecycle_abandoned_path(self, mock_bus_cls) -> None:
         """Exercise the session lifecycle for an abandoned session."""
         mock_bus = AsyncMock()
@@ -278,7 +278,7 @@ class TestEmitSessionOutcome:
     """Tests for emit_session_outcome_from_config function."""
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_publishes_to_both_topics(self, mock_bus_cls) -> None:
         """Session outcome is fan-out published to CMD and EVT topics."""
         mock_bus = AsyncMock()
@@ -303,7 +303,7 @@ class TestEmitSessionOutcome:
         assert TopicBase.SESSION_OUTCOME_EVT in topics
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_partition_key_is_session_id(self, mock_bus_cls) -> None:
         """Partition key is set to session_id for ordering guarantees."""
         mock_bus = AsyncMock()
@@ -324,7 +324,7 @@ class TestEmitSessionOutcome:
             assert call.kwargs["key"] == b"my-session-id"
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_payload_matches_schema(self, mock_bus_cls) -> None:
         """Published payload matches ModelSessionOutcome schema."""
         mock_bus = AsyncMock()
@@ -350,7 +350,7 @@ class TestEmitSessionOutcome:
             assert validated.emitted_at == ts
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_invalid_outcome_raises_at_config_construction(
         self, mock_bus_cls
     ) -> None:
@@ -382,7 +382,7 @@ class TestEmitSessionOutcome:
             )
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_all_four_outcomes_are_valid(self, mock_bus_cls) -> None:
         """All four outcome classifications can be emitted."""
         mock_bus = AsyncMock()
@@ -407,7 +407,7 @@ class TestEmitSessionOutcome:
             )
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_never_raises_exceptions(self, mock_bus_cls) -> None:
         """Function never raises, returns failure result instead."""
         mock_bus = AsyncMock()
@@ -429,7 +429,7 @@ class TestEmitSessionOutcome:
         assert result.error_message is not None
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_partial_fanout_cmd_ok_evt_fails(self, mock_bus_cls) -> None:
         """CMD succeeds but EVT fails: returns success=True with partial error."""
         mock_bus = AsyncMock()
@@ -453,7 +453,7 @@ class TestEmitSessionOutcome:
         assert "Partial fan-out" in result.error_message
 
     @pytest.mark.asyncio
-    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    @patch("omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka")
     async def test_defaults_emitted_at_to_now(self, mock_bus_cls, caplog) -> None:
         """When emitted_at is not provided, defaults to current UTC time and warns."""
         mock_bus = AsyncMock()

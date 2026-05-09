@@ -770,7 +770,9 @@ class TestToolContentCommand:
         """
         import json
 
-        with patch("omniclaude.hooks.cli_emit.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
+        ) as mock_bus_class:
             # Setup mock bus instance
             mock_bus = MagicMock()
             mock_bus.start = AsyncMock()
