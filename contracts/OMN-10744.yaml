@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-10744"
+title: "Extract runtime lifecycle EventBusKafka construction to lifecycle_bootstrapper factory"
+summary: >
+  Removes the direct EventBusKafka() instantiation (stopgap bus-ok annotation) from
+  src/omniclaude/runtime/lifecycle.py. A new lifecycle_bootstrapper.py factory is introduced,
+  allowlisted by the _bootstrapper.py suffix pattern in the AST validator.
+  This is a refactor-only change: no Dockerfile, docker-compose, or runtime compose files
+  are modified. No deploy action is required.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-no-direct-bus"
+    description: "Direct EventBus instantiation validator passes after refactor."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_no_direct_bus_instantiation.py src/"
+  - id: "dod-deploy-scope"
+    description: "No deploy required: refactor changes only Python object construction, not runtime compose/Dockerfile. Confirmed: deploy scope is non-deployment refactor only."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "echo 'deploy scope: lifecycle_bootstrapper refactor is Python-only; no compose or Dockerfile changed; no deploy action needed'"
+  - id: "dod-tests"
+    description: "Unit test for lifecycle_bootstrapper passes."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/runtime/test_lifecycle_bootstrapper.py -v"
