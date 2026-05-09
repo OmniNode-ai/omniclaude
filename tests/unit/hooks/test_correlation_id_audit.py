@@ -326,7 +326,7 @@ class TestSessionOutcomeCorrelationPropagation:
         )
 
         with patch(
-            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
         ) as mock_bus_cls:
             mock_bus = AsyncMock()
             mock_bus.publish = AsyncMock(return_value=None)
@@ -356,7 +356,7 @@ class TestSessionOutcomeCorrelationPropagation:
         )
 
         with patch(
-            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
         ) as mock_bus_cls:
             mock_bus = AsyncMock()
             mock_bus.publish = AsyncMock(return_value=None)
