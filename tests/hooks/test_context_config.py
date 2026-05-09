@@ -250,3 +250,55 @@ class TestContextInjectionConfigDatabaseDsn:
         config = ContextInjectionConfig(db_password=SecretStr("mypassword"))
         with pytest.raises(RuntimeError, match="OMNICLAUDE_CONTEXT_DB_HOST is not set"):
             config.get_db_dsn()
+
+
+class TestContextInjectionConfigNoLocalhostFallbacks:
+    """Test that no localhost defaults exist for opt-in features [OMN-10734]."""
+
+    def test_memory_fabric_url_default_is_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """memory_fabric_url defaults to empty string, not localhost [OMN-7227]."""
+        monkeypatch.delenv("OMNICLAUDE_CONTEXT_MEMORY_FABRIC_URL", raising=False)
+        config = ContextInjectionConfig()
+        assert config.memory_fabric_url == ""
+        assert "localhost" not in config.memory_fabric_url
+
+    def test_session_projector_url_default_is_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """session_projector_url defaults to empty string, not localhost [OMN-7227]."""
+        monkeypatch.delenv("OMNICLAUDE_CONTEXT_SESSION_PROJECTOR_URL", raising=False)
+        config = ContextInjectionConfig()
+        assert config.session_projector_url == ""
+        assert "localhost" not in config.session_projector_url
+
+    def test_memory_fabric_enabled_without_url_raises(self) -> None:
+        """Enabling memory_fabric without a URL raises ValueError [OMN-7227]."""
+        with pytest.raises(ValueError, match="OMNICLAUDE_CONTEXT_MEMORY_FABRIC_URL"):
+            ContextInjectionConfig(memory_fabric_enabled=True)
+
+    def test_session_resume_enabled_without_url_raises(self) -> None:
+        """Enabling session_resume without a URL raises ValueError [OMN-7227]."""
+        with pytest.raises(
+            ValueError, match="OMNICLAUDE_CONTEXT_SESSION_PROJECTOR_URL"
+        ):
+            ContextInjectionConfig(session_resume_enabled=True)
+
+    def test_memory_fabric_enabled_with_url_succeeds(self) -> None:
+        """Enabling memory_fabric with a URL configured is valid."""
+        config = ContextInjectionConfig(
+            memory_fabric_enabled=True,
+            memory_fabric_url="http://192.168.86.201:8085/v1/nodes/node_agent_learning_retrieval_effect/execute",  # onex-allow-internal-ip # kafka-fallback-ok
+        )
+        assert config.memory_fabric_enabled is True
+        assert "localhost" not in config.memory_fabric_url
+
+    def test_session_resume_enabled_with_url_succeeds(self) -> None:
+        """Enabling session_resume with a URL configured is valid."""
+        config = ContextInjectionConfig(
+            session_resume_enabled=True,
+            session_projector_url="http://192.168.86.201:8085/v1/nodes/node_session_projector_effect/execute",  # onex-allow-internal-ip # kafka-fallback-ok
+        )
+        assert config.session_resume_enabled is True
+        assert "localhost" not in config.session_projector_url

@@ -383,10 +383,11 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     memory_fabric_url: str = Field(
-        default="http://localhost:8085/v1/nodes/node_agent_learning_retrieval_effect/execute",
+        default="",
         description=(
             "URL for the memory fabric retrieval endpoint. "
-            "Override via OMNICLAUDE_CONTEXT_MEMORY_FABRIC_URL."
+            "Required when memory_fabric_enabled=True. "
+            "Set via OMNICLAUDE_CONTEXT_MEMORY_FABRIC_URL. No localhost default. [OMN-7227]"
         ),
     )
 
@@ -411,10 +412,11 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     session_projector_url: str = Field(
-        default="http://localhost:8085/v1/nodes/node_session_projector_effect/execute",
+        default="",
         description=(
             "URL for the session projector retrieval endpoint. "
-            "Override via OMNICLAUDE_CONTEXT_SESSION_PROJECTOR_URL."
+            "Required when session_resume_enabled=True. "
+            "Set via OMNICLAUDE_CONTEXT_SESSION_PROJECTOR_URL. No localhost default. [OMN-7227]"
         ),
     )
 
@@ -514,6 +516,26 @@ class ContextInjectionConfig(BaseSettings):
         context_api_url = os.environ.get("OMNICLAUDE_CONTEXT_API_URL", "").strip()
         if not intelligence_url and not context_api_url:
             object.__setattr__(self, "api_enabled", False)
+        return self
+
+    @model_validator(mode="after")
+    def validate_memory_fabric_url(self) -> Self:
+        """Raise if memory fabric is enabled but URL is not configured. [OMN-7227]"""
+        if self.memory_fabric_enabled and not self.memory_fabric_url:
+            raise ValueError(
+                "OMNICLAUDE_CONTEXT_MEMORY_FABRIC_URL is required when "
+                "memory_fabric_enabled=True. No localhost default. [OMN-7227]"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_session_projector_url(self) -> Self:
+        """Raise if session resume is enabled but URL is not configured. [OMN-7227]"""
+        if self.session_resume_enabled and not self.session_projector_url:
+            raise ValueError(
+                "OMNICLAUDE_CONTEXT_SESSION_PROJECTOR_URL is required when "
+                "session_resume_enabled=True. No localhost default. [OMN-7227]"
+            )
         return self
 
     def get_db_dsn(self) -> str:
