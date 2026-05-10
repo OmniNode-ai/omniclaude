@@ -109,7 +109,7 @@ _reset_failure() {
 }
 
 # --- Extract common fields ---
-SESSION_ID="${CLAUDE_SESSION_ID:-$(printf '%s\n' "$HOOK_EVENT" | jq -r '.session_id // "unknown"' 2>/dev/null)}"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-$(printf '%s\n' "$HOOK_EVENT" | jq -r '.session_id // "unknown"' 2>/dev/null)}"
 CORRELATION_ID="${ONEX_CORRELATION_ID:-}"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 DISPATCH_SURFACE="${ONEX_DISPATCH_SURFACE:-claude-code}"

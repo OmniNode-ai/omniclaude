@@ -280,7 +280,7 @@ fi
 
 emit_guard_event() {
     local guard_outcome="$1"
-    local session_id="${CLAUDE_SESSION_ID:-}"
+    local session_id="${CLAUDE_CODE_SESSION_ID:-}"
     local timestamp
     timestamp=$(python3 -c "from datetime import datetime, timezone; print(datetime.now(tz=timezone.utc).isoformat())" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
 

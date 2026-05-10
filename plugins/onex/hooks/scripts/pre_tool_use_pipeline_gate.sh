@@ -214,7 +214,7 @@ now = time.time()
 max_age_seconds = 1800  # 30 minutes
 
 # Session correlation
-session_id = os.environ.get('CLAUDE_SESSION_ID', '')
+session_id = os.environ.get('CLAUDE_CODE_SESSION_ID', '')
 
 for state_file in state_dir.glob('*/state.yaml'):
     try:
@@ -265,7 +265,7 @@ fi
 
 # --- Check for /authorize override ---
 AUTH_DIR="/tmp/omniclaude-auth"
-SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-unknown}"
 if [[ -f "${AUTH_DIR}/${SESSION_ID}.json" ]]; then
     AUTH_VALID=$($PYTHON_CMD -c "
 import json, sys, time

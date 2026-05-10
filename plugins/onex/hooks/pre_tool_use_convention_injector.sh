@@ -88,7 +88,7 @@ print(name)
 
 # Emit context.utilization event (backgrounded, non-blocking)
 if [[ "${KAFKA_ENABLED:-false}" == "true" ]]; then
-    SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+    SESSION_ID="${CLAUDE_CODE_SESSION_ID:-unknown}"
     "$PYTHON_CMD" -c "
 import sys, os, json, datetime, uuid
 sys.path.insert(0, '${HOOKS_LIB}')
@@ -96,8 +96,8 @@ from emit_client_wrapper import emit_event
 emit_event(
     event_type='context.utilization',
     payload={
-        'session_id': os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
-        'entity_id': 'urn:onex:session:' + os.environ.get('CLAUDE_SESSION_ID', 'unknown'),
+        'session_id': os.environ.get('CLAUDE_CODE_SESSION_ID', 'unknown'),
+        'entity_id': 'urn:onex:session:' + os.environ.get('CLAUDE_CODE_SESSION_ID', 'unknown'),
         'correlation_id': str(uuid.uuid4()),
         'causation_id': str(uuid.uuid4()),
         'emitted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),

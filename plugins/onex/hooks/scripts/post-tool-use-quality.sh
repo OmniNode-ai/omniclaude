@@ -214,7 +214,7 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
             if [[ -z "$_SKILL_RUN_ID" ]]; then
                 exit 0
             fi
-            _SKILL_CORR_ID="${ONEX_CORRELATION_ID:-${CLAUDE_SESSION_ID:-$SESSION_ID}}"
+            _SKILL_CORR_ID="${ONEX_CORRELATION_ID:-${CLAUDE_CODE_SESSION_ID:-$SESSION_ID}}"
             _SKILL_ARGS_COUNT=$(echo "$TOOL_INFO" | jq -r '.tool_input.args | if . == null then 0 elif type == "object" then length elif type == "array" then length else 0 end' 2>/dev/null) || _SKILL_ARGS_COUNT=0
             _SKILL_STARTED_PAYLOAD=$(jq -n \
                 --arg run_id "$_SKILL_RUN_ID" \
@@ -509,7 +509,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             # Maps each tool use to the agent-action topic for downstream
             # consumer (omninode-agent-actions-consumer) and omnidash projections.
             AGENT_NAME="${ONEX_AGENT_NAME:-${CLAUDE_AGENT_NAME:-claude-code}}"
-            CORRELATION_ID="${ONEX_CORRELATION_ID:-${CLAUDE_SESSION_ID:-$SESSION_ID}}"
+            CORRELATION_ID="${ONEX_CORRELATION_ID:-${CLAUDE_CODE_SESSION_ID:-$SESSION_ID}}"
             ACTION_PAYLOAD=$(jq -n \
                 --arg correlation_id "$CORRELATION_ID" \
                 --arg agent_name "$AGENT_NAME" \
