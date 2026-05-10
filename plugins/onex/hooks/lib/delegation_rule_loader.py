@@ -112,6 +112,6 @@ class DelegationRuleLoader:
             data: dict[str, Any] = yaml.safe_load(raw) or {}
             self._cache = _CachedConfig(mtime=mtime, data=data)
             return data
-        except Exception:
+        except (OSError, ValueError, yaml.YAMLError):
             logger.warning("delegation_rule_loader: failed to parse %s", self._path)
             return None
