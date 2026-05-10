@@ -94,6 +94,7 @@ EXEMPT_MARKERS: tuple[str, ...] = (
 )
 
 _COMMENT_RE = re.compile(r"^\s*#")
+_TRIPLE_QUOTE_DELIMS = ('"""', "'''")
 
 
 def _is_pure_comment(line: str) -> bool:
@@ -102,6 +103,14 @@ def _is_pure_comment(line: str) -> bool:
 
 def _has_exempt_marker(line: str) -> bool:
     return any(marker in line for marker in EXEMPT_MARKERS)
+
+
+def _has_executable_suffix_after_closing_delim(line: str, delim: str) -> bool:
+    close_index = line.find(delim, len(delim))
+    if close_index == -1:
+        return False
+    suffix = line[close_index + len(delim) :].strip()
+    return bool(suffix and not suffix.startswith("#"))
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +134,7 @@ def scan_python_file(path: Path) -> list[tuple[int, str]]:
 
         # Track triple-quoted docstrings that begin a stripped line. Embedded
         # triple quotes in executable code must not hide fallback violations.
-        for delim in ('"""', "'''"):
+        for delim in _TRIPLE_QUOTE_DELIMS:
             count = stripped.count(delim)
             if in_docstring and docstring_delim == delim:
                 if count >= 1:
@@ -137,8 +146,8 @@ def scan_python_file(path: Path) -> list[tuple[int, str]]:
                 if count == 1:
                     in_docstring = True
                     docstring_delim = delim
-                else:
-                    # Opens and closes on the same line — skip as a docstring line
+                elif not _has_executable_suffix_after_closing_delim(stripped, delim):
+                    # Opens and closes on the same line with no executable tail.
                     skip_line = True
                 break
 
