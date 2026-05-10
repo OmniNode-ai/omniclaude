@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Validate that no localhost/default fallbacks exist in src/ and scripts/.
+"""Canonical unified validator: no localhost/hardcoded-endpoint fallbacks.
 
-Scans Python and shell files for patterns like:
-  - os.environ.get("VAR", "localhost...")
-  - os.getenv("VAR", "localhost...")
-  - ${VAR:-localhost}
-  - hardcoded localhost:<port> connection strings (outside comments/docstrings)
+Covers all 6 pattern types from OMN-10658 enforcement sweep:
+  1. os.environ.get("X", "localhost...")
+  2. os.getenv("X", "localhost...")
+  3. default="localhost..." (Pydantic Field or function param)
+  4. ${VAR:-localhost} (shell scripts)
+  5. Hardcoded 192.168.* IPs as default values
+  6. 127.0.0.1 bind addresses as default values
 
-Exit code 0 if clean, 1 if violations found.
+Exits 0 if clean, 1 if violations found.
 
-[OMN-7227]
+Annotation: add  # fallback-ok: <reason>  to a line to exempt it.
+[OMN-10741]
 """
 
 from __future__ import annotations
@@ -20,132 +23,242 @@ import re
 import sys
 from pathlib import Path
 
-# Directories to scan (relative to repo root)
-SCAN_DIRS = ["src", "scripts"]
+# ---------------------------------------------------------------------------
+# Pattern building blocks
+# ---------------------------------------------------------------------------
+_LOCALHOST_VARIANTS = (
+    r"(?:localhost|127\.0\.0\.1"
+    r"|http://localhost|https://localhost"
+    r"|bolt://localhost|redis://localhost"
+    r"|postgresql://localhost|amqp://localhost"
+    r"|http://127\.0\.0\.1|redis://127\.0\.0\.1|postgresql://127\.0\.0\.1)"
+)
+_PRIV_IP = r"192\.168\.\d{1,3}\.\d{1,3}"
 
-# Directories/files to skip
-SKIP_DIRS = {"tests", "__pycache__", ".git", "scripts/tests"}
-SKIP_FILES = {
-    "validate_no_env_fallbacks.py",  # this file
-    "validate_no_hardcoded_kafka_broker.py",  # existing validator (has examples in comments)
-    "cron-closeout.sh",  # documentation-only references in heredoc strings
-    "start-dashboard.sh",  # informational echo of local URL
-    "validate_secrets.py",  # example strings in validation messages
-}
-
-# Patterns that indicate a localhost fallback
-PYTHON_FALLBACK_PATTERNS = [
-    # os.environ.get("VAR", "localhost...") or os.getenv("VAR", "localhost...")
+# ---------------------------------------------------------------------------
+# Python patterns
+# ---------------------------------------------------------------------------
+PYTHON_FALLBACK_PATTERNS: list[re.Pattern[str]] = [
+    # os.environ.get("VAR", "localhost...")
     re.compile(
-        r"""os\.(?:environ\.get|getenv)\(\s*["'][^"']+["']\s*,\s*["'][^"']*localhost[^"']*["']\s*\)"""
+        rf"""os\.environ\.get\(\s*["'][^"']*["']\s*,\s*["'][^"']*{_LOCALHOST_VARIANTS}[^"']*["']"""
     ),
-    # Hardcoded connection strings with localhost
+    # os.getenv("VAR", "localhost...")
     re.compile(
-        r"""[=:]\s*["'](?:postgresql|redis|http|https)://[^"']*localhost[^"']*["']"""
+        rf"""os\.getenv\(\s*["'][^"']*["']\s*,\s*["'][^"']*{_LOCALHOST_VARIANTS}[^"']*["']"""
     ),
-    # bootstrap_servers="localhost:..."
-    re.compile(r"""bootstrap_servers\s*=\s*["']localhost:[^"']*["']"""),
+    # default="localhost..." (Pydantic Field or keyword argument)
+    re.compile(rf"""default\s*=\s*["'][^"']*{_LOCALHOST_VARIANTS}[^"']*["']"""),
+    # ": str = "localhost..." style parameter defaults
+    re.compile(rf""":\s*str\s*=\s*["'][^"']*{_LOCALHOST_VARIANTS}[^"']*["']"""),
+    # os.environ.get / os.getenv with private-IP default
+    re.compile(
+        rf"""os\.(?:environ\.get|getenv)\(\s*["'][^"']*["']\s*,\s*["'][^"']*{_PRIV_IP}[^"']*["']"""
+    ),
+    # default="192.168...." or ": str = "192.168...." style
+    re.compile(rf"""(?:default\s*=|:\s*str\s*=)\s*["'][^"']*{_PRIV_IP}[^"']*["']"""),
+    # bootstrap_servers="localhost:..." or private-IP
+    re.compile(
+        rf"""bootstrap_servers\s*=\s*["'](?:{_LOCALHOST_VARIANTS}|{_PRIV_IP})[^"']*["']"""
+    ),
 ]
 
-SHELL_FALLBACK_PATTERNS = [
-    # ${VAR:-localhost}
-    re.compile(r"""\$\{[A-Z_]+:-localhost[^}]*\}"""),
+# ---------------------------------------------------------------------------
+# Shell patterns
+# ---------------------------------------------------------------------------
+SHELL_FALLBACK_PATTERNS: list[re.Pattern[str]] = [
+    # ${VAR:-localhost} or ${VAR:-http://localhost:8080}
+    re.compile(
+        rf"""\$\{{[A-Za-z_][A-Za-z0-9_]*:-[^}}]*{_LOCALHOST_VARIANTS}[^}}]*\}}"""
+    ),
+    re.compile(rf"""\$\{{[A-Za-z_][A-Za-z0-9_]*:-[^}}]*{_PRIV_IP}[^}}]*\}}"""),
 ]
 
-# Lines containing these markers are exempted
-EXEMPT_MARKERS = [
-    "# cloud-bus-ok",
+# ---------------------------------------------------------------------------
+# Skip / exempt configuration
+# ---------------------------------------------------------------------------
+SKIP_DIRS: frozenset[str] = frozenset(
+    {"tests", "node_tests", "__tests__", "test", "__pycache__", ".git", ".venv", "venv"}
+)
+
+SKIP_FILES: frozenset[str] = frozenset(
+    {
+        "validate_no_env_fallbacks.py",  # this script — patterns appear as strings
+    }
+)
+
+EXEMPT_MARKERS: tuple[str, ...] = (
     "# fallback-ok",
+    "# cloud-bus-ok",
     "# OMN-7227-exempt",
-    "SKIP_DIRS",  # this script's own skip list
-]
+)
+
+_COMMENT_RE = re.compile(r"^\s*#")
 
 
-def _is_comment_or_docstring_line(line: str) -> bool:
-    """Rough heuristic: skip lines that are pure comments or docstring content."""
-    stripped = line.strip()
-    if stripped.startswith("#"):
-        return True
-    if stripped.startswith(('"""', "'''", ">>>")):
-        return True
-    # Lines inside docstrings are harder to detect; we check for leading prose patterns
-    if stripped.startswith(("description=", "help=")):
-        # argparse help strings reference localhost in docs — check if it's a default value
-        return False
-    return False
+def _is_pure_comment(line: str) -> bool:
+    return bool(_COMMENT_RE.match(line))
 
 
-def scan_file(path: Path) -> list[tuple[int, str]]:
-    """Return list of (line_number, line_text) violations."""
-    violations: list[tuple[int, str]] = []
+def _has_exempt_marker(line: str) -> bool:
+    return any(marker in line for marker in EXEMPT_MARKERS)
+
+
+# ---------------------------------------------------------------------------
+# File scanners
+# ---------------------------------------------------------------------------
+
+
+def scan_python_file(path: Path) -> list[tuple[int, str]]:
     try:
         content = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return violations
+        return []
 
-    lines = content.splitlines()
-    is_python = path.suffix == ".py"
-    is_shell = path.suffix in (".sh", ".bash")
+    violations: list[tuple[int, str]] = []
+    in_docstring = False
+    docstring_delim: str | None = None
 
-    patterns = []
-    if is_python:
-        patterns = PYTHON_FALLBACK_PATTERNS
-    elif is_shell:
-        patterns = SHELL_FALLBACK_PATTERNS
-    else:
-        return violations
+    for lineno, line in enumerate(content.splitlines(), start=1):
+        stripped = line.strip()
+        skip_line = False
 
-    for i, line in enumerate(lines, start=1):
-        # Skip exempt lines
-        if any(marker in line for marker in EXEMPT_MARKERS):
+        # Track triple-quoted docstrings
+        for delim in ('"""', "'''"):
+            count = stripped.count(delim)
+            if in_docstring and docstring_delim == delim:
+                if count >= 1:
+                    in_docstring = False
+                    docstring_delim = None
+                    skip_line = True
+                break
+            if not in_docstring and count == 1:
+                in_docstring = True
+                docstring_delim = delim
+                break
+            if count >= 2:
+                # Opens and closes on the same line — skip as a docstring line
+                skip_line = True
+                break
+
+        if in_docstring or skip_line:
             continue
-        # Skip pure comment lines
-        if _is_comment_or_docstring_line(line):
+        if _is_pure_comment(line):
             continue
-        for pattern in patterns:
+        if _has_exempt_marker(line):
+            continue
+
+        for pattern in PYTHON_FALLBACK_PATTERNS:
             if pattern.search(line):
-                violations.append((i, line.rstrip()))
+                violations.append((lineno, line.rstrip()))
                 break
 
     return violations
 
 
-def main() -> int:
-    repo_root = Path(__file__).resolve().parent.parent
-    all_violations: list[tuple[str, int, str]] = []
+def scan_shell_file(path: Path) -> list[tuple[int, str]]:
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
 
-    for scan_dir in SCAN_DIRS:
-        base = repo_root / scan_dir
+    violations: list[tuple[int, str]] = []
+    for lineno, line in enumerate(content.splitlines(), start=1):
+        if _is_pure_comment(line):
+            continue
+        if _has_exempt_marker(line):
+            continue
+        for pattern in SHELL_FALLBACK_PATTERNS:
+            if pattern.search(line):
+                violations.append((lineno, line.rstrip()))
+                break
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def _should_skip(path: Path, repo_root: Path) -> bool:
+    rel = path.relative_to(repo_root)
+    if any(part in SKIP_DIRS for part in rel.parts):
+        return True
+    if path.name in SKIP_FILES:
+        return True
+    return False
+
+
+def run(scan_roots: list[Path], repo_root: Path) -> list[tuple[str, int, str]]:
+    all_violations: list[tuple[str, int, str]] = []
+    for base in scan_roots:
         if not base.exists():
             continue
         for path in sorted(base.rglob("*")):
             if not path.is_file():
                 continue
-            if path.suffix not in (".py", ".sh", ".bash"):
+            if _should_skip(path, repo_root):
                 continue
-            # Check skip dirs
-            rel = path.relative_to(repo_root)
-            if any(skip in rel.parts for skip in SKIP_DIRS):
+            rel = str(path.relative_to(repo_root))
+            if path.suffix == ".py":
+                file_viols = scan_python_file(path)
+            elif path.suffix in (".sh", ".bash"):
+                file_viols = scan_shell_file(path)
+            else:
                 continue
-            if path.name in SKIP_FILES:
-                continue
+            for lineno, line_text in file_viols:
+                all_violations.append((rel, lineno, line_text))
+    return all_violations
 
-            violations = scan_file(path)
-            for line_num, line_text in violations:
-                all_violations.append((str(rel), line_num, line_text))
 
-    if all_violations:
-        print(f"FAIL: {len(all_violations)} localhost/default fallback(s) found:\n")
-        for filepath, line_num, line_text in all_violations:
-            print(f"  {filepath}:{line_num}")
+def run_on_files(files: list[Path], repo_root: Path) -> list[tuple[str, int, str]]:
+    """Scan a specific list of files (pre-commit pass_filenames mode)."""
+    all_violations: list[tuple[str, int, str]] = []
+    for path in files:
+        path = path if path.is_absolute() else repo_root / path
+        if not path.is_file():
+            continue
+        if _should_skip(path, repo_root):
+            continue
+        rel = str(path.relative_to(repo_root))
+        if path.suffix == ".py":
+            file_viols = scan_python_file(path)
+        elif path.suffix in (".sh", ".bash"):
+            file_viols = scan_shell_file(path)
+        else:
+            continue
+        for lineno, line_text in file_viols:
+            all_violations.append((rel, lineno, line_text))
+    return all_violations
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parent.parent
+
+    if len(sys.argv) > 1:
+        # pre-commit pass_filenames mode: scan only the files passed as args
+        files = [Path(f) for f in sys.argv[1:]]
+        violations = run_on_files(files, repo_root)
+    else:
+        # standalone mode: scan all of src/ and scripts/
+        scan_roots = [repo_root / "src", repo_root / "scripts"]
+        violations = run(scan_roots, repo_root)
+
+    if violations:
+        print(
+            f"FAIL: {len(violations)} localhost/hardcoded-endpoint fallback(s) found:\n"
+        )
+        for filepath, lineno, line_text in violations:
+            print(f"  {filepath}:{lineno}")
             print(f"    {line_text}\n")
         print(
-            'Fix: Replace with os.environ["VAR"] (no fallback) or raise an error '
-            "when the env var is missing. [OMN-7227]"
+            'Fix: Replace with os.environ["VAR"] (fail-fast, no default) or raise explicitly.\n'
+            "Annotate justified exceptions with  # fallback-ok: <reason>  on the same line.\n"
+            "[OMN-10741]"
         )
         return 1
 
-    print("PASS: No localhost/default fallbacks found in src/ and scripts/.")
+    print("PASS: No localhost/hardcoded-endpoint fallbacks found.")
     return 0
 
 

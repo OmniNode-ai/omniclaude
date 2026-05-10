@@ -33,6 +33,15 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Environment bootstrap
+# ---------------------------------------------------------------------------
+
+if [[ -f "${HOME}/.omnibase/.env" ]]; then
+  # shellcheck disable=SC1091
+  source "${HOME}/.omnibase/.env"
+fi
+
+# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
@@ -47,8 +56,8 @@ RUN_ID="201-baseline-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 DRY_RUN=false
 
 # .201 infrastructure addresses (never hardcode in source; override via env)
-DOT201_HOST="${ONEX_DOT201_HOST:-192.168.86.201}"
-DOT200_HOST="${ONEX_DOT200_HOST:-192.168.86.200}"
+DOT201_HOST="${ONEX_DOT201_HOST:?Set ONEX_DOT201_HOST for .201 baseline checks}"
+DOT200_HOST="${ONEX_DOT200_HOST:?Set ONEX_DOT200_HOST for .200 baseline checks}"
 
 # LLM endpoints to probe (host:port label)
 VLLM_ENDPOINTS=(
@@ -62,7 +71,7 @@ MLX_ENDPOINTS=(
 )
 
 # Kafka bootstrap for broker reachability check
-KAFKA_BOOTSTRAP="${ONEX_KAFKA_BOOTSTRAP:-${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.201:19092}}"
+KAFKA_BOOTSTRAP="${ONEX_KAFKA_BOOTSTRAP:-${KAFKA_BOOTSTRAP_SERVERS:?Set ONEX_KAFKA_BOOTSTRAP or KAFKA_BOOTSTRAP_SERVERS for .201 baseline checks}}"
 
 # Expected consumer groups registry — F0/F1's eventual registry will be the
 # long-term source of truth; for now read from this default path if it exists.
@@ -83,15 +92,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
-
-# ---------------------------------------------------------------------------
-# Environment bootstrap
-# ---------------------------------------------------------------------------
-
-if [[ -f "${HOME}/.omnibase/.env" ]]; then
-  # shellcheck disable=SC1091
-  source "${HOME}/.omnibase/.env"
-fi
 
 # ---------------------------------------------------------------------------
 # Directory + lock setup

@@ -147,10 +147,10 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      # OMN-10734: block localhost/default fallbacks in src/ and scripts/
+      # OMN-10658 / OMN-10734: block localhost/default fallbacks in src/ and scripts/
       # Enforces fail-fast env var access: os.environ["VAR"] not os.getenv("VAR", "localhost...")
       - id: no-env-fallbacks
-        name: No localhost/default env fallbacks (OMN-10734)
+        name: No localhost/default env fallbacks (OMN-10658)
         entry: python3 scripts/validate_no_env_fallbacks.py
         language: system
         pass_filenames: false

@@ -644,7 +644,7 @@ jobs:
         run: python3 scripts/validation/validate_no_raw_sqlite3.py
 
   arch-no-env-fallbacks:
-    name: "Arch: No localhost/default env fallbacks (OMN-10734)"
+    name: "Arch: No localhost/default env fallbacks (OMN-10658)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
