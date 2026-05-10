@@ -91,6 +91,13 @@ repos:
         language: script
         pass_filenames: true
         stages: [commit-msg]
+      - id: reject-legacy-session-id-reads
+        name: Reject legacy session-id env-var reads
+        entry: .pre-commit-hooks/reject-legacy-session-id-reads.sh
+        language: script
+        types_or: [python, shell]
+        pass_filenames: true
+        stages: [pre-commit]
 
       # TODO: Simplify back to `uv run python -m omnibase_core.validation.validator_local_paths`
       # once validator_local_paths is included in a released omnibase_core package.

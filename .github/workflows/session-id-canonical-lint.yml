@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT
+name: Session-ID Canonical Lint
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "plugins/**"
+      - "tests/**"
+      - ".pre-commit-hooks/**"
+      - ".github/workflows/session-id-canonical-lint.yml"
+
+jobs:
+  lint:
+    name: Reject legacy session-id env-var reads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run lint script over changed files
+        run: |
+          set -euo pipefail
+          chmod +x .pre-commit-hooks/reject-legacy-session-id-reads.sh
+          mapfile -t files < <(git diff --name-only --diff-filter=AM \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}" \
+              -- '*.py' '*.sh')
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No Python/shell files changed."
+            exit 0
+          fi
+          .pre-commit-hooks/reject-legacy-session-id-reads.sh "${files[@]}"
