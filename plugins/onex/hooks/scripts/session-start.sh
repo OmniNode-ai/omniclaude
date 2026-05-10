@@ -342,7 +342,7 @@ start_emit_daemon_if_needed() {
                 # daemon still targets the old broker. Kill and restart with the new value.
                 if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
                     local _running_broker
-                    _running_broker=$(ps -p "$_pid" -o args= 2>/dev/null | grep -o -- '--kafka-bootstrap-servers [^ ]*' | awk '{print $2}' || true)
+                    _running_broker=$(ps -ww -p "$_pid" -o args= 2>/dev/null | grep -o -- '--kafka-bootstrap-servers [^ ]*' | awk '{print $2}' || true)
                     if [[ -n "$_running_broker" && "$_running_broker" != "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
                         log "Publisher broker mismatch: running=$_running_broker env=$KAFKA_BOOTSTRAP_SERVERS — restarting"
                         kill "$_pid" 2>/dev/null || true
