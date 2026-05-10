@@ -403,6 +403,12 @@ def classify_and_publish(
         "codex_sandbox_mode": codex_sandbox_mode,
     }
 
+    if timeout_ms <= 0:
+        return {
+            "success": False,
+            "error": f"timeout_ms must be positive, got {timeout_ms}",
+            "correlation_id": correlation_id_str,
+        }
     timeout_seconds = timeout_ms / 1000.0
     ssh_host = os.environ.get("ONEX_RUNTIME_SSH_HOST", "").strip()
     ssh_socket_path = os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "").strip()
