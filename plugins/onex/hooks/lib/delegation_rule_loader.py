@@ -109,7 +109,10 @@ class DelegationRuleLoader:
             import yaml  # type: ignore[import-untyped]
 
             raw = self._path.read_text(encoding="utf-8")
-            data: dict[str, Any] = yaml.safe_load(raw) or {}
+            loaded = yaml.safe_load(raw) or {}
+            if not isinstance(loaded, dict):
+                raise ValueError("delegation rules config must be a mapping")
+            data: dict[str, Any] = loaded
             self._cache = _CachedConfig(mtime=mtime, data=data)
             return data
         except (OSError, ValueError, yaml.YAMLError):

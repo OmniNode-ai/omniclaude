@@ -589,6 +589,9 @@ _DELEGATION_BEHAVIOR="suggest"  # default: no config = preserve existing behavio
 _RULE_LOADER="${HOOKS_LIB}/delegation_rule_loader.py"
 if [[ -f "$_RULE_LOADER" ]]; then
     _RULE_RESULT=$(
+        HOOKS_LIB="$HOOKS_LIB" \
+        _INTENT_CLASS="${_INTENT_CLASS:-GENERAL}" \
+        _INTENT_CONF="${_INTENT_CONF:-0}" \
         "$PYTHON_CMD" - <<'_PYEOF' 2>/dev/null
 import sys, os
 from pathlib import Path
