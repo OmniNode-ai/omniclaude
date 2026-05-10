@@ -17,8 +17,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Patterns match Python and shell legacy reads (both function-call and dict-subscript forms).
-PY_PAT='os\.(environ\.get|getenv)\(\s*["'"'"'](CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)["'"'"']|os\.environ\["'"'"'"(CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)"'"'"'"\]'
-SH_PAT='\$\{?\b(CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)\b'
+# SESSION_ID is omitted from SH_PAT: it is a valid local variable name in shell scripts; only
+# env-var aliases CLAUDE_SESSION_ID and ONEX_SESSION_ID are forbidden direct reads.
+PY_PAT='os\.(environ\.get|getenv)\(\s*["'"'"'](CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)["'"'"']|os\.environ\[["'"'"'](CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)["'"'"']\]'
+SH_PAT='\$\{?\b(CLAUDE_SESSION_ID|ONEX_SESSION_ID)\b'
 
 rc=0
 for f in "${FILES[@]+"${FILES[@]}"}"; do
