@@ -1,33 +1,25 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Delegate skill - classify prompt and dispatch through local runtime ingress.
+"""Delegate skill - classify prompt and dispatch through runtime ingress.
 
 Invoked when the user runs /onex:delegate.  Classifies the prompt via
-TaskClassifier, wraps it in a ModelRuntimeSkillRequest, and sends it to the
-runtime-owned Pattern B broker path via LocalRuntimeSkillClient.
+TaskClassifier, then dispatches to the runtime via:
+  1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
+  2. HTTP (ONEX_RUNTIME_URL is set and non-empty)
+  3. Unix socket (LocalRuntimeSkillClient — fallback when neither above is set)
 
-If the runtime socket is unavailable, the skill returns an explicit error.
-There is no silent in-process fallback (OMN-10723).
-
-Wire schema (plain dict - runtime-side validation by ModelDelegationCommand):
-  {
-    "prompt": str,
-    "correlation_id": str (UUID4),
-    "session_id": str,
-    "prompt_length": int,
-    "source_file_path": str | None,
-    "max_tokens": int,
-    "recipient": "auto" | "claude" | "opencode" | "codex",
-    "wait_for_result": bool,
-    "working_directory": str | None,
-    "codex_sandbox_mode": str | None,
-  }
+Optional env vars:
+  ONEX_RUNTIME_SSH_HOST    — SSH target for remote socket dispatch, e.g. user@host
+  ONEX_RUNTIME_SOCKET_PATH — Unix socket path on the SSH host
+  ONEX_RUNTIME_URL         — HTTP endpoint for direct HTTP dispatch
 """
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -48,7 +40,7 @@ if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
     sys.path.insert(0, str(_SRC_PATH))
 
 # ---------------------------------------------------------------------------
-# Imports
+# Classifier import
 # ---------------------------------------------------------------------------
 try:
     from omniclaude.lib.task_classifier import TaskClassifier
@@ -109,7 +101,7 @@ def _resolve_correlation_id(correlation_id: str | None) -> uuid.UUID:
     return uuid.uuid4()
 
 
-def _runtime_import_error(exc: ImportError) -> dict:
+def _runtime_import_error(exc: ImportError) -> dict:  # type: ignore[type-arg]
     return {
         "success": False,
         "error": (
@@ -249,6 +241,90 @@ def _emit_task_delegated_event(
         return False
 
 
+def _dispatch_via_ssh_socket(
+    payload_json: str,
+    ssh_host: str,
+    socket_path: str,
+    timeout_seconds: float,
+) -> dict:  # type: ignore[type-arg]
+    """Send newline-delimited JSON to a remote Unix socket via SSH.
+
+    Protocol: write JSON + newline, read response line.
+    Raises OSError on transport failure, json.JSONDecodeError on bad response.
+    Returns the parsed response dict on success.
+    """
+    import base64  # noqa: PLC0415
+
+    script_src = f"""import socket, sys
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect({socket_path!r})
+sock.settimeout({timeout_seconds})
+data = sys.stdin.buffer.read()
+sock.send(data if data.endswith(b'\\n') else data + b'\\n')
+resp = b''
+while True:
+    chunk = sock.recv(65536)
+    if not chunk:
+        break
+    resp += chunk
+    if b'\\n' in resp:
+        break
+sock.close()
+print(resp.decode('utf-8', errors='replace').strip())
+"""
+    encoded = base64.b64encode(script_src.encode()).decode()
+    remote_cmd = f"python3 -c \"import base64,sys; exec(base64.b64decode('{encoded}').decode())\""
+
+    proc = subprocess.run(  # noqa: S603
+        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", ssh_host, remote_cmd],
+        input=payload_json.encode("utf-8"),
+        capture_output=True,
+        timeout=timeout_seconds + 15,
+        check=False,
+    )
+
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise OSError(f"SSH dispatch failed (exit {proc.returncode}): {stderr}")
+
+    raw_output = proc.stdout.decode("utf-8", errors="replace").strip()
+    if not raw_output:
+        raise OSError("SSH dispatch returned empty response")
+
+    return json.loads(raw_output)  # type: ignore[return-value]
+
+
+def _dispatch_via_http(
+    request: object,
+    runtime_url: str,
+    timeout_seconds: float,
+) -> object:
+    """POST a ModelRuntimeSkillRequest to the runtime HTTP ingress.
+
+    Returns a ModelRuntimeSkillResponse on success.
+    Raises urllib.error.URLError on transport failure.
+    """
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    payload = request.model_dump_json(exclude_none=True).encode("utf-8")  # type: ignore[attr-defined]
+    req = urllib.request.Request(  # noqa: S310
+        f"{runtime_url.rstrip('/')}/skill",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:  # noqa: S310
+            raw = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError:
+        raise
+
+    from omnibase_core.models.runtime import ModelRuntimeSkillResponse  # noqa: PLC0415
+
+    return ModelRuntimeSkillResponse.model_validate(raw)
+
+
 # ---------------------------------------------------------------------------
 # Core dispatch function
 # ---------------------------------------------------------------------------
@@ -266,12 +342,15 @@ def classify_and_publish(
     | None = None,
     timeout_ms: int = 300_000,
     force_local: bool = False,
-) -> dict:
-    """Classify *prompt* and dispatch a delegation request via runtime socket.
+) -> dict:  # type: ignore[type-arg]
+    """Classify *prompt* and dispatch a delegation request to the runtime.
 
-    Returns a result dict with keys: success, correlation_id, task_type, path.
-    On failure, returns success=False with an error message.
-    The ``--local`` flag (force_local=True) is no longer supported (OMN-10723).
+    Transport priority:
+      1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
+      2. HTTP (ONEX_RUNTIME_URL)
+      3. Unix socket (LocalRuntimeSkillClient)
+
+    force_local=True returns an explicit error (OMN-10723).
     """
     if not _HAS_CLASSIFIER:
         return {
@@ -293,7 +372,7 @@ def classify_and_publish(
         }
 
     correlation_uuid = _resolve_correlation_id(correlation_id)
-    correlation_id = str(correlation_uuid)
+    correlation_id_str = str(correlation_uuid)
 
     if force_local:
         runtime_socket_path = os.environ.get(
@@ -306,14 +385,14 @@ def classify_and_publish(
                 "Use the runtime path: start the runtime and ensure "
                 f"ONEX_LOCAL_RUNTIME_SOCKET_PATH is set (current value: {runtime_socket_path})."
             ),
-            "correlation_id": correlation_id,
+            "correlation_id": correlation_id_str,
         }
 
     from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
 
     delegation_payload = {
         "prompt": prompt,
-        "correlation_id": correlation_id,
+        "correlation_id": correlation_id_str,
         "session_id": resolve_session_id(default=""),
         "prompt_length": len(prompt),
         "source_file_path": source_file,
@@ -323,6 +402,68 @@ def classify_and_publish(
         "working_directory": working_directory,
         "codex_sandbox_mode": codex_sandbox_mode,
     }
+
+    timeout_seconds = timeout_ms / 1000.0
+    ssh_host = os.environ.get("ONEX_RUNTIME_SSH_HOST", "").strip()
+    ssh_socket_path = os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "").strip()
+    runtime_url = os.environ.get("ONEX_RUNTIME_URL", "").strip()
+
+    if ssh_host and ssh_socket_path:
+        ssh_payload = {
+            "command_name": _DELEGATION_COMMAND_NAME,
+            "payload": delegation_payload,
+            "correlation_id": correlation_id_str,
+            "timeout_ms": timeout_ms,
+        }
+        try:
+            raw = _dispatch_via_ssh_socket(
+                payload_json=json.dumps(ssh_payload),
+                ssh_host=ssh_host,
+                socket_path=ssh_socket_path,
+                timeout_seconds=timeout_seconds,
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            return {
+                "success": False,
+                "error": str(exc),
+                "error_code": "dispatch_error",
+                "retryable": False,
+                "correlation_id": correlation_id_str,
+                "command_name": _DELEGATION_COMMAND_NAME,
+                "topic": _DELEGATION_REQUEST_TOPIC,
+                "path": "ssh",
+            }
+        ok = raw.get("ok", False)
+        if not ok:
+            error = raw.get("error") or {}
+            return {
+                "success": False,
+                "error": error.get("message", "runtime dispatch failed")
+                if isinstance(error, dict)
+                else str(error),
+                "error_code": error.get("code", "dispatch_error")
+                if isinstance(error, dict)
+                else "dispatch_error",
+                "retryable": error.get("retryable", False)
+                if isinstance(error, dict)
+                else False,
+                "correlation_id": raw.get("correlation_id", correlation_id_str),
+                "command_name": raw.get("command_name", _DELEGATION_COMMAND_NAME),
+                "topic": raw.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
+                "path": "ssh",
+            }
+        return {
+            "success": True,
+            "correlation_id": raw.get("correlation_id", correlation_id_str),
+            "task_type": getattr(intent, "value", str(intent)),
+            "command_name": raw.get("command_name", _DELEGATION_COMMAND_NAME),
+            "resolved_node_name": raw.get("resolved_node_name"),
+            "topic": raw.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
+            "terminal_event": raw.get("terminal_event"),
+            "dispatch_status": raw.get("dispatch_result", {}).get("status"),
+            "output_payloads": raw.get("output_payloads"),
+            "path": "ssh",
+        }
 
     if (
         _RUNTIME_IMPORT_ERROR is not None
@@ -340,15 +481,29 @@ def classify_and_publish(
         timeout_ms=timeout_ms,
     )
 
-    try:
-        response = LocalRuntimeSkillClient().dispatch_sync(request)
-    except Exception as exc:
-        return {
-            "success": False,
-            "error": f"Runtime socket unavailable: {exc}. Start the runtime or set ONEX_LOCAL_RUNTIME_SOCKET_PATH.",
-            "correlation_id": correlation_id,
-            "path": "runtime",
-        }
+    if runtime_url:
+        import urllib.error  # noqa: PLC0415
+
+        try:
+            response = _dispatch_via_http(request, runtime_url, timeout_seconds)
+        except urllib.error.URLError as exc:
+            return {
+                "success": False,
+                "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}",
+                "path": "http",
+            }
+        path = "http"
+    else:
+        try:
+            response = LocalRuntimeSkillClient().dispatch_sync(request)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error": f"Runtime socket unavailable: {exc}. Start the runtime or set ONEX_LOCAL_RUNTIME_SOCKET_PATH.",
+                "correlation_id": correlation_id_str,
+                "path": "socket",
+            }
+        path = "socket"
 
     if not response.ok:
         error = response.error
@@ -358,25 +513,26 @@ def classify_and_publish(
             "error": error.message if error else "runtime dispatch failed",
             "error_code": error_code,
             "retryable": error.retryable if error else False,
-            "correlation_id": correlation_id,
-            "command_name": _DELEGATION_COMMAND_NAME,
-            "topic": response.command_topic or _DELEGATION_REQUEST_TOPIC,
-            "path": "runtime",
+            "correlation_id": str(response.correlation_id or correlation_uuid),
+            "command_name": response.command_name,
+            "topic": getattr(response, "command_topic", None)
+            or _DELEGATION_REQUEST_TOPIC,
+            "path": path,
         }
 
     return {
         "success": True,
-        "correlation_id": correlation_id,
+        "correlation_id": str(response.correlation_id or correlation_uuid),
         "task_type": intent.value,
         "command_name": response.command_name,
         "resolved_node_name": response.resolved_node_name,
-        "topic": response.command_topic or _DELEGATION_REQUEST_TOPIC,
-        "terminal_event": response.terminal_event,
+        "topic": getattr(response, "command_topic", None) or _DELEGATION_REQUEST_TOPIC,
+        "terminal_event": getattr(response, "terminal_event", None),
         "dispatch_status": response.dispatch_result.status
         if response.dispatch_result
         else None,
-        "output_payloads": response.output_payloads,
-        "path": "runtime",
+        "output_payloads": getattr(response, "output_payloads", None),
+        "path": path,
     }
 
 
@@ -387,11 +543,10 @@ def classify_and_publish(
 
 def main() -> None:
     """CLI entry point for /onex:delegate."""
-    import argparse
-    import json
+    import argparse  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(
-        description="Delegate skill - dispatch through local runtime ingress"
+        description="Delegate skill - dispatch through runtime SSH socket, HTTP, or Unix socket"
     )
     parser.add_argument("prompt", nargs="+", help="The task to delegate")
     parser.add_argument("--source-file", default=None)
@@ -435,7 +590,8 @@ def main() -> None:
 
     if result.get("success"):
         print(
-            f"\nDelegation dispatched (runtime) - correlation_id={result['correlation_id']}\n"
+            f"\nDelegation dispatched ({result.get('path')}) - "
+            f"correlation_id={result['correlation_id']}\n"
             f"task_type={result['task_type']}\n"
             f"command_name={result.get('command_name')}\n"
             f"dispatch_status={result.get('dispatch_status')}",
