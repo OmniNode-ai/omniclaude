@@ -49,8 +49,14 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_session_id_canonical() -> str:
-    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
-
+    try:
+        from session_id import (
+            resolve_session_id,  # type: ignore[import-not-found]  # noqa: PLC0415
+        )
+    except ImportError:
+        from plugins.onex.hooks.lib.session_id import (
+            resolve_session_id,  # noqa: PLC0415
+        )
     return resolve_session_id()
 
 

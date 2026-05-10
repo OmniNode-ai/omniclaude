@@ -4,7 +4,7 @@
 # Allowed reader: plugins/onex/hooks/lib/session_id.py (and test fixtures under tests/).
 set -euo pipefail
 
-ALLOWLIST_NAMES=("session_id.py")
+ALLOWLIST_NAMES=("plugins/onex/hooks/lib/session_id.py")
 EXTRA_ALLOWLIST_PATH_GLOBS=("tests/**" ".pre-commit-hooks/**" "**/test_*session_id*.py")
 
 FILES=()
@@ -16,9 +16,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Patterns match Python and shell legacy reads.
-PY_PAT='os\.(environ\.get|getenv)\(\s*["'"'"'](CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)["'"'"']'
-SH_PAT='\$\{?\b(CLAUDE_SESSION_ID|ONEX_SESSION_ID)\b'
+# Patterns match Python and shell legacy reads (both function-call and dict-subscript forms).
+PY_PAT='os\.(environ\.get|getenv)\(\s*["'"'"'](CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)["'"'"']|os\.environ\["'"'"'"(CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)"'"'"'"\]'
+SH_PAT='\$\{?\b(CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)\b'
 
 rc=0
 for f in "${FILES[@]+"${FILES[@]}"}"; do
@@ -26,7 +26,10 @@ for f in "${FILES[@]+"${FILES[@]}"}"; do
     base=$(basename "$f")
     skip=0
     for allowed in "${ALLOWLIST_NAMES[@]}"; do
-        [[ "$base" == "$allowed" ]] && skip=1 && break
+        # Support both path-qualified (e.g. plugins/onex/hooks/lib/session_id.py) and basename matches
+        if [[ "$f" == *"$allowed" ]] || [[ "$base" == "$allowed" ]]; then
+            skip=1; break
+        fi
     done
     [[ "$skip" == 1 ]] && continue
     for glob in "${EXTRA_ALLOWLIST_PATH_GLOBS[@]}"; do

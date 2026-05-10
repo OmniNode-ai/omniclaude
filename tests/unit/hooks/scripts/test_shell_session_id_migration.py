@@ -26,8 +26,8 @@ TARGETS = [
 def test_no_legacy_env_var_reads(rel_path: str) -> None:
     """Shell scripts must read CLAUDE_CODE_SESSION_ID, not legacy aliases."""
     text = (REPO_ROOT / rel_path).read_text()
-    # Match ${CLAUDE_SESSION_ID...} or ${ONEX_SESSION_ID...} or bare $CLAUDE_SESSION_ID
-    forbidden = re.compile(r"\$\{?\b(CLAUDE_SESSION_ID|ONEX_SESSION_ID)\b")
+    # Match ${CLAUDE_SESSION_ID...} or ${ONEX_SESSION_ID...} or ${SESSION_ID...} or bare $SESSION_ID
+    forbidden = re.compile(r"\$\{?\b(CLAUDE_SESSION_ID|ONEX_SESSION_ID|SESSION_ID)\b")
     matches = forbidden.findall(text)
     assert not matches, f"Legacy env-var read remains in {rel_path}: {matches}"
 
