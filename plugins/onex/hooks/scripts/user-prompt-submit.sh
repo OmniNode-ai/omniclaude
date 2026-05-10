@@ -577,13 +577,48 @@ if [[ -n "$AGENTIC_WORK_PRODUCT" ]]; then
 fi
 
 # -----------------------------
+# Delegation Rule Gate (OMN-10278)
+# -----------------------------
+# Load ~/.omninode/delegation/delegation-rules.yaml and determine whether
+# the delegation bridge should fire for this task class.
+# behavior=off  → skip bridge entirely
+# behavior=auto → bridge fires unconditionally (subject to existing guards)
+# behavior=suggest → bridge fires (default; same as pre-existing behavior)
+# Missing file → existing behavior preserved (bridge fires as before)
+_DELEGATION_BEHAVIOR="suggest"  # default: no config = preserve existing behavior
+_RULE_LOADER="${HOOKS_LIB}/delegation_rule_loader.py"
+if [[ -f "$_RULE_LOADER" ]]; then
+    _RULE_RESULT=$(
+        "$PYTHON_CMD" - <<'_PYEOF' 2>/dev/null
+import sys, os
+from pathlib import Path
+_lib = str(Path(os.environ.get("HOOKS_LIB", "")).resolve())
+if _lib and _lib not in sys.path:
+    sys.path.insert(0, _lib)
+try:
+    from delegation_rule_loader import DelegationRuleLoader
+    loader = DelegationRuleLoader()
+    decision = loader.get_rule(
+        os.environ.get("_INTENT_CLASS", "GENERAL").lower(),
+        confidence=float(os.environ.get("_INTENT_CONF", "0") or "0"),
+    )
+    print(decision.behavior if decision else "suggest")
+except Exception:
+    print("suggest")
+_PYEOF
+    ) || _RULE_RESULT="suggest"
+    _DELEGATION_BEHAVIOR="${_RULE_RESULT:-suggest}"
+    log "Delegation rule gate: intent=${_INTENT_CLASS:-GENERAL} behavior=${_DELEGATION_BEHAVIOR}"
+fi
+
+# -----------------------------
 # Delegation Bridge (OMN-8746)
 # -----------------------------
 # Publish a delegate-task command to the ONEX node pipeline for every
 # non-slash, non-automated prompt. node_delegation_orchestrator on .201
 # handles routing, LLM inference, and quality gating.
 # Requires Kafka to be reachable — there is no local prose fallback.
-if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]]; then
+if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELEGATION_BEHAVIOR" != "off" ]]; then
     _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
     if [[ -f "$_BRIDGE_SCRIPT" ]]; then
         (
