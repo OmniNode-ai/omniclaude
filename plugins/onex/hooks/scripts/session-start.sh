@@ -341,9 +341,17 @@ start_emit_daemon_if_needed() {
                 # switched from main to stability-test on a different port), the running
                 # daemon still targets the old broker. Kill and restart with the new value.
                 if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-                    local _running_broker
-                    _running_broker=$(ps -ww -p "$_pid" -o args= 2>/dev/null | grep -o -- '--kafka-bootstrap-servers [^ ]*' | awk '{print $2}' || true)
-                    if [[ -n "$_running_broker" && "$_running_broker" != "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
+                    local _running_args _running_broker
+                    _running_args=$(ps -ww -p "$_pid" -o args= 2>/dev/null || true)
+                    _running_broker=$(printf '%s\n' "$_running_args" | sed -nE 's/.*--kafka-bootstrap-servers[[:space:]]+([^[:space:]]+).*/\1/p' | head -1)
+                    if [[ -z "$_running_broker" ]]; then
+                        # Broker extraction failed (ps output truncated or unavailable) —
+                        # restart to avoid silently keeping a daemon on a stale broker.
+                        log "Publisher broker check unavailable for PID $_pid — restarting to avoid stale broker"
+                        kill "$_pid" 2>/dev/null || true
+                        sleep 0.2
+                        rm -f "$EMIT_DAEMON_SOCKET" "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
+                    elif [[ "$_running_broker" != "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
                         log "Publisher broker mismatch: running=$_running_broker env=$KAFKA_BOOTSTRAP_SERVERS — restarting"
                         kill "$_pid" 2>/dev/null || true
                         sleep 0.2
