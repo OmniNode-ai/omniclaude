@@ -95,6 +95,8 @@ class TestDelegateRuntimeDispatch:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("ONEX_SESSION_ID", "session-test-123")
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "")
         prompt = "write unit tests for handler_event_emitter.py"
 
         result = delegate_run.classify_and_publish(

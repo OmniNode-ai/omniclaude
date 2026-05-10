@@ -132,7 +132,12 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
     hookSpecificOutput.additionalContext (the proven OMN-10606 mechanism).
     Returns None when no delegation result is pending.
     """
-    from .session_id import resolve_session_id  # noqa: PLC0415
+    try:
+        from .session_id import resolve_session_id  # noqa: PLC0415
+    except ImportError:
+        from plugins.onex.hooks.lib.session_id import (
+            resolve_session_id,  # noqa: PLC0415
+        )
 
     tool_name = hook_event.get("tool_name", "unknown")
     session_id = hook_event.get("session_id", resolve_session_id(default=""))
