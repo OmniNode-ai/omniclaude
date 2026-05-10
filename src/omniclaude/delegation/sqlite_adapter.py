@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 _MIGRATION_SQL = _MIGRATIONS_DIR / "001_create_delegation_tables.sql"
 _MIGRATION_002_SQL = _MIGRATIONS_DIR / "002_align_with_projection_handler.sql"
+_MIGRATION_003_SQL = _MIGRATIONS_DIR / "003_add_compliance_columns.sql"
 _DEFAULT_DB_PATH = Path.home() / ".omninode" / "delegation" / "delegation.sqlite"
-_MIGRATION_VERSION = "002"
-_MIGRATION_DESCRIPTION = "Align with projection handler schema"
+_MIGRATION_VERSION = "003"
+_MIGRATION_DESCRIPTION = "Add tokens_to_compliance and compliance_attempts columns"
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,8 @@ class ModelDelegationEvent(BaseModel):
     input_hash: str | None = None
     input_redaction_policy: str = "hash_only"
     contract_version: str = "v1"
+    tokens_to_compliance: int = 0
+    compliance_attempts: int = 1
     created_at: float = Field(default_factory=time.time)
 
 
@@ -130,6 +133,8 @@ class ModelDelegationEventRow(BaseModel):
     tokens_input: int = 0
     tokens_output: int = 0
     cost_savings_usd: float = 0.0
+    tokens_to_compliance: int = 0
+    compliance_attempts: int = 1
 
 
 class ModelSavingsSummary(BaseModel):
@@ -200,7 +205,26 @@ class SQLiteProjectionAdapter:
                             raise
                 self._conn.execute(
                     "INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?, ?, ?)",
-                    ("002", time.time(), _MIGRATION_DESCRIPTION),
+                    ("002", time.time(), "Align with projection handler schema"),
+                )
+            if "003" not in applied:
+                migration_sql = "\n".join(
+                    line
+                    for line in _MIGRATION_003_SQL.read_text().splitlines()
+                    if not line.lstrip().startswith("--")
+                )
+                for stmt in migration_sql.strip().split(";"):
+                    stmt = stmt.strip()
+                    if not stmt:
+                        continue
+                    try:
+                        self._conn.execute(stmt)
+                    except sqlite3.OperationalError as exc:
+                        if "duplicate column" not in str(exc):
+                            raise
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?, ?, ?)",
+                    ("003", time.time(), _MIGRATION_DESCRIPTION),
                 )
             self._conn.commit()
         logger.debug("Ensured migration %s is applied", _MIGRATION_VERSION)
@@ -220,13 +244,15 @@ class SQLiteProjectionAdapter:
                         task_type, delegated_to, model_name,
                         quality_gate_passed, quality_gate_detail,
                         latency_ms, input_hash, input_redaction_policy,
-                        contract_version, created_at
+                        contract_version, tokens_to_compliance,
+                        compliance_attempts, created_at
                     ) VALUES (
                         :correlation_id, :session_id, :tool_use_id, :hook_name,
                         :task_type, :delegated_to, :model_name,
                         :quality_gate_passed, :quality_gate_detail,
                         :latency_ms, :input_hash, :input_redaction_policy,
-                        :contract_version, :created_at
+                        :contract_version, :tokens_to_compliance,
+                        :compliance_attempts, :created_at
                     )
                     ON CONFLICT(correlation_id) DO UPDATE SET
                         session_id              = excluded.session_id,
@@ -240,7 +266,9 @@ class SQLiteProjectionAdapter:
                         latency_ms              = excluded.latency_ms,
                         input_hash              = excluded.input_hash,
                         input_redaction_policy  = excluded.input_redaction_policy,
-                        contract_version        = excluded.contract_version
+                        contract_version        = excluded.contract_version,
+                        tokens_to_compliance    = excluded.tokens_to_compliance,
+                        compliance_attempts     = excluded.compliance_attempts
                     """,
                     {
                         "correlation_id": event.correlation_id,
@@ -256,6 +284,8 @@ class SQLiteProjectionAdapter:
                         "input_hash": event.input_hash,
                         "input_redaction_policy": event.input_redaction_policy,
                         "contract_version": event.contract_version,
+                        "tokens_to_compliance": event.tokens_to_compliance,
+                        "compliance_attempts": event.compliance_attempts,
                         "created_at": event.created_at,
                     },
                 )
@@ -464,6 +494,8 @@ class SQLiteProjectionAdapter:
             "input_hash",
             "input_redaction_policy",
             "contract_version",
+            "tokens_to_compliance",
+            "compliance_attempts",
             "created_at",
         }
     )
