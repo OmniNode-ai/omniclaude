@@ -499,11 +499,11 @@ def classify_and_publish(
         except Exception as exc:
             return {
                 "success": False,
-                "error": f"Runtime socket unavailable: {exc}. Start the runtime or set ONEX_LOCAL_RUNTIME_SOCKET_PATH.",
+                "error": str(exc),
                 "correlation_id": correlation_id_str,
-                "path": "socket",
+                "path": "runtime",
             }
-        path = "socket"
+        path = "runtime"
 
     if not response.ok:
         error = response.error
