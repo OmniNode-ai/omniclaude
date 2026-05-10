@@ -337,8 +337,26 @@ start_emit_daemon_if_needed() {
             local _pid
             _pid=$(cat "$EMIT_DAEMON_PID_FILE" 2>/dev/null)
             if [[ -n "$_pid" ]] && kill -0 "$_pid" 2>/dev/null; then
-                log "Publisher already running (PID $_pid, fast-path skip)"
-                return 0
+                # Broker mismatch guard: if KAFKA_BOOTSTRAP_SERVERS changed (e.g. stack
+                # switched from main to stability-test on a different port), the running
+                # daemon still targets the old broker. Kill and restart with the new value.
+                if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+                    local _running_broker
+                    _running_broker=$(ps -p "$_pid" -o args= 2>/dev/null | grep -o -- '--kafka-bootstrap-servers [^ ]*' | awk '{print $2}' || true)
+                    if [[ -n "$_running_broker" && "$_running_broker" != "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
+                        log "Publisher broker mismatch: running=$_running_broker env=$KAFKA_BOOTSTRAP_SERVERS — restarting"
+                        kill "$_pid" 2>/dev/null || true
+                        sleep 0.2
+                        rm -f "$EMIT_DAEMON_SOCKET" "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
+                        # Fall through to start a fresh daemon below
+                    else
+                        log "Publisher already running (PID $_pid, fast-path skip)"
+                        return 0
+                    fi
+                else
+                    log "Publisher already running (PID $_pid, fast-path skip)"
+                    return 0
+                fi
             fi
         fi
         # Slow path: PID file missing or process dead — fall back to Python ping
