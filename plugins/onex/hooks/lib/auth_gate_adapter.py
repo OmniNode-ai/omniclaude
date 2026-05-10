@@ -174,8 +174,12 @@ def main() -> None:
         tool_name = data.get("tool_name", "unknown")
         tool_input = data.get("tool_input", {})
         file_path = tool_input.get("file_path", tool_input.get("path", ""))
-        session_id = os.environ.get(
-            "CLAUDE_CODE_SESSION_ID", data.get("session_id", data.get("sessionId", ""))
+        from .session_id import resolve_session_id  # noqa: PLC0415
+
+        session_id = (
+            resolve_session_id(default="")
+            or data.get("session_id")
+            or data.get("sessionId", "")
         )
         result = decide(tool_name, file_path, session_id, mode)
         print(json.dumps(_build_output(result["decision"], result["reason"])))

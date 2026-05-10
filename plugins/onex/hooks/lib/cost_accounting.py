@@ -132,10 +132,10 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
     hookSpecificOutput.additionalContext (the proven OMN-10606 mechanism).
     Returns None when no delegation result is pending.
     """
+    from .session_id import resolve_session_id  # noqa: PLC0415
+
     tool_name = hook_event.get("tool_name", "unknown")
-    session_id = hook_event.get(
-        "session_id", os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-    )
+    session_id = hook_event.get("session_id", resolve_session_id(default=""))
 
     # Load pending delegation result if one exists
     delegation_result: dict[str, Any] | None = None

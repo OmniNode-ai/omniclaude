@@ -29,7 +29,7 @@ Design decisions (per DoD + `feedback_delegation_enforcer_risk.md`):
   session is the lead.
 
 * **Team identification.** Walk ``~/.claude/teams/*/config.json`` looking for a
-  file whose ``leadSessionId`` matches the current ``CLAUDE_SESSION_ID``. This
+  file whose ``leadSessionId`` matches the current ``CLAUDE_CODE_SESSION_ID``. This
   is the authoritative signal — no brittle "active team" flag file that can
   drift.
 
@@ -60,7 +60,7 @@ BLOCK_TOOLS = frozenset({"Read", "Edit", "Write", "Bash", "Glob", "Grep"})
 ENV_ENABLE = "TEAM_LEAD_FOREGROUND_BLOCK"
 ENV_KILL_SWITCH = "ONEX_TEAM_LEAD_GUARD_DISABLE"
 ENV_AGENT_ID = "CLAUDE_AGENT_ID"
-ENV_SESSION_ID = "CLAUDE_SESSION_ID"
+ENV_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
 
 
 def _kill_switch_file() -> Path:
@@ -200,7 +200,14 @@ def main() -> int:
 
     # 5. Identify the team this session is leading, if any. Fail open when no
     # session ID is present (common in ad-hoc CLI invocations / tests).
-    session_id = os.environ.get(ENV_SESSION_ID, "").strip()
+    try:
+        from .session_id import resolve_session_id  # noqa: PLC0415
+    except ImportError:
+        from plugins.onex.hooks.lib.session_id import (
+            resolve_session_id,  # noqa: PLC0415
+        )
+
+    session_id = resolve_session_id(default="").strip()
     if not session_id:
         print("{}")
         return 0

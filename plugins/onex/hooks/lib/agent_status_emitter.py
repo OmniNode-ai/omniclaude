@@ -83,10 +83,10 @@ def emit_agent_status(
                 if agent_name is not None
                 else os.environ.get("AGENT_NAME", "unknown")
             )
+            from .session_id import resolve_session_id  # noqa: PLC0415
+
             _log_session = (
-                session_id
-                if session_id is not None
-                else os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown")
+                session_id if session_id is not None else resolve_session_id()
             )
             logger.error(
                 "Invalid agent state: %r (valid: %s), event_type=agent.status, "
@@ -106,10 +106,10 @@ def emit_agent_status(
             else os.environ.get("AGENT_NAME", "unknown")
         )
         # "unknown" sentinel indicates caller did not provide value; see event_registry.py
+        from .session_id import resolve_session_id  # noqa: PLC0415
+
         resolved_session_id = (
-            session_id
-            if session_id is not None
-            else os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown")
+            session_id if session_id is not None else resolve_session_id()
         )
 
         # Track data quality degradation from sentinel defaults (OMN-6907)
@@ -192,9 +192,7 @@ def emit_agent_status(
             if agent_name is not None
             else os.environ.get("AGENT_NAME", "unknown"),
             # "unknown" sentinel indicates caller did not provide value; see event_registry.py
-            session_id
-            if session_id is not None
-            else os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown"),
+            session_id if session_id is not None else resolve_session_id(),
         )
         return False
 

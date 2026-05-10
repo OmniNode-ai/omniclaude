@@ -555,10 +555,12 @@ class PipelineSlackNotifier:
         try:
             from emit_client_wrapper import emit_event
 
+            from .session_id import resolve_session_id  # noqa: PLC0415
+
             payload: dict[str, object] = {
                 "ticket_id": self.ticket_id,
                 "repo": os.path.basename(os.getcwd()),
-                "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown"),
+                "session_id": resolve_session_id(),
                 "run_id": self.run_id,
             }
 

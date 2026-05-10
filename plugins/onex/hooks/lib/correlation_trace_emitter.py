@@ -27,7 +27,6 @@ Related Tickets:
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -114,10 +113,10 @@ def emit_trace_span(
         resolved_correlation_id = (
             correlation_id if correlation_id is not None else resolved_trace_id
         )
+        from .session_id import resolve_session_id  # noqa: PLC0415
+
         resolved_session_id = (
-            session_id
-            if session_id is not None
-            else os.environ.get("CLAUDE_CODE_SESSION_ID", "unknown")
+            session_id if session_id is not None else resolve_session_id()
         )
 
         # Build validated payload -- Pydantic enforces all constraints
