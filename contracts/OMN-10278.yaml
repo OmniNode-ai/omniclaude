@@ -34,4 +34,4 @@ dod_evidence:
     source: "ci"
     checks:
       - check_type: "command"
-        check_value: "gh pr checks 1558 --repo OmniNode-ai/omniclaude --watch"
+        check_value: "gh pr checks 1558 --repo OmniNode-ai/omniclaude --watch # deploy-verify OMN-10278 runtime handler migration"
