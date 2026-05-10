@@ -33,8 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_session_id() -> str:
-    """Resolve the current session ID from environment."""
-    return os.environ.get("CLAUDE_SESSION_ID", os.environ.get("SESSION_ID", "unknown"))
+    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
+
+    return resolve_session_id()
 
 
 def _resolve_agent_id() -> str:

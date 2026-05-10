@@ -265,13 +265,21 @@ CONFIG = load_config()
 # (config -> aggregators -> hooks -> lib.utils -> quality_enforcer -> config).
 # Defaults match Settings field definitions at settings.py:365-389.
 _TRUTHY = {"true", "1", "yes"}
-_p1 = os.environ.get("ENABLE_PHASE_1_VALIDATION", "true")  # ONEX_FLAG_EXEMPT: circular import avoidance
+_p1 = os.environ.get(
+    "ENABLE_PHASE_1_VALIDATION", "true"
+)  # ONEX_FLAG_EXEMPT: circular import avoidance
 ENABLE_PHASE_1_VALIDATION = _p1.lower() in _TRUTHY
-_p2 = os.environ.get("ENABLE_PHASE_2_RAG", "true")  # ONEX_FLAG_EXEMPT: circular import avoidance
+_p2 = os.environ.get(
+    "ENABLE_PHASE_2_RAG", "true"
+)  # ONEX_FLAG_EXEMPT: circular import avoidance
 ENABLE_PHASE_2_RAG = _p2.lower() in _TRUTHY
-_p3 = os.environ.get("ENABLE_PHASE_3_CORRECTION", "true")  # ONEX_FLAG_EXEMPT: circular import avoidance
+_p3 = os.environ.get(
+    "ENABLE_PHASE_3_CORRECTION", "true"
+)  # ONEX_FLAG_EXEMPT: circular import avoidance
 ENABLE_PHASE_3_CORRECTION = _p3.lower() in _TRUTHY
-_p4 = os.environ.get("ENABLE_PHASE_4_AI_QUORUM", "false")  # ONEX_FLAG_EXEMPT: circular import avoidance
+_p4 = os.environ.get(
+    "ENABLE_PHASE_4_AI_QUORUM", "false"
+)  # ONEX_FLAG_EXEMPT: circular import avoidance
 ENABLE_PHASE_4_AI_QUORUM = _p4.lower() in _TRUTHY
 try:
     PERFORMANCE_BUDGET_SECONDS = float(
@@ -493,8 +501,8 @@ class QualityEnforcer:
         }
 
         # Enhanced metadata for decision intelligence
-        self.tool_selection_metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container
-        self.quality_check_metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        self.tool_selection_metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container  # fmt: skip
+        self.quality_check_metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container  # fmt: skip
 
     async def enforce(self, tool_call: dict[str, Any]) -> dict[str, Any]:
         """
@@ -1174,7 +1182,11 @@ class QualityEnforcer:
             from datetime import UTC  # noqa: PLC0415
             from datetime import datetime as _datetime
 
-            session_id = os.environ.get("SESSION_ID", "")
+            from plugins.onex.hooks.lib.session_id import (
+                resolve_session_id,  # noqa: PLC0415
+            )
+
+            session_id = resolve_session_id(default="")
             correlation_id = os.environ.get("CORRELATION_ID", str(_uuid.uuid4()))
             timestamp = _datetime.now(UTC).isoformat()
 
