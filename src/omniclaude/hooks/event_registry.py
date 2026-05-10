@@ -712,7 +712,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # NOTE: agent_name and session_id may carry the sentinel value "unknown".
     # This indicates the caller did not provide these fields explicitly and
-    # the corresponding environment variables (AGENT_NAME, SESSION_ID) were
+    # the corresponding environment variables (AGENT_NAME, CLAUDE_CODE_SESSION_ID) were
     # also unset. Consumers should treat "unknown" as "not provided", not as
     # a literal agent name or session identifier.
     "agent.status": EventRegistration(
