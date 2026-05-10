@@ -520,7 +520,11 @@ def emit_dod_verify_completed(
     if run_id is None:
         run_id = str(uuid.uuid4())
     if session_id is None:
-        session_id = os.environ.get("CLAUDE_SESSION_ID", "")
+        from plugins.onex.hooks.lib.session_id import (
+            resolve_session_id,  # noqa: PLC0415
+        )
+
+        session_id = resolve_session_id(default="")
     if correlation_id is None:
         correlation_id = os.environ.get("OMNICLAUDE_CORRELATION_ID", "")
 

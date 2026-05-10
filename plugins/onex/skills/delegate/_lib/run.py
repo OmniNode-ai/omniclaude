@@ -150,7 +150,9 @@ def _write_evidence_bundle(
             correlation_id=cid,
             bundle_id=new_bundle_id(),
             ticket_id=os.environ.get("ONEX_TICKET_ID"),
-            session_id=os.environ.get("ONEX_SESSION_ID"),
+            session_id=__import__(
+                "plugins.onex.hooks.lib.session_id", fromlist=["resolve_session_id"]
+            ).resolve_session_id(default=None),
             task_type=str(result.task_type),  # type: ignore[attr-defined]
             prompt_hash=hash_prompt(prompt),
             started_at=started_at,  # type: ignore[arg-type]
@@ -180,7 +182,9 @@ def _write_evidence_bundle(
         )
         cost = ModelCostEvent(
             correlation_id=cid,
-            session_id=os.environ.get("ONEX_SESSION_ID"),
+            session_id=__import__(
+                "plugins.onex.hooks.lib.session_id", fromlist=["resolve_session_id"]
+            ).resolve_session_id(default=None),
             model_local=str(result.model_used),  # type: ignore[attr-defined]
             baseline_model="claude-sonnet-4-6",
             local_cost_usd=None,
@@ -305,10 +309,12 @@ def classify_and_publish(
             "correlation_id": correlation_id,
         }
 
+    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
+
     delegation_payload = {
         "prompt": prompt,
         "correlation_id": correlation_id,
-        "session_id": os.environ.get("ONEX_SESSION_ID") or "",
+        "session_id": resolve_session_id(default=""),
         "prompt_length": len(prompt),
         "source_file_path": source_file,
         "max_tokens": max_tokens,

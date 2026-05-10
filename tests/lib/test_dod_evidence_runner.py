@@ -423,8 +423,12 @@ class TestEmitDodVerifyCompleted:
         mock_emit = MagicMock(return_value=True)
         run_result = EvidenceRunResult(total=0)
 
+        env_override = {"CLAUDE_CODE_SESSION_ID": "session-abc"}
+        # Remove all legacy aliases so the resolver reads the canonical var only.
+        for _legacy in ("CLAUDE_SESSION_ID", "ONEX_SESSION_ID", "SESSION_ID"):
+            env_override[_legacy] = ""
         with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
-            with patch.dict("os.environ", {"CLAUDE_SESSION_ID": "session-abc"}):
+            with patch.dict("os.environ", env_override):
                 emit_dod_verify_completed(
                     ticket_id="OMN-5198",
                     run_result=run_result,

@@ -48,8 +48,10 @@ def emit_codex_invocation_cost(
         )
         return None
 
+    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
+
     resolved_session_id = (
-        session_id or os.environ.get("ONEX_SESSION_ID", "") or str(uuid.uuid4())
+        session_id or resolve_session_id(default="") or str(uuid.uuid4())
     )
     resolved_correlation_id = correlation_id or str(uuid.uuid4())
     emitted_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

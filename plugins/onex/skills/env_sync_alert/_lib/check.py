@@ -209,6 +209,8 @@ def run_alert_check(
             critical_log_findings=critical_findings,
         )
 
+    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
+
     severity = "critical" if env_result.error_count >= 5 else "high"
     friction_data: dict[str, object] = {
         "surface": "config/env-sync-infisical",
@@ -220,7 +222,7 @@ def run_alert_check(
             f"Last run: {env_result.last_run_line or 'unknown'}."
         ),
         "timestamp": now.isoformat(),
-        "session_id": os.environ.get("CLAUDE_SESSION_ID", "unknown"),
+        "session_id": resolve_session_id(),
         "context_ticket_id": "OMN-8868",
     }
 
