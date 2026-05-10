@@ -123,7 +123,8 @@ def scan_python_file(path: Path) -> list[tuple[int, str]]:
         stripped = line.strip()
         skip_line = False
 
-        # Track triple-quoted docstrings
+        # Track triple-quoted docstrings that begin a stripped line. Embedded
+        # triple quotes in executable code must not hide fallback violations.
         for delim in ('"""', "'''"):
             count = stripped.count(delim)
             if in_docstring and docstring_delim == delim:
@@ -132,13 +133,13 @@ def scan_python_file(path: Path) -> list[tuple[int, str]]:
                     docstring_delim = None
                     skip_line = True
                 break
-            if not in_docstring and count == 1:
-                in_docstring = True
-                docstring_delim = delim
-                break
-            if count >= 2:
-                # Opens and closes on the same line — skip as a docstring line
-                skip_line = True
+            if not in_docstring and stripped.startswith(delim):
+                if count == 1:
+                    in_docstring = True
+                    docstring_delim = delim
+                else:
+                    # Opens and closes on the same line — skip as a docstring line
+                    skip_line = True
                 break
 
         if in_docstring or skip_line:
