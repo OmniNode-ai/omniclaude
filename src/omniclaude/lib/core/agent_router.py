@@ -53,7 +53,9 @@ def _resolve_session_id_canonical() -> str:
         from session_id import (
             resolve_session_id,  # type: ignore[import-not-found]  # noqa: PLC0415
         )
-    except ImportError:
+    except ModuleNotFoundError as exc:
+        if exc.name != "session_id":
+            raise
         from plugins.onex.hooks.lib.session_id import (
             resolve_session_id,  # noqa: PLC0415
         )
@@ -397,6 +399,10 @@ class AgentRouter:
             with self._stats_lock:
                 self.routing_stats["total_routes"] += 1
             context = context or {}
+            raw_sid = context.get("session_id")
+            context_session_id: str | None = (
+                str(raw_sid) if raw_sid is not None else None
+            )
 
             logger.debug(
                 f"Routing request: {user_request[:100]}...",
@@ -466,9 +472,7 @@ class AgentRouter:
                         timing=timing,
                         routing_policy="explicit_request",
                         fallback=False,
-                        session_id=context.get("session_id")
-                        if isinstance(context, dict)
-                        else None,
+                        session_id=context_session_id,
                     )
 
                     return result
@@ -579,9 +583,7 @@ class AgentRouter:
                 timing=timing,
                 routing_policy="trigger_match",
                 fallback=len(recommendations) == 0,
-                session_id=context.get("session_id")
-                if isinstance(context, dict)
-                else None,
+                session_id=context_session_id,
             )
 
             return recommendations

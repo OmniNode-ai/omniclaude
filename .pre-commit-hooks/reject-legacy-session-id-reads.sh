@@ -11,7 +11,11 @@ FILES=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --allowlist-name) ALLOWLIST_NAMES+=("$2"); shift 2 ;;
-        --) shift; break ;;
+        --)
+            shift
+            FILES+=("$@")
+            break
+            ;;
         *) FILES+=("$1"); shift ;;
     esac
 done
