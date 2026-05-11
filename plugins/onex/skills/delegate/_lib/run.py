@@ -7,7 +7,9 @@ Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, then dispatches to the runtime via:
   1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
   2. HTTP (ONEX_RUNTIME_URL is set and non-empty)
-  3. Kafka (contract-driven, topic onex.cmd.omniclaude.delegate-task.v1)
+  3. Kafka (contract-driven — topic and event_type resolved from the deployed
+     omnibase_infra node_delegation_orchestrator contract.yaml at import time;
+     falls back to TopicBase.DELEGATE_TASK if the contract is unavailable)
      Uses KAFKA_BOOTSTRAP_SERVERS — fail-fast if unset.
 
 Optional env vars:
@@ -80,14 +82,106 @@ try:
 except ImportError:
     _HAS_EVIDENCE_BUNDLE = False
 
-try:
-    from omniclaude.hooks.topics import TopicBase as _TopicBase
 
-    # Use DELEGATE_TASK - the canonical topic that node_delegation_orchestrator
-    # subscribes to (contract.yaml:39). Aligned in OMN-10050.
-    _DELEGATION_REQUEST_TOPIC: str = _TopicBase.DELEGATE_TASK
-except (ImportError, AttributeError):
-    _DELEGATION_REQUEST_TOPIC = ""  # fallback; emit still works via event_type key
+def _load_infra_orchestrator_contract() -> dict:  # type: ignore[type-arg]
+    """Load the omnibase_infra node_delegation_orchestrator contract.yaml.
+
+    Searches for the contract relative to the omnibase_infra package location,
+    falling back gracefully if not installed or not findable. Returns an empty
+    dict on any failure so callers can apply their own defaults.
+    """
+    search_roots: list[Path] = []
+
+    # 1. Try via installed package location
+    try:
+        import omnibase_infra as _obi  # noqa: PLC0415
+
+        pkg_root = Path(_obi.__file__).parent
+        search_roots.append(pkg_root)
+    except ImportError:
+        pass
+
+    # 2. Try common repo paths relative to this skill file
+    _repo_candidates = [
+        _PLUGIN_ROOT.parent.parent.parent.parent
+        / "omnibase_infra"
+        / "src"
+        / "omnibase_infra",
+        _PLUGIN_ROOT.parent.parent.parent.parent.parent
+        / "omnibase_infra"
+        / "src"
+        / "omnibase_infra",
+    ]
+    search_roots.extend(_repo_candidates)
+
+    for root in search_roots:
+        candidate = root / "nodes" / "node_delegation_orchestrator" / "contract.yaml"
+        if candidate.exists():
+            try:
+                import yaml  # noqa: PLC0415
+
+                with candidate.open() as f:
+                    return yaml.safe_load(f) or {}
+            except Exception:  # noqa: BLE001
+                return {}
+
+    return {}
+
+
+def _resolve_delegation_topic_and_event_type() -> tuple[str, str]:
+    """Return (topic, event_type) from the deployed omnibase_infra contract.
+
+    Priority:
+      1. omnibase_infra node_delegation_orchestrator contract.yaml subscribe_topics[0]
+      2. TopicBase.DELEGATE_TASK (omniclaude fallback)
+      3. Empty string (last resort; Kafka path will fail-fast anyway)
+
+    event_type defaults to the first consumed_event's event_type, then
+    "DelegationRequest" (the omnibase_infra wire type), then the legacy
+    "DelegateTaskCommand" as a last resort.
+    """
+    contract = _load_infra_orchestrator_contract()
+
+    # Extract topic
+    topic: str = ""
+    try:
+        subscribe_topics = contract.get("event_bus", {}).get("subscribe_topics", [])
+        if subscribe_topics:
+            # First subscribe topic is the primary inbound command topic
+            topic = str(subscribe_topics[0])
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Extract event_type from consumed_events or published_events
+    event_type: str = ""
+    try:
+        consumed = contract.get("consumed_events", [])
+        if consumed:
+            event_type = str(consumed[0].get("event_type", ""))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Fallback chain for topic
+    if not topic:
+        try:
+            from omniclaude.hooks.topics import TopicBase as _TopicBase  # noqa: PLC0415
+
+            topic = _TopicBase.DELEGATE_TASK
+        except (ImportError, AttributeError):
+            topic = ""
+
+    # Fallback for event_type
+    if not event_type:
+        event_type = "DelegationRequest"
+
+    return topic, event_type
+
+
+_DELEGATION_REQUEST_TOPIC: str
+_DELEGATION_EVENT_TYPE: str
+_DELEGATION_REQUEST_TOPIC, _DELEGATION_EVENT_TYPE = (
+    _resolve_delegation_topic_and_event_type()
+)
 
 
 DELEGATABLE: frozenset[object] = (
@@ -368,7 +462,7 @@ def _dispatch_via_kafka(
     from uuid import uuid4  # noqa: PLC0415
 
     envelope = {
-        "event_type": "DelegateTaskCommand",
+        "event_type": _DELEGATION_EVENT_TYPE,
         "event_id": str(uuid4()),
         "timestamp": datetime.now(UTC).isoformat(),
         "source": "omniclaude.delegate-skill",
@@ -448,7 +542,7 @@ def classify_and_publish(
     Transport priority:
       1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       2. HTTP (ONEX_RUNTIME_URL)
-      3. Kafka (contract-driven, topic onex.cmd.omniclaude.delegate-task.v1)
+      3. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
 
     force_local=True returns an explicit error (OMN-10723).
     """

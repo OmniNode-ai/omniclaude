@@ -34,19 +34,24 @@ description: >
   result events. Fully async via Kafka. correlation_id-keyed, replay-safe.
 
 # Event bus topics
+# NOTE: The runtime orchestrator lives in omnibase_infra and subscribes to
+# onex.cmd.omnibase-infra.delegation-request.v1.  The omniclaude topic below
+# (onex.cmd.omniclaude.delegate-task.v1) is a legacy stub retained only for
+# reference — the delegate skill resolves topic + event_type from the
+# omnibase_infra contract at runtime (OMN-10834).
 event_bus:
   subscribe_topics:
-    - "onex.cmd.omniclaude.delegate-task.v1"
+    - "onex.cmd.omnibase-infra.delegation-request.v1"
   publish_topics:
     - "onex.evt.omniclaude.delegation-completed.v1"
     - "onex.evt.omniclaude.delegation-failed.v1"
     - "onex.evt.omniclaude.task-delegated.v1"
 
 consumed_events:
-  - topic: "onex.cmd.omniclaude.delegate-task.v1"
-    event_type: "DelegateTaskCommand"
+  - topic: "onex.cmd.omnibase-infra.delegation-request.v1"
+    event_type: "DelegationRequest"
     message_category: "COMMAND"
-    description: "Inbound delegation request from user-prompt-submit hook"
+    description: "Inbound delegation request — canonical topic from omnibase_infra orchestrator (OMN-10834)"
 
 published_events:
   - topic: "onex.evt.omniclaude.delegation-completed.v1"
@@ -116,7 +121,7 @@ dependencies:
 
 # Golden path: delegation chain (task delegated -> delegation_events table)
 golden_path:
-  - "Receive delegation request on onex.cmd.omniclaude.delegate-task.v1"
+  - "Receive delegation request on onex.cmd.omnibase-infra.delegation-request.v1"
   - "Classify prompt, route to LLM backend, run quality gate"
   - "Emit task-delegated event to onex.evt.omniclaude.task-delegated.v1"
   - "Event consumed by node_projection_delegation in omnimarket"
