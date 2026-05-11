@@ -408,6 +408,14 @@ def _dispatch_via_kafka(
             "path": "kafka",
         }
 
+    if not delivered:
+        return {
+            "success": False,
+            "error": "Kafka delivery timed out — no confirmation received within 10s",
+            "correlation_id": correlation_id_str,
+            "path": "kafka",
+        }
+
     return {
         "success": True,
         "correlation_id": correlation_id_str,

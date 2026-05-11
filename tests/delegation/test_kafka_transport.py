@@ -163,6 +163,41 @@ def test_kafka_transport_delivery_failure(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 # ---------------------------------------------------------------------------
+# flush timeout (no delivery callback fired) → failure result
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_kafka_transport_flush_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092")
+
+    mock_producer = MagicMock()
+
+    def _fake_produce_no_callback(
+        topic: str, value: bytes, key: bytes, on_delivery
+    ) -> None:  # type: ignore[type-arg]
+        pass  # delivery callback never called — simulates flush timeout
+
+    mock_producer.produce = _fake_produce_no_callback
+    mock_producer.flush = MagicMock(return_value=1)  # 1 = messages still pending
+
+    fake_confluent = types.ModuleType("confluent_kafka")
+    fake_confluent.Producer = MagicMock(return_value=mock_producer)  # type: ignore[attr-defined]
+
+    with patch.dict(sys.modules, {"confluent_kafka": fake_confluent}):
+        fn = _import_dispatch_via_kafka()
+        result = fn(
+            delegation_payload={"prompt": "write tests"},
+            correlation_id_str="test-cid-005",
+            topic="onex.cmd.omniclaude.delegate-task.v1",
+        )
+
+    assert result["success"] is False
+    assert "timed out" in result["error"]
+    assert result["path"] == "kafka"
+
+
+# ---------------------------------------------------------------------------
 # delegation __init__ no longer exports transport.py symbols
 # ---------------------------------------------------------------------------
 
