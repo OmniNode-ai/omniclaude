@@ -79,12 +79,30 @@ def reset_fake_client() -> None:
 
 
 @pytest.fixture
-def delegate_run() -> ModuleType:
+def delegate_run(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     sys.modules.pop("run", None)
     import run as delegate_run_module  # noqa: PLC0415
 
     imported = importlib.reload(delegate_run_module)
-    imported.LocalRuntimeSkillClient = FakeRuntimeSkillClient
+
+    # Route through HTTP path so FakeRuntimeSkillClient.dispatch_sync is used.
+    monkeypatch.setenv("ONEX_RUNTIME_URL", "http://localhost:8085")
+    # Clear SSH env vars so HTTP path is chosen over SSH.
+    monkeypatch.delenv("ONEX_RUNTIME_SSH_HOST", raising=False)
+    monkeypatch.delenv("ONEX_RUNTIME_SOCKET_PATH", raising=False)
+
+    fake_client = FakeRuntimeSkillClient()
+
+    def _fake_dispatch_via_http(
+        request: object, runtime_url: str, timeout_seconds: float
+    ) -> object:
+        return fake_client.dispatch_sync(request)
+
+    monkeypatch.setattr(imported, "_dispatch_via_http", _fake_dispatch_via_http)
+    monkeypatch.setattr(imported, "_RUNTIME_IMPORT_ERROR", None)
+
+    # Attach fake client so tests can inspect requests.
+    imported.LocalRuntimeSkillClient = fake_client  # type: ignore[assignment]
     return imported
 
 
@@ -113,8 +131,9 @@ class TestDelegateRuntimeDispatch:
         assert result["command_name"] == "node_delegation_orchestrator"
         assert result["dispatch_status"] == "completed"
 
-        assert len(FakeRuntimeSkillClient.requests) == 1
-        request = FakeRuntimeSkillClient.requests[0]
+        fake = delegate_run.LocalRuntimeSkillClient
+        assert len(fake.requests) == 1
+        request = fake.requests[0]
         assert request.command_name == "node_delegation_orchestrator"
         assert request.correlation_id is not None
 
@@ -160,7 +179,8 @@ class TestDelegateRuntimeDispatch:
 
         assert result.get("success") is True, f"Expected success, got: {result}"
         assert result.get("correlation_id") == expected_corr
-        request = FakeRuntimeSkillClient.requests[0]
+        fake = delegate_run.LocalRuntimeSkillClient
+        request = fake.requests[0]
         assert str(request.correlation_id) == expected_corr
         assert request.payload["correlation_id"] == expected_corr
 
@@ -171,7 +191,7 @@ class TestDelegateRuntimeDispatch:
             prompt="debug the database connection failure",
         )
 
-        assert FakeRuntimeSkillClient.requests == []
+        assert delegate_run.LocalRuntimeSkillClient.requests == []
         assert result.get("success") is False
 
     def test_runtime_failure_returns_error_result(

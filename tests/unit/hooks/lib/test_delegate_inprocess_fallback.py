@@ -69,13 +69,19 @@ class TestDelegateRuntimeOnly:
         delegate_run: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Runtime socket unavailable → explicit error, no silent fallback."""
+        """SSH socket failure → explicit error, no silent fallback."""
+        monkeypatch.setenv("ONEX_RUNTIME_SSH_HOST", "user@testhost")
+        monkeypatch.setenv("ONEX_RUNTIME_SOCKET_PATH", "/tmp/onex.sock")
 
-        def _bad_client() -> None:
-            raise ConnectionRefusedError("socket unavailable")
+        def _bad_ssh_dispatch(
+            payload_json: str,
+            ssh_host: str,
+            socket_path: str,
+            timeout_seconds: float,
+        ) -> dict:  # type: ignore[type-arg]
+            raise OSError("socket unavailable")
 
-        monkeypatch.setattr(delegate_run, "LocalRuntimeSkillClient", _bad_client)
-        monkeypatch.setattr(delegate_run, "_RUNTIME_IMPORT_ERROR", None)
+        monkeypatch.setattr(delegate_run, "_dispatch_via_ssh_socket", _bad_ssh_dispatch)
 
         result = delegate_run.classify_and_publish(
             prompt="write unit tests for handler_event_emitter.py",
@@ -83,14 +89,15 @@ class TestDelegateRuntimeOnly:
 
         assert result.get("success") is False
         assert "socket unavailable" in result["error"]
-        assert result.get("path") == "runtime"
+        assert result.get("path") == "ssh"
 
     def test_runtime_import_error_returns_explicit_error(
         self,
         delegate_run: ModuleType,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Import error → explicit error, no silent fallback."""
+        """HTTP path import error → explicit error, no silent fallback."""
+        monkeypatch.setenv("ONEX_RUNTIME_URL", "http://localhost:8085")
         monkeypatch.setattr(
             delegate_run,
             "_RUNTIME_IMPORT_ERROR",
