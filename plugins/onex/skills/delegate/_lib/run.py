@@ -7,12 +7,14 @@ Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, then dispatches to the runtime via:
   1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
   2. HTTP (ONEX_RUNTIME_URL is set and non-empty)
-  3. Unix socket (LocalRuntimeSkillClient — fallback when neither above is set)
+  3. Kafka (contract-driven, topic onex.cmd.omniclaude.delegate-task.v1)
+     Uses KAFKA_BOOTSTRAP_SERVERS — fail-fast if unset.
 
 Optional env vars:
   ONEX_RUNTIME_SSH_HOST    — SSH target for remote socket dispatch, e.g. user@host
   ONEX_RUNTIME_SOCKET_PATH — Unix socket path on the SSH host
   ONEX_RUNTIME_URL         — HTTP endpoint for direct HTTP dispatch
+  KAFKA_BOOTSTRAP_SERVERS  — Required for the Kafka fallback transport
 """
 
 from __future__ import annotations
@@ -50,12 +52,16 @@ except ImportError:
     _HAS_CLASSIFIER = False
 
 try:
-    from omnibase_core.models.runtime import ModelRuntimeSkillRequest
+    from omnibase_core.models.runtime import (
+        ModelRuntimeSkillRequest,
+        ModelRuntimeSkillResponse,
+    )
     from omnibase_infra.clients.runtime_skill_client import LocalRuntimeSkillClient
 
     _RUNTIME_IMPORT_ERROR: ImportError | None = None
 except ImportError as exc:
     ModelRuntimeSkillRequest = None  # type: ignore[assignment]
+    ModelRuntimeSkillResponse = None  # type: ignore[assignment]
     LocalRuntimeSkillClient = None  # type: ignore[assignment]
     _RUNTIME_IMPORT_ERROR = exc
 
@@ -325,6 +331,92 @@ def _dispatch_via_http(
     return ModelRuntimeSkillResponse.model_validate(raw)
 
 
+def _dispatch_via_kafka(
+    delegation_payload: dict,  # type: ignore[type-arg]
+    correlation_id_str: str,
+    topic: str,
+) -> dict:  # type: ignore[type-arg]
+    """Publish delegation command to Kafka topic.
+
+    Uses confluent_kafka.Producer (sync). Fails fast if KAFKA_BOOTSTRAP_SERVERS
+    is unset — no silent fallback.
+
+    Returns a result dict with success/error keys.
+    """
+    bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+    if not bootstrap_servers:
+        return {
+            "success": False,
+            "error": "KAFKA_BOOTSTRAP_SERVERS is not set — cannot dispatch via Kafka",
+            "correlation_id": correlation_id_str,
+            "path": "kafka",
+        }
+
+    try:
+        from confluent_kafka import (
+            Producer,  # type: ignore[import-untyped] # noqa: PLC0415
+        )
+    except ImportError:
+        return {
+            "success": False,
+            "error": "confluent_kafka not installed — cannot dispatch via Kafka",
+            "correlation_id": correlation_id_str,
+            "path": "kafka",
+        }
+
+    from datetime import UTC, datetime  # noqa: PLC0415
+    from uuid import uuid4  # noqa: PLC0415
+
+    envelope = {
+        "event_type": "DelegateTaskCommand",
+        "event_id": str(uuid4()),
+        "timestamp": datetime.now(UTC).isoformat(),
+        "source": "omniclaude.delegate-skill",
+        "correlation_id": correlation_id_str,
+        "payload": delegation_payload,
+    }
+    message = json.dumps(envelope).encode("utf-8")
+    key = correlation_id_str.encode("utf-8")
+
+    delivered: list[bool] = []
+    errors: list[str] = []
+
+    def _on_delivery(err: object, _msg: object) -> None:
+        if err:
+            errors.append(str(err))
+            delivered.append(False)
+        else:
+            delivered.append(True)
+
+    try:
+        producer = Producer({"bootstrap.servers": bootstrap_servers})
+        producer.produce(topic, value=message, key=key, on_delivery=_on_delivery)
+        producer.flush(timeout=10)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "success": False,
+            "error": f"Kafka produce failed: {exc}",
+            "correlation_id": correlation_id_str,
+            "path": "kafka",
+        }
+
+    if errors:
+        return {
+            "success": False,
+            "error": f"Kafka delivery failed: {errors[0]}",
+            "correlation_id": correlation_id_str,
+            "path": "kafka",
+        }
+
+    return {
+        "success": True,
+        "correlation_id": correlation_id_str,
+        "topic": topic,
+        "path": "kafka",
+        "dispatch_status": "published",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Core dispatch function
 # ---------------------------------------------------------------------------
@@ -348,7 +440,7 @@ def classify_and_publish(
     Transport priority:
       1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       2. HTTP (ONEX_RUNTIME_URL)
-      3. Unix socket (LocalRuntimeSkillClient)
+      3. Kafka (contract-driven, topic onex.cmd.omniclaude.delegate-task.v1)
 
     force_local=True returns an explicit error (OMN-10723).
     """
@@ -471,23 +563,17 @@ def classify_and_publish(
             "path": "ssh",
         }
 
-    if (
-        _RUNTIME_IMPORT_ERROR is not None
-        or ModelRuntimeSkillRequest is None
-        or LocalRuntimeSkillClient is None
-    ):
-        return _runtime_import_error(
-            _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
-        )
-
-    request = ModelRuntimeSkillRequest(
-        command_name=_DELEGATION_COMMAND_NAME,
-        payload=delegation_payload,
-        correlation_id=correlation_uuid,
-        timeout_ms=timeout_ms,
-    )
-
     if runtime_url:
+        if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
+            return _runtime_import_error(
+                _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
+            )
+        request = ModelRuntimeSkillRequest(
+            command_name=_DELEGATION_COMMAND_NAME,
+            payload=delegation_payload,
+            correlation_id=correlation_uuid,
+            timeout_ms=timeout_ms,
+        )
         import urllib.error  # noqa: PLC0415
 
         try:
@@ -498,48 +584,52 @@ def classify_and_publish(
                 "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}",
                 "path": "http",
             }
-        path = "http"
-    else:
-        try:
-            response = LocalRuntimeSkillClient().dispatch_sync(request)
-        except Exception as exc:
+        if not response.ok:  # type: ignore[union-attr]
+            error = response.error  # type: ignore[union-attr]
+            error_code = error.code if error else "dispatch_error"
             return {
                 "success": False,
-                "error": str(exc),
-                "correlation_id": correlation_id_str,
-                "path": "runtime",
+                "error": error.message if error else "runtime dispatch failed",
+                "error_code": error_code,
+                "retryable": error.retryable if error else False,
+                "correlation_id": str(
+                    getattr(response, "correlation_id", None) or correlation_uuid
+                ),
+                "command_name": getattr(
+                    response, "command_name", _DELEGATION_COMMAND_NAME
+                ),
+                "topic": getattr(response, "command_topic", None)
+                or _DELEGATION_REQUEST_TOPIC,
+                "path": "http",
             }
-        path = "runtime"
-
-    if not response.ok:
-        error = response.error
-        error_code = error.code if error else "dispatch_error"
         return {
-            "success": False,
-            "error": error.message if error else "runtime dispatch failed",
-            "error_code": error_code,
-            "retryable": error.retryable if error else False,
-            "correlation_id": str(response.correlation_id or correlation_uuid),
-            "command_name": response.command_name,
+            "success": True,
+            "correlation_id": str(
+                getattr(response, "correlation_id", None) or correlation_uuid
+            ),
+            "task_type": intent.value,
+            "command_name": getattr(response, "command_name", _DELEGATION_COMMAND_NAME),
+            "resolved_node_name": getattr(response, "resolved_node_name", None),
             "topic": getattr(response, "command_topic", None)
             or _DELEGATION_REQUEST_TOPIC,
-            "path": path,
+            "terminal_event": getattr(response, "terminal_event", None),
+            "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
+            if getattr(response, "dispatch_result", None)
+            else None,
+            "output_payloads": getattr(response, "output_payloads", None),
+            "path": "http",
         }
 
-    return {
-        "success": True,
-        "correlation_id": str(response.correlation_id or correlation_uuid),
-        "task_type": intent.value,
-        "command_name": response.command_name,
-        "resolved_node_name": response.resolved_node_name,
-        "topic": getattr(response, "command_topic", None) or _DELEGATION_REQUEST_TOPIC,
-        "terminal_event": getattr(response, "terminal_event", None),
-        "dispatch_status": response.dispatch_result.status
-        if response.dispatch_result
-        else None,
-        "output_payloads": getattr(response, "output_payloads", None),
-        "path": path,
-    }
+    # Kafka: contract-driven transport (OMN-10834)
+    kafka_result = _dispatch_via_kafka(
+        delegation_payload=delegation_payload,
+        correlation_id_str=correlation_id_str,
+        topic=_DELEGATION_REQUEST_TOPIC,
+    )
+    if kafka_result["success"]:
+        kafka_result["task_type"] = intent.value
+        kafka_result["command_name"] = _DELEGATION_COMMAND_NAME
+    return kafka_result
 
 
 # ---------------------------------------------------------------------------
@@ -552,7 +642,7 @@ def main() -> None:
     import argparse  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(
-        description="Delegate skill - dispatch through runtime SSH socket, HTTP, or Unix socket"
+        description="Delegate skill - dispatch through runtime SSH socket, HTTP, or Kafka"
     )
     parser.add_argument("prompt", nargs="+", help="The task to delegate")
     parser.add_argument("--source-file", default=None)

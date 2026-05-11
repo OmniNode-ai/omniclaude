@@ -6,7 +6,6 @@ from omniclaude.delegation.bus_bootstrap import (
     ProtocolProjectionDatabaseSync,
     bootstrap_delegation_bus,
 )
-from omniclaude.delegation.daemon_fallback import is_daemon_available
 from omniclaude.delegation.emitter import emit_task_delegated
 from omniclaude.delegation.evidence_bundle import (
     EnumBundleArtifact,
@@ -35,21 +34,14 @@ from omniclaude.delegation.sensitivity_gate import (
     ModelSensitivityResult,
     SensitivityGate,
 )
-from omniclaude.delegation.transport import (
-    DelegationTransportSelector,
-    EnumDelegationTransport,
-    get_delegation_transport,
-)
 
 __all__: list[str] = [
     "DelegationRunner",
-    "DelegationTransportSelector",
     "DelegationRunnerError",
     "ProtocolProjectionDatabaseSync",
     "bootstrap_delegation_bus",
     "emit_task_delegated",
     "EnumBundleArtifact",
-    "EnumDelegationTransport",
     "EnumDelegationTaskType",
     "EnumSensitivityPolicy",
     "EvidenceBundleWriter",
@@ -65,8 +57,6 @@ __all__: list[str] = [
     "ModelSensitivityResult",
     "SavingsCalculator",
     "SensitivityGate",
-    "get_delegation_transport",
     "hash_prompt",
-    "is_daemon_available",
     "new_bundle_id",
 ]

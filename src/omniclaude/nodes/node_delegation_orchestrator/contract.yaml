@@ -131,6 +131,7 @@ metadata:
   ticket: OMN-7108
   epic: OMN-7103
   maturity: alpha
+  transport_type: kafka
   tags:
     - orchestrator
     - delegation
