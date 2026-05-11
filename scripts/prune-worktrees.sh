@@ -71,13 +71,13 @@ remote_to_slug() {
   # Strip trailing .git
   url="${url%.git}"
   # Handle SSH: git@github.com:OmniNode-ai/foo  →  OmniNode-ai/foo
-  if [[ "$url" =~ ^git@github\.com:(.+)$ ]]; then
-    echo "${BASH_REMATCH[1]}"
+  if echo "$url" | grep -qE '^git@github\.com:'; then
+    echo "$url" | sed 's|^git@github\.com:||'
     return
   fi
   # Handle HTTPS: https://github.com/OmniNode-ai/foo  →  OmniNode-ai/foo
-  if [[ "$url" =~ ^https://github\.com/(.+)$ ]]; then
-    echo "${BASH_REMATCH[1]}"
+  if echo "$url" | grep -qE '^https://github\.com/'; then
+    echo "$url" | sed 's|^https://github\.com/||'
     return
   fi
   echo ""
@@ -117,9 +117,10 @@ ERRORS=()
 
 # We look for .git files (not directories) — git worktrees use a .git file
 # that points back to the parent repo's worktrees dir.
-mapfile -t GIT_FILES < <(
-  find "$WORKTREES_ROOT" -maxdepth 4 -name ".git" -type f 2>/dev/null | sort
-)
+GIT_FILES=()
+while IFS= read -r line; do
+  GIT_FILES+=("$line")
+done < <(find "$WORKTREES_ROOT" -maxdepth 4 -name ".git" -type f 2>/dev/null | sort)
 
 if [[ ${#GIT_FILES[@]} -eq 0 ]]; then
   log "No worktrees found under $WORKTREES_ROOT"
