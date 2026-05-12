@@ -335,6 +335,7 @@ def _dispatch_via_kafka(
     delegation_payload: dict,  # type: ignore[type-arg]
     correlation_id_str: str,
     topic: str,
+    task_type: str,
 ) -> dict:  # type: ignore[type-arg]
     """Publish delegation command to Kafka topic.
 
@@ -367,13 +368,25 @@ def _dispatch_via_kafka(
     from datetime import UTC, datetime  # noqa: PLC0415
     from uuid import uuid4  # noqa: PLC0415
 
+    now = datetime.now(UTC).isoformat()
+    # ModelDelegationRequest requires task_type, correlation_id, and emitted_at
+    # in the payload; source_session_id maps from session_id.
+    model_payload = {
+        "prompt": delegation_payload.get("prompt", ""),
+        "task_type": task_type,
+        "correlation_id": correlation_id_str,
+        "emitted_at": now,
+        "source_session_id": delegation_payload.get("session_id"),
+        "source_file_path": delegation_payload.get("source_file_path"),
+        "max_tokens": delegation_payload.get("max_tokens", 2048),
+    }
     envelope = {
-        "event_type": "DelegateTaskCommand",
-        "event_id": str(uuid4()),
-        "timestamp": datetime.now(UTC).isoformat(),
+        "event_type": "omnibase-infra.delegation-request",
+        "envelope_id": str(uuid4()),
+        "envelope_timestamp": now,
         "source": "omniclaude.delegate-skill",
         "correlation_id": correlation_id_str,
-        "payload": delegation_payload,
+        "payload": model_payload,
     }
     message = json.dumps(envelope).encode("utf-8")
     key = correlation_id_str.encode("utf-8")
@@ -633,6 +646,7 @@ def classify_and_publish(
         delegation_payload=delegation_payload,
         correlation_id_str=correlation_id_str,
         topic=_DELEGATION_REQUEST_TOPIC,
+        task_type=intent.value,
     )
     if kafka_result["success"]:
         kafka_result["task_type"] = intent.value

@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Tests for contract-driven Kafka delegation transport (OMN-10834).
+"""Tests for contract-driven Kafka delegation transport (OMN-10834, OMN-10278).
 
 Covers:
   - _dispatch_via_kafka fails fast when KAFKA_BOOTSTRAP_SERVERS is unset
   - _dispatch_via_kafka returns success when producer delivers message
   - _dispatch_via_kafka returns error when delivery callback reports failure
   - delegation __init__ no longer exports transport.py symbols
+  - envelope event_type is omnibase-infra.delegation-request (not DelegateTaskCommand)
+  - envelope payload is shaped as ModelDelegationRequest (task_type, correlation_id, emitted_at)
 """
 
 from __future__ import annotations
@@ -58,6 +60,7 @@ def test_kafka_transport_missing_bootstrap_servers(
         delegation_payload={"prompt": "write tests"},
         correlation_id_str="test-cid-001",
         topic="onex.cmd.omniclaude.delegate-task.v1",
+        task_type="test",
     )
     assert result["success"] is False
     assert "KAFKA_BOOTSTRAP_SERVERS" in result["error"]
@@ -83,6 +86,7 @@ def test_kafka_transport_confluent_kafka_not_installed(
             delegation_payload={"prompt": "write tests"},
             correlation_id_str="test-cid-002",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
         assert result["success"] is False
         assert "confluent_kafka" in result["error"]
@@ -101,11 +105,15 @@ def test_kafka_transport_confluent_kafka_not_installed(
 
 @pytest.mark.unit
 def test_kafka_transport_successful_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092")
 
     mock_producer = MagicMock()
+    captured_messages: list[bytes] = []
 
     def _fake_produce(topic: str, value: bytes, key: bytes, on_delivery) -> None:  # type: ignore[type-arg]
+        captured_messages.append(value)
         on_delivery(None, MagicMock())  # err=None → success
 
     mock_producer.produce = _fake_produce
@@ -117,9 +125,13 @@ def test_kafka_transport_successful_delivery(monkeypatch: pytest.MonkeyPatch) ->
     with patch.dict(sys.modules, {"confluent_kafka": fake_confluent}):
         fn = _import_dispatch_via_kafka()
         result = fn(
-            delegation_payload={"prompt": "write tests for OMN-10834"},
+            delegation_payload={
+                "prompt": "write tests for OMN-10834",
+                "session_id": "sess-1",
+            },
             correlation_id_str="test-cid-003",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
 
     assert result["success"] is True
@@ -127,6 +139,19 @@ def test_kafka_transport_successful_delivery(monkeypatch: pytest.MonkeyPatch) ->
     assert result["topic"] == "onex.cmd.omniclaude.delegate-task.v1"
     assert result["path"] == "kafka"
     assert result["dispatch_status"] == "published"
+
+    # Verify envelope shape matches what the runtime dispatcher expects
+    assert len(captured_messages) == 1
+    envelope = json.loads(captured_messages[0])
+    assert envelope["event_type"] == "omnibase-infra.delegation-request", (
+        "event_type must be 'omnibase-infra.delegation-request' — "
+        "runtime route matches on this value, not 'DelegateTaskCommand'"
+    )
+    payload = envelope["payload"]
+    assert payload["task_type"] == "test"
+    assert payload["correlation_id"] == "test-cid-003"
+    assert "emitted_at" in payload
+    assert payload["source_session_id"] == "sess-1"
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +180,7 @@ def test_kafka_transport_delivery_failure(monkeypatch: pytest.MonkeyPatch) -> No
             delegation_payload={"prompt": "write tests"},
             correlation_id_str="test-cid-004",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
 
     assert result["success"] is False
@@ -190,6 +216,7 @@ def test_kafka_transport_flush_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
             delegation_payload={"prompt": "write tests"},
             correlation_id_str="test-cid-005",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
 
     assert result["success"] is False
