@@ -170,9 +170,9 @@ def _resolve_delegation_topic_and_event_type() -> tuple[str, str]:
         except (ImportError, AttributeError):
             topic = ""
 
-    # Fallback for event_type
+    # Fallback for event_type — must match DispatcherDelegationRequest.message_types
     if not event_type:
-        event_type = "DelegationRequest"
+        event_type = "omnibase-infra.delegation-request"
 
     return topic, event_type
 
@@ -429,6 +429,7 @@ def _dispatch_via_kafka(
     delegation_payload: dict,  # type: ignore[type-arg]
     correlation_id_str: str,
     topic: str,
+    task_type: str,
 ) -> dict:  # type: ignore[type-arg]
     """Publish delegation command to Kafka topic.
 
@@ -461,13 +462,18 @@ def _dispatch_via_kafka(
     from datetime import UTC, datetime  # noqa: PLC0415
     from uuid import uuid4  # noqa: PLC0415
 
+    emitted_at = datetime.now(UTC).isoformat()
     envelope = {
         "event_type": _DELEGATION_EVENT_TYPE,
         "event_id": str(uuid4()),
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": emitted_at,
         "source": "omniclaude.delegate-skill",
         "correlation_id": correlation_id_str,
-        "payload": delegation_payload,
+        "payload": {
+            **delegation_payload,
+            "task_type": task_type,
+            "emitted_at": emitted_at,
+        },
     }
     message = json.dumps(envelope).encode("utf-8")
     key = correlation_id_str.encode("utf-8")
@@ -727,6 +733,7 @@ def classify_and_publish(
         delegation_payload=delegation_payload,
         correlation_id_str=correlation_id_str,
         topic=_DELEGATION_REQUEST_TOPIC,
+        task_type=intent.value,
     )
     if kafka_result["success"]:
         kafka_result["task_type"] = intent.value

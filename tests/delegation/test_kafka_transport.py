@@ -58,6 +58,7 @@ def test_kafka_transport_missing_bootstrap_servers(
         delegation_payload={"prompt": "write tests"},
         correlation_id_str="test-cid-001",
         topic="onex.cmd.omniclaude.delegate-task.v1",
+        task_type="test",
     )
     assert result["success"] is False
     assert "KAFKA_BOOTSTRAP_SERVERS" in result["error"]
@@ -83,6 +84,7 @@ def test_kafka_transport_confluent_kafka_not_installed(
             delegation_payload={"prompt": "write tests"},
             correlation_id_str="test-cid-002",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
         assert result["success"] is False
         assert "confluent_kafka" in result["error"]
@@ -120,6 +122,7 @@ def test_kafka_transport_successful_delivery(monkeypatch: pytest.MonkeyPatch) ->
             delegation_payload={"prompt": "write tests for OMN-10834"},
             correlation_id_str="test-cid-003",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
 
     assert result["success"] is True
@@ -155,6 +158,7 @@ def test_kafka_transport_delivery_failure(monkeypatch: pytest.MonkeyPatch) -> No
             delegation_payload={"prompt": "write tests"},
             correlation_id_str="test-cid-004",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
 
     assert result["success"] is False
@@ -190,6 +194,7 @@ def test_kafka_transport_flush_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
             delegation_payload={"prompt": "write tests"},
             correlation_id_str="test-cid-005",
             topic="onex.cmd.omniclaude.delegate-task.v1",
+            task_type="test",
         )
 
     assert result["success"] is False
