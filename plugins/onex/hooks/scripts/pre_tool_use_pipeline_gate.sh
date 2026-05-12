@@ -19,6 +19,19 @@
 
 set -eo pipefail
 
+_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
+# shellcheck source=../lib/repo_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+if declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+        is_omninode_repo || {
+        _OMNICLAUDE_PASSTHROUGH=$(cat)
+        echo "$_OMNICLAUDE_PASSTHROUGH"
+        trap - EXIT 2>/dev/null || true
+        exit 0
+    }
+fi
+
 # --- Lite mode guard [OMN-5398] ---
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
@@ -35,7 +48,7 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 source "${HOOKS_DIR}/scripts/common.sh"
 onex_hook_gate PIPELINE_GATE || exit 0
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_HOOK_LOG}"
 
 # Read stdin (tool invocation JSON)

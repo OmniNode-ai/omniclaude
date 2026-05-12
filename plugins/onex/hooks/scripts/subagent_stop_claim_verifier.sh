@@ -27,6 +27,17 @@
 
 set -eo pipefail
 
+_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
+# shellcheck source=../lib/repo_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+if declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+        is_omninode_repo || {
+        trap - EXIT 2>/dev/null || true
+        exit 0
+    }
+fi
+
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${_SCRIPT_DIR}/../.." && pwd)"
 PROJECT_ROOT="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd || echo "")"

@@ -54,6 +54,17 @@ fi
 # Resolve script dir before cd $HOME (relative paths break after cwd change)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+
+_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
+# shellcheck source=../lib/repo_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+if declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+        is_omninode_repo || {
+        trap - EXIT 2>/dev/null || true
+        exit 0
+    }
+fi
 onex_hook_gate POST_TOOL_DELEGATION_COUNTER || exit 0
 # shellcheck source=hook-runtime-client.sh
 source "${SCRIPT_DIR}/hook-runtime-client.sh" 2>/dev/null || true

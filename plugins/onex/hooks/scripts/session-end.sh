@@ -10,6 +10,17 @@
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
+# shellcheck source=../lib/repo_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+if declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+        is_omninode_repo || {
+        trap - EXIT 2>/dev/null || true
+        exit 0
+    }
+fi
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
 # --- Lite mode guard [OMN-5398] ---
@@ -163,7 +174,7 @@ fi
 # Uses jq instead of Python to avoid ~30-50ms interpreter startup on the
 # synchronous path (preserves <50ms SessionEnd budget).
 CORRELATION_ID=""
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
 CORRELATION_STATE_FILE="${ONEX_HOOKS_STATE_DIR}/correlation_id.json"
 if [[ -f "$CORRELATION_STATE_FILE" ]]; then
     CORRELATION_ID=$(jq -r '.correlation_id // empty' "$CORRELATION_STATE_FILE" 2>/dev/null) || CORRELATION_ID=""
