@@ -542,21 +542,6 @@ class TopicBase(StrEnum):
     BUILD_LOOP_FAILED = "onex.evt.omnibase-infra.build-loop-failed.v1"
     """Emitted by the build-loop orchestrator when a build cycle fails."""
 
-    # ==========================================================================
-    # PR lifecycle orchestrator topics (OMN-10834)
-    # Declared in omnimarket node_pr_lifecycle_orchestrator/contract.yaml.
-    # Consumed by merge_sweep skill dispatch shim.
-    # ==========================================================================
-    PR_LIFECYCLE_ORCHESTRATOR_START = (
-        "onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1"
-    )
-    """Command to start the PR lifecycle orchestrator FSM."""
-
-    PR_LIFECYCLE_ORCHESTRATOR_COMPLETED = (
-        "onex.evt.omnimarket.pr-lifecycle-orchestrator-completed.v1"
-    )
-    """Emitted when the PR lifecycle orchestrator FSM reaches a terminal state."""
-
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

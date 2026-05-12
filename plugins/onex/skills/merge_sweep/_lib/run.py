@@ -57,14 +57,33 @@ except ImportError as exc:
     LocalRuntimeSkillClient = None  # type: ignore[assignment]
     _RUNTIME_IMPORT_ERROR = exc
 
-try:
-    from omniclaude.hooks.topics import TopicBase as _TopicBase
-
-    _PR_LIFECYCLE_TOPIC: str = _TopicBase.PR_LIFECYCLE_ORCHESTRATOR_START
-except (ImportError, AttributeError):
-    _PR_LIFECYCLE_TOPIC = ""  # fallback; Kafka path will fail-fast with clear error
-
 _PR_LIFECYCLE_COMMAND_NAME = "node_pr_lifecycle_orchestrator"
+_CONTRACT_RELATIVE_PATH = (
+    "omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator/contract.yaml"
+)
+
+
+def _resolve_command_topic() -> str:
+    """Return the subscribe topic from the node's contract.yaml.
+
+    Locates the contract via OMNI_HOME, loads it with yaml.safe_load, and
+    returns event_bus.subscribe_topics[0]. Returns an empty string on any
+    failure so callers can produce a clear error rather than silently misbehaving.
+    """
+    omni_home = os.environ.get("OMNI_HOME", "").strip()
+    if not omni_home:
+        return ""
+    contract_path = Path(omni_home) / _CONTRACT_RELATIVE_PATH
+    if not contract_path.is_file():
+        return ""
+    try:
+        import yaml  # noqa: PLC0415
+
+        data = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+        topics = (data or {}).get("event_bus", {}).get("subscribe_topics", [])
+        return str(topics[0]) if topics else ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _resolve_correlation_id(correlation_id: str | None) -> uuid.UUID:
@@ -100,7 +119,7 @@ sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.connect({socket_path!r})
 sock.settimeout({timeout_seconds})
 data = sys.stdin.buffer.read()
-sock.send(data if data.endswith(b'\\n') else data + b'\\n')
+sock.sendall(data if data.endswith(b'\\n') else data + b'\\n')
 resp = b''
 while True:
     chunk = sock.recv(65536)
@@ -271,11 +290,13 @@ def dispatch_merge_sweep(
     Transport priority:
       1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       2. HTTP (ONEX_RUNTIME_URL)
-      3. Kafka (contract-driven topic)
+      3. Kafka (contract-driven topic resolved from node contract.yaml)
     """
     correlation_uuid = _resolve_correlation_id(correlation_id)
     correlation_id_str = str(correlation_uuid)
     timeout_seconds = timeout_ms / 1000.0
+
+    command_topic = _resolve_command_topic()
 
     payload: dict = {  # type: ignore[type-arg]
         "correlation_id": correlation_id_str,
@@ -306,6 +327,7 @@ def dispatch_merge_sweep(
             "correlation_id": correlation_id_str,
             "timeout_ms": timeout_ms,
         }
+        _ssh_transport_error: str | None = None
         try:
             raw = _dispatch_via_ssh_socket(
                 payload_json=json.dumps(ssh_payload),
@@ -314,45 +336,38 @@ def dispatch_merge_sweep(
                 timeout_seconds=timeout_seconds,
             )
         except (OSError, json.JSONDecodeError) as exc:
-            return {
-                "success": False,
-                "error": str(exc),
-                "error_code": "dispatch_error",
-                "retryable": False,
-                "correlation_id": correlation_id_str,
-                "command_name": _PR_LIFECYCLE_COMMAND_NAME,
-                "topic": _PR_LIFECYCLE_TOPIC,
-                "path": "ssh",
-            }
-        ok = raw.get("ok", False)
-        if not ok:
-            error = raw.get("error") or {}
-            return {
-                "success": False,
-                "error": error.get("message", "runtime dispatch failed")
-                if isinstance(error, dict)
-                else str(error),
-                "error_code": error.get("code", "dispatch_error")
-                if isinstance(error, dict)
-                else "dispatch_error",
-                "retryable": error.get("retryable", False)
-                if isinstance(error, dict)
-                else False,
-                "correlation_id": raw.get("correlation_id", correlation_id_str),
-                "command_name": _PR_LIFECYCLE_COMMAND_NAME,
-                "topic": raw.get("command_topic") or _PR_LIFECYCLE_TOPIC,
-                "path": "ssh",
-            }
-        return {
-            "success": True,
-            "correlation_id": raw.get("correlation_id", correlation_id_str),
-            "command_name": raw.get("command_name", _PR_LIFECYCLE_COMMAND_NAME),
-            "topic": raw.get("command_topic") or _PR_LIFECYCLE_TOPIC,
-            "terminal_event": raw.get("terminal_event"),
-            "dispatch_status": raw.get("dispatch_result", {}).get("status"),
-            "output_payloads": raw.get("output_payloads"),
-            "path": "ssh",
-        }
+            _ssh_transport_error = str(exc)
+            raw = None
+        if raw is not None:
+            ok = raw.get("ok", False)
+            if not ok:
+                error = raw.get("error") or {}
+                is_structured = isinstance(error, dict) and (
+                    "code" in error or "message" in error or "retryable" in error
+                )
+                if is_structured:
+                    return {
+                        "success": False,
+                        "error": error.get("message", "runtime dispatch failed"),
+                        "error_code": error.get("code", "dispatch_error"),
+                        "retryable": error.get("retryable", False),
+                        "correlation_id": raw.get("correlation_id", correlation_id_str),
+                        "command_name": _PR_LIFECYCLE_COMMAND_NAME,
+                        "topic": raw.get("command_topic") or command_topic,
+                        "path": "ssh",
+                    }
+                _ssh_transport_error = str(error) if error else "runtime unreachable"
+            else:
+                return {
+                    "success": True,
+                    "correlation_id": raw.get("correlation_id", correlation_id_str),
+                    "command_name": raw.get("command_name", _PR_LIFECYCLE_COMMAND_NAME),
+                    "topic": raw.get("command_topic") or command_topic,
+                    "terminal_event": raw.get("terminal_event"),
+                    "dispatch_status": raw.get("dispatch_result", {}).get("status"),
+                    "output_payloads": raw.get("output_payloads"),
+                    "path": "ssh",
+                }
 
     if runtime_url:
         if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
@@ -367,54 +382,70 @@ def dispatch_merge_sweep(
         )
         import urllib.error  # noqa: PLC0415
 
+        _http_transport_error: str | None = None
         try:
             response = _dispatch_via_http(request, runtime_url, timeout_seconds)
         except urllib.error.URLError as exc:
-            return {
-                "success": False,
-                "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}",
-                "path": "http",
-            }
-        if not response.ok:  # type: ignore[union-attr]
-            error = response.error  # type: ignore[union-attr]
-            error_code = error.code if error else "dispatch_error"
-            return {
-                "success": False,
-                "error": error.message if error else "runtime dispatch failed",
-                "error_code": error_code,
-                "retryable": error.retryable if error else False,
-                "correlation_id": str(
-                    getattr(response, "correlation_id", None) or correlation_uuid
-                ),
-                "command_name": getattr(
-                    response, "command_name", _PR_LIFECYCLE_COMMAND_NAME
-                ),
-                "topic": getattr(response, "command_topic", None)
-                or _PR_LIFECYCLE_TOPIC,
-                "path": "http",
-            }
-        return {
-            "success": True,
-            "correlation_id": str(
-                getattr(response, "correlation_id", None) or correlation_uuid
-            ),
-            "command_name": getattr(
-                response, "command_name", _PR_LIFECYCLE_COMMAND_NAME
-            ),
-            "topic": getattr(response, "command_topic", None) or _PR_LIFECYCLE_TOPIC,
-            "terminal_event": getattr(response, "terminal_event", None),
-            "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
-            if getattr(response, "dispatch_result", None)
-            else None,
-            "output_payloads": getattr(response, "output_payloads", None),
-            "path": "http",
-        }
+            _http_transport_error = (
+                f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}"
+            )
+            response = None  # type: ignore[assignment]
+        if response is not None:
+            if not response.ok:  # type: ignore[union-attr]
+                error = response.error  # type: ignore[union-attr]
+                is_structured = error is not None and hasattr(error, "code")
+                if is_structured:
+                    return {
+                        "success": False,
+                        "error": error.message if error else "runtime dispatch failed",
+                        "error_code": error.code if error else "dispatch_error",
+                        "retryable": error.retryable if error else False,
+                        "correlation_id": str(
+                            getattr(response, "correlation_id", None)
+                            or correlation_uuid
+                        ),
+                        "command_name": getattr(
+                            response, "command_name", _PR_LIFECYCLE_COMMAND_NAME
+                        ),
+                        "topic": getattr(response, "command_topic", None)
+                        or command_topic,
+                        "path": "http",
+                    }
+                _http_transport_error = (
+                    error.message if error else "runtime unreachable via HTTP"
+                )
+            else:
+                return {
+                    "success": True,
+                    "correlation_id": str(
+                        getattr(response, "correlation_id", None) or correlation_uuid
+                    ),
+                    "command_name": getattr(
+                        response, "command_name", _PR_LIFECYCLE_COMMAND_NAME
+                    ),
+                    "topic": getattr(response, "command_topic", None) or command_topic,
+                    "terminal_event": getattr(response, "terminal_event", None),
+                    "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
+                    if getattr(response, "dispatch_result", None)
+                    else None,
+                    "output_payloads": getattr(response, "output_payloads", None),
+                    "path": "http",
+                }
 
-    # Kafka: contract-driven transport
+    # Kafka: contract-driven transport — topic resolved from node contract.yaml
+    if not command_topic:
+        return {
+            "success": False,
+            "error": (
+                "Cannot resolve command topic from node contract.yaml. "
+                f"Set OMNI_HOME so run.py can locate {_CONTRACT_RELATIVE_PATH}"
+            ),
+            "path": "kafka",
+        }
     return _dispatch_via_kafka(
         payload=payload,
         correlation_id_str=correlation_id_str,
-        topic=_PR_LIFECYCLE_TOPIC,
+        topic=command_topic,
     )
 
 
