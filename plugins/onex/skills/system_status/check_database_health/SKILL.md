@@ -1,53 +1,52 @@
 ---
-description: PostgreSQL database health including table stats, connection pool, and query performance
+description: PostgreSQL database health via omninode-runtime HTTP health endpoint (OMN-10492)
 ---
 
 # Check Database Health
 
-Monitor PostgreSQL database health, activity, and performance.
+Monitor PostgreSQL database health through the omninode-runtime health endpoint.
+
+The Mac must never connect directly to Postgres via raw psql. The correct
+data access path is: Mac → runtime health endpoint → Postgres.
 
 ## What It Checks
 
-- Table counts and row counts
-- Recent insert activity (5min, 1hr, 24hr)
-- Connection pool status
-- Query performance metrics
-- Table sizes
+- Runtime health endpoint reachability (`/health`)
+- HTTP response status and latency
+- Response body from the runtime service
 
 ## How to Use
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-database-health/execute.py \
-  --tables agent_manifest_injections,agent_routing_decisions
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_database_health/_lib/execute.py
 ```
 
-### Arguments
+Override the endpoint via env var:
 
-- `--tables`: Comma-separated list of tables to check [default: all main tables]
-- `--include-sizes`: Include table size information
+```bash
+OMNINODE_RUNTIME_HEALTH_URL=http://192.168.86.201:8085/health `# onex-allow-internal-ip` \
+  python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_database_health/_lib/execute.py
+```
 
 ## Example Output
 
 ```json
 {
-  "connection": "healthy",
-  "total_tables": 34,
-  "connections": {
-    "active": 8,
-    "idle": 2,
-    "total": 10
-  },
-  "recent_activity": {
-    "agent_manifest_injections": {
-      "5m": 12,
-      "1h": 85,
-      "24h": 452
-    },
-    "agent_routing_decisions": {
-      "5m": 18,
-      "1h": 142,
-      "24h": 890
-    }
+  "timestamp": "2025-11-12T14:30:00Z",
+  "status": "healthy",
+  "probe_method": "runtime_health_endpoint",
+  "database": {
+    "status": "healthy",
+    "response_time_ms": 12.4,
+    "status_code": 200,
+    "details": {"status": "ok"},
+    "endpoint": "http://192.168.86.201:8085/health" // onex-allow-internal-ip
   }
 }
 ```
+<!-- onex-allow-internal-ip -->
+
+## Exit Codes
+
+- `0` - Runtime health endpoint returned HTTP 200
+- `1` - Endpoint unreachable, timed out, or returned non-200
