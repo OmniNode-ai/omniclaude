@@ -1,0 +1,111 @@
+---
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ban-hardcoded-runner-ip.yml
+#
+# CI gate: reject PRs that introduce literal 192.168.86.201 (or variant  # onex-allow-internal-ip
+# "\.201") references inside .github/workflows/**/*.yml files.
+#
+# Runner routing must be config/variable-driven (vars.OMNI_TRUSTED_CI_RUNS_ON_JSON).
+# Direct IP literals in workflow files create non-portable, incident-fragile
+# pipelines. Implements OMN-10603.
+#
+# Annotation exception: lines containing "# onex-allow-internal-ip" are
+# allowed through (for comments that document why a LAN constraint exists,
+# not for actual runs-on values).
+#
+# Usage (call from any repo's omni-standards-compliance.yml):
+#
+#   uses: OmniNode-ai/omniclaude/.github/workflows/ban-hardcoded-runner-ip.yml@main
+#
+# Or call directly in a standalone workflow:
+#
+#   jobs:
+#     ban-runner-ip:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/ban-hardcoded-runner-ip.yml@main
+#
+# Disable procedure (for runner/merge-queue incidents):
+# Set repository variable SKIP_RUNNER_IP_GATE=1 temporarily.
+# Restore by unsetting or setting to empty string.
+# Document the outage window in the incident record.
+
+name: Ban Hardcoded Runner IP
+
+on:
+  workflow_call:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  ban-hardcoded-runner-ip:
+    name: ban-hardcoded-runner-ip
+    # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
+    runs-on: >-
+      ${{
+        github.event_name != 'pull_request'
+        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+      }}
+    if: vars.SKIP_RUNNER_IP_GATE != '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject hardcoded runner IP literals in workflow files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VIOLATIONS=""
+          VIOLATION_COUNT=0
+
+          # Scan only changed workflow files on PRs; full scan otherwise
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            WORKFLOW_FILES=$(git diff --name-only origin/main...HEAD -- '.github/workflows/*.yml' '.github/workflows/**/*.yml' 2>/dev/null || true)
+          else
+            WORKFLOW_FILES=$(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null || true)
+          fi
+
+          if [ -z "$WORKFLOW_FILES" ]; then
+            echo "No workflow files to check."
+            exit 0
+          fi
+
+          while IFS= read -r wf; do
+            [ -f "$wf" ] || continue
+
+            # Check for literal 192.168.86.201 — skip lines with allow annotation  # onex-allow-internal-ip
+            while IFS= read -r line; do
+              LINE_NUM=$(echo "$line" | cut -d: -f1)
+              LINE_CONTENT=$(echo "$line" | cut -d: -f2-)
+              # Skip annotated exceptions
+              if echo "$LINE_CONTENT" | grep -q "onex-allow-internal-ip"; then
+                continue
+              fi
+              VIOLATIONS="${VIOLATIONS}  ${wf}:${LINE_NUM}: ${LINE_CONTENT}"$'\n'
+              VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
+            done < <(grep -n "192\.168\.86\.201" "$wf" 2>/dev/null || true)  # onex-allow-internal-ip
+
+          done <<< "$WORKFLOW_FILES"
+
+          if [ "$VIOLATION_COUNT" -gt 0 ]; then
+            echo "::error::Found ${VIOLATION_COUNT} hardcoded runner IP literal(s) in workflow files:"
+            echo ""
+            echo "$VIOLATIONS"
+            echo ""
+            echo "Runner routing must use vars.OMNI_TRUSTED_CI_RUNS_ON_JSON (see OMN-10603)."
+            echo "If a comment must reference the IP for documentation, add '# onex-allow-internal-ip' on that line."
+            echo ""
+            echo "To temporarily disable this gate during a runner incident:"
+            echo "  Set repository variable SKIP_RUNNER_IP_GATE=1"
+            echo "  Restore after incident: unset or set to empty string"
+            exit 1
+          fi
+
+          echo "No hardcoded runner IP literals found in workflow files."
