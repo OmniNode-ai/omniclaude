@@ -173,6 +173,7 @@ class TestKafkaEnvelopeUsesContractEventType:
                 delegation_payload={"prompt": "test"},
                 correlation_id_str=str(uuid.uuid4()),
                 topic="onex.cmd.omnibase-infra.delegation-request.v1",
+                task_type="test",
             )
 
         assert result["success"] is True

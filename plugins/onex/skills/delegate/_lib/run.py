@@ -169,9 +169,9 @@ def _resolve_delegation_topic_and_event_type() -> tuple[str, str]:
         except (ImportError, AttributeError):
             topic = ""
 
-    # Fallback for event_type — must match DispatcherDelegationRequest.message_types
+    # Fallback for event_type — must match DelegationRequest envelope event_type
     if not event_type:
-        event_type = "omnibase-infra.delegation-request"
+        event_type = "DelegationRequest"
 
     return topic, event_type
 
@@ -464,9 +464,8 @@ def _dispatch_via_kafka(
     emitted_at = datetime.now(UTC).isoformat()
     envelope = {
         "event_type": _DELEGATION_EVENT_TYPE,
-        "event_id": str(uuid4()),
-        "timestamp": emitted_at,
-        "source": "omniclaude.delegate-skill",
+        "envelope_id": str(uuid4()),
+        "envelope_timestamp": emitted_at,
         "correlation_id": correlation_id_str,
         "payload": {
             **delegation_payload,
@@ -524,6 +523,112 @@ def _dispatch_via_kafka(
     }
 
 
+def _build_delegation_request_payload(
+    delegation_payload: dict,  # type: ignore[type-arg]
+    task_type: str,
+    emitted_at: str,
+) -> dict:  # type: ignore[type-arg]
+    """Build a ModelDelegationRequest-compatible payload dict.
+
+    ModelDelegationRequest uses extra="forbid", so only known fields may be sent.
+    Maps delegation_payload's field names to ModelDelegationRequest's names.
+    """
+    return {
+        "prompt": delegation_payload.get("prompt", ""),
+        "task_type": task_type,
+        "source_session_id": delegation_payload.get("session_id"),
+        "source_file_path": delegation_payload.get("source_file_path"),
+        "correlation_id": delegation_payload.get("correlation_id"),
+        "max_tokens": delegation_payload.get("max_tokens", 2048),
+        "emitted_at": emitted_at,
+    }
+
+
+def _dispatch_via_ssh_rpk(
+    delegation_payload: dict,  # type: ignore[type-arg]
+    correlation_id_str: str,
+    topic: str,
+    task_type: str,
+    ssh_host: str,
+    bridge_script: str,
+    timeout_seconds: float,
+) -> dict:  # type: ignore[type-arg]
+    """Publish delegation command to Kafka via SSH + rpk bridge script on the remote host.
+
+    Builds a ModelEventEnvelope-compatible JSON payload and pipes it through SSH to
+    bridge_script on ssh_host, which publishes it via `rpk topic produce`.
+
+    Returns a result dict with success/error keys.
+    """
+    from datetime import UTC, datetime  # noqa: PLC0415
+    from uuid import uuid4  # noqa: PLC0415
+
+    emitted_at = datetime.now(UTC).isoformat()
+    envelope = {
+        "event_type": _DELEGATION_EVENT_TYPE,
+        "envelope_id": str(uuid4()),
+        "envelope_timestamp": emitted_at,
+        "correlation_id": correlation_id_str,
+        "payload": _build_delegation_request_payload(
+            delegation_payload, task_type, emitted_at
+        ),
+    }
+    message = json.dumps(envelope)
+
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                ssh_host,
+                f"bash {bridge_script} {topic}",
+            ],
+            input=message.encode("utf-8"),
+            capture_output=True,
+            timeout=timeout_seconds + 15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "success": False,
+            "error": f"SSH rpk bridge failed: {exc}",
+            "correlation_id": correlation_id_str,
+            "path": "ssh_rpk",
+        }
+
+    stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+    stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+
+    if proc.returncode != 0:
+        return {
+            "success": False,
+            "error": f"SSH rpk bridge exited {proc.returncode}: {stderr or stdout}",
+            "correlation_id": correlation_id_str,
+            "path": "ssh_rpk",
+        }
+
+    # rpk outputs "Produced to partition N at offset M..." on success
+    if "Produced to partition" not in stdout:
+        return {
+            "success": False,
+            "error": f"SSH rpk bridge unexpected output: {stdout or stderr}",
+            "correlation_id": correlation_id_str,
+            "path": "ssh_rpk",
+        }
+
+    return {
+        "success": True,
+        "correlation_id": correlation_id_str,
+        "topic": topic,
+        "path": "ssh_rpk",
+        "dispatch_status": "published",
+        "bridge_output": stdout,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Core dispatch function
 # ---------------------------------------------------------------------------
@@ -547,7 +652,8 @@ def classify_and_publish(
     Transport priority:
       1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       2. HTTP (ONEX_RUNTIME_URL)
-      3. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
+      3. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT)
+      4. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
 
     force_local=True returns an explicit error (OMN-10723).
     """
@@ -611,6 +717,7 @@ def classify_and_publish(
     timeout_seconds = timeout_ms / 1000.0
     ssh_host = os.environ.get("ONEX_RUNTIME_SSH_HOST", "").strip()
     ssh_socket_path = os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "").strip()
+    kafka_bridge_script = os.environ.get("ONEX_KAFKA_BRIDGE_SCRIPT", "").strip()
     runtime_url = os.environ.get("ONEX_RUNTIME_URL", "").strip()
 
     if ssh_host and ssh_socket_path:
@@ -726,6 +833,22 @@ def classify_and_publish(
             "output_payloads": getattr(response, "output_payloads", None),
             "path": "http",
         }
+
+    # SSH rpk bridge: Mac→.201 Kafka via SSH when direct Kafka is unreachable
+    if ssh_host and kafka_bridge_script:
+        rpk_result = _dispatch_via_ssh_rpk(
+            delegation_payload=delegation_payload,
+            correlation_id_str=correlation_id_str,
+            topic=_DELEGATION_REQUEST_TOPIC,
+            task_type=intent.value,
+            ssh_host=ssh_host,
+            bridge_script=kafka_bridge_script,
+            timeout_seconds=timeout_seconds,
+        )
+        if rpk_result["success"]:
+            rpk_result["task_type"] = intent.value
+            rpk_result["command_name"] = _DELEGATION_COMMAND_NAME
+        return rpk_result
 
     # Kafka: contract-driven transport (OMN-10834)
     kafka_result = _dispatch_via_kafka(
