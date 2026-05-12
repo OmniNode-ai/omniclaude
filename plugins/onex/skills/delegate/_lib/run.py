@@ -137,8 +137,7 @@ def _resolve_delegation_topic_and_event_type() -> tuple[str, str]:
       3. Empty string (last resort; Kafka path will fail-fast anyway)
 
     event_type defaults to the first consumed_event's event_type, then
-    "DelegationRequest" (the omnibase_infra wire type), then the legacy
-    "DelegateTaskCommand" as a last resort.
+    "omnibase-infra.delegation-request" (matching DispatcherDelegationRequest.message_types).
     """
     contract = _load_infra_orchestrator_contract()
 
