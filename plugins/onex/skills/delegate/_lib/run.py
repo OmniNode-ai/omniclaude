@@ -521,6 +521,107 @@ def _dispatch_via_kafka(
     }
 
 
+def _dispatch_via_pandaproxy(
+    delegation_payload: dict,  # type: ignore[type-arg]
+    correlation_id_str: str,
+    topic: str,
+    task_type: str,
+    pandaproxy_url: str,
+    timeout_seconds: float,
+) -> dict:  # type: ignore[type-arg]
+    """Publish delegation command via Redpanda HTTP proxy (pandaproxy).
+
+    Uses curl subprocess — Python sockets lack the macOS LAN grant on uv-managed
+    interpreters, but the curl binary has it. Builds a ModelEventEnvelope-compatible
+    payload and POSTs to /topics/<topic> with application/vnd.kafka.json.v2+json.
+
+    pandaproxy_url example: http://192.168.86.201:28082  # onex-allow-internal-ip # kafka-fallback-ok
+
+    Returns a result dict with success/error keys.
+    """
+    from datetime import UTC, datetime  # noqa: PLC0415
+    from uuid import uuid4  # noqa: PLC0415
+
+    emitted_at = datetime.now(UTC).isoformat()
+    envelope = {
+        "event_type": _DELEGATION_EVENT_TYPE,
+        "envelope_id": str(uuid4()),
+        "envelope_timestamp": emitted_at,
+        "correlation_id": correlation_id_str,
+        "payload": _build_delegation_request_payload(
+            delegation_payload, task_type, emitted_at
+        ),
+    }
+    body = json.dumps({"records": [{"value": envelope}]})
+    url = f"{pandaproxy_url.rstrip('/')}/topics/{topic}"
+
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [
+                "curl",
+                "-fsS",
+                "-X",
+                "POST",
+                url,
+                "-H",
+                "Content-Type: application/vnd.kafka.json.v2+json",
+                "-d",
+                body,
+                "--max-time",
+                str(int(timeout_seconds)),
+            ],
+            capture_output=True,
+            timeout=timeout_seconds + 5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "success": False,
+            "error": f"Pandaproxy curl failed: {exc}",
+            "correlation_id": correlation_id_str,
+            "path": "pandaproxy",
+        }
+
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        return {
+            "success": False,
+            "error": f"Pandaproxy curl exited {proc.returncode}: {stderr}",
+            "correlation_id": correlation_id_str,
+            "path": "pandaproxy",
+        }
+
+    try:
+        raw = json.loads(proc.stdout.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        return {
+            "success": False,
+            "error": f"Pandaproxy response parse failed: {exc}",
+            "correlation_id": correlation_id_str,
+            "path": "pandaproxy",
+        }
+
+    offsets = raw.get("offsets", [])
+    if not offsets or offsets[0].get("error_code", 0) != 0:
+        err = offsets[0].get("error", "unknown") if offsets else "no offsets returned"
+        return {
+            "success": False,
+            "error": f"Pandaproxy produce failed: {err}",
+            "correlation_id": correlation_id_str,
+            "path": "pandaproxy",
+        }
+
+    return {
+        "success": True,
+        "correlation_id": correlation_id_str,
+        "topic": topic,
+        "path": "pandaproxy",
+        "dispatch_status": "published",
+        "partition": offsets[0].get("partition"),
+        "offset": offsets[0].get("offset"),
+    }
+
+
 def _build_delegation_request_payload(
     delegation_payload: dict,  # type: ignore[type-arg]
     task_type: str,
@@ -650,8 +751,9 @@ def classify_and_publish(
     Transport priority:
       1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       2. HTTP (ONEX_RUNTIME_URL)
-      3. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT)
-      4. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
+      3. Pandaproxy HTTP (ONEX_PANDAPROXY_URL) — preferred for Mac→.201 LAN
+      4. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT) — fallback
+      5. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
 
     force_local=True returns an explicit error (OMN-10723).
     """
@@ -716,6 +818,7 @@ def classify_and_publish(
     ssh_host = os.environ.get("ONEX_RUNTIME_SSH_HOST", "").strip()
     ssh_socket_path = os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "").strip()
     kafka_bridge_script = os.environ.get("ONEX_KAFKA_BRIDGE_SCRIPT", "").strip()
+    pandaproxy_url = os.environ.get("ONEX_PANDAPROXY_URL", "").strip()
     runtime_url = os.environ.get("ONEX_RUNTIME_URL", "").strip()
 
     if ssh_host and ssh_socket_path:
@@ -832,7 +935,22 @@ def classify_and_publish(
             "path": "http",
         }
 
-    # SSH rpk bridge: Mac→.201 Kafka via SSH when direct Kafka is unreachable
+    # Pandaproxy HTTP: preferred Mac→.201 transport (curl/urllib have LAN grant)
+    if pandaproxy_url:
+        pp_result = _dispatch_via_pandaproxy(
+            delegation_payload=delegation_payload,
+            correlation_id_str=correlation_id_str,
+            topic=_DELEGATION_REQUEST_TOPIC,
+            task_type=intent.value,
+            pandaproxy_url=pandaproxy_url,
+            timeout_seconds=timeout_seconds,
+        )
+        if pp_result["success"]:
+            pp_result["task_type"] = intent.value
+            pp_result["command_name"] = _DELEGATION_COMMAND_NAME
+        return pp_result
+
+    # SSH rpk bridge: fallback Mac→.201 Kafka via SSH when direct Kafka is unreachable
     if ssh_host and kafka_bridge_script:
         rpk_result = _dispatch_via_ssh_rpk(
             delegation_payload=delegation_payload,
