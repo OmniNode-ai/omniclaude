@@ -169,9 +169,9 @@ def _resolve_delegation_topic_and_event_type() -> tuple[str, str]:
         except (ImportError, AttributeError):
             topic = ""
 
-    # Fallback for event_type — must match DelegationRequest envelope event_type
+    # Fallback for event_type — must match dispatcher_delegation_request.message_types
     if not event_type:
-        event_type = "DelegationRequest"
+        event_type = "omnibase-infra.delegation-request"
 
     return topic, event_type
 
@@ -467,11 +467,9 @@ def _dispatch_via_kafka(
         "envelope_id": str(uuid4()),
         "envelope_timestamp": emitted_at,
         "correlation_id": correlation_id_str,
-        "payload": {
-            **delegation_payload,
-            "task_type": task_type,
-            "emitted_at": emitted_at,
-        },
+        "payload": _build_delegation_request_payload(
+            delegation_payload, task_type, emitted_at
+        ),
     }
     message = json.dumps(envelope).encode("utf-8")
     key = correlation_id_str.encode("utf-8")

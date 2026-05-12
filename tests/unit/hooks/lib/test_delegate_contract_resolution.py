@@ -132,7 +132,7 @@ class TestResolveDelegationTopicAndEventType:
         ):
             _topic, event_type = delegate_run._resolve_delegation_topic_and_event_type()
 
-        assert event_type == "DelegationRequest"
+        assert event_type == "omnibase-infra.delegation-request"
 
 
 class TestKafkaEnvelopeUsesContractEventType:
