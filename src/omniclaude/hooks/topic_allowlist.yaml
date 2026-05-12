@@ -773,3 +773,13 @@ allowed_extras:
       a single contract event_bus entry due to the per-agent dynamic suffix.
       Built via build_agent_inbox_directed_topic() helper in topics.py.
     ticket: OMN-8634
+
+  - topic: "onex.cmd.omniclaude.delegate-task.v1"
+    lifecycle: deprecated
+    reason: >
+      Legacy delegation command topic (OMN-7103). The delegate skill now resolves
+      topic and event_type from the omnibase_infra contract at runtime (OMN-10834).
+      The canonical topic is onex.cmd.omnibase-infra.delegation-request.v1 (owned by
+      omnibase_infra). This stub is retained in TopicBase for backward-compat
+      reference only and will be removed in a follow-up cleanup ticket.
+    ticket: OMN-10834

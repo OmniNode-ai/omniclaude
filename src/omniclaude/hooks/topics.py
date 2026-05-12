@@ -470,7 +470,10 @@ class TopicBase(StrEnum):
     # Node-based delegation orchestrator command/event bus topics.
     # ==========================================================================
     DELEGATE_TASK = "onex.cmd.omniclaude.delegate-task.v1"
-    """Command to request delegation of a task to a local LLM endpoint."""
+    """Legacy stub — delegate skill now resolves topic from omnibase_infra contract (OMN-10834)."""
+
+    DELEGATION_REQUEST = "onex.cmd.omnibase-infra.delegation-request.v1"
+    """Canonical delegation command topic owned by omnibase_infra orchestrator (OMN-10834)."""
 
     DELEGATION_COMPLETED = "onex.evt.omniclaude.delegation-completed.v1"
     """Emitted when a delegation pipeline run completes successfully."""
