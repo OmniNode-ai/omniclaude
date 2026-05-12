@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import uuid
@@ -683,7 +684,7 @@ def _dispatch_via_ssh_rpk(
                 "-o",
                 "ConnectTimeout=10",
                 ssh_host,
-                f"bash {bridge_script} {topic}",
+                f"bash {shlex.quote(bridge_script)} {shlex.quote(topic)}",
             ],
             input=message.encode("utf-8"),
             capture_output=True,

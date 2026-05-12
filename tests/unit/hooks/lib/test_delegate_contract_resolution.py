@@ -7,10 +7,9 @@ DoD evidence for OMN-10834:
   omnibase_infra contract YAML is reachable.
 - _resolve_delegation_topic_and_event_type() picks up subscribe_topics[0] and
   consumed_events[0].event_type from the contract.
-- Falls back to TopicBase.DELEGATE_TASK and "DelegationRequest" when the contract
-  is unreachable.
-- The Kafka envelope uses the contract-resolved event_type, not the hardcoded
-  "DelegateTaskCommand" string.
+- Falls back to TopicBase.DELEGATE_TASK and "omnibase-infra.delegation-request" when
+  the contract is unreachable.
+- The Kafka envelope uses the contract-resolved event_type, not a hardcoded string.
 """
 
 from __future__ import annotations
@@ -120,9 +119,8 @@ class TestResolveDelegationTopicAndEventType:
         ):
             topic, event_type = delegate_run._resolve_delegation_topic_and_event_type()
 
-        # Must not be empty — either TopicBase value or "DelegationRequest"
-        assert topic != "" or event_type != ""
-        assert event_type in {"DelegationRequest", "DelegateTaskCommand"} or event_type
+        assert topic != ""
+        assert event_type == "omnibase-infra.delegation-request"
 
     def test_event_type_defaults_to_delegation_request_when_contract_empty(
         self, delegate_run: ModuleType
