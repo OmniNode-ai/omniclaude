@@ -9,9 +9,15 @@ creation on machines whose ``$OMNI_HOME`` differs from the previous
 hardcoded default.
 
 OMN-9896 covers:
-  1. ``ONEX_WORKTREE_GUARD=off`` opt-out for alpha testers / non-OmniNode users.
-  2. ``$OMNI_HOME``-based canonical root resolution (no hardcoded paths).
-  3. Fail-fast when ``OMNI_HOME`` is unset and no override is provided.
+  1. ``$OMNI_HOME``-based canonical root resolution (no hardcoded paths).
+  2. Fail-fast when ``OMNI_HOME`` is unset and no override is provided.
+
+OMN-9906: the legacy ``ONEX_WORKTREE_GUARD=off`` env-var opt-out was migrated
+to ``ONEX_HOOKS_MASK``. Disable via: ``onex hooks disable WORKTREE_GUARD``
+(sets ``ONEX_HOOKS_MASK`` with the WORKTREE_GUARD bit cleared).
+
+WORKTREE_GUARD bit value: 0x800000000000000 (bit 59).
+Mask with WORKTREE_GUARD cleared (all other bits on): 0x7ffffffffffffff
 """
 
 from __future__ import annotations
@@ -85,61 +91,71 @@ def sandbox_home(tmp_path: Path) -> Path:
     return home
 
 
+_WORKTREE_GUARD_BIT = 0x800000000000000
+_MASK_WORKTREE_GUARD_OFF = hex(0xFFFFFFFFFFFFFFFF & ~_WORKTREE_GUARD_BIT)
+
+
 @pytest.mark.unit
 class TestWorktreeGuardToggle:
-    """OMN-9896: per-hook opt-out via ONEX_WORKTREE_GUARD."""
+    """OMN-9906: opt-out via ONEX_HOOKS_MASK (WORKTREE_GUARD bit cleared)."""
 
-    @pytest.mark.parametrize(
-        "toggle_value", ["off", "OFF", "disabled", "DISABLED", "0", "false", "FALSE"]
-    )
-    def test_toggle_off_short_circuits_guard(self, toggle_value: str) -> None:
-        """ONEX_WORKTREE_GUARD=<falsey> bypasses the guard entirely.
+    def test_mask_with_worktree_guard_cleared_short_circuits(self) -> None:
+        """Clearing the WORKTREE_GUARD bit in ONEX_HOOKS_MASK bypasses the guard.
 
+        OMN-9906: replaces the legacy ONEX_WORKTREE_GUARD=off env-var opt-out.
         Without the toggle, ``git worktree add /tmp/anywhere`` is blocked
         because ``/tmp`` is not under any canonical worktree root.
         """
         result = _run_hook(
             "git worktree add /tmp/non-canonical-but-allowed -b feat/test",
-            env_overrides={"ONEX_WORKTREE_GUARD": toggle_value},
+            env_overrides={"ONEX_HOOKS_MASK": _MASK_WORKTREE_GUARD_OFF},
         )
         assert result.returncode == 0, (
-            f"Toggle value {toggle_value!r} should bypass the guard, "
+            f"ONEX_HOOKS_MASK with WORKTREE_GUARD cleared should bypass the guard, "
             f"got exit {result.returncode}.\nstderr: {result.stderr}"
         )
 
-    def test_toggle_unset_enforces_guard(
+    def test_default_mask_enforces_guard(
         self, tmp_path: Path, sandbox_home: Path
     ) -> None:
-        """With the toggle unset, an out-of-root path is blocked."""
+        """With default mask (WORKTREE_GUARD bit set), out-of-root path is blocked."""
         result = _run_hook(
             "git worktree add /tmp/non-canonical -b feat/test",
             env_overrides={
-                "ONEX_WORKTREE_GUARD": None,
+                "ONEX_HOOKS_MASK": None,
                 "ONEX_WORKTREES_ROOT": str(tmp_path / "wt"),
                 "OMNI_WORKTREES_DIR": None,
             },
             sandbox_home=sandbox_home,
         )
         assert result.returncode == 2, (
-            f"Without toggle, /tmp path must be blocked. Got exit "
+            f"Without mask override, /tmp path must be blocked. Got exit "
             f"{result.returncode}.\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        # Block message must mention the opt-out so alpha testers see how to escape.
-        assert "ONEX_WORKTREE_GUARD" in result.stdout, (
-            "BLOCKED message should advertise the ONEX_WORKTREE_GUARD opt-out "
-            f"so users can disable the guard. Got: {result.stdout!r}"
+        # Block message must mention how to disable the guard.
+        body = result.stdout
+        assert "WORKTREE_GUARD" in body or "onex hooks disable" in body, (
+            f"BLOCKED message should advertise the bitmask opt-out. Got: {body!r}"
         )
 
-    def test_toggle_on_value_is_treated_as_enforce(self, sandbox_home: Path) -> None:
-        """ONEX_WORKTREE_GUARD=on (anything not falsey) keeps the guard active."""
+    def test_legacy_onex_worktree_guard_env_var_no_longer_bypasses(
+        self, tmp_path: Path, sandbox_home: Path
+    ) -> None:
+        """OMN-9906: ONEX_WORKTREE_GUARD=off no longer bypasses the guard."""
         result = _run_hook(
             "git worktree add /tmp/non-canonical -b feat/test",
-            env_overrides={"ONEX_WORKTREE_GUARD": "on"},
+            env_overrides={
+                "ONEX_WORKTREE_GUARD": "off",
+                "ONEX_WORKTREES_ROOT": str(tmp_path / "wt"),
+                "OMNI_WORKTREES_DIR": None,
+                "OMNI_HOME": None,
+                "ONEX_HOOKS_MASK": None,
+            },
             sandbox_home=sandbox_home,
         )
         assert result.returncode == 2, (
-            f"ONEX_WORKTREE_GUARD=on should not disable the guard; got exit "
-            f"{result.returncode}"
+            "ONEX_WORKTREE_GUARD=off must no longer bypass the guard after OMN-9906. "
+            f"Got exit {result.returncode}.\nstdout: {result.stdout}"
         )
 
 
@@ -159,7 +175,6 @@ class TestWorktreeGuardRootResolution:
                 "OMNI_HOME": str(omni_home),
                 "ONEX_WORKTREES_ROOT": None,
                 "OMNI_WORKTREES_DIR": None,
-                "ONEX_WORKTREE_GUARD": None,
             },
             sandbox_home=sandbox_home,
         )
@@ -180,7 +195,7 @@ class TestWorktreeGuardRootResolution:
                 "OMNI_HOME": str(omni_home),
                 "ONEX_WORKTREES_ROOT": None,
                 "OMNI_WORKTREES_DIR": None,
-                "ONEX_WORKTREE_GUARD": None,
+                "ONEX_HOOKS_MASK": None,
             },
             sandbox_home=sandbox_home,
         )
@@ -201,7 +216,7 @@ class TestWorktreeGuardRootResolution:
             env_overrides={
                 "ONEX_WORKTREES_ROOT": str(root),
                 "OMNI_WORKTREES_DIR": None,
-                "ONEX_WORKTREE_GUARD": None,
+                "ONEX_HOOKS_MASK": None,
             },
             sandbox_home=sandbox_home,
         )
@@ -221,7 +236,6 @@ class TestWorktreeGuardRootResolution:
             env_overrides={
                 "ONEX_WORKTREES_ROOT": str(root),
                 "OMNI_WORKTREES_DIR": None,
-                "ONEX_WORKTREE_GUARD": None,
             },
             sandbox_home=sandbox_home,
             cwd=tmp_path,
@@ -245,7 +259,6 @@ class TestWorktreeGuardRootResolution:
                 "OMNI_HOME": str(omni_home),
                 "ONEX_WORKTREES_ROOT": str(override_root),
                 "OMNI_WORKTREES_DIR": None,
-                "ONEX_WORKTREE_GUARD": None,
             },
             sandbox_home=sandbox_home,
         )
@@ -264,17 +277,17 @@ class TestWorktreeGuardRootResolution:
                 "OMNI_HOME": None,
                 "ONEX_WORKTREES_ROOT": None,
                 "OMNI_WORKTREES_DIR": None,
-                "ONEX_WORKTREE_GUARD": None,
+                "ONEX_HOOKS_MASK": None,
             },
             sandbox_home=sandbox_home,
         )
         assert result.returncode == 2
         body = result.stdout
         # Block message must explain how to recover (set OMNI_HOME, set
-        # ONEX_WORKTREES_ROOT, or disable the guard via ONEX_WORKTREE_GUARD).
+        # ONEX_WORKTREES_ROOT, or disable via the bitmask).
         assert "OMNI_HOME" in body
-        assert "ONEX_WORKTREE_GUARD" in body, (
-            "Fail-fast message should advertise the opt-out so non-OmniNode "
+        assert "WORKTREE_GUARD" in body or "onex hooks disable" in body, (
+            "Fail-fast message should advertise the bitmask opt-out so non-OmniNode "
             f"users can recover. Got: {body!r}"
         )
 

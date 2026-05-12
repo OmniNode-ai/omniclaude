@@ -9,7 +9,7 @@
 # so the lead delegates via SendMessage / Agent / TaskCreate instead.
 #
 # Bypass paths (all documented in lib/team_lead_foreground_guard.py):
-#   1. ONEX_TEAM_LEAD_GUARD_DISABLE=1 — hard kill-switch (env)
+#   1. ONEX_HOOKS_MASK TEAM_LEAD_GUARD bit cleared — bitmask gate (OMN-9906)
 #   2. ~/.claude/omniclaude-team-lead-guard-disabled — file-marker kill-switch
 #   3. TEAM_LEAD_FOREGROUND_BLOCK is unset (guard is opt-in; default OFF)
 #   4. CLAUDE_AGENT_ID is set — subagents bypass unconditionally
@@ -60,11 +60,18 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
     exit 0
 }
 
-# Fast pre-flight: kill-switch OR guard disabled OR subagent → skip Python entirely.
+# Fast pre-flight: bitmask gate OR guard disabled OR file-marker OR subagent → skip Python.
 # This keeps the hot path under 1ms on every PreToolUse that doesn't need checks.
-if [[ "${ONEX_TEAM_LEAD_GUARD_DISABLE:-}" == "1" ]] \
-   || [[ "${ONEX_TEAM_LEAD_GUARD_DISABLE:-}" == "true" ]] \
-   || [[ -f "$HOME/.claude/omniclaude-team-lead-guard-disabled" ]] \
+
+# Bitmask gate (OMN-9906): replaces ONEX_TEAM_LEAD_GUARD_DISABLE env var.
+# To disable: onex hooks disable TEAM_LEAD_GUARD (clears TEAM_LEAD_GUARD bit in ONEX_HOOKS_MASK).
+source "${HOOKS_DIR}/scripts/hook-gate.sh" 2>/dev/null || true
+if declare -F onex_hook_gate >/dev/null 2>&1 && ! onex_hook_gate TEAM_LEAD_GUARD; then
+    echo "$TOOL_INFO"
+    exit 0
+fi
+
+if [[ -f "$HOME/.claude/omniclaude-team-lead-guard-disabled" ]] \
    || [[ "${TEAM_LEAD_FOREGROUND_BLOCK:-}" != "true" && "${TEAM_LEAD_FOREGROUND_BLOCK:-}" != "1" && "${TEAM_LEAD_FOREGROUND_BLOCK:-}" != "yes" ]] \
    || [[ -n "${CLAUDE_AGENT_ID:-}" ]]; then
     echo "$TOOL_INFO"
@@ -75,16 +82,6 @@ fi
 # scopes this further, but a belt-and-braces check here keeps the guard cheap
 # if the matcher ever drifts.
 if [[ ! "$TOOL_NAME" =~ ^(Read|Edit|Write|Bash|Glob|Grep)$ ]]; then
-    echo "$TOOL_INFO"
-    exit 0
-fi
-
-# Locate Python. The guard module uses only stdlib - any Python 3.10+ works.
-# We intentionally DO NOT source common.sh: its strict venv discovery path can
-# hard-exit when the plugin venv isn't materialised, which would convert this
-# hook from fail-open to fail-closed. Stdlib-only means plain python3 is safe.
-source "${HOOKS_DIR}/scripts/hook-gate.sh" 2>/dev/null || true
-if declare -F onex_hook_gate >/dev/null 2>&1 && ! onex_hook_gate TEAM_LEAD_GUARD; then
     echo "$TOOL_INFO"
     exit 0
 fi

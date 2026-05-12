@@ -4,10 +4,13 @@
 
 Bypass paths that must all be verified:
   1. Guard disabled (TEAM_LEAD_FOREGROUND_BLOCK unset) → allow
-  2. Kill-switch env var (ONEX_TEAM_LEAD_GUARD_DISABLE=1) → allow
-  3. Kill-switch file marker → allow
-  4. Subagent (CLAUDE_AGENT_ID set) → allow
-  5. No matching team / empty team / lead-only team → allow
+  2. Kill-switch file marker → allow
+  3. Subagent (CLAUDE_AGENT_ID set) → allow
+  4. No matching team / empty team / lead-only team → allow
+
+Note: the legacy ONEX_TEAM_LEAD_GUARD_DISABLE env-var bypass was removed in
+OMN-9906. Use ``onex hooks disable TEAM_LEAD_GUARD`` (clears TEAM_LEAD_GUARD
+bit in ONEX_HOOKS_MASK) to disable at the shell layer.
 
 Block path:
   * Enabled + lead session + ≥1 non-lead worker + blocked tool → exit 2
@@ -58,7 +61,6 @@ def teams_root(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathl
     monkeypatch.setenv("CLAUDE_TEAMS_ROOT", str(root))
     # Clean all relevant env vars by default; individual tests set what they need.
     monkeypatch.delenv(tlg.ENV_ENABLE, raising=False)
-    monkeypatch.delenv(tlg.ENV_KILL_SWITCH, raising=False)
     monkeypatch.delenv(tlg.ENV_AGENT_ID, raising=False)
     monkeypatch.delenv(tlg.ENV_SESSION_ID, raising=False)
     return root
@@ -110,17 +112,12 @@ class TestBypassPaths:
         assert code == 0
         assert out == "{}"
 
-    def test_kill_switch_env_var(
-        self, teams_root: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """ONEX_TEAM_LEAD_GUARD_DISABLE=1 always wins, even with enable flag on."""
-        _write_team(teams_root, name="t1", lead_session="sess-1", workers=2)
-        monkeypatch.setenv(tlg.ENV_ENABLE, "true")
-        monkeypatch.setenv(tlg.ENV_SESSION_ID, "sess-1")
-        monkeypatch.setenv(tlg.ENV_KILL_SWITCH, "1")
-        out, code = _run({"tool_name": "Edit", "tool_input": {"file_path": "/x"}})
-        assert code == 0
-        assert out == "{}"
+    def test_kill_switch_env_var_removed(self) -> None:
+        """OMN-9906: ONEX_TEAM_LEAD_GUARD_DISABLE was removed; use ONEX_HOOKS_MASK."""
+        assert not hasattr(tlg, "ENV_KILL_SWITCH"), (
+            "ONEX_TEAM_LEAD_GUARD_DISABLE was migrated to ONEX_HOOKS_MASK "
+            "(OMN-9906). ENV_KILL_SWITCH must not exist on the module."
+        )
 
     def test_kill_switch_file_marker(
         self, teams_root: pathlib.Path, monkeypatch: pytest.MonkeyPatch

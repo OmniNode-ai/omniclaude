@@ -246,3 +246,7 @@ hook_activations:
   - hook_bit: TASK_BOUNDARY_TESTS
     enabled_by_default: true
     description: "Reminds agent to run tests at task boundaries."
+
+  - hook_bit: WORKTREE_GUARD
+    enabled_by_default: true
+    description: "Enforces that git worktrees are created under the canonical ONEX worktree root."

@@ -13,10 +13,11 @@ Design decisions (per DoD + `feedback_delegation_enforcer_risk.md`):
   guard is effectively a no-op unless the user explicitly enables it. This is
   the #1 defense against recursive-block incidents.
 
-* **Hard kill-switch via `ONEX_TEAM_LEAD_GUARD_DISABLE=1`.** If set, the guard
-  short-circuits before any logic runs. This must be respected regardless of
-  any other signal. Also honored: a file marker at
-  ``~/.claude/omniclaude-team-lead-guard-disabled``.
+* **Bitmask kill-switch via ONEX_HOOKS_MASK (OMN-9906).** The shell wrapper
+  checks the TEAM_LEAD_GUARD bit before invoking this module. Clear it via
+  ``onex hooks disable TEAM_LEAD_GUARD``. The legacy ``ONEX_TEAM_LEAD_GUARD_DISABLE``
+  env var has been removed; use the bitmask instead. Also honored by the shell:
+  a file marker at ``~/.claude/omniclaude-team-lead-guard-disabled``.
 
 * **Subagent exemption.** If ``CLAUDE_AGENT_ID`` is set (i.e., we are running
   inside a spawned subagent — not the session that owns the team), bypass
@@ -38,10 +39,9 @@ Exit codes::
     0 — allow (guard disabled, no team, subagent, missing session, etc.)
     2 — block (lead session with ≥1 worker AND matcher-tool invoked)
 
-Performance: kill-switch + subagent + session-missing paths exit in <1ms with
-no filesystem access beyond the kill-switch file marker check. The team lookup
-is at most one ``glob('*')`` + small JSON reads — well under the 10ms budget
-called out in the DoD.
+Performance: subagent + guard-disabled + session-missing paths exit in <1ms with
+no filesystem access. The team lookup is at most one ``glob('*')`` + small JSON
+reads — well under the 10ms budget called out in the DoD.
 """
 
 from __future__ import annotations
@@ -58,7 +58,6 @@ BLOCK_TOOLS = frozenset({"Read", "Edit", "Write", "Bash", "Glob", "Grep"})
 
 # Env var names
 ENV_ENABLE = "TEAM_LEAD_FOREGROUND_BLOCK"
-ENV_KILL_SWITCH = "ONEX_TEAM_LEAD_GUARD_DISABLE"
 ENV_AGENT_ID = "CLAUDE_AGENT_ID"
 ENV_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
 
@@ -72,10 +71,8 @@ def _kill_switch_file() -> Path:
     return Path.home() / ".claude" / "omniclaude-team-lead-guard-disabled"
 
 
-def _kill_switch_active() -> bool:
-    """Return True if the guard should short-circuit (fail open)."""
-    if os.environ.get(ENV_KILL_SWITCH, "").strip() in {"1", "true", "TRUE", "yes"}:
-        return True
+def _file_marker_active() -> bool:
+    """Return True if the file-marker kill-switch is present."""
     try:
         return _kill_switch_file().exists()
     except OSError:
@@ -170,8 +167,8 @@ def _find_lead_team(session_id: str) -> tuple[str, int] | None:
 def main() -> int:
     # Fast paths — these must be first, before any filesystem or parse work.
 
-    # 1. Hard kill-switch. Always wins. No logs, no processing.
-    if _kill_switch_active():
+    # 1. File-marker kill-switch (emergency escape; bitmask gate is in the shell wrapper).
+    if _file_marker_active():
         print("{}")
         return 0
 
@@ -222,7 +219,7 @@ def main() -> int:
         f"Team lead foreground guard: team '{team_name}' has {worker_count} "
         f"active worker(s). Delegate this work via SendMessage, Agent, or "
         "TaskCreate instead of running the tool yourself. To bypass "
-        f"temporarily, set {ENV_KILL_SWITCH}=1 or unset {ENV_ENABLE}."
+        f"temporarily, unset {ENV_ENABLE} or run: onex hooks disable TEAM_LEAD_GUARD"
     )
     print(json.dumps({"decision": "block", "reason": reason}))
     return 2
