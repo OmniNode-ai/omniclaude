@@ -52,7 +52,7 @@ unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
-LOG_FILE="${ONEX_HOOK_LOG}"
+LOG_FILE="${ONEX_HOOK_LOG:-/tmp/hook-verifier-role-guard.log}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 

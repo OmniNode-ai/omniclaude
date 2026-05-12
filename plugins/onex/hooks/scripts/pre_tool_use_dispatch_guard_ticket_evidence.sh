@@ -40,7 +40,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
-LOG_FILE="${LOG_FILE:-${ONEX_HOOK_LOG}}"
+LOG_FILE="${LOG_FILE:-${ONEX_HOOK_LOG:-/tmp/hook-dispatch-guard-ticket-evidence.log}}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 

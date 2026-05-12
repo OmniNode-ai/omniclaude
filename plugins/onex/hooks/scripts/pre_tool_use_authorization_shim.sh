@@ -11,15 +11,20 @@ _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
-if declare -F is_omninode_repo >/dev/null 2>&1; then
-    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
-        is_omninode_repo || {
-        _OMNICLAUDE_PASSTHROUGH=$(cat)
-        echo "$_OMNICLAUDE_PASSTHROUGH"
-        trap - EXIT 2>/dev/null || true
-        exit 0
-    }
+if ! declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}"
+    _OMNICLAUDE_PASSTHROUGH=$(cat)
+    echo "$_OMNICLAUDE_PASSTHROUGH"
+    trap - EXIT 2>/dev/null || true
+    exit 0
 fi
+CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+    is_omninode_repo || {
+    _OMNICLAUDE_PASSTHROUGH=$(cat)
+    echo "$_OMNICLAUDE_PASSTHROUGH"
+    trap - EXIT 2>/dev/null || true
+    exit 0
+}
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
 # --- Lite mode guard [OMN-5398] ---
