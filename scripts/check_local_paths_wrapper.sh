@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 # Wrapper for the check-local-paths pre-commit hook.
-# Gracefully skips if omnibase_core.validation.validator_local_paths is not yet published.
-# TODO: Remove this wrapper once validator_local_paths is in a released omnibase_core package
-#       (the module exists in omnibase_core source via PR #530 but is not yet on PyPI).
+# Fails loud if omnibase_core.validation.validator_local_paths is not importable —
+# a missing validator is a configuration error, not a reason to silently pass.
 set -euo pipefail
 
 if uv run python -c "import omnibase_core.validation.validator_local_paths" 2>/dev/null; then
     exec uv run python -m omnibase_core.validation.validator_local_paths "$@"
 else
-    echo "⚠  check-local-paths: validator_local_paths not in installed omnibase_core — skipping until next release" >&2
-    exit 0
+    echo "ERROR: check-local-paths: omnibase_core.validation.validator_local_paths is not importable." >&2
+    echo "  Run 'uv sync' to install omnibase_core, or check that omnibase_core is in your dependencies." >&2
+    exit 1
 fi

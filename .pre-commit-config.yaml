@@ -99,10 +99,9 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
-      # TODO: Simplify back to `uv run python -m omnibase_core.validation.validator_local_paths`
-      # once validator_local_paths is included in a released omnibase_core package.
-      # The module exists in omnibase_core source (PR #530) but is not yet on PyPI.
-      # Wrapper script gracefully skips if the module is unavailable.
+      # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
+      # is not importable — a missing validator is a config error, not a pass.
+      # OMN-9043: changed from silent skip to hard fail.
       - id: check-local-paths
         name: check for local path references
         entry: bash scripts/check_local_paths_wrapper.sh
