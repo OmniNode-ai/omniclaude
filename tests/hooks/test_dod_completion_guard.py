@@ -14,8 +14,10 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 HOOK_SCRIPT = str(
-    Path(__file__).resolve().parents[2]
+    REPO_ROOT
     / "plugins"
     / "onex"
     / "hooks"
@@ -24,12 +26,7 @@ HOOK_SCRIPT = str(
 )
 
 DOD_ENFORCEMENT_YAML = str(
-    Path(__file__).resolve().parents[2]
-    / "plugins"
-    / "onex"
-    / "hooks"
-    / "config"
-    / "dod_enforcement.yaml"
+    REPO_ROOT / "plugins" / "onex" / "hooks" / "config" / "dod_enforcement.yaml"
 )
 
 
@@ -53,6 +50,7 @@ def _run_hook(
         if cwd
         else str(Path.home() / ".onex-state"),
         "OMNICLAUDE_MODE": "full",
+        "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
     }
     if env_overrides:
         env.update(env_overrides)
