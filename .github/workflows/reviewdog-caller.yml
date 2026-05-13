@@ -8,6 +8,7 @@ jobs:
   reviewdog:
     uses: ./.github/workflows/reviewdog-review.yml
     with:
+      python-version: "3.12"
       src-dir: "src/"
       ruff-enabled: true
       mypy-enabled: true
