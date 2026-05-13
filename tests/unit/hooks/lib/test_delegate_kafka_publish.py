@@ -139,23 +139,23 @@ class TestDelegateRuntimeDispatch:
 
         payload = request.payload
         assert payload["prompt"] == prompt
-        assert payload["session_id"] == "session-test-123"
-        assert payload["prompt_length"] == len(prompt)
+        assert payload["task_type"] == "test"
+        assert payload["source_session_id"] == "session-test-123"
         assert payload["source_file_path"] == (
             "src/omniclaude/hooks/handler_event_emitter.py"
         )
         assert payload["max_tokens"] == 4096
-        assert payload["recipient"] == "codex"
-        assert payload["wait_for_result"] is True
-        assert payload["working_directory"] == "/tmp/work"
-        assert payload["codex_sandbox_mode"] == "workspace-write"
+        assert "emitted_at" in payload
 
-        from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
-            ModelDelegationCommand,
-        )
-
-        command = ModelDelegationCommand.model_validate(payload)
-        assert command.prompt == prompt
+        assert set(payload) == {
+            "prompt",
+            "task_type",
+            "source_session_id",
+            "source_file_path",
+            "correlation_id",
+            "max_tokens",
+            "emitted_at",
+        }
 
     def test_correlation_id_is_valid_uuid(self, delegate_run: ModuleType) -> None:
         result = delegate_run.classify_and_publish(

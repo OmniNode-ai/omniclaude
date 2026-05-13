@@ -5,8 +5,8 @@
 
 Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, then dispatches to the runtime via:
-  1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
-  2. HTTP (ONEX_RUNTIME_URL is set and non-empty)
+  1. HTTP (ONEX_RUNTIME_URL is set and non-empty)
+  2. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
   3. Kafka (contract-driven — topic and event_type resolved from the deployed
      omnibase_infra node_delegation_orchestrator contract.yaml at import time;
      falls back to TopicBase.DELEGATE_TASK if the contract is unavailable)
@@ -36,11 +36,15 @@ from typing import Literal
 _LIB_DIR = Path(__file__).parent  # delegate/_lib/
 _SKILL_DIR = _LIB_DIR.parent  # delegate/
 _PLUGIN_ROOT = _SKILL_DIR.parent.parent  # plugins/onex/
+_REPO_ROOT = _PLUGIN_ROOT.parent.parent  # repository root
+if _REPO_ROOT.exists() and str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 _HOOKS_LIB = _PLUGIN_ROOT / "hooks" / "lib"
 if _HOOKS_LIB.exists() and str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-_SRC_PATH = _PLUGIN_ROOT.parent.parent / "src"
+_SRC_PATH = _REPO_ROOT / "src"
 if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
     sys.path.insert(0, str(_SRC_PATH))
 
@@ -187,6 +191,7 @@ _DELEGATION_REQUEST_TOPIC, _DELEGATION_EVENT_TYPE = (
 DELEGATABLE: frozenset[object] = (
     TaskClassifier.DELEGATABLE_INTENTS if _HAS_CLASSIFIER else frozenset()
 )
+_RUNTIME_TASK_TYPES = frozenset({"test", "document", "research"})
 
 _DELEGATION_COMMAND_NAME = "node_delegation_orchestrator"
 
@@ -209,6 +214,32 @@ def _runtime_import_error(exc: ImportError) -> dict:  # type: ignore[type-arg]
             f"omnibase_infra in the plugin environment: {exc}"
         ),
     }
+
+
+def _resolve_runtime_task_type(intent_value: str, prompt: str) -> str:
+    """Map classifier intents onto the runtime's supported task_type literals."""
+    if intent_value in _RUNTIME_TASK_TYPES:
+        return intent_value
+
+    prompt_lower = prompt.lower()
+    if any(marker in prompt_lower for marker in ("test", "pytest", "unit test")):
+        return "test"
+    if any(
+        marker in prompt_lower
+        for marker in ("doc", "docs", "docstring", "documentation", "readme")
+    ):
+        return "document"
+    return "research"
+
+
+def _derive_runtime_url_from_ssh_host(ssh_host: str) -> str:
+    """Derive the stability runtime HTTP URL from an SSH host value."""
+    host = ssh_host.rsplit("@", 1)[-1].strip()
+    if not host:
+        return ""
+    if host not in {"localhost", "127.0.0.1"} and not host[0].isdigit():
+        return ""
+    return f"http://{host}:18085"
 
 
 def _write_evidence_bundle(
@@ -750,8 +781,8 @@ def classify_and_publish(
     """Classify *prompt* and dispatch a delegation request to the runtime.
 
     Transport priority:
-      1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
-      2. HTTP (ONEX_RUNTIME_URL)
+      1. HTTP (ONEX_RUNTIME_URL)
+      2. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       3. Pandaproxy HTTP (ONEX_PANDAPROXY_URL) — preferred for Mac→.201 LAN
       4. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT) — fallback
       5. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
@@ -776,6 +807,7 @@ def classify_and_publish(
                 "Only test/document/research tasks can be delegated."
             ),
         }
+    runtime_task_type = _resolve_runtime_task_type(intent.value, prompt)
 
     correlation_uuid = _resolve_correlation_id(correlation_id)
     correlation_id_str = str(correlation_uuid)
@@ -794,7 +826,12 @@ def classify_and_publish(
             "correlation_id": correlation_id_str,
         }
 
-    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
+    try:
+        from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
+            resolve_session_id,
+        )
+    except ModuleNotFoundError:
+        from session_id import resolve_session_id  # type: ignore[no-redef] # noqa: I001, PLC0415
 
     delegation_payload = {
         "prompt": prompt,
@@ -821,11 +858,85 @@ def classify_and_publish(
     kafka_bridge_script = os.environ.get("ONEX_KAFKA_BRIDGE_SCRIPT", "").strip()
     pandaproxy_url = os.environ.get("ONEX_PANDAPROXY_URL", "").strip()
     runtime_url = os.environ.get("ONEX_RUNTIME_URL", "").strip()
+    if not runtime_url and ssh_host:
+        runtime_url = _derive_runtime_url_from_ssh_host(ssh_host)
+
+    if runtime_url:
+        if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
+            return _runtime_import_error(
+                _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
+            )
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        emitted_at = datetime.now(UTC).isoformat()
+        request = ModelRuntimeSkillRequest(
+            command_name=_DELEGATION_COMMAND_NAME,
+            payload=_build_delegation_request_payload(
+                delegation_payload,
+                runtime_task_type,
+                emitted_at,
+            ),
+            correlation_id=correlation_uuid,
+            timeout_ms=timeout_ms,
+        )
+        import urllib.error  # noqa: PLC0415
+
+        try:
+            response = _dispatch_via_http(request, runtime_url, timeout_seconds)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            reason = getattr(exc, "reason", str(exc))
+            return {
+                "success": False,
+                "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {reason}",
+                "path": "http",
+            }
+        if not response.ok:  # type: ignore[union-attr]
+            error = response.error  # type: ignore[union-attr]
+            error_code = error.code if error else "dispatch_error"
+            return {
+                "success": False,
+                "error": error.message if error else "runtime dispatch failed",
+                "error_code": error_code,
+                "retryable": error.retryable if error else False,
+                "correlation_id": str(
+                    getattr(response, "correlation_id", None) or correlation_uuid
+                ),
+                "command_name": getattr(
+                    response, "command_name", _DELEGATION_COMMAND_NAME
+                ),
+                "topic": getattr(response, "command_topic", None)
+                or _DELEGATION_REQUEST_TOPIC,
+                "path": "http",
+            }
+        return {
+            "success": True,
+            "correlation_id": str(
+                getattr(response, "correlation_id", None) or correlation_uuid
+            ),
+            "task_type": runtime_task_type,
+            "command_name": getattr(response, "command_name", _DELEGATION_COMMAND_NAME),
+            "resolved_node_name": getattr(response, "resolved_node_name", None),
+            "topic": getattr(response, "command_topic", None)
+            or _DELEGATION_REQUEST_TOPIC,
+            "terminal_event": getattr(response, "terminal_event", None),
+            "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
+            if getattr(response, "dispatch_result", None)
+            else None,
+            "output_payloads": getattr(response, "output_payloads", None),
+            "path": "http",
+        }
 
     if ssh_host and ssh_socket_path:
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        emitted_at = datetime.now(UTC).isoformat()
         ssh_payload = {
             "command_name": _DELEGATION_COMMAND_NAME,
-            "payload": delegation_payload,
+            "payload": _build_delegation_request_payload(
+                delegation_payload,
+                runtime_task_type,
+                emitted_at,
+            ),
             "correlation_id": correlation_id_str,
             "timeout_ms": timeout_ms,
         }
@@ -869,7 +980,7 @@ def classify_and_publish(
         return {
             "success": True,
             "correlation_id": raw.get("correlation_id", correlation_id_str),
-            "task_type": getattr(intent, "value", str(intent)),
+            "task_type": runtime_task_type,
             "command_name": raw.get("command_name", _DELEGATION_COMMAND_NAME),
             "resolved_node_name": raw.get("resolved_node_name"),
             "topic": raw.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
@@ -879,75 +990,18 @@ def classify_and_publish(
             "path": "ssh",
         }
 
-    if runtime_url:
-        if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
-            return _runtime_import_error(
-                _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
-            )
-        request = ModelRuntimeSkillRequest(
-            command_name=_DELEGATION_COMMAND_NAME,
-            payload=delegation_payload,
-            correlation_id=correlation_uuid,
-            timeout_ms=timeout_ms,
-        )
-        import urllib.error  # noqa: PLC0415
-
-        try:
-            response = _dispatch_via_http(request, runtime_url, timeout_seconds)
-        except urllib.error.URLError as exc:
-            return {
-                "success": False,
-                "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}",
-                "path": "http",
-            }
-        if not response.ok:  # type: ignore[union-attr]
-            error = response.error  # type: ignore[union-attr]
-            error_code = error.code if error else "dispatch_error"
-            return {
-                "success": False,
-                "error": error.message if error else "runtime dispatch failed",
-                "error_code": error_code,
-                "retryable": error.retryable if error else False,
-                "correlation_id": str(
-                    getattr(response, "correlation_id", None) or correlation_uuid
-                ),
-                "command_name": getattr(
-                    response, "command_name", _DELEGATION_COMMAND_NAME
-                ),
-                "topic": getattr(response, "command_topic", None)
-                or _DELEGATION_REQUEST_TOPIC,
-                "path": "http",
-            }
-        return {
-            "success": True,
-            "correlation_id": str(
-                getattr(response, "correlation_id", None) or correlation_uuid
-            ),
-            "task_type": intent.value,
-            "command_name": getattr(response, "command_name", _DELEGATION_COMMAND_NAME),
-            "resolved_node_name": getattr(response, "resolved_node_name", None),
-            "topic": getattr(response, "command_topic", None)
-            or _DELEGATION_REQUEST_TOPIC,
-            "terminal_event": getattr(response, "terminal_event", None),
-            "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
-            if getattr(response, "dispatch_result", None)
-            else None,
-            "output_payloads": getattr(response, "output_payloads", None),
-            "path": "http",
-        }
-
     # Pandaproxy HTTP: preferred Mac→.201 transport (curl/urllib have LAN grant)
     if pandaproxy_url:
         pp_result = _dispatch_via_pandaproxy(
             delegation_payload=delegation_payload,
             correlation_id_str=correlation_id_str,
             topic=_DELEGATION_REQUEST_TOPIC,
-            task_type=intent.value,
+            task_type=runtime_task_type,
             pandaproxy_url=pandaproxy_url,
             timeout_seconds=timeout_seconds,
         )
         if pp_result["success"]:
-            pp_result["task_type"] = intent.value
+            pp_result["task_type"] = runtime_task_type
             pp_result["command_name"] = _DELEGATION_COMMAND_NAME
         return pp_result
 
@@ -957,13 +1011,13 @@ def classify_and_publish(
             delegation_payload=delegation_payload,
             correlation_id_str=correlation_id_str,
             topic=_DELEGATION_REQUEST_TOPIC,
-            task_type=intent.value,
+            task_type=runtime_task_type,
             ssh_host=ssh_host,
             bridge_script=kafka_bridge_script,
             timeout_seconds=timeout_seconds,
         )
         if rpk_result["success"]:
-            rpk_result["task_type"] = intent.value
+            rpk_result["task_type"] = runtime_task_type
             rpk_result["command_name"] = _DELEGATION_COMMAND_NAME
         return rpk_result
 
@@ -972,10 +1026,10 @@ def classify_and_publish(
         delegation_payload=delegation_payload,
         correlation_id_str=correlation_id_str,
         topic=_DELEGATION_REQUEST_TOPIC,
-        task_type=intent.value,
+        task_type=runtime_task_type,
     )
     if kafka_result["success"]:
-        kafka_result["task_type"] = intent.value
+        kafka_result["task_type"] = runtime_task_type
         kafka_result["command_name"] = _DELEGATION_COMMAND_NAME
     return kafka_result
 
