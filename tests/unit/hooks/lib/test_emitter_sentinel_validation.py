@@ -129,6 +129,7 @@ class TestAgentStatusEmitterDegradedTag:
             return True
 
         monkeypatch.delenv("SESSION_ID", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
         with patch(
             "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
@@ -158,6 +159,7 @@ class TestAgentStatusEmitterDegradedTag:
 
         monkeypatch.delenv("AGENT_NAME", raising=False)
         monkeypatch.delenv("SESSION_ID", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
         with patch(
             "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
