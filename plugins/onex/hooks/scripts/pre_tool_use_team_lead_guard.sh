@@ -65,8 +65,17 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
 
 # Bitmask gate (OMN-9906): replaces ONEX_TEAM_LEAD_GUARD_DISABLE env var.
 # To disable: onex hooks disable TEAM_LEAD_GUARD (clears TEAM_LEAD_GUARD bit in ONEX_HOOKS_MASK).
-source "${HOOKS_DIR}/scripts/hook-gate.sh" 2>/dev/null || true
-if declare -F onex_hook_gate >/dev/null 2>&1 && ! onex_hook_gate TEAM_LEAD_GUARD; then
+if ! source "${HOOKS_DIR}/scripts/hook-gate.sh" 2>/dev/null; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ERROR: failed to source hook-gate.sh; failing open" >> "$LOG_FILE" 2>/dev/null || true
+    echo "$TOOL_INFO"
+    exit 0
+fi
+if ! declare -F onex_hook_gate >/dev/null 2>&1; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ERROR: onex_hook_gate unavailable; failing open" >> "$LOG_FILE" 2>/dev/null || true
+    echo "$TOOL_INFO"
+    exit 0
+fi
+if ! onex_hook_gate TEAM_LEAD_GUARD; then
     echo "$TOOL_INFO"
     exit 0
 fi
