@@ -116,6 +116,30 @@ def test_unknown_format_fails():
     assert result.returncode != 0
 
 
+def test_malformed_json_reports_clear_error():
+    result = subprocess.run(
+        ["python3", str(SCRIPT)],
+        input="{not-json",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "Invalid JSON input:" in result.stderr
+
+
+def test_missing_findings_reports_clear_error():
+    result = subprocess.run(
+        ["python3", str(SCRIPT)],
+        input=json.dumps({"format": "hostile_reviewer"}),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "Missing or invalid required field: findings" in result.stderr
+
+
 def test_output_conforms_to_reviewdog_diagnostic_schema():
     """Validate rdjsonl output has required fields per reviewdog Diagnostic spec."""
     payload = {

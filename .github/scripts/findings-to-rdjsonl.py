@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Convert ONEX sweep/review finding formats to reviewdog rdjsonl."""
 
 import json
@@ -78,11 +80,25 @@ CONVERTERS = {
 }
 
 if __name__ == "__main__":
-    data = json.load(sys.stdin)
-    fmt = data["format"]
+    try:
+        data = json.load(sys.stdin)
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON input: {exc}", file=sys.stderr)  # noqa: T201
+        sys.exit(1)
+    if not isinstance(data, dict):
+        print("Input must be a JSON object", file=sys.stderr)  # noqa: T201
+        sys.exit(1)
+    fmt = data.get("format")
+    if not isinstance(fmt, str):
+        print("Missing or invalid required field: format", file=sys.stderr)  # noqa: T201
+        sys.exit(1)
+    findings = data.get("findings")
+    if not isinstance(findings, list):
+        print("Missing or invalid required field: findings", file=sys.stderr)  # noqa: T201
+        sys.exit(1)
     if fmt not in CONVERTERS:
         print(f"Unknown format: {fmt}", file=sys.stderr)  # noqa: T201
         sys.exit(1)
     converter = CONVERTERS[fmt]
-    for finding in data["findings"]:
+    for finding in findings:
         print(json.dumps(converter(finding)))  # noqa: T201
