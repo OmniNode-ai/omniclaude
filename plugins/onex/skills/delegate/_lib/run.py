@@ -931,6 +931,14 @@ def classify_and_publish(
                 "path": "http",
             }
 
+    # Surface HTTP transport error only when no fallback transport is configured.
+    if http_transport_error and not (
+        (ssh_host and ssh_socket_path)
+        or pandaproxy_url
+        or (ssh_host and kafka_bridge_script)
+    ):
+        return http_transport_error
+
     if ssh_host and ssh_socket_path:
         from datetime import UTC, datetime  # noqa: PLC0415
 
