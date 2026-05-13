@@ -10,7 +10,7 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core==0.40.1",
+    "omnibase-core>=0.40.1,<0.41.0",
     "omnibase-spi==0.20.6",
     "omnibase-infra==0.34.2",
     "omnimarket>=0.1.0",
@@ -239,7 +239,7 @@ build-backend = "hatchling.build"
 # Override omninode-intelligence's transitive pin on omnibase-infra so our direct pin wins.
 # Required until omniintelligence publishes a release with >=0.24.1.
 override-dependencies = [
-    "omnibase-core==0.40.1",
+    "omnibase-core>=0.40.1,<0.41.0",
     "omnibase-spi==0.20.6",
     "omnibase-infra==0.34.2",
 ]
