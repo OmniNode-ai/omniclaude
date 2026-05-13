@@ -85,7 +85,10 @@ if [[ ! "$TOOL_NAME" =~ ^(Read|Edit|Write|Bash|Glob|Grep)$ ]]; then
     echo "$TOOL_INFO"
     exit 0
 fi
-PYTHON_CMD="${PLUGIN_PYTHON_BIN:-python3}"
+
+# Resolve Python via common.sh (proper venv detection; honors PLUGIN_PYTHON_BIN).
+# Sourced only after the fast-path bail-outs above to keep the hot path cheap.
+source "${HOOKS_DIR}/scripts/common.sh"
 
 # Run Python guard.
 set +e
