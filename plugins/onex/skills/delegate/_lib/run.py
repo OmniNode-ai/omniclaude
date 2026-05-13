@@ -861,6 +861,7 @@ def classify_and_publish(
     if not runtime_url and ssh_host:
         runtime_url = _derive_runtime_url_from_ssh_host(ssh_host)
 
+    http_transport_error: dict | None = None
     if runtime_url:
         if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
             return _runtime_import_error(
@@ -885,46 +886,50 @@ def classify_and_publish(
             response = _dispatch_via_http(request, runtime_url, timeout_seconds)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             reason = getattr(exc, "reason", str(exc))
-            return {
+            # Transport-level failure — record and fall through to other transports.
+            http_transport_error = {
                 "success": False,
                 "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {reason}",
                 "path": "http",
             }
-        if not response.ok:  # type: ignore[union-attr]
-            error = response.error  # type: ignore[union-attr]
-            error_code = error.code if error else "dispatch_error"
+        else:
+            if not response.ok:  # type: ignore[union-attr]
+                error = response.error  # type: ignore[union-attr]
+                error_code = error.code if error else "dispatch_error"
+                return {
+                    "success": False,
+                    "error": error.message if error else "runtime dispatch failed",
+                    "error_code": error_code,
+                    "retryable": error.retryable if error else False,
+                    "correlation_id": str(
+                        getattr(response, "correlation_id", None) or correlation_uuid
+                    ),
+                    "command_name": getattr(
+                        response, "command_name", _DELEGATION_COMMAND_NAME
+                    ),
+                    "topic": getattr(response, "command_topic", None)
+                    or _DELEGATION_REQUEST_TOPIC,
+                    "path": "http",
+                }
             return {
-                "success": False,
-                "error": error.message if error else "runtime dispatch failed",
-                "error_code": error_code,
-                "retryable": error.retryable if error else False,
+                "success": True,
                 "correlation_id": str(
                     getattr(response, "correlation_id", None) or correlation_uuid
                 ),
+                "task_type": runtime_task_type,
                 "command_name": getattr(
                     response, "command_name", _DELEGATION_COMMAND_NAME
                 ),
+                "resolved_node_name": getattr(response, "resolved_node_name", None),
                 "topic": getattr(response, "command_topic", None)
                 or _DELEGATION_REQUEST_TOPIC,
+                "terminal_event": getattr(response, "terminal_event", None),
+                "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
+                if getattr(response, "dispatch_result", None)
+                else None,
+                "output_payloads": getattr(response, "output_payloads", None),
                 "path": "http",
             }
-        return {
-            "success": True,
-            "correlation_id": str(
-                getattr(response, "correlation_id", None) or correlation_uuid
-            ),
-            "task_type": runtime_task_type,
-            "command_name": getattr(response, "command_name", _DELEGATION_COMMAND_NAME),
-            "resolved_node_name": getattr(response, "resolved_node_name", None),
-            "topic": getattr(response, "command_topic", None)
-            or _DELEGATION_REQUEST_TOPIC,
-            "terminal_event": getattr(response, "terminal_event", None),
-            "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
-            if getattr(response, "dispatch_result", None)
-            else None,
-            "output_payloads": getattr(response, "output_payloads", None),
-            "path": "http",
-        }
 
     if ssh_host and ssh_socket_path:
         from datetime import UTC, datetime  # noqa: PLC0415
