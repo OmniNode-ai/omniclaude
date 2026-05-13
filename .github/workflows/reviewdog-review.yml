@@ -1,0 +1,211 @@
+name: reviewdog-review
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version for linter execution"
+        type: string
+        required: false
+        default: "3.12"
+      ruff-enabled:
+        description: "Run ruff check with reviewdog annotations"
+        type: boolean
+        required: false
+        default: true
+      mypy-enabled:
+        description: "Run mypy with reviewdog annotations"
+        type: boolean
+        required: false
+        default: true
+      security-enabled:
+        description: "Run security scanners (Trivy/Bandit) with SARIF annotations"
+        type: boolean
+        required: false
+        default: true
+      fail-level:
+        description: "Minimum severity to fail the check (any|info|warning|error)"
+        type: string
+        required: false
+        default: "error"
+      src-dir:
+        description: "Source directory/directories for linting (space-separated for multiple)"
+        type: string
+        required: false
+        default: "src/"
+      install-command:
+        description: "Custom dependency install command (overrides uv sync default)"
+        type: string
+        required: false
+        default: ""
+      working-directory:
+        description: "Working directory for all steps"
+        type: string
+        required: false
+        default: "."
+    secrets:
+      REVIEWDOG_PAT:
+        description: "GitHub PAT with repo scope for github-pr-review reporter (required for PR review mode, unused for merge_group/fork)"
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: reviewdog-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reviewdog:
+    timeout-minutes: 15
+    runs-on: >-
+      ${{ (github.event_name == 'pull_request'
+           && github.event.pull_request.head.repo.fork)
+          && 'ubuntu-latest' || 'self-hosted' }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: "v0.20.3"
+
+      - name: Print tool versions
+        run: |
+          reviewdog --version
+          echo "reviewdog_version=v0.20.3"
+
+      - name: Determine reporter and token
+        id: reporter
+        run: |
+          IS_FORK="false"
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            IS_FORK="true"
+          fi
+
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            echo "reporter=github-pr-check" >> "$GITHUB_OUTPUT"
+            echo "token=${{ github.token }}" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK" = "true" ]; then
+            echo "reporter=github-pr-check" >> "$GITHUB_OUTPUT"
+            echo "token=${{ github.token }}" >> "$GITHUB_OUTPUT"
+          else
+            if [ -z "${{ secrets.REVIEWDOG_PAT }}" ]; then
+              echo "::error::REVIEWDOG_PAT secret is required for github-pr-review on non-fork PRs"
+              exit 1
+            fi
+            echo "reporter=github-pr-review" >> "$GITHUB_OUTPUT"
+            echo "token=${{ secrets.REVIEWDOG_PAT }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: inputs.ruff-enabled || inputs.mypy-enabled
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - uses: astral-sh/setup-uv@v4
+        if: inputs.ruff-enabled || inputs.mypy-enabled
+
+      - name: Install Python dependencies
+        if: inputs.ruff-enabled || inputs.mypy-enabled
+        run: |
+          if [ -n "${{ inputs.install-command }}" ]; then
+            ${{ inputs.install-command }}
+          elif [ -f uv.lock ]; then
+            uv sync --frozen
+          elif [ -f pyproject.toml ]; then
+            uv sync
+          else
+            echo "::warning::No Python project metadata found (no uv.lock or pyproject.toml)"
+          fi
+
+      - name: Ruff review
+        if: inputs.ruff-enabled
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ steps.reporter.outputs.token }}
+          SRC_DIR: "${{ inputs.src-dir }}"
+        run: |
+          set +e
+          uv run ruff check --output-format=json ${SRC_DIR} > ruff.json 2> ruff.stderr
+          rc=$?
+          cat ruff.stderr >&2
+          if [ "$rc" -ne 0 ] && ! python3 -c 'import json; json.load(open("ruff.json"))' 2>/dev/null; then
+            echo "::error::ruff crashed (exit $rc); see stderr above"
+            exit "$rc"
+          fi
+          python3 .github/scripts/ruff-to-rdjsonl.py < ruff.json \
+            | reviewdog -f=rdjsonl -name=ruff \
+              -reporter=${{ steps.reporter.outputs.reporter }} \
+              -filter-mode=added -fail-level=${{ inputs.fail-level }}
+
+      - name: Mypy review
+        if: inputs.mypy-enabled
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ steps.reporter.outputs.token }}
+          SRC_DIR: "${{ inputs.src-dir }}"
+        run: |
+          uv run mypy ${SRC_DIR} --no-error-summary 2>&1 || true \
+            | python3 .github/scripts/mypy-to-rdjsonl.py \
+            | reviewdog -f=rdjsonl -name=mypy \
+              -reporter=github-pr-check \
+              -filter-mode=added -fail-level=${{ inputs.fail-level }}
+
+      - name: Install Trivy
+        if: inputs.security-enabled
+        env:
+          TRIVY_VERSION: "0.62.1"
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/v${TRIVY_VERSION}/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin "v${TRIVY_VERSION}"
+          trivy --version
+
+      - name: Trivy filesystem scan (SARIF)
+        if: inputs.security-enabled
+        run: |
+          trivy fs --format sarif --output trivy-results.sarif \
+            --severity HIGH,CRITICAL . || true
+
+      - name: Trivy review
+        if: inputs.security-enabled
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ steps.reporter.outputs.token }}
+        run: |
+          [ -f trivy-results.sarif ] && cat trivy-results.sarif \
+            | reviewdog -f=sarif -name=trivy-security \
+              -reporter=github-pr-check \
+              -filter-mode=diff_context -fail-level=${{ inputs.fail-level }} \
+          || echo "No Trivy results to report"
+
+      - name: Verify Bandit availability
+        id: bandit-check
+        if: inputs.security-enabled && inputs.ruff-enabled
+        run: |
+          if uv run bandit --version 2>/dev/null; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Bandit not installed — skipping Python security scan. Add bandit to dev dependencies."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bandit scan (SARIF)
+        if: inputs.security-enabled && inputs.ruff-enabled && steps.bandit-check.outputs.available == 'true'
+        env:
+          SRC_DIR: "${{ inputs.src-dir }}"
+        run: |
+          uv run bandit -r ${SRC_DIR} -f sarif -o bandit-results.sarif \
+            --severity-level medium || true
+
+      - name: Bandit review
+        if: inputs.security-enabled && inputs.ruff-enabled && steps.bandit-check.outputs.available == 'true'
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ steps.reporter.outputs.token }}
+        run: |
+          [ -f bandit-results.sarif ] && cat bandit-results.sarif \
+            | reviewdog -f=sarif -name=bandit-security \
+              -reporter=github-pr-check \
+              -filter-mode=diff_context -fail-level=${{ inputs.fail-level }} \
+          || echo "No Bandit results to report"
