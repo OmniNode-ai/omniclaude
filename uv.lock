@@ -12,7 +12,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = ">=0.40.1,<0.41.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.40.2" },
     { name = "omnibase-infra", specifier = "==0.34.2" },
     { name = "omnibase-spi", specifier = "==0.20.6" },
 ]
@@ -2196,7 +2196,7 @@ dependencies = [
 [[package]]
 name = "omnibase-core"
 version = "0.40.1"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.40.2#30c6e83c13d9a3c64ae2a7cb75715451877ba756" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -2210,10 +2210,6 @@ dependencies = [
     { name = "ruamel-yaml" },
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/ee/437d2a59f3a08827c7688d2ddf62da6d0f2647ef7ca741f092da695c23d2/omnibase_core-0.40.1.tar.gz", hash = "sha256:ed9308f3cbca5dbcdcffd5cc7e6ce9d5ae3e4fa96b89b0dda6f69388fedac3bf", size = 8395663, upload-time = "2026-05-04T02:00:24.88Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/98/20316960a989aa24f5b851bf74402c0b8a0febc0a28ccb67cfc8b518d418/omnibase_core-0.40.1-py3-none-any.whl", hash = "sha256:1fa09caee8e9237397c42154b102704b4faacd4c881edf1d98aa3d1d897b6308", size = 5773507, upload-time = "2026-05-04T02:00:22.44Z" },
 ]
 
 [[package]]
@@ -2401,7 +2397,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = ">=0.40.1,<0.41.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.40.2" },
     { name = "omnibase-infra", specifier = "==0.34.2" },
     { name = "omnibase-spi", specifier = "==0.20.6" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git" },

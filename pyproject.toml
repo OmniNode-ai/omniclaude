@@ -245,6 +245,7 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.40.2" }
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "main" }
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.23.0" }
 omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git" }
