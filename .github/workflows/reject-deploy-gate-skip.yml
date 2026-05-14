@@ -114,12 +114,9 @@ jobs:
             # Only scan PR-body-like file types (md, yaml, yml, txt) to avoid
             # false positives on source code that legitimately discusses skip tokens
             # (validators, tests, docs). The pre-commit hook applies the same filter.
-            DIFF=$(gh pr diff "${PR_NUMBER}" 2>/dev/null | grep '^+' | grep -E '\.(md|yaml|yml|txt):' || true)
-            if [[ -z "$DIFF" ]]; then
-              # Fallback: use GITHUB_BASE_REF so the diff reflects the PR's actual base
-              BASE_REF="${GITHUB_BASE_REF:-main}"
-              DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '*.md' '*.yaml' '*.yml' '*.txt' | grep '^+' || true)
-            fi
+            # Filter on filename headers ("+++ b/file.ext") then include following added lines.
+            BASE_REF="${GITHUB_BASE_REF:-main}"
+            DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '*.md' '*.yaml' '*.yml' '*.txt' | grep '^+' || true)
           else
             echo "::notice::No PR number available — skipping title, commit, and diff scans."
           fi
@@ -128,9 +125,7 @@ jobs:
           # The receipt is PR-wide: if ANY surface contains skip-token-allowed,
           # the entire PR is allowed (with friction logged). This prevents a single
           # surface from blocking when a receipt exists elsewhere in the PR.
-          FULL_PR_PAYLOAD="${BODY}
-${TITLE}
-${COMMIT_MESSAGES}"
+          FULL_PR_PAYLOAD="$(printf '%s\n%s\n%s' "${BODY}" "${TITLE}" "${COMMIT_MESSAGES}")"
 
           RECEIPT_PRESENT=false
           if echo "$FULL_PR_PAYLOAD" | grep -qiE "$ALLOWLIST_PATTERN"; then
