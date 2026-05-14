@@ -14,8 +14,14 @@
 # from the queue head ref when GitHub exposes a pr-<number> segment.
 # Cache is disabled on this job (invariant I9).
 #
+# OMN-10971: skip-token-allowed escape hatch now validated against a central registry in
+# onex_change_control@main. The allowlist is fetched from the pinned trusted ref — NOT from
+# the PR's own content — to prevent self-approval. All five fields are validated:
+# receipt_id, repo, pr_number, expires_at, and approved_by != PR author.
+#
 # This is a REQUIRED status check. PRs containing any [skip-*] bypass token
-# cannot merge unless an explicit approval receipt (# skip-token-allowed: <id>) is present.
+# cannot merge unless an explicit approval receipt (# skip-token-allowed: <id>) is present
+# AND that receipt passes registry validation.
 #
 # CLAUDE.md Rule #10: Never bypass local gates.
 # Plan: omni_home/docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4
@@ -46,35 +52,173 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve PR number
-        id: resolve-pr
+      - name: Resolve PR body and metadata
+        id: resolve-body
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           EVENT_NAME: ${{ github.event_name }}
+          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
+          write_outputs() {
+            local body="$1"
+            local pr_number="$2"
+            local pr_author="$3"
+            local body_file
+
+            body_file="$(mktemp "${RUNNER_TEMP:-/tmp}/skip-token-body.XXXXXX")"
+            printf '%s' "${body}" > "${body_file}"
+            {
+              printf 'body_path=%s\n' "${body_file}"
+              printf 'pr_number=%s\n' "${pr_number}"
+              printf 'pr_author=%s\n' "${pr_author}"
+            } >> "${GITHUB_OUTPUT}"
+          }
+
           if [[ "${EVENT_NAME}" == "merge_group" ]]; then
+            # On merge_group, github.event.pull_request is null.
+            # merge_group.head_sha is a synthetic queue commit, not the PR head
+            # commit, so resolve via the queue ref's pr-<number> segment.
             HEAD_REF="${MERGE_GROUP_HEAD_REF:-}"
             PR_NUMBER_FROM_REF=""
             if [[ "${HEAD_REF}" =~ (^|/)pr-([0-9]+)- ]]; then
               PR_NUMBER_FROM_REF="${BASH_REMATCH[2]}"
             fi
-            printf 'pr_number=%s\n' "${PR_NUMBER_FROM_REF}" >> "${GITHUB_OUTPUT}"
+
+            if [[ -n "${PR_NUMBER_FROM_REF}" ]]; then
+              PR_JSON=$(gh pr view "${PR_NUMBER_FROM_REF}" --json body,author 2>/dev/null || true)
+              BODY=$(printf '%s' "${PR_JSON}" | jq -r '.body // ""')
+              AUTHOR=$(printf '%s' "${PR_JSON}" | jq -r '.author.login // ""')
+              write_outputs "${BODY}" "${PR_NUMBER_FROM_REF}" "${AUTHOR}"
+              exit 0
+            fi
+
+            echo "::notice::merge_group event did not expose a resolvable PR ref; skip-token scan already runs on pull_request events."
+            echo "::notice::merge_group head_ref='${HEAD_REF}' head_sha='${MERGE_GROUP_HEAD_SHA:-}'"
+            write_outputs "" "" ""
           else
-            printf 'pr_number=%s\n' "${PR_NUMBER:-}" >> "${GITHUB_OUTPUT}"
+            BODY="${PR_BODY:-}"
+            AUTHOR="${PR_AUTHOR:-}"
+            RESOLVED_PR="${PR_NUMBER:-}"
+            if [[ -z "${BODY}" ]] && [[ -n "${RESOLVED_PR}" ]]; then
+              PR_JSON=$(gh pr view "${RESOLVED_PR}" --json body,author 2>/dev/null || true)
+              BODY=$(printf '%s' "${PR_JSON}" | jq -r '.body // ""')
+              AUTHOR=$(printf '%s' "${PR_JSON}" | jq -r '.author.login // ""')
+            fi
+            write_outputs "${BODY}" "${RESOLVED_PR}" "${AUTHOR}"
           fi
+
+      - name: Write registry validator script
+        run: |
+          cat > "${RUNNER_TEMP}/validate_skip_receipt.py" << 'SCRIPT_EOF'
+          import sys, os
+          from datetime import datetime, timezone
+
+          try:
+              import yaml
+          except ImportError:
+              print("::error::PyYAML not available on runner. Install python3-yaml.")
+              sys.exit(1)
+
+          allowlist_file = os.environ["SKIP_ALLOWLIST_FILE"]
+          receipt_id     = os.environ["SKIP_RECEIPT_ID"]
+          repo           = os.environ["SKIP_REPO"]
+          pr_number_str  = os.environ.get("SKIP_PR_NUMBER", "")
+          pr_author      = os.environ.get("SKIP_PR_AUTHOR", "")
+
+          try:
+              pr_number = int(pr_number_str) if pr_number_str else None
+          except ValueError:
+              pr_number = None
+
+          try:
+              with open(allowlist_file) as f:
+                  data = yaml.safe_load(f) or {}
+          except Exception as exc:
+              print(f"::error::Failed to load allowlist file: {exc}")
+              sys.exit(1)
+
+          entries = data.get("entries") or []
+
+          if not entries:
+              print(f"::error::Allowlist is empty — no approvals are registered.")
+              print(f"::error::Receipt-id '{receipt_id}' is not approved.")
+              sys.exit(1)
+
+          match = None
+          for entry in entries:
+              if entry.get("receipt_id") == receipt_id:
+                  match = entry
+                  break
+
+          if match is None:
+              print(f"::error::Receipt-id '{receipt_id}' not found in central registry.")
+              print(f"::error::Add an approved entry to onex_change_control/allowlists/skip_token_approvals.yaml")
+              print(f"::error::via a PR reviewed by @OmniNode-ai/platform-leads.")
+              sys.exit(1)
+
+          failures = []
+
+          entry_repo = match.get("repo", "")
+          if entry_repo != repo:
+              failures.append(f"repo mismatch: allowlist has repo='{entry_repo}', calling repo is '{repo}'")
+
+          entry_pr = match.get("pr_number")
+          if entry_pr is None:
+              failures.append("pr_number missing from allowlist entry — unscoped entries are rejected")
+          elif pr_number is not None and entry_pr != pr_number:
+              failures.append(f"pr_number mismatch: allowlist has pr_number={entry_pr}, this PR is #{pr_number}")
+
+          expires_str = match.get("expires_at", "")
+          if not expires_str:
+              failures.append("expires_at missing from allowlist entry")
+          else:
+              try:
+                  expires_dt = datetime.fromisoformat(str(expires_str).replace("Z", "+00:00"))
+                  if expires_dt.tzinfo is None:
+                      expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+                  now = datetime.now(tz=timezone.utc)
+                  if now > expires_dt:
+                      failures.append(
+                          f"approval expired at {expires_str} (current UTC: {now.strftime('%Y-%m-%dT%H:%M:%SZ')})"
+                      )
+              except Exception as exc:
+                  failures.append(f"could not parse expires_at='{expires_str}': {exc}")
+
+          approved_by = match.get("approved_by", "")
+          if not approved_by:
+              failures.append("approved_by missing from allowlist entry")
+          elif pr_author and approved_by == pr_author:
+              failures.append(
+                  f"self-approval rejected: approved_by='{approved_by}' equals PR author '{pr_author}'"
+              )
+
+          if failures:
+              print(f"::error::Registry validation failed for receipt-id '{receipt_id}':")
+              for msg in failures:
+                  print(f"::error::  - {msg}")
+              sys.exit(1)
+
+          print(f"::notice::Receipt-id '{receipt_id}' passed all registry validation checks.")
+          print(f"::notice::  repo={entry_repo}, pr_number={entry_pr}, approved_by={approved_by}, expires_at={expires_str}")
+          SCRIPT_EOF
 
       - name: Scan all PR surfaces for skip-gate bypass tokens
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.resolve-pr.outputs.pr_number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
+          RESOLVED_BODY_PATH: ${{ steps.resolve-body.outputs.body_path }}
+          RESOLVED_PR_NUMBER: ${{ steps.resolve-body.outputs.pr_number }}
+          RESOLVED_PR_AUTHOR: ${{ steps.resolve-body.outputs.pr_author }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           EVENT_NAME: ${{ github.event_name }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
+          REPO: ${{ github.repository }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
@@ -84,31 +228,31 @@ jobs:
           SKIP_PATTERN='\[skip-[a-zA-Z]'
           ALLOWLIST_PATTERN='#[[:space:]]*skip-token-allowed:[[:space:]]*[^[:space:]]'
           RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
-          TICKET_REF="OMN-10969"
+          TICKET_REF="OMN-10971"
 
           VIOLATIONS=()
 
           # ── Collect all surfaces ──────────────────────────────────────────────
 
           # Surface 1: PR body
-          BODY="${PR_BODY:-}"
-          if [[ -z "${BODY}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
-            BODY=$(gh pr view "${PR_NUMBER}" --json body --jq .body 2>/dev/null || true)
+          BODY=""
+          if [[ -n "${RESOLVED_BODY_PATH:-}" && -f "${RESOLVED_BODY_PATH}" ]]; then
+            BODY="$(cat "${RESOLVED_BODY_PATH}")"
           fi
 
           TITLE=""
           COMMIT_MESSAGES=""
           DIFF=""
 
-          if [[ -n "${PR_NUMBER:-}" ]]; then
+          if [[ -n "${RESOLVED_PR_NUMBER:-}" ]]; then
             # Surface 2: PR title
             TITLE="${PR_TITLE:-}"
             if [[ -z "${TITLE}" ]]; then
-              TITLE=$(gh pr view "${PR_NUMBER}" --json title --jq .title 2>/dev/null || true)
+              TITLE=$(gh pr view "${RESOLVED_PR_NUMBER}" --json title --jq .title 2>/dev/null || true)
             fi
 
             # Surface 3: Commit messages in the PR
-            COMMIT_MESSAGES=$(gh pr view "${PR_NUMBER}" --json commits --jq '[.commits[].messageHeadline] | join("\n")' 2>/dev/null || true)
+            COMMIT_MESSAGES=$(gh pr view "${RESOLVED_PR_NUMBER}" --json commits --jq '[.commits[].messageHeadline] | join("\n")' 2>/dev/null || true)
 
             # Surface 4: Changed file diff
             # Only scan PR-body-like file types (md, yaml, yml, txt) to avoid
@@ -116,7 +260,7 @@ jobs:
             # (validators, tests, docs). The pre-commit hook applies the same filter.
             # Filter on filename headers ("+++ b/file.ext") then include following added lines.
             BASE_REF="${GITHUB_BASE_REF:-main}"
-            DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '*.md' '*.yaml' '*.yml' '*.txt' | grep '^+' || true)
+            DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '*.md' '*.yaml' '*.yml' '*.txt' ':(exclude).github/workflows/reject-deploy-gate-skip.yml' | grep '^+' || true)
           else
             echo "::notice::No PR number available — skipping title, commit, and diff scans."
           fi
@@ -131,6 +275,7 @@ jobs:
           if echo "$FULL_PR_PAYLOAD" | grep -qiE "$ALLOWLIST_PATTERN"; then
             RECEIPT_PRESENT=true
           fi
+          SKIP_FOUND=false
 
           # ── Per-surface skip-token scan ───────────────────────────────────────
           check_surface() {
@@ -142,6 +287,7 @@ jobs:
             fi
 
             if echo "$content" | grep -qiE "$SKIP_PATTERN"; then
+              SKIP_FOUND=true
               if [[ "$RECEIPT_PRESENT" == "true" ]]; then
                 echo "::warning::$surface_name contains a [skip-*] token but a PR-wide approval receipt (skip-token-allowed) is present. Allowed with friction logged."
               else
@@ -155,7 +301,12 @@ jobs:
           check_surface "commit messages" "${COMMIT_MESSAGES}"
           check_surface "changed file diff" "${DIFF}"
 
-          # ── Report ────────────────────────────────────────────────────────────
+          # ── Report unapproved bypass tokens ───────────────────────────────────
+          if [[ "$SKIP_FOUND" != "true" ]]; then
+            echo "::notice::No [skip-*] bypass tokens found in any scanned surface (body, title, commits, diff). OK."
+            exit 0
+          fi
+
           if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
             for surface in "${VIOLATIONS[@]}"; do
               echo "::error::$surface contains a [skip-*] bypass token."
@@ -164,9 +315,50 @@ jobs:
             echo "::error::Fix the gate properly:"
             echo "::error::  1. Add dod_evidence with type: no_deployable_artifact (preferred)"
             echo "::error::  2. Narrow path patterns in validate_pr_deploy_required.py"
-            echo "::error::  3. If truly exceptional: add '# skip-token-allowed: <receipt-id>' with a traceable approval receipt"
+            echo "::error::  3. If truly exceptional: obtain a platform-leads-approved entry in"
+            echo "::error::     onex_change_control/allowlists/skip_token_approvals.yaml, then add"
+            echo "::error::     '# skip-token-allowed: <receipt-id>' to the PR body"
             echo "::error::Ticket: $TICKET_REF"
             exit 1
           fi
 
-          echo "::notice::No [skip-*] bypass tokens found in any scanned surface (body, title, commits, diff). OK."
+          # OMN-10971: Escape hatch receipt comment found — validate against central registry.
+          # Extract the receipt-id from the first matching line.
+          RECEIPT_ID=$(echo "$FULL_PR_PAYLOAD" \
+            | grep -iE "$ALLOWLIST_PATTERN" \
+            | head -1 \
+            | sed -E 's/.*#[[:space:]]*skip-token-allowed:[[:space:]]*//' \
+            | awk '{print $1}')
+
+          if [[ -z "${RECEIPT_ID}" ]]; then
+            echo "::error::Found skip-token-allowed comment but could not extract a receipt-id."
+            echo "::error::Expected format: # skip-token-allowed: <receipt-id>"
+            exit 1
+          fi
+
+          echo "::notice::Validating receipt-id '${RECEIPT_ID}' against central registry in OmniNode-ai/onex_change_control@main ..."
+
+          # Fetch allowlist from onex_change_control@main — NOT from the PR branch.
+          # Pinning to main prevents self-approval by adding an entry in the same PR.
+          ALLOWLIST_RAW=$(gh api \
+            "repos/OmniNode-ai/onex_change_control/contents/allowlists/skip_token_approvals.yaml?ref=main" \
+            -q '.content' 2>/dev/null | base64 -d 2>/dev/null || true)
+
+          if [[ -z "${ALLOWLIST_RAW}" ]]; then
+            echo "::error::Could not fetch allowlists/skip_token_approvals.yaml from OmniNode-ai/onex_change_control@main."
+            echo "::error::Ensure the file exists and the workflow token has read access to that repo."
+            echo "::error::Treating as no approvals — failing."
+            exit 1
+          fi
+
+          # Write allowlist to temp file (avoids env-size limits for large registries).
+          ALLOWLIST_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/skip-token-allowlist.XXXXXX")"
+          printf '%s' "${ALLOWLIST_RAW}" > "${ALLOWLIST_FILE}"
+
+          # Run the validator script written in the previous step.
+          SKIP_ALLOWLIST_FILE="${ALLOWLIST_FILE}" \
+          SKIP_RECEIPT_ID="${RECEIPT_ID}" \
+          SKIP_REPO="${REPO}" \
+          SKIP_PR_NUMBER="${RESOLVED_PR_NUMBER:-}" \
+          SKIP_PR_AUTHOR="${RESOLVED_PR_AUTHOR:-}" \
+          python3 "${RUNNER_TEMP}/validate_skip_receipt.py"
