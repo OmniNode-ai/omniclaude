@@ -6,10 +6,10 @@
 # [skip-*] bypass tokens, including [skip-receipt-gate:] and [skip-deploy-gate:].
 # Rejects any staged file or commit message containing [skip-<anything>:].
 #
-# ADVISORY ONLY — this hook is a developer-convenience warning, not enforcement.
-# Receipt-gate (omnibase_core/src/omnibase_core/validation/receipt_gate.py) is the
-# sole enforcement authority. Workers can still bypass this local hook with
-# --no-verify; that hole is closed at the GHA layer (T9 / OMN-10422).
+# BLOCKING — this hook rejects all [skip-*] tokens. This is the LOCAL enforcement
+# layer. The GHA workflow (reject-deploy-gate-skip.yml) is the REMOTE enforcement
+# layer. Both layers are required; neither is advisory-only. Using --no-verify
+# bypasses this hook but not the remote GHA gate, which is a required status check.
 #
 # CLAUDE.md Rule #10: Never bypass local gates. Fix the underlying issue.
 # Plan: omni_home/docs/plans/2026-04-30-gate-collapse-fix.md Task 8
