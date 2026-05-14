@@ -41,89 +41,107 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Resolve PR body
-        id: resolve-body
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve PR number
+        id: resolve-pr
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
           EVENT_NAME: ${{ github.event_name }}
-          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
-        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
-          write_body_output() {
-            local body="$1"
-            local body_file
-
-            body_file="$(mktemp "${RUNNER_TEMP:-/tmp}/skip-token-body.XXXXXX")"
-            printf '%s' "${body}" > "${body_file}"
-            printf 'body_path=%s\n' "${body_file}" >> "${GITHUB_OUTPUT}"
-          }
-
           if [[ "${EVENT_NAME}" == "merge_group" ]]; then
-            # On merge_group, github.event.pull_request is null.
-            # merge_group.head_sha is a synthetic queue commit, not the PR head
-            # commit, so resolve via the queue ref's pr-<number> segment.
             HEAD_REF="${MERGE_GROUP_HEAD_REF:-}"
             PR_NUMBER_FROM_REF=""
-
             if [[ "${HEAD_REF}" =~ (^|/)pr-([0-9]+)- ]]; then
               PR_NUMBER_FROM_REF="${BASH_REMATCH[2]}"
             fi
-
-            if [[ -n "${PR_NUMBER_FROM_REF}" ]]; then
-              BODY=$(gh pr view "${PR_NUMBER_FROM_REF}" --json body --jq .body 2>/dev/null || true)
-              write_body_output "${BODY}"
-              exit 0
-            fi
-
-            echo "::notice::merge_group event did not expose a resolvable PR ref; skip-token scan already runs on pull_request events."
-            echo "::notice::merge_group head_ref='${HEAD_REF}' head_sha='${MERGE_GROUP_HEAD_SHA:-}'"
-            write_body_output ""
+            printf 'pr_number=%s\n' "${PR_NUMBER_FROM_REF}" >> "${GITHUB_OUTPUT}"
           else
-            BODY="${PR_BODY:-}"
-            if [[ -z "${BODY}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
-              BODY=$(gh pr view "${PR_NUMBER}" --json body --jq .body 2>/dev/null || true)
-            fi
-            write_body_output "${BODY}"
+            printf 'pr_number=%s\n' "${PR_NUMBER:-}" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Scan PR body for skip-gate bypass tokens
+      - name: Scan all PR surfaces for skip-gate bypass tokens
         env:
           GH_TOKEN: ${{ github.token }}
-          RESOLVED_BODY_PATH: ${{ steps.resolve-body.outputs.body_path }}
+          PR_NUMBER: ${{ steps.resolve-pr.outputs.pr_number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          EVENT_NAME: ${{ github.event_name }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
           # OMN-10347: Broadened from [skip-deploy-gate: to ALL [skip-* tokens.
+          # OMN-10969: Extended to scan PR title, commit messages, and changed file diff.
           SKIP_PATTERN='\[skip-[a-zA-Z]'
           ALLOWLIST_PATTERN='#[[:space:]]*skip-token-allowed:[[:space:]]*[^[:space:]]'
           RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
-          TICKET_REF="OMN-10422"
+          TICKET_REF="OMN-10969"
 
-          BODY=""
-          if [[ -n "${RESOLVED_BODY_PATH:-}" && -f "${RESOLVED_BODY_PATH}" ]]; then
-            BODY="$(cat "${RESOLVED_BODY_PATH}")"
-          fi
+          VIOLATIONS=()
 
-          if [[ -z "$BODY" ]]; then
-            echo "::notice::No PR body available to scan — skipping skip-token check."
-            exit 0
-          fi
+          check_surface() {
+            local surface_name="$1"
+            local content="$2"
 
-          # Check for bypass token
-          if echo "$BODY" | grep -qiE "$SKIP_PATTERN"; then
-            # Check for explicit allowlist receipt
-            if echo "$BODY" | grep -qiE "$ALLOWLIST_PATTERN"; then
-              echo "::warning::PR body contains a [skip-*] token but an explicit approval receipt (skip-token-allowed) is present. Allowed with friction logged."
-              exit 0
+            if [[ -z "$content" ]]; then
+              return
             fi
 
-            echo "::error::PR body contains a [skip-*] bypass token."
+            if echo "$content" | grep -qiE "$SKIP_PATTERN"; then
+              if echo "$content" | grep -qiE "$ALLOWLIST_PATTERN"; then
+                echo "::warning::$surface_name contains a [skip-*] token but an explicit approval receipt (skip-token-allowed) is present. Allowed with friction logged."
+              else
+                VIOLATIONS+=("$surface_name")
+              fi
+            fi
+          }
+
+          # ── Surface 1: PR body ─────────────────────────────────────────────────
+          BODY="${PR_BODY:-}"
+          if [[ -z "${BODY}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
+            BODY=$(gh pr view "${PR_NUMBER}" --json body --jq .body 2>/dev/null || true)
+          fi
+          check_surface "PR body" "${BODY}"
+
+          if [[ -n "${PR_NUMBER:-}" ]]; then
+            # ── Surface 2: PR title ───────────────────────────────────────────────
+            TITLE="${PR_TITLE:-}"
+            if [[ -z "${TITLE}" ]]; then
+              TITLE=$(gh pr view "${PR_NUMBER}" --json title --jq .title 2>/dev/null || true)
+            fi
+            check_surface "PR title" "${TITLE}"
+
+            # ── Surface 3: Commit messages in the PR ──────────────────────────────
+            COMMIT_MESSAGES=$(gh pr view "${PR_NUMBER}" --json commits --jq '[.commits[].messageHeadline] | join("\n")' 2>/dev/null || true)
+            check_surface "commit messages" "${COMMIT_MESSAGES}"
+
+            # ── Surface 4: Changed file diff ──────────────────────────────────────
+            # Only scan diff of PR-body-like file types (md, yaml, yml, txt) to avoid
+            # false positives on source code that legitimately discusses skip tokens
+            # (validators, tests, docs). The pre-commit hook applies the same filter.
+            DIFF=$(gh pr diff "${PR_NUMBER}" 2>/dev/null | grep '^+' | grep -E '\.(md|yaml|yml|txt):' || true)
+            if [[ -z "$DIFF" ]]; then
+              # Fallback: scan local checkout diff for the same file types
+              DIFF=$(git diff origin/main...HEAD -- '*.md' '*.yaml' '*.yml' '*.txt' | grep '^+' || true)
+            fi
+            check_surface "changed file diff" "${DIFF}"
+          else
+            echo "::notice::No PR number available — skipping title, commit, and diff scans."
+          fi
+
+          # ── Report ────────────────────────────────────────────────────────────
+          if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
+            for surface in "${VIOLATIONS[@]}"; do
+              echo "::error::$surface contains a [skip-*] bypass token."
+            done
             echo "::error::Per $RULE_REF, bypass is not permitted without explicit user approval."
             echo "::error::Fix the gate properly:"
             echo "::error::  1. Add dod_evidence with type: no_deployable_artifact (preferred)"
@@ -133,4 +151,4 @@ jobs:
             exit 1
           fi
 
-          echo "::notice::No [skip-*] bypass tokens found in PR body. OK."
+          echo "::notice::No [skip-*] bypass tokens found in any scanned surface (body, title, commits, diff). OK."
