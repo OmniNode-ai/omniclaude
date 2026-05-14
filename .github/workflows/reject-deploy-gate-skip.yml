@@ -74,6 +74,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
@@ -87,6 +88,56 @@ jobs:
 
           VIOLATIONS=()
 
+          # ── Collect all surfaces ──────────────────────────────────────────────
+
+          # Surface 1: PR body
+          BODY="${PR_BODY:-}"
+          if [[ -z "${BODY}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
+            BODY=$(gh pr view "${PR_NUMBER}" --json body --jq .body 2>/dev/null || true)
+          fi
+
+          TITLE=""
+          COMMIT_MESSAGES=""
+          DIFF=""
+
+          if [[ -n "${PR_NUMBER:-}" ]]; then
+            # Surface 2: PR title
+            TITLE="${PR_TITLE:-}"
+            if [[ -z "${TITLE}" ]]; then
+              TITLE=$(gh pr view "${PR_NUMBER}" --json title --jq .title 2>/dev/null || true)
+            fi
+
+            # Surface 3: Commit messages in the PR
+            COMMIT_MESSAGES=$(gh pr view "${PR_NUMBER}" --json commits --jq '[.commits[].messageHeadline] | join("\n")' 2>/dev/null || true)
+
+            # Surface 4: Changed file diff
+            # Only scan PR-body-like file types (md, yaml, yml, txt) to avoid
+            # false positives on source code that legitimately discusses skip tokens
+            # (validators, tests, docs). The pre-commit hook applies the same filter.
+            DIFF=$(gh pr diff "${PR_NUMBER}" 2>/dev/null | grep '^+' | grep -E '\.(md|yaml|yml|txt):' || true)
+            if [[ -z "$DIFF" ]]; then
+              # Fallback: use GITHUB_BASE_REF so the diff reflects the PR's actual base
+              BASE_REF="${GITHUB_BASE_REF:-main}"
+              DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '*.md' '*.yaml' '*.yml' '*.txt' | grep '^+' || true)
+            fi
+          else
+            echo "::notice::No PR number available — skipping title, commit, and diff scans."
+          fi
+
+          # ── PR-wide allowlist receipt check ──────────────────────────────────
+          # The receipt is PR-wide: if ANY surface contains skip-token-allowed,
+          # the entire PR is allowed (with friction logged). This prevents a single
+          # surface from blocking when a receipt exists elsewhere in the PR.
+          FULL_PR_PAYLOAD="${BODY}
+${TITLE}
+${COMMIT_MESSAGES}"
+
+          RECEIPT_PRESENT=false
+          if echo "$FULL_PR_PAYLOAD" | grep -qiE "$ALLOWLIST_PATTERN"; then
+            RECEIPT_PRESENT=true
+          fi
+
+          # ── Per-surface skip-token scan ───────────────────────────────────────
           check_surface() {
             local surface_name="$1"
             local content="$2"
@@ -96,46 +147,18 @@ jobs:
             fi
 
             if echo "$content" | grep -qiE "$SKIP_PATTERN"; then
-              if echo "$content" | grep -qiE "$ALLOWLIST_PATTERN"; then
-                echo "::warning::$surface_name contains a [skip-*] token but an explicit approval receipt (skip-token-allowed) is present. Allowed with friction logged."
+              if [[ "$RECEIPT_PRESENT" == "true" ]]; then
+                echo "::warning::$surface_name contains a [skip-*] token but a PR-wide approval receipt (skip-token-allowed) is present. Allowed with friction logged."
               else
                 VIOLATIONS+=("$surface_name")
               fi
             fi
           }
 
-          # ── Surface 1: PR body ─────────────────────────────────────────────────
-          BODY="${PR_BODY:-}"
-          if [[ -z "${BODY}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
-            BODY=$(gh pr view "${PR_NUMBER}" --json body --jq .body 2>/dev/null || true)
-          fi
           check_surface "PR body" "${BODY}"
-
-          if [[ -n "${PR_NUMBER:-}" ]]; then
-            # ── Surface 2: PR title ───────────────────────────────────────────────
-            TITLE="${PR_TITLE:-}"
-            if [[ -z "${TITLE}" ]]; then
-              TITLE=$(gh pr view "${PR_NUMBER}" --json title --jq .title 2>/dev/null || true)
-            fi
-            check_surface "PR title" "${TITLE}"
-
-            # ── Surface 3: Commit messages in the PR ──────────────────────────────
-            COMMIT_MESSAGES=$(gh pr view "${PR_NUMBER}" --json commits --jq '[.commits[].messageHeadline] | join("\n")' 2>/dev/null || true)
-            check_surface "commit messages" "${COMMIT_MESSAGES}"
-
-            # ── Surface 4: Changed file diff ──────────────────────────────────────
-            # Only scan diff of PR-body-like file types (md, yaml, yml, txt) to avoid
-            # false positives on source code that legitimately discusses skip tokens
-            # (validators, tests, docs). The pre-commit hook applies the same filter.
-            DIFF=$(gh pr diff "${PR_NUMBER}" 2>/dev/null | grep '^+' | grep -E '\.(md|yaml|yml|txt):' || true)
-            if [[ -z "$DIFF" ]]; then
-              # Fallback: scan local checkout diff for the same file types
-              DIFF=$(git diff origin/main...HEAD -- '*.md' '*.yaml' '*.yml' '*.txt' | grep '^+' || true)
-            fi
-            check_surface "changed file diff" "${DIFF}"
-          else
-            echo "::notice::No PR number available — skipping title, commit, and diff scans."
-          fi
+          check_surface "PR title" "${TITLE}"
+          check_surface "commit messages" "${COMMIT_MESSAGES}"
+          check_surface "changed file diff" "${DIFF}"
 
           # ── Report ────────────────────────────────────────────────────────────
           if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
