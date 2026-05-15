@@ -30,6 +30,7 @@ class TestEnrichContract:
     SKELETON: dict[str, object] = {
         "schema_version": "1.0.0",
         "ticket_id": "OMN-9999",
+        "title": "Test ticket",
         "summary": "Test ticket",
         "is_seam_ticket": False,
         "interface_change": False,
@@ -103,6 +104,7 @@ class TestEnrichContract:
         # Validate contract fields (dod_evidence is extra data ignored by the model)
         contract = ModelTicketContract.model_validate(parsed)
         assert contract.ticket_id == "OMN-9999"
+        assert contract.title == "Test ticket"
         # dod_evidence exists in the YAML dict even though the model ignores it
         assert len(parsed["dod_evidence"]) >= 1
 

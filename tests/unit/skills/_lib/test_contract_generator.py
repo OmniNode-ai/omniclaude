@@ -36,6 +36,7 @@ class TestGenerateSkeletonContract:
         parsed = yaml.safe_load(result)
         assert parsed["schema_version"] == "1.0.0"
         assert parsed["ticket_id"] == "OMN-9999"
+        assert parsed["title"] == "Add foo widget to bar service"
         assert parsed["summary"] == "Add foo widget to bar service"
         assert parsed["is_seam_ticket"] is False
         assert parsed["interface_change"] is False
@@ -67,6 +68,7 @@ class TestGenerateSkeletonContract:
 
         contract = ModelTicketContract.model_validate(parsed)
         assert contract.ticket_id == "OMN-7777"
+        assert contract.title == "Test schema compliance"
 
     def test_output_is_idempotent(self) -> None:
         """Same inputs produce same YAML."""

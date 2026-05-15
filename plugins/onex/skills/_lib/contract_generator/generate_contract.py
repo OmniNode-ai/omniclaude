@@ -119,6 +119,7 @@ def generate_skeleton_contract(
     contract: dict[str, object] = {
         "schema_version": "1.0.0",
         "ticket_id": ticket_id,
+        "title": summary,
         "summary": summary,
         "is_seam_ticket": is_seam_ticket,
         "interface_change": interface_change,
