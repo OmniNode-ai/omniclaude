@@ -9,6 +9,8 @@ on:
     # Run every day at 2 AM UTC
     - cron: '0 2 * * *'
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
@@ -22,6 +24,7 @@ jobs:
   # ============================================================================
   dependency-scan:
     name: Dependency Security Scan
+    if: github.event_name != 'pull_request'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -165,6 +168,7 @@ jobs:
         run: docker build -f deployment/Dockerfile -t omniclaude:scan .
 
       - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
           image-ref: 'omniclaude:scan'
@@ -173,11 +177,13 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
 
       - name: Upload Trivy results
+        if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Run Trivy filesystem scanner
+        if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
           scan-type: 'fs'
@@ -186,13 +192,19 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Run Dockle (Docker image linter)
-        continue-on-error: true
         working-directory: ${{ github.workspace }}
         run: |
+          set -euo pipefail
           VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          curl -L -o dockle.tar.gz https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz
+          curl -L -o dockle.tar.gz "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
           tar zxf dockle.tar.gz
-          ./dockle --timeout 600s --exit-code 1 omniclaude:scan
+          ./dockle \
+            --timeout 600s \
+            --exit-code 1 \
+            --exit-level fatal \
+            --accept-file settings.py \
+            --ignore DKL-DI-0005 \
+            omniclaude:scan
 
   # ============================================================================
   # Infrastructure as Code Security Scan
@@ -221,11 +233,13 @@ jobs:
           framework: dockerfile,github_actions
           output_format: sarif
           output_file_path: checkov-results.sarif
-          soft_fail: true
+          soft_fail: false
+          soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
+          hard_fail_on: HIGH,CRITICAL
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: 'checkov-results.sarif'
 
