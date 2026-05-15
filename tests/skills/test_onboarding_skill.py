@@ -24,6 +24,7 @@ class TestOnboardingSkill:
     )
 
     EXPECTED_POLICIES = {
+        "setup",
         "new_employee",
         "standalone_quickstart",
         "contributor_local",

@@ -14,7 +14,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --policy
-    description: "Policy name: new_employee (default), standalone_quickstart, contributor_local, full_platform"
+    description: "Policy name: setup (default), standalone_quickstart, new_employee, contributor_local, full_platform"
     required: false
   - name: --skip
     description: "Comma-separated step keys to skip"
@@ -37,10 +37,16 @@ step verifications, and renders a markdown progress report.
 
 ## Built-in Policies
 
+### Environment Setup
 | Policy | Time | Target |
 |--------|------|--------|
-| `new_employee` | ~45 min (target estimate, unvalidated on fresh machine) | Full platform: Python, uv, core, Docker, Redpanda, secrets, Omnidash |
-| `standalone_quickstart` | ~5 min | First standalone node running |
+| `setup` (default) | ~10 min | Toolchain + Docker + secrets verified |
+| `standalone_quickstart` | ~2 min | Python + uv + core verified |
+
+### Full Platform / Development
+| Policy | Time | Target |
+|--------|------|--------|
+| `new_employee` | ~45 min | Full platform: Docker, event bus, secrets, Omnidash, first node |
 | `contributor_local` | ~20 min | Local dev with event bus connected |
 | `full_platform` | ~45 min | All capabilities including Omnidash |
 
