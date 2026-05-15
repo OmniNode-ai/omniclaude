@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -47,6 +46,11 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_BIFROST_DEPLOYED_PATH = (
+    Path.home() / ".omninode" / "delegation" / "bifrost_delegation.yaml"
+)
+_SOURCE_BIFROST_CONFIG_PATH = Path(__file__).parent / "bifrost_delegation.yaml"
 
 # ---------------------------------------------------------------------------
 # Audit event model
@@ -638,18 +642,11 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
     except (ImportError, SyntaxError):
         return None
 
-    env_override = os.environ.get("BIFROST_CONTRACT_PATH", "")
-    if env_override:
-        local_config_path = Path(env_override)
-    else:
-        deployed_path = (
-            Path.home() / ".omninode" / "delegation" / "bifrost_delegation.yaml"
-        )
-        local_config_path = (
-            deployed_path
-            if deployed_path.exists()
-            else Path(__file__).parent / "bifrost_delegation.yaml"
-        )
+    local_config_path = (
+        _DEFAULT_BIFROST_DEPLOYED_PATH
+        if _DEFAULT_BIFROST_DEPLOYED_PATH.exists()
+        else _SOURCE_BIFROST_CONFIG_PATH
+    )
     if not local_config_path.exists():
         logger.warning("bifrost_delegation.yaml not found, delegation disabled")
         return None

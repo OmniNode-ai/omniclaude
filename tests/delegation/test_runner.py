@@ -8,7 +8,7 @@ Tests verify:
 - Audit events are emitted on every call (success and failure)
 - run() returns a failed result when all Bifrost backends are down
 - run() returns None on unexpected gateway exception
-- _build_env_config() builds valid config from env vars
+- _build_env_config() builds valid config from the deployed contract
 - _extract_response_text() handles diverse response shapes
 - ModelBifrostRunnerResult captures rule_id, config_version, backend_selected
 """
@@ -21,6 +21,7 @@ from uuid import UUID
 
 import pytest
 
+from omniclaude.delegation import runner as runner_module
 from omniclaude.delegation.runner import (
     DelegationRunner,
     ModelBifrostRunnerResult,
@@ -295,7 +296,16 @@ def test_runner_returns_none_on_unexpected_exception_from_run_async() -> None:
 @pytest.mark.unit
 def test_build_env_config_returns_none_when_no_contract(monkeypatch, tmp_path) -> None:
     """_build_env_config returns None when no bifrost contract is available."""
-    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(tmp_path / "nonexistent.yaml"))
+    monkeypatch.setattr(
+        runner_module,
+        "_DEFAULT_BIFROST_DEPLOYED_PATH",
+        tmp_path / "nonexistent.yaml",
+    )
+    monkeypatch.setattr(
+        runner_module,
+        "_SOURCE_BIFROST_CONFIG_PATH",
+        tmp_path / "missing-source.yaml",
+    )
 
     result = _build_env_config()
     assert result is None
@@ -337,7 +347,7 @@ def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -
     dst = _write_bifrost_with_endpoints(
         tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
     )
-    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    monkeypatch.setattr(runner_module, "_DEFAULT_BIFROST_DEPLOYED_PATH", dst)
 
     cfg = _build_env_config()
 
@@ -357,7 +367,7 @@ def test_build_env_config_stable_rule_id_across_calls(monkeypatch, tmp_path) -> 
     dst = _write_bifrost_with_endpoints(
         tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
     )
-    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    monkeypatch.setattr(runner_module, "_DEFAULT_BIFROST_DEPLOYED_PATH", dst)
 
     cfg1 = _build_env_config()
     cfg2 = _build_env_config()
@@ -377,7 +387,7 @@ def test_build_env_config_multiple_backends(monkeypatch, tmp_path) -> None:
             "local-deepseek-r1-14b": "http://host:8001",
         },
     )
-    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    monkeypatch.setattr(runner_module, "_DEFAULT_BIFROST_DEPLOYED_PATH", dst)
 
     cfg = _build_env_config()
 

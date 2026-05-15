@@ -1,0 +1,29 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11006
+title: "Remove residual delegation contract path env reads"
+summary: >
+  Removes the Bifrost delegation contract path env override from the Claude
+  delegation runner. The runner now uses the canonical deployed contract path
+  and falls back to the packaged source fixture for local development.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-runner-tests
+    description: Delegation runner tests pass after replacing env-var path overrides with explicit test monkeypatching.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/delegation/test_runner.py -q"
+  - id: dod-deploy
+    description: >
+      Runner cleanup is deploy-compatible. No live deploy or restart was performed pre-merge; deployed runners continue to read ~/.omninode/delegation/bifrost_delegation.yaml.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "deploy: no live deploy or restart performed for OMN-11006; deployed runner contract path remains ~/.omninode/delegation/bifrost_delegation.yaml"
