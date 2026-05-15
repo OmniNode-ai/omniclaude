@@ -7,7 +7,7 @@ Wires together:
   - TaskClassifier (on main)
   - delegation_hook_runner pipeline (OMN-10607)
   - DelegationRunner (OMN-10610) with mocked HTTP
-  - quality_gate delta (omnibase_infra)
+  - quality_gate delta (omnimarket)
 
 Components from open PRs (not yet on main) are imported from their worktrees
 via sys.path injection, matching the pattern used by delegation_hook_runner.py.
@@ -123,7 +123,7 @@ def hook_runner_module() -> ModuleType:
 
 def _fake_routing_decision(task_type: str = "document") -> Any:
     """Return a ModelRoutingDecision-compatible mock."""
-    from omnibase_infra.nodes.node_delegation_routing_reducer.models.model_routing_decision import (
+    from omnimarket.nodes.node_delegation_routing_reducer.models.model_routing_decision import (
         ModelRoutingDecision,
     )
 
@@ -175,7 +175,7 @@ class TestHappyPathDocumentDelegation:
     def test_runner_returns_delegation_result_with_mock_http(
         self, runner_module: ModuleType
     ) -> None:
-        from omnibase_infra.nodes.node_delegation_routing_reducer.handlers import (
+        from omnimarket.nodes.node_delegation_routing_reducer.handlers import (
             handler_delegation_routing,
         )
 
@@ -213,7 +213,7 @@ class TestHappyPathDocumentDelegation:
         self, gate_module: ModuleType, runner_module: ModuleType
     ) -> None:
         """Full pipeline: gate check → classifier → runner → result."""
-        from omnibase_infra.nodes.node_delegation_routing_reducer.handlers import (
+        from omnimarket.nodes.node_delegation_routing_reducer.handlers import (
             handler_delegation_routing,
         )
 

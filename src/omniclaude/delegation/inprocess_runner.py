@@ -28,19 +28,19 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 import httpx
-from omnibase_infra.nodes.node_delegation_orchestrator.models.model_delegation_request import (
+from omnimarket.nodes.node_delegation_orchestrator.models.model_delegation_request import (
     ModelDelegationRequest,
 )
-from omnibase_infra.nodes.node_delegation_orchestrator.models.model_delegation_result import (
+from omnimarket.nodes.node_delegation_orchestrator.models.model_delegation_result import (
     ModelDelegationResult,
 )
-from omnibase_infra.nodes.node_delegation_quality_gate_reducer.handlers.handler_quality_gate import (
+from omnimarket.nodes.node_delegation_quality_gate_reducer.handlers.handler_quality_gate import (
     delta as quality_gate_delta,
 )
-from omnibase_infra.nodes.node_delegation_quality_gate_reducer.models.model_quality_gate_input import (
+from omnimarket.nodes.node_delegation_quality_gate_reducer.models.model_quality_gate_input import (
     ModelQualityGateInput,
 )
-from omnibase_infra.nodes.node_delegation_routing_reducer.handlers.handler_delegation_routing import (
+from omnimarket.nodes.node_delegation_routing_reducer.handlers.handler_delegation_routing import (
     delta as routing_delta,
 )
 
