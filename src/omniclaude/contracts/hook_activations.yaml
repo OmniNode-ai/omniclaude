@@ -250,3 +250,15 @@ hook_activations:
   - hook_bit: WORKTREE_GUARD
     enabled_by_default: true
     description: "Enforces that git worktrees are created under the canonical ONEX worktree root."
+
+  - hook_bit: AISLOP_GATE
+    enabled_by_default: false
+    description: "Opt-in AI slop quality gate for generated code review."
+
+  - hook_bit: STOP_QUALITY_GATE
+    enabled_by_default: false
+    description: "Opt-in stop-hook quality enforcement gate."
+
+  - hook_bit: INLINE_REVIEW_GATE
+    enabled_by_default: false
+    description: "Opt-in inline review enforcement gate."
