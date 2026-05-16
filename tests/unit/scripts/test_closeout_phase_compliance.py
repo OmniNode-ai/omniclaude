@@ -289,6 +289,74 @@ class TestComplianceChecker:
         assert "MISSING" in violations[0]
 
 
+class TestMarketNodePhaseParity:
+    """Verify omnimarket.node_close_out parity checks against the cron contract."""
+
+    def _write_market_state_model(self, tmp_path: Path, phases: list[str]) -> Path:
+        enum_lines = [
+            "from enum import StrEnum\n\n",
+            "class EnumCloseOutPhase(StrEnum):\n",
+            '    IDLE = "idle"\n',
+        ]
+        for phase in phases:
+            enum_lines.append(f'    {phase.upper()} = "{phase}"\n')
+        enum_lines.extend(
+            [
+                '    DONE = "done"\n',
+                '    FAILED = "failed"\n\n',
+                "CLOSE_OUT_PHASE_ORDER: tuple[EnumCloseOutPhase, ...] = (\n",
+            ]
+        )
+        for phase in phases:
+            enum_lines.append(f"    EnumCloseOutPhase.{phase.upper()},\n")
+        enum_lines.append(")\n")
+
+        model_path = tmp_path / "model_close_out_state.py"
+        model_path.write_text("".join(enum_lines))
+        return model_path
+
+    def test_contract_projects_non_build_phases_for_market_node(self) -> None:
+        phases = checker.expected_market_node_phases(CONTRACT_PATH)
+
+        assert "a1_merge_sweep" in phases
+        assert "e3_dashboard_tests" in phases
+        assert "f1_fill" not in phases
+        assert "f3_build_${ticket_id}" not in phases
+
+    def test_market_node_phase_parity_passes(self, tmp_path: Path) -> None:
+        phases = checker.expected_market_node_phases(CONTRACT_PATH)
+        model_path = self._write_market_state_model(tmp_path, phases)
+
+        violations = checker.check_market_node_phase_parity(CONTRACT_PATH, model_path)
+
+        assert violations == []
+
+    def test_market_node_phase_parity_catches_missing_phase(
+        self, tmp_path: Path
+    ) -> None:
+        phases = checker.expected_market_node_phases(CONTRACT_PATH)
+        model_path = self._write_market_state_model(tmp_path, phases[:-1])
+
+        violations = checker.check_market_node_phase_parity(CONTRACT_PATH, model_path)
+
+        assert any("MARKET_NODE_PHASE_DRIFT" in v for v in violations)
+        assert any("MARKET_NODE_PHASE_MISSING" in v for v in violations)
+
+    def test_current_market_node_phase_parity_when_available(self) -> None:
+        market_model_path = (
+            Path(__file__).resolve().parents[3].parent
+            / "omnimarket/src/omnimarket/nodes/node_close_out/models/model_close_out_state.py"
+        )
+        if not market_model_path.exists():
+            pytest.skip("Sibling omnimarket checkout not available")
+
+        violations = checker.check_market_node_phase_parity(
+            CONTRACT_PATH, market_model_path
+        )
+
+        assert violations == []
+
+
 class TestCurrentScriptCompliance:
     """Verify the CURRENT cron-closeout.sh against the contract."""
 

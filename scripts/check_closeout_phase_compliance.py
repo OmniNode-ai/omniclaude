@@ -25,6 +25,8 @@ Exit codes:
 
 from __future__ import annotations
 
+import ast
+import os
 import sys
 from pathlib import Path
 
@@ -116,6 +118,90 @@ def extract_phase_prompts(script_path: Path) -> dict[str, str]:
     return phases
 
 
+def expected_market_node_phases(contract_path: Path) -> list[str]:
+    """Return close-out phase IDs expected in omnimarket.node_close_out.
+
+    The cron closeout contract is the source of phase identity. Build-loop
+    phases are intentionally excluded because they are owned by build-loop
+    nodes, not node_close_out.
+    """
+    contract = _load_yaml_minimal(contract_path)
+    return [
+        phase["id"].lower()
+        for phase in contract.get("phases", [])
+        if phase.get("category") != "build"
+    ]
+
+
+def extract_market_node_phases(model_path: Path) -> list[str]:
+    """Extract CLOSE_OUT_PHASE_ORDER values from node_close_out state model."""
+    module = ast.parse(model_path.read_text())
+    enum_values: dict[str, str] = {}
+
+    for node in module.body:
+        if not isinstance(node, ast.ClassDef) or node.name != "EnumCloseOutPhase":
+            continue
+        for stmt in node.body:
+            if (
+                isinstance(stmt, ast.Assign)
+                and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name)
+                and isinstance(stmt.value, ast.Constant)
+                and isinstance(stmt.value.value, str)
+            ):
+                enum_values[stmt.targets[0].id] = stmt.value.value
+
+    for node in module.body:
+        if not isinstance(node, ast.AnnAssign):
+            continue
+        if not isinstance(node.target, ast.Name):
+            continue
+        if node.target.id != "CLOSE_OUT_PHASE_ORDER":
+            continue
+        if not isinstance(node.value, ast.Tuple):
+            break
+
+        phases: list[str] = []
+        for elt in node.value.elts:
+            if (
+                isinstance(elt, ast.Attribute)
+                and isinstance(elt.value, ast.Name)
+                and elt.value.id == "EnumCloseOutPhase"
+            ):
+                phases.append(enum_values[elt.attr])
+        return phases
+
+    raise ValueError(f"CLOSE_OUT_PHASE_ORDER not found in {model_path}")
+
+
+def check_market_node_phase_parity(
+    contract_path: Path,
+    market_node_state_path: Path,
+) -> list[str]:
+    """Verify omnimarket.node_close_out phase order matches the cron contract."""
+    expected = expected_market_node_phases(contract_path)
+    actual = extract_market_node_phases(market_node_state_path)
+    if expected == actual:
+        return []
+
+    violations = [
+        "MARKET_NODE_PHASE_DRIFT: node_close_out CLOSE_OUT_PHASE_ORDER does not "
+        "match closeout-phase-contract.yaml non-build phases"
+    ]
+    if set(expected) - set(actual):
+        missing = sorted(set(expected) - set(actual))
+        violations.append(f"MARKET_NODE_PHASE_MISSING: {missing}")
+    if set(actual) - set(expected):
+        extra = sorted(set(actual) - set(expected))
+        violations.append(f"MARKET_NODE_PHASE_EXTRA: {extra}")
+    if set(expected) == set(actual):
+        violations.append(
+            "MARKET_NODE_PHASE_ORDER: phase sets match but order differs; "
+            f"expected={expected}; actual={actual}"
+        )
+    return violations
+
+
 def check_compliance(
     contract_path: Path,
     script_path: Path,
@@ -192,6 +278,18 @@ def check_compliance(
 
 def main() -> int:
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
+    market_node_state_path: Path | None = None
+    if "--market-node-state" in sys.argv:
+        idx = sys.argv.index("--market-node-state")
+        try:
+            market_node_state_path = Path(sys.argv[idx + 1]).expanduser().resolve()
+        except IndexError:
+            print("ERROR: --market-node-state requires a path", file=sys.stderr)
+            return 1
+    elif os.environ.get("OMNIMARKET_CLOSE_OUT_STATE_PATH"):
+        market_node_state_path = (
+            Path(os.environ["OMNIMARKET_CLOSE_OUT_STATE_PATH"]).expanduser().resolve()
+        )
 
     # Resolve paths relative to script location
     script_dir = Path(__file__).resolve().parent
@@ -207,6 +305,16 @@ def main() -> int:
         return 1
 
     violations = check_compliance(contract_path, closeout_path, verbose=verbose)
+    if market_node_state_path is not None:
+        if not market_node_state_path.exists():
+            print(
+                f"ERROR: Market node state model not found: {market_node_state_path}",
+                file=sys.stderr,
+            )
+            return 1
+        violations.extend(
+            check_market_node_phase_parity(contract_path, market_node_state_path)
+        )
 
     if violations:
         print(f"\n{'=' * 60}")

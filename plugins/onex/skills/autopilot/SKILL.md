@@ -40,6 +40,11 @@ outputs:
 > Phase A/B/C/D close-out logic becomes Phase 3 dispatch targets in `/onex:session`.
 > Use `/onex:session` for session management.
 > Do not add new functionality here.
+> Historical phase lists in this retired skill are not authoritative. The
+> machine-checked closeout phase definition lives in
+> `scripts/closeout-phase-contract.yaml` and is checked against
+> `omnimarket`'s `node_close_out` FSM by
+> `scripts/check_closeout_phase_compliance.py --market-node-state ...`.
 
 # autopilot
 
