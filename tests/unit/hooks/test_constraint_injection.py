@@ -223,3 +223,17 @@ class TestBuiltinConstraints:
         assert "no_ollama" in names
         assert "bus_policy_local" in names
         assert "no_env_fallbacks" in names
+        assert "inmemory_bus_forbidden" in names
+
+    def test_runtime_bus_policy_requires_kafka_or_fail_closed(self) -> None:
+        constraints = select_constraints(
+            domains=(EnumConstraintDomain.BUS_POLICY,),
+            max_items=50,
+        )
+        inmemory_rule = next(
+            c.rule for c in constraints if c.name == "inmemory_bus_forbidden"
+        )
+
+        assert "runtime paths" in inmemory_rule
+        assert "typed settings or fail closed" in inmemory_rule
+        assert "explicit unit/local test profiles" in inmemory_rule

@@ -148,8 +148,15 @@ BUILTIN_CONSTRAINTS: tuple[ModelConstraintTemplate, ...] = (
     ModelConstraintTemplate(
         name="inmemory_bus_forbidden",
         domain=EnumConstraintDomain.BUS_POLICY,
-        rule="ONEX_EVENT_BUS_TYPE=inmemory is FORBIDDEN. It silently drops all Kafka events.",
-        reason="In-memory bus looks like it works but drops all events, breaking observability.",
+        rule=(
+            "ONEX_EVENT_BUS_TYPE=inmemory is FORBIDDEN for runtime paths. "
+            "Use Kafka bootstrap config from typed settings or fail closed; "
+            "in-memory buses are allowed only in explicit unit/local test profiles."
+        ),
+        reason=(
+            "In-memory buses look like they work but drop Kafka events, breaking "
+            "durable projections and observability."
+        ),
     ),
     ModelConstraintTemplate(
         name="pep604_unions",
