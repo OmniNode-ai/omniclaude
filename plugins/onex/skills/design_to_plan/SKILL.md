@@ -69,3 +69,27 @@ Contract target: `node_design_to_plan`
 Command topic: `onex.cmd.omnimarket.design-to-plan-start.v1`
 
 Terminal event: `onex.evt.omnimarket.design-to-plan-completed.v1`
+
+## Phase 2b: Adversarial Review — R11 Doctrine Compliance (Advisory)
+
+After the R1-R10 adversarial review loop completes, run an R11 doctrine
+compliance check for plans that create or modify doctrine-governed surfaces.
+
+### R11 -- Doctrine Compliance (Advisory)
+
+For each task in the plan, check whether it touches a doctrine-governed surface:
+
+- **Kafka topics**: Any task creating a Kafka topic must reference doctrine clause DT-001
+- **Projections**: Any task creating a projection must declare freshness SLA (DT-003)
+- **API endpoints**: Any task adding an API endpoint must declare contract binding (DT-004)
+- **New data**: Any task creating new data must declare provenance (DT-005)
+
+**Severity:** All R11 findings are ADVISORY — they do not block ticketization.
+CI and runtime gates (Tasks 16-17) remain the authoritative enforcement layer.
+R11 findings must not be treated as completion proof.
+
+**Output format:**
+
+```
+R11: checked -- [advisory: task 3 creates projection without DT-003 freshness declaration] OR [clean (no doctrine-governed surfaces touched)]
+```
