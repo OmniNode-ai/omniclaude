@@ -10,7 +10,7 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core>=0.40.1,<0.41.0",
+    "omnibase-core>=0.41.0,<0.42.0",
     "omnibase-spi==0.20.6",
     "omnibase-infra==0.34.2",
     "omnimarket>=0.1.0",
@@ -239,13 +239,13 @@ build-backend = "hatchling.build"
 # Override omninode-intelligence's transitive pin on omnibase-infra so our direct pin wins.
 # Required until omniintelligence publishes a release with >=0.24.1.
 override-dependencies = [
-    "omnibase-core>=0.40.1,<0.41.0",
+    "omnibase-core>=0.41.0,<0.42.0",
     "omnibase-spi==0.20.6",
     "omnibase-infra==0.34.2",
 ]
 
 [tool.uv.sources]
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.40.2" }
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "6406ab7a" }  # pragma: allowlist secret
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.23.0" }
 omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git" }

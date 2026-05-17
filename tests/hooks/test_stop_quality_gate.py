@@ -157,12 +157,17 @@ def test_test_file_failure_blocks(tmp_path: Path) -> None:
     assert "pytest exited 1" in json.loads(result.stdout)["reason"]
 
 
+# STOP_QUALITY_GATE bit position (1 << 61) — opt-in per OMN-11083.
+_STOP_GATE_MASK = hex(1 << 61)
+
+
 @pytest.mark.unit
 def test_hook_enabled_blocks(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
     (repo / "src/pkg/example.py").write_text("import os\n")
     _run(["git", "add", "src/pkg/example.py"], repo)
     env = _gate_env(tmp_path, repo, fail="ruff")
+    env["ONEX_HOOKS_MASK"] = _STOP_GATE_MASK
     result = _run_shell_gate(repo, env)
     assert result.returncode == 2
     assert json.loads(result.stdout)["decision"] == "block"
@@ -174,7 +179,6 @@ def test_hook_disabled_skips(tmp_path: Path) -> None:
     (repo / "src/pkg/example.py").write_text("import os\n")
     _run(["git", "add", "src/pkg/example.py"], repo)
     env = _gate_env(tmp_path, repo, fail="ruff")
-    env["ONEX_HOOKS_MASK"] = "0"
     result = _run_shell_gate(repo, env)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == json.loads(_STOP_JSON)

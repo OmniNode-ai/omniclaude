@@ -39,24 +39,21 @@ source "${HOOKS_DIR}/scripts/onex-paths.sh"
 LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/stop-quality-gate.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Temporary local compatibility: STOP_QUALITY_GATE is owned by the hook-bit
-# ticket. Until that lands, ONEX_HOOKS_MASK=0 still disables this new gate
-# without editing the generated hook bit table here.
+STOP_INFO="$(cat)"
+
 if declare -F hook_bits_bit_for_name >/dev/null 2>&1; then
     _STOP_GATE_BIT="$(hook_bits_bit_for_name STOP_QUALITY_GATE 2>/dev/null || true)"
 else
     _STOP_GATE_BIT=""
 fi
 if [[ -n "$_STOP_GATE_BIT" ]]; then
-    onex_hook_gate STOP_QUALITY_GATE || exit 0
-elif [[ "${ONEX_HOOKS_MASK:-}" =~ ^(0|0x0|0X0|0b0|0B0)$ ]]; then
-    echo "[$(date -u +%FT%TZ)] STOP_QUALITY_GATE skipped: ONEX_HOOKS_MASK=0" >> "$LOG_FILE"
-    cat
-    exit 0
+    if ! onex_hook_gate STOP_QUALITY_GATE; then
+        echo "[$(date -u +%FT%TZ)] STOP_QUALITY_GATE skipped: gate disabled" >> "$LOG_FILE"
+        printf '%s' "$STOP_INFO"
+        exit 0
+    fi
 fi
 unset _STOP_GATE_BIT
-
-STOP_INFO="$(cat)"
 
 set +e
 RESULT="$("$PYTHON_CMD" "${HOOKS_DIR}/scripts/stop_quality_gate.py" \
