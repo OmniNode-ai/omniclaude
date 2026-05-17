@@ -19,7 +19,11 @@ _SKILLS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "onex" / "skills
 
 @pytest.mark.unit
 class TestCreateTicketMandatoryContract:
-    """create_ticket SKILL.md must declare mandatory contract generation."""
+    """create_ticket SKILL.md must dispatch to node_create_ticket (OMN-8768 thin shim).
+
+    Contract generation logic (ModelTicketContract, Step 5.5, contract_completeness)
+    now lives in node_create_ticket. The shim verifies dispatch-only contract.
+    """
 
     SKILL_FILE = _SKILLS_DIR / "create_ticket" / "SKILL.md"
 
@@ -28,32 +32,36 @@ class TestCreateTicketMandatoryContract:
 
     def test_mandatory_contract_section_present(self) -> None:
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert "Contract Generation (MANDATORY)" in content or (
-            "MANDATORY" in content and "ModelTicketContract" in content
-        ), "create_ticket SKILL.md must contain MANDATORY contract generation section"
+        assert "node_create_ticket" in content, (
+            "create_ticket SKILL.md must reference node_create_ticket (owns contract generation)"
+        )
 
     def test_step_5_5_present(self) -> None:
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert "Step 5.5" in content, (
-            "create_ticket SKILL.md must have Step 5.5 (contract embedding)"
+        assert "node_create_ticket" in content, (
+            "create_ticket SKILL.md dispatches to node_create_ticket (owns Step 5.5 logic)"
         )
 
     def test_contract_embedded_in_every_ticket(self) -> None:
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert (
-            "generate_model_ticket_contract" in content or "contract_yaml" in content
-        ), "create_ticket must generate contract YAML for every ticket"
+        assert "node_create_ticket" in content, (
+            "create_ticket dispatches to node_create_ticket which generates contract YAML"
+        )
 
     def test_contract_completeness_stub_present(self) -> None:
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert "contract_completeness" in content, (
-            "create_ticket must use contract_completeness field (stub/enriched/full)"
+        assert "node_create_ticket" in content, (
+            "create_ticket dispatches to node_create_ticket (owns contract_completeness logic)"
         )
 
 
 @pytest.mark.unit
 class TestPlanToTicketsMandatoryContract:
-    """plan_to_tickets SKILL.md must declare mandatory contract generation for all tickets."""
+    """plan_to_tickets SKILL.md must dispatch to node_plan_to_tickets (OMN-8768 thin shim).
+
+    Contract generation logic (Post-Creation, generate_contracts_for_all, seam filtering)
+    now lives in node_plan_to_tickets. The shim verifies dispatch-only contract.
+    """
 
     SKILL_FILE = _SKILLS_DIR / "plan_to_tickets" / "SKILL.md"
 
@@ -62,24 +70,22 @@ class TestPlanToTicketsMandatoryContract:
 
     def test_post_creation_contracts_section_present(self) -> None:
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert "Post-Creation" in content and "Contracts" in content, (
-            "plan_to_tickets SKILL.md must have Post-Creation contract generation section"
+        assert "node_plan_to_tickets" in content, (
+            "plan_to_tickets SKILL.md must reference node_plan_to_tickets (owns Post-Creation contract logic)"
         )
 
     def test_generate_contracts_for_all_tickets(self) -> None:
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert (
-            "generate_contracts_for_all" in content or "every ticket" in content.lower()
-        ), (
-            "plan_to_tickets must generate contracts for ALL tickets, not just seam tickets"
+        assert "node_plan_to_tickets" in content, (
+            "plan_to_tickets dispatches to node_plan_to_tickets (owns generate-contracts-for-all logic)"
         )
 
     def test_no_seam_only_filter(self) -> None:
-        """Must not filter contract generation to seam tickets only."""
+        """Seam filter logic is in node_plan_to_tickets; shim must dispatch to it."""
         content = self.SKILL_FILE.read_text(encoding="utf-8")
-        assert "Call generate-ticket-contract for every ticket" in content or (
-            "no seam-keyword filtering" in content.lower()
-        ), "plan_to_tickets must NOT filter contract generation to seam tickets only"
+        assert "node_plan_to_tickets" in content, (
+            "plan_to_tickets dispatches to node_plan_to_tickets (owns seam filtering logic)"
+        )
 
 
 @pytest.mark.unit

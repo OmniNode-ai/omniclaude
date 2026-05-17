@@ -39,55 +39,56 @@ def _read(relpath: str) -> str:
 
 @pytest.mark.unit
 class TestPrPolishPrecommitGuard:
-    """Guards `pr_polish:tooling/agents-skip-precommit-before-push`."""
+    """Guards `pr_polish:tooling/agents-skip-precommit-before-push`.
+
+    Updated for thin dispatch-only shim (OMN-8768): pre-commit gate logic
+    now lives in node_pr_polish; the shim dispatches to it. The SKILL.md
+    must document that the node owns the pre-commit gate (OMN-8602).
+    """
 
     @pytest.fixture
-    def prompt(self) -> str:
-        return _read("pr_polish/prompt.md")
+    def skill_md(self) -> str:
+        return _read("pr_polish/SKILL.md")
 
-    def test_pre_push_precommit_section_present(self, prompt: str) -> None:
-        """Finalize must contain a Pre-Push pre-commit Gate section."""
-        assert "Pre-Push pre-commit Gate" in prompt, (
-            "pr_polish/prompt.md is missing the mandatory pre-push pre-commit "
-            "gate section. This guards the friction surface "
-            "'pr_polish:tooling/agents-skip-precommit-before-push' (OMN-8602)."
-        )
-
-    def test_runs_pre_commit_run_all_files(self, prompt: str) -> None:
-        """The gate must invoke `pre-commit run --all-files`."""
-        assert "pre-commit run --all-files" in prompt, (
-            "pr_polish/prompt.md must invoke `pre-commit run --all-files` "
-            "before push (OMN-8602)."
+    def test_pre_push_precommit_gate_in_node(self, skill_md: str) -> None:
+        """SKILL.md must reference the backing node that owns the pre-commit gate."""
+        assert "node_pr_polish" in skill_md, (
+            "pr_polish/SKILL.md must reference node_pr_polish, which owns "
+            "the pre-commit gate (OMN-8602). The gate is enforced in the node, "
+            "not inline in the shim prompt."
         )
 
-    def test_blocks_push_on_failure(self, prompt: str) -> None:
-        """A pre-commit failure must explicitly block the push."""
-        # The gate sets precommit_status = "FAILED" and goto Final Report —
-        # both phrases must appear in the same gate block.
-        assert 'precommit_status = "FAILED"' in prompt, (
-            "pr_polish/prompt.md must mark precommit_status = 'FAILED' on "
-            "pre-commit failure to block the push (OMN-8602)."
-        )
-        idx = prompt.find('precommit_status = "FAILED"')
-        assert idx >= 0
-        gate_block = prompt[max(0, idx - 500) : idx + 500]
-        assert "goto Final Report" in gate_block, (
-            "pr_polish/prompt.md must route to 'Final Report' after "
-            "pre-commit failure so push is skipped (OMN-8602)."
+    def test_dispatch_only_tag(self, skill_md: str) -> None:
+        """Thin shim must carry dispatch-only tag to prevent inline logic creep."""
+        assert "dispatch-only" in skill_md, (
+            "pr_polish/SKILL.md must be tagged dispatch-only (OMN-8768). "
+            "Pre-commit gate belongs to node_pr_polish."
         )
 
-    def test_forbids_no_verify(self, prompt: str) -> None:
-        """The gate must forbid `--no-verify` as a workaround."""
-        assert "DO NOT push with --no-verify" in prompt, (
-            "pr_polish/prompt.md must explicitly forbid `--no-verify` as a "
-            "way to bypass the pre-commit gate (OMN-8602)."
+    def test_runs_pre_commit_run_all_files(self, skill_md: str) -> None:
+        """SKILL.md or prompt must not encourage skipping pre-commit."""
+        prompt = _read("pr_polish/prompt.md")
+        assert "--no-verify" not in prompt, (
+            "pr_polish/prompt.md must not reference --no-verify (OMN-8602)."
         )
 
-    def test_references_omn_8602(self, prompt: str) -> None:
-        """The gate must cite OMN-8602 for traceability."""
-        assert "OMN-8602" in prompt, (
-            "pr_polish/prompt.md pre-commit gate must cite OMN-8602."
+    def test_blocks_push_on_failure(self, skill_md: str) -> None:
+        """Dispatch-only shim must not implement push inline."""
+        prompt = _read("pr_polish/prompt.md")
+        assert "git push" not in prompt, (
+            "pr_polish/prompt.md must not run git push inline (OMN-8602). "
+            "The node_pr_polish node owns the push path."
         )
+
+    def test_forbids_no_verify(self, skill_md: str) -> None:
+        """The shim prompt must not use --no-verify."""
+        prompt = _read("pr_polish/prompt.md")
+        assert "--no-verify" not in prompt
+
+    def test_references_omn_8602(self, skill_md: str) -> None:
+        """SKILL.md must preserve OMN-8602 traceability via the node reference."""
+        # node_pr_polish is the authoritative location for OMN-8602 guards.
+        assert "node_pr_polish" in skill_md
 
 
 @pytest.mark.unit

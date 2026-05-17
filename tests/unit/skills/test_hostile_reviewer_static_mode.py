@@ -406,7 +406,11 @@ class TestStaticModeDryRun:
 
 @pytest.mark.unit
 class TestSkillMdStaticMode:
-    """Test that SKILL.md documents --static mode and all categories."""
+    """Test that SKILL.md documents --static mode.
+
+    Updated for thin dispatch-only shim (OMN-8768). Category lists and scan
+    logic now live in node_hostile_reviewer; shim preserves the CLI surface.
+    """
 
     def test_skill_md_has_static_arg(self) -> None:
         """SKILL.md declares --static argument."""
@@ -414,18 +418,14 @@ class TestSkillMdStaticMode:
         assert "static" in content
 
     def test_skill_md_documents_all_categories(self) -> None:
-        """SKILL.md documents all 7 finding categories for static mode."""
+        """Thin shim: categories documented in backing node; shim references node."""
         content = SKILL_MD.read_text()
-        for category in VALID_CATEGORIES:
-            assert category in content, (
-                f"Category {category!r} not documented in SKILL.md"
-            )
+        assert "node_hostile_reviewer" in content
 
     def test_skill_md_documents_ticket_cap(self) -> None:
-        """SKILL.md documents the hard ticket cap."""
+        """SKILL.md documents --max-tickets arg."""
         content = SKILL_MD.read_text()
-        assert "10" in content
-        assert "hard cap" in content.lower() or "Hard cap" in content
+        assert "max-tickets" in content
 
     def test_skill_md_documents_dry_run(self) -> None:
         """SKILL.md documents --dry-run for static mode."""
@@ -433,19 +433,19 @@ class TestSkillMdStaticMode:
         assert "dry-run" in content
 
     def test_skill_md_version_bumped(self) -> None:
-        """SKILL.md version is 4.0.0 (bumped for static mode addition)."""
+        """SKILL.md version is 5.0.0 (bumped for S21 thin shim)."""
         content = SKILL_MD.read_text()
-        assert "version: 4.0.0" in content
+        assert "version: 5.0.0" in content
 
     def test_skill_md_static_mode_section(self) -> None:
-        """SKILL.md has a Static Mode section."""
+        """SKILL.md dispatches --static mode through node."""
         content = SKILL_MD.read_text()
-        assert "Static Mode" in content or "--static" in content
+        assert "--static" in content
 
     def test_skill_md_replaces_code_review_sweep(self) -> None:
-        """SKILL.md notes that it replaces code-review-sweep."""
+        """Thin shim: code-review-sweep replacement documented in node contract."""
         content = SKILL_MD.read_text()
-        assert "code-review-sweep" in content or "code_review_sweep" in content
+        assert "node_hostile_reviewer" in content
 
 
 # ---------------------------------------------------------------------------
@@ -455,47 +455,51 @@ class TestSkillMdStaticMode:
 
 @pytest.mark.unit
 class TestPromptMdStaticMode:
-    """Test that prompt.md includes static mode execution logic."""
+    """Test that prompt.md dispatches static mode to node_hostile_reviewer.
+
+    Updated for thin dispatch-only shim (OMN-8768). Static scan phases,
+    vulture logic, CODE_REVIEW_REPOS, and ticket creation all live in the node.
+    """
 
     def test_prompt_md_has_static_mode_section(self) -> None:
-        """prompt.md has a Static Mode Execution section."""
+        """prompt.md dispatches --static to node_hostile_reviewer."""
         content = PROMPT_MD.read_text()
-        assert "Static Mode" in content
+        assert "static" in content
 
     def test_prompt_md_has_scan_phases(self) -> None:
-        """prompt.md documents the scan phases for static mode."""
+        """Scan phases are in node; shim dispatches to it."""
         content = PROMPT_MD.read_text()
-        assert "Phase 1: Scan" in content or "Scan" in content
+        assert "node_hostile_reviewer" in content
 
     def test_prompt_md_has_triage_phase(self) -> None:
-        """prompt.md documents triage phase."""
+        """Triage phase is in node; shim dispatches to it."""
         content = PROMPT_MD.read_text()
-        assert "Phase 2: Triage" in content or "Triage" in content
+        assert "node_hostile_reviewer" in content
 
     def test_prompt_md_has_ticket_creation(self) -> None:
-        """prompt.md documents ticket creation phase."""
+        """Ticket creation is in node; shim dispatches to it."""
         content = PROMPT_MD.read_text()
-        assert "Ticket Creation" in content or "ticket" in content.lower()
+        assert "node_hostile_reviewer" in content
 
     def test_prompt_md_has_state_update(self) -> None:
-        """prompt.md documents state update phase."""
+        """State update is in node; shim dispatches to it."""
         content = PROMPT_MD.read_text()
-        assert "State Update" in content or "state" in content.lower()
+        assert "node_hostile_reviewer" in content
 
     def test_prompt_md_documents_vulture(self) -> None:
-        """prompt.md documents vulture usage for cross-file dead code."""
+        """Vulture logic is in node_hostile_reviewer; shim dispatches."""
         content = PROMPT_MD.read_text()
-        assert "vulture" in content.lower()
+        assert "node_hostile_reviewer" in content
 
     def test_prompt_md_has_first_run_dry_run(self) -> None:
-        """prompt.md documents first-run dry-run default for static mode."""
+        """First-run dry-run default is in node; shim exposes --dry-run arg."""
         content = PROMPT_MD.read_text()
-        assert "first run" in content.lower() or "dry_run" in content
+        assert "dry_run" in content or "--dry-run" in content
 
     def test_prompt_md_documents_code_review_repos(self) -> None:
-        """prompt.md documents CODE_REVIEW_REPOS constant."""
+        """CODE_REVIEW_REPOS constant is in node_hostile_reviewer."""
         content = PROMPT_MD.read_text()
-        assert "CODE_REVIEW_REPOS" in content
+        assert "node_hostile_reviewer" in content
 
     def test_prompt_md_mode_detection_includes_static(self) -> None:
         """prompt.md mode detection handles --static flag."""
@@ -503,8 +507,7 @@ class TestPromptMdStaticMode:
         assert "--static" in content
 
     def test_prompt_md_static_returns_before_adversarial_loop(self) -> None:
-        """prompt.md static mode returns before running adversarial review."""
+        """Static mode routing is in node; shim prompt must not run adversarial loop."""
         content = PROMPT_MD.read_text()
-        assert "Do not run the adversarial review loop" in content or (
-            "Return after static mode" in content
-        )
+        # Thin shim must not contain adversarial loop inline logic
+        assert "adversarial" not in content or "node_hostile_reviewer" in content

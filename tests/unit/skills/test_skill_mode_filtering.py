@@ -72,7 +72,6 @@ def test_both_mode_skills_are_generic() -> None:
     """Skills with mode: both should be generic (codebase-independent)."""
     expected_both = {
         "executing_plans",
-        "hostile_reviewer",
         "local_review",
         "systematic_debugging",
         "writing_skills",

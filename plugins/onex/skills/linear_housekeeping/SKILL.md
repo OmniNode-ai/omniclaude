@@ -1,7 +1,7 @@
 ---
 description: Orchestrate full Linear housekeeping — triage ticket status, organize orphans into epics, then sync MASTER_TICKET_PLAN.md. Human checkpoint between triage and apply.
 mode: full
-version: 1.0.0
+version: 2.0.0
 level: intermediate
 debug: false
 category: workflow
@@ -11,214 +11,52 @@ tags:
   - triage
   - epics
   - documentation
+  - dispatch-only
+  - routing-enforced
 author: OmniClaude Team
+args:
+  - name: --team
+    description: "Linear team name to scope housekeeping (default: Omninode)"
+    required: false
+  - name: --dry-run
+    description: "Report only, no mutations"
+    required: false
 ---
 
-# Linear Housekeeping
+# /onex:linear_housekeeping — Linear Housekeeping Orchestrator
 
-## Dispatch Surface
+**Skill ID**: `onex:linear_housekeeping`
+**Version**: 2.0.0
+**Backing node**: `node_linear_triage`
 
-**Target**: Agent Teams
+## Changelog
 
-## Overview
+- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). Chains through node_linear_triage.
+- **1.0.0** — Original skill.
 
-Parent skill that chains `ticketing-triage` → human review checkpoint → `ticketing-epic-org`
-→ `ticket-plan --sync` into a single coherent workflow.
+## What this skill does
+
+Dispatches through `onex run-node node_linear_triage`. The node owns full triage
+(status sweep, orphan detection, epic organization, plan sync). This shim contains
+no inline Linear query or mutation logic.
 
 **Announce at start:** "I'm using the linear-housekeeping skill for a full ticket audit."
 
-**Imports:** `@_lib/contracts/helpers.md`
+## Dispatch
 
-## Quick Start
-
-```
-/linear-housekeeping
-/linear-housekeeping --dry-run        # preview all changes, write nothing
-/linear-housekeeping --threshold 7   # use 7-day staleness threshold (default 14)
-/linear-housekeeping --skip-triage   # skip triage, go straight to epic-org + sync
-/linear-housekeeping --sync-only     # only run ticket-plan --sync (fastest)
+```bash
+uv run onex run-node node_linear_triage --input '{
+  "team": "Omninode",
+  "dry_run": false
+}'
 ```
 
-## Workflow Phases
+On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
 
-```
-Phase 1: ticketing-triage   (assess + mark done tickets)
-          ↓
-          Human checkpoint  (review TriageReport, confirm stale flags)
-          ↓
-Phase 2: ticketing-epic-org (group orphans into epics, human gate for ambiguous)
-          ↓
-Phase 3: ticket-plan --sync (regenerate or patch MASTER_TICKET_PLAN.md)
-          ↓
-         Done
-```
+## Wire Schema
 
----
+Contract target: `node_linear_triage`
 
-## Phase 1: Triage
+Command topic: `onex.cmd.omnimarket.linear-triage-start.v1`
 
-Dispatch ticketing-triage:
-
-```
-Skill("onex:ticketing_triage", args="--threshold-days {threshold}")
-```
-
-On completion, display the TriageReport summary.
-
-**If `--dry-run`:** pass `--dry-run` to ticketing-triage. Continue to Phase 2 without pause.
-**Otherwise:** pause for human review.
-
-### Human Checkpoint (after triage)
-
-Present the summary and ask:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Triage complete. Review before continuing:
-
-✅ Marked done:  {N} tickets (applied)
-⚠️  Stale flags: {K} tickets (not applied — see below)
-🔗 Orphans:      {M} tickets (will be addressed in Phase 2)
-
-STALE TICKETS FLAGGED (review needed):
-{list of stale tickets with age and recommendation}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Continue to Phase 2 (epic organization)?
-Type "y" to continue, "stop" to exit, or review stale tickets first.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**Stale ticket handling:** The user may ask to archive/cancel specific stale tickets
-during this review. Handle those immediately via Linear MCP before proceeding to Phase 2.
-
----
-
-## Phase 2: Epic Organization
-
-If triage found orphaned tickets (or `--skip-triage` was used with known orphans):
-
-```
-Skill("onex:ticketing_epic_org", args="--triage-report {report_path}")
-```
-
-`ticketing-epic-org` handles its own human gate for ambiguous groupings. See that skill
-for the full interaction flow.
-
-If no orphans found, skip Phase 2 with a note:
-```
-Phase 2: No orphaned tickets found — skipping epic organization.
-```
-
----
-
-## Phase 3: Ticket Plan Sync
-
-After triage and epic-org are complete (tickets marked done, epics created), the
-MASTER_TICKET_PLAN.md will be out of sync. Always run sync as the final step.
-
-```
-Skill("onex:ticket_plan", args="--sync")
-```
-
-Mode is auto-selected by ticket-plan --sync based on file age. Pass `--mode full` after
-a session with many changes to ensure a clean state.
-
----
-
-## Flags
-
-| Flag | Effect |
-|------|--------|
-| `--dry-run` | Pass through to all three sub-skills. No Linear writes, no file writes. |
-| `--threshold N` | Set staleness threshold in days (default 14). Passed to ticketing-triage. |
-| `--skip-triage` | Skip Phase 1. Jump to Phase 2 (epic-org) and Phase 3 (sync). |
-| `--sync-only` | Skip Phases 1 and 2. Only run ticket-plan --sync. |
-| `--no-epic-org` | Skip Phase 2. Run triage → sync without epic organization. |
-| `--full-sync` | Pass `--mode full` to ticket-plan --sync (force full regeneration). |
-
----
-
-## Recommended Cadence
-
-| Frequency | Command |
-|-----------|---------|
-| Weekly | `/linear-housekeeping` — full triage + org + sync |
-| Daily / after PR merges | `/linear-housekeeping --sync-only` — refresh the doc |
-| After epic sprint planning | `/linear-housekeeping --no-epic-org` — triage + sync |
-| New project start | `/linear-housekeeping --full-sync` — clean slate |
-
-**What weekly triage now catches (after OMN-3577 remediation):**
-- Tickets with a closed PR where work landed in a sibling PR → auto-closed as `mark_done_superseded`
-- Epics where all children are Done → auto-closed as `mark_done_epic`
-
-Running weekly limits zombie ticket accumulation to at most one week of drift.
-
----
-
-## Example Session
-
-```
-> /linear-housekeeping
-
-I'm using the linear-housekeeping skill for a full ticket audit.
-
-Phase 1: Running ticketing-triage (threshold: 14 days)...
-[triage runs, marks OMN-2068 done, flags 4 stale tickets, finds 7 orphans]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Triage complete. Review before continuing:
-✅ Marked done:  1 ticket  (OMN-2068 — FK scan, PR merged)
-⚠️  Stale flags: 4 tickets  (age >30d, recommend review)
-🔗 Orphans:      7 tickets  (will be addressed in Phase 2)
-
-STALE TICKETS:
-  OMN-1452  (89d)  omniintelligence  → recommend: review_and_close
-  OMN-407   (95d)  omnibase_core     → recommend: keep_open
-  OMN-554   (32d)  omnibase_core     → recommend: keep_open
-  OMN-917   (61d)  omnibase_core     → recommend: review_and_close
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Continue to Phase 2?
-
-> y
-
-Phase 2: Running ticketing-epic-org (7 orphans)...
-[epic-org presents groupings, user approves, 2 epics created]
-
-Phase 3: Running ticket-plan --sync (patch mode)...
-Updated 3 rows, added 2 new epic sections.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Housekeeping Complete
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tickets marked done:   1
-Epics created:         2
-Tickets linked:        7
-Doc rows updated:      3
-Doc sections added:    2
-
-Stale tickets (need your review): 4
-  → Review and archive manually or rerun triage after decisions.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## Error Handling
-
-| Failure | Behavior |
-|---------|----------|
-| ticketing-triage fails | Report error, stop. Do not proceed to Phase 2. |
-| ticketing-epic-org fails | Report error. Skip to Phase 3 (sync still safe). |
-| ticket-plan --sync fails | Report error. Triage and epic changes already applied in Linear — just retry `--sync-only`. |
-| Linear API rate limit | Pause 60s, retry once. If still failing, save state and exit with resume instructions. |
-
----
-
-## See Also
-
-- `ticketing-triage` skill — Phase 1: status assessment
-- `ticketing-epic-org` skill — Phase 2: epic organization
-- `ticket-plan --sync` — Phase 3: doc sync
-- `@_lib/contracts/helpers.md` — TicketContract, EpicContract schemas
-- `docs/tracking/MASTER_TICKET_PLAN.md` — the output document
+Terminal event: `onex.evt.omnimarket.linear-triage-completed.v1`

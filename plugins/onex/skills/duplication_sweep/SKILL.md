@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 2.0.0
 description: >
   Detect duplicate definitions across repos: Drizzle table definitions,
   Kafka topic registrations, migration prefixes, and Python model names.
@@ -9,88 +9,55 @@ mode: full
 user_invocable: true
 level: advanced
 debug: false
-tags: [sweep, quality, enforcement]
+tags:
+  - sweep
+  - quality
+  - enforcement
+  - dispatch-only
+  - routing-enforced
 ---
 
-# Duplication Sweep
+# /onex:duplication_sweep — Duplicate Definition Sweep
 
 **Skill ID**: `onex:duplication_sweep`
-**Backing node**: `omnimarket/src/omnimarket/nodes/node_duplication_sweep/`
-**Ticket**: OMN-10431
+**Version**: 2.0.0
+**Backing node**: `node_duplication_sweep`
 
----
+## Changelog
 
-## Dispatch Surface
+- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). Removed inline check implementations from prompt.md.
+- **1.0.0** — Original (OMN-10431).
 
-**Target**: `node_duplication_sweep` in omnimarket via `onex run-node`.
+## What this skill does
+
+Dispatches through `onex run-node node_duplication_sweep`. The node owns all scanning
+logic (D1–D4). This shim is a thin shell: parse args, dispatch, render results.
+
+**Announce at start:** "I'm using the duplication-sweep skill."
+
+## Dispatch
 
 ```bash
-INPUT_JSON='{"omni_home":"<workspace-root>","checks":["D1","D2"]}'
-uv run onex run-node node_duplication_sweep --input "${INPUT_JSON}"
+uv run onex run-node node_duplication_sweep --input '{
+  "omni_home": null,
+  "checks": ["D1", "D2", "D3", "D4"]
+}'
 ```
 
-Omit `omni_home` or `checks` from the JSON envelope when the default repository
-root or full check set should be used.
+Omit `omni_home` or `checks` to use defaults.
 
-**Backing node:** `omnimarket/src/omnimarket/nodes/node_duplication_sweep/`
-**Contract:** `node_duplication_sweep/contract.yaml`
-  - subscribe: `onex.cmd.omnimarket.duplication-sweep-start.v1`
-  - publish: `onex.evt.omnimarket.duplication-sweep-completed.v1`
+On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
 
-The node handler owns all scanning logic. This skill is a thin shell: parse args, dispatch to node, render results.
+## Wire Schema
 
-Lightweight structural scan designed to catch obvious collision classes quickly.
-It is intentionally text- and pattern-driven, not a full semantic analyzer.
+Contract target: `node_duplication_sweep`
 
----
+Command topic: `onex.cmd.omnimarket.duplication-sweep-start.v1`
 
-## Result Contract
-
-The node returns `ModelDuplicationCheckResult` per check and an overall status:
-
-- `check_results: list[ModelDuplicationCheckResult]` — per-check results with findings
-- `overall_status: str` — `PASS` if no FAIL checks, `FAIL` otherwise
-
-Each check result contains:
-
-- `check_id` -- D1, D2, D3, or D4
-- `status` -- PASS, WARN, or FAIL
-- `finding_count` -- number of findings for this check
-- `detail` -- human-readable summary
-- `findings` -- optional list of individual findings (populated in --json mode)
-
-Autopilot consumes `status` for gate decisions. A check with one FAIL and
-one WARN produces two separate findings, and the check status is FAIL
-(worst-of aggregation). Exit 0 if all checks are PASS/WARN, exit 1 if any FAIL.
-
----
-
-## Checks
-
-### D1: Drizzle Table Duplication
-Scan `omnidash/shared/*-schema.ts` for `pgTable()` calls. Flag any table name
-that appears in more than one schema file (e.g., `gate_decisions` in both
-`intelligence-schema.ts` and `omniclaude-state-schema.ts`).
-
-### D2: Topic Registration Duplication
-Scan `omniclaude/src/omniclaude/hooks/topics.py` TopicBase enum and cross-reference
-with `onex_change_control/boundaries/kafka_boundaries.yaml`. D2 assumes TopicBase
-values in omniclaude are canonical producer claims for omniclaude-owned emit paths.
-Flag only manifest entries asserting a conflicting single producer for the same topic.
-
-### D3: Migration Prefix Duplication
-Run `check-migration-conflicts` from onex_change_control. Parse output for
-EXACT_DUPLICATE and NAME_CONFLICT. Any finding is a FAIL.
-
-### D4: Cross-Repo Model Name Collision
-For each repo (discovered via `gh repo list OmniNode-ai --json name`), grep `class Model[A-Z]` in `src/` (excluding
-`tests/` and `fixtures/` directories). Collect (class_name, repo, file_path).
-Treat duplicate model names as WARN by default unless the duplicate appears in
-production codepaths outside `omnibase_core`, in which case escalate to FAIL.
-Models in `omnibase_core` are expected shared types and are excluded from collision checks.
-
----
+Terminal event: `onex.evt.omnimarket.duplication-sweep-completed.v1`
 
 ## Usage
 
-`/duplication-sweep [--checks D1,D2] [--omni-home /path] [--json]`
+```
+/duplication-sweep [--checks D1,D2] [--omni-home /path] [--json]
+```
