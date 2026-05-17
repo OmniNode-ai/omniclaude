@@ -1,6 +1,8 @@
 ---
-description: Overnight session readiness check — verifies drive mount, machine identity, zombie agents, merge queue health, and required env vars, then emits a go/no-go verdict
-version: 1.0.0
+description: Session environment health probe — verifies drive mount, machine identity, zombie agents, merge queue health, and required env vars. Callable from node_session_orchestrator only; not a top-level user-invocable skill.
+version: 1.1.0
+user_invocable: false
+replacement_skill: session
 mode: full
 level: intermediate
 debug: false
@@ -8,9 +10,9 @@ category: operations
 tags:
   - preflight
   - session-readiness
-  - overnight
   - environment
   - health-check
+  - health-probe
 author: OmniClaude Team
 composable: true
 args:
@@ -24,8 +26,10 @@ args:
 
 # Preflight
 
-Run this skill before any overnight or long-running session. It performs 6 sequential checks
-and emits a single go/no-go verdict. All checks are mandatory — a single FAIL blocks the verdict.
+> **NOT USER-INVOCABLE.** This skill is a health-probe callable from `node_session_orchestrator`
+> (Phase 1 health gate) only. Use `/onex:session` for session orchestration.
+
+Performs 6 sequential environment checks and emits a single go/no-go verdict. All checks are mandatory — a single FAIL blocks the verdict.
 
 ## CRITICAL RULES
 
