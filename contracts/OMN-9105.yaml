@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-9105
+title: "Remove /onex:session legacy fallback --- primary path must work end-to-end"
+summary: >
+  Deletes node_skill_overnight_orchestrator and its runtime surface from omniclaude.
+  Marks preflight as non-user-invocable. No new runtime component deployed --- the
+  overnight node is removed, not replaced.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: manual
+    description: "node_skill_overnight_orchestrator directory absent from src/"
+    command: "test ! -d src/omniclaude/nodes/node_skill_overnight_orchestrator"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "gh pr checks --repo OmniNode-ai/omniclaude 1598"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-overnight-node-deleted
+    description: "node_skill_overnight_orchestrator removed from src/ --- node deleted, no deploy required"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test ! -d src/omniclaude/nodes/node_skill_overnight_orchestrator && echo deploy not required overnight node removed runtime surface gone"
+  - id: dod-preflight-non-user-invocable
+    description: "preflight/SKILL.md marked user_invocable:false"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q user_invocable plugins/onex/skills/preflight/SKILL.md"
+  - id: dod-overnight-skill-deleted
+    description: "plugins/onex/skills/overnight/ deleted from omniclaude"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test ! -d plugins/onex/skills/overnight && echo overnight skill directory absent"
