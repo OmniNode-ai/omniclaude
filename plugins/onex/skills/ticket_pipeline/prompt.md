@@ -18,6 +18,7 @@ Extract from `$ARGUMENTS`:
 - `--dry-run` — No commits, pushes, or PRs
 - `--skip-test-iterate` — Skip the test-fix loop
 - `--auto-merge` — Force auto_merge policy on
+- `--docs-only` — Assert all changes are documentation-only; skips integration verification
 
 Validate `ticket_id` matches pattern `[A-Z]+-\d+`. Exit with an error if missing or malformed.
 
