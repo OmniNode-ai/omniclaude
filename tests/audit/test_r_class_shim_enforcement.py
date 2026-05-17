@@ -49,7 +49,6 @@ R_CLASS_SKILLS = {
     "multi_agent",
     "observability",
     "onboarding",
-    "overnight",
     "pipeline_audit",
     "pipeline_fill",
     "platform_readiness",

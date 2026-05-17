@@ -44,7 +44,6 @@ TIER1_DETERMINISTIC_SKILLS: set[str] = {
     "data_flow_sweep",
     "golden_chain_sweep",
     "merge_sweep",
-    "overnight",
     "pipeline_fill",
     "platform_readiness",
     "pr_review",
@@ -69,7 +68,6 @@ MISSING_NODE_SKILLS: set[str] = {
 DEPRECATED_SKILLS: set[str] = {
     "autopilot",
     "begin_day",
-    "overnight",
 }
 
 ENFORCED_SKILLS = TIER1_DETERMINISTIC_SKILLS - DEPRECATED_SKILLS

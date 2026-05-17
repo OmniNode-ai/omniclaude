@@ -202,15 +202,6 @@ def test_real_wave_scheduler_skill_bypasses_enforcer() -> None:
 
 
 @pytest.mark.unit
-def test_real_overnight_skill_no_longer_bypasses_enforcer() -> None:
-    """overnight is retired and must not opt out as an active foreground orchestrator."""
-    plugin_root = _REPO_ROOT / "plugins" / "onex"
-    rc, stdout, _ = run_enforcer("overnight", plugin_root=str(plugin_root))
-    assert rc == 0
-    assert "DELEGATION ENFORCER" in stdout
-
-
-@pytest.mark.unit
 def test_real_dispatch_engine_skill_bypasses_enforcer() -> None:
     """dispatch_engine skill must have foreground_orchestrator: true."""
     plugin_root = _REPO_ROOT / "plugins" / "onex"

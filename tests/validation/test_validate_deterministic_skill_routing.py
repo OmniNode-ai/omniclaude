@@ -204,7 +204,7 @@ class TestEnforcedSkillsSet:
     def test_retired_skills_not_in_enforced(self) -> None:
         # OMN-9428: retired skills are not user-invocable deterministic
         # dispatch surfaces and must not be enforced as active shims.
-        for skill in ("autopilot", "begin_day", "overnight"):
+        for skill in ("autopilot", "begin_day"):
             assert skill in DEPRECATED_SKILLS
             assert skill not in ENFORCED_SKILLS
 

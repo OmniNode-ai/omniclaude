@@ -14,7 +14,6 @@ SKILLS_ROOT = Path(__file__).resolve().parents[3] / "plugins" / "onex" / "skills
 RETIRED_SKILLS = {
     "autopilot": "/onex:session",
     "begin_day": "/onex:session --mode interactive",
-    "overnight": "/onex:session --mode autonomous",
 }
 
 
