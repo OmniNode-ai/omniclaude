@@ -125,13 +125,15 @@ Repos are released in dependency-tier order to guarantee downstream consumers ge
 
 | Tier | Repos |
 |------|-------|
-| Tier 1 | omnibase_spi |
-| Tier 2 | omnibase_core, omnibase_compat |
-| Tier 3 | omniclaude, omniintelligence, omnimemory, omnimarket |
-| Tier 4 | omninode_infra, omnidash |
+| Tier 1 | omnibase_compat |
+| Tier 2 | omnibase_core |
+| Tier 3 | omnibase_spi |
+| Tier 4 | omnibase_infra |
+| Tier 5 | omniclaude, omniintelligence, omnimemory, omnimarket |
+| Tier 6 | omninode_infra, omnidash |
 
 Tier N+1 repos pin the released version of Tier N repos. If a Tier 2 release fails,
-Tier 3 and Tier 4 are BLOCKED.
+Tiers 3 through 6 are BLOCKED.
 
 ## Error Table
 
