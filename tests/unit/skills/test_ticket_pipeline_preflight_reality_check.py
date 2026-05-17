@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Contract test: ticket_pipeline PRE_FLIGHT phase wires the reality-check gate.
+"""Contract test: ticket_pipeline dispatch-only shim (S20 thinning).
 
-Validates that the ticket_pipeline skill's prompt.md references the
-preflight_reality_check library and documents the halt-on-mismatch behavior.
-Mirrors the test_ticket_pipeline_dod_phase.py pattern.
+S20 thinned ticket_pipeline/prompt.md to a dispatch-only shim routing to
+node_ticket_pipeline. Pre-flight reality check and all phase logic lives in
+the node handler. The shim must not contain inline imports or phase logic.
 """
 
 from __future__ import annotations
@@ -27,33 +27,29 @@ PROMPT_MD = (
 @pytest.mark.unit
 class TestPreflightRealityCheckWiring:
     def test_prompt_imports_reality_check_module(self) -> None:
+        """S20: shim dispatches to node — no inline preflight_reality_check import."""
         content = PROMPT_MD.read_text()
-        assert (
-            "from plugins.onex.hooks.lib.preflight_reality_check import" in content
-        ), "prompt.md must import the preflight_reality_check library"
-        assert "run_reality_check" in content
-        assert "write_diagnosis" in content
+        assert "onex run-node node_ticket_pipeline" in content, (
+            "S20: ticket_pipeline must dispatch to node_ticket_pipeline"
+        )
 
     def test_preflight_halts_on_mismatch(self) -> None:
+        """S20: halt-on-mismatch logic lives in node_ticket_pipeline, not the shim."""
         content = PROMPT_MD.read_text()
-        assert "report.halted" in content, (
-            "preflight must branch on reality check halt flag"
-        )
-        assert "reality_check_mismatch" in content, (
-            "halted preflight must return block_kind=reality_check_mismatch"
+        assert "node_ticket_pipeline" in content, (
+            "S20: pre-flight halt logic is owned by node_ticket_pipeline"
         )
 
     def test_preflight_writes_diagnosis(self) -> None:
+        """S20: diagnosis writing is owned by node_ticket_pipeline."""
         content = PROMPT_MD.read_text()
-        assert "write_diagnosis(report" in content, (
-            "halted preflight must write a Two-Strike diagnosis doc"
+        assert "node_ticket_pipeline" in content, (
+            "S20: diagnosis writing is owned by node_ticket_pipeline, not the shim"
         )
 
     def test_preflight_emits_friction(self) -> None:
+        """S20: friction emission is owned by node_ticket_pipeline."""
         content = PROMPT_MD.read_text()
-        assert "record_friction" in content, (
-            "halted preflight must record a friction event"
-        )
-        assert "tooling/preflight-reality-check" in content, (
-            "friction surface must be tooling/preflight-reality-check"
+        assert "node_ticket_pipeline" in content, (
+            "S20: friction emission is owned by node_ticket_pipeline, not the shim"
         )
