@@ -90,6 +90,16 @@ R11 findings must not be treated as completion proof.
 
 **Output format:**
 
+Emit exactly one of the following forms, not both alternatives joined together.
+
+If doctrine violations are found:
+
 ```
-R11: checked -- [advisory: task 3 creates projection without DT-003 freshness declaration] OR [clean (no doctrine-governed surfaces touched)]
+R11: checked -- [advisory: task 3 creates projection without DT-003 freshness declaration]
+```
+
+If no doctrine-governed surfaces are touched:
+
+```
+R11: checked -- [clean (no doctrine-governed surfaces touched)]
 ```
