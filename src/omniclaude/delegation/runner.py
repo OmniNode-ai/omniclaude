@@ -42,9 +42,15 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.handler_bifrost_response import (  # noqa: F401
+        ModelBifrostResponse,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +224,7 @@ def _build_transport_and_handler() -> tuple[object, object]:
         HandlerLlmOpenaiCompatible,
     )
 
-    class _InProcessTransport(MixinLlmHttpTransport):
+    class _InProcessTransport(MixinLlmHttpTransport):  # type: ignore[misc]
         """Minimal concrete transport for in-process Bifrost delegation calls."""
 
         def __init__(self) -> None:
@@ -326,7 +332,7 @@ class DelegationRunner:
             )
             return False
 
-    def _handle_routing_decision(self, response: object) -> None:
+    def _handle_routing_decision(self, response: ModelBifrostResponse) -> None:
         """on_routing_decision callback from HandlerBifrostGateway.
 
         Receives a ModelBifrostResponse after every routing decision and
@@ -557,7 +563,7 @@ class DelegationRunner:
     # ------------------------------------------------------------------
 
     def _emit_audit(
-        self, correlation_id: str, session_id: str, response: object
+        self, correlation_id: str, session_id: str, response: ModelBifrostResponse
     ) -> None:
         """Emit audit event from a ModelBifrostResponse."""
         rule_id = str(response.matched_rule_id) if response.matched_rule_id else ""
@@ -702,22 +708,25 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
         bid for bid in delegation_config.default_backends if bid in backends
     )
 
-    return ModelBifrostConfig(
-        backends=backends,
-        routing_rules=tuple(rules)
-        if rules
-        else (
-            ModelBifrostRoutingRule(
-                rule_id=uuid4(),
-                priority=100,
-                backend_ids=tuple(backends.keys()),
+    return cast(
+        "object",
+        ModelBifrostConfig(
+            backends=backends,
+            routing_rules=tuple(rules)
+            if rules
+            else (
+                ModelBifrostRoutingRule(
+                    rule_id=uuid4(),
+                    priority=100,
+                    backend_ids=tuple(backends.keys()),
+                ),
             ),
+            default_backends=default_ids or tuple(backends.keys()),
+            failover_attempts=delegation_config.failover.max_attempts,
+            failover_backoff_base_ms=delegation_config.failover.backoff_base_ms,
+            circuit_breaker_failure_threshold=delegation_config.circuit_breaker.failure_threshold,
+            circuit_breaker_window_seconds=delegation_config.circuit_breaker.window_seconds,
         ),
-        default_backends=default_ids or tuple(backends.keys()),
-        failover_attempts=delegation_config.failover.max_attempts,
-        failover_backoff_base_ms=delegation_config.failover.backoff_base_ms,
-        circuit_breaker_failure_threshold=delegation_config.circuit_breaker.failure_threshold,
-        circuit_breaker_window_seconds=delegation_config.circuit_breaker.window_seconds,
     )
 
 

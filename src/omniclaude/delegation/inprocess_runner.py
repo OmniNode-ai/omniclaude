@@ -227,7 +227,7 @@ class InProcessDelegationRunner:
 
         request = ModelDelegationRequest(
             prompt=full_prompt,
-            task_type=task_type,
+            task_type=task_type.value,
             source_session_id=source_session_id,
             source_file_path=source_file_path,
             correlation_id=correlation_id,

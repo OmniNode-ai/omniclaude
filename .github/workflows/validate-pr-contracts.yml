@@ -6,9 +6,6 @@
 # Strict companion to contract-validation.yml. Enforces:
 # - Runtime-touching PRs with OMN ticket refs MUST have a contract YAML
 # - Contract dod_evidence MUST be non-empty for runtime-touching PRs
-#
-# Phase 1: warn-only — posts PR comment on violations, always exits 0.
-# Phase 2: flip to blocking when FP rate < 5% over 20+ PRs.
 
 name: Validate PR Contracts
 
@@ -111,20 +108,17 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         working-directory: ${{ github.workspace }}
         run: |
-          BODY="## ⚠️ Contract Validation Findings (warn-only)
+          BODY="## Contract Validation Findings
 
           $(cat /tmp/validation_output.txt)
 
           ---
-          *This check is in **warn-only mode** (Phase 1). It will become blocking once false-positive rate < 5% over 20+ PRs.*
           *Ticket: OMN-8909 | Epic: OMN-8908*"
 
           gh pr comment "$PR_NUMBER" --body "$BODY" || echo "::warning::Failed to post PR comment"
 
-      # Phase 1: always exit 0 (warn-only)
-      - name: Gate result (warn-only)
+      - name: Gate result
         if: github.event_name != 'merge_group'
         working-directory: ${{ github.workspace }}
         run: |
-          echo "::notice::validate-pr-contracts completed (warn-only mode). Exit code from validation: ${{ steps.validate.outputs.exit_code }}"
-          exit 0
+          exit ${{ steps.validate.outputs.exit_code }}

@@ -74,14 +74,12 @@ jobs:
       - name: Mypy type checking
         working-directory: ${{ github.workspace }}
         run: |
-          # Phase 1: Non-blocking (report errors but don't fail CI)
-          # Phase 2: Fix errors and make blocking (TODO: remove || true)
-          # TODO(OMN-XXXX): Make mypy blocking in Phase 2
-          uv run mypy src/ --config-file mypy.ini 2>&1 | tee mypy-output.txt || true
+          uv run mypy src/ --config-file mypy.ini 2>&1 | tee mypy-output.txt
           ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
           echo "MyPy Summary: $ERROR_COUNT type errors found"
           if [ "$ERROR_COUNT" -gt "0" ]; then
-            echo "MyPy found $ERROR_COUNT type errors (non-blocking for now)"
+            echo "::error::MyPy found $ERROR_COUNT type errors"
+            exit 1
           fi
 
   docs-links:
@@ -1848,13 +1846,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run DoD evidence check
-        # Advisory until CI can generate DoD evidence (evidence files are local
-        # artifacts not committed to the repo). Hard mode blocks every PR that
-        # has a ticket ID in the branch name. Tracked: OMN-6117.
         working-directory: ${{ github.workspace }}
         run: bash scripts/dod-pre-push-check.sh
         env:
-          DOD_ENFORCEMENT: advisory
+          DOD_ENFORCEMENT: hard
 
   # ============================================================================
   # COVERAGE (runs after test matrix)
@@ -2534,12 +2529,11 @@ jobs:
       github.event_name == 'merge_group' ||
       github.event_name == 'push' ||
       contains(github.event.pull_request.changed_files || '0', '0') == false
-    continue-on-error: true
     steps:
       - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
         with:
           checks: "boundary-parity"
-          warn-only: "true"
+          warn-only: "false"
 
   # ============================================================================
   # CI SUMMARY (OMN-4501) — single branch-protection check

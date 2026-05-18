@@ -1,13 +1,11 @@
 # Model Router Hook Configuration (OMN-7810)
-# Advisory-mode hook that suggests delegation to cheaper models
-# for implementation tasks that don't require Opus.
+# Enforcement-mode hook that routes implementation tasks to cheaper models.
 
 # Master switch — set to false to disable entirely
 enabled: true
 
 # Enforcement mode: "advisory" (warn only) or "enforce" (hard block)
-# Start with advisory; switch to enforce after proving stable.
-mode: advisory
+mode: enforce
 
 # Tools that trigger delegation classification
 implementation_tools:
