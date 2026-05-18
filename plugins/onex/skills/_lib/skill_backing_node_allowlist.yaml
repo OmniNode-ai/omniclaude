@@ -17,4 +17,10 @@
 #     - skill: <directory name under plugins/onex/skills/>
 #       reason: <free-text justification, non-empty>
 
-allowlist: []
+allowlist:
+  - skill: verified_dispatch
+    reason: >
+      Backing node node_verified_dispatch_orchestrator lives in omnimarket (PR #695).
+      CI does not check out omnimarket when validating omniclaude skills. The node
+      exists and is registered; liveness is verified by the omnimarket PR CI. This
+      entry will be removed once the cross-repo checkout is wired (OMN-11220).
