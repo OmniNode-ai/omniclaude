@@ -5,12 +5,10 @@ title: "Verification-First Parallel Worker Dispatch Skill"
 summary: "Build verified_dispatch skill shim and node_verified_dispatch_orchestrator with paired worker/verifier dispatch and bounded escalation"
 is_seam_ticket: false
 interface_change: false
-interfaces_touched:
-  - skills
-  - nodes
+interfaces_touched: []
 evidence_requirements:
   - kind: tests
-    description: "Golden chain tests for node_verified_dispatch_orchestrator pass"
+    description: "Golden chain tests for node_verified_dispatch_orchestrator pass in omnimarket"
     command: "cd omnimarket && uv run pytest tests/test_golden_chain_verified_dispatch_orchestrator.py -v"
   - kind: ci
     description: "omniclaude PR CI green across required gates"
@@ -27,7 +25,7 @@ dod_evidence:
       - check_type: command
         check_value: "test -f plugins/onex/skills/verified_dispatch/SKILL.md && echo OK"
   - id: dod-002
-    description: "node_verified_dispatch_orchestrator contract present in omnimarket PR"
+    description: "node_verified_dispatch_orchestrator backing node contract present in omnimarket PR #695 (backing node lives in omnimarket, not omniclaude)"
     source: manual
     checks:
       - check_type: command
