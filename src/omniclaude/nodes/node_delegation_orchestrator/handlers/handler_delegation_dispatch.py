@@ -26,6 +26,9 @@ import shutil
 from dataclasses import dataclass
 
 from omniclaude.lib.task_classifier import TaskClassifier
+from omniclaude.nodes.node_delegation_orchestrator.models.model_cross_cli_invocation_result import (
+    ModelCrossCLIInvocationResult,
+)
 from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
     ModelDelegationCommand,
 )
@@ -175,8 +178,30 @@ def handle_delegation_dispatch(
     )
 
 
+def handle_cross_cli_dispatch(
+    command: ModelDelegationCommand,
+) -> ModelCrossCLIInvocationResult:
+    """Dispatch to claude/opencode/codex CLI via HandlerCrossCLIInvoker.
+
+    Only valid when command.recipient is claude, opencode, or codex.
+    For recipient='auto', use handle_delegation_dispatch() instead.
+    """
+    if command.recipient == "auto":
+        raise ValueError(
+            "handle_cross_cli_dispatch requires explicit recipient; got recipient='auto'. "
+            "Use handle_delegation_dispatch() for auto-routing."
+        )
+    from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_cross_cli_invoker import (  # noqa: PLC0415
+        HandlerCrossCLIInvoker,
+    )
+
+    invoker = HandlerCrossCLIInvoker()
+    return invoker.invoke(command)
+
+
 __all__ = [
     "DelegationRoute",
+    "handle_cross_cli_dispatch",
     "handle_delegation_dispatch",
     "select_backend",
 ]

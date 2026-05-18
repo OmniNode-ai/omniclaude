@@ -129,6 +129,18 @@ golden_path:
   - "Verify row exists with correlation_id, task_type, delegated_to fields"
   - "Golden chain test: omnimarket/tests/test_golden_chain_projection_delegation.py"
 
+codex_config:
+  sandbox_modes:
+    read-only:
+      use_for: [code_review, research, reasoning, planning, review]
+      description: "No filesystem writes; safe for analysis tasks"
+    workspace-write:
+      use_for: [code_generation, refactor, test, document]
+      description: "Writes to cwd + TMPDIR; network disabled"
+    danger-full-access:
+      use_for: []
+      description: "No restrictions; explicit opt-in only via codex_sandbox_mode field"
+
 # Metadata
 metadata:
   author: OmniNode Team
