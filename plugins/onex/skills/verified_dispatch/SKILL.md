@@ -40,7 +40,7 @@ args:
 
 ## Changelog
 
-- **1.0.0** — Initial skill (OMN-11220). Thin dispatch-only shim. All logic in `node_verified_dispatch_orchestrator`.
+- **1.0.0** — Initial skill (OMN-11220). Thin dispatch-only shim. All logic in `node_verified_dispatch_orchestrator` (omnimarket PR #695).
 
 ## What this skill does
 
