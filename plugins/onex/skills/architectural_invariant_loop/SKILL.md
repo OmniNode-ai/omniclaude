@@ -28,7 +28,7 @@ args:
     required: false
 inputs:
   - name: repos
-    description: "list[str] — repos to scan; empty = all repos under OMNI_HOME"
+    description: "list[str] — repos to scan; empty = all repos under ONEX_WORKTREES_ROOT"
 outputs:
   - name: skill_result
     description: "ArchInvariantLoopResult JSON; violations and summary delivered in result field"
@@ -52,12 +52,12 @@ outputs:
 
 ### Step 1 — Parse arguments
 
-- `--repos` → comma-separated repo names (default: all repos under `$OMNI_HOME`)
+- `--repos` → comma-separated repo names (default: all repos under `$ONEX_WORKTREES_ROOT`)
 - `--invariants` → comma-separated principle codes (default: all 5 seed invariants)
 - `--dry-run` → pass through to node
 - `--severity-threshold` → pass through to node (default: WARNING)
 
-Resolve each repo name to an absolute path under `$OMNI_HOME/<repo>`.
+Resolve each repo name to an absolute path under `$ONEX_WORKTREES_ROOT/<repo>`.
 
 ### Step 2 — Run node
 
