@@ -103,29 +103,35 @@ jobs:
           branch-name: ${{ steps.resolve-branch.outputs.resolved_branch }}
           contracts-path: contracts
 
-      - name: Resolve proof references (Phase 1 — visibility only)
+      - name: Resolve proof references
         if: steps.validate-contract.outputs.validation-status == 'passed'
-        continue-on-error: true
         env:
           TICKET_ID: ${{ steps.validate-contract.outputs.ticket-id }}
         working-directory: ${{ github.workspace }}
         run: |
+          set -euo pipefail
+
           echo "=== Proof Reference Resolution (v1) ==="
           echo "SEMANTICS: RESOLVED = reference plausibility only; not proof of test execution."
+          set +e
           python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
             --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml" \
-            --json > "/tmp/proof_resolution_${TICKET_ID}.json" && \
+            --json > "/tmp/proof_resolution_${TICKET_ID}.json"
+          json_status=$?
+
           python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
-            --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml" \
-            || echo "::warning::Proof reference resolution found unresolvable refs. See Phase 2 for enforcement policy."
-        # Rollout milestones:
-        #   Phase 1 (current): warn-only; gather baseline data via --json output
-        #   Phase 2: block malformed schema; FAIL for newly created contracts
-        #   Phase 3: flip continue-on-error: false for all modified contracts
+            --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml"
+          human_status=$?
+          set -e
+
+          if [[ "$json_status" -ne 0 || "$human_status" -ne 0 ]]; then
+            echo "::error::Proof reference resolution failed for ${TICKET_ID}."
+            exit 1
+          fi
 
       - name: Report validation result
         if: always()
