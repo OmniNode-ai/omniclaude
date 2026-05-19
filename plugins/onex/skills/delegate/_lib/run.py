@@ -5,18 +5,20 @@
 
 Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, then dispatches to the runtime via:
-  1. HTTP (ONEX_RUNTIME_URL is set and non-empty)
-  2. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
-  3. Kafka (contract-driven — topic resolved from omnimarket
+  1. HTTP (contract runtime_ingress.http_url or ONEX_RUNTIME_URL fallback)
+  2. SSH socket (contract runtime_ingress.ssh_host + ssh_socket_path, or env
+     vars ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
+  3. Pandaproxy HTTP (contract runtime_ingress.pandaproxy_url or ONEX_PANDAPROXY_URL)
+  4. SSH rpk bridge (contract runtime_ingress.ssh_host + kafka_bridge_script or
+     ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT)
+  5. Kafka (contract-driven — topic resolved from omnimarket
      node_delegate_skill_orchestrator contract.yaml via OMNI_HOME;
      returns error if topic cannot be resolved)
      Uses KAFKA_BOOTSTRAP_SERVERS — fail-fast if unset.
 
-Optional env vars:
-  ONEX_RUNTIME_SSH_HOST    — SSH target for remote socket dispatch, e.g. user@host
-  ONEX_RUNTIME_SOCKET_PATH — Unix socket path on the SSH host
-  ONEX_RUNTIME_URL         — HTTP endpoint for direct HTTP dispatch
-  KAFKA_BOOTSTRAP_SERVERS  — Required for the Kafka fallback transport
+Transport config is read from the omnimarket node_delegate_skill_orchestrator
+contract.yaml runtime_ingress stanza via OMNI_HOME. Env vars serve as fallback
+only (per "no env vars, contracts only" rule).
 """
 
 from __future__ import annotations
@@ -92,6 +94,39 @@ _DELEGATION_COMMAND_NAME = "node_delegate_skill_orchestrator"
 _CONTRACT_RELATIVE_PATH = (
     "omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml"
 )
+
+_DELEGATE_SKILL_CONTRACT_PATH = (
+    "omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml"
+)
+
+
+def _resolve_transport_config() -> dict[str, str]:
+    """Return runtime_ingress values from the omnimarket delegate skill contract.
+
+    Reads OMNI_HOME + _DELEGATE_SKILL_CONTRACT_PATH, extracts runtime_ingress,
+    and returns a dict of string values. Returns an empty dict on any failure
+    so callers fall back to env vars.
+    """
+    omni_home = os.environ.get("OMNI_HOME", "").strip()
+    if not omni_home:
+        return {}
+    contract_path = Path(omni_home) / _DELEGATE_SKILL_CONTRACT_PATH
+    if not contract_path.is_file():
+        return {}
+    try:
+        import yaml  # noqa: PLC0415
+
+        data = yaml.safe_load(contract_path.read_text(encoding="utf-8")) or {}
+        ingress = data.get("runtime_ingress", {})
+        if not isinstance(ingress, dict):
+            return {}
+        return {
+            k: value
+            for k, v in ingress.items()
+            if isinstance(v, str) and (value := v.strip())
+        }
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _resolve_command_topic() -> str:
@@ -783,11 +818,24 @@ def classify_and_publish(
             "correlation_id": correlation_id_str,
         }
     timeout_seconds = timeout_ms / 1000.0
-    ssh_host = os.environ.get("ONEX_RUNTIME_SSH_HOST", "").strip()
-    ssh_socket_path = os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "").strip()
-    kafka_bridge_script = os.environ.get("ONEX_KAFKA_BRIDGE_SCRIPT", "").strip()
-    pandaproxy_url = os.environ.get("ONEX_PANDAPROXY_URL", "").strip()
-    runtime_url = os.environ.get("ONEX_RUNTIME_URL", "").strip()
+    _transport = _resolve_transport_config()
+    ssh_host = (
+        _transport.get("ssh_host") or os.environ.get("ONEX_RUNTIME_SSH_HOST", "")
+    ).strip()
+    ssh_socket_path = (
+        _transport.get("ssh_socket_path")
+        or os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "")
+    ).strip()
+    kafka_bridge_script = (
+        _transport.get("kafka_bridge_script")
+        or os.environ.get("ONEX_KAFKA_BRIDGE_SCRIPT", "")
+    ).strip()
+    pandaproxy_url = (
+        _transport.get("pandaproxy_url") or os.environ.get("ONEX_PANDAPROXY_URL", "")
+    ).strip()
+    runtime_url = (
+        _transport.get("http_url") or os.environ.get("ONEX_RUNTIME_URL", "")
+    ).strip()
     if not runtime_url and ssh_host:
         runtime_url = _derive_runtime_url_from_ssh_host(ssh_host)
 
