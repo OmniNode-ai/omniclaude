@@ -23,6 +23,9 @@ on:
       - 'docs/**/*handoff*.md'
       - 'docs/tracking/**/*handoff*.md'
 
+permissions:
+  contents: read
+
 jobs:
   check-infra-health-section:
     name: gate / Handoff Infra Health
