@@ -25,6 +25,13 @@ Validate `ticket_id` matches pattern `[A-Z]+-\d+`. Exit with an error if missing
 Build the JSON input from parsed flags and dispatch via `onex run-node`. No inline
 phase logic, no LLM orchestration, no tracker calls.
 
+### Tracker DI contract
+
+The dispatched `node_ticket_work` handler owns Linear access through
+`ProtocolProjectTracker` DI, resolved with `resolve_project_tracker()`. This
+prompt must not call `tracker.*` directly; it preserves the tracker DI boundary
+by routing all ticket work through the node.
+
 ```bash
 onex run-node node_ticket_work \
   --input '{"ticket_id": "<ticket_id>", "autonomous": <bool>, "skip_to": <phase_or_null>}' \
