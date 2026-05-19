@@ -323,6 +323,7 @@ Applied first-match-wins against `gh pr diff --name-only`:
 
 | Changed-file pattern | Verification target | Check |
 |---|---|---|
+| `src/**/runtime/auto_wiring/**`, `src/**/runtime/service_kernel.py`, `**/handlers/handler_*.py` | `runtime-health` | `docker inspect` reports `RestartCount == 0`; last 200 runtime container log lines include `Auto-wiring complete`, report `failed=0`, and do not contain `Auto-wiring failed` in the last successful boot |
 | `src/**/projection*.py`, `src/**/projector*.py` | Projection table for that module | Table exists, `row_count > 0`, sample row has all non-null required columns matching the Drizzle schema |
 | `src/**/handler*.py` (Kafka consumer) | Projection sink + summary endpoint consuming it | Endpoint returns HTTP 2xx with structurally valid JSON matching expected response shape |
 | `src/**/route*.py`, `src/**/api*.py`, `pages/api/**` | The modified API route(s) | Endpoint returns HTTP 2xx with non-error payload; response body contains expected top-level keys |
