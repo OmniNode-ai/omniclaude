@@ -58,7 +58,7 @@ class TestClassifyWithCache:
         ):
             mock_tc = MagicMock()
             mock_tc.is_delegatable.return_value = MagicMock(
-                intent=MagicMock(value="document"),
+                classified_intent="document",
                 confidence=0.92,
                 delegatable=True,
             )
@@ -193,7 +193,7 @@ class TestValkeyFailureModes:
         ):
             mock_tc = MagicMock()
             mock_tc.is_delegatable.return_value = MagicMock(
-                intent=MagicMock(value="research"),
+                classified_intent="research",
                 confidence=0.85,
                 delegatable=True,
             )
@@ -217,7 +217,7 @@ class TestValkeyFailureModes:
         ):
             mock_tc = MagicMock()
             mock_tc.is_delegatable.return_value = MagicMock(
-                intent=MagicMock(value="test"),
+                classified_intent="test",
                 confidence=0.90,
                 delegatable=True,
             )
@@ -249,7 +249,7 @@ class TestValkeyFailureModes:
         ):
             mock_tc = MagicMock()
             mock_tc.is_delegatable.return_value = MagicMock(
-                intent=MagicMock(value="document"),
+                classified_intent="document",
                 confidence=0.91,
                 delegatable=True,
             )

@@ -439,9 +439,7 @@ def _classify_with_cache(prompt: str, correlation_id: str) -> dict[str, Any] | N
         score = classifier.is_delegatable(prompt)
         result: dict[str, Any] = {
             "schema_version": CACHE_SCHEMA_VERSION,
-            "intent": score.intent.value
-            if hasattr(score.intent, "value")
-            else str(score.intent),
+            "intent": score.classified_intent,
             "confidence": score.confidence,
             "delegatable": score.delegatable,
             "agentic_eligible": getattr(score, "agentic_eligible", False) is True,
