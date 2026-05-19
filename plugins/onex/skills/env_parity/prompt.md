@@ -19,7 +19,12 @@ Say: "I'm using the env-parity skill to dispatch node_env_parity_compute."
 | `--all-checks` | unset |
 | `--namespace <ns>` | `onex-dev` |
 | `--dry-run` | unset |
-| `--create-tickets` | unset |
+| `--create-tickets` | true |
+| `--no-create-tickets` | unset |
+
+Set `CREATE_TICKETS=true` unless `--no-create-tickets` is present. If
+`--no-create-tickets` is present, set `NO_CREATE_TICKETS=true` and do not set
+`CREATE_TICKETS`.
 
 ## Dispatch
 
@@ -30,7 +35,8 @@ onex run node_env_parity_compute -- \
   ${ALL_CHECKS:+--all-checks} \
   ${NAMESPACE:+--namespace "$NAMESPACE"} \
   ${DRY_RUN:+--dry-run} \
-  ${CREATE_TICKETS:+--create-tickets}
+  ${CREATE_TICKETS:+--create-tickets} \
+  ${NO_CREATE_TICKETS:+--no-create-tickets}
 ```
 
 Surface the JSON output from stdout. The node produces a `ModelSkillResult` with `status`, `run_id`, and `message`.

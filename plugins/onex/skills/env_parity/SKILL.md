@@ -30,7 +30,10 @@ args:
     description: "Preview fix actions without executing"
     required: false
   - name: --create-tickets
-    description: "Create Linear tickets for CRITICAL findings (opt-in, not default)"
+    description: "Create Linear tickets for CRITICAL findings. Default: true (on-by-default; pass --no-create-tickets to disable)"
+    required: false
+  - name: --no-create-tickets
+    description: "Do not create Linear tickets for CRITICAL findings"
     required: false
 ---
 
@@ -78,7 +81,7 @@ The `onex:gap` skill covers code/contract drift. This skill fills the runtime st
 ## Quick Start
 
 ```bash
-# Default: CRITICAL checks only (credential, ECR, Infisical)
+# Default: CRITICAL checks only (credential, ECR, Infisical) and ticket CRITICAL findings
 /env-parity check
 
 # All 8 checks
@@ -90,8 +93,11 @@ The `onex:gap` skill covers code/contract drift. This skill fills the runtime st
 # Dry-run fix
 /env-parity fix --checks infisical --dry-run
 
-# Create Linear tickets for CRITICAL findings
+# Explicitly request ticket creation (also the default)
 /env-parity check --create-tickets
+
+# Disable ticket creation for a read-only parity check
+/env-parity check --no-create-tickets
 ```
 
 ## Alert Thresholds
@@ -104,10 +110,11 @@ The `onex:gap` skill covers code/contract drift. This skill fills the runtime st
 
 ## Ticket Creation
 
-Linear ticket creation requires the explicit `--create-tickets` flag. It is NOT the default.
-This prevents ticket spam on routine parity checks.
+Linear ticket creation is enabled by default for CRITICAL findings so active env
+mismatches are tracked. Pass `--no-create-tickets` for explicit read-only runs.
+`--create-tickets` remains accepted for callers that want to be explicit.
 
-When `--create-tickets` is set, one ticket is created per CRITICAL finding using:
+When ticket creation is enabled, one ticket is created per CRITICAL finding using:
 - Title: `[env-parity:<check_id>] <finding title verbatim>`
 - Priority: 1 (Urgent)
 - Project: Active Sprint
