@@ -140,40 +140,46 @@ class TestTicketWorkMandatoryContract:
 
     PROMPT_FILE = _SKILLS_DIR / "ticket_work" / "prompt.md"
 
+    def _content(self) -> str:
+        return self.PROMPT_FILE.read_text(encoding="utf-8")
+
+    def _assert_dispatch_only_shim(self, content: str) -> None:
+        assert "onex run-node node_ticket_work" in content
+        assert "SkillRoutingError" in content
+        assert "Do not fall back to inline phase execution" in content
+        assert "ProtocolProjectTracker" in content
+        assert "resolve_project_tracker()" in content
+        assert "tracker.save_issue(" not in content
+        assert "def intake" not in content
+        assert "def research" not in content
+
     def test_prompt_file_exists(self) -> None:
         assert self.PROMPT_FILE.is_file(), f"Missing: {self.PROMPT_FILE}"
 
     def test_auto_generate_mentioned_in_initialization(self) -> None:
         """S20: contract generation is owned by node_ticket_work, not the shim."""
-        content = self.PROMPT_FILE.read_text(encoding="utf-8")
-        assert "onex run-node node_ticket_work" in content, (
-            "S20: ticket_work must dispatch to node_ticket_work via onex run-node"
-        )
+        self._assert_dispatch_only_shim(self._content())
 
     def test_intake_phase_generates_stub_contract(self) -> None:
         """S20: stub contract generation lives in node_ticket_work."""
-        content = self.PROMPT_FILE.read_text(encoding="utf-8")
-        assert "node_ticket_work" in content, (
-            "S20: intake phase contract generation is owned by node_ticket_work"
-        )
+        content = self._content()
+        self._assert_dispatch_only_shim(content)
+        assert '"ticket_id": "<ticket_id>"' in content
 
     def test_contract_generation_is_mandatory(self) -> None:
         """S20: mandatory contract generation enforced in node_ticket_work."""
-        content = self.PROMPT_FILE.read_text(encoding="utf-8")
-        assert "node_ticket_work" in content, (
-            "S20: node_ticket_work enforces mandatory contract generation"
-        )
+        content = self._content()
+        self._assert_dispatch_only_shim(content)
+        assert "The node is the single source of truth for ticket work logic" in content
 
     def test_seam_detection_in_intake(self) -> None:
         """S20: seam detection runs in node_ticket_work, not the shim."""
-        content = self.PROMPT_FILE.read_text(encoding="utf-8")
-        assert "node_ticket_work" in content, (
-            "S20: seam detection lives in node_ticket_work, not the dispatch shim"
-        )
+        content = self._content()
+        self._assert_dispatch_only_shim(content)
+        assert "no LLM orchestration" in content
 
     def test_save_issue_called_to_embed_contract(self) -> None:
         """S20: issue embedding is handled by node_ticket_work."""
-        content = self.PROMPT_FILE.read_text(encoding="utf-8")
-        assert "node_ticket_work" in content, (
-            "S20: node_ticket_work handles issue embedding (contract generation moved to node)"
-        )
+        content = self._content()
+        self._assert_dispatch_only_shim(content)
+        assert "handler owns Linear access" in content

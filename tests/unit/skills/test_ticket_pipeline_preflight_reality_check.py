@@ -24,32 +24,44 @@ PROMPT_MD = (
 )
 
 
+def _assert_node_owned_preflight_contract(content: str, expected_clause: str) -> None:
+    assert "onex run-node node_ticket_pipeline" in content
+    assert expected_clause in content
+    assert "preflight_reality_check" not in content
+    assert "write_diagnosis" not in content
+    assert "emit_friction" not in content
+
+
 @pytest.mark.unit
 class TestPreflightRealityCheckWiring:
     def test_prompt_imports_reality_check_module(self) -> None:
         """S20: shim dispatches to node — no inline preflight_reality_check import."""
         content = PROMPT_MD.read_text()
-        assert "onex run-node node_ticket_pipeline" in content, (
-            "S20: ticket_pipeline must dispatch to node_ticket_pipeline"
+        _assert_node_owned_preflight_contract(
+            content,
+            "All FSM logic",
         )
 
     def test_preflight_halts_on_mismatch(self) -> None:
         """S20: halt-on-mismatch logic lives in node_ticket_pipeline, not the shim."""
         content = PROMPT_MD.read_text()
-        assert "node_ticket_pipeline" in content, (
-            "S20: pre-flight halt logic is owned by node_ticket_pipeline"
+        _assert_node_owned_preflight_contract(
+            content,
+            "If the pipeline reached FAILED state, display the failure reason",
         )
 
     def test_preflight_writes_diagnosis(self) -> None:
         """S20: diagnosis writing is owned by node_ticket_pipeline."""
         content = PROMPT_MD.read_text()
-        assert "node_ticket_pipeline" in content, (
-            "S20: diagnosis writing is owned by node_ticket_pipeline, not the shim"
+        _assert_node_owned_preflight_contract(
+            content,
+            "Phase results: <phase_results summary>",
         )
 
     def test_preflight_emits_friction(self) -> None:
         """S20: friction emission is owned by node_ticket_pipeline."""
         content = PROMPT_MD.read_text()
-        assert "node_ticket_pipeline" in content, (
-            "S20: friction emission is owned by node_ticket_pipeline, not the shim"
+        _assert_node_owned_preflight_contract(
+            content,
+            "Do not attempt inline recovery",
         )

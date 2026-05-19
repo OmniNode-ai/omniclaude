@@ -25,7 +25,7 @@ Validate `ticket_id` matches pattern `[A-Z]+-\d+`. Exit with an error if missing
 ## Execution: Dispatch to node_ticket_pipeline
 
 Build the JSON input from parsed flags and dispatch via `onex run-node`. No inline
-FSM logic, no subprocess wrappers, no script fallbacks.
+FSM logic, no shell wrappers, no script fallbacks.
 
 ```bash
 onex run-node node_ticket_pipeline \
@@ -55,5 +55,5 @@ phase. Do not attempt inline recovery — the node owns all retry and circuit-br
 
 - If `onex run-node node_ticket_pipeline` fails: surface the `SkillRoutingError`
   JSON envelope from stdout/stderr and exit non-zero.
-- Do not fall back to inline phase execution, task dispatch, or subprocess scripts.
+- Do not fall back to inline phase execution, task dispatch, or shell scripts.
   The node is the single source of truth for pipeline logic (A4 amendment).

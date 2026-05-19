@@ -24,6 +24,16 @@ PROMPT_MD = (
 )
 
 
+def _assert_dispatch_only_pipeline(content: str) -> None:
+    assert "onex run-node node_ticket_pipeline" in content
+    assert "SkillRoutingError" in content
+    assert "Do not fall back to inline phase execution" in content
+    assert "execute_dod_verify" not in content
+    assert "subprocess" not in content.lower()
+    for marker in ("state_machine", "on_entry", "transition", "run-step"):
+        assert marker not in content
+
+
 @pytest.mark.unit
 class TestExecuteDodVerifyExists:
     """S20: ticket_pipeline is a dispatch-only shim — no inline DoD verify."""
@@ -34,16 +44,12 @@ class TestExecuteDodVerifyExists:
     def test_handler_dict_references_execute_dod_verify(self) -> None:
         """S20: handler dict and inline execute_dod_verify are absent; dispatch routes to node."""
         content = PROMPT_MD.read_text()
-        assert "onex run-node node_ticket_pipeline" in content, (
-            "S20: ticket_pipeline must dispatch to node_ticket_pipeline via onex run-node"
-        )
+        _assert_dispatch_only_pipeline(content)
 
     def test_execute_dod_verify_has_implementation_body(self) -> None:
         """S20: no inline execute_dod_verify — all DoD logic is in node_ticket_pipeline."""
         content = PROMPT_MD.read_text()
-        assert "onex run-node node_ticket_pipeline" in content, (
-            "S20: ticket_pipeline shim must route to node_ticket_pipeline, not implement inline"
-        )
+        _assert_dispatch_only_pipeline(content)
 
 
 @pytest.mark.unit
@@ -55,36 +61,22 @@ class TestExecuteDodVerifyPromptContract:
         self.content = PROMPT_MD.read_text()
 
     def test_phase_section_exists(self) -> None:
-        assert "node_ticket_pipeline" in self.content, (
-            "S20: shim must reference node_ticket_pipeline as dispatch target"
-        )
+        _assert_dispatch_only_pipeline(self.content)
 
     def test_invokes_evidence_runner(self) -> None:
-        assert "onex run-node node_ticket_pipeline" in self.content, (
-            "S20: DoD phase handled by node — shim dispatches to node_ticket_pipeline"
-        )
+        _assert_dispatch_only_pipeline(self.content)
 
     def test_reads_policy_mode(self) -> None:
-        assert "onex run-node node_ticket_pipeline" in self.content, (
-            "S20: policy mode is handled by node_ticket_pipeline, not the shim"
-        )
+        _assert_dispatch_only_pipeline(self.content)
 
     def test_writes_receipt_path(self) -> None:
-        assert "onex run-node node_ticket_pipeline" in self.content, (
-            "S20: receipt path is written by node_ticket_pipeline, not the shim"
-        )
+        _assert_dispatch_only_pipeline(self.content)
 
     def test_branches_on_hard_soft_advisory(self) -> None:
-        assert "onex run-node node_ticket_pipeline" in self.content, (
-            "S20: enforcement mode branching is handled by node_ticket_pipeline"
-        )
+        _assert_dispatch_only_pipeline(self.content)
 
     def test_returns_stable_result_codes(self) -> None:
-        assert "node_ticket_pipeline" in self.content, (
-            "S20: result codes are defined in node_ticket_pipeline, not the shim"
-        )
+        _assert_dispatch_only_pipeline(self.content)
 
     def test_includes_artifact_paths(self) -> None:
-        assert "node_ticket_pipeline" in self.content, (
-            "S20: artifact paths are returned by node_ticket_pipeline, not the shim"
-        )
+        _assert_dispatch_only_pipeline(self.content)

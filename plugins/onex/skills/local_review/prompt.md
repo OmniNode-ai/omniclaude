@@ -33,7 +33,7 @@ review loop, no fix agents, no subprocess wrappers.
 
 ```bash
 onex run-node node_local_review \
-  --input '{"max_iterations": <n>, "required_clean_runs": <n>, "dry_run": <bool>}' \
+  --input '{"uncommitted": <bool>, "since": <ref_or_null>, "max_iterations": <n>, "required_clean_runs": <n>, "no_fix": <bool>, "no_commit": <bool>, "dry_run": <bool>, "path": <dir_or_null>}' \
   --timeout 300
 ```
 
