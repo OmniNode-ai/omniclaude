@@ -4,7 +4,7 @@
 
 # cron-contract-verify.sh — Headless contract-verify tick [OMN-9036]
 #
-# Thin wrapper that delegates to /onex:contract_sweep --mode runtime via claude -p.
+# Thin wrapper that delegates to full /onex:contract_sweep runtime verification via claude -p.
 # No inline business logic.
 
 set -euo pipefail
@@ -87,7 +87,7 @@ canonical_clone_preflight "preflight" || {
 }
 
 OUTPUT_FILE="${STATE_DIR}/${RUN_ID}.txt"
-PROMPT='/onex:contract_sweep --mode runtime'
+PROMPT='/onex:contract_sweep --mode runtime --full-runtime-verification'
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   log "[DRY RUN] Would execute: claude -p '${PROMPT}' --allowedTools '${ALLOWED_TOOLS}'"
