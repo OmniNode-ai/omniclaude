@@ -7,9 +7,9 @@ Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, then dispatches to the runtime via:
   1. HTTP (ONEX_RUNTIME_URL is set and non-empty)
   2. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
-  3. Kafka (contract-driven — topic and event_type resolved from the deployed
-     omnibase_infra node_delegation_orchestrator contract.yaml at import time;
-     falls back to TopicBase.DELEGATE_TASK if the contract is unavailable)
+  3. Kafka (contract-driven — topic resolved from omnimarket
+     node_delegate_skill_orchestrator contract.yaml via OMNI_HOME;
+     returns error if topic cannot be resolved)
      Uses KAFKA_BOOTSTRAP_SERVERS — fail-fast if unset.
 
 Optional env vars:
@@ -88,112 +88,42 @@ except ImportError:
     _HAS_EVIDENCE_BUNDLE = False
 
 
-def _load_infra_orchestrator_contract() -> dict:  # type: ignore[type-arg]
-    """Load the omnibase_infra node_delegation_orchestrator contract.yaml.
-
-    Searches for the contract relative to the omnibase_infra package location,
-    falling back gracefully if not installed or not findable. Returns an empty
-    dict on any failure so callers can apply their own defaults.
-    """
-    search_roots: list[Path] = []
-
-    # 1. Try via installed package location
-    try:
-        import omnibase_infra as _obi  # noqa: PLC0415
-
-        pkg_root = Path(_obi.__file__).parent
-        search_roots.append(pkg_root)
-    except ImportError:
-        pass
-
-    # 2. Try common repo paths relative to this skill file
-    _repo_candidates = [
-        _PLUGIN_ROOT.parent.parent.parent.parent
-        / "omnibase_infra"
-        / "src"
-        / "omnibase_infra",
-        _PLUGIN_ROOT.parent.parent.parent.parent.parent
-        / "omnibase_infra"
-        / "src"
-        / "omnibase_infra",
-    ]
-    search_roots.extend(_repo_candidates)
-
-    for root in search_roots:
-        candidate = root / "nodes" / "node_delegation_orchestrator" / "contract.yaml"
-        if candidate.exists():
-            try:
-                import yaml  # noqa: PLC0415
-
-                with candidate.open() as f:
-                    return yaml.safe_load(f) or {}
-            except Exception:  # noqa: BLE001
-                return {}
-
-    return {}
-
-
-def _resolve_delegation_topic_and_event_type() -> tuple[str, str]:
-    """Return (topic, event_type) from the deployed omnibase_infra contract.
-
-    Priority:
-      1. omnibase_infra node_delegation_orchestrator contract.yaml subscribe_topics[0]
-      2. TopicBase.DELEGATE_TASK (omniclaude fallback)
-      3. Empty string (last resort; Kafka path will fail-fast anyway)
-
-    event_type defaults to the first consumed_event's event_type, then
-    "omnibase-infra.delegation-request" (matching DispatcherDelegationRequest.message_types).
-    """
-    contract = _load_infra_orchestrator_contract()
-
-    # Extract topic
-    topic: str = ""
-    try:
-        subscribe_topics = contract.get("event_bus", {}).get("subscribe_topics", [])
-        if subscribe_topics:
-            # First subscribe topic is the primary inbound command topic
-            topic = str(subscribe_topics[0])
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Extract event_type from consumed_events or published_events
-    event_type: str = ""
-    try:
-        consumed = contract.get("consumed_events", [])
-        if consumed:
-            event_type = str(consumed[0].get("event_type", ""))
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Fallback chain for topic
-    if not topic:
-        try:
-            from omniclaude.hooks.topics import TopicBase as _TopicBase  # noqa: PLC0415
-
-            topic = _TopicBase.DELEGATE_TASK
-        except (ImportError, AttributeError):
-            topic = ""
-
-    # Fallback for event_type — must match dispatcher_delegation_request.message_types
-    if not event_type:
-        event_type = "omnibase-infra.delegation-request"
-
-    return topic, event_type
-
-
-_DELEGATION_REQUEST_TOPIC: str
-_DELEGATION_EVENT_TYPE: str
-_DELEGATION_REQUEST_TOPIC, _DELEGATION_EVENT_TYPE = (
-    _resolve_delegation_topic_and_event_type()
+_DELEGATION_COMMAND_NAME = "node_delegate_skill_orchestrator"
+_CONTRACT_RELATIVE_PATH = (
+    "omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml"
 )
+
+
+def _resolve_command_topic() -> str:
+    """Return the subscribe topic from the node's contract.yaml.
+
+    Locates the contract via OMNI_HOME, loads it with yaml.safe_load, and
+    returns event_bus.subscribe_topics[0]. Returns an empty string on any
+    failure so callers can produce a clear error rather than silently misbehaving.
+    """
+    omni_home = os.environ.get("OMNI_HOME", "").strip()
+    if not omni_home:
+        return ""
+    contract_path = Path(omni_home) / _CONTRACT_RELATIVE_PATH
+    if not contract_path.is_file():
+        return ""
+    try:
+        import yaml  # noqa: PLC0415
+
+        data = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+        topics = (data or {}).get("event_bus", {}).get("subscribe_topics", [])
+        return str(topics[0]) if topics else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+_DELEGATION_REQUEST_TOPIC: str = _resolve_command_topic()
 
 
 DELEGATABLE: frozenset[object] = (
     TaskClassifier.DELEGATABLE_INTENTS if _HAS_CLASSIFIER else frozenset()
 )
 _RUNTIME_TASK_TYPES = frozenset({"test", "document", "research"})
-
-_DELEGATION_COMMAND_NAME = "node_delegation_orchestrator"
 
 
 def _resolve_correlation_id(correlation_id: str | None) -> uuid.UUID:
@@ -495,7 +425,7 @@ def _dispatch_via_kafka(
 
     emitted_at = datetime.now(UTC).isoformat()
     envelope = {
-        "event_type": _DELEGATION_EVENT_TYPE,
+        "event_type": "omnimarket.delegate-skill",
         "envelope_id": str(uuid4()),
         "envelope_timestamp": emitted_at,
         "correlation_id": correlation_id_str,
@@ -576,7 +506,7 @@ def _dispatch_via_pandaproxy(
 
     emitted_at = datetime.now(UTC).isoformat()
     envelope = {
-        "event_type": _DELEGATION_EVENT_TYPE,
+        "event_type": "omnimarket.delegate-skill",
         "envelope_id": str(uuid4()),
         "envelope_timestamp": emitted_at,
         "correlation_id": correlation_id_str,
@@ -696,7 +626,7 @@ def _dispatch_via_ssh_rpk(
 
     emitted_at = datetime.now(UTC).isoformat()
     envelope = {
-        "event_type": _DELEGATION_EVENT_TYPE,
+        "event_type": "omnimarket.delegate-skill",
         "envelope_id": str(uuid4()),
         "envelope_timestamp": emitted_at,
         "correlation_id": correlation_id_str,
@@ -785,7 +715,7 @@ def classify_and_publish(
       2. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
       3. Pandaproxy HTTP (ONEX_PANDAPROXY_URL) — preferred for Mac→.201 LAN
       4. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT) — fallback
-      5. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
+      5. Kafka (contract-driven; topic resolved from omnimarket contract at import time)
 
     force_local=True returns an explicit error (OMN-10723).
     """
@@ -861,7 +791,7 @@ def classify_and_publish(
     if not runtime_url and ssh_host:
         runtime_url = _derive_runtime_url_from_ssh_host(ssh_host)
 
-    http_transport_error: dict | None = None
+    http_transport_error: dict | None = None  # type: ignore[type-arg]
     if runtime_url:
         if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
             return _runtime_import_error(
@@ -1034,7 +964,16 @@ def classify_and_publish(
             rpk_result["command_name"] = _DELEGATION_COMMAND_NAME
         return rpk_result
 
-    # Kafka: contract-driven transport (OMN-10834)
+    # Kafka: contract-driven transport (OMN-10604)
+    if not _DELEGATION_REQUEST_TOPIC:
+        return {
+            "success": False,
+            "error": (
+                "Cannot resolve command topic from node contract.yaml. "
+                f"Set OMNI_HOME so run.py can locate {_CONTRACT_RELATIVE_PATH}"
+            ),
+            "path": "kafka",
+        }
     kafka_result = _dispatch_via_kafka(
         delegation_payload=delegation_payload,
         correlation_id_str=correlation_id_str,
