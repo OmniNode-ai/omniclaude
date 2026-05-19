@@ -433,9 +433,9 @@ class TestSkillMdStaticMode:
         assert "dry-run" in content
 
     def test_skill_md_version_bumped(self) -> None:
-        """SKILL.md version is 5.0.0 (bumped for S21 thin shim)."""
+        """SKILL.md version is 6.0.0 (bumped for OMN-7981 re-enablement)."""
         content = SKILL_MD.read_text()
-        assert "version: 5.0.0" in content
+        assert "version: 6.0.0" in content
 
     def test_skill_md_static_mode_section(self) -> None:
         """SKILL.md dispatches --static mode through node."""
