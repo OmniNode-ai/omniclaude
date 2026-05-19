@@ -178,3 +178,108 @@ class TestKafkaEnvelopeUsesContractEventType:
         assert len(captured) == 1
         assert captured[0]["event_type"] == "DelegationRequest"
         assert captured[0]["event_type"] != "DelegateTaskCommand"
+
+
+class TestKafkaEnvelopeFieldNaming:
+    """Regression tests for OMN-10604: envelope field naming must use envelope_id /
+    envelope_timestamp, NOT event_id / timestamp / source.
+
+    These field names match the canonical ModelEventEnvelope contract.
+    """
+
+    def test_kafka_envelope_uses_envelope_id_not_event_id(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_dispatch_via_kafka must emit envelope_id, not event_id."""
+        monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+
+        captured: list[dict] = []  # type: ignore[type-arg]
+
+        class FakeProducer:
+            def __init__(self, _conf: dict) -> None:  # type: ignore[type-arg]
+                pass
+
+            def produce(
+                self,
+                topic: str,
+                *,
+                value: bytes,
+                key: bytes,
+                on_delivery: object,
+            ) -> None:
+                import json  # noqa: PLC0415
+
+                captured.append(json.loads(value.decode()))
+                if callable(on_delivery):
+                    on_delivery(None, MagicMock())  # type: ignore[arg-type]
+
+            def flush(self, timeout: float = 10.0) -> None:
+                pass
+
+        with patch.dict(
+            sys.modules, {"confluent_kafka": MagicMock(Producer=FakeProducer)}
+        ):
+            delegate_run._dispatch_via_kafka(
+                delegation_payload={"prompt": "test"},
+                correlation_id_str=str(uuid.uuid4()),
+                topic="onex.cmd.omnibase-infra.delegation-request.v1",
+                task_type="test",
+            )
+
+        assert len(captured) == 1
+        envelope = captured[0]
+        # Must use canonical ModelEventEnvelope field names
+        assert "envelope_id" in envelope, "envelope_id missing from Kafka envelope"
+        assert "envelope_timestamp" in envelope, (
+            "envelope_timestamp missing from Kafka envelope"
+        )
+        # Must NOT use the stashed-changes field names
+        assert "event_id" not in envelope, "event_id must not appear (use envelope_id)"
+        assert "source" not in envelope, (
+            "source must not appear in envelope (stashed-changes field)"
+        )
+
+    def test_pandaproxy_envelope_uses_envelope_id_not_event_id(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_dispatch_via_pandaproxy must also emit envelope_id / envelope_timestamp."""
+        import json  # noqa: PLC0415
+        import subprocess  # noqa: PLC0415
+        from unittest.mock import patch as _patch  # noqa: PLC0415
+
+        captured_body: list[dict] = []  # type: ignore[type-arg]
+
+        def fake_run(cmd: list, **kwargs: object) -> object:  # type: ignore[type-arg]
+            # Extract the -d argument (body JSON)
+            d_idx = cmd.index("-d")
+            body = json.loads(cmd[d_idx + 1])
+            captured_body.append(body)
+
+            class FakeResult:
+                returncode = 0
+                stdout = json.dumps(
+                    {"offsets": [{"partition": 0, "offset": 1, "error_code": 0}]}
+                ).encode()
+                stderr = b""
+
+            return FakeResult()
+
+        with _patch.object(subprocess, "run", fake_run):
+            delegate_run._dispatch_via_pandaproxy(
+                delegation_payload={"prompt": "test"},
+                correlation_id_str=str(uuid.uuid4()),
+                topic="onex.cmd.omnibase-infra.delegation-request.v1",
+                task_type="test",
+                pandaproxy_url="http://localhost:28082",
+                timeout_seconds=5.0,
+            )
+
+        assert len(captured_body) == 1
+        # pandaproxy wraps in {"records": [{"value": <envelope>}]}
+        envelope = captured_body[0]["records"][0]["value"]
+        assert "envelope_id" in envelope, "envelope_id missing from pandaproxy envelope"
+        assert "envelope_timestamp" in envelope, (
+            "envelope_timestamp missing from pandaproxy envelope"
+        )
+        assert "event_id" not in envelope
+        assert "source" not in envelope
