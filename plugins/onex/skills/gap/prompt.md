@@ -17,6 +17,11 @@ First positional argument is the subcommand: `detect`, `fix`, `cycle`, or `recon
 
 All remaining flags are passed through to the node.
 
+Auth probes are included by default so Infisical/token drift is visible in
+normal gap runs. Accept `--include-auth-probes` as an explicit/default-compatible
+enable and pass `--no-include-auth-probes` through when a caller needs to
+disable auth_config probing.
+
 ### Arguments
 
 | Argument | Description |
@@ -43,7 +48,8 @@ All remaining flags are passed through to the node.
 | `--verify` | Run golden-path-validate after fix (cycle mode) |
 | `--auto-only` | Skip GATE findings in fix phase (cycle mode) |
 | `--skip-infra-probes` | Skip infrastructure probes that require live services |
-| `--include-auth-probes` | Include auth_config probes (disabled by default) |
+| `--include-auth-probes` | Include auth_config probes (default: true; explicit/default-compatible enable) |
+| `--no-include-auth-probes` | Disable auth_config probes |
 | `--lag-threshold` | Consumer group lag threshold for projection_lag probe (default: 10000) |
 
 ## Dispatch

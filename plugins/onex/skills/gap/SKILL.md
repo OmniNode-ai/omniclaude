@@ -81,7 +81,10 @@ args:
     description: "Skip infrastructure probes (projection_lag, env_activation, migration_parity) that require live services"
     required: false
   - name: --include-auth-probes
-    description: "Include auth_config probes (disabled by default as they require Infisical access)"
+    description: "Include auth_config probes (default: true; retained for explicit enable/backward compatibility)"
+    required: false
+  - name: --no-include-auth-probes
+    description: "Disable auth_config probes for runs that must not touch Infisical/token checks"
     required: false
   - name: --lag-threshold
     description: "Consumer group lag threshold for projection_lag probe (default: 10000)"
@@ -171,7 +174,8 @@ Absorbed from: gap-analysis (v1.0.0)
 /gap detect --severity-threshold CRITICAL
 /gap detect --max-best-effort 20
 /gap detect --epic OMN-2500 --skip-infra-probes
-/gap detect --epic OMN-2500 --include-auth-probes --lag-threshold 5000
+/gap detect --epic OMN-2500 --lag-threshold 5000
+/gap detect --epic OMN-2500 --no-include-auth-probes
 ```
 
 | Arg | Default | Description |
@@ -185,7 +189,8 @@ Absorbed from: gap-analysis (v1.0.0)
 | `--dry-run` | false | Skip ticket creation/commenting |
 | `--output` | md | Output format: `json` or `md` |
 | `--skip-infra-probes` | false | Skip probes 2.7-2.8, 2.10 (env_activation, projection_lag, migration_parity) that require live infrastructure |
-| `--include-auth-probes` | false | Include probe 2.9 (auth_config); disabled by default as it requires Infisical access |
+| `--include-auth-probes` | true | Include probe 2.9 (auth_config); accepted as an explicit/default-compatible enable |
+| `--no-include-auth-probes` | false | Disable probe 2.9 (auth_config) for runs that must not touch Infisical/token checks |
 | `--lag-threshold` | 10000 | Consumer group lag threshold for projection_lag probe (probe 2.8) |
 
 ### Gating Rules (Hard -- Never Violate)
