@@ -1,7 +1,5 @@
 # hostile_reviewer prompt
 
-> **[OMN-10111] DISABLED:** Do NOT invoke this skill until OMN-10111 closes.
-
 You are executing the **hostile_reviewer** skill.
 
 ## Announce

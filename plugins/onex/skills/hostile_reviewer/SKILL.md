@@ -1,7 +1,7 @@
 ---
 description: Multi-model adversarial code review (Gemini, Codex, Qwen3-Coder, DeepSeek-R1, Claude) with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
 mode: full
-version: 5.0.0
+version: 6.0.0
 level: intermediate
 debug: false
 category: review
@@ -71,14 +71,13 @@ args:
 
 # /onex:hostile_reviewer — Multi-Model Adversarial Review
 
-> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Do NOT invoke this skill in any mode (--gate, --static, --file, --pr). Re-enable when OMN-10111 closes (eval precision/recall thresholds met, silent-stub file-mode replaced).
-
 **Skill ID**: `onex:hostile_reviewer`
-**Version**: 5.0.0
+**Version**: 6.0.0
 **Backing node**: `node_hostile_reviewer`
 
 ## Changelog
 
+- **6.0.0** — Re-enabled (OMN-7981). Contract-driven model routing: endpoints declared in contract.yaml model_routing, resolved from env vars at runtime. N-1 graceful degradation when endpoints are down.
 - **5.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_hostile_reviewer`.
 - **4.0.0** — Added DISABLED notice (OMN-10111).
 
