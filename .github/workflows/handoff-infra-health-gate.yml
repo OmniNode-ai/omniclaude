@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-11271: Reusable workflow — enforce ## Infra Health section in handoff docs.
+# Called from each repo via:
+#
+#   jobs:
+#     call-handoff-infra-health:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/handoff-infra-health-gate.yml@main
+#
+# Required status check: gate / Handoff Infra Health
+# Hard fail — no warn-only mode (CLAUDE.md Rule #5, Rule #10).
+# Spec: OMN-8867 (mandatory ## Infra Health section format).
+
+name: Handoff Infra Health Gate
+
+on:
+  workflow_call:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'docs/handoffs/**/*.md'
+      - 'docs/**/*handoff*.md'
+      - 'docs/tracking/**/*handoff*.md'
+
+jobs:
+  check-infra-health-section:
+    name: gate / Handoff Infra Health
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check handoff docs for ## Infra Health section
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          SECTION_PATTERN='^## Infra Health'
+          TICKET_REF="OMN-11271"
+          VIOLATIONS=()
+
+          # Find handoff docs changed in this PR
+          CHANGED_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null || \
+                          git diff --name-only HEAD~1...HEAD 2>/dev/null || true)
+
+          for file in $CHANGED_FILES; do
+            # Only markdown files
+            [[ "$file" == *.md ]] || continue
+
+            # Only handoff documents
+            case "$file" in
+              docs/handoffs/*.md|\
+              docs/*handoff*.md|\
+              docs/tracking/*handoff*.md) ;;
+              *) continue ;;
+            esac
+
+            # File must exist in the working tree
+            [[ -f "$file" ]] || continue
+
+            if ! grep -qE "$SECTION_PATTERN" "$file"; then
+              VIOLATIONS+=("$file")
+              echo "::error file=$file::HANDOFF_MISSING_INFRA_HEALTH: $file — add ## Infra Health section (${TICKET_REF} / OMN-8867)"
+            fi
+          done
+
+          if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
+            echo ""
+            echo "::error::${#VIOLATIONS[@]} handoff document(s) missing the mandatory '## Infra Health' section."
+            echo "::error::Add the section as specified in OMN-8867 before merging."
+            echo "::error::Ticket: ${TICKET_REF}"
+            exit 1
+          fi
+
+          echo "::notice::All changed handoff documents contain the required '## Infra Health' section. OK."

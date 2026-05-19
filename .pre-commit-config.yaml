@@ -73,6 +73,17 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-11271: Reject handoff docs missing mandatory ## Infra Health section.
+      # Matches docs/handoffs/*.md, docs/*handoff*.md, docs/tracking/*handoff*.md.
+      # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10). Spec: OMN-8867.
+      - id: check-handoff-infra-health
+        name: Reject handoff docs missing ## Infra Health section (OMN-11271)
+        entry: .pre-commit-hooks/check-handoff-infra-health.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
       # approval receipt (# skip-token-allowed: <receipt-id>).
