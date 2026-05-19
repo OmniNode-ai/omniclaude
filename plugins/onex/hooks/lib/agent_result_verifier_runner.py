@@ -1,22 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Runner for post_tool_use_agent_result_verifier.sh (OMN-9055 Task 4 scaffold).
+"""Runner for post_tool_use_agent_result_verifier.sh.
 
 Reads an agent turn body on stdin, extracts claims via
-`agent_claim_extractor.extract_claims`, probes each `pr_merged` claim via
-`gh pr view`, and exits 2 with a structured JSON diff when any claim is
-fabricated (PR missing) or misstated (PR exists but not merged).
-
-Scaffold scope — only `pr_merged` is probed; `thread_resolved` and
-`linear_state` short-circuit to PASS. The maturity ticket replaces the
-inline `gh` probe with a real omnimarket claim-resolver node.
+`agent_claim_extractor.extract_claims`, sends them to omnimarket
+`node_claim_resolver`, and exits 2 with a structured JSON diff when any
+claim is fabricated or misstated.
 
 Contract:
     stdin:  raw agent turn body (free-form text)
     env:    REPO_HINT — repository slug used to qualify PR references;
-            empty/unset => bare "#N" refs, which are skipped by the probe.
+            empty/unset => bare "#N" refs, which the resolver may skip.
     stdout: JSON `{"mismatches": [...]}` when exit=2; nothing on exit=0.
-    stderr: diagnostics; "RESOLVER_UNREACHABLE:..." on gh absence/timeout.
+    stderr: diagnostics; "RESOLVER_UNREACHABLE:..." on resolver absence/timeout.
 
 Exit codes:
     0 — all verifiable claims passed or no claims / resolver unreachable.
@@ -27,88 +23,97 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess  # nosec: B404 - gh CLI invocation is the core mechanism
+import shlex
+import subprocess  # nosec: B404 - resolver CLI invocation is the core mechanism.
 import sys
+from collections.abc import Callable
 
 from plugins.onex.hooks.lib.agent_claim_extractor import extract_claims
 
-_GH_TIMEOUT_SECONDS = 10
+_RESOLVER_TIMEOUT_SECONDS = 30
+Resolver = Callable[[dict[str, object]], dict[str, object]]
 
 
-def _probe_pr_merged(repo: str, number: str) -> tuple[str, str] | None:
-    """Probe whether a PR exists and is merged via `gh pr view`.
+class ResolverUnavailable(RuntimeError):
+    """Raised when node_claim_resolver cannot be reached."""
 
-    Returns:
-        None when the PR is confirmed merged (no mismatch).
-        ("reason", "detail") on mismatch.
 
-    Raises:
-        Caller handles FileNotFoundError and TimeoutExpired as fail-open.
-    """
-    proc = subprocess.run(  # nosec: B603,B607 - gh CLI is the verifier bridge
-        [
-            "gh",
-            "pr",
-            "view",
-            number,
-            "--repo",
-            f"OmniNode-ai/{repo}",
-            "--json",
-            "state,number",
-        ],
+def _resolver_command() -> list[str]:
+    configured = os.environ.get("OMN_CLAIM_RESOLVER_CMD")
+    if configured:
+        return shlex.split(configured)
+    return [sys.executable, "-m", "omnimarket.nodes.node_claim_resolver"]
+
+
+def _resolve_claims_via_node(payload: dict[str, object]) -> dict[str, object]:
+    """Call omnimarket node_claim_resolver with the normalized claim payload."""
+    proc = subprocess.run(  # nosec: B603 - fixed resolver command, no shell.
+        _resolver_command(),
+        input=json.dumps(payload),
         capture_output=True,
         text=True,
-        timeout=_GH_TIMEOUT_SECONDS,
+        timeout=_RESOLVER_TIMEOUT_SECONDS,
         check=False,
     )
-    if proc.returncode != 0:
-        return (
-            f"PR {repo}#{number} not found on GitHub",
-            proc.stderr.strip()[:200],
-        )
     try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return None
-    state = data.get("state", "").upper()
-    if state != "MERGED":
-        return (f"PR {repo}#{number} state is {state!r}, not MERGED", "")
-    return None
+        response = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ResolverUnavailable(f"invalid resolver JSON: {exc}") from exc
+    if proc.returncode not in (0, 2):
+        detail = proc.stderr.strip()[:300] or f"resolver exit {proc.returncode}"
+        raise ResolverUnavailable(detail)
+    if not isinstance(response, dict):
+        raise ResolverUnavailable("resolver returned non-object JSON")
+    return response
 
 
-def run(body: str, repo_hint: str | None) -> int:
+def run(
+    body: str,
+    repo_hint: str | None,
+    *,
+    resolver: Resolver | None = None,
+    repo_root: str | None = None,
+) -> int:
     """Extract and verify claims. See module docstring for the contract."""
     claims = extract_claims(body, repo_hint=repo_hint)
-    mismatches: list[dict[str, object]] = []
+    if not claims:
+        return 0
 
-    for claim in claims:
-        if claim.kind != "pr_merged":
-            # Scaffold short-circuit — maturity ticket routes the full
-            # taxonomy through a real resolver node.
-            continue
-        repo, _, number = claim.ref.partition("#")
-        if not repo or not number:
-            # Bare `#N` (no repo_hint); can't probe without context.
-            continue
-        try:
-            result = _probe_pr_merged(repo, number)
-        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-            print(f"RESOLVER_UNREACHABLE:{exc}", file=sys.stderr)
-            return 0
-        if result is not None:
-            reason, detail = result
-            entry: dict[str, object] = {
-                "claim": claim.model_dump(),
-                "reason": reason,
-            }
-            if detail:
-                entry["gh_stderr"] = detail
-            mismatches.append(entry)
+    payload: dict[str, object] = {
+        "claims": [claim.model_dump(mode="json") for claim in claims],
+        "repo_hint": repo_hint,
+        "repo_root": repo_root or os.environ.get("OMN_CLAIM_RESOLVER_REPO_ROOT"),
+    }
+    resolve = resolver or _resolve_claims_via_node
+    try:
+        response = resolve(payload)
+    except (FileNotFoundError, subprocess.TimeoutExpired, ResolverUnavailable) as exc:
+        print(f"RESOLVER_UNREACHABLE:{exc}", file=sys.stderr)
+        return 0
+
+    mismatches = _extract_mismatches(response)
 
     if mismatches:
-        print(json.dumps({"mismatches": mismatches}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "mismatches": mismatches,
+                    "claim_count": len(claims),
+                },
+                indent=2,
+            )
+        )
         return 2
     return 0
+
+
+def _extract_mismatches(response: dict[str, object]) -> list[object]:
+    mismatches = response.get("mismatches", [])
+    if isinstance(mismatches, list):
+        return mismatches
+    if isinstance(mismatches, tuple):
+        return list(mismatches)
+    raise ResolverUnavailable("resolver response has non-list mismatches")
 
 
 def main() -> int:

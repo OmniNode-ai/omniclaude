@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# PostToolUse Agent-Result Verifier (OMN-9055 — Task 4 scaffold)
+# PostToolUse Agent-Result Verifier (OMN-9055/OMN-9107)
 #
-# Extracts structured claims (pr_merged, thread_resolved, linear_state)
-# from Agent turn output and verifies each against ground truth via
-# agent_result_verifier_runner. On fabricated-claim detection the runner
+# Extracts structured claims from Agent turn output and verifies them through
+# agent_result_verifier_runner plus omnimarket node_claim_resolver. On
+# fabricated-claim detection the runner
 # prints a structured JSON diff; this wrapper surfaces that diff to stderr
 # so the user sees the block message inline.
 #
@@ -16,11 +16,8 @@
 # stderr output, not the exit code. Blocking semantics are surfaced via
 # text, not status. Python-layer tests assert the true exit-2 path.
 #
-# Scaffold scope — 3 claim kinds, basic `gh pr view` check only. Maturity
-# (≥6 kinds + real resolver-backed verification via a dedicated omnimarket
-# claim-resolver node) ships under a follow-up ticket. Do NOT extend the
-# inline `gh` path here; it is deliberately minimal so the bridge point
-# is obvious when the follow-up lands.
+# Supported claim kinds include pr_merged, pr_opened, commit_sha, ci_passing,
+# file_committed, blocker_on_X, thread_resolved, and linear_state.
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -131,6 +128,7 @@ set +e
 VERIFIER_RESULT="$(
     PYTHONPATH="${REPO_ROOT_FOR_PYTHONPATH}${PYTHONPATH:+:${PYTHONPATH}}" \
     REPO_HINT="$REPO_HINT" \
+    OMN_CLAIM_RESOLVER_REPO_ROOT="${_OMNICLAUDE_CALLER_CWD}" \
     "$PYTHON_BIN" -m plugins.onex.hooks.lib.agent_result_verifier_runner \
     <<< "$TURN_BODY" 2>&1
 )"

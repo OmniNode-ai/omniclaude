@@ -39,22 +39,27 @@ HOOK_SCRIPT = (
 # =============================================================================
 
 
-class TestRunnerBlocksOnFabricatedPr:
-    """Runner returns exit code 2 when a pr_merged claim is fabricated."""
+class TestRunnerBlocksOnFabricatedClaims:
+    """Runner returns exit code 2 when resolver reports mismatches."""
 
     def test_fabricated_pr_returns_2(self, capsys: pytest.CaptureFixture[str]) -> None:
         from plugins.onex.hooks.lib.agent_result_verifier_runner import run
 
-        # Mock subprocess.run to simulate `gh pr view` failing (PR not found).
-        fake_proc = mock.MagicMock(
-            returncode=1, stdout="", stderr="HTTP 404: Not Found"
-        )
         body = "All done. PR #99999999 merged at 07:56Z."
-        with mock.patch(
-            "plugins.onex.hooks.lib.agent_result_verifier_runner.subprocess.run",
-            return_value=fake_proc,
-        ):
-            rc = run(body, repo_hint="omniclaude")
+
+        def resolver(payload: dict[str, object]) -> dict[str, object]:
+            return {
+                "results": [],
+                "mismatches": [
+                    {
+                        "claim": payload["claims"][0],  # type: ignore[index]
+                        "status": "failed",
+                        "reason": "PR omniclaude#99999999 not found on GitHub",
+                    }
+                ],
+            }
+
+        rc = run(body, repo_hint="omniclaude", resolver=resolver)
         assert rc == 2
         out = capsys.readouterr().out
         payload = json.loads(out)
@@ -63,24 +68,47 @@ class TestRunnerBlocksOnFabricatedPr:
         assert mismatch["claim"]["ref"] == "omniclaude#99999999"
         assert "not found" in mismatch["reason"].lower()
 
-    def test_open_pr_state_returns_2(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_multi_claim_mismatches_return_structured_diff(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         from plugins.onex.hooks.lib.agent_result_verifier_runner import run
 
-        # gh returned success but state=OPEN — claim misstates the outcome.
-        fake_proc = mock.MagicMock(
-            returncode=0,
-            stdout=json.dumps({"state": "OPEN", "number": 123}),
-            stderr="",
+        body = (
+            "PR #123 merged. CI passing for PR #123. "
+            "Committed file plugins/onex/hooks/lib/agent_claim_extractor.py. "
+            "Blocker on OMN-9107 without evidence."
         )
-        body = "All done. PR #123 merged at 07:56Z."
-        with mock.patch(
-            "plugins.onex.hooks.lib.agent_result_verifier_runner.subprocess.run",
-            return_value=fake_proc,
-        ):
-            rc = run(body, repo_hint="omniclaude")
+
+        def resolver(payload: dict[str, object]) -> dict[str, object]:
+            claims = payload["claims"]
+            assert isinstance(claims, list)
+            return {
+                "results": [],
+                "mismatches": [
+                    {
+                        "claim": claims[0],
+                        "status": "failed",
+                        "reason": "PR omniclaude#123 state mismatch",
+                        "expected": "MERGED",
+                        "actual": "OPEN",
+                    },
+                    {
+                        "claim": claims[-1],
+                        "status": "failed",
+                        "reason": "blocker claim lacks quoted gh pr view --json evidence",
+                        "expected": "quoted gh pr view --json evidence",
+                        "actual": "absent",
+                    },
+                ],
+            }
+
+        rc = run(body, repo_hint="omniclaude", resolver=resolver)
         assert rc == 2
         payload = json.loads(capsys.readouterr().out)
-        assert payload["mismatches"][0]["reason"].startswith("PR omniclaude#123 state")
+        assert payload["claim_count"] == 4
+        assert len(payload["mismatches"]) == 2
+        assert payload["mismatches"][0]["actual"] == "OPEN"
+        assert "gh pr view --json" in payload["mismatches"][1]["reason"]
 
 
 class TestRunnerPasses:
@@ -91,16 +119,11 @@ class TestRunnerPasses:
     ) -> None:
         from plugins.onex.hooks.lib.agent_result_verifier_runner import run
 
-        fake_proc = mock.MagicMock(
-            returncode=0,
-            stdout=json.dumps({"state": "MERGED", "number": 1}),
-            stderr="",
+        rc = run(
+            "PR #1 merged.",
+            repo_hint="omniclaude",
+            resolver=lambda payload: {"results": [], "mismatches": []},
         )
-        with mock.patch(
-            "plugins.onex.hooks.lib.agent_result_verifier_runner.subprocess.run",
-            return_value=fake_proc,
-        ):
-            rc = run("PR #1 merged.", repo_hint="omniclaude")
         assert rc == 0
         assert capsys.readouterr().out == ""
 
@@ -111,31 +134,36 @@ class TestRunnerPasses:
         assert rc == 0
         assert capsys.readouterr().out == ""
 
-    def test_gh_unavailable_fails_open(
+    def test_resolver_unavailable_fails_open(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         from plugins.onex.hooks.lib.agent_result_verifier_runner import run
 
         with mock.patch(
             "plugins.onex.hooks.lib.agent_result_verifier_runner.subprocess.run",
-            side_effect=FileNotFoundError("gh not found"),
+            side_effect=FileNotFoundError("resolver not found"),
         ):
             rc = run("PR #1 merged.", repo_hint="omniclaude")
         assert rc == 0  # fail-open
 
-    def test_thread_resolved_short_circuits_to_pass(
+    def test_thread_resolved_is_sent_to_resolver(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         from plugins.onex.hooks.lib.agent_result_verifier_runner import run
 
-        # Scaffold posture: thread_resolved claims don't hit the resolver.
         body = "Resolved CR thread PRRT_kwDOP_NzS857mezy with reply + resolve."
-        with mock.patch(
-            "plugins.onex.hooks.lib.agent_result_verifier_runner.subprocess.run"
-        ) as mocked:
-            rc = run(body, repo_hint="omniclaude")
-            mocked.assert_not_called()
+
+        observed: dict[str, object] = {}
+
+        def resolver(payload: dict[str, object]) -> dict[str, object]:
+            observed.update(payload)
+            return {"results": [], "mismatches": []}
+
+        rc = run(body, repo_hint="omniclaude", resolver=resolver)
         assert rc == 0
+        claims = observed["claims"]
+        assert isinstance(claims, list)
+        assert claims[0]["kind"] == "thread_resolved"
 
 
 class TestRunnerMainStdin:
