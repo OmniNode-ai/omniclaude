@@ -15,7 +15,6 @@ import sys
 import textwrap
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -63,10 +62,29 @@ class TestShimDoesNotReadDelegationEnvVarsAtImportTime:
         importlib.reload(m)
 
     def test_module_level_topic_comes_from_contract_resolution_not_env(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """_DELEGATION_REQUEST_TOPIC is set by contract resolution, not env var lookup."""
         monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
+        contract_dir = (
+            tmp_path
+            / "omnimarket"
+            / "src"
+            / "omnimarket"
+            / "nodes"
+            / "node_delegate_skill_orchestrator"
+        )
+        contract_dir.mkdir(parents=True)
+        (contract_dir / "contract.yaml").write_text(
+            textwrap.dedent("""\
+                name: node_delegate_skill_orchestrator
+                event_bus:
+                  subscribe_topics:
+                    - "onex.cmd.omnimarket.delegate-skill.v1"
+            """),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
 
         sys.modules.pop("run", None)
         import run as m  # noqa: PLC0415
@@ -75,41 +93,40 @@ class TestShimDoesNotReadDelegationEnvVarsAtImportTime:
 
         assert hasattr(mod, "_DELEGATION_REQUEST_TOPIC")
         assert isinstance(mod._DELEGATION_REQUEST_TOPIC, str)
-        # Must be a non-empty topic derived from contract or TopicBase fallback
-        assert mod._DELEGATION_REQUEST_TOPIC != ""
+        assert mod._DELEGATION_REQUEST_TOPIC == "onex.cmd.omnimarket.delegate-skill.v1"
 
 
 class TestShimLoadsTopicFromContract:
     def test_topic_loaded_from_contract_subscribe_topics(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """_resolve_delegation_topic_and_event_type reads subscribe_topics[0] from contract."""
+        """_resolve_command_topic reads subscribe_topics[0] from the omnimarket contract."""
         contract_yaml = textwrap.dedent("""\
-            name: node_delegation_orchestrator
+            name: node_delegate_skill_orchestrator
             event_bus:
               subscribe_topics:
-                - "onex.cmd.omnibase-infra.delegation-request.v1"
-            consumed_events:
-              - topic: "onex.cmd.omnibase-infra.delegation-request.v1"
-                event_type: "ContractDrivenEventType"
+                - "onex.cmd.omnimarket.delegate-skill.v1"
         """)
-        node_dir = tmp_path / "nodes" / "node_delegation_orchestrator"
-        node_dir.mkdir(parents=True)
-        (node_dir / "contract.yaml").write_text(contract_yaml)
-
-        fake_obi = MagicMock()
-        fake_obi.__file__ = str(tmp_path / "__init__.py")
+        contract_dir = (
+            tmp_path
+            / "omnimarket"
+            / "src"
+            / "omnimarket"
+            / "nodes"
+            / "node_delegate_skill_orchestrator"
+        )
+        contract_dir.mkdir(parents=True)
+        (contract_dir / "contract.yaml").write_text(contract_yaml, encoding="utf-8")
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
 
         sys.modules.pop("run", None)
         import run as m  # noqa: PLC0415
 
         mod = importlib.reload(m)
 
-        with patch.dict(sys.modules, {"omnibase_infra": fake_obi}):
-            topic, event_type = mod._resolve_delegation_topic_and_event_type()
+        topic = mod._resolve_command_topic()
 
-        assert topic == "onex.cmd.omnibase-infra.delegation-request.v1"
-        assert event_type == "ContractDrivenEventType"
+        assert topic == "onex.cmd.omnimarket.delegate-skill.v1"
 
     def test_topic_not_hardcoded_string(self, delegate_run: ModuleType) -> None:
         """_DELEGATION_REQUEST_TOPIC must not be a bare hardcoded literal.
@@ -124,7 +141,7 @@ class TestShimLoadsTopicFromContract:
         assignment_line = f"_DELEGATION_REQUEST_TOPIC = {hardcoded_sentinel}"
         assert assignment_line not in source, (
             "Topic must not be hardcoded as a string literal assignment — "
-            "use contract resolution via _resolve_delegation_topic_and_event_type()"
+            "use contract resolution via _resolve_command_topic()"
         )
 
 
