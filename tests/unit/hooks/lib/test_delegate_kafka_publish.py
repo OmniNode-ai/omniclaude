@@ -4,7 +4,7 @@
 
 DoD evidence for OMN-10206:
 - classify_and_publish() builds a ModelRuntimeSkillRequest for
-  node_delegation_orchestrator whenever the intent is delegatable.
+  node_delegate_skill_orchestrator whenever the intent is delegatable.
 - The skill uses LocalRuntimeSkillClient, not emit_event or EmitClient.
 - Recipient and wait options are threaded into the delegation payload for the
   runtime-owned Pattern B broker path.
@@ -28,6 +28,7 @@ from omnibase_core.models.runtime import (
 _TESTS_DIR = Path(__file__).parent
 _REPO_ROOT = _TESTS_DIR.parent.parent.parent.parent
 _DELEGATE_LIB = _REPO_ROOT / "plugins" / "onex" / "skills" / "delegate" / "_lib"
+_DELEGATE_SKILL_COMMAND_NAME = "node_delegate_skill_orchestrator"
 
 if _DELEGATE_LIB.exists() and str(_DELEGATE_LIB) not in sys.path:
     sys.path.insert(0, str(_DELEGATE_LIB))
@@ -37,9 +38,9 @@ class FakeRuntimeSkillClient:
     requests: list[object] = []
     response: ModelRuntimeSkillResponse = ModelRuntimeSkillResponse(
         ok=True,
-        command_name="node_delegation_orchestrator",
-        resolved_node_name="node_delegation_orchestrator",
-        contract_name="node_delegation_orchestrator",
+        command_name=_DELEGATE_SKILL_COMMAND_NAME,
+        resolved_node_name=_DELEGATE_SKILL_COMMAND_NAME,
+        contract_name=_DELEGATE_SKILL_COMMAND_NAME,
         command_topic="onex.cmd.omniclaude.delegate-task.v1",
         terminal_event="onex.evt.omniclaude.delegation-completed.v1",
         correlation_id=uuid.uuid4(),
@@ -63,9 +64,9 @@ def reset_fake_client() -> None:
     FakeRuntimeSkillClient.requests = []
     FakeRuntimeSkillClient.response = ModelRuntimeSkillResponse(
         ok=True,
-        command_name="node_delegation_orchestrator",
-        resolved_node_name="node_delegation_orchestrator",
-        contract_name="node_delegation_orchestrator",
+        command_name=_DELEGATE_SKILL_COMMAND_NAME,
+        resolved_node_name=_DELEGATE_SKILL_COMMAND_NAME,
+        contract_name=_DELEGATE_SKILL_COMMAND_NAME,
         command_topic="onex.cmd.omniclaude.delegate-task.v1",
         terminal_event="onex.evt.omniclaude.delegation-completed.v1",
         correlation_id=uuid.uuid4(),
@@ -128,13 +129,13 @@ class TestDelegateRuntimeDispatch:
         )
 
         assert result.get("success") is True, f"Expected success, got: {result}"
-        assert result["command_name"] == "node_delegation_orchestrator"
+        assert result["command_name"] == _DELEGATE_SKILL_COMMAND_NAME
         assert result["dispatch_status"] == "completed"
 
         fake = delegate_run.LocalRuntimeSkillClient
         assert len(fake.requests) == 1
         request = fake.requests[0]
-        assert request.command_name == "node_delegation_orchestrator"
+        assert request.command_name == _DELEGATE_SKILL_COMMAND_NAME
         assert request.correlation_id is not None
 
         payload = request.payload
@@ -199,7 +200,7 @@ class TestDelegateRuntimeDispatch:
     ) -> None:
         FakeRuntimeSkillClient.response = ModelRuntimeSkillResponse(
             ok=False,
-            command_name="node_delegation_orchestrator",
+            command_name=_DELEGATE_SKILL_COMMAND_NAME,
             correlation_id=uuid.uuid4(),
             error=ModelRuntimeSkillError(
                 code="runtime_unavailable",
