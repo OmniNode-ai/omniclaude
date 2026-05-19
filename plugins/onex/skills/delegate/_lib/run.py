@@ -87,6 +87,108 @@ try:
 except ImportError:
     _HAS_EVIDENCE_BUNDLE = False
 
+try:
+    from omniclaude.delegation.inprocess_runner import (  # fallback-removed
+        InProcessDelegationRunner,  # fallback-removed
+    )
+
+    _HAS_INPROCESS_RUNNER = True
+except ImportError:
+    _HAS_INPROCESS_RUNNER = False
+
+
+# ---------------------------------------------------------------------------
+# curl-based LLM shim for Mac LAN grant (uv-managed Python lacks the grant)
+# ---------------------------------------------------------------------------
+
+
+def _call_llm_via_curl(
+    *,
+    endpoint_url: str,
+    model: str,
+    system_prompt: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    correlation_id: uuid.UUID,
+) -> tuple[str, dict, int, str]:  # type: ignore[type-arg]
+    """Drop-in replacement for _call_llm using curl subprocess.  # fallback-removed
+
+    macOS Local Network privacy grant is per-binary. uv-managed Python venvs
+    (used by the plugin) do not carry the grant and get EHOSTUNREACH when
+    connecting to 192.168.x.x. curl does carry the grant. This shim provides  # onex-allow-internal-ip
+    the same return contract as _call_llm.
+    """
+    import time  # noqa: PLC0415
+
+    # Model-id rewrite: routing_tiers.yaml uses short IDs that vLLM rejects.
+    # vLLM serves the full HuggingFace ID; map short → served at the wire.
+    _VLLM_MODEL_REWRITES: dict[str, str] = {
+        "qwen3-coder-30b": "cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit",
+        "deepseek-r1-14b": "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ",
+    }
+    served_model = _VLLM_MODEL_REWRITES.get(model, model)
+
+    payload = {
+        "model": served_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    url = f"{endpoint_url.rstrip('/')}/v1/chat/completions"
+
+    t0 = time.monotonic_ns()
+    proc = subprocess.run(  # noqa: S603
+        [
+            "curl",
+            "-fsS",
+            "--max-time",
+            "120",
+            "-H",
+            "Content-Type: application/json",
+            "-X",
+            "POST",
+            url,
+            "-d",
+            json.dumps(payload),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    latency_ms = (time.monotonic_ns() - t0) // 1_000_000
+
+    if proc.returncode != 0:
+        # DelegationRunnerError may not be importable if _HAS_INPROCESS_RUNNER is False.
+        raise RuntimeError(
+            f"curl LLM call failed (rc={proc.returncode}): {proc.stderr.strip()}"
+        )
+
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"vLLM returned invalid JSON: {exc}\nstdout={proc.stdout[:400]}"
+        ) from exc
+
+    try:
+        content: str = data["choices"][0]["message"]["content"] or ""
+        model_used: str = data.get("model", served_model)
+        usage: dict[str, int] = {
+            "prompt_tokens": data.get("usage", {}).get("prompt_tokens", 0),
+            "completion_tokens": data.get("usage", {}).get("completion_tokens", 0),
+            "total_tokens": data.get("usage", {}).get("total_tokens", 0),
+        }
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(
+            f"vLLM response missing expected fields: {exc} — keys: {list(data)}"
+        ) from exc
+
+    return content, usage, int(latency_ms), model_used
+
 
 def _load_infra_orchestrator_contract() -> dict:  # type: ignore[type-arg]
     """Load the omnibase_infra node_delegation_orchestrator contract.yaml.
@@ -761,6 +863,105 @@ def _dispatch_via_ssh_rpk(
 
 
 # ---------------------------------------------------------------------------
+# In-process local execution (explicit --local demo path, not silent fallback)
+# ---------------------------------------------------------------------------
+
+
+def _run_inprocess(
+    *,
+    prompt: str,
+    task_type: str,
+    correlation_id_str: str,
+    correlation_uuid: uuid.UUID,
+    source_file: str | None,
+    max_tokens: int,
+) -> dict:  # type: ignore[type-arg]
+    """Run the local delegation pipeline with a curl LLM shim.  # fallback-removed
+
+    Uses a curl subprocess for the LLM HTTP call so this works from
+    uv-managed plugin venvs on Mac (which lack the macOS Local Network grant).
+
+    Returns a result dict with path="inprocess" and the same keys that
+    classify_and_publish returns for other transports.
+    """
+    from datetime import UTC, datetime  # noqa: PLC0415
+    from unittest.mock import patch  # noqa: PLC0415
+
+    started_at = datetime.now(UTC)
+    runner = InProcessDelegationRunner()  # fallback-removed
+
+    try:
+        session_id: str | None
+        try:
+            from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
+                resolve_session_id,
+            )
+
+            session_id = resolve_session_id(default=None)
+        except (ModuleNotFoundError, ImportError):
+            try:
+                from session_id import (
+                    resolve_session_id as _rs,  # type: ignore[no-redef] # noqa: PLC0415
+                )
+
+                session_id = _rs(default=None)
+            except (ModuleNotFoundError, ImportError):
+                session_id = None
+
+        _TARGET = "omniclaude.delegation.inprocess_runner._call_llm"  # fallback-removed
+        with patch(_TARGET, side_effect=_call_llm_via_curl):
+            result = runner.run(
+                task_type=task_type,
+                prompt=prompt,
+                source_session_id=session_id,
+                source_file_path=source_file,
+                max_tokens=max_tokens,
+            )
+
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "success": False,
+            "error": f"In-process delegation pipeline failed: {exc}",
+            "correlation_id": correlation_id_str,
+            "path": "inprocess",
+        }
+
+    completed_at = datetime.now(UTC)
+
+    bundle_path = _write_evidence_bundle(
+        result=result,
+        prompt=prompt,
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+
+    _emit_task_delegated_event(
+        result=result,
+        fallback_correlation_id=correlation_id_str,
+        session_id=session_id,
+    )
+
+    return {
+        "success": True,
+        "correlation_id": str(result.correlation_id),
+        "task_type": str(result.task_type),
+        "path": "inprocess",
+        "content": result.content,
+        "model_used": result.model_used,
+        "endpoint_url": result.endpoint_url,
+        "quality_passed": result.quality_passed,
+        "quality_score": result.quality_score,
+        "failure_reason": result.failure_reason,
+        "latency_ms": result.latency_ms,
+        "prompt_tokens": result.prompt_tokens,
+        "completion_tokens": result.completion_tokens,
+        "total_tokens": result.total_tokens,
+        "fallback_to_claude": result.fallback_to_claude,
+        "evidence_bundle_path": bundle_path,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Core dispatch function
 # ---------------------------------------------------------------------------
 
@@ -787,7 +988,8 @@ def classify_and_publish(
       4. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT) — fallback
       5. Kafka (contract-driven; topic resolved from omnibase_infra contract at import time)
 
-    force_local=True returns an explicit error (OMN-10723).
+    force_local=True dispatches via the local runner with a curl LLM shim  # fallback-removed
+    (no Kafka or runtime socket required). Restored in OMN-10604.
     """
     if not _HAS_CLASSIFIER:
         return {
@@ -813,18 +1015,24 @@ def classify_and_publish(
     correlation_id_str = str(correlation_uuid)
 
     if force_local:
-        runtime_socket_path = os.environ.get(
-            "ONEX_LOCAL_RUNTIME_SOCKET_PATH", "<unset>"
+        if not _HAS_INPROCESS_RUNNER:
+            return {
+                "success": False,
+                "error": (
+                    "Local in-process runner unavailable — omniclaude or omnimarket "  # fallback-removed
+                    "packages not on sys.path. Install the plugin venv dependencies."
+                ),
+                "correlation_id": correlation_id_str,
+                "path": "inprocess",
+            }
+        return _run_inprocess(
+            prompt=prompt,
+            task_type=runtime_task_type,
+            correlation_id_str=correlation_id_str,
+            correlation_uuid=correlation_uuid,
+            source_file=source_file,
+            max_tokens=max_tokens,
         )
-        return {
-            "success": False,
-            "error": (
-                "In-process fallback removed (OMN-10723). "
-                "Use the runtime path: start the runtime and ensure "
-                f"ONEX_LOCAL_RUNTIME_SOCKET_PATH is set (current value: {runtime_socket_path})."
-            ),
-            "correlation_id": correlation_id_str,
-        }
 
     try:
         from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
@@ -1079,7 +1287,7 @@ def main() -> None:
     parser.add_argument(
         "--local",
         action="store_true",
-        help="[removed] In-process fallback removed (OMN-10723). Returns an error.",
+        help="Run delegation in-process using local vLLM endpoint (no Kafka/runtime required).",
     )
     args = parser.parse_args()
 
