@@ -332,6 +332,26 @@ def _write_bifrost_with_endpoints(tmp_path, endpoints: dict[str, str]):
 
 
 @pytest.mark.unit
+def test_packaged_bifrost_contract_has_empty_endpoint_urls() -> None:
+    """The repo default must not contain user- or host-specific endpoints."""
+    import yaml
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "omniclaude"
+        / "delegation"
+        / "bifrost_delegation.yaml"
+    )
+    data = yaml.safe_load(src.read_text())
+
+    endpoints = [backend.get("endpoint_url", "") for backend in data["backends"]]
+
+    assert endpoints
+    assert all(endpoint == "" for endpoint in endpoints)
+
+
+@pytest.mark.unit
 def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -> None:
     """_build_env_config loads from contract and reads endpoint_url directly."""
     dst = _write_bifrost_with_endpoints(
@@ -349,6 +369,40 @@ def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -
         == "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"
     )
     assert len(cfg.routing_rules) >= 1
+
+
+@pytest.mark.unit
+def test_build_env_config_merges_default_contract_with_overlay(
+    monkeypatch, tmp_path
+) -> None:
+    """Overlay-only endpoint files are deep-merged over the default contract."""
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "omniclaude"
+        / "delegation"
+        / "bifrost_delegation.yaml"
+    )
+    default_path = tmp_path / "bifrost_delegation.yaml"
+    default_path.write_text(src.read_text())
+    overlay_path = tmp_path / "bifrost_overrides.yaml"
+    overlay_path.write_text(
+        "backends:\n"
+        "  - backend_id: local-deepseek-r1-14b\n"
+        f'    endpoint_url: "{_CODER_FAST_URL}"\n'
+    )
+    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(default_path))
+    monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(overlay_path))
+
+    cfg = _build_env_config()
+
+    assert cfg is not None
+    assert "local-deepseek-r1-14b" in cfg.backends
+    assert cfg.backends["local-deepseek-r1-14b"].base_url == _CODER_FAST_URL
+    assert (
+        cfg.backends["local-deepseek-r1-14b"].model_name
+        == "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"
+    )
 
 
 @pytest.mark.unit

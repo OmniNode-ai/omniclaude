@@ -37,6 +37,7 @@ Related:
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import os
 import time
@@ -202,6 +203,107 @@ class ModelDelegationBifrostContract(BaseModel):
     circuit_breaker: ModelDelegationCircuitBreakerContract = Field(
         default_factory=ModelDelegationCircuitBreakerContract
     )
+
+
+_DEFAULT_BIFROST_CONTRACT_PATH = Path(__file__).parent / "bifrost_delegation.yaml"
+_DEFAULT_BIFROST_OVERLAY_PATH = (
+    Path.home() / ".omninode" / "delegation" / "bifrost_overrides.yaml"
+)
+_IDENTITY_KEYS = ("backend_id", "rule_id")
+YamlMapping = dict[str, object]
+
+
+def _deep_merge_bifrost_contract(
+    default_config: YamlMapping,
+    overlay_config: YamlMapping,
+) -> YamlMapping:
+    """Return default bifrost config deep-merged with an endpoint overlay."""
+    return cast("YamlMapping", _deep_merge(default_config, overlay_config))
+
+
+def _deep_merge(default_value: object, overlay_value: object) -> object:
+    if isinstance(default_value, dict) and isinstance(overlay_value, dict):
+        merged = copy.deepcopy(default_value)
+        for key, value in overlay_value.items():
+            if key in merged:
+                merged[key] = _deep_merge(merged[key], value)
+            else:
+                merged[key] = copy.deepcopy(value)
+        return merged
+
+    if isinstance(default_value, list) and isinstance(overlay_value, list):
+        return _merge_lists(default_value, overlay_value)
+
+    return copy.deepcopy(overlay_value)
+
+
+def _merge_lists(
+    default_items: list[object], overlay_items: list[object]
+) -> list[object]:
+    identity_key = _list_identity_key(default_items, overlay_items)
+    if identity_key is None:
+        return copy.deepcopy(overlay_items)
+
+    merged = copy.deepcopy(default_items)
+    index_by_id = {
+        item[identity_key]: index
+        for index, item in enumerate(merged)
+        if isinstance(item, dict) and identity_key in item
+    }
+
+    for overlay_item in overlay_items:
+        if not isinstance(overlay_item, dict) or identity_key not in overlay_item:
+            merged.append(copy.deepcopy(overlay_item))
+            continue
+        item_id = overlay_item[identity_key]
+        if item_id in index_by_id:
+            existing_index = index_by_id[item_id]
+            merged[existing_index] = _deep_merge(merged[existing_index], overlay_item)
+        else:
+            index_by_id[item_id] = len(merged)
+            merged.append(copy.deepcopy(overlay_item))
+
+    return merged
+
+
+def _list_identity_key(
+    default_items: list[object], overlay_items: list[object]
+) -> str | None:
+    mapping_items = [
+        item for item in [*default_items, *overlay_items] if isinstance(item, dict)
+    ]
+    if not mapping_items:
+        return None
+
+    for key in _IDENTITY_KEYS:
+        if all(key in item for item in mapping_items):
+            return key
+    return None
+
+
+def _read_yaml_mapping(path: Path) -> YamlMapping:
+    import yaml
+
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML at {path}: {exc}") from exc
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected YAML mapping at {path}, got {type(data).__name__}")
+    return cast("YamlMapping", data)
+
+
+def _load_delegation_bifrost_contract(
+    default_path: Path,
+    overlay_path: Path,
+) -> ModelDelegationBifrostContract:
+    default_config = _read_yaml_mapping(default_path)
+    if overlay_path.exists():
+        overlay_config = _read_yaml_mapping(overlay_path)
+        default_config = _deep_merge_bifrost_contract(default_config, overlay_config)
+    return ModelDelegationBifrostContract.model_validate(default_config)
 
 
 # ---------------------------------------------------------------------------
@@ -626,12 +728,12 @@ def _delegation_tenant_id() -> UUID:
 
 
 def _build_env_config() -> object | None:  # ModelBifrostConfig | None
-    """Build a ModelBifrostConfig from the deployed bifrost delegation contract.
+    """Build a ModelBifrostConfig from the bifrost default plus endpoint overlay.
 
     Loads the delegation routing contract and converts it to the gateway's
-    ModelBifrostConfig. Backend URLs are read directly from the contract's
-    endpoint_url field (populated by install-delegation.sh). Backends with
-    empty endpoint_url are skipped.
+    ModelBifrostConfig. Backend URLs are read from the merged endpoint_url field
+    after applying ``bifrost_overrides.yaml``. Backends with empty endpoint_url
+    are skipped.
     """
     try:
         from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
@@ -645,27 +747,24 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
         return None
 
     env_override = os.environ.get("BIFROST_CONTRACT_PATH", "")
-    if env_override:
-        local_config_path = Path(env_override)
-    else:
-        deployed_path = (
-            Path.home() / ".omninode" / "delegation" / "bifrost_delegation.yaml"
-        )
-        local_config_path = (
-            deployed_path
-            if deployed_path.exists()
-            else Path(__file__).parent / "bifrost_delegation.yaml"
-        )
-    if not local_config_path.exists():
+    overlay_override = os.environ.get("BIFROST_OVERLAY_PATH", "")
+    default_config_path = (
+        Path(env_override) if env_override else _DEFAULT_BIFROST_CONTRACT_PATH
+    )
+    overlay_path = (
+        Path(overlay_override) if overlay_override else _DEFAULT_BIFROST_OVERLAY_PATH
+    )
+
+    if not default_config_path.exists():
         logger.warning("bifrost_delegation.yaml not found, delegation disabled")
         return None
 
     try:
-        import yaml
-
-        raw_config: object = yaml.safe_load(local_config_path.read_text())
-        delegation_config = ModelDelegationBifrostContract.model_validate(raw_config)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+        delegation_config = _load_delegation_bifrost_contract(
+            default_config_path,
+            overlay_path,
+        )
+    except (OSError, ValueError) as exc:
         logger.warning("bifrost_delegation.yaml invalid: %s", exc)
         return None
 

@@ -46,10 +46,10 @@ SOURCE_HOOK_CONFIG="${REPO_ROOT}/plugins/onex/hooks/hooks-delegation.v1.json"
 SOURCE_HOOK_SCRIPTS="${REPO_ROOT}/plugins/onex/hooks/scripts"
 PACKAGE_NAME="omninode-claude"
 
-# Bifrost contract: source template and deployed location (OMN-10657).
-# The handler reads endpoint_url from the deployed copy; the installer
-# populates it from --endpoint-url or interactive prompt.
-INSTALL_BIFROST="${INSTALL_ROOT}/bifrost_delegation.yaml"
+# Bifrost contract endpoints: repo defaults stay packaged with empty endpoint_url
+# fields; user-specific endpoints live in this overlay only (OMN-10717).
+INSTALL_BIFROST_OVERLAY="${INSTALL_ROOT}/bifrost_overrides.yaml"
+LEGACY_INSTALL_BIFROST="${INSTALL_ROOT}/bifrost_delegation.yaml"
 
 DRY_RUN=true
 APPLY=false
@@ -106,8 +106,8 @@ Usage:
 Options:
   --apply                 Execute changes (default is dry-run preview).
   --uninstall             Restore prior state using the rollback manifest.
-  --endpoint-url <url>    LLM endpoint URL to write into the deployed bifrost
-                          contract (e.g. http://192.168.86.201:8000). If omitted
+  --endpoint-url <url>    LLM endpoint URL to write into the bifrost endpoint
+                          overlay (e.g. http://192.168.86.201:8000). If omitted
                           during --apply, an interactive prompt will ask for it.
   --from-source <path>    Install the omniclaude package from a local repo
                           (default: install ${PACKAGE_NAME} from package index).
@@ -284,7 +284,7 @@ PY
 }
 
 deploy_bifrost_contract() {
-  log_step "deploy bifrost delegation contract to ${INSTALL_BIFROST}"
+  log_step "write bifrost endpoint overlay to ${INSTALL_BIFROST_OVERLAY}"
 
   # Locate the source bifrost contract. When --from-source is used, look in
   # the omnibase_infra sibling directory (monorepo layout) or fall back to
@@ -303,8 +303,8 @@ deploy_bifrost_contract() {
   done
 
   if [[ -z "${bifrost_source}" ]]; then
-    log_warn "bifrost_delegation.yaml not found in source tree — skipping contract deploy"
-    log_warn "The routing handler will fall back to the source copy in omnibase_infra"
+    log_warn "bifrost_delegation.yaml not found in source tree — skipping endpoint overlay"
+    log_warn "The routing handler will load the packaged default contract without endpoint overrides"
     return 0
   fi
 
@@ -321,41 +321,74 @@ deploy_bifrost_contract() {
   fi
 
   if "${DRY_RUN}"; then
-    log_dry "would copy ${bifrost_source} → ${INSTALL_BIFROST}"
+    log_dry "would read backend IDs from ${bifrost_source}"
+    log_dry "would write overlay ${INSTALL_BIFROST_OVERLAY}"
+    if [[ -f "${LEGACY_INSTALL_BIFROST}" ]]; then
+      log_dry "would preserve endpoints from legacy ${LEGACY_INSTALL_BIFROST}"
+    fi
     if [[ -n "${ENDPOINT_URL}" ]]; then
-      log_dry "would write endpoint_url=${ENDPOINT_URL} into local backends"
+      log_dry "would write endpoint_url=${ENDPOINT_URL} into local backend overlay entries"
     fi
     return 0
   fi
 
-  cp "${bifrost_source}" "${INSTALL_BIFROST}"
-  log_ok "copied bifrost contract to ${INSTALL_BIFROST}"
+  "${PYTHON_BIN}" - "${bifrost_source}" "${INSTALL_BIFROST_OVERLAY}" "${LEGACY_INSTALL_BIFROST}" "${ENDPOINT_URL}" <<'PY'
+import pathlib
+import sys
 
-  # Write endpoint URL into the deployed contract if provided.
-  if [[ -n "${ENDPOINT_URL}" ]]; then
-    "${PYTHON_BIN}" - "${INSTALL_BIFROST}" "${ENDPOINT_URL}" <<'PY'
-import pathlib, sys, yaml
+import yaml
 
-bifrost_path = pathlib.Path(sys.argv[1])
-endpoint_url = sys.argv[2]
+source_path = pathlib.Path(sys.argv[1])
+overlay_path = pathlib.Path(sys.argv[2])
+legacy_path = pathlib.Path(sys.argv[3])
+endpoint_url = sys.argv[4]
 
-data = yaml.safe_load(bifrost_path.read_text())
-if not isinstance(data, dict):
-    raise SystemExit("invalid bifrost contract")
 
-for backend in data.get("backends", []):
-    if not isinstance(backend, dict):
-        continue
-    tier = backend.get("tier", "")
-    if tier == "local":
-        backend["endpoint_url"] = endpoint_url
+def load_mapping(path: pathlib.Path) -> dict:
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text())
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise SystemExit(f"invalid bifrost yaml at {path}")
+    return data
 
-# Preserve comments as much as possible by writing back through yaml.dump.
-bifrost_path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
-print(f"wrote endpoint_url={endpoint_url} to local backends")
+
+source = load_mapping(source_path)
+existing_overlay = load_mapping(overlay_path)
+legacy = load_mapping(legacy_path)
+
+backends_by_id: dict[str, dict] = {}
+for container in (legacy, existing_overlay):
+    for backend in container.get("backends") or []:
+        if not isinstance(backend, dict):
+            continue
+        backend_id = backend.get("backend_id")
+        existing_endpoint = str(backend.get("endpoint_url") or "").strip()
+        if backend_id and existing_endpoint:
+            backends_by_id[str(backend_id)] = {
+                "backend_id": str(backend_id),
+                "endpoint_url": existing_endpoint,
+            }
+
+if endpoint_url:
+    for backend in source.get("backends") or []:
+        if not isinstance(backend, dict):
+            continue
+        backend_id = backend.get("backend_id")
+        if backend_id and backend.get("tier") == "local":
+            backends_by_id[str(backend_id)] = {
+                "backend_id": str(backend_id),
+                "endpoint_url": endpoint_url,
+            }
+
+overlay = {"backends": list(backends_by_id.values())}
+overlay_path.parent.mkdir(parents=True, exist_ok=True)
+overlay_path.write_text(yaml.dump(overlay, default_flow_style=False, sort_keys=False))
+print(f"wrote {len(overlay['backends'])} endpoint overlay entries to {overlay_path}")
 PY
-    log_ok "populated local backend endpoints with ${ENDPOINT_URL}"
-  fi
+  log_ok "wrote bifrost endpoint overlay to ${INSTALL_BIFROST_OVERLAY}"
 }
 
 install_hook_config() {
@@ -636,7 +669,7 @@ print_next_steps() {
 ${C_GREEN}${C_BOLD}Installation complete.${C_RESET}
 
   Database:       ${INSTALL_DB}
-  Bifrost:        ${INSTALL_BIFROST}
+  Bifrost overlay: ${INSTALL_BIFROST_OVERLAY}
   Hook config:    ${INSTALL_HOOKS_JSON}
   Hook scripts:   ${INSTALL_SCRIPTS_DIR}
   Rollback:       ${ROLLBACK_MANIFEST}

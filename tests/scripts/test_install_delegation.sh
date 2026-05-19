@@ -138,7 +138,21 @@ run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply.log" 2>&1 \
   || fail "rollback manifest not written"
 [[ -d "${SANDBOX_HOME}/.omninode/delegation/hook-scripts" ]] \
   || fail "hook scripts dir not created"
+[[ -f "${SANDBOX_HOME}/.omninode/delegation/bifrost_overrides.yaml" ]] \
+  || fail "bifrost endpoint overlay not written"
+[[ ! -f "${SANDBOX_HOME}/.omninode/delegation/bifrost_delegation.yaml" ]] \
+  || fail "installer must not write a full bifrost_delegation.yaml contract"
 pass "--apply creates the install layout"
+
+"${PY_BIN}" - "${SANDBOX_HOME}/.omninode/delegation/bifrost_overrides.yaml" <<'PY'
+import pathlib, sys, yaml
+
+data = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())
+assert isinstance(data, dict), data
+assert set(data) == {"backends"}, data
+assert isinstance(data["backends"], list), data
+PY
+pass "--apply writes overlay-only bifrost endpoint file"
 
 # --- Test 7: existing settings.json hooks are preserved + backed up ---------
 "${PY_BIN}" - "${SANDBOX_HOME}/.claude/settings.json" <<'PY'
@@ -167,12 +181,32 @@ ls "${SANDBOX_HOME}/.omninode/delegation/backups"/settings.json.*.bak >/dev/null
 pass "settings.json merge preserves existing hooks + writes backup"
 
 # --- Test 8: idempotent — second --apply does not duplicate hooks -----------
-BEFORE_HASH="$(shasum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1}')"
+"${PY_BIN}" - "${SANDBOX_HOME}/.omninode/delegation/bifrost_overrides.yaml" <<'PY'
+import pathlib, sys, yaml
+
+p = pathlib.Path(sys.argv[1])
+p.write_text(yaml.dump({
+    "backends": [
+        {
+            "backend_id": "local-qwen-coder-30b",
+            "endpoint_url": "http://user-preserved.test:8000",
+        }
+    ]
+}, default_flow_style=False, sort_keys=False))
+PY
+BEFORE_HASH="$(cksum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1 ":" $2}')"
 run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply2.log" 2>&1 \
   || { cat "${TMPDIR_SANDBOX}/apply2.log" >&2; fail "second --apply must exit 0"; }
-AFTER_HASH="$(shasum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1}')"
+AFTER_HASH="$(cksum "${SANDBOX_HOME}/.claude/settings.json" | awk '{print $1 ":" $2}')"
 [[ "${BEFORE_HASH}" == "${AFTER_HASH}" ]] \
   || fail "second --apply mutated settings.json (idempotency violated)"
+"${PY_BIN}" - "${SANDBOX_HOME}/.omninode/delegation/bifrost_overrides.yaml" <<'PY'
+import pathlib, sys, yaml
+
+data = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())
+by_id = {b["backend_id"]: b for b in data["backends"]}
+assert by_id["local-qwen-coder-30b"]["endpoint_url"] == "http://user-preserved.test:8000", data
+PY
 pass "--apply is idempotent"
 
 # Simulate a user edit made after installation. Uninstall must remove the

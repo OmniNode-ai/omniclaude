@@ -7,15 +7,14 @@
 # Every gateway response MUST include the selected rule_id and config_version
 # to make provenance auditable (OMN-10637 requirement R1).
 #
-# Backend endpoint URLs are declared here and populated by the installer
-# (install-delegation.sh --apply). The source version has empty endpoint_url
-# fields; the deployed copy at ~/.omninode/delegation/bifrost_delegation.yaml
-# has actual URLs written by the installer.
+# Backend endpoint URLs are intentionally empty here. User-specific endpoint
+# values belong in ~/.omninode/delegation/bifrost_overrides.yaml, which is
+# deep-merged over this repo default at runtime.
 #
-# Tickets: OMN-10637, OMN-10657
+# Tickets: OMN-10637, OMN-10657, OMN-10717
 config_version: "1.1.0"
 schema_version: "bifrost_delegation.v1"
-# Backend definitions — endpoint_url populated by installer at deploy time.
+# Backend definitions — endpoint_url populated from overlay at load time.
 backends:
   # Local backends on 192.168.86.201 (AIPC)  # onex-allow-internal-ip
   - backend_id: local-qwen-coder-30b
