@@ -143,6 +143,37 @@ class TestResolveTransportConfig:
         assert result["pandaproxy_url"] == _pp
         assert "ssh_host" not in result
 
+    def test_omits_whitespace_only_values(
+        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        contract = textwrap.dedent("""\
+            name: node_delegate_skill_orchestrator
+            runtime_ingress:
+              http_url: "   "
+              pandaproxy_url: "\t"
+              ssh_host: "  "
+              ssh_socket_path: " /tmp/onex-runtime.sock "
+              kafka_bridge_script: ""
+        """)
+        omnimarket_dir = (
+            tmp_path
+            / "omnimarket"
+            / "src"
+            / "omnimarket"
+            / "nodes"
+            / "node_delegate_skill_orchestrator"
+        )
+        omnimarket_dir.mkdir(parents=True)
+        (omnimarket_dir / "contract.yaml").write_text(contract)
+
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
+        result = delegate_run._resolve_transport_config()
+
+        assert "http_url" not in result
+        assert "pandaproxy_url" not in result
+        assert "ssh_host" not in result
+        assert result["ssh_socket_path"] == "/tmp/onex-runtime.sock"
+
 
 class TestClassifyAndPublishPrefersContractTransport:
     def test_contract_pandaproxy_url_takes_precedence_over_env(
