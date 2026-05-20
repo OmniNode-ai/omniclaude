@@ -9,7 +9,6 @@ is_seam_ticket: false
 interface_change: true
 interfaces_touched:
   - topics
-  - contracts
 evidence_requirements:
   - kind: tests
     description: "Skill backing node and skill contract validation pass on PR #1603"
@@ -17,7 +16,7 @@ evidence_requirements:
   - kind: manual
     description: "Architectural invariant loop remains a dispatch-only shim with no inline scanning logic"
     command: "bash -lc '! rg -n \"subprocess|grep|os.walk|Path\\\\(\" plugins/onex/skills/architectural_invariant_loop/SKILL.md src/omniclaude/nodes/node_skill_architectural_invariant_loop_orchestrator'"
-  - kind: deploy_gate
+  - kind: manual
     description: "Runtime-touching node contract and node files are covered by local deploy-gate validation"
     command: "python .github/actions/deploy-gate/validate_pr_deploy_required.py --changed-files \"$(git diff --name-only origin/main...HEAD | tr '\\n' ' ')\" --pr-body \"$(gh pr view 1603 --repo OmniNode-ai/omniclaude --json body -q .body)\" --contracts-dir contracts"
 emergency_bypass:
@@ -33,7 +32,7 @@ dod_evidence:
         check_value: "sed -n '1,160p' plugins/onex/skills/architectural_invariant_loop/SKILL.md"
   - id: dod-skill-node-ci-green
     description: "PR #1603 CI already proves skill backing node liveness, skill hygiene, and skill contract validation"
-    source: ci
+    source: manual
     checks:
       - check_type: command
         check_value: "gh pr checks 1603 --repo OmniNode-ai/omniclaude | grep -E 'Skill Backing Node|Skill Hygiene|Skill Contract Validation'"
