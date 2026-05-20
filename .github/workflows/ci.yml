@@ -1845,6 +1845,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Resolve DoD evidence source
+        id: dod-evidence
+        shell: bash
+        run: |
+          BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          SOURCE="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-source" {print $2; exit}' | tr -d '\r' | xargs || true)"
+          TICKET="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-ticket" {print $2; exit}' | tr -d '\r' | xargs || true)"
+          if [[ -z "$TICKET" ]]; then
+            REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
+            if [[ "$REF" =~ [Oo][Mm][Nn]-([0-9]+) ]]; then
+              TICKET="OMN-${BASH_REMATCH[1]}"
+            fi
+          fi
+          if [[ -n "$SOURCE" && ! "$SOURCE" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Ignoring invalid Evidence-Source value: $SOURCE" >&2
+            SOURCE=""
+          fi
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+          echo "ticket=$TICKET" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout central DoD evidence
+        if: steps.dod-evidence.outputs.source != ''
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          ref: ${{ steps.dod-evidence.outputs.source }}
+          path: .onex_change_control_evidence
+
+      - name: Materialize central DoD evidence receipt
+        if: steps.dod-evidence.outputs.source != ''
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/materialize-dod-evidence-from-occ.sh "${{ steps.dod-evidence.outputs.ticket }}" .onex_change_control_evidence
+
       - name: Run DoD evidence check
         working-directory: ${{ github.workspace }}
         run: bash scripts/dod-pre-push-check.sh
@@ -2534,6 +2567,7 @@ jobs:
         with:
           checks: "boundary-parity"
           warn-only: "false"
+          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,onex_change_control"
 
   # ============================================================================
   # CI SUMMARY (OMN-4501) — single branch-protection check
