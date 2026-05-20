@@ -105,7 +105,34 @@ def test_delegation_command_existing_fields_unchanged() -> None:
     assert cmd.recipient == "auto"
     assert cmd.wait_for_result is False
     assert cmd.working_directory is None
+    assert cmd.task_type == "research"
     assert cmd.codex_sandbox_mode is None
+
+
+def test_delegation_command_task_type_valid_values() -> None:
+    from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
+        ModelDelegationCommand,
+    )
+
+    for task_type in (
+        "research",
+        "code_review",
+        "code_generation",
+        "refactor",
+        "test",
+        "document",
+    ):
+        cmd = ModelDelegationCommand(prompt="do it", task_type=task_type)
+        assert cmd.task_type == task_type
+
+
+def test_delegation_command_task_type_invalid_value_raises() -> None:
+    from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
+        ModelDelegationCommand,
+    )
+
+    with pytest.raises(ValidationError):
+        ModelDelegationCommand(prompt="do it", task_type="write-because-prompt-says-so")
 
 
 def test_delegation_command_accepts_delegate_skill_payload_fields() -> None:

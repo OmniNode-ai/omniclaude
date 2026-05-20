@@ -24,14 +24,10 @@ from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_comma
 )
 
 _MUTATION_TASK_TYPES = frozenset({"code_generation", "refactor", "test", "document"})
-_MUTATION_PROMPT_MARKERS = frozenset(
-    {"write", "implement", "create", "modify", "edit", "refactor", "fix", "test"}
-)
 
 
-def _infer_task_type(prompt: str) -> str:
-    words = {part.strip(".,:;!?()[]{}").lower() for part in prompt.split()}
-    if words & _MUTATION_PROMPT_MARKERS:
+def _infer_task_type(task_type: str | None) -> str:
+    if task_type in _MUTATION_TASK_TYPES:
         return "code_generation"
     return "research"
 
@@ -204,7 +200,7 @@ class HandlerCrossCLIInvoker:
         elif recipient == EnumCliRecipient.OPENCODE:
             args = self._build_opencode_args(prompt, cwd or ".")
         elif recipient == EnumCliRecipient.CODEX:
-            task_type = _infer_task_type(prompt)
+            task_type = _infer_task_type(command.task_type)
             args = self._build_codex_args(
                 prompt,
                 task_type=task_type,

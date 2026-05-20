@@ -80,6 +80,20 @@ def test_invoker_respects_explicit_sandbox_override() -> None:
     assert "workspace-write" in args
 
 
+def test_invoker_infers_codex_task_type_from_structured_field_only() -> None:
+    from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_cross_cli_invoker import (
+        _infer_task_type,
+    )
+
+    assert _infer_task_type("code_generation") == "code_generation"
+    assert _infer_task_type("refactor") == "code_generation"
+    assert _infer_task_type("test") == "code_generation"
+    assert _infer_task_type("document") == "code_generation"
+    assert _infer_task_type("code_review") == "research"
+    assert _infer_task_type("research") == "research"
+    assert _infer_task_type(None) == "research"
+
+
 def test_invoker_parses_claude_json_output() -> None:
     from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_cross_cli_invoker import (
         HandlerCrossCLIInvoker,

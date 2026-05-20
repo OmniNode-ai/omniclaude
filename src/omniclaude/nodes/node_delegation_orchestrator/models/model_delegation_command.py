@@ -22,6 +22,12 @@ class ModelDelegationCommand(BaseModel):
     correlation_id: str = Field(default="", description="Correlation ID for tracing")
     session_id: str = Field(default="", description="Claude Code session ID")
     prompt_length: int = Field(default=0, ge=0, description="Original prompt length")
+    task_type: Literal[
+        "research", "code_review", "code_generation", "refactor", "test", "document"
+    ] = Field(
+        default="research",
+        description="Explicit task classification used for downstream CLI policy",
+    )
     source_file_path: Path | None = Field(
         default=None,
         description="Optional source file path supplied by the delegate skill",
@@ -47,7 +53,7 @@ class ModelDelegationCommand(BaseModel):
         Literal["read-only", "workspace-write", "danger-full-access"] | None
     ) = Field(
         default=None,
-        description="Explicit codex sandbox override; None = auto-select from prompt classification",
+        description="Explicit codex sandbox override; None = auto-select from task_type",
     )
 
     @model_validator(mode="after")
