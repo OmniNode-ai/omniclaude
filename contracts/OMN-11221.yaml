@@ -1,0 +1,45 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11221
+title: "Add architectural invariant loop skill shim"
+summary: "Add a dispatch-only architectural_invariant_loop skill shim in omniclaude and
+  the generated skill orchestrator node contract that routes runtime execution to
+  the existing architectural invariant loop implementation."
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - topics
+  - contracts
+evidence_requirements:
+  - kind: tests
+    description: "Skill backing node and skill contract validation pass on PR #1603"
+    command: "gh pr checks 1603 --repo OmniNode-ai/omniclaude"
+  - kind: manual
+    description: "Architectural invariant loop remains a dispatch-only shim with no inline scanning logic"
+    command: "bash -lc '! rg -n \"subprocess|grep|os.walk|Path\\\\(\" plugins/onex/skills/architectural_invariant_loop/SKILL.md src/omniclaude/nodes/node_skill_architectural_invariant_loop_orchestrator'"
+  - kind: deploy_gate
+    description: "Runtime-touching node contract and node files are covered by local deploy-gate validation"
+    command: "python .github/actions/deploy-gate/validate_pr_deploy_required.py --changed-files \"$(git diff --name-only origin/main...HEAD | tr '\\n' ' ')\" --pr-body \"$(gh pr view 1603 --repo OmniNode-ai/omniclaude --json body -q .body)\" --contracts-dir contracts"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-skill-shim-dispatch-only
+    description: "Skill shim dispatches to the omnimarket architectural invariant loop node and contains no inline scanner implementation"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "sed -n '1,160p' plugins/onex/skills/architectural_invariant_loop/SKILL.md"
+  - id: dod-skill-node-ci-green
+    description: "PR #1603 CI already proves skill backing node liveness, skill hygiene, and skill contract validation"
+    source: ci
+    checks:
+      - check_type: command
+        check_value: "gh pr checks 1603 --repo OmniNode-ai/omniclaude | grep -E 'Skill Backing Node|Skill Hygiene|Skill Contract Validation'"
+  - id: dod-deploy-gate-validation
+    description: "Local deploy-gate validator passes for the PR runtime path set without runtime mutation"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "python .github/actions/deploy-gate/validate_pr_deploy_required.py --changed-files \"$(git diff --name-only origin/main...HEAD | tr '\\n' ' ')\" --pr-body \"$(gh pr view 1603 --repo OmniNode-ai/omniclaude --json body -q .body)\" --contracts-dir contracts"
