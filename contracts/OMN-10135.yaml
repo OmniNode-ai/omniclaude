@@ -1,6 +1,7 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-10135
+title: "Cross-CLI Bridge Phase 1"
 summary: "Cross-CLI Bridge Phase 1 task implementation for explicit CLI delegation"
 is_seam_ticket: true
 interface_change: true
@@ -10,7 +11,7 @@ evidence_requirements:
   - kind: tests
     description: "Cross-CLI invoker and dispatch unit tests pass"
     command: "uv run pytest tests/unit/node_delegation_orchestrator/test_handler_cross_cli_invoker.py tests/unit/node_delegation_orchestrator/test_handle_cross_cli_dispatch.py tests/unit/node_delegation_orchestrator/test_model_delegation_outcome_cli_fields.py tests/unit/node_delegation_orchestrator/test_codex_sandbox_config.py -q"
-  - kind: deploy
+  - kind: manual
     description: "Runtime-adjacent delegation orchestrator changes have a pre-merge deploy verification surface without live runtime mutation"
     command: "uv run pytest tests/unit/node_delegation_orchestrator/test_handler_cross_cli_invoker.py tests/unit/node_delegation_orchestrator/test_handle_cross_cli_dispatch.py tests/unit/node_delegation_orchestrator/test_model_delegation_outcome_cli_fields.py tests/unit/node_delegation_orchestrator/test_codex_sandbox_config.py -q  # deploy-verify Cross-CLI delegation orchestrator"
 emergency_bypass:
