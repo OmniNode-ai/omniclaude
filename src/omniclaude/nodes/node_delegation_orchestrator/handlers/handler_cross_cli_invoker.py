@@ -24,9 +24,6 @@ from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_comma
 )
 
 _MUTATION_TASK_TYPES = frozenset({"code_generation", "refactor", "test", "document"})
-_ANALYSIS_TASK_TYPES = frozenset(
-    {"code_review", "research", "reasoning", "planning", "review"}
-)
 
 
 class HandlerCrossCLIInvoker:
