@@ -24,6 +24,16 @@ from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_comma
 )
 
 _MUTATION_TASK_TYPES = frozenset({"code_generation", "refactor", "test", "document"})
+_MUTATION_PROMPT_MARKERS = frozenset(
+    {"write", "implement", "create", "modify", "edit", "refactor", "fix", "test"}
+)
+
+
+def _infer_task_type(prompt: str) -> str:
+    words = {part.strip(".,:;!?()[]{}").lower() for part in prompt.split()}
+    if words & _MUTATION_PROMPT_MARKERS:
+        return "code_generation"
+    return "research"
 
 
 class HandlerCrossCLIInvoker:
@@ -80,6 +90,7 @@ class HandlerCrossCLIInvoker:
     def _parse_claude_output(
         self,
         raw: str,
+        stderr: str,
         exit_code: int,
         runtime_seconds: float,
         correlation_id: str,
@@ -101,7 +112,7 @@ class HandlerCrossCLIInvoker:
             correlation_id=correlation_id,
             recipient=EnumCliRecipient.CLAUDE,
             stdout=stdout,
-            stderr="",
+            stderr=stderr,
             exit_code=exit_code,
             runtime_seconds=runtime_seconds,
             working_directory=working_directory,
@@ -111,7 +122,9 @@ class HandlerCrossCLIInvoker:
     def _parse_opencode_output(
         self,
         raw: str,
+        stderr: str,
         exit_code: int,
+        runtime_seconds: float,
         correlation_id: str,
         working_directory: str | None,
     ) -> ModelCrossCLIInvocationResult:
@@ -133,14 +146,16 @@ class HandlerCrossCLIInvoker:
             correlation_id=correlation_id,
             recipient=EnumCliRecipient.OPENCODE,
             stdout="\n".join(text_parts),
-            stderr="",
+            stderr=stderr,
             exit_code=exit_code,
+            runtime_seconds=runtime_seconds,
             working_directory=working_directory,
         )
 
     def _parse_codex_output(
         self,
         raw: str,
+        stderr: str,
         exit_code: int,
         runtime_seconds: float,
         correlation_id: str,
@@ -166,7 +181,7 @@ class HandlerCrossCLIInvoker:
             correlation_id=correlation_id,
             recipient=EnumCliRecipient.CODEX,
             stdout="\n".join(agent_messages),
-            stderr="",
+            stderr=stderr,
             exit_code=exit_code,
             runtime_seconds=runtime_seconds,
             working_directory=working_directory,
@@ -189,7 +204,7 @@ class HandlerCrossCLIInvoker:
         elif recipient == EnumCliRecipient.OPENCODE:
             args = self._build_opencode_args(prompt, cwd or ".")
         elif recipient == EnumCliRecipient.CODEX:
-            task_type = "research"
+            task_type = _infer_task_type(prompt)
             args = self._build_codex_args(
                 prompt,
                 task_type=task_type,
@@ -239,15 +254,15 @@ class HandlerCrossCLIInvoker:
 
         if recipient == EnumCliRecipient.CLAUDE:
             return self._parse_claude_output(
-                proc.stdout, proc.returncode, runtime, correlation_id, cwd
+                proc.stdout, proc.stderr, proc.returncode, runtime, correlation_id, cwd
             )
         elif recipient == EnumCliRecipient.OPENCODE:
             return self._parse_opencode_output(
-                proc.stdout, proc.returncode, correlation_id, cwd
+                proc.stdout, proc.stderr, proc.returncode, runtime, correlation_id, cwd
             )
         else:
             return self._parse_codex_output(
-                proc.stdout, proc.returncode, runtime, correlation_id, cwd
+                proc.stdout, proc.stderr, proc.returncode, runtime, correlation_id, cwd
             )
 
 

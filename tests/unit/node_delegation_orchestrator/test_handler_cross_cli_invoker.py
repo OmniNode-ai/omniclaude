@@ -91,12 +91,14 @@ def test_invoker_parses_claude_json_output() -> None:
     invoker = HandlerCrossCLIInvoker()
     parsed = invoker._parse_claude_output(
         raw,
+        stderr="warning",
         exit_code=0,
         runtime_seconds=2.0,
         correlation_id="c1",
         working_directory="/tmp",
     )
     assert parsed.stdout == "done"
+    assert parsed.stderr == "warning"
     assert parsed.runtime_seconds == 2.0
     assert parsed.success is True
 
@@ -118,9 +120,15 @@ def test_invoker_parses_opencode_jsonl_output() -> None:
     ]
     invoker = HandlerCrossCLIInvoker()
     parsed = invoker._parse_opencode_output(
-        "\n".join(lines), exit_code=0, correlation_id="c1", working_directory="/tmp"
+        "\n".join(lines),
+        stderr="",
+        exit_code=0,
+        runtime_seconds=1.25,
+        correlation_id="c1",
+        working_directory="/tmp",
     )
     assert "hello world" in parsed.stdout
+    assert parsed.runtime_seconds == 1.25
 
 
 def test_invoker_parses_codex_jsonl_output() -> None:
@@ -140,9 +148,11 @@ def test_invoker_parses_codex_jsonl_output() -> None:
     invoker = HandlerCrossCLIInvoker()
     parsed = invoker._parse_codex_output(
         "\n".join(lines),
+        stderr="diagnostic",
         exit_code=0,
         runtime_seconds=1.0,
         correlation_id="c1",
         working_directory="/tmp",
     )
     assert "answer" in parsed.stdout
+    assert parsed.stderr == "diagnostic"
