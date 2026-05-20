@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for /onex:delegate runtime-only dispatch (OMN-10723).
+"""Unit tests for /onex:delegate dispatch behavior.
 
 Verifies that:
-- force_local=True returns an explicit error (inprocess fallback removed)
+- force_local=True uses the explicit in-process local path
 - Runtime socket failure returns explicit error, no silent fallback
 - Runtime import error returns explicit error
 - Non-delegatable intents are still rejected before any dispatch attempt
@@ -35,25 +35,44 @@ def delegate_run(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return importlib.reload(delegate_run_module)
 
 
-class TestDelegateRuntimeOnly:
-    def test_force_local_returns_explicit_error(
+class TestDelegateDispatch:
+    def test_force_local_returns_explicit_pipeline_error(
         self,
         delegate_run: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """OMN-10723: --local flag returns error, not silent in-process execution."""
+        """OMN-10604: --local errors are reported from the explicit local path."""
+        monkeypatch.setattr(
+            delegate_run.InProcessDelegationRunner,
+            "run",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("routing unavailable")
+            ),
+        )
+
         result = delegate_run.classify_and_publish(
             prompt="write unit tests for handler_event_emitter.py",
             force_local=True,
         )
 
         assert result.get("success") is False
-        assert "OMN-10723" in result["error"]
-        assert "runtime" in result["error"].lower()
+        assert result.get("path") == "inprocess"
+        assert "In-process delegation pipeline failed" in result["error"]
+        assert "routing unavailable" in result["error"]
 
     def test_force_local_error_includes_correlation_id(
         self,
         delegate_run: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setattr(
+            delegate_run.InProcessDelegationRunner,
+            "run",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("routing unavailable")
+            ),
+        )
+
         corr = str(uuid.uuid4())
         result = delegate_run.classify_and_publish(
             prompt="write unit tests for handler_event_emitter.py",
@@ -63,6 +82,7 @@ class TestDelegateRuntimeOnly:
 
         assert result.get("success") is False
         assert result.get("correlation_id") == corr
+        assert result.get("path") == "inprocess"
 
     def test_runtime_socket_failure_returns_explicit_error(
         self,
@@ -124,11 +144,12 @@ class TestDelegateRuntimeOnly:
         assert result.get("success") is False
         assert "not delegatable" in result["error"]
 
-    def test_no_inprocess_runner_attribute(
+    def test_inprocess_runner_attribute_available(
         self,
         delegate_run: ModuleType,
     ) -> None:
-        """InProcessDelegationRunner must not be importable from the skill module."""
-        assert not hasattr(delegate_run, "InProcessDelegationRunner")
+        """The explicit local path exposes the in-process runner, not fallback hooks."""
+        assert hasattr(delegate_run, "InProcessDelegationRunner")
+        assert delegate_run._HAS_INPROCESS_RUNNER is True
         assert not hasattr(delegate_run, "_HAS_DELEGATION_RUNNER")
         assert not hasattr(delegate_run, "_inprocess_fallback")

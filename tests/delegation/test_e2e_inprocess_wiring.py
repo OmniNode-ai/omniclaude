@@ -17,9 +17,15 @@ import sys
 import uuid
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from omnimarket.nodes.node_delegation_orchestrator.models.model_delegation_result import (
+        ModelDelegationResult,
+    )
 
 # ---------------------------------------------------------------------------
 # Make the delegate skill _lib module importable as `run`
@@ -46,7 +52,7 @@ def delegate_run_module() -> ModuleType:
 def _make_fake_result(
     task_type: str = "test",
     correlation_id: uuid.UUID | None = None,
-) -> MagicMock:
+) -> ModelDelegationResult:
     """Build a fake ModelDelegationResult for unit tests."""
     from omnimarket.nodes.node_delegation_orchestrator.models.model_delegation_result import (  # noqa: PLC0415
         ModelDelegationResult,
