@@ -83,7 +83,7 @@ make_canonical_clone() {
   echo "init" > "${clone}/file.txt"
   git -C "${clone}" add file.txt
   git -C "${clone}" commit -m "init" -q
-  git -C "${clone}" push -u origin main -q 2>/dev/null
+  git -C "${clone}" push -u origin HEAD:main -q 2>/dev/null
 
   TEST_CLONE="${clone}"
 }
