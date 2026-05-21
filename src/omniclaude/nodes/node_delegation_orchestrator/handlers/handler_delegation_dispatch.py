@@ -7,11 +7,12 @@ Classifies incoming prompts, selects the appropriate LLM backend, and
 routes to the selected effect node. correlation_id-keyed, replay-safe.
 
 Backend selection fallback chain:
-    1. Local vLLM (if endpoint healthy, <3s response)
-    2. Gemini CLI (if installed, <60s)
-    3. Codex CLI (if installed, <120s)
-    4. GLM/Z.AI (if API key set, cloud fallback)
-    5. Fail — emit delegation-failed event
+    1. OpenRouter GLM-4.7-Flash (if API key configured)
+    2. Local vLLM Qwen coder (fallback)
+    3. Gemini CLI (if installed, <60s)
+    4. Codex CLI (if installed, <120s)
+    5. GLM/Z.AI (if API key set, cloud fallback)
+    6. Fail — emit delegation-failed event
 
 Related:
     - OMN-7109: Implement delegation orchestrator dispatch handler
@@ -21,10 +22,14 @@ Related:
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 from dataclasses import dataclass
 
+from omniclaude.config.model_local_llm_config import (
+    LlmEndpointConfig,
+    LlmEndpointPurpose,
+    LocalLlmEndpointRegistry,
+)
 from omniclaude.lib.task_classifier import TaskClassifier
 from omniclaude.nodes.node_delegation_orchestrator.models.model_cross_cli_invocation_result import (
     ModelCrossCLIInvocationResult,
@@ -43,40 +48,60 @@ logger = logging.getLogger(__name__)
 class DelegationRoute:
     """Selected backend route for a delegation request."""
 
-    backend: str  # "local_vllm" | "gemini_cli" | "codex_cli" | "glm"
+    backend: str  # "openrouter" | "local_vllm" | "gemini_cli" | "codex_cli" | "glm"
     base_url: str
     model: str
     api_key: str | None = None
     timeout: int = 30
 
 
-# Backend selection priorities
-_LOCAL_VLLM_ENDPOINTS = [
-    ("LLM_CODER_FAST_URL", "LLM_CODER_FAST_MODEL_NAME", "Qwen/Qwen3-14B-AWQ"),
-    ("LLM_CODER_URL", "LLM_CODER_MODEL_NAME", "Qwen3-Coder-30B-A3B-Instruct"),
-    ("LLM_DEEPSEEK_R1_URL", "LLM_DEEPSEEK_R1_MODEL_NAME", "DeepSeek-R1-Distill"),
-]
+def _route_from_endpoint(
+    *,
+    backend: str,
+    endpoint: LlmEndpointConfig,
+) -> DelegationRoute:
+    """Convert a typed endpoint config into a delegation route."""
+    timeout_seconds = max(1, (endpoint.max_latency_ms + 999) // 1000)
+    return DelegationRoute(
+        backend=backend,
+        base_url=str(endpoint.url).rstrip("/"),
+        model=endpoint.model_name,
+        api_key=endpoint.api_key,
+        timeout=timeout_seconds,
+    )
 
 
-def select_backend() -> DelegationRoute | None:
+def select_backend(
+    registry: LocalLlmEndpointRegistry | None = None,
+) -> DelegationRoute | None:
     """Select the best available LLM backend via fallback chain.
+
+    Args:
+        registry: Optional typed endpoint registry, injected by tests.
 
     Returns:
         DelegationRoute if a backend is available, None otherwise.
     """
-    # 1. Local vLLM endpoints (fastest)
-    for url_var, model_var, default_model in _LOCAL_VLLM_ENDPOINTS:
-        url = os.environ.get(url_var)
-        if url:
-            model = os.environ.get(model_var, default_model)
-            return DelegationRoute(
-                backend="local_vllm",
-                base_url=url,
-                model=model,
-                timeout=15,
-            )
+    endpoint_registry = registry or LocalLlmEndpointRegistry()
 
-    # 2. Gemini CLI
+    # 1. Hosted OpenRouter code generation. It is only registered when
+    # OPENROUTER_API_KEY is configured; missing credentials fall through to local.
+    openrouter = endpoint_registry.get_endpoint(LlmEndpointPurpose.OPENROUTER)
+    if openrouter is not None and openrouter.api_key:
+        return _route_from_endpoint(backend="openrouter", endpoint=openrouter)
+
+    # 2. Local vLLM fallback. Prefer the dedicated coder model, then the
+    # mid-tier routing model, then the best configured reasoning endpoint.
+    for purpose in (
+        LlmEndpointPurpose.CODE_ANALYSIS,
+        LlmEndpointPurpose.ROUTING,
+        LlmEndpointPurpose.REASONING,
+    ):
+        endpoint = endpoint_registry.get_endpoint(purpose)
+        if endpoint is not None:
+            return _route_from_endpoint(backend="local_vllm", endpoint=endpoint)
+
+    # 3. Gemini CLI
     if shutil.which("gemini"):
         return DelegationRoute(
             backend="gemini_cli",
@@ -85,7 +110,7 @@ def select_backend() -> DelegationRoute | None:
             timeout=60,
         )
 
-    # 3. Codex CLI
+    # 4. Codex CLI
     if shutil.which("codex"):
         return DelegationRoute(
             backend="codex_cli",
@@ -94,18 +119,10 @@ def select_backend() -> DelegationRoute | None:
             timeout=120,
         )
 
-    # 4. GLM/Z.AI (cloud fallback)
-    glm_url = os.environ.get("LLM_GLM_URL")
-    glm_key = os.environ.get("LLM_GLM_API_KEY")
-    if glm_url and glm_key:
-        glm_model = os.environ.get("LLM_GLM_MODEL_NAME", "glm-4.5")
-        return DelegationRoute(
-            backend="glm",
-            base_url=glm_url,
-            model=glm_model,
-            api_key=glm_key,
-            timeout=30,
-        )
+    # 5. GLM/Z.AI direct cloud fallback.
+    glm = endpoint_registry.get_endpoint(LlmEndpointPurpose.GLM)
+    if glm is not None and glm.api_key:
+        return _route_from_endpoint(backend="glm", endpoint=glm)
 
     return None
 

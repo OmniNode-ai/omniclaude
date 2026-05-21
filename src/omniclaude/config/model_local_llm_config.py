@@ -38,6 +38,11 @@ Environment variables:
     LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint.
     LLM_QWEN_14B_MODEL_NAME: Model ID sent in API requests to the Qwen 14B endpoint.
         Default: "Qwen2.5-14B". Must be non-empty if set.
+    OPENROUTER_API_KEY: OpenRouter API key for hosted code generation.
+    LLM_OPENROUTER_URL: OpenRouter OpenAI-compatible API base URL.
+        Default: "https://openrouter.ai/api/v1".
+    LLM_OPENROUTER_MODEL_NAME: OpenRouter model ID for code generation.
+        Default: "z-ai/glm-4.7-flash". Must be non-empty if set.
 
 Example:
     >>> from omniclaude.config.model_local_llm_config import (
@@ -89,6 +94,7 @@ class LlmEndpointPurpose(StrEnum):
     REASONING = "reasoning"
     GEMINI = "gemini"
     GLM = "glm"
+    OPENROUTER = "openrouter"
 
 
 class LlmEndpointConfig(BaseModel):
@@ -334,6 +340,19 @@ class LocalLlmEndpointRegistry(BaseSettings):
         min_length=1,
         description="Model ID for GLM API requests",
     )
+    openrouter_api_key: str | None = Field(
+        default=None,
+        description="API key for OpenRouter hosted code generation",
+    )
+    llm_openrouter_url: HttpUrl = Field(
+        default=HttpUrl("https://openrouter.ai/api/v1"),
+        description="OpenRouter OpenAI-compatible API base URL",
+    )
+    llm_openrouter_model_name: str = Field(
+        default="z-ai/glm-4.7-flash",
+        min_length=1,
+        description="OpenRouter model ID for delegated code generation",
+    )
 
     @field_validator(
         "llm_coder_model_name",
@@ -347,6 +366,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         "llm_qwen_14b_model_name",
         "llm_gemini_model_name",
         "llm_glm_model_name",
+        "llm_openrouter_model_name",
         mode="before",
     )
     @classmethod
@@ -431,6 +451,12 @@ class LocalLlmEndpointRegistry(BaseSettings):
         ge=100,
         le=60000,
         description="Max latency for GLM frontier endpoint",
+    )
+    llm_openrouter_max_latency_ms: int = Field(
+        default=60000,
+        ge=100,
+        le=120000,
+        description="Max latency for OpenRouter hosted code generation",
     )
 
     # Intentionally a cached_property, not a Pydantic field. This is a private
@@ -542,6 +568,18 @@ class LocalLlmEndpointRegistry(BaseSettings):
         import os
 
         if os.environ.get("DELEGATION_DISABLE_FRONTIER_ROUTING", "").lower() != "true":
+            if self.openrouter_api_key:
+                endpoint_specs.append(
+                    (
+                        self.llm_openrouter_url,
+                        self.llm_openrouter_model_name,
+                        LlmEndpointPurpose.OPENROUTER,
+                        self.llm_openrouter_max_latency_ms,
+                        10,  # Primary hosted code-gen backend when explicitly keyed.
+                        self.openrouter_api_key,
+                        "/chat/completions",
+                    )
+                )
             endpoint_specs.extend(
                 [
                     (

@@ -44,6 +44,7 @@ class TestLlmEndpointPurpose:
             "REASONING",
             "GEMINI",
             "GLM",
+            "OPENROUTER",
         }
         actual = {member.name for member in LlmEndpointPurpose}
         assert actual == expected
@@ -212,6 +213,8 @@ class TestLocalLlmEndpointRegistry:
         for key in list(os.environ):
             if key.startswith("LLM_"):
                 monkeypatch.delenv(key, raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     @pytest.fixture
     def full_env(self, monkeypatch: pytest.MonkeyPatch, _clean_env: None) -> None:
@@ -442,6 +445,7 @@ class TestLocalLlmEndpointRegistry:
             "LLM_VISION_MODEL_NAME",
             "LLM_DEEPSEEK_R1_MODEL_NAME",
             "LLM_QWEN_14B_MODEL_NAME",
+            "LLM_OPENROUTER_MODEL_NAME",
         ],
     )
     def test_whitespace_only_model_name_rejected(
@@ -488,3 +492,33 @@ class TestLocalLlmEndpointRegistry:
         monkeypatch.setenv("LLM_CODER_MODEL_NAME", "my model v2")
         registry = make_registry()
         assert registry.llm_coder_model_name == "my model v2"
+
+    @pytest.mark.unit
+    def test_openrouter_endpoint_requires_api_key(
+        self,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+    ) -> None:
+        """OpenRouter has a default URL but is unavailable until keyed."""
+        registry = make_registry()
+        assert registry.get_endpoint(LlmEndpointPurpose.OPENROUTER) is None
+
+    @pytest.mark.unit
+    def test_openrouter_endpoint_defaults_to_glm_flash(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+    ) -> None:
+        """OPENROUTER_API_KEY enables GLM-4.7-Flash via OpenRouter."""
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+        registry = make_registry()
+
+        endpoint = registry.get_endpoint(LlmEndpointPurpose.OPENROUTER)
+
+        assert endpoint is not None
+        assert str(endpoint.url) == "https://openrouter.ai/api/v1"
+        assert endpoint.model_name == "z-ai/glm-4.7-flash"
+        assert endpoint.api_key == "test-openrouter-key"
+        assert endpoint.chat_completions_path == "/chat/completions"
+        assert endpoint.priority == 10

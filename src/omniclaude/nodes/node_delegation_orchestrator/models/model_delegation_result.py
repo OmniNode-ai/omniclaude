@@ -20,10 +20,10 @@ class ModelDelegationDispatchResult(BaseModel):
 
     Attributes:
         routed: Whether the prompt was classified as delegatable and a backend was found.
-        backend: Selected backend identifier (local_vllm, gemini_cli, codex_cli, glm).
+        backend: Selected backend identifier (openrouter, local_vllm, gemini_cli, codex_cli, glm).
         base_url: Endpoint URL for the selected backend.
         model: Model identifier for the selected backend.
-        api_key: API key for authenticated backends (GLM). None for local/CLI.
+        api_key: API key for authenticated backends (OpenRouter/GLM). None for local/CLI.
         timeout: Timeout in seconds for the selected backend.
         intent: Classified task intent (document, test, research, implement).
         confidence: Classification confidence score (0.0-1.0).
@@ -40,7 +40,9 @@ class ModelDelegationDispatchResult(BaseModel):
     backend: str = Field(default="", description="Selected backend identifier")
     base_url: str = Field(default="", description="Backend endpoint URL")
     model: str = Field(default="", description="Model identifier")
-    api_key: str | None = Field(default=None, description="API key for auth (GLM)")
+    api_key: str | None = Field(
+        default=None, description="API key for auth (OpenRouter/GLM)"
+    )
     timeout: int = Field(default=30, ge=1, description="Backend timeout in seconds")
     intent: str = Field(default="", description="Classified task intent")
     confidence: float = Field(

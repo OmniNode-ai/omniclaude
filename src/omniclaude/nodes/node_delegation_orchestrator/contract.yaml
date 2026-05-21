@@ -5,7 +5,7 @@
 # Node: NodeDelegationOrchestrator
 #
 # Delegation orchestrator — classifies incoming prompts, routes to the
-# appropriate LLM backend (local vLLM, GLM, Gemini CLI, Codex CLI),
+# appropriate LLM backend (OpenRouter, local vLLM, GLM, Gemini CLI, Codex CLI),
 # runs quality gate, emits delegation result. Fully async via Kafka.
 #
 # Terminal event semantics: exactly one terminal event (completed OR failed)
@@ -29,7 +29,7 @@ node_type: ORCHESTRATOR_GENERIC
 
 description: >
   Delegation orchestrator. Classifies incoming prompts, routes to the
-  appropriate LLM backend (local vLLM, GLM/Z.AI, Gemini CLI, Codex CLI),
+  appropriate LLM backend (OpenRouter, local vLLM, GLM/Z.AI, Gemini CLI, Codex CLI),
   runs quality gate with failure class preservation, emits delegation
   result events. Fully async via Kafka. correlation_id-keyed, replay-safe.
 
@@ -103,7 +103,7 @@ lifecycle:
 downstream_effects:
   - node: NodeLlmInferenceEffect
     capability: inference.openai_compatible
-    description: "Local vLLM (Qwen3-Coder, Qwen3-14B) and cloud OpenAI-compatible (GLM/Z.AI)"
+    description: "OpenRouter GLM-4.7-Flash, local vLLM (Qwen3-Coder, Qwen3-14B), and cloud OpenAI-compatible (GLM/Z.AI)"
   - node: NodeLlmInferenceEffect
     capability: inference.gemini_cli
     description: "Gemini CLI subprocess dispatch"
@@ -157,3 +157,4 @@ metadata:
     - gemini
     - codex
     - glm
+    - openrouter

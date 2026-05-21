@@ -229,6 +229,10 @@ class PythonSecretValidator(ast.NodeVisitor):
             # Pydantic SecretStr field names (runtime env values, not hardcoded)
             "db_password",
             "db_pass",
+            # Pydantic settings API key fields loaded from env, never hardcoded.
+            "gemini_api_key",
+            "llm_glm_api_key",
+            "openrouter_api_key",
             # Token counting/limits (not authentication tokens)
             "tokenizer",
             "token_count",
