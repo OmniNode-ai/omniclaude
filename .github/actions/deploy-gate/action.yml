@@ -18,9 +18,12 @@ inputs:
     description: GitHub token for gh CLI access
     required: true
   contracts-dir:
-    description: Path to directory containing OMN-XXXX.yaml ticket contracts
+    description: >
+      Path to directory containing OMN-XXXX.yaml ticket contracts.
+      Canonical source is onex_change_control (OMN-11423); the reusable
+      workflow checks out OCC and passes _occ/contracts here.
     required: false
-    default: contracts
+    default: _occ/contracts
 
 runs:
   using: composite

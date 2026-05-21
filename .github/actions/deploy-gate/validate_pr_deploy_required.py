@@ -170,8 +170,9 @@ def validate_pr_deploy_gate(
                 "DEPLOY GATE FAILED: PR touches runtime paths but cites no OMN-XXXX ticket. "
                 f"Runtime paths: {runtime_hits}. "
                 "Add a dod_evidence item with check_value containing 'deploy', "
-                "'docker exec', or 'rpk topic produce' to the cited ticket contract. "
-                "See OMN-8912 and OMN-9685."
+                "'docker exec', or 'rpk topic produce' to the ticket contract in "
+                "onex_change_control/contracts/OMN-XXXX.yaml. "
+                "See OMN-8912, OMN-9685, and OMN-11423."
             ),
         )
 
@@ -205,7 +206,10 @@ def validate_pr_deploy_gate(
         f"Runtime paths: {runtime_hits}.",
     ]
     if missing:
-        parts.append(f"Tickets with no contract file: {missing}.")
+        parts.append(
+            f"Tickets with no contract file in onex_change_control/contracts/: {missing}. "
+            "Create the contract YAML in the onex_change_control repo, not in the caller repo."
+        )
     if no_deploy:
         parts.append(
             f"Tickets found but missing deploy evidence (check_value must contain "
@@ -213,9 +217,9 @@ def validate_pr_deploy_gate(
         )
     parts.append(
         "Add a dod_evidence item with check_value containing 'deploy', 'docker exec', or "
-        "'rpk topic produce' to the cited ticket contract. "
+        "'rpk topic produce' to onex_change_control/contracts/OMN-XXXX.yaml. "
         "Root cause: OMN-8841 (deploy-agent inactive 2 days post-Dockerfile change). "
-        "Gate: OMN-8912."
+        "Gate: OMN-8912. Contract source fix: OMN-11423."
     )
 
     return DeployGateResult(

@@ -7,6 +7,7 @@
 #
 # Canonical validator: OMN-9685 (omnibase_core PR #902, 2026-04-25).
 # Centralised: OMN-9734 (DGM-Phase6). Supersedes DGM-Phase2.
+# OCC contract resolution: OMN-11423 — contracts read from onex_change_control, not caller repo.
 #
 # Usage in caller repos:
 #   jobs:
@@ -25,7 +26,9 @@ on:
         required: false
         default: 0
       contracts-dir:
-        description: Path to ticket contracts directory relative to repo root
+        description: >
+          Deprecated (OMN-11423). Contracts are now read from onex_change_control;
+          this input is ignored. Remove it from your caller workflow.
         type: string
         required: false
         default: contracts
@@ -47,6 +50,15 @@ jobs:
       - name: Checkout caller repo
         uses: actions/checkout@v6
 
+      - name: Checkout onex_change_control (canonical contract source)
+        if: github.event_name != 'merge_group'
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          path: _occ
+          sparse-checkout: contracts
+          sparse-checkout-cone-mode: false
+
       - name: Skip on merge_group
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
@@ -59,4 +71,4 @@ jobs:
         with:
           pr-number: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          contracts-dir: ${{ inputs.contracts-dir }}
+          contracts-dir: _occ/contracts
