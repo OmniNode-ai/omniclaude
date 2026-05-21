@@ -300,6 +300,7 @@ class TestSessionPhaseHookScript:
 
         env = {
             **os.environ,
+            "OMNICLAUDE_MODE": "full",
             "ONEX_STATE_DIR": str(tmp_path / "state"),
             "PATH": path_without_jq,
             "PLUGIN_PYTHON_BIN": sys.executable,
