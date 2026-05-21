@@ -17,13 +17,18 @@ set -eo pipefail
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then
+    # shellcheck source=../../lib/mode.sh
+    # shellcheck disable=SC1091
     source "$_MODE_SH"
-    [[ "$(omniclaude_mode)" == "lite" ]] && exit 0
+    if [[ "$(omniclaude_mode)" == "lite" ]]; then
+        cat >/dev/null
+        exit 0
+    fi
 fi
 unset _MODE_SH
 
 # Drain stdin (required by hook protocol; we don't use prompt contents)
-PROMPT_INFO="$(cat)"
+cat >/dev/null
 
 # Resolve the state file path
 if [[ -n "${ONEX_STATE_DIR:-}" ]]; then
@@ -105,8 +110,9 @@ if command -v jq >/dev/null 2>&1; then
     jq -n --arg ctx "$DIRECTIVE" \
         '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": $ctx}}'
 else
-    printf '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "%s"}}\n' \
-        "$(echo "$DIRECTIVE" | sed 's/"/\\"/g')"
+    ESCAPED_CTX="$("$PYTHON_BIN" -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$DIRECTIVE")"
+    printf '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": %s}}\n' \
+        "$ESCAPED_CTX"
 fi
 
 exit 0

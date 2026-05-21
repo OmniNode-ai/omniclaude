@@ -5,6 +5,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -32,6 +36,21 @@ def _write_phase_state(path: Path, state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w") as fh:
         yaml.safe_dump(state, fh)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _hook_script() -> Path:
+    return (
+        _repo_root()
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / "user_prompt_session_phase_enforcement.sh"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +263,63 @@ class TestHookInjectDirectiveEndToEnd:
     def test_hook_no_op_when_no_state_file(self, tmp_path: Path) -> None:
         state_file = tmp_path / ".onex_state" / "session" / "phase_state.yaml"
         assert read_phase_state(state_file) is None
+
+
+@pytest.mark.unit
+class TestSessionPhaseHookScript:
+    def test_lite_mode_drains_stdin_before_success_exit(self, tmp_path: Path) -> None:
+        env = {**os.environ, "OMNICLAUDE_MODE": "lite"}
+        result = subprocess.run(
+            ["/bin/bash", str(_hook_script())],
+            input='{"prompt": "hello"}\n',
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 0
+        assert result.stdout == ""
+        assert result.stderr == ""
+
+    def test_fallback_json_emitter_escapes_directive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        state_file = tmp_path / "state" / "session" / "phase_state.yaml"
+        _write_phase_state(
+            state_file,
+            {
+                "current_phase": 'build "quoted"',
+                "last_evaluation": "halt_required",
+                "halt_reason": 'path C:\\tmp\\new\nstop "now"',
+            },
+        )
+        path_without_jq = "/bin:/usr/bin"
+        monkeypatch.setenv("PATH", path_without_jq)
+
+        env = {
+            **os.environ,
+            "ONEX_STATE_DIR": str(tmp_path / "state"),
+            "PATH": path_without_jq,
+            "PLUGIN_PYTHON_BIN": sys.executable,
+        }
+        result = subprocess.run(
+            ["/bin/bash", str(_hook_script())],
+            input='{"prompt": "hello"}\n',
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+        additional_context = payload["hookSpecificOutput"]["additionalContext"]
+        assert 'build "quoted"' not in additional_context
+        assert 'C:\\tmp\\new\nstop "now"' in additional_context
 
 
 @pytest.mark.unit
