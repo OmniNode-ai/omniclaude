@@ -429,7 +429,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     (
       result='{'
       first=1
-      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control"; do
+      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control" "market:omnimarket" "sea:onex-self-extending-agent"; do
         short="${pair%%:*}"; repo="${pair##*:}"
         cnt=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json number --jq 'length' 2>/dev/null || echo "0")
         [ "$first" -eq 1 ] || result="${result},"
@@ -449,7 +449,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
       PR_DATA='{}'
     fi
     PR_PARTS=""
-    for short in core infra spi claude node dash intel mem web cc; do
+    for short in core infra spi claude node dash intel mem web cc market sea; do
       cnt=$(printf '%s' "$PR_DATA" | jq -r ".${short} // 0" 2>/dev/null) || cnt=0
       [[ "$cnt" =~ ^[1-9] ]] && PR_PARTS="${PR_PARTS}${short}·${cnt} "
     done
