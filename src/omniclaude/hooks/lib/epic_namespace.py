@@ -28,7 +28,7 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -79,9 +79,7 @@ def _serialize_lock(lock: ModelEpicNamespaceLock) -> str:
     try:
         import yaml
 
-        return cast(
-            "str", yaml.dump(lock.model_dump(mode="json"), default_flow_style=False)
-        )
+        return yaml.dump(lock.model_dump(mode="json"), default_flow_style=False)
     except ImportError:
         import json
 
