@@ -34,3 +34,9 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "test -f src/omniclaude/nodes/node_skill_status_orchestrator/contract.yaml"
+  - id: dod-deploy-assessment
+    description: "Status skill runtime node addition requires CI validation but no live deploy before merge"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "printf '%s\n' 'deploy gate: OMN-9691 adds a status skill runtime node; no live deploy, runtime restart, docker exec, or rpk topic produce required before merge'"
