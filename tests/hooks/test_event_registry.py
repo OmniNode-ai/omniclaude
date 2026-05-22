@@ -760,6 +760,7 @@ class TestEventRegistryIntegration:
             "prompt.submitted",
             # Tool events
             "tool.executed",
+            "tool.content",
             # Routing feedback events (OMN-1892, OMN-2622)
             # routing.skipped TOMBSTONED: folded into routing.feedback via feedback_status field
             "routing.feedback",
