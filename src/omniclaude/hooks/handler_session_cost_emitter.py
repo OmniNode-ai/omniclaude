@@ -99,7 +99,7 @@ def _emit_via_daemon(
                 "session_cost_daemon_rejected",
                 extra={"event_type": _EVENT_TYPE},
             )
-        return success
+        return bool(success)
     except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
         logger.warning(
             "session_cost_emit_failed",
