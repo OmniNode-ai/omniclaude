@@ -9,9 +9,11 @@ from pathlib import Path
 
 import pytest
 
+from plugins.onex.skills._lib.generate_ticket_contract import proof_validation
 from plugins.onex.skills._lib.generate_ticket_contract.proof_validation import (
     EnumRefStatus,
     ProofReferenceResolver,
+    resolve_contract,
 )
 
 
@@ -113,6 +115,31 @@ def test_missing_registry_file_errors_cleanly(tmp_path: Path) -> None:
     resolver = ProofReferenceResolver(repo_root=tmp_path, registry_path=bad_registry)
     with pytest.raises(FileNotFoundError):
         _ = resolver.registry  # loading registry should raise clearly
+
+
+@pytest.mark.unit
+def test_resolve_contract_without_pyyaml_uses_narrow_parser(
+    resolver: ProofReferenceResolver, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    test_file = tmp_path / "tests" / "test_contract.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text("def test_contract_path(): pass\n")
+    contract = tmp_path / "contract.yaml"
+    contract.write_text(
+        "requirements:\n"
+        "  - id: r1\n"
+        "    proof_requirements:\n"
+        "      - kind: unit_test\n"
+        "        ref: tests/test_contract.py::test_contract_path\n"
+        "        criterion_id: c1\n"
+    )
+
+    monkeypatch.setattr(proof_validation, "yaml", None)
+
+    results = resolve_contract(contract, resolver)
+
+    assert len(results) == 1
+    assert results[0].status == EnumRefStatus.RESOLVED
 
 
 @pytest.mark.unit
