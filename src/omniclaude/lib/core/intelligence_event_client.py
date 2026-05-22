@@ -38,10 +38,6 @@ class IntelligenceEventClient:
     TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"  # noqa: arch-topic-naming  # onex-topic-allow: pending contract auto-wiring
     TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"  # noqa: arch-topic-naming  # onex-topic-allow: pending contract auto-wiring
 
-    # Legacy topic — stable constant during dual-publish migration window (OMN-2368).
-    # Public so tests can pin the exact value and guard against silent renames.
-    TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"  # noqa: arch-topic-naming
-
     _INSTANCE_NAME = "intelligence"
 
     def __init__(
@@ -209,25 +205,6 @@ class IntelligenceEventClient:
             },
         }
         try:
-            # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2367).
-            # Feature flag: DUAL_PUBLISH_LEGACY_TOPICS=1 — see CLAUDE.md canonical env-var table.
-            if settings.dual_publish_legacy_topics and self._event_bus is not None:
-                try:
-                    legacy_payload = {
-                        **payload,
-                        "event_type": self.TOPIC_REQUEST_LEGACY,
-                        "event_id": str(
-                            uuid4()
-                        ),  # distinct id; avoids broker-side dedup conflicts
-                    }
-                    await self._event_bus.publish(
-                        self.TOPIC_REQUEST_LEGACY, legacy_payload
-                    )
-                except Exception as legacy_err:
-                    self.logger.warning(
-                        f"Dual-publish to legacy topic failed (non-fatal): {legacy_err}"
-                    )
-
             result = await self._wiring.send_request(
                 instance_name=self._INSTANCE_NAME,
                 payload=payload,
