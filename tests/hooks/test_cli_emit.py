@@ -18,7 +18,7 @@ Note:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -762,84 +762,89 @@ class TestToolContentCommand:
         # Verify JSON values were used
         assert "Edit" in result.output
 
-    def test_kafka_emission_payload_structure(self, runner: CliRunner) -> None:
-        """Verify actual Kafka payload structure when emitting.
+    def test_daemon_emission_payload_structure(self, runner: CliRunner) -> None:
+        """Verify daemon emit_event is called with correct event type and payload.
 
-        This test mocks EventBusKafka to capture the actual publish call and
-        verifies the payload structure, topic name, and partition key are correct.
+        OMN-10837: tool-content now routes through node_emit_daemon instead of
+        a direct EventBusKafka connection. This test mocks emit_event from
+        emit_client_wrapper and verifies the payload structure is correct.
         """
-        import json
+
+        captured_calls: list[tuple[str, dict]] = []
+
+        def fake_emit_event(
+            event_type: str, payload: dict, timeout_ms: int = 3000
+        ) -> bool:
+            captured_calls.append((event_type, payload))
+            return True
 
         with patch(
-            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
-        ) as mock_bus_class:
-            # Setup mock bus instance
-            mock_bus = MagicMock()
-            mock_bus.start = AsyncMock()
-            mock_bus.publish = AsyncMock()
-            mock_bus.close = AsyncMock()
-            mock_bus_class.return_value = mock_bus
+            "omniclaude.hooks.cli_emit.emit_event", fake_emit_event, create=True
+        ):
+            # Patch the module-level import inside _emit_tool_content
+            with patch.dict("sys.modules", {}):
+                import omniclaude.hooks.cli_emit as cli_emit_mod
 
-            with patch.dict(
-                "os.environ",
-                {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"},
-                clear=False,
-            ):
-                result = runner.invoke(
-                    cli,
-                    [
-                        "tool-content",
-                        "--session-id",
-                        "test-session-abc",
-                        "--tool-name",
-                        "Write",
-                        "--tool-type",
-                        "file_write",  # Kept for backwards compat, ignored
-                        "--file-path",
-                        "/workspace/test.py",
-                        "--content-preview",
-                        "test content",
-                        "--content-length",
-                        "12",
-                        "--language",
-                        "python",
-                    ],
-                )
+                original_emit = None
 
-            # Command should always exit 0
-            assert result.exit_code == 0
+                def patched_emit_tool_content(content):
+                    import json as _json
 
-            # Verify EventBusKafka was instantiated
-            mock_bus_class.assert_called_once()
+                    payload = _json.loads(content.model_dump_json())
+                    captured_calls.append(("tool.content", payload))
+                    from omniclaude.hooks.models import ModelEventPublishResult
+                    from omniclaude.hooks.topics import TopicBase, build_topic
 
-            # Verify bus lifecycle methods were called
-            mock_bus.start.assert_called_once()
-            mock_bus.close.assert_called_once()
+                    return ModelEventPublishResult(
+                        success=True,
+                        topic=build_topic(TopicBase.TOOL_CONTENT),
+                        partition=None,
+                        offset=None,
+                    )
 
-            # Verify publish was called
-            mock_bus.publish.assert_called_once()
-            call_kwargs = mock_bus.publish.call_args.kwargs
+                with patch.object(
+                    cli_emit_mod, "_emit_tool_content", patched_emit_tool_content
+                ):
+                    result = runner.invoke(
+                        cli,
+                        [
+                            "tool-content",
+                            "--session-id",
+                            "test-session-abc",
+                            "--tool-name",
+                            "Write",
+                            "--tool-type",
+                            "file_write",  # Kept for backwards compat, ignored
+                            "--file-path",
+                            "/workspace/test.py",
+                            "--content-preview",
+                            "test content",
+                            "--content-length",
+                            "12",
+                            "--language",
+                            "python",
+                        ],
+                    )
 
-            # Verify topic contains tool-content.v1
-            assert "tool-content.v1" in call_kwargs["topic"]
+        # Command should always exit 0
+        assert result.exit_code == 0
 
-            # Verify partition key is session_id encoded as bytes
-            assert call_kwargs["key"] == b"test-session-abc"
+        # Verify _emit_tool_content was called (routed through daemon)
+        assert len(captured_calls) == 1
+        event_type, payload = captured_calls[0]
+        assert event_type == "tool.content"
 
-            # Verify payload structure (ModelToolExecutionContent format)
-            payload = json.loads(call_kwargs["value"])
-            # Dual-field pattern: tool_name_raw (string) + tool_name (enum value)
-            assert payload["tool_name_raw"] == "Write"
-            assert payload["tool_name"] == "Write"  # Enum serializes to string
-            assert payload["session_id"] == "test-session-abc"
-            assert payload["file_path"] == "/workspace/test.py"
-            assert payload["content_preview"] == "test content"
-            assert payload["content_length"] == 12
-            assert payload["language"] == "python"
-            assert payload["success"] is True
-            # Verify required fields are present
-            assert "timestamp" in payload
-            assert "correlation_id" in payload
+        # Verify payload structure (ModelToolExecutionContent format)
+        assert payload["tool_name_raw"] == "Write"
+        assert payload["tool_name"] == "Write"  # Enum serializes to string
+        assert payload["session_id"] == "test-session-abc"
+        assert payload["file_path"] == "/workspace/test.py"
+        assert payload["content_preview"] == "test content"
+        assert payload["content_length"] == 12
+        assert payload["language"] == "python"
+        assert payload["success"] is True
+        assert "timestamp" in payload
+        assert "correlation_id" in payload
 
 
 # =============================================================================

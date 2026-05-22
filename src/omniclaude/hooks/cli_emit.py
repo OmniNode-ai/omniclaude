@@ -38,7 +38,6 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import click
@@ -59,13 +58,8 @@ except (ImportError, PackageNotFoundError):
 from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.intelligence import ModelToolExecutionContent
 
-if TYPE_CHECKING:
-    from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
-
-from omniclaude.hooks.emit_bus_bootstrapper import create_kafka_event_bus
 from omniclaude.hooks.handler_event_emitter import (
     ModelClaudeHookEventConfig,
-    create_kafka_config,
     emit_claude_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
@@ -629,10 +623,13 @@ def cmd_claude_hook_event(
 # =============================================================================
 
 
-async def _emit_tool_content(
-    content: ModelToolExecutionContent,
-) -> ModelEventPublishResult:
-    """Emit a tool content event to Kafka.
+def _emit_tool_content(content: ModelToolExecutionContent) -> ModelEventPublishResult:
+    """Emit a tool content event via node_emit_daemon (OMN-10837).
+
+    Routes through the daemon socket client instead of a direct EventBusKafka
+    connection. The daemon provides circuit-breaker, exponential backoff, and
+    disk-spool durability — eliminating the legacy embedded-publisher crash-loop
+    path that had no retry on Redpanda restart.
 
     Args:
         content: The tool execution content model to emit.
@@ -640,76 +637,59 @@ async def _emit_tool_content(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    bus: EventBusKafka | None = None
-    topic = "unknown"
+    import os  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    # Resolve emit_client_wrapper from the plugin lib directory.
+    # The module path is constructed relative to CLAUDE_PLUGIN_ROOT so the
+    # hook works both from the source tree and from the plugin cache.
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+    hooks_lib = os.path.join(plugin_root, "hooks", "lib") if plugin_root else ""
+    if hooks_lib and hooks_lib not in sys.path:
+        sys.path.insert(0, hooks_lib)
+
+    topic = build_topic(TopicBase.TOOL_CONTENT)
 
     try:
-        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
-        topic = build_topic(TopicBase.TOOL_CONTENT)
+        from emit_client_wrapper import emit_event  # noqa: PLC0415
 
-        # Reuse shared Kafka config (raises ModelOnexError if bootstrap missing)
-        config = create_kafka_config()
-        # New bus per call is intentional - each invocation runs in an isolated
-        # subshell from the shell hook, so connection pooling isn't beneficial
-        bus = create_kafka_event_bus(config)
+        payload = json.loads(content.model_dump_json())
+        success = emit_event("tool.content", payload)
 
-        # Start producer
-        await bus.start()
+        if success:
+            logger.debug(
+                "tool_content_emitted_via_daemon",
+                extra={
+                    "topic": topic,
+                    "tool_name": content.tool_name_raw,
+                    "session_id": content.session_id,
+                },
+            )
+            return ModelEventPublishResult(
+                success=True, topic=topic, partition=None, offset=None
+            )
 
-        # Publish the model as JSON
-        partition_key = (content.session_id or "unknown").encode("utf-8")
-        message_bytes = content.model_dump_json().encode("utf-8")
-
-        await bus.publish(
-            topic=topic,
-            key=partition_key,
-            value=message_bytes,
-        )
-
-        logger.debug(
-            "tool_content_emitted",
-            extra={
-                "topic": topic,
-                "tool_name": content.tool_name_raw,
-                "session_id": content.session_id,
-            },
-        )
-
-        return ModelEventPublishResult(
-            success=True,
-            topic=topic,
-            partition=None,
-            offset=None,
-        )
-
-    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
         logger.warning(
-            "tool_content_publish_failed",
-            extra={
-                "topic": topic,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
+            "tool_content_daemon_rejected",
+            extra={"topic": topic, "tool_name": content.tool_name_raw},
         )
-
-        error_msg = f"{type(e).__name__}: {e!s}"
         return ModelEventPublishResult(
             success=False,
             topic=topic,
-            error_message=(
-                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
-            ),
+            error_message="emit_event returned False (daemon unavailable or validation failed)",
         )
 
-    finally:
-        if bus is not None:
-            try:
-                await bus.close()
-            except Exception as close_error:  # noqa: BLE001 — boundary: best-effort cleanup
-                logger.debug(
-                    "kafka_bus_close_error",
-                    extra={"error": str(close_error)},
-                )
+    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
+        error_msg = f"{type(e).__name__}: {e!s}"
+        logger.warning(
+            "tool_content_publish_failed",
+            extra={"topic": topic, "error": error_msg},
+        )
+        return ModelEventPublishResult(
+            success=False,
+            topic=topic,
+            error_message=error_msg[:1000],
+        )
 
 
 @cli.command("tool-content")
@@ -818,11 +798,11 @@ def cmd_tool_content(
             click.echo(f"Payload: {content.model_dump_json(indent=2)}")
             return
 
-        result = run_with_timeout(_emit_tool_content(content))
+        result = _emit_tool_content(content)
 
-        if result and result.success:
+        if result.success:
             logger.debug("tool_content_emitted", extra={"topic": result.topic})
-        elif result:
+        else:
             logger.warning("tool_content_failed", extra={"error": result.error_message})
 
     except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise

@@ -70,6 +70,13 @@ events:
     partition_key_field: session_id
     required_fields: [tool_name, session_id]
 
+  tool.content:
+    fan_out:
+      - topic: "onex.cmd.omniintelligence.tool-content.v1"
+        description: "Tool execution content for omniintelligence pattern learning"
+    partition_key_field: session_id
+    required_fields: [tool_name_raw, session_id]
+
   # =========================================================================
   # Routing Events
   # =========================================================================

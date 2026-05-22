@@ -107,6 +107,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "session.outcome",
         "prompt.submitted",
         "tool.executed",
+        "tool.content",  # OMN-10837 - routes through daemon (was legacy embedded-publisher)
         "injection.recorded",
         "context.utilization",  # OMN-1889
         "agent.match",  # OMN-1889
