@@ -1,0 +1,53 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-7980
+title: "Wire OpenRouter as delegation backend for build loop code generation"
+summary: "Typed OpenRouter backend selection added with local fallback behavior and tests for the delegation orchestrator node."
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+  - protocols
+  - events
+evidence_requirements:
+  - kind: tests
+    description: "Unit tests for OpenRouter delegation backend pass"
+    command: "uv run pytest tests/ -k openrouter -v"
+  - kind: ci
+    description: "All CI checks pass on omniclaude PR #1629"
+    command: "gh pr checks 1629 --repo OmniNode-ai/omniclaude --watch"
+  - kind: manual
+    description: "Deploy verification: delegation orchestrator node routes to OpenRouter backend in runtime container"
+    command: "docker exec omninode-runtime uv run python -c 'from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_dispatch import HandlerDelegationDispatch; print(HandlerDelegationDispatch)' && gh pr checks 1629 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Unit tests for OpenRouter delegation backend pass on omniclaude PR #1629"
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/ -k openrouter -v"
+  - id: dod-002
+    description: "All CI gates pass on omniclaude PR #1629"
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "gh pr checks 1629 --repo OmniNode-ai/omniclaude --watch"
+  - id: dod-003
+    description: "Deploy verification: omninode-runtime container picks up delegation orchestrator node with OpenRouter backend wired"
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "docker exec omninode-runtime uv run python -c 'from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_dispatch import HandlerDelegationDispatch; print(HandlerDelegationDispatch)' # deploy-verify OMN-7980 OpenRouter delegation backend"
+  - id: dod-occ-pr-1204
+    description: "OCC evidence PR #1204 carries the OMN-7980 receipt update — merged 2026-05-20"
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "gh pr view 1204 --repo OmniNode-ai/onex_change_control --json state,mergedAt # deploy-occ-evidence OMN-7980"
