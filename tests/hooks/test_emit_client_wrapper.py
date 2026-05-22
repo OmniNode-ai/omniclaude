@@ -55,6 +55,7 @@ class TestModuleImport:
             "session.outcome",
             "prompt.submitted",
             "tool.executed",
+            "tool.content",  # OMN-10837 - tool content routed through daemon
             "injection.recorded",
             "context.utilization",  # OMN-1889
             "agent.match",  # OMN-1889

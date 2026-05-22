@@ -387,6 +387,20 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["tool_name", "session_id"],
     ),
+    # Tool content (OMN-10837): full tool execution content for pattern learning.
+    # Routes through node_emit_daemon, eliminating the legacy embedded EventBusKafka path.
+    "tool.content": EventRegistration(
+        event_type="tool.content",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TOOL_CONTENT,
+                transform=None,  # Passthrough — restricted cmd topic, full content safe
+                description="Tool execution content for omniintelligence pattern learning",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["tool_name_raw", "session_id"],
+    ),
     # =========================================================================
     # Routing Feedback Events (OMN-1892)
     # =========================================================================

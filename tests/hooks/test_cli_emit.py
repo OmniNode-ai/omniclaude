@@ -763,76 +763,60 @@ class TestToolContentCommand:
         assert "Edit" in result.output
 
     def test_daemon_emission_payload_structure(self, runner: CliRunner) -> None:
-        """Verify daemon emit_event is called with correct event type and payload.
+        """Verify _emit_tool_content is called with correct payload.
 
         OMN-10837: tool-content now routes through node_emit_daemon instead of
-        a direct EventBusKafka connection. This test mocks emit_event from
-        emit_client_wrapper and verifies the payload structure is correct.
+        a direct EventBusKafka connection. Mock _emit_tool_content to capture
+        the ModelToolExecutionContent passed to it and verify its fields.
         """
+        import json as _json
 
-        captured_calls: list[tuple[str, dict]] = []
+        from omniclaude.hooks.models import ModelEventPublishResult
+        from omniclaude.hooks.topics import TopicBase, build_topic
 
-        def fake_emit_event(
-            event_type: str, payload: dict, timeout_ms: int = 3000
-        ) -> bool:
-            captured_calls.append((event_type, payload))
-            return True
+        captured_contents: list[object] = []
 
-        with patch(
-            "omniclaude.hooks.cli_emit.emit_event", fake_emit_event, create=True
+        def patched_emit_tool_content(content):
+            captured_contents.append(content)
+            return ModelEventPublishResult(
+                success=True,
+                topic=build_topic(TopicBase.TOOL_CONTENT),
+                partition=None,
+                offset=None,
+            )
+
+        import omniclaude.hooks.cli_emit as cli_emit_mod
+
+        with patch.object(
+            cli_emit_mod, "_emit_tool_content", patched_emit_tool_content
         ):
-            # Patch the module-level import inside _emit_tool_content
-            with patch.dict("sys.modules", {}):
-                import omniclaude.hooks.cli_emit as cli_emit_mod
-
-                original_emit = None
-
-                def patched_emit_tool_content(content):
-                    import json as _json
-
-                    payload = _json.loads(content.model_dump_json())
-                    captured_calls.append(("tool.content", payload))
-                    from omniclaude.hooks.models import ModelEventPublishResult
-                    from omniclaude.hooks.topics import TopicBase, build_topic
-
-                    return ModelEventPublishResult(
-                        success=True,
-                        topic=build_topic(TopicBase.TOOL_CONTENT),
-                        partition=None,
-                        offset=None,
-                    )
-
-                with patch.object(
-                    cli_emit_mod, "_emit_tool_content", patched_emit_tool_content
-                ):
-                    result = runner.invoke(
-                        cli,
-                        [
-                            "tool-content",
-                            "--session-id",
-                            "test-session-abc",
-                            "--tool-name",
-                            "Write",
-                            "--tool-type",
-                            "file_write",  # Kept for backwards compat, ignored
-                            "--file-path",
-                            "/workspace/test.py",
-                            "--content-preview",
-                            "test content",
-                            "--content-length",
-                            "12",
-                            "--language",
-                            "python",
-                        ],
-                    )
+            result = runner.invoke(
+                cli,
+                [
+                    "tool-content",
+                    "--session-id",
+                    "test-session-abc",
+                    "--tool-name",
+                    "Write",
+                    "--tool-type",
+                    "file_write",  # Kept for backwards compat, ignored
+                    "--file-path",
+                    "/workspace/test.py",
+                    "--content-preview",
+                    "test content",
+                    "--content-length",
+                    "12",
+                    "--language",
+                    "python",
+                ],
+            )
 
         # Command should always exit 0
         assert result.exit_code == 0
 
         # Verify _emit_tool_content was called (routed through daemon)
-        assert len(captured_calls) == 1
-        event_type, payload = captured_calls[0]
-        assert event_type == "tool.content"
+        assert len(captured_contents) == 1
+        payload = _json.loads(captured_contents[0].model_dump_json())  # type: ignore[union-attr]
 
         # Verify payload structure (ModelToolExecutionContent format)
         assert payload["tool_name_raw"] == "Write"
