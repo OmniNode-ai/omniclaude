@@ -785,10 +785,8 @@ class TestToolContentCommand:
                 offset=None,
             )
 
-        import omniclaude.hooks.cli_emit as cli_emit_mod
-
-        with patch.object(
-            cli_emit_mod, "_emit_tool_content", patched_emit_tool_content
+        with patch(
+            "omniclaude.hooks.cli_emit._emit_tool_content", patched_emit_tool_content
         ):
             result = runner.invoke(
                 cli,
