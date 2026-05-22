@@ -1,6 +1,6 @@
 ---
-version: 1.0.3
-description: Delegate tasks to the ONEX node-based delegation pipeline through local runtime ingress and the Pattern B broker. Classifies prompt, wraps a typed runtime request, and lets the runtime own event-bus dispatch and terminal correlation.
+version: 1.1.0
+description: Delegate tasks to the ONEX delegation pipeline via the market adapter. Classifies prompt, wraps a typed dispatch payload, and routes through DelegationDispatchAdapter → node_delegate_skill_orchestrator.
 mode: full
 level: advanced
 debug: true
@@ -21,25 +21,46 @@ args:
   - name: --wait
     description: "Request runtime terminal-result correlation instead of fire-and-forget routing"
     required: false
+  - name: --local
+    description: "Run in-process using local vLLM endpoint (debug/demo only — no Kafka or runtime required)"
+    required: false
 ---
 
 # Delegate
 
-Thin skill that classifies a user prompt and submits a typed runtime request to
-`node_delegation_orchestrator`. The skill does not publish directly to Kafka and
-does not depend on the Claude hook emit daemon. Runtime ingress and the Pattern B
-broker own route resolution, event-bus dispatch, terminal-result correlation,
-serialization, and transport errors.
+Thin skill shim that classifies a user prompt and dispatches through the market
+delegation adapter. The shim has no transport logic; all route resolution,
+event-bus dispatch, topic naming, and terminal-result correlation are owned by
+`DelegationDispatchAdapter` in omnimarket.
 
 ## How It Works
 
 1. Parse the user's prompt.
 2. Classify the task type using `TaskClassifier`.
-3. Construct a `ModelDelegationCommand`-compatible payload.
-4. Submit `ModelRuntimeSkillRequest(command_name="node_delegation_orchestrator")`
-   through `LocalRuntimeSkillClient`.
-5. Return the runtime response with the correlation ID, broker dispatch status,
-   resolved node, command topic, and terminal event when available.
+3. Build a typed dispatch payload.
+4. Route through `DelegationDispatchAdapter` → contract-declared runtime dispatch
+   → `node_delegate_skill_orchestrator`.
+5. Return the correlation ID, dispatch status, resolved node, command topic, and
+   terminal event when available.
+
+For `--local`: bypass the adapter entirely and run the delegation pipeline
+in-process using a local vLLM endpoint via curl shim (debug/demo path only).
+
+## Dispatch Path
+
+```
+omniclaude skill shim
+  └─► DelegationDispatchAdapter  (omnimarket)
+        └─► contract-declared runtime dispatch
+              └─► node_delegate_skill_orchestrator
+```
+
+Debug path (--local flag):
+
+```
+omniclaude skill shim
+  └─► InprocessRunner  (no Kafka, no runtime socket, no projection)
+```
 
 ## Task Types
 
@@ -51,9 +72,9 @@ Classification maps to three delegatable intents from `TaskClassifier`:
 | `document` | document, docstring, README, explain | "add docstrings to the handler module" |
 | `research` | what, how, explain, investigate, analyze | "what does the routing reducer do?" |
 
-Non-delegatable intents are rejected before runtime dispatch.
+Non-delegatable intents are rejected before adapter dispatch.
 
-## Runtime Request Payload
+## Dispatch Payload
 
 ```json
 {
@@ -70,17 +91,8 @@ Non-delegatable intents are rejected before runtime dispatch.
 }
 ```
 
-The payload remains compatible with `ModelDelegationCommand`; runtime-side
-validation occurs on the consuming `node_delegation_orchestrator`.
-
-## Runtime Path
-
-- **Skill client**: `LocalRuntimeSkillClient`
-- **Request model**: `ModelRuntimeSkillRequest`
-- **Command name**: `node_delegation_orchestrator`
-- **Runtime ingress**: `ONEX_LOCAL_RUNTIME_SOCKET_PATH` or `/tmp/onex-runtime.sock`
-- **Broker route**: Pattern B broker resolves the command topic from the node contract
-- **Legacy topic**: `onex.cmd.omniclaude.delegate-task.v1` is runtime-owned, not skill-owned
+The payload is forwarded to `node_delegate_skill_orchestrator` via the adapter;
+runtime-side validation occurs there.
 
 ## Usage
 
@@ -89,14 +101,14 @@ validation occurs on the consuming `node_delegation_orchestrator`.
 /delegate --source-file src/omniclaude/hooks/handler_event_emitter.py add docstrings
 /delegate --max-tokens 4096 --recipient codex analyze the routing architecture
 /delegate --wait research the cross-CLI bridge terminal-result flow
+/delegate --local write a failing test for the classifier
 ```
 
 ## What This Skill Does NOT Do
 
-- Publish through the legacy hook emission client
+- Open a Kafka producer or consumer directly
+- Publish via HTTP, SSH socket, Pandaproxy, or SSH rpk bridge
 - Require the Claude hook emit daemon
-- Open a Kafka producer or consumer
-- Run skill-local terminal-result waits
 - Call any LLM directly
 - Run quality gates
 
@@ -104,6 +116,5 @@ validation occurs on the consuming `node_delegation_orchestrator`.
 
 - **Bridge implementation**: `plugins/onex/skills/delegate/_lib/run.py`
 - **TaskClassifier**: `src/omniclaude/lib/task_classifier.py`
-- **Runtime client**: `omnibase_infra.clients.runtime_skill_client.LocalRuntimeSkillClient`
-- **Request model**: `omnibase_core.models.runtime.ModelRuntimeSkillRequest`
-- **Orchestrator contract**: `src/omniclaude/nodes/node_delegation_orchestrator/contract.yaml`
+- **Market adapter**: `omnimarket.adapters.claude_code.delegate.DelegationDispatchAdapter`
+- **Orchestrator contract**: `omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml`
