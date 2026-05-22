@@ -12,7 +12,7 @@ Say: "I'm using the delegate skill to dispatch to node_delegate_skill_orchestrat
 
 Before first dispatch, verify the pipeline is ready:
 
-1. Check `$OMNI_HOME/omnimarket` exists and has a `.venv`
+1. Check `$ONEX_REGISTRY_ROOT/omnimarket` exists and has a `.venv`  `# local-path-ok: canonical omnimarket repo root`
 2. Check bifrost overlay exists: `~/.omninode/delegation/bifrost_overrides.yaml`
 3. If the overlay is missing, ask the user:
    - "The delegation pipeline needs endpoint configuration. What are your vLLM endpoint URLs?"
@@ -63,7 +63,7 @@ PAYLOAD
 2. Run the node:
 
 ```bash
-cd "$OMNI_HOME/omnimarket"
+cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket repo root
 uv run onex node node_delegate_skill_orchestrator \
   --backend event_bus=inmemory \
   --timeout 300 \
@@ -73,7 +73,7 @@ uv run onex node node_delegate_skill_orchestrator \
 3. Read the result:
 
 ```bash
-cat "$OMNI_HOME/omnimarket/.onex_state/workflow_result.json"
+cat "$ONEX_REGISTRY_ROOT/omnimarket/.onex_state/workflow_result.json"  # local-path-ok: canonical omnimarket repo root
 ```
 
 4. Clean up:
