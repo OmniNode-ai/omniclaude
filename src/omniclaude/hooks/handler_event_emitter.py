@@ -32,6 +32,7 @@ See Also:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid as _uuid
@@ -321,6 +322,44 @@ class ModelSessionOutcomeConfig:
             "outcome",
             EnumClaudeCodeSessionOutcome(self.outcome),
         )
+
+
+@dataclass(frozen=True)
+class ModelPatternDiscoveredConfig:
+    """Configuration for pattern discovered events (OMN-8162).
+
+    Published to ``onex.evt.pattern.discovered.v1`` — a multi-producer
+    domain topic consumed by omniintelligence node_pattern_storage_effect.
+
+    Attributes:
+        discovery_id: Idempotency key; callers should generate a stable UUID
+            per unique (session_id, signature_hash) pair to enable exact-replay
+            deduplication in the consumer.
+        pattern_signature: Raw pattern content (1-500 chars).
+        signature_hash: SHA-256 hex digest of pattern_signature for semantic
+            deduplication across sessions.
+        domain: Domain classification string (e.g., ``"code_quality"``).
+        confidence: Discovery confidence in [0.5, 1.0].
+        source_session_id: Claude Code session UUID where pattern was found.
+        source_system: Originating system label (e.g., ``"omniclaude"``).
+        source_agent: Optional agent identifier.
+        discovered_at: Timezone-aware timestamp of discovery; must be injected
+            by the caller — no ``datetime.now()`` defaults.
+        correlation_id: Correlation UUID for distributed tracing.
+        metadata: Arbitrary string-valued metadata forwarded to pattern storage.
+    """
+
+    discovery_id: UUID
+    pattern_signature: str
+    signature_hash: str
+    domain: str
+    confidence: float
+    source_session_id: UUID
+    source_system: str
+    discovered_at: datetime
+    correlation_id: UUID
+    source_agent: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)  # ONEX_EXCLUDE: dict_str_any  # fmt: skip
 
 
 # =============================================================================
@@ -1412,6 +1451,113 @@ async def emit_session_outcome_from_config(
                 )
 
 
+# =============================================================================
+# Pattern Discovery Emission (OMN-8162)
+# =============================================================================
+
+
+async def emit_pattern_discovered(
+    config: ModelPatternDiscoveredConfig,
+) -> ModelEventPublishResult:
+    """Publish a pattern.discovered event to the cross-domain topic.
+
+    Emits to ``onex.evt.pattern.discovered.v1`` — the multi-producer domain
+    topic consumed by omniintelligence ``node_pattern_storage_effect`` for
+    persistence. Producer segment is intentionally omitted from the topic
+    name per ONEX convention for multi-producer domain events.
+
+    The function never raises; failures are returned as a failed result so
+    the hook path cannot be disrupted by Kafka unavailability.
+
+    Args:
+        config: Pattern discovered configuration containing all event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+    """
+    bus: EventBusKafka | None = None
+    topic = "unknown"
+
+    try:
+        topic = build_topic(TopicBase.PATTERN_DISCOVERED)
+
+        payload: dict[str, object] = {
+            "event_type": "PatternDiscovered",
+            "discovery_id": str(config.discovery_id),
+            "pattern_signature": config.pattern_signature,
+            "signature_hash": config.signature_hash,
+            "domain": config.domain,
+            "confidence": config.confidence,
+            "source_session_id": str(config.source_session_id),
+            "source_system": config.source_system,
+            "source_agent": config.source_agent,
+            "correlation_id": str(config.correlation_id),
+            "discovered_at": config.discovered_at.isoformat(),
+            "metadata": config.metadata,
+        }
+
+        kafka_config = create_kafka_config()
+        bus = create_kafka_event_bus(kafka_config)
+        await bus.start()
+
+        message_bytes = json.dumps(payload).encode("utf-8")
+        partition_key = str(config.source_session_id).encode("utf-8")
+
+        await bus.publish(
+            topic=topic,
+            key=partition_key,
+            value=message_bytes,
+        )
+
+        logger.debug(
+            "pattern_discovered_emitted",
+            extra={
+                "topic": topic,
+                "discovery_id": str(config.discovery_id),
+                "domain": config.domain,
+                "source_session_id": str(config.source_session_id),
+                "correlation_id": str(config.correlation_id),
+            },
+        )
+
+        return ModelEventPublishResult(
+            success=True,
+            topic=topic,
+            partition=None,
+            offset=None,
+        )
+
+    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
+        logger.warning(
+            "pattern_discovered_publish_failed",
+            extra={
+                "topic": topic,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "discovery_id": str(config.discovery_id),
+            },
+        )
+
+        error_msg = f"{type(e).__name__}: {e!s}"
+        return ModelEventPublishResult(
+            success=False,
+            topic=topic,
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
+        )
+
+    finally:
+        if bus is not None:
+            try:
+                await bus.close()
+            except Exception as close_error:  # noqa: BLE001 — boundary: best-effort cleanup
+                logger.debug(
+                    "kafka_bus_close_error",
+                    extra={"error": str(close_error)},
+                )
+
+
 __all__ = [
     # Constants
     "MAX_PROMPT_SIZE",
@@ -1425,6 +1571,7 @@ __all__ = [
     "ModelSessionEndedConfig",
     "ModelClaudeHookEventConfig",
     "ModelSessionOutcomeConfig",
+    "ModelPatternDiscoveredConfig",
     # Kafka configuration
     "create_kafka_config",
     # Core emission function
@@ -1438,6 +1585,8 @@ __all__ = [
     "emit_session_outcome_from_config",
     # Claude hook event emission (for omniintelligence)
     "emit_claude_hook_event",
+    # Pattern discovery emission (OMN-8162)
+    "emit_pattern_discovered",
     # Backwards-compatible convenience functions
     "emit_session_started",
     "emit_session_ended",

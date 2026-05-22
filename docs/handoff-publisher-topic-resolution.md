@@ -144,6 +144,18 @@ print(f'Wire topic: {topic}')
 - OMN-1889: Injection metrics events (DONE -- context.utilization, agent.match, latency.breakdown)
 - OMN-1831: Notification events (DONE -- notification.blocked, notification.completed)
 
+## Infra Health
+
+Verify before any follow-up work on this handoff:
+
+```bash
+# Kafka broker reachable
+curl -fsS http://192.168.86.201:19092 || echo "Redpanda unreachable"  # onex-allow-internal-ip
+
+# omnibase-infra runtime healthy (dev lane)
+curl -fsS http://192.168.86.201:8085/health || echo "dev lane down"  # onex-allow-internal-ip
+```
+
 ## Decision Log
 | Decision | Rationale |
 |----------|-----------|
