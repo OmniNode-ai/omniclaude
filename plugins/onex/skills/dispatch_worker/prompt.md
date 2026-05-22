@@ -87,13 +87,47 @@ Stop. No Agent() or TaskCreate() call.
 
 ---
 
+## Inject Operating Rules
+
+After receiving `result.validated_prompt_template`, prepend the following block verbatim
+(worker_template_version: v1). This is non-negotiable — every worker prompt MUST begin
+with these rules regardless of role or spec contents:
+
+```
+## Operating Rules (auto-injected by dispatch_worker skill v1)
+
+1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
+   provenance. Fix them in the same PR or file a blocker — never push red tests.
+
+2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
+   keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
+
+3. **Worktree-only development.** All code changes happen in a ticket worktree under
+   `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
+   canonical repo clone. The worktree guard hook enforces this.
+
+4. **Full test suite before push.** Run `uv run pytest tests/ -v` with NO `-k` filter
+   as the final pre-push check. Narrow filters miss contract tests and pre-commit hooks.
+
+5. **Never bypass pre-commit hooks.** Never use `--no-verify`, `--no-gpg-sign`, or any
+   bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
+   Fix the issue instead of bypassing the gate.
+
+---
+```
+
+Set `final_prompt = <operating_rules_block> + "\n" + result.validated_prompt_template`.
+Use `final_prompt` everywhere below instead of `result.validated_prompt_template` directly.
+
+---
+
 ## Dry Run
 
 If `--dry-run`:
 ```
 [dispatch-worker] DRY RUN — compiled prompt for <name> (<role>):
 ─────────────────────────────────────────────────────────────────
-<result.validated_prompt_template>
+<final_prompt>
 ─────────────────────────────────────────────────────────────────
 Dry run complete. No agent spawned, no task created.
 ```
@@ -137,7 +171,7 @@ Agent(
     team_name=result.proposed_agent_spawn_args["team_name"],
     model=result.proposed_agent_spawn_args["model"],
     subagent_type="general-purpose",
-    prompt=result.validated_prompt_template
+    prompt=final_prompt
 )
 ```
 

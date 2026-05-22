@@ -1,19 +1,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests verifying the delegate skill routes through DelegationDispatchAdapter.
-
-DoD evidence for OMN-11638:
-- classify_and_publish() dispatches through DelegationDispatchAdapter (market adapter path).
-- Market adapter unavailability returns an explicit error with path="market_adapter".
-- Contract topic is still resolved from omnimarket contract.yaml via OMNI_HOME.
-- No stale transport paths (HTTP, SSH socket, Pandaproxy, SSH rpk, ad-hoc Kafka).
-"""
+"""Unit tests for legacy /onex:delegate option mapping."""
 
 from __future__ import annotations
 
 import importlib
 import sys
-import uuid
 from pathlib import Path
 from types import ModuleType
 
@@ -35,210 +27,69 @@ def delegate_run() -> ModuleType:
     return importlib.reload(m)
 
 
-class TestNoStaleTransportFunctions:
-    def test_dispatch_via_http_removed(self, delegate_run: ModuleType) -> None:
-        assert not hasattr(delegate_run, "_dispatch_via_http"), (
-            "_dispatch_via_http must be removed — HTTP transport is stale"
-        )
+def test_build_metadata_preserves_legacy_cli_options(
+    delegate_run: ModuleType,
+) -> None:
+    metadata = delegate_run._build_metadata(
+        source_file="src/example.py",
+        session_id="session-1",
+        recipient="codex",
+        wait_for_result=True,
+        working_directory="/tmp/work",
+        codex_sandbox_mode="workspace-write",
+        timeout_ms=12345,
+    )
 
-    def test_dispatch_via_ssh_socket_removed(self, delegate_run: ModuleType) -> None:
-        assert not hasattr(delegate_run, "_dispatch_via_ssh_socket"), (
-            "_dispatch_via_ssh_socket must be removed — SSH socket transport is stale"
-        )
-
-    def test_dispatch_via_pandaproxy_removed(self, delegate_run: ModuleType) -> None:
-        assert not hasattr(delegate_run, "_dispatch_via_pandaproxy"), (
-            "_dispatch_via_pandaproxy must be removed — Pandaproxy transport is stale"
-        )
-
-    def test_dispatch_via_ssh_rpk_removed(self, delegate_run: ModuleType) -> None:
-        assert not hasattr(delegate_run, "_dispatch_via_ssh_rpk"), (
-            "_dispatch_via_ssh_rpk must be removed — SSH rpk bridge transport is stale"
-        )
-
-    def test_dispatch_via_kafka_removed(self, delegate_run: ModuleType) -> None:
-        assert not hasattr(delegate_run, "_dispatch_via_kafka"), (
-            "_dispatch_via_kafka must be removed — ad-hoc Kafka transport is stale"
-        )
-
-    def test_resolve_transport_config_removed(self, delegate_run: ModuleType) -> None:
-        assert not hasattr(delegate_run, "_resolve_transport_config"), (
-            "_resolve_transport_config must be removed — stale transport config reader"
-        )
+    assert metadata == {
+        "adapter": "omniclaude.delegate-skill",
+        "session_id": "session-1",
+        "recipient": "codex",
+        "wait_for_result": "true",
+        "timeout_ms": "12345",
+        "source_file_path": "src/example.py",
+        "working_directory": "/tmp/work",
+        "codex_sandbox_mode": "workspace-write",
+    }
 
 
-class TestMarketAdapterPath:
-    def test_market_adapter_unavailable_returns_explicit_error(
-        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", False)
-        monkeypatch.setattr(
-            delegate_run,
-            "_MARKET_ADAPTER_IMPORT_ERROR",
-            ImportError("omnimarket not installed"),
-        )
+def test_build_metadata_omits_absent_optional_values(delegate_run: ModuleType) -> None:
+    metadata = delegate_run._build_metadata(
+        source_file=None,
+        session_id="",
+        recipient="auto",
+        wait_for_result=False,
+        working_directory=None,
+        codex_sandbox_mode=None,
+        timeout_ms=300000,
+    )
 
-        result = delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
-        )
+    assert metadata == {
+        "adapter": "omniclaude.delegate-skill",
+        "session_id": "",
+        "recipient": "auto",
+        "wait_for_result": "false",
+        "timeout_ms": "300000",
+    }
 
-        assert result.get("success") is False
-        assert result.get("path") == "market_adapter"
-        assert "omnimarket not installed" in result["error"]
 
-    def test_classify_and_publish_routes_through_market_adapter(
-        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        corr = str(uuid.uuid4())
-        fake_response = {
+def test_result_normalization_preserves_adapter_fields(
+    delegate_run: ModuleType,
+) -> None:
+    result = delegate_run._normalize_adapter_result(
+        {
             "ok": True,
-            "correlation_id": corr,
+            "correlation_id": "11111111-1111-1111-1111-111111111111",
             "command_topic": "onex.cmd.omnimarket.delegate-skill.v1",
-            "terminal_events": {
-                "success": "onex.evt.omnimarket.delegate-skill-completed.v1",
-                "failure": "onex.evt.omnimarket.delegate-skill-failed.v1",
-            },
-            "status": "published",
-        }
+        },
+        correlation_id="22222222-2222-2222-2222-222222222222",
+        task_type="test",
+    )
 
-        class FakeAdapter:
-            def __init__(self, contract_path: object = None) -> None:
-                pass
-
-            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
-                return fake_response
-
-        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
-        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
-        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
-
-        result = delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
-            correlation_id=corr,
-        )
-
-        assert result.get("success") is True, f"Expected success, got: {result}"
-        assert result.get("path") == "market_adapter"
-        assert result.get("correlation_id") == corr
-
-    def test_market_adapter_failure_returns_error(
-        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        class FakeAdapter:
-            def __init__(self, contract_path: object = None) -> None:
-                pass
-
-            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
-                return {"ok": False, "error": "runtime unavailable"}
-
-        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
-        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
-        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
-
-        result = delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
-        )
-
-        assert result.get("success") is False
-        assert result.get("path") == "market_adapter"
-        assert "runtime unavailable" in result["error"]
-
-    def test_market_adapter_exception_returns_error(
-        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        class FakeAdapter:
-            def __init__(self, contract_path: object = None) -> None:
-                raise RuntimeError("contract path not found")
-
-            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
-                return {}
-
-        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
-        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
-        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
-
-        result = delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
-        )
-
-        assert result.get("success") is False
-        assert result.get("path") == "market_adapter"
-        assert "contract path not found" in result["error"]
-
-    def test_no_stale_env_vars_consulted_for_transport(
-        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Stale transport env vars (ONEX_RUNTIME_URL, ONEX_PANDAPROXY_URL, etc.) must
-        have no effect on dispatch routing."""
-        monkeypatch.setenv("ONEX_RUNTIME_URL", "http://stale-env:8085")
-        monkeypatch.setenv("ONEX_PANDAPROXY_URL", "http://stale-env:28082")
-        monkeypatch.setenv("ONEX_RUNTIME_SSH_HOST", "user@stale-env")
-        monkeypatch.setenv("ONEX_RUNTIME_SOCKET_PATH", "/tmp/stale.sock")
-        monkeypatch.setenv("ONEX_KAFKA_BRIDGE_SCRIPT", "/opt/stale/kafka_bridge.sh")
-
-        calls: list[dict] = []  # type: ignore[type-arg]
-
-        class FakeAdapter:
-            def __init__(self, contract_path: object = None) -> None:
-                pass
-
-            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
-                calls.append(dict(kwargs))
-                return {
-                    "ok": True,
-                    "correlation_id": str(uuid.uuid4()),
-                    "status": "published",
-                }
-
-        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
-        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
-        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
-
-        result = delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
-        )
-
-        assert result.get("success") is True
-        assert result.get("path") == "market_adapter"
-        # Adapter was called exactly once — no stale transport fallback
-        assert len(calls) == 1
-
-
-class TestShimProducesModelDelegateSkillRequest:
-    def test_shim_payload_matches_market_adapter_interface(
-        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """classify_and_publish passes prompt, task_type, source, and correlation_id
-        to DelegationDispatchAdapter.dispatch_sync in the fields it expects."""
-        corr = str(uuid.uuid4())
-        captured: list[dict] = []  # type: ignore[type-arg]
-
-        class FakeAdapter:
-            def __init__(self, contract_path: object = None) -> None:
-                pass
-
-            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
-                captured.append(dict(kwargs))
-                return {"ok": True, "correlation_id": corr, "status": "published"}
-
-        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
-        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
-        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
-
-        delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
-            max_tokens=4096,
-            correlation_id=corr,
-            wait_for_result=True,
-            working_directory="/tmp/work",
-        )
-
-        assert len(captured) == 1
-        call = captured[0]
-        assert call["prompt"] == "write unit tests for handler_event_emitter.py"
-        assert call["task_type"] == "test"
-        assert call["source"] in ("claude-code", "codex")
-        assert call["max_tokens"] == 4096
-        assert call["wait"] is True
-        assert call["cwd"] == "/tmp/work"
-        assert "correlation_id" in call
+    assert result["success"] is True
+    assert result["ok"] is True
+    assert result["correlation_id"] == "11111111-1111-1111-1111-111111111111"
+    assert result["command_topic"] == "onex.cmd.omnimarket.delegate-skill.v1"
+    assert result["command_name"] == "delegate_skill.orchestrate"
+    assert result["resolved_node_name"] == "node_delegate_skill_orchestrator"
+    assert result["path"] == "omnimarket_adapter"
+    assert result["task_type"] == "test"

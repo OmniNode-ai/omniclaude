@@ -1,0 +1,35 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-9690"
+title: "Auto-inject worker Operating Rules boilerplate"
+summary: >
+  Adds worker_template_version metadata and deterministic Operating Rules injection to dispatch_worker so every compiled worker prompt receives the v1 rules block before spawning an agent.
+
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Dispatch worker Operating Rules injection tests pass."
+    command: "uv run pytest tests/skills/test_dispatch_worker_operating_rules_injection.py -q"
+  - kind: "tests"
+    description: "S-class skill guard still blocks omni_home references."
+    command: "uv run pytest tests/skills/test_no_omni_home_in_s_class_skills.py::test_no_omni_home_refs_in_s_class_skills -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-operating-rules-tests"
+    description: "Unit tests prove dispatch_worker metadata, rules text, and final_prompt injection behavior."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/skills/test_dispatch_worker_operating_rules_injection.py -q"
+  - id: "dod-s-class-skill-guard"
+    description: "Existing S-class skill guard still passes after dispatch_worker prompt changes."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/skills/test_no_omni_home_in_s_class_skills.py::test_no_omni_home_refs_in_s_class_skills -q"
