@@ -1,31 +1,22 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Delegate skill - classify prompt and dispatch through runtime ingress.
+"""Delegate skill - classify prompt and dispatch through the market delegation adapter.
 
 Invoked when the user runs /onex:delegate.  Classifies the prompt via
-TaskClassifier, then dispatches to the runtime via:
-  1. HTTP (contract runtime_ingress.http_url or ONEX_RUNTIME_URL fallback)
-  2. SSH socket (contract runtime_ingress.ssh_host + ssh_socket_path, or env
-     vars ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
-  3. Pandaproxy HTTP (contract runtime_ingress.pandaproxy_url or ONEX_PANDAPROXY_URL)
-  4. SSH rpk bridge (contract runtime_ingress.ssh_host + kafka_bridge_script or
-     ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT)
-  5. Kafka (contract-driven — topic resolved from omnimarket
-     node_delegate_skill_orchestrator contract.yaml via OMNI_HOME;
-     returns error if topic cannot be resolved)
-     Uses KAFKA_BOOTSTRAP_SERVERS — fail-fast if unset.
+TaskClassifier, then dispatches through:
+  1. DelegationDispatchAdapter → contract-declared runtime dispatch →
+     node_delegate_skill_orchestrator (canonical market adapter path)
+  2. Local in-process runner when --local is passed (debug/demo path only)
 
-Transport config is read from the omnimarket node_delegate_skill_orchestrator
-contract.yaml runtime_ingress stanza via OMNI_HOME. Env vars serve as fallback
-only (per "no env vars, contracts only" rule).
+Topic resolution and transport wiring are owned by omnimarket's
+DelegationDispatchAdapter; this shim has no transport logic.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shlex
 import subprocess
 import sys
 import uuid
@@ -61,20 +52,6 @@ except ImportError:
     _HAS_CLASSIFIER = False
 
 try:
-    from omnibase_core.models.runtime import (
-        ModelRuntimeSkillRequest,
-        ModelRuntimeSkillResponse,
-    )
-    from omnibase_infra.clients.runtime_skill_client import LocalRuntimeSkillClient
-
-    _RUNTIME_IMPORT_ERROR: ImportError | None = None
-except ImportError as exc:
-    ModelRuntimeSkillRequest = None  # type: ignore[assignment]
-    ModelRuntimeSkillResponse = None  # type: ignore[assignment]
-    LocalRuntimeSkillClient = None  # type: ignore[assignment]
-    _RUNTIME_IMPORT_ERROR = exc
-
-try:
     from omniclaude.delegation.evidence_bundle import (
         EvidenceBundleWriter,
         ModelBifrostResponse,
@@ -97,6 +74,18 @@ try:
     _HAS_INPROCESS_RUNNER = True
 except ImportError:
     _HAS_INPROCESS_RUNNER = False
+
+try:
+    from omnimarket.adapters.claude_code.delegate import (
+        DelegationDispatchAdapter,
+    )
+
+    _HAS_MARKET_ADAPTER = True
+    _MARKET_ADAPTER_IMPORT_ERROR: ImportError | None = None
+except ImportError as _exc:
+    DelegationDispatchAdapter = None  # type: ignore[assignment,misc]
+    _HAS_MARKET_ADAPTER = False
+    _MARKET_ADAPTER_IMPORT_ERROR = _exc
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +153,6 @@ def _call_llm_via_curl(
     latency_ms = (time.monotonic_ns() - t0) // 1_000_000
 
     if proc.returncode != 0:
-        # DelegationRunnerError may not be importable if _HAS_INPROCESS_RUNNER is False.
         raise RuntimeError(
             f"curl LLM call failed (rc={proc.returncode}): {proc.stderr.strip()}"
         )
@@ -196,39 +184,6 @@ _DELEGATION_COMMAND_NAME = "node_delegate_skill_orchestrator"
 _CONTRACT_RELATIVE_PATH = (
     "omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml"
 )
-
-_DELEGATE_SKILL_CONTRACT_PATH = (
-    "omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml"
-)
-
-
-def _resolve_transport_config() -> dict[str, str]:
-    """Return runtime_ingress values from the omnimarket delegate skill contract.
-
-    Reads OMNI_HOME + _DELEGATE_SKILL_CONTRACT_PATH, extracts runtime_ingress,
-    and returns a dict of string values. Returns an empty dict on any failure
-    so callers fall back to env vars.
-    """
-    omni_home = os.environ.get("OMNI_HOME", "").strip()
-    if not omni_home:
-        return {}
-    contract_path = Path(omni_home) / _DELEGATE_SKILL_CONTRACT_PATH
-    if not contract_path.is_file():
-        return {}
-    try:
-        import yaml  # noqa: PLC0415
-
-        data = yaml.safe_load(contract_path.read_text(encoding="utf-8")) or {}
-        ingress = data.get("runtime_ingress", {})
-        if not isinstance(ingress, dict):
-            return {}
-        return {
-            k: value
-            for k, v in ingress.items()
-            if isinstance(v, str) and (value := v.strip())
-        }
-    except Exception:  # noqa: BLE001
-        return {}
 
 
 def _resolve_command_topic() -> str:
@@ -273,16 +228,6 @@ def _resolve_correlation_id(correlation_id: str | None) -> uuid.UUID:
     return uuid.uuid4()
 
 
-def _runtime_import_error(exc: ImportError) -> dict:  # type: ignore[type-arg]
-    return {
-        "success": False,
-        "error": (
-            "Runtime skill client unavailable - install omnibase_core and "
-            f"omnibase_infra in the plugin environment: {exc}"
-        ),
-    }
-
-
 def _resolve_runtime_task_type(intent_value: str, prompt: str) -> str:
     """Map classifier intents onto the runtime's supported task_type literals."""
     if intent_value in _RUNTIME_TASK_TYPES:
@@ -297,16 +242,6 @@ def _resolve_runtime_task_type(intent_value: str, prompt: str) -> str:
     ):
         return "document"
     return "research"
-
-
-def _derive_runtime_url_from_ssh_host(ssh_host: str) -> str:
-    """Derive the stability runtime HTTP URL from an SSH host value."""
-    host = ssh_host.rsplit("@", 1)[-1].strip()
-    if not host:
-        return ""
-    if host not in {"localhost", "127.0.0.1"} and not host[0].isdigit():
-        return ""
-    return f"http://{host}:18085"
 
 
 def _write_evidence_bundle(
@@ -439,288 +374,6 @@ def _emit_task_delegated_event(
         return False
 
 
-def _dispatch_via_ssh_socket(
-    payload_json: str,
-    ssh_host: str,
-    socket_path: str,
-    timeout_seconds: float,
-) -> dict:  # type: ignore[type-arg]
-    """Send newline-delimited JSON to a remote Unix socket via SSH.
-
-    Protocol: write JSON + newline, read response line.
-    Raises OSError on transport failure, json.JSONDecodeError on bad response.
-    Returns the parsed response dict on success.
-    """
-    import base64  # noqa: PLC0415
-
-    script_src = f"""import socket, sys
-sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-sock.connect({socket_path!r})
-sock.settimeout({timeout_seconds})
-data = sys.stdin.buffer.read()
-sock.send(data if data.endswith(b'\\n') else data + b'\\n')
-resp = b''
-while True:
-    chunk = sock.recv(65536)
-    if not chunk:
-        break
-    resp += chunk
-    if b'\\n' in resp:
-        break
-sock.close()
-print(resp.decode('utf-8', errors='replace').strip())
-"""
-    encoded = base64.b64encode(script_src.encode()).decode()
-    remote_cmd = f"python3 -c \"import base64,sys; exec(base64.b64decode('{encoded}').decode())\""
-
-    proc = subprocess.run(  # noqa: S603
-        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", ssh_host, remote_cmd],
-        input=payload_json.encode("utf-8"),
-        capture_output=True,
-        timeout=timeout_seconds + 15,
-        check=False,
-    )
-
-    if proc.returncode != 0:
-        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-        raise OSError(f"SSH dispatch failed (exit {proc.returncode}): {stderr}")
-
-    raw_output = proc.stdout.decode("utf-8", errors="replace").strip()
-    if not raw_output:
-        raise OSError("SSH dispatch returned empty response")
-
-    return json.loads(raw_output)  # type: ignore[return-value]
-
-
-def _dispatch_via_http(
-    request: object,
-    runtime_url: str,
-    timeout_seconds: float,
-) -> object:
-    """POST a ModelRuntimeSkillRequest to the runtime HTTP ingress.
-
-    Returns a ModelRuntimeSkillResponse on success.
-    Raises urllib.error.URLError on transport failure.
-    """
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
-
-    payload = request.model_dump_json(exclude_none=True).encode("utf-8")  # type: ignore[attr-defined]
-    req = urllib.request.Request(  # noqa: S310
-        f"{runtime_url.rstrip('/')}/skill",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:  # noqa: S310
-            raw = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.URLError:
-        raise
-
-    from omnibase_core.models.runtime import ModelRuntimeSkillResponse  # noqa: PLC0415
-
-    return ModelRuntimeSkillResponse.model_validate(raw)
-
-
-def _dispatch_via_kafka(
-    delegation_payload: dict,  # type: ignore[type-arg]
-    correlation_id_str: str,
-    topic: str,
-    task_type: str,
-) -> dict:  # type: ignore[type-arg]
-    """Publish delegation command to Kafka topic.
-
-    Uses confluent_kafka.Producer (sync). Fails fast if KAFKA_BOOTSTRAP_SERVERS
-    is unset — no silent fallback.
-
-    Returns a result dict with success/error keys.
-    """
-    bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
-    if not bootstrap_servers:
-        return {
-            "success": False,
-            "error": "KAFKA_BOOTSTRAP_SERVERS is not set — cannot dispatch via Kafka",
-            "correlation_id": correlation_id_str,
-            "path": "kafka",
-        }
-
-    try:
-        from confluent_kafka import (
-            Producer,  # type: ignore[import-untyped] # noqa: PLC0415
-        )
-    except ImportError:
-        return {
-            "success": False,
-            "error": "confluent_kafka not installed — cannot dispatch via Kafka",
-            "correlation_id": correlation_id_str,
-            "path": "kafka",
-        }
-
-    from datetime import UTC, datetime  # noqa: PLC0415
-    from uuid import uuid4  # noqa: PLC0415
-
-    emitted_at = datetime.now(UTC).isoformat()
-    envelope = {
-        "event_type": "omnimarket.delegate-skill",
-        "envelope_id": str(uuid4()),
-        "envelope_timestamp": emitted_at,
-        "correlation_id": correlation_id_str,
-        "payload": _build_delegation_request_payload(
-            delegation_payload, task_type, emitted_at
-        ),
-    }
-    message = json.dumps(envelope).encode("utf-8")
-    key = correlation_id_str.encode("utf-8")
-
-    delivered: list[bool] = []
-    errors: list[str] = []
-
-    def _on_delivery(err: object, _msg: object) -> None:
-        if err:
-            errors.append(str(err))
-            delivered.append(False)
-        else:
-            delivered.append(True)
-
-    try:
-        producer = Producer({"bootstrap.servers": bootstrap_servers})
-        producer.produce(topic, value=message, key=key, on_delivery=_on_delivery)
-        producer.flush(timeout=10)
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "success": False,
-            "error": f"Kafka produce failed: {exc}",
-            "correlation_id": correlation_id_str,
-            "path": "kafka",
-        }
-
-    if errors:
-        return {
-            "success": False,
-            "error": f"Kafka delivery failed: {errors[0]}",
-            "correlation_id": correlation_id_str,
-            "path": "kafka",
-        }
-
-    if not delivered:
-        return {
-            "success": False,
-            "error": "Kafka delivery timed out — no confirmation received within 10s",
-            "correlation_id": correlation_id_str,
-            "path": "kafka",
-        }
-
-    return {
-        "success": True,
-        "correlation_id": correlation_id_str,
-        "topic": topic,
-        "path": "kafka",
-        "dispatch_status": "published",
-    }
-
-
-def _dispatch_via_pandaproxy(
-    delegation_payload: dict,  # type: ignore[type-arg]
-    correlation_id_str: str,
-    topic: str,
-    task_type: str,
-    pandaproxy_url: str,
-    timeout_seconds: float,
-) -> dict:  # type: ignore[type-arg]
-    """Publish delegation command via Redpanda HTTP proxy (pandaproxy).
-
-    Uses curl subprocess — Python sockets lack the macOS LAN grant on uv-managed
-    interpreters, but the curl binary has it. Builds a ModelEventEnvelope-compatible
-    payload and POSTs to /topics/<topic> with application/vnd.kafka.json.v2+json.
-
-    pandaproxy_url example: http://192.168.86.201:28082  # onex-allow-internal-ip # kafka-fallback-ok
-
-    Returns a result dict with success/error keys.
-    """
-    from datetime import UTC, datetime  # noqa: PLC0415
-    from uuid import uuid4  # noqa: PLC0415
-
-    emitted_at = datetime.now(UTC).isoformat()
-    envelope = {
-        "event_type": "omnimarket.delegate-skill",
-        "envelope_id": str(uuid4()),
-        "envelope_timestamp": emitted_at,
-        "correlation_id": correlation_id_str,
-        "payload": _build_delegation_request_payload(
-            delegation_payload, task_type, emitted_at
-        ),
-    }
-    body = json.dumps({"records": [{"value": envelope}]})
-    url = f"{pandaproxy_url.rstrip('/')}/topics/{topic}"
-
-    try:
-        proc = subprocess.run(  # noqa: S603
-            [
-                "curl",
-                "-fsS",
-                "-X",
-                "POST",
-                url,
-                "-H",
-                "Content-Type: application/vnd.kafka.json.v2+json",
-                "-d",
-                body,
-                "--max-time",
-                str(int(timeout_seconds)),
-            ],
-            capture_output=True,
-            timeout=timeout_seconds + 5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return {
-            "success": False,
-            "error": f"Pandaproxy curl failed: {exc}",
-            "correlation_id": correlation_id_str,
-            "path": "pandaproxy",
-        }
-
-    if proc.returncode != 0:
-        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-        return {
-            "success": False,
-            "error": f"Pandaproxy curl exited {proc.returncode}: {stderr}",
-            "correlation_id": correlation_id_str,
-            "path": "pandaproxy",
-        }
-
-    try:
-        raw = json.loads(proc.stdout.decode("utf-8"))
-    except json.JSONDecodeError as exc:
-        return {
-            "success": False,
-            "error": f"Pandaproxy response parse failed: {exc}",
-            "correlation_id": correlation_id_str,
-            "path": "pandaproxy",
-        }
-
-    offsets = raw.get("offsets", [])
-    if not offsets or offsets[0].get("error_code", 0) != 0:
-        err = offsets[0].get("error", "unknown") if offsets else "no offsets returned"
-        return {
-            "success": False,
-            "error": f"Pandaproxy produce failed: {err}",
-            "correlation_id": correlation_id_str,
-            "path": "pandaproxy",
-        }
-
-    return {
-        "success": True,
-        "correlation_id": correlation_id_str,
-        "topic": topic,
-        "path": "pandaproxy",
-        "dispatch_status": "published",
-        "partition": offsets[0].get("partition"),
-        "offset": offsets[0].get("offset"),
-    }
-
-
 def _build_delegation_request_payload(
     delegation_payload: dict,  # type: ignore[type-arg]
     task_type: str,
@@ -739,91 +392,6 @@ def _build_delegation_request_payload(
         "correlation_id": delegation_payload.get("correlation_id"),
         "max_tokens": delegation_payload.get("max_tokens", 2048),
         "emitted_at": emitted_at,
-    }
-
-
-def _dispatch_via_ssh_rpk(
-    delegation_payload: dict,  # type: ignore[type-arg]
-    correlation_id_str: str,
-    topic: str,
-    task_type: str,
-    ssh_host: str,
-    bridge_script: str,
-    timeout_seconds: float,
-) -> dict:  # type: ignore[type-arg]
-    """Publish delegation command to Kafka via SSH + rpk bridge script on the remote host.
-
-    Builds a ModelEventEnvelope-compatible JSON payload and pipes it through SSH to
-    bridge_script on ssh_host, which publishes it via `rpk topic produce`.
-
-    Returns a result dict with success/error keys.
-    """
-    from datetime import UTC, datetime  # noqa: PLC0415
-    from uuid import uuid4  # noqa: PLC0415
-
-    emitted_at = datetime.now(UTC).isoformat()
-    envelope = {
-        "event_type": "omnimarket.delegate-skill",
-        "envelope_id": str(uuid4()),
-        "envelope_timestamp": emitted_at,
-        "correlation_id": correlation_id_str,
-        "payload": _build_delegation_request_payload(
-            delegation_payload, task_type, emitted_at
-        ),
-    }
-    message = json.dumps(envelope)
-
-    try:
-        proc = subprocess.run(  # noqa: S603
-            [
-                "ssh",
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10",
-                ssh_host,
-                f"bash {shlex.quote(bridge_script)} {shlex.quote(topic)}",
-            ],
-            input=message.encode("utf-8"),
-            capture_output=True,
-            timeout=timeout_seconds + 15,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return {
-            "success": False,
-            "error": f"SSH rpk bridge failed: {exc}",
-            "correlation_id": correlation_id_str,
-            "path": "ssh_rpk",
-        }
-
-    stdout = proc.stdout.decode("utf-8", errors="replace").strip()
-    stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-
-    if proc.returncode != 0:
-        return {
-            "success": False,
-            "error": f"SSH rpk bridge exited {proc.returncode}: {stderr or stdout}",
-            "correlation_id": correlation_id_str,
-            "path": "ssh_rpk",
-        }
-
-    # rpk outputs "Produced to partition N at offset M..." on success
-    if "Produced to partition" not in stdout:
-        return {
-            "success": False,
-            "error": f"SSH rpk bridge unexpected output: {stdout or stderr}",
-            "correlation_id": correlation_id_str,
-            "path": "ssh_rpk",
-        }
-
-    return {
-        "success": True,
-        "correlation_id": correlation_id_str,
-        "topic": topic,
-        "path": "ssh_rpk",
-        "dispatch_status": "published",
-        "bridge_output": stdout,
     }
 
 
@@ -944,17 +512,13 @@ def classify_and_publish(
     timeout_ms: int = 300_000,
     force_local: bool = False,
 ) -> dict:  # type: ignore[type-arg]
-    """Classify *prompt* and dispatch a delegation request to the runtime.
+    """Classify *prompt* and dispatch a delegation request through the market adapter.
 
-    Transport priority:
-      1. HTTP (ONEX_RUNTIME_URL)
-      2. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
-      3. Pandaproxy HTTP (ONEX_PANDAPROXY_URL) — preferred for Mac→.201 LAN
-      4. SSH rpk bridge (ONEX_RUNTIME_SSH_HOST + ONEX_KAFKA_BRIDGE_SCRIPT) — fallback
-      5. Kafka (contract-driven; topic resolved from omnimarket contract at import time)
+    Canonical path: DelegationDispatchAdapter → contract-declared runtime dispatch
+    → node_delegate_skill_orchestrator.
 
     force_local=True dispatches via the local runner with a curl LLM shim  # fallback-removed
-    (no Kafka or runtime socket required). Restored in OMN-10604.
+    (no Kafka or runtime socket required). Intended for debug/demo use only.
     """
     if not _HAS_CLASSIFIER:
         return {
@@ -999,25 +563,17 @@ def classify_and_publish(
             max_tokens=max_tokens,
         )
 
-    try:
-        from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
-            resolve_session_id,
-        )
-    except ModuleNotFoundError:
-        from session_id import resolve_session_id  # type: ignore[no-redef] # noqa: I001, PLC0415
-
-    delegation_payload = {
-        "prompt": prompt,
-        "correlation_id": correlation_id_str,
-        "session_id": resolve_session_id(default=""),
-        "prompt_length": len(prompt),
-        "source_file_path": source_file,
-        "max_tokens": max_tokens,
-        "recipient": recipient,
-        "wait_for_result": wait_for_result,
-        "working_directory": working_directory,
-        "codex_sandbox_mode": codex_sandbox_mode,
-    }
+    if not _HAS_MARKET_ADAPTER:
+        return {
+            "success": False,
+            "error": (
+                "DelegationDispatchAdapter unavailable — omnimarket package not on "
+                f"sys.path. Install the plugin venv dependencies: "
+                f"{_MARKET_ADAPTER_IMPORT_ERROR}"
+            ),
+            "correlation_id": correlation_id_str,
+            "path": "market_adapter",
+        }
 
     if timeout_ms <= 0:
         return {
@@ -1025,221 +581,66 @@ def classify_and_publish(
             "error": f"timeout_ms must be positive, got {timeout_ms}",
             "correlation_id": correlation_id_str,
         }
-    timeout_seconds = timeout_ms / 1000.0
-    _transport = _resolve_transport_config()
-    ssh_host = (
-        _transport.get("ssh_host") or os.environ.get("ONEX_RUNTIME_SSH_HOST", "")
-    ).strip()
-    ssh_socket_path = (
-        _transport.get("ssh_socket_path")
-        or os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "")
-    ).strip()
-    kafka_bridge_script = (
-        _transport.get("kafka_bridge_script")
-        or os.environ.get("ONEX_KAFKA_BRIDGE_SCRIPT", "")
-    ).strip()
-    pandaproxy_url = (
-        _transport.get("pandaproxy_url") or os.environ.get("ONEX_PANDAPROXY_URL", "")
-    ).strip()
-    runtime_url = (
-        _transport.get("http_url") or os.environ.get("ONEX_RUNTIME_URL", "")
-    ).strip()
-    if not runtime_url and ssh_host:
-        runtime_url = _derive_runtime_url_from_ssh_host(ssh_host)
 
-    http_transport_error: dict | None = None  # type: ignore[type-arg]
-    if runtime_url:
-        if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
-            return _runtime_import_error(
-                _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
+    try:
+        session_id: str | None
+        try:
+            from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
+                resolve_session_id,
             )
-        from datetime import UTC, datetime  # noqa: PLC0415
 
-        emitted_at = datetime.now(UTC).isoformat()
-        request = ModelRuntimeSkillRequest(
-            command_name=_DELEGATION_COMMAND_NAME,
-            payload=_build_delegation_request_payload(
-                delegation_payload,
-                runtime_task_type,
-                emitted_at,
-            ),
+            session_id = resolve_session_id(default=None)
+        except (ModuleNotFoundError, ImportError):
+            try:
+                from session_id import resolve_session_id as _rs  # type: ignore[no-redef] # noqa: I001, PLC0415
+
+                session_id = _rs(default=None)
+            except (ModuleNotFoundError, ImportError):
+                session_id = None
+
+        # Map recipient to source for the market adapter
+        source = "codex" if recipient == "codex" else "claude-code"
+
+        adapter = DelegationDispatchAdapter()
+        response = adapter.dispatch_sync(
+            prompt=prompt,
+            task_type=runtime_task_type,
+            source=source,
+            cwd=working_directory,
+            wait=wait_for_result,
+            max_tokens=max_tokens,
             correlation_id=correlation_uuid,
             timeout_ms=timeout_ms,
         )
-        import urllib.error  # noqa: PLC0415
-
-        try:
-            response = _dispatch_via_http(request, runtime_url, timeout_seconds)
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            reason = getattr(exc, "reason", str(exc))
-            # Transport-level failure — record and fall through to other transports.
-            http_transport_error = {
-                "success": False,
-                "error": f"HTTP dispatch to ONEX_RUNTIME_URL failed: {reason}",
-                "path": "http",
-            }
-        else:
-            if not response.ok:  # type: ignore[union-attr]
-                error = response.error  # type: ignore[union-attr]
-                error_code = error.code if error else "dispatch_error"
-                return {
-                    "success": False,
-                    "error": error.message if error else "runtime dispatch failed",
-                    "error_code": error_code,
-                    "retryable": error.retryable if error else False,
-                    "correlation_id": str(
-                        getattr(response, "correlation_id", None) or correlation_uuid
-                    ),
-                    "command_name": getattr(
-                        response, "command_name", _DELEGATION_COMMAND_NAME
-                    ),
-                    "topic": getattr(response, "command_topic", None)
-                    or _DELEGATION_REQUEST_TOPIC,
-                    "path": "http",
-                }
-            return {
-                "success": True,
-                "correlation_id": str(
-                    getattr(response, "correlation_id", None) or correlation_uuid
-                ),
-                "task_type": runtime_task_type,
-                "command_name": getattr(
-                    response, "command_name", _DELEGATION_COMMAND_NAME
-                ),
-                "resolved_node_name": getattr(response, "resolved_node_name", None),
-                "topic": getattr(response, "command_topic", None)
-                or _DELEGATION_REQUEST_TOPIC,
-                "terminal_event": getattr(response, "terminal_event", None),
-                "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
-                if getattr(response, "dispatch_result", None)
-                else None,
-                "output_payloads": getattr(response, "output_payloads", None),
-                "path": "http",
-            }
-
-    # Surface HTTP transport error only when no fallback transport is configured.
-    if http_transport_error and not (
-        (ssh_host and ssh_socket_path)
-        or pandaproxy_url
-        or (ssh_host and kafka_bridge_script)
-    ):
-        return http_transport_error
-
-    if ssh_host and ssh_socket_path:
-        from datetime import UTC, datetime  # noqa: PLC0415
-
-        emitted_at = datetime.now(UTC).isoformat()
-        ssh_payload = {
-            "command_name": _DELEGATION_COMMAND_NAME,
-            "payload": _build_delegation_request_payload(
-                delegation_payload,
-                runtime_task_type,
-                emitted_at,
-            ),
-            "correlation_id": correlation_id_str,
-            "timeout_ms": timeout_ms,
-        }
-        try:
-            raw = _dispatch_via_ssh_socket(
-                payload_json=json.dumps(ssh_payload),
-                ssh_host=ssh_host,
-                socket_path=ssh_socket_path,
-                timeout_seconds=timeout_seconds,
-            )
-        except (OSError, json.JSONDecodeError) as exc:
-            return {
-                "success": False,
-                "error": str(exc),
-                "error_code": "dispatch_error",
-                "retryable": False,
-                "correlation_id": correlation_id_str,
-                "command_name": _DELEGATION_COMMAND_NAME,
-                "topic": _DELEGATION_REQUEST_TOPIC,
-                "path": "ssh",
-            }
-        ok = raw.get("ok", False)
-        if not ok:
-            error = raw.get("error") or {}
-            return {
-                "success": False,
-                "error": error.get("message", "runtime dispatch failed")
-                if isinstance(error, dict)
-                else str(error),
-                "error_code": error.get("code", "dispatch_error")
-                if isinstance(error, dict)
-                else "dispatch_error",
-                "retryable": error.get("retryable", False)
-                if isinstance(error, dict)
-                else False,
-                "correlation_id": raw.get("correlation_id", correlation_id_str),
-                "command_name": raw.get("command_name", _DELEGATION_COMMAND_NAME),
-                "topic": raw.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
-                "path": "ssh",
-            }
-        return {
-            "success": True,
-            "correlation_id": raw.get("correlation_id", correlation_id_str),
-            "task_type": runtime_task_type,
-            "command_name": raw.get("command_name", _DELEGATION_COMMAND_NAME),
-            "resolved_node_name": raw.get("resolved_node_name"),
-            "topic": raw.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
-            "terminal_event": raw.get("terminal_event"),
-            "dispatch_status": raw.get("dispatch_result", {}).get("status"),
-            "output_payloads": raw.get("output_payloads"),
-            "path": "ssh",
-        }
-
-    # Pandaproxy HTTP: preferred Mac→.201 transport (curl/urllib have LAN grant)
-    if pandaproxy_url:
-        pp_result = _dispatch_via_pandaproxy(
-            delegation_payload=delegation_payload,
-            correlation_id_str=correlation_id_str,
-            topic=_DELEGATION_REQUEST_TOPIC,
-            task_type=runtime_task_type,
-            pandaproxy_url=pandaproxy_url,
-            timeout_seconds=timeout_seconds,
-        )
-        if pp_result["success"]:
-            pp_result["task_type"] = runtime_task_type
-            pp_result["command_name"] = _DELEGATION_COMMAND_NAME
-        return pp_result
-
-    # SSH rpk bridge: fallback Mac→.201 Kafka via SSH when direct Kafka is unreachable
-    if ssh_host and kafka_bridge_script:
-        rpk_result = _dispatch_via_ssh_rpk(
-            delegation_payload=delegation_payload,
-            correlation_id_str=correlation_id_str,
-            topic=_DELEGATION_REQUEST_TOPIC,
-            task_type=runtime_task_type,
-            ssh_host=ssh_host,
-            bridge_script=kafka_bridge_script,
-            timeout_seconds=timeout_seconds,
-        )
-        if rpk_result["success"]:
-            rpk_result["task_type"] = runtime_task_type
-            rpk_result["command_name"] = _DELEGATION_COMMAND_NAME
-        return rpk_result
-
-    # Kafka: contract-driven transport (OMN-10604)
-    if not _DELEGATION_REQUEST_TOPIC:
+    except Exception as exc:  # noqa: BLE001
         return {
             "success": False,
-            "error": (
-                "Cannot resolve command topic from node contract.yaml. "
-                f"Set OMNI_HOME so run.py can locate {_CONTRACT_RELATIVE_PATH}"
-            ),
-            "path": "kafka",
+            "error": f"Market adapter dispatch failed: {exc}",
+            "correlation_id": correlation_id_str,
+            "path": "market_adapter",
         }
-    kafka_result = _dispatch_via_kafka(
-        delegation_payload=delegation_payload,
-        correlation_id_str=correlation_id_str,
-        topic=_DELEGATION_REQUEST_TOPIC,
-        task_type=runtime_task_type,
-    )
-    if kafka_result["success"]:
-        kafka_result["task_type"] = runtime_task_type
-        kafka_result["command_name"] = _DELEGATION_COMMAND_NAME
-    return kafka_result
+
+    ok = response.get("ok", False)
+    if not ok:
+        return {
+            "success": False,
+            "error": response.get("error") or "market adapter dispatch failed",
+            "correlation_id": response.get("correlation_id", correlation_id_str),
+            "command_name": _DELEGATION_COMMAND_NAME,
+            "topic": response.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
+            "path": "market_adapter",
+        }
+
+    return {
+        "success": True,
+        "correlation_id": response.get("correlation_id", correlation_id_str),
+        "task_type": runtime_task_type,
+        "command_name": _DELEGATION_COMMAND_NAME,
+        "topic": response.get("command_topic") or _DELEGATION_REQUEST_TOPIC,
+        "terminal_events": response.get("terminal_events"),
+        "dispatch_status": response.get("status"),
+        "path": "market_adapter",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1252,7 +653,7 @@ def main() -> None:
     import argparse  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(
-        description="Delegate skill - dispatch through runtime SSH socket, HTTP, or Kafka"
+        description="Delegate skill - dispatch through omnimarket DelegationDispatchAdapter"
     )
     parser.add_argument("prompt", nargs="+", help="The task to delegate")
     parser.add_argument("--source-file", default=None)

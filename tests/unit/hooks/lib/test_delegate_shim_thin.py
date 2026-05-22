@@ -147,11 +147,7 @@ class TestShimLoadsTopicFromContract:
 
 class TestShimHasNoOmnibaseInfraInternalImports:
     def test_no_omnibase_infra_handler_imports_at_module_level(self) -> None:
-        """run.py must not hard-import omnibase_infra internal handler classes.
-
-        omnibase_infra.clients.runtime_skill_client is allowed only behind a
-        try/except guard (for optional HTTP path) — not as a hard top-level import.
-        """
+        """run.py must not hard-import omnibase_infra internal handler classes."""
         src_path = _DELEGATE_LIB / "run.py"
         source = src_path.read_text()
 
@@ -160,6 +156,7 @@ class TestShimHasNoOmnibaseInfraInternalImports:
             "import omnibase_infra.handlers.",
             "from omnibase_infra.kafka.",
             "import omnibase_infra.kafka.",
+            "LocalRuntimeSkillClient",
         ]
         for pattern in forbidden_patterns:
             assert pattern not in source, (
@@ -167,27 +164,25 @@ class TestShimHasNoOmnibaseInfraInternalImports:
                 "Skill shim must not import omnibase_infra internals directly."
             )
 
-    def test_runtime_skill_client_import_is_guarded(self) -> None:
-        """LocalRuntimeSkillClient import must be inside a try/except, not bare."""
+    def test_market_adapter_import_is_guarded(self) -> None:
+        """DelegationDispatchAdapter import must be inside a try/except, not bare."""
         src_path = _DELEGATE_LIB / "run.py"
         source = src_path.read_text()
 
-        # Verify the import exists but is guarded (inside try block)
-        assert "LocalRuntimeSkillClient" in source
+        assert "DelegationDispatchAdapter" in source
 
-        # The import must appear after a 'try:' and before an 'except ImportError'
         lines = source.splitlines()
         in_try_block = False
-        client_import_found_in_try = False
+        adapter_import_found_in_try = False
         for line in lines:
             stripped = line.strip()
             if stripped == "try:":
                 in_try_block = True
             elif stripped.startswith("except ImportError"):
                 in_try_block = False
-            elif in_try_block and "LocalRuntimeSkillClient" in stripped:
-                client_import_found_in_try = True
+            elif in_try_block and "DelegationDispatchAdapter" in stripped:
+                adapter_import_found_in_try = True
 
-        assert client_import_found_in_try, (
-            "LocalRuntimeSkillClient must only be imported inside a try/except block"
+        assert adapter_import_found_in_try, (
+            "DelegationDispatchAdapter must only be imported inside a try/except block"
         )

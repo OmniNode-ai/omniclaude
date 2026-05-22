@@ -1,25 +1,21 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for _resolve_transport_config() in the delegate skill.
+"""Unit tests verifying the delegate skill routes through DelegationDispatchAdapter.
 
-DoD evidence for OMN-10604:
-- _resolve_transport_config() reads runtime_ingress from the omnimarket
-  delegate skill orchestrator contract.yaml via OMNI_HOME.
-- Returns values from the contract when populated.
-- Returns empty dict gracefully when OMNI_HOME is unset, contract is missing,
-  or runtime_ingress is absent.
-- classify_and_publish() prefers contract values over env vars for all five
-  transport fields.
+DoD evidence for OMN-11638:
+- classify_and_publish() dispatches through DelegationDispatchAdapter (market adapter path).
+- Market adapter unavailability returns an explicit error with path="market_adapter".
+- Contract topic is still resolved from omnimarket contract.yaml via OMNI_HOME.
+- No stale transport paths (HTTP, SSH socket, Pandaproxy, SSH rpk, ad-hoc Kafka).
 """
 
 from __future__ import annotations
 
 import importlib
 import sys
-import textwrap
+import uuid
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import patch
 
 import pytest
 
@@ -39,247 +35,210 @@ def delegate_run() -> ModuleType:
     return importlib.reload(m)
 
 
-_MINIMAL_CONTRACT = textwrap.dedent("""\
-    name: node_delegate_skill_orchestrator
-    runtime_ingress:
-      http_url: "http://192.168.86.201:18085"  # onex-allow-internal-ip
-      pandaproxy_url: "http://192.168.86.201:28082"  # onex-allow-internal-ip
-      ssh_host: "jonah@192.168.86.201"  # onex-allow-internal-ip
-      ssh_socket_path: "/tmp/onex-runtime.sock"
-      kafka_bridge_script: "/opt/onex/scripts/kafka_bridge.sh"  # local-path-ok: test fixture
-""")
-
-
-class TestResolveTransportConfig:
-    def test_returns_ingress_values_from_contract(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        omnimarket_dir = (
-            tmp_path
-            / "omnimarket"
-            / "src"
-            / "omnimarket"
-            / "nodes"
-            / "node_delegate_skill_orchestrator"
+class TestNoStaleTransportFunctions:
+    def test_dispatch_via_http_removed(self, delegate_run: ModuleType) -> None:
+        assert not hasattr(delegate_run, "_dispatch_via_http"), (
+            "_dispatch_via_http must be removed — HTTP transport is stale"
         )
-        omnimarket_dir.mkdir(parents=True)
-        (omnimarket_dir / "contract.yaml").write_text(_MINIMAL_CONTRACT)
 
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        result = delegate_run._resolve_transport_config()
+    def test_dispatch_via_ssh_socket_removed(self, delegate_run: ModuleType) -> None:
+        assert not hasattr(delegate_run, "_dispatch_via_ssh_socket"), (
+            "_dispatch_via_ssh_socket must be removed — SSH socket transport is stale"
+        )
 
-        _http = "http://192.168.86.201:18085"  # onex-allow-internal-ip
-        _pp = "http://192.168.86.201:28082"  # onex-allow-internal-ip
-        _ssh = "jonah@192.168.86.201"  # onex-allow-internal-ip
-        _bridge = "/opt/onex/scripts/kafka_bridge.sh"  # local-path-ok: test fixture
-        assert result["http_url"] == _http
-        assert result["pandaproxy_url"] == _pp
-        assert result["ssh_host"] == _ssh
-        assert result["ssh_socket_path"] == "/tmp/onex-runtime.sock"
-        assert result["kafka_bridge_script"] == _bridge
+    def test_dispatch_via_pandaproxy_removed(self, delegate_run: ModuleType) -> None:
+        assert not hasattr(delegate_run, "_dispatch_via_pandaproxy"), (
+            "_dispatch_via_pandaproxy must be removed — Pandaproxy transport is stale"
+        )
 
-    def test_returns_empty_dict_when_omni_home_unset(
+    def test_dispatch_via_ssh_rpk_removed(self, delegate_run: ModuleType) -> None:
+        assert not hasattr(delegate_run, "_dispatch_via_ssh_rpk"), (
+            "_dispatch_via_ssh_rpk must be removed — SSH rpk bridge transport is stale"
+        )
+
+    def test_dispatch_via_kafka_removed(self, delegate_run: ModuleType) -> None:
+        assert not hasattr(delegate_run, "_dispatch_via_kafka"), (
+            "_dispatch_via_kafka must be removed — ad-hoc Kafka transport is stale"
+        )
+
+    def test_resolve_transport_config_removed(self, delegate_run: ModuleType) -> None:
+        assert not hasattr(delegate_run, "_resolve_transport_config"), (
+            "_resolve_transport_config must be removed — stale transport config reader"
+        )
+
+
+class TestMarketAdapterPath:
+    def test_market_adapter_unavailable_returns_explicit_error(
         self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("OMNI_HOME", raising=False)
-        result = delegate_run._resolve_transport_config()
-        assert result == {}
-
-    def test_returns_empty_dict_when_contract_missing(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        result = delegate_run._resolve_transport_config()
-        assert result == {}
-
-    def test_returns_empty_dict_when_runtime_ingress_absent(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        omnimarket_dir = (
-            tmp_path
-            / "omnimarket"
-            / "src"
-            / "omnimarket"
-            / "nodes"
-            / "node_delegate_skill_orchestrator"
-        )
-        omnimarket_dir.mkdir(parents=True)
-        (omnimarket_dir / "contract.yaml").write_text(
-            "name: node_delegate_skill_orchestrator\n"
+        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", False)
+        monkeypatch.setattr(
+            delegate_run,
+            "_MARKET_ADAPTER_IMPORT_ERROR",
+            ImportError("omnimarket not installed"),
         )
 
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        result = delegate_run._resolve_transport_config()
-        assert result == {}
-
-    def test_omits_empty_string_values(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        contract = textwrap.dedent("""\
-            name: node_delegate_skill_orchestrator
-            runtime_ingress:
-              http_url: ""
-              pandaproxy_url: "http://192.168.86.201:28082"  # onex-allow-internal-ip
-              ssh_host: ""
-              ssh_socket_path: ""
-              kafka_bridge_script: ""
-        """)
-        omnimarket_dir = (
-            tmp_path
-            / "omnimarket"
-            / "src"
-            / "omnimarket"
-            / "nodes"
-            / "node_delegate_skill_orchestrator"
+        result = delegate_run.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
         )
-        omnimarket_dir.mkdir(parents=True)
-        (omnimarket_dir / "contract.yaml").write_text(contract)
 
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        result = delegate_run._resolve_transport_config()
+        assert result.get("success") is False
+        assert result.get("path") == "market_adapter"
+        assert "omnimarket not installed" in result["error"]
 
-        _pp = "http://192.168.86.201:28082"  # onex-allow-internal-ip
-        assert "http_url" not in result
-        assert result["pandaproxy_url"] == _pp
-        assert "ssh_host" not in result
-
-    def test_omits_whitespace_only_values(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    def test_classify_and_publish_routes_through_market_adapter(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        contract = textwrap.dedent("""\
-            name: node_delegate_skill_orchestrator
-            runtime_ingress:
-              http_url: "   "
-              pandaproxy_url: "\t"
-              ssh_host: "  "
-              ssh_socket_path: " /tmp/onex-runtime.sock "
-              kafka_bridge_script: ""
-        """)
-        omnimarket_dir = (
-            tmp_path
-            / "omnimarket"
-            / "src"
-            / "omnimarket"
-            / "nodes"
-            / "node_delegate_skill_orchestrator"
+        corr = str(uuid.uuid4())
+        fake_response = {
+            "ok": True,
+            "correlation_id": corr,
+            "command_topic": "onex.cmd.omnimarket.delegate-skill.v1",
+            "terminal_events": {
+                "success": "onex.evt.omnimarket.delegate-skill-completed.v1",
+                "failure": "onex.evt.omnimarket.delegate-skill-failed.v1",
+            },
+            "status": "published",
+        }
+
+        class FakeAdapter:
+            def __init__(self, contract_path: object = None) -> None:
+                pass
+
+            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
+                return fake_response
+
+        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
+        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
+        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
+
+        result = delegate_run.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            correlation_id=corr,
         )
-        omnimarket_dir.mkdir(parents=True)
-        (omnimarket_dir / "contract.yaml").write_text(contract)
 
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        result = delegate_run._resolve_transport_config()
+        assert result.get("success") is True, f"Expected success, got: {result}"
+        assert result.get("path") == "market_adapter"
+        assert result.get("correlation_id") == corr
 
-        assert "http_url" not in result
-        assert "pandaproxy_url" not in result
-        assert "ssh_host" not in result
-        assert result["ssh_socket_path"] == "/tmp/onex-runtime.sock"
-
-    def test_omits_non_string_values(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    def test_market_adapter_failure_returns_error(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        contract = textwrap.dedent("""\
-            name: node_delegate_skill_orchestrator
-            runtime_ingress:
-              http_url: null
-              pandaproxy_url: 28082
-              ssh_host: true
-              ssh_socket_path: "/tmp/onex-runtime.sock"
-              kafka_bridge_script:
-                - "/opt/onex/scripts/kafka_bridge.sh"
-        """)
-        omnimarket_dir = (
-            tmp_path
-            / "omnimarket"
-            / "src"
-            / "omnimarket"
-            / "nodes"
-            / "node_delegate_skill_orchestrator"
+        class FakeAdapter:
+            def __init__(self, contract_path: object = None) -> None:
+                pass
+
+            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
+                return {"ok": False, "error": "runtime unavailable"}
+
+        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
+        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
+        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
+
+        result = delegate_run.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
         )
-        omnimarket_dir.mkdir(parents=True)
-        (omnimarket_dir / "contract.yaml").write_text(contract)
 
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        result = delegate_run._resolve_transport_config()
+        assert result.get("success") is False
+        assert result.get("path") == "market_adapter"
+        assert "runtime unavailable" in result["error"]
 
-        assert "http_url" not in result
-        assert "pandaproxy_url" not in result
-        assert "ssh_host" not in result
-        assert result["ssh_socket_path"] == "/tmp/onex-runtime.sock"
-        assert "kafka_bridge_script" not in result
-
-
-class TestClassifyAndPublishPrefersContractTransport:
-    def test_contract_pandaproxy_url_takes_precedence_over_env(
-        self, tmp_path: Path, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    def test_market_adapter_exception_returns_error(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        contract = textwrap.dedent("""\
-            name: node_delegate_skill_orchestrator
-            runtime_ingress:
-              pandaproxy_url: "http://from-contract:28082"
-        """)
-        omnimarket_dir = (
-            tmp_path
-            / "omnimarket"
-            / "src"
-            / "omnimarket"
-            / "nodes"
-            / "node_delegate_skill_orchestrator"
+        class FakeAdapter:
+            def __init__(self, contract_path: object = None) -> None:
+                raise RuntimeError("contract path not found")
+
+            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
+                return {}
+
+        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
+        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
+        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
+
+        result = delegate_run.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
         )
-        omnimarket_dir.mkdir(parents=True)
-        (omnimarket_dir / "contract.yaml").write_text(contract)
 
-        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-        monkeypatch.setenv("ONEX_PANDAPROXY_URL", "http://from-env:28082")
+        assert result.get("success") is False
+        assert result.get("path") == "market_adapter"
+        assert "contract path not found" in result["error"]
 
-        captured_url: list[str] = []
+    def test_no_stale_env_vars_consulted_for_transport(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Stale transport env vars (ONEX_RUNTIME_URL, ONEX_PANDAPROXY_URL, etc.) must
+        have no effect on dispatch routing."""
+        monkeypatch.setenv("ONEX_RUNTIME_URL", "http://stale-env:8085")
+        monkeypatch.setenv("ONEX_PANDAPROXY_URL", "http://stale-env:28082")
+        monkeypatch.setenv("ONEX_RUNTIME_SSH_HOST", "user@stale-env")
+        monkeypatch.setenv("ONEX_RUNTIME_SOCKET_PATH", "/tmp/stale.sock")
+        monkeypatch.setenv("ONEX_KAFKA_BRIDGE_SCRIPT", "/opt/stale/kafka_bridge.sh")
 
-        def fake_pandaproxy(
-            *,
-            delegation_payload: object,
-            correlation_id_str: str,
-            topic: str,
-            task_type: str,
-            pandaproxy_url: str,
-            timeout_seconds: float,
-        ) -> dict:  # type: ignore[type-arg]
-            captured_url.append(pandaproxy_url)
-            return {"success": True}
+        calls: list[dict] = []  # type: ignore[type-arg]
 
-        class _FakeResult:
-            primary_intent = (
-                next(iter(delegate_run.DELEGATABLE))
-                if delegate_run.DELEGATABLE
-                else None
-            )
+        class FakeAdapter:
+            def __init__(self, contract_path: object = None) -> None:
+                pass
 
-        class _FakeClassifier:
-            def classify(self, _prompt: str) -> _FakeResult:
-                return _FakeResult()
+            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
+                calls.append(dict(kwargs))
+                return {
+                    "ok": True,
+                    "correlation_id": str(uuid.uuid4()),
+                    "status": "published",
+                }
 
-        with (
-            patch.object(
-                delegate_run,
-                "_resolve_transport_config",
-                return_value={"pandaproxy_url": "http://from-contract:28082"},
-            ),
-            patch.object(
-                delegate_run, "_dispatch_via_pandaproxy", side_effect=fake_pandaproxy
-            ),
-            patch.object(
-                delegate_run, "TaskClassifier", return_value=_FakeClassifier()
-            ),
-            patch.object(delegate_run, "_HAS_CLASSIFIER", True),
-            patch.object(
-                delegate_run,
-                "DELEGATABLE",
-                frozenset({_FakeResult.primary_intent})
-                if _FakeResult.primary_intent
-                else delegate_run.DELEGATABLE,
-            ),
-        ):
-            if not delegate_run.DELEGATABLE:
-                pytest.skip("DELEGATABLE is empty — classifier unavailable")
-            delegate_run.classify_and_publish("write a test for this function")
+        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
+        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
+        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
 
-        if captured_url:
-            assert captured_url[0] == "http://from-contract:28082"
+        result = delegate_run.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+        )
+
+        assert result.get("success") is True
+        assert result.get("path") == "market_adapter"
+        # Adapter was called exactly once — no stale transport fallback
+        assert len(calls) == 1
+
+
+class TestShimProducesModelDelegateSkillRequest:
+    def test_shim_payload_matches_market_adapter_interface(
+        self, delegate_run: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """classify_and_publish passes prompt, task_type, source, and correlation_id
+        to DelegationDispatchAdapter.dispatch_sync in the fields it expects."""
+        corr = str(uuid.uuid4())
+        captured: list[dict] = []  # type: ignore[type-arg]
+
+        class FakeAdapter:
+            def __init__(self, contract_path: object = None) -> None:
+                pass
+
+            def dispatch_sync(self, **kwargs: object) -> dict:  # type: ignore[type-arg]
+                captured.append(dict(kwargs))
+                return {"ok": True, "correlation_id": corr, "status": "published"}
+
+        monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", FakeAdapter)
+        monkeypatch.setattr(delegate_run, "_HAS_MARKET_ADAPTER", True)
+        monkeypatch.setattr(delegate_run, "_MARKET_ADAPTER_IMPORT_ERROR", None)
+
+        delegate_run.classify_and_publish(
+            prompt="write unit tests for handler_event_emitter.py",
+            max_tokens=4096,
+            correlation_id=corr,
+            wait_for_result=True,
+            working_directory="/tmp/work",
+        )
+
+        assert len(captured) == 1
+        call = captured[0]
+        assert call["prompt"] == "write unit tests for handler_event_emitter.py"
+        assert call["task_type"] == "test"
+        assert call["source"] in ("claude-code", "codex")
+        assert call["max_tokens"] == 4096
+        assert call["wait"] is True
+        assert call["cwd"] == "/tmp/work"
+        assert "correlation_id" in call
