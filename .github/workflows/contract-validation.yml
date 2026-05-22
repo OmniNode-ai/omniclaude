@@ -114,14 +114,14 @@ jobs:
           echo "=== Proof Reference Resolution (v1) ==="
           echo "SEMANTICS: RESOLVED = reference plausibility only; not proof of test execution."
           set +e
-          python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
+          uv run python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
             --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml" \
             --json > "/tmp/proof_resolution_${TICKET_ID}.json"
           json_status=$?
 
-          python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
+          uv run python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
             --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml"
