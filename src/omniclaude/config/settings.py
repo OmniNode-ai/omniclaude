@@ -324,13 +324,6 @@ class Settings(BaseSettings):
             "Defaults to False for safety."
         ),
     )
-    dual_publish_legacy_topics: bool = Field(
-        default=False,
-        description=(
-            "Enable dual-publish to legacy topic during migration window (OMN-2414). "
-            "Env var: DUAL_PUBLISH_LEGACY_TOPICS (truthy: 1, true, yes)"
-        ),
-    )
     use_onex_routing_nodes: bool = Field(
         default=False,
         description=(
