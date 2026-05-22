@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid as _uuid
 import warnings
 from dataclasses import dataclass, field
@@ -49,6 +50,7 @@ from omnibase_core.models.hooks.claude_code import (
     ModelClaudeCodeHookEventPayload,
 )
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from omniclaude.hooks._helpers import normalize_action_description
 from omniclaude.hooks.emit_bus_bootstrapper import create_kafka_event_bus
@@ -324,8 +326,7 @@ class ModelSessionOutcomeConfig:
         )
 
 
-@dataclass(frozen=True)
-class ModelPatternDiscoveredConfig:
+class ModelPatternDiscoveredConfig(BaseModel):
     """Configuration for pattern discovered events (OMN-8162).
 
     Published to ``onex.evt.pattern.discovered.v1`` — a multi-producer
@@ -349,17 +350,45 @@ class ModelPatternDiscoveredConfig:
         metadata: Arbitrary string-valued metadata forwarded to pattern storage.
     """
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     discovery_id: UUID
-    pattern_signature: str
-    signature_hash: str
-    domain: str
-    confidence: float
+    pattern_signature: str = Field(min_length=1, max_length=500)
+    signature_hash: str = Field(min_length=64, max_length=64)
+    domain: str = Field(min_length=1)
+    confidence: float = Field(ge=0.5, le=1.0)
     source_session_id: UUID
-    source_system: str
+    source_system: str = Field(min_length=1)
     discovered_at: datetime
     correlation_id: UUID
     source_agent: str | None = None
-    metadata: dict[str, object] = field(default_factory=dict)  # ONEX_EXCLUDE: dict_str_any  # fmt: skip
+    metadata: dict[str, object] = Field(default_factory=dict)  # ONEX_EXCLUDE: dict_str_any - validated JSON metadata boundary  # fmt: skip
+
+    @field_validator("signature_hash")
+    @classmethod
+    def _validate_signature_hash(cls, value: str) -> str:
+        if not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise ValueError("signature_hash must be lowercase SHA-256 hex")
+        return value
+
+    @field_validator("discovered_at")
+    @classmethod
+    def _validate_discovered_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("discovered_at must be timezone-aware")
+        return value
+
+    @field_validator("metadata")
+    @classmethod
+    def _validate_metadata_json_serializable(
+        cls,
+        value: dict[str, object],
+    ) -> dict[str, object]:
+        try:
+            json.dumps(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("metadata must be JSON-serializable") from exc
+        return value
 
 
 # =============================================================================

@@ -1298,3 +1298,38 @@ class TestPatternDiscoveredEmission:
         from omniclaude.hooks.topics import TopicBase
 
         assert TopicBase.PATTERN_DISCOVERED == "onex.evt.pattern.discovered.v1"
+
+    def test_pattern_discovered_config_rejects_invalid_signature_hash(self) -> None:
+        """Pattern discovery config validates SHA-256 hash format."""
+        with pytest.raises(ValueError, match="signature_hash"):
+            ModelPatternDiscoveredConfig(
+                discovery_id=uuid4(),
+                pattern_signature="lowercase sha required",
+                signature_hash="not-a-sha",
+                domain="tracing",
+                confidence=0.75,
+                source_session_id=uuid4(),
+                source_system="omniclaude",
+                discovered_at=datetime.now(UTC),
+                correlation_id=uuid4(),
+            )
+
+    def test_pattern_discovered_config_rejects_naive_timestamp(self) -> None:
+        """Pattern discovery config requires timezone-aware timestamps."""
+        with pytest.raises(ValueError, match="timezone-aware"):
+            ModelPatternDiscoveredConfig(
+                discovery_id=uuid4(),
+                pattern_signature="explicit timestamps only",
+                signature_hash=_sha256("explicit timestamps only"),
+                domain="tracing",
+                confidence=0.75,
+                source_session_id=uuid4(),
+                source_system="omniclaude",
+                discovered_at=datetime(2026, 5, 22),
+                correlation_id=uuid4(),
+            )
+
+    def test_pattern_discovered_config_rejects_non_json_metadata(self) -> None:
+        """Pattern discovery metadata must be JSON-serializable."""
+        with pytest.raises(ValueError, match="JSON-serializable"):
+            make_pattern_discovered_config(metadata={"bad": object()})
