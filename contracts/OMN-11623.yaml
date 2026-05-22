@@ -10,7 +10,7 @@ evidence_requirements:
   - kind: tests
     description: "Focused delegation shim and transport tests pass."
     command: "uv run pytest tests/delegation tests/unit/hooks/lib tests/validation/test_validate_runtime_backed_skill_paths.py -q"
-  - kind: occ
+  - kind: manual
     description: "Central OCC evidence binds OMN-11623 proof and downstream PR refs."
     command: "Evidence-Source: 02d2935465235e7c8c7a26735a35ca9e4d4bea40"
 emergency_bypass:
