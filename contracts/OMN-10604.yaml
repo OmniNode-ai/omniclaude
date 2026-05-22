@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-10604
+title: "Rewrite delegate skill as dispatch-only shim"
+summary: "Delete the legacy delegate _lib/run.py bridge and keep the delegate skill dispatch-only through the omnimarket node_delegate_skill_orchestrator."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Focused delegate skill migration and dispatch-only shim tests pass."
+    command: "uv run pytest tests/unit/skills/test_skill_session_id_migration.py tests/validation/test_validate_runtime_backed_skill_paths.py tests/delegation/test_e2e_inprocess_wiring.py tests/unit/hooks/lib/test_delegate_shim_thin.py -q"
+  - kind: manual
+    description: "Central OCC evidence binds OMN-10604 proof and downstream PR refs."
+    command: "Evidence-Source: 6c91ad3eee46ae4c48f1b670a9250a151590170b"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-delegate-skill-shim-tests
+    description: "Focused delegate skill migration and dispatch-only shim tests passed."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/skills/test_skill_session_id_migration.py tests/validation/test_validate_runtime_backed_skill_paths.py tests/delegation/test_e2e_inprocess_wiring.py tests/unit/hooks/lib/test_delegate_shim_thin.py -q"
+  - id: dod-delegate-skill-dispatch-only
+    description: "The delegate skill no longer carries the legacy Python bridge and dispatches through the market-owned orchestrator."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test ! -e plugins/onex/skills/delegate/_lib/run.py && grep -q 'uv run onex node node_delegate_skill_orchestrator' plugins/onex/skills/delegate/prompt.md"
+  - id: dod-occ-evidence
+    description: "Central OCC evidence for OMN-10604 is merged and referenced by this PR body."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'Evidence-Source: 6c91ad3eee46ae4c48f1b670a9250a151590170b' /tmp/pr_body.txt"
