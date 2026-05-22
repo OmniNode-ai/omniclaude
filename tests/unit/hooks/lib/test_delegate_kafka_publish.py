@@ -1,14 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for /onex:delegate runtime ingress dispatch.
-
-DoD evidence for OMN-10206:
-- classify_and_publish() builds a ModelRuntimeSkillRequest for
-  node_delegate_skill_orchestrator whenever the intent is delegatable.
-- The skill uses LocalRuntimeSkillClient, not emit_event or EmitClient.
-- Recipient and wait options are threaded into the delegation payload for the
-  runtime-owned Pattern B broker path.
-"""
+"""Unit tests for /onex:delegate market-adapter dispatch."""
 
 from __future__ import annotations
 
@@ -16,67 +8,45 @@ import importlib
 import sys
 import uuid
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
-from omnibase_core.models.dispatch import ModelDispatchBusTerminalResult
-from omnibase_core.models.runtime import (
-    ModelRuntimeSkillError,
-    ModelRuntimeSkillResponse,
-)
 
 _TESTS_DIR = Path(__file__).parent
 _REPO_ROOT = _TESTS_DIR.parent.parent.parent.parent
 _DELEGATE_LIB = _REPO_ROOT / "plugins" / "onex" / "skills" / "delegate" / "_lib"
-_DELEGATE_SKILL_COMMAND_NAME = "node_delegate_skill_orchestrator"
+_DELEGATE_SKILL_COMMAND_NAME = "delegate_skill.orchestrate"
+_DELEGATE_NODE_NAME = "node_delegate_skill_orchestrator"
 
 if _DELEGATE_LIB.exists() and str(_DELEGATE_LIB) not in sys.path:
     sys.path.insert(0, str(_DELEGATE_LIB))
 
 
-class FakeRuntimeSkillClient:
-    requests: list[object] = []
-    response: ModelRuntimeSkillResponse = ModelRuntimeSkillResponse(
-        ok=True,
-        command_name=_DELEGATE_SKILL_COMMAND_NAME,
-        resolved_node_name=_DELEGATE_SKILL_COMMAND_NAME,
-        contract_name=_DELEGATE_SKILL_COMMAND_NAME,
-        command_topic="onex.cmd.omniclaude.delegate-task.v1",
-        terminal_event="onex.evt.omniclaude.delegation-completed.v1",
-        correlation_id=uuid.uuid4(),
-        dispatch_result=ModelDispatchBusTerminalResult(
-            status="completed",
-            correlation_id=uuid.uuid4(),
-            payload={"result": "queued"},
-        ),
-        output_payloads=[{"result": "queued"}],
-    )
-
-    def dispatch_sync(self, request: object) -> ModelRuntimeSkillResponse:
-        self.requests.append(request)
-        return self.response.model_copy(
-            update={"correlation_id": request.correlation_id}
-        )
+class _Intent:
+    value = "test"
 
 
-@pytest.fixture(autouse=True)
-def reset_fake_client() -> None:
-    FakeRuntimeSkillClient.requests = []
-    FakeRuntimeSkillClient.response = ModelRuntimeSkillResponse(
-        ok=True,
-        command_name=_DELEGATE_SKILL_COMMAND_NAME,
-        resolved_node_name=_DELEGATE_SKILL_COMMAND_NAME,
-        contract_name=_DELEGATE_SKILL_COMMAND_NAME,
-        command_topic="onex.cmd.omniclaude.delegate-task.v1",
-        terminal_event="onex.evt.omniclaude.delegation-completed.v1",
-        correlation_id=uuid.uuid4(),
-        dispatch_result=ModelDispatchBusTerminalResult(
-            status="completed",
-            correlation_id=uuid.uuid4(),
-            payload={"result": "queued"},
-        ),
-        output_payloads=[{"result": "queued"}],
-    )
+class _FakeClassifier:
+    def classify(self, _prompt: str) -> SimpleNamespace:
+        return SimpleNamespace(primary_intent=_Intent)
+
+
+class _FakeAdapter:
+    calls: list[dict[str, object]] = []
+    response: dict[str, object] = {}
+
+    def dispatch_sync(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(kwargs)
+        return {
+            "ok": True,
+            "correlation_id": str(kwargs["correlation_id"]),
+            "command_topic": "onex.cmd.omnimarket.delegate-skill.v1",
+            "terminal_events": {
+                "success": "onex.evt.omnimarket.delegate-skill-completed.v1",
+                "failure": "onex.evt.omnimarket.delegate-skill-failed.v1",
+            },
+            **self.response,
+        }
 
 
 @pytest.fixture
@@ -85,135 +55,120 @@ def delegate_run(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     import run as delegate_run_module  # noqa: PLC0415
 
     imported = importlib.reload(delegate_run_module)
-
-    # Route through HTTP path so FakeRuntimeSkillClient.dispatch_sync is used.
-    monkeypatch.setenv("ONEX_RUNTIME_URL", "http://localhost:8085")
-    # Clear SSH env vars so HTTP path is chosen over SSH.
-    monkeypatch.delenv("ONEX_RUNTIME_SSH_HOST", raising=False)
-    monkeypatch.delenv("ONEX_RUNTIME_SOCKET_PATH", raising=False)
-
-    fake_client = FakeRuntimeSkillClient()
-
-    def _fake_dispatch_via_http(
-        request: object, runtime_url: str, timeout_seconds: float
-    ) -> object:
-        return fake_client.dispatch_sync(request)
-
-    monkeypatch.setattr(imported, "_dispatch_via_http", _fake_dispatch_via_http)
-    monkeypatch.setattr(imported, "_RUNTIME_IMPORT_ERROR", None)
-
-    # Attach fake client so tests can inspect requests.
-    imported.LocalRuntimeSkillClient = fake_client  # type: ignore[assignment]
+    _FakeAdapter.calls = []
+    _FakeAdapter.response = {}
+    monkeypatch.setattr(imported, "TaskClassifier", _FakeClassifier)
+    monkeypatch.setattr(imported, "_HAS_CLASSIFIER", True)
+    monkeypatch.setattr(imported, "DELEGATABLE", frozenset({_Intent}))
+    monkeypatch.setattr(imported, "DelegationDispatchAdapter", _FakeAdapter)
     return imported
 
 
-class TestDelegateRuntimeDispatch:
-    def test_delegatable_prompt_dispatches_runtime_skill_request(
-        self,
-        delegate_run: ModuleType,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("ONEX_SESSION_ID", "session-test-123")
-        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
-        monkeypatch.setenv("CLAUDE_SESSION_ID", "")
-        prompt = "write unit tests for handler_event_emitter.py"
+def test_delegatable_prompt_dispatches_market_adapter(
+    delegate_run: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ONEX_SESSION_ID", "session-test-123")
+    prompt = "write unit tests for handler_event_emitter.py"
 
-        result = delegate_run.classify_and_publish(
-            prompt=prompt,
-            source_file="src/omniclaude/hooks/handler_event_emitter.py",
-            max_tokens=4096,
-            recipient="codex",
-            wait_for_result=True,
-            working_directory="/tmp/work",
-            codex_sandbox_mode="workspace-write",
-        )
+    result = delegate_run.classify_and_publish(
+        prompt=prompt,
+        source_file="src/omniclaude/hooks/handler_event_emitter.py",
+        max_tokens=4096,
+        recipient="codex",
+        wait_for_result=True,
+        working_directory="/tmp/work",
+        codex_sandbox_mode="workspace-write",
+        timeout_ms=12345,
+    )
 
-        assert result.get("success") is True, f"Expected success, got: {result}"
-        assert result["command_name"] == _DELEGATE_SKILL_COMMAND_NAME
-        assert result["dispatch_status"] == "completed"
+    assert result.get("success") is True, f"Expected success, got: {result}"
+    assert result["command_name"] == _DELEGATE_SKILL_COMMAND_NAME
+    assert result["resolved_node_name"] == _DELEGATE_NODE_NAME
+    assert result["path"] == "omnimarket_adapter"
 
-        fake = delegate_run.LocalRuntimeSkillClient
-        assert len(fake.requests) == 1
-        request = fake.requests[0]
-        assert request.command_name == _DELEGATE_SKILL_COMMAND_NAME
-        assert request.correlation_id is not None
+    assert len(_FakeAdapter.calls) == 1
+    call = _FakeAdapter.calls[0]
+    assert call["prompt"] == prompt
+    assert call["task_type"] == "test"
+    assert call["source"] == "claude-code"
+    assert call["cwd"] == "/tmp/work"
+    assert call["wait"] is True
+    assert call["max_tokens"] == 4096
+    assert call["timeout_ms"] == 12345
 
-        payload = request.payload
-        assert payload["prompt"] == prompt
-        assert payload["task_type"] == "test"
-        assert payload["source_session_id"] == "session-test-123"
-        assert payload["source_file_path"] == (
-            "src/omniclaude/hooks/handler_event_emitter.py"
-        )
-        assert payload["max_tokens"] == 4096
-        assert "emitted_at" in payload
+    metadata = call["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["source_file_path"] == (
+        "src/omniclaude/hooks/handler_event_emitter.py"
+    )
+    assert metadata["session_id"] == "session-test-123"
+    assert metadata["recipient"] == "codex"
+    assert metadata["wait_for_result"] == "true"
+    assert metadata["working_directory"] == "/tmp/work"
+    assert metadata["codex_sandbox_mode"] == "workspace-write"
 
-        assert set(payload) == {
-            "prompt",
-            "task_type",
-            "source_session_id",
-            "source_file_path",
-            "correlation_id",
-            "max_tokens",
-            "emitted_at",
-        }
 
-    def test_correlation_id_is_valid_uuid(self, delegate_run: ModuleType) -> None:
-        result = delegate_run.classify_and_publish(
-            prompt="document the routing architecture",
-        )
+def test_explicit_correlation_id_is_threaded_through(delegate_run: ModuleType) -> None:
+    expected_corr = str(uuid.uuid4())
 
-        assert result.get("success") is True, f"Expected success, got: {result}"
-        corr = result.get("correlation_id")
-        assert corr is not None
-        uuid.UUID(str(corr))
+    result = delegate_run.classify_and_publish(
+        prompt="research and explain the delegation routing flow",
+        correlation_id=expected_corr,
+    )
 
-    def test_explicit_correlation_id_is_threaded_through(
-        self, delegate_run: ModuleType
-    ) -> None:
-        expected_corr = str(uuid.uuid4())
+    assert result.get("success") is True, f"Expected success, got: {result}"
+    assert result.get("correlation_id") == expected_corr
+    assert str(_FakeAdapter.calls[0]["correlation_id"]) == expected_corr
 
-        result = delegate_run.classify_and_publish(
-            prompt="research and explain the delegation routing flow in detail",
-            correlation_id=expected_corr,
-        )
 
-        assert result.get("success") is True, f"Expected success, got: {result}"
-        assert result.get("correlation_id") == expected_corr
-        fake = delegate_run.LocalRuntimeSkillClient
-        request = fake.requests[0]
-        assert str(request.correlation_id) == expected_corr
-        assert request.payload["correlation_id"] == expected_corr
+def test_non_delegatable_intent_does_not_dispatch(
+    delegate_run: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _OtherIntent:
+        value = "implement"
 
-    def test_non_delegatable_intent_does_not_dispatch(
-        self, delegate_run: ModuleType
-    ) -> None:
-        result = delegate_run.classify_and_publish(
-            prompt="debug the database connection failure",
-        )
+    class _OtherClassifier:
+        def classify(self, _prompt: str) -> SimpleNamespace:
+            return SimpleNamespace(primary_intent=_OtherIntent)
 
-        assert delegate_run.LocalRuntimeSkillClient.requests == []
-        assert result.get("success") is False
+    monkeypatch.setattr(delegate_run, "TaskClassifier", _OtherClassifier)
 
-    def test_runtime_failure_returns_error_result(
-        self, delegate_run: ModuleType
-    ) -> None:
-        FakeRuntimeSkillClient.response = ModelRuntimeSkillResponse(
-            ok=False,
-            command_name=_DELEGATE_SKILL_COMMAND_NAME,
-            correlation_id=uuid.uuid4(),
-            error=ModelRuntimeSkillError(
-                code="runtime_unavailable",
-                message="runtime socket unavailable",
-                retryable=True,
-            ),
-        )
+    result = delegate_run.classify_and_publish(
+        prompt="debug the database connection failure",
+    )
 
-        result = delegate_run.classify_and_publish(
-            prompt="write unit tests for verify_registration.py",
-        )
+    assert _FakeAdapter.calls == []
+    assert result.get("success") is False
+    assert "not delegatable" in result["error"]
 
-        assert result.get("success") is False
-        assert result["error"] == "runtime socket unavailable"
-        assert result["error_code"] == "runtime_unavailable"
-        assert result["retryable"] is True
+
+def test_adapter_failure_returns_error_result(delegate_run: ModuleType) -> None:
+    _FakeAdapter.response = {"ok": False, "error": "runtime unavailable"}
+
+    result = delegate_run.classify_and_publish(
+        prompt="write unit tests for verify_registration.py",
+    )
+
+    assert result.get("success") is False
+    assert result["error"] == "runtime unavailable"
+
+
+def test_missing_adapter_returns_explicit_error(
+    delegate_run: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(delegate_run, "DelegationDispatchAdapter", None)
+    monkeypatch.setattr(
+        delegate_run,
+        "_load_adapter_class",
+        lambda: (None, ImportError("omnimarket missing")),
+    )
+
+    result = delegate_run.classify_and_publish(
+        prompt="write unit tests for verify_registration.py",
+    )
+
+    assert result.get("success") is False
+    assert "Market delegation adapter unavailable" in result["error"]

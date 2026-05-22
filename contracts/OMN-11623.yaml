@@ -1,0 +1,32 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11623
+title: "Route delegate shim through market adapter"
+summary: "Reduce the omniclaude /delegate skill runner to a thin compatibility wrapper over the omnimarket delegation adapter."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Focused delegation shim and transport tests pass."
+    command: "uv run pytest tests/delegation tests/unit/hooks/lib tests/validation/test_validate_runtime_backed_skill_paths.py -q"
+  - kind: manual
+    description: "Central OCC evidence binds OMN-11623 proof and downstream PR refs."
+    command: "Evidence-Source: 02d2935465235e7c8c7a26735a35ca9e4d4bea40"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-delegate-shim-tests
+    description: "Focused /delegate wrapper tests passed after routing through the market adapter."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/delegation tests/unit/hooks/lib tests/validation/test_validate_runtime_backed_skill_paths.py -q"
+  - id: dod-occ-evidence
+    description: "Central OCC evidence for OMN-11623 is merged and referenced by this PR body."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'Evidence-Source: 02d2935465235e7c8c7a26735a35ca9e4d4bea40' /tmp/pr_body.txt"

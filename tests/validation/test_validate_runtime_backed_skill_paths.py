@@ -65,7 +65,7 @@ skills:
     canonical_target: node_pr_review_bot
   delegate:
     canonical_path: runtime_skill_client
-    canonical_target: node_delegation_orchestrator
+    canonical_target: node_delegate_skill_orchestrator
 """.strip()
         + "\n",
     )
@@ -230,6 +230,23 @@ class TestTopicPublishInventory:
                 "SKILL.md": (
                     "Dispatch via LocalRuntimeSkillClient and ModelRuntimeSkillRequest "
                     "through local runtime ingress.\n"
+                )
+            },
+        )
+        manifest = load_manifest(manifest_path)
+        findings = scan_skill(skill_dir, manifest["delegate"])
+        assert findings == [], [f.format_line() for f in findings]
+
+    def test_delegate_market_adapter_is_canonical(
+        self, tmp_path: Path, manifest_path: Path
+    ) -> None:
+        skill_dir = _write_skill(
+            tmp_path,
+            "delegate",
+            {
+                "SKILL.md": (
+                    "Dispatch via omnimarket.adapters.claude_code.delegate."
+                    "DelegationDispatchAdapter to delegate_skill.orchestrate.\n"
                 )
             },
         )

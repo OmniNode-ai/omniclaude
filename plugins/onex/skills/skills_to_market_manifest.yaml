@@ -33,5 +33,5 @@ skills:
 
   delegate:
     canonical_path: runtime_skill_client
-    canonical_target: node_delegation_orchestrator
-    notes: Delegate dispatches to node_delegation_orchestrator through LocalRuntimeSkillClient and the runtime-owned Pattern B broker path; direct emit-daemon publish is legacy-only.
+    canonical_target: node_delegate_skill_orchestrator
+    notes: Delegate routes through omnimarket.adapters.claude_code.delegate.DelegationDispatchAdapter to delegate_skill.orchestrate; omniclaude keeps only the compatibility CLI shim.

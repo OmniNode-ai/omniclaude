@@ -2,6 +2,7 @@
 description: Dispatch a background worker with role-templated prompt and auto-populated collision fences
 mode: full
 version: 1.0.0
+worker_template_version: v1
 level: intermediate
 debug: false
 category: orchestration
@@ -125,6 +126,32 @@ The PostToolUse `post_tool_use_subagent_tool_log.sh` hook appends a JSONL
 line per subagent tool call to
 `$ONEX_STATE_DIR/dispatches/<agent-id>/tool-calls.jsonl` when
 `ONEX_AGENT_ID` is set in the subagent environment.
+
+## Worker Operating Rules (worker_template_version: v1)
+
+The following 5 rules are injected verbatim into every worker prompt by `prompt.md`
+before spawning. They are auto-injected — dispatchers MUST NOT hand-restate them.
+
+```
+## Operating Rules (auto-injected by dispatch_worker skill v1)
+
+1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
+   provenance. Fix them in the same PR or file a blocker — never push red tests.
+
+2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
+   keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
+
+3. **Worktree-only development.** All code changes happen in a ticket worktree under
+   `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
+   canonical repo clone. The worktree guard hook enforces this.
+
+4. **Full test suite before push.** Run `uv run pytest tests/ -v` with NO `-k` filter
+   as the final pre-push check. Narrow filters miss contract tests and pre-commit hooks.
+
+5. **Never bypass pre-commit hooks.** Never use `--no-verify`, `--no-gpg-sign`, or any
+   bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
+   Fix the issue instead of bypassing the gate.
+```
 
 ## See Also
 
