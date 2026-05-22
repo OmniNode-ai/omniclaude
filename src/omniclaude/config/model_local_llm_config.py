@@ -455,7 +455,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     llm_openrouter_max_latency_ms: int = Field(
         default=60000,
         ge=100,
-        le=120000,
+        le=60000,
         description="Max latency for OpenRouter hosted code generation",
     )
 
