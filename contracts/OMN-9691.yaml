@@ -9,8 +9,7 @@ summary: >
 is_seam_ticket: false
 interface_change: true
 interfaces_touched:
-  - plugin_skill
-  - runtime_node
+  - public_api
 evidence_requirements:
   - kind: tests
     description: "Status skill hygiene and plugin reference tests pass"
