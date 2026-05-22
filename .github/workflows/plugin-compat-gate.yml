@@ -15,12 +15,12 @@ name: Plugin Compat Gate
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'hotfix/**']
     paths:
       - 'plugins/onex/**'
       - '.github/workflows/plugin-compat-gate.yml'
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev, develop]
     paths:
       - 'plugins/onex/**'
       - '.github/workflows/plugin-compat-gate.yml'

@@ -10,13 +10,13 @@ name: Skill MCP Reference Lint
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
     paths:
       - 'plugins/onex/skills/**/*.md'
       - 'scripts/lint_skill_mcp_refs.py'
       - '.github/workflows/skill-mcp-ref-lint.yml'
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'plugins/onex/skills/**/*.md'
       - 'scripts/lint_skill_mcp_refs.py'

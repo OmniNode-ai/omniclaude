@@ -3,7 +3,7 @@
 name: Build and push migration image to ECR
 on:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
     paths:
       - 'docker/Dockerfile.migrate'
       - 'sql/migrations/**'

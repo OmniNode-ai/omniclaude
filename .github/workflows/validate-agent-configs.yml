@@ -13,7 +13,7 @@ name: Validate Agent Configs
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev, develop]
     paths:
       - "plugins/onex/agents/configs/**/*.yaml"
   merge_group:

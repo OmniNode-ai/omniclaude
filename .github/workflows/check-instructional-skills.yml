@@ -15,7 +15,7 @@ name: check-instructional-skills
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev, develop]
     paths:
       - "plugins/onex/skills/**/SKILL.md"
       - "scripts/validation/validate_instructional_skill_routing.py"

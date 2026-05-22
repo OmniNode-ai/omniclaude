@@ -23,7 +23,7 @@ name: Skill Backing Node
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
     paths:
       - 'plugins/onex/skills/**/*.md'
       - 'plugins/onex/skills/_lib/validate_skill_backing_node.py'
@@ -31,7 +31,7 @@ on:
       - 'tests/unit/skills/_lib/test_validate_skill_backing_node.py'
       - '.github/workflows/validate-skill-backing-node.yml'
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'plugins/onex/skills/**/*.md'
       - 'plugins/onex/skills/_lib/validate_skill_backing_node.py'

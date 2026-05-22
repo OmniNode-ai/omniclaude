@@ -9,11 +9,11 @@ name: Hook Log Path Lint
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
     paths:
       - 'plugins/onex/hooks/scripts/**'
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'plugins/onex/hooks/scripts/**'
   merge_group:

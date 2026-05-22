@@ -10,9 +10,9 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
 
 # Default permissions — individual jobs override as needed
 permissions:
