@@ -1,5 +1,5 @@
 ---
-description: Foreground status snapshot — routes to merge-sweep-lead teammate if present, otherwise spawns a one-shot snapshot agent. Never calls gh directly from foreground.
+description: Foreground status snapshot — routes to merge-sweep-lead teammate if present, otherwise spawns a one-shot snapshot agent. Avoids inline repository polling from foreground.
 mode: full
 version: 1.0.0
 level: intermediate
@@ -26,9 +26,8 @@ ticket: OMN-9691
 ## What this skill does
 
 Delivers a PR / merge-queue status snapshot to the foreground session without
-calling `gh` directly. Foreground sessions must not poll GitHub state inline —
-doing so blocks the session and bypasses the merge-sweep pipeline's own
-authoritative view.
+inline repository polling. Foreground sessions must route state requests through
+the merge-sweep pipeline's authoritative view.
 
 Routing decision:
 
@@ -41,8 +40,8 @@ Routing decision:
    - Spawn a one-shot snapshot agent (see **One-Shot Snapshot Agent** below).
    - Surface the agent's returned snapshot to the user once it completes.
 
-Under no circumstances should this skill or any agent it spawns call `gh pr list`,
-`gh pr checks`, or any GitHub API endpoint from the foreground session directly.
+Under no circumstances should this skill or any agent it spawns query PR state
+directly from the foreground session.
 
 ## Routing decision pseudocode
 
@@ -76,7 +75,8 @@ You are a one-shot status snapshot agent. Your only job:
 4. Send the snapshot text to "team-lead" via SendMessage.
 5. Stop immediately after sending.
 
-Never call gh directly. Never open PRs or push code. Read-only snapshot only.
+Never query repository state directly. Never open PRs or push code. Read-only
+snapshot only.
 ```
 
 Use `model="claude-haiku-4-5-20251001"` for the snapshot agent — this is a
@@ -86,19 +86,17 @@ read-only reporting task, not a reasoning task.
 
 | Condition | Behavior |
 |-----------|----------|
-| `TaskList` unavailable | Surface error; do not fall through to `gh` |
+| `TaskList` unavailable | Surface error; do not fall through to direct polling |
 | `merge-sweep-lead` does not reply within 30 seconds | Surface timeout; suggest running `/onex:merge_sweep` to restart the lead |
 | `node_pr_lifecycle_orchestrator` unavailable | Surface the node error verbatim; do not guess state |
 | Agent tool unavailable in current context | Surface "Status routing requires Agent tool — run from a foreground session" |
 
 ## Why this routing exists
 
-Foreground `gh` calls for PR/merge-queue state are a recurring source of:
-- Stale reads (foreground session has no cache of the merge-sweep lead's view)
-- Rate-limit waste (each foreground `gh pr list` consumes API quota shared
-  with the merge-sweep pipeline)
-- Inconsistency (foreground sees a snapshot; merge-sweep lead acts on a
-  different snapshot taken milliseconds later)
+Foreground PR/merge-queue polling is a recurring source of stale reads,
+rate-limit waste, and inconsistent snapshots. The foreground session has no
+cache of the merge-sweep lead's view, and the sweep lead may act on a newer
+snapshot milliseconds later.
 
 Routing through `merge-sweep-lead` when it exists gives the foreground session
 the authoritative view that the sweep lead is already maintaining.
@@ -107,4 +105,4 @@ the authoritative view that the sweep lead is already maintaining.
 
 - `/onex:merge_sweep` — launches or resumes the merge-sweep pipeline
 - `/onex:system_status` — full platform health (infra, Kafka, DB); not PR state
-- `node_pr_lifecycle_orchestrator` (omnimarket) — backing node for PR inventory
+- omnimarket PR lifecycle orchestrator — backing node for PR inventory
