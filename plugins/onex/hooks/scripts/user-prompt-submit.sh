@@ -617,10 +617,9 @@ fi
 # -----------------------------
 # Delegation Bridge (OMN-8746)
 # -----------------------------
-# Publish a delegate-task command to the ONEX node pipeline for every
-# non-slash, non-automated prompt. node_delegation_orchestrator on .201
-# handles routing, LLM inference, and quality gating.
-# Requires Kafka to be reachable — there is no local prose fallback.
+# Hand a delegate request to the market-owned delegate skill adapter for every
+# non-slash, non-automated prompt. node_delegate_skill_orchestrator owns routing,
+# runtime dispatch, terminal correlation, LLM inference, and quality gating.
 if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELEGATION_BEHAVIOR" != "off" ]]; then
     _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
     if [[ -f "$_BRIDGE_SCRIPT" ]]; then
@@ -634,9 +633,9 @@ if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELE
             fi
         ) &
         disown
-        log "Delegation bridge: published to node pipeline (corr=$CORRELATION_ID)"
+        log "Delegation bridge: submitted to market adapter (corr=$CORRELATION_ID)"
     else
-        log "WARNING: delegation bridge run.py not found at $_BRIDGE_SCRIPT — Kafka publish skipped"
+        log "WARNING: delegation bridge run.py not found at $_BRIDGE_SCRIPT — market adapter submit skipped"
     fi
 fi
 

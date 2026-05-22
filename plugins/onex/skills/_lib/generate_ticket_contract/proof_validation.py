@@ -19,11 +19,15 @@ currently passing. Use --collect-only in v1.1.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - exercised by CI runner import path
+    yaml = None
 
 
 class EnumRefStatus(StrEnum):
@@ -48,8 +52,85 @@ class RefResolutionResult:
 def _load_registry(registry_path: Path) -> set[str]:
     if not registry_path.exists():
         raise FileNotFoundError(f"Static checks registry not found: {registry_path}")
-    data = yaml.safe_load(registry_path.read_text())
+    text = registry_path.read_text()
+    if yaml is None:
+        return {
+            match.group("id")
+            for match in re.finditer(
+                r"^\s*-\s*id:\s*(?P<id>['\"]?[^'\"\s#]+['\"]?)", text, re.MULTILINE
+            )
+        }
+    data = yaml.safe_load(text)
     return {check["id"] for check in data.get("checks", [])}
+
+
+def _clean_yaml_scalar(value: str) -> str:
+    value = value.split(" #", 1)[0].strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _resolve_contract_without_yaml(
+    contract_path: Path, resolver: ProofReferenceResolver
+) -> list[RefResolutionResult]:
+    """Resolve proof refs with a narrow parser for bare CI Python.
+
+    The normal path uses PyYAML. This fallback intentionally handles only the
+    `proof_requirements` list shape consumed by this helper, so contract schema
+    validation remains owned by the dedicated validator.
+    """
+    results: list[RefResolutionResult] = []
+    in_proof_requirements = False
+    proof_requirements_indent = 0
+    current: dict[str, str] | None = None
+
+    def flush_current() -> None:
+        nonlocal current
+        if current is not None:
+            results.append(
+                resolver.resolve(
+                    kind=current.get("kind", ""),
+                    ref=current.get("ref", ""),
+                    criterion_id=current.get("criterion_id", ""),
+                )
+            )
+            current = None
+
+    for raw_line in contract_path.read_text().splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        indent = len(raw_line) - len(raw_line.lstrip())
+        if stripped == "proof_requirements:":
+            flush_current()
+            in_proof_requirements = True
+            proof_requirements_indent = indent
+            continue
+
+        if not in_proof_requirements:
+            continue
+
+        if indent <= proof_requirements_indent:
+            flush_current()
+            in_proof_requirements = False
+            continue
+
+        item_match = re.match(r"-\s+kind:\s*(?P<value>.+)$", stripped)
+        if item_match:
+            flush_current()
+            current = {"kind": _clean_yaml_scalar(item_match.group("value"))}
+            continue
+
+        field_match = re.match(r"(?P<key>ref|criterion_id):\s*(?P<value>.*)$", stripped)
+        if current is not None and field_match:
+            current[field_match.group("key")] = _clean_yaml_scalar(
+                field_match.group("value")
+            )
+
+    flush_current()
+    return results
 
 
 class ProofReferenceResolver:
@@ -157,6 +238,9 @@ def resolve_contract(
 
     Returns empty list if no proof_requirements exist in the contract.
     """
+    if yaml is None:
+        return _resolve_contract_without_yaml(contract_path, resolver)
+
     data = yaml.safe_load(contract_path.read_text())
     results: list[RefResolutionResult] = []
     for req in data.get("requirements", []):
