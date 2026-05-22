@@ -141,9 +141,9 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
 2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
    keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
 
-3. **Worktree-only development.** All code changes happen in
-   `$OMNI_HOME/omni_worktrees/<ticket>/<repo>/`. NEVER stage or commit inside
-   `$OMNI_HOME/<repo>/` (the canonical clone). The worktree guard hook enforces this.
+3. **Worktree-only development.** All code changes happen in a ticket worktree under
+   `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
+   canonical repo clone. The worktree guard hook enforces this.
 
 4. **Full test suite before push.** Run `uv run pytest tests/ -v` with NO `-k` filter
    as the final pre-push check. Narrow filters miss contract tests and pre-commit hooks.
