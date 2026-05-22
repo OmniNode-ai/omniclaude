@@ -102,7 +102,7 @@ validation occurs on the consuming `node_delegation_orchestrator`.
 
 ## Related
 
-- **Bridge implementation**: `plugins/onex/skills/delegate/_lib/run.py`
+- **Bridge implementation**: `plugins/onex/skills/delegate/_lib/handler_delegate_skill.py`
 - **TaskClassifier**: `src/omniclaude/lib/task_classifier.py`
 - **Runtime client**: `omnibase_infra.clients.runtime_skill_client.LocalRuntimeSkillClient`
 - **Request model**: `omnibase_core.models.runtime.ModelRuntimeSkillRequest`

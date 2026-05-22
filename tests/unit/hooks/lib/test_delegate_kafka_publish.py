@@ -81,8 +81,8 @@ def reset_fake_client() -> None:
 
 @pytest.fixture
 def delegate_run(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    sys.modules.pop("run", None)
-    import run as delegate_run_module  # noqa: PLC0415
+    sys.modules.pop("handler_delegate_skill", None)
+    import handler_delegate_skill as delegate_run_module  # noqa: PLC0415
 
     imported = importlib.reload(delegate_run_module)
 

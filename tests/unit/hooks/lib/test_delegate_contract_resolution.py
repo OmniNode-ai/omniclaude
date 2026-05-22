@@ -51,8 +51,8 @@ def delegate_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
         encoding="utf-8",
     )
     monkeypatch.setenv("OMNI_HOME", str(tmp_path))
-    sys.modules.pop("run", None)
-    import run as m  # noqa: PLC0415
+    sys.modules.pop("handler_delegate_skill", None)
+    import handler_delegate_skill as m  # noqa: PLC0415
 
     return importlib.reload(m)
 

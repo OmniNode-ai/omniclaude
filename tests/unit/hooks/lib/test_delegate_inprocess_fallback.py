@@ -29,8 +29,8 @@ if _DELEGATE_LIB.exists() and str(_DELEGATE_LIB) not in sys.path:
 
 @pytest.fixture
 def delegate_run(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    sys.modules.pop("run", None)
-    import run as delegate_run_module  # noqa: PLC0415
+    sys.modules.pop("handler_delegate_skill", None)
+    import handler_delegate_skill as delegate_run_module  # noqa: PLC0415
 
     return importlib.reload(delegate_run_module)
 

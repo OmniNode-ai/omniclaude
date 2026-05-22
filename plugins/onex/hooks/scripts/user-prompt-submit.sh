@@ -622,7 +622,7 @@ fi
 # handles routing, LLM inference, and quality gating.
 # Requires Kafka to be reachable — there is no local prose fallback.
 if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELEGATION_BEHAVIOR" != "off" ]]; then
-    _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
+    _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/handler_delegate_skill.py"
     if [[ -f "$_BRIDGE_SCRIPT" ]]; then
         (
             _BRIDGE_PROMPT="$(printf '%s' "$PROMPT_B64" | base64 -d 2>/dev/null || echo "")"
@@ -636,7 +636,7 @@ if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELE
         disown
         log "Delegation bridge: published to node pipeline (corr=$CORRELATION_ID)"
     else
-        log "WARNING: delegation bridge run.py not found at $_BRIDGE_SCRIPT — Kafka publish skipped"
+        log "WARNING: delegation bridge handler_delegate_skill.py not found at $_BRIDGE_SCRIPT — Kafka publish skipped"
     fi
 fi
 

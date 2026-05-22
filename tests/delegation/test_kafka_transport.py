@@ -37,7 +37,7 @@ if str(_SKILL_LIB) not in sys.path:
 def _import_dispatch_via_kafka():  # type: ignore[return]
     import importlib
 
-    import run as _run_mod
+    import handler_delegate_skill as _run_mod
 
     importlib.reload(_run_mod)
     return _run_mod._dispatch_via_kafka  # noqa: SLF001

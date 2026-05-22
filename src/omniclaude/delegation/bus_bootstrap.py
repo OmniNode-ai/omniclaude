@@ -106,7 +106,7 @@ async def bootstrap_delegation_bus(
 
         omnimarket is a soft dependency: when not installed the handler logs a
         warning and skips persistence. This mirrors the soft-import pattern used
-        in plugins/onex/skills/delegate/_lib/run.py.
+        in plugins/onex/skills/delegate/_lib/handler_delegate_skill.py.
         """
         try:
             data = json.loads(msg.value) if msg.value else {}

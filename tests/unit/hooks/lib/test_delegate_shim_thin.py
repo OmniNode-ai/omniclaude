@@ -28,8 +28,8 @@ if _DELEGATE_LIB.exists() and str(_DELEGATE_LIB) not in sys.path:
 
 @pytest.fixture
 def delegate_run(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    sys.modules.pop("run", None)
-    import run as m  # noqa: PLC0415
+    sys.modules.pop("handler_delegate_skill", None)
+    import handler_delegate_skill as m  # noqa: PLC0415
 
     return importlib.reload(m)
 
@@ -43,8 +43,8 @@ class TestShimDoesNotReadDelegationEnvVarsAtImportTime:
         monkeypatch.delenv("ONEX_RUNTIME_URL", raising=False)
         monkeypatch.delenv("ONEX_RUNTIME_SSH_HOST", raising=False)
 
-        sys.modules.pop("run", None)
-        import run as m  # noqa: PLC0415
+        sys.modules.pop("handler_delegate_skill", None)
+        import handler_delegate_skill as m  # noqa: PLC0415
 
         importlib.reload(m)
 
@@ -56,8 +56,8 @@ class TestShimDoesNotReadDelegationEnvVarsAtImportTime:
         monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         monkeypatch.delenv("LLM_CODER_FAST_URL", raising=False)
 
-        sys.modules.pop("run", None)
-        import run as m  # noqa: PLC0415
+        sys.modules.pop("handler_delegate_skill", None)
+        import handler_delegate_skill as m  # noqa: PLC0415
 
         importlib.reload(m)
 
@@ -86,8 +86,8 @@ class TestShimDoesNotReadDelegationEnvVarsAtImportTime:
         )
         monkeypatch.setenv("OMNI_HOME", str(tmp_path))
 
-        sys.modules.pop("run", None)
-        import run as m  # noqa: PLC0415
+        sys.modules.pop("handler_delegate_skill", None)
+        import handler_delegate_skill as m  # noqa: PLC0415
 
         mod = importlib.reload(m)
 
@@ -119,8 +119,8 @@ class TestShimLoadsTopicFromContract:
         (contract_dir / "contract.yaml").write_text(contract_yaml, encoding="utf-8")
         monkeypatch.setenv("OMNI_HOME", str(tmp_path))
 
-        sys.modules.pop("run", None)
-        import run as m  # noqa: PLC0415
+        sys.modules.pop("handler_delegate_skill", None)
+        import handler_delegate_skill as m  # noqa: PLC0415
 
         mod = importlib.reload(m)
 
@@ -134,7 +134,7 @@ class TestShimLoadsTopicFromContract:
         It must go through contract resolution. The fallback is TopicBase.DELEGATE_TASK
         (itself contract-driven), not a raw string constant defined in this file.
         """
-        src_path = _DELEGATE_LIB / "run.py"
+        src_path = _DELEGATE_LIB / "handler_delegate_skill.py"
         source = src_path.read_text()
 
         hardcoded_sentinel = '"onex.cmd.omniclaude.delegate-task.v1"'
@@ -147,12 +147,12 @@ class TestShimLoadsTopicFromContract:
 
 class TestShimHasNoOmnibaseInfraInternalImports:
     def test_no_omnibase_infra_handler_imports_at_module_level(self) -> None:
-        """run.py must not hard-import omnibase_infra internal handler classes.
+        """handler_delegate_skill.py must not hard-import omnibase_infra internal handler classes.
 
         omnibase_infra.clients.runtime_skill_client is allowed only behind a
         try/except guard (for optional HTTP path) — not as a hard top-level import.
         """
-        src_path = _DELEGATE_LIB / "run.py"
+        src_path = _DELEGATE_LIB / "handler_delegate_skill.py"
         source = src_path.read_text()
 
         forbidden_patterns = [
@@ -169,7 +169,7 @@ class TestShimHasNoOmnibaseInfraInternalImports:
 
     def test_runtime_skill_client_import_is_guarded(self) -> None:
         """LocalRuntimeSkillClient import must be inside a try/except, not bare."""
-        src_path = _DELEGATE_LIB / "run.py"
+        src_path = _DELEGATE_LIB / "handler_delegate_skill.py"
         source = src_path.read_text()
 
         # Verify the import exists but is guarded (inside try block)

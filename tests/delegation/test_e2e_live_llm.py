@@ -176,7 +176,7 @@ def _call_llm_via_curl(
 
 
 # ---------------------------------------------------------------------------
-# Make the delegate skill _lib module importable as `run`
+# Make the delegate skill _lib module importable as `handler_delegate_skill`
 # ---------------------------------------------------------------------------
 _TESTS_DIR = Path(__file__).parent
 _REPO_ROOT = _TESTS_DIR.parent.parent
@@ -188,10 +188,10 @@ if _DELEGATE_LIB.exists() and str(_DELEGATE_LIB) not in sys.path:
 
 @pytest.fixture
 def delegate_run_module() -> ModuleType:
-    sys.modules.pop("run", None)
+    sys.modules.pop("handler_delegate_skill", None)
     import importlib  # noqa: PLC0415
 
-    import run as _run  # noqa: PLC0415
+    import handler_delegate_skill as _run  # noqa: PLC0415
 
     return importlib.reload(_run)
 
