@@ -5,13 +5,15 @@
 # Full deployment Dockerfile pending codebase restructure
 FROM python:3.12-slim
 
+ENV UV_NO_CACHE=1
+
 WORKDIR /app
 
 # Install git (required for git+https:// dependencies like onex-change-control)
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency management
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
 # Copy package files
 COPY pyproject.toml uv.lock ./
