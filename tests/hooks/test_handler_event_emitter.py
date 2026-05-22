@@ -1174,6 +1174,7 @@ def make_pattern_discovered_config(
     )
 
 
+@pytest.mark.usefixtures("kafka_env")
 class TestPatternDiscoveredEmission:
     """Tests for emit_pattern_discovered() — OMN-8162."""
 

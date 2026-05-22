@@ -202,7 +202,7 @@ class TopicBase(StrEnum):
     # Multi-producer: producer segment intentionally omitted (consumed by
     # omniintelligence node_pattern_storage_effect as a domain-level event).
     # ==========================================================================
-    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"
+    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"  # noqa: arch-topic-naming
     """Published by omniclaude when a pattern is discovered during a session."""
 
     # ==========================================================================
