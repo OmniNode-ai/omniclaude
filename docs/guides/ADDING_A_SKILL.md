@@ -150,5 +150,5 @@ If the skill does not appear after deploying:
 - Skill definitions: `plugins/onex/skills/*/SKILL.md`
 - Existing skills for reference patterns: `plugins/onex/skills/`
 - Skill authoring guide: `docs/reference/SKILL_AUTHORING_GUIDE.md`
-- Commands (related): `plugins/onex/commands/*.md`
+- Workflow entrypoints: `plugins/onex/skills/*/SKILL.md`
 - [Skill Lifecycle](../architecture/skill-lifecycle.md) — when to put logic in omnimarket instead
