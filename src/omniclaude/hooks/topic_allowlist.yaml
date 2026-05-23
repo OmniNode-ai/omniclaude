@@ -84,6 +84,14 @@ allowed_extras:
     reason: Agent routing CMD topic; predates contract governance.
     ticket: OMN-3294
 
+  - topic: "onex.evt.pattern.discovered.v1"
+    lifecycle: integration
+    reason: >
+      Cross-domain multi-producer pattern discovery event consumed by
+      omniintelligence node_pattern_storage_effect. The producer segment is
+      intentionally omitted; the owning consumer contract declares this topic.
+    ticket: OMN-8162
+
   - topic: "onex.evt.omniclaude.agent-action.v1"
     lifecycle: observability
     reason: Agent action observability topic; predates contract governance.

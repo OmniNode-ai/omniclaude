@@ -198,6 +198,14 @@ class TopicBase(StrEnum):
     CONTEXT_ENRICHMENT = "onex.evt.omniclaude.context-enrichment.v1"  # OMN-2274
 
     # ==========================================================================
+    # Cross-domain pattern discovery topic (OMN-8162)
+    # Multi-producer: producer segment intentionally omitted (consumed by
+    # omniintelligence node_pattern_storage_effect as a domain-level event).
+    # ==========================================================================
+    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"  # noqa: arch-topic-naming
+    """Published by omniclaude when a pattern is discovered during a session."""
+
+    # ==========================================================================
     # Intelligence output topics (omniintelligence producers)
     # ==========================================================================
     PATTERN_STORED = "onex.evt.omniintelligence.pattern-stored.v1"

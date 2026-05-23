@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11566
+title: "Rename delegate skill runtime entrypoint"
+summary: >
+  Renames the delegate skill runtime helper from _lib/run.py to the
+  ONEX handler_delegate_skill.py convention and updates all references without
+  keeping a compatibility shim.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+evidence_requirements:
+  - kind: tests
+    description: "Delegate skill and hook references use handler_delegate_skill.py"
+    command: "uv run pytest tests/delegation/test_e2e_inprocess_wiring.py tests/delegation/test_e2e_live_llm.py tests/delegation/test_kafka_transport.py tests/unit/hooks/lib/test_delegate_contract_resolution.py tests/unit/hooks/lib/test_delegate_inprocess_fallback.py tests/unit/hooks/lib/test_delegate_kafka_publish.py tests/unit/hooks/lib/test_delegate_shim_thin.py tests/unit/hooks/lib/test_delegate_transport_config.py tests/unit/skills/test_skill_session_id_migration.py -q"
+  - kind: ci
+    description: "omniclaude PR #1640 CI green across required gates"
+    command: "gh pr checks 1640 --repo OmniNode-ai/omniclaude --watch"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-delegate-entrypoint-rename
+    description: "Delegate skill entrypoint is renamed to handler_delegate_skill.py and old _lib/run.py references are removed"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f plugins/onex/skills/delegate/_lib/handler_delegate_skill.py && ! test -e plugins/onex/skills/delegate/_lib/run.py"
+  - id: dod-delegate-reference-tests
+    description: "Delegation and hook tests cover the renamed entrypoint"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/delegation/test_e2e_inprocess_wiring.py tests/delegation/test_e2e_live_llm.py tests/delegation/test_kafka_transport.py tests/unit/hooks/lib/test_delegate_contract_resolution.py tests/unit/hooks/lib/test_delegate_inprocess_fallback.py tests/unit/hooks/lib/test_delegate_kafka_publish.py tests/unit/hooks/lib/test_delegate_shim_thin.py tests/unit/hooks/lib/test_delegate_transport_config.py tests/unit/skills/test_skill_session_id_migration.py -q"

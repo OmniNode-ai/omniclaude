@@ -55,3 +55,18 @@ outputs:
 /delegate --max-tokens 4096 analyze the routing architecture
 /delegate --task-type test write unit tests for verify_registration.py
 ```
+
+## What This Skill Does NOT Do
+
+- Publish through the legacy hook emission client
+- Require the Claude hook emit daemon
+- Open transport clients from the omniclaude skill surface
+- Run skill-local terminal-result waits or inference
+- Call any LLM directly
+- Run quality gates
+
+## Related
+
+- **TaskClassifier**: `src/omniclaude/lib/task_classifier.py`
+- **Market adapter**: `omnimarket.adapters.claude_code.delegate.DelegationDispatchAdapter`
+- **Orchestrator contract**: `omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml`

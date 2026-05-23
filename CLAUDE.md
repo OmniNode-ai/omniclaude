@@ -197,7 +197,7 @@ Do not add new per-hook env vars of the legacy form.
 | **Repo Charter** | See [`docs/architecture/charter.md`](docs/architecture/charter.md) for full scope boundary declaration |
 | Claude Code hooks (SessionStart, UserPromptSubmit, PostToolUse, SessionEnd) | **omniintelligence** -- intelligence processing, code analysis |
 | Agent YAML definitions (`plugins/onex/agents/configs/`) | **omniintelligence** -- intelligence processing, code analysis |
-| Slash commands and skills (`plugins/onex/commands/`, `plugins/onex/skills/`) | **omnibase_core** -- ONEX runtime, node framework, contracts |
+| Skill-driven workflows (`plugins/onex/skills/`) | **omnibase_core** -- ONEX runtime, node framework, contracts |
 | Event emission via Unix socket daemon | **omnibase_infra** -- Kubernetes, deployment |
 | Context injection (learned patterns into prompts) | |
 | Agent routing (prompt-to-agent matching) | |
@@ -219,7 +219,7 @@ These rules are non-negotiable. Violations will cause production issues.
 | `emitted_at` timestamps must be **explicitly injected** | No `datetime.now()` defaults for deterministic testing |
 | SessionStart must be **idempotent** | May be called multiple times on reconnect |
 | Hooks must exit 0 unless blocking is intentional | Non-zero exit blocks the tool/prompt |
-| **Migration freeze active** (`.migration_freeze`) | DB-SPLIT in progress (OMN-2055) — no new schema migrations |
+| **Migration freeze is marker-driven** (`.migration_freeze`) | If the marker exists, no new schema migrations are allowed until the freeze is lifted |
 
 ---
 
@@ -399,7 +399,8 @@ For parallel background work, use Agent Teams (TeamCreate + Agent with team_name
 For overnight/cron work, use headless `claude -p` with checkpoint-resume.
 For verification and simple tasks, delegate to local LLMs.
 
-See `docs/plans/2026-03-30-agent-team-architecture.md` for the full routing matrix.
+See `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md` and
+`docs/reference/AGENT_YAML_SCHEMA.md` for the routing model and agent config schema.
 
 ```bash
 # Human developers running CLI tools directly (not agent workflows):
@@ -500,7 +501,7 @@ Recurring wrong-approach mistakes surfaced from session analysis (875 sessions, 
 | Iterating plans beyond adversarial review cap | Adversarial review uses a 3-round severity-graded convergence loop. After round 3, present remaining CRITICAL/MAJOR findings to user. Do not continue internally. |
 | Inventing raw Kafka topic strings outside contract.yaml | All topic names must come from a `ContractConfig` or event contract YAML. Never hardcode topic strings. |
 | Writing "call helper X()" in a skill without a real implementation | If logic is needed, it must be a tool, node, or handler — not a phantom callable referenced in markdown. |
-| Adding hooks to `settings.json` | Never add a `hooks` block to `~/.claude/settings.json`. Hook registration lives exclusively in `plugins/onex/hooks/hooks.json`. The plugin manifest loads it automatically. Duplicate entries in `settings.json` cause every event to fire twice (doubled log entries, doubled Kafka emissions, find_python() crashes). deploy.sh actively removes any such entries on each deploy. |
+| Adding hooks to `settings.json` | Never add a `hooks` block to `~/.claude/settings.json`. Hook registration lives exclusively in `plugins/onex/hooks/hooks.json`. The plugin manifest loads it automatically. Duplicate entries in `settings.json` cause every event to fire twice (doubled log entries, doubled Kafka emissions, find_python() crashes). `plugins/onex/hooks/scripts/deploy.sh` removes stale manual entries during hook deployment. |
 
 ### Behavioral Directives
 
@@ -595,7 +596,6 @@ ls -la plugins/onex/hooks/scripts/*.sh                              # Check scri
 | Hook scripts | `plugins/onex/hooks/scripts/*.sh` | Shell handlers |
 | Handler modules | `plugins/onex/hooks/lib/*.py` | Python business logic |
 | Agent definitions | `plugins/onex/agents/configs/*.yaml` | Agent capabilities, triggers |
-| Commands | `plugins/onex/commands/*.md` | User-invocable workflows |
 | Skills | `plugins/onex/skills/*/SKILL.md` | Reusable methodologies |
 
 ### Public Entrypoints (stable API)
@@ -625,7 +625,7 @@ These modules are intended for external use:
 | `ENABLE_POSTGRES` | Enable database logging | No (default: false) |
 | `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
-| `OMNICLAUDE_PROJECT_ROOT` | **REMOVED (2026-03-30)** — caused hooks to resolve through bare clone instead of plugin cache. `CLAUDE_PLUGIN_ROOT` is now set exclusively by Claude Code's native plugin system. Removed from `settings.json` automatically by `deploy.sh`. | No |
+| `OMNICLAUDE_PROJECT_ROOT` | **REMOVED (2026-03-30)** — caused hooks to resolve through bare clone instead of plugin cache. `CLAUDE_PLUGIN_ROOT` is now set exclusively by Claude Code's native plugin system. Stale `settings.json` entries are removed by `plugins/onex/hooks/scripts/deploy.sh`. | No |
 | `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
 | `INTELLIGENCE_SERVICE_URL` | Overrides default context injection API URL (http://localhost:8053); ignored if `OMNICLAUDE_CONTEXT_API_URL` is explicitly set | No |
 | `OMNICLAUDE_CONTEXT_API_URL` | Overrides the omniintelligence HTTP API base URL used for context injection (default: `INTELLIGENCE_SERVICE_URL` or http://localhost:8053) | No |
@@ -828,12 +828,6 @@ activation_patterns:
 
 Agents are selected by matching `activation_patterns` against user prompts.
 
-### Commands (Markdown)
-
-**Location**: `plugins/onex/commands/*.md`
-
-User-invocable via `/command-name`. Examples: `/parallel-solve`, `/ci-failures`, `/pr-review-dev`
-
 ### Skills (SKILL.md)
 
 **Location**: `plugins/onex/skills/*/SKILL.md`
@@ -924,5 +918,5 @@ Canonical spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`
 
 ---
 
-**Last Updated**: 2026-02-13
-**Version**: 0.3.0
+**Last Updated**: 2026-05-22
+**Version**: 0.3.1

@@ -20,6 +20,8 @@ Note:
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
@@ -33,12 +35,14 @@ from omniclaude.hooks.handler_event_emitter import (
     MAX_PROMPT_SIZE,
     TRUNCATION_MARKER,
     ModelClaudeHookEventConfig,
+    ModelPatternDiscoveredConfig,
     ModelSessionStartedConfig,
     _get_event_type,
     _get_topic_base,
     create_kafka_config,
     emit_claude_hook_event,
     emit_hook_event,
+    emit_pattern_discovered,
     emit_prompt_submitted,
     emit_session_ended,
     emit_session_started_from_config,
@@ -1027,7 +1031,6 @@ class TestClaudeHookEventEmission:
     @pytest.mark.asyncio
     async def test_emit_claude_hook_event_truncates_large_prompt(self) -> None:
         """emit_claude_hook_event truncates prompts exceeding MAX_PROMPT_SIZE."""
-        import json
 
         # Create a 1.5MB prompt (exceeds 1MB MAX_PROMPT_SIZE)
         large_prompt = "x" * 1_500_000
@@ -1137,3 +1140,196 @@ class TestClaudeHookEventEmission:
         assert len(TRUNCATION_MARKER) < MAX_PROMPT_SIZE, (
             "MAX_PROMPT_SIZE must be greater than TRUNCATION_MARKER length"
         )
+
+
+# =============================================================================
+# Helpers for pattern discovered tests
+# =============================================================================
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def make_pattern_discovered_config(
+    *,
+    pattern_signature: str = "use explicit correlation_id for tracing",
+    domain: str = "code_quality",
+    confidence: float = 0.85,
+    source_system: str = "omniclaude",
+    metadata: dict | None = None,
+) -> ModelPatternDiscoveredConfig:
+    sig = pattern_signature
+    return ModelPatternDiscoveredConfig(
+        discovery_id=uuid4(),
+        pattern_signature=sig,
+        signature_hash=_sha256(sig),
+        domain=domain,
+        confidence=confidence,
+        source_session_id=uuid4(),
+        source_system=source_system,
+        discovered_at=datetime.now(UTC),
+        correlation_id=uuid4(),
+        metadata=metadata or {},
+    )
+
+
+@pytest.mark.usefixtures("kafka_env")
+class TestPatternDiscoveredEmission:
+    """Tests for emit_pattern_discovered() — OMN-8162."""
+
+    @pytest.mark.asyncio
+    async def test_emit_pattern_discovered_success(self) -> None:
+        """emit_pattern_discovered returns success result with mocked Kafka."""
+
+        config = make_pattern_discovered_config()
+
+        with patch(
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_pattern_discovered(config)
+
+        assert result.success is True
+        assert "pattern.discovered" in result.topic
+        mock_bus.publish.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_emit_pattern_discovered_topic_is_canonical(self) -> None:
+        """emit_pattern_discovered publishes to onex.evt.pattern.discovered.v1."""
+        from omniclaude.hooks.topics import TopicBase
+
+        config = make_pattern_discovered_config()
+
+        with patch(
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_pattern_discovered(config)
+
+        assert result.topic == TopicBase.PATTERN_DISCOVERED
+        assert result.topic == "onex.evt.pattern.discovered.v1"
+
+    @pytest.mark.asyncio
+    async def test_emit_pattern_discovered_payload_fields(self) -> None:
+        """Payload published to Kafka contains required ModelPatternDiscoveredEvent fields."""
+
+        config = make_pattern_discovered_config(
+            pattern_signature="always pass correlation_id",
+            domain="tracing",
+            confidence=0.9,
+            source_system="omniclaude",
+        )
+
+        captured: list[bytes] = []
+
+        with patch(
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+
+            async def capture_publish(**kwargs: object) -> None:
+                captured.append(kwargs["value"])  # type: ignore[arg-type]
+
+            mock_bus.publish.side_effect = capture_publish
+            mock_bus_class.return_value = mock_bus
+
+            await emit_pattern_discovered(config)
+
+        assert len(captured) == 1
+        data = json.loads(captured[0])
+        assert data["event_type"] == "PatternDiscovered"
+        assert data["domain"] == "tracing"
+        assert data["confidence"] == 0.9
+        assert data["source_system"] == "omniclaude"
+        assert data["signature_hash"] == config.signature_hash
+        assert data["correlation_id"] == str(config.correlation_id)
+
+    @pytest.mark.asyncio
+    async def test_emit_pattern_discovered_uses_session_id_as_partition_key(
+        self,
+    ) -> None:
+        """Partition key is the source_session_id bytes for session-ordered delivery."""
+
+        config = make_pattern_discovered_config()
+
+        with patch(
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            await emit_pattern_discovered(config)
+
+        call_kwargs = mock_bus.publish.call_args.kwargs
+        assert call_kwargs["key"] == str(config.source_session_id).encode("utf-8")
+
+    @pytest.mark.asyncio
+    async def test_emit_pattern_discovered_kafka_failure_returns_failed_result(
+        self,
+    ) -> None:
+        """Kafka publish failure returns failed result without raising."""
+
+        config = make_pattern_discovered_config()
+
+        with patch(
+            "omniclaude.hooks.emit_bus_bootstrapper.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.publish.side_effect = ConnectionError("broker unavailable")
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_pattern_discovered(config)
+
+        assert result.success is False
+        assert result.error_message is not None
+        assert "broker unavailable" in result.error_message
+
+    @pytest.mark.unit
+    def test_pattern_discovered_topic_in_topicbase(self) -> None:
+        """TopicBase.PATTERN_DISCOVERED is the canonical multi-producer domain topic."""
+        from omniclaude.hooks.topics import TopicBase
+
+        assert TopicBase.PATTERN_DISCOVERED == "onex.evt.pattern.discovered.v1"
+
+    def test_pattern_discovered_config_rejects_invalid_signature_hash(self) -> None:
+        """Pattern discovery config validates SHA-256 hash format."""
+        with pytest.raises(ValueError, match="signature_hash"):
+            ModelPatternDiscoveredConfig(
+                discovery_id=uuid4(),
+                pattern_signature="lowercase sha required",
+                signature_hash="not-a-sha",
+                domain="tracing",
+                confidence=0.75,
+                source_session_id=uuid4(),
+                source_system="omniclaude",
+                discovered_at=datetime.now(UTC),
+                correlation_id=uuid4(),
+            )
+
+    def test_pattern_discovered_config_rejects_naive_timestamp(self) -> None:
+        """Pattern discovery config requires timezone-aware timestamps."""
+        with pytest.raises(ValueError, match="timezone-aware"):
+            ModelPatternDiscoveredConfig(
+                discovery_id=uuid4(),
+                pattern_signature="explicit timestamps only",
+                signature_hash=_sha256("explicit timestamps only"),
+                domain="tracing",
+                confidence=0.75,
+                source_session_id=uuid4(),
+                source_system="omniclaude",
+                discovered_at=datetime(2026, 5, 22),
+                correlation_id=uuid4(),
+            )
+
+    def test_pattern_discovered_config_rejects_non_json_metadata(self) -> None:
+        """Pattern discovery metadata must be JSON-serializable."""
+        with pytest.raises(ValueError, match="JSON-serializable"):
+            make_pattern_discovered_config(metadata={"bad": object()})

@@ -90,7 +90,7 @@ Claude Code (stdin JSON)
          ▼
     ┌────┴──────────────────────────────────────────┐
     │  Delegation bridge (fire-and-forget)          │
-    │  delegate/_lib/run.py (background subprocess) │
+    │  delegate/_lib/handler_delegate_skill.py (background subprocess) │
     │                                               │
     │  TaskClassifier.classify(prompt)              │
     │  → publish to delegate-task.v1 (Kafka)        │

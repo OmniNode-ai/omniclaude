@@ -198,8 +198,8 @@ authoritatively in `hooks/hooks.json` (the plugin manifest). Claude Code
 loads `hooks.json` automatically via the plugin — duplicate entries in
 `settings.json` cause each event to fire twice.
 
-Running `deploy.sh --execute` (version 1.3.0+) automatically removes any
-legacy onex hook entries from `settings.json`.
+Running `hooks/scripts/deploy.sh --execute` automatically removes any legacy
+onex hook entries from `settings.json`.
 
 To remove them manually:
 
@@ -262,7 +262,7 @@ ls -la ~/.claude/plugins/ | grep onex
 
 # Verify plugin structure
 ls ~/.claude/plugins/onex/
-# Expected: hooks/ agents/ skills/ commands/ .claude-plugin/
+# Expected: hooks/ agents/ skills/ .claude-plugin/
 
 # Test hooks (should execute without errors)
 source .env
@@ -285,7 +285,7 @@ Restart Claude Code to apply the new plugin configuration.
 | **Hooks** | `claude/hooks/*.sh` | `plugins/onex/hooks/scripts/*.sh` |
 | **Agents** | `plugins/omniclaude-agents/agents/` | `plugins/onex/agents/` |
 | **Skills** | `plugins/omniclaude-skills/skills/` | `plugins/onex/skills/` |
-| **Commands** | `plugins/omniclaude-commands/commands/` | `plugins/onex/commands/` |
+| **Command workflows** | `plugins/omniclaude-commands/commands/` | Retired; workflow entrypoints now live under `plugins/onex/skills/` |
 | **Hook Libs** | `claude/hooks/lib/` | `plugins/onex/hooks/lib/` |
 | **Namespace** | Fragmented | ONEX-aligned |
 

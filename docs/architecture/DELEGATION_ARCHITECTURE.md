@@ -25,7 +25,7 @@ prompt normally.
 UserPromptSubmit
     │
     ▼ (non-slash, non-automated prompts only)
-plugins/onex/skills/delegate/_lib/run.py
+plugins/onex/skills/delegate/_lib/handler_delegate_skill.py
     │
     ├─ TaskClassifier.classify(prompt) → TaskContext
     │    delegatable intents: test, document, research, implement
@@ -71,7 +71,7 @@ plugins/onex/skills/delegate/_lib/run.py
 
 | File | Role |
 |------|------|
-| `plugins/onex/skills/delegate/_lib/run.py` | Classify + publish to Kafka |
+| `plugins/onex/skills/delegate/_lib/handler_delegate_skill.py` | Classify + publish to Kafka |
 | `src/omniclaude/lib/task_classifier.py` | Prompt classification |
 | `src/omniclaude/hooks/topics.py` (`DELEGATE_TASK`) | Kafka topic definition |
 | `plugins/onex/hooks/scripts/user-prompt-submit.sh` | Bridge invocation (fire-and-forget) |

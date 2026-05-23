@@ -621,7 +621,7 @@ fi
 # non-slash, non-automated prompt. node_delegate_skill_orchestrator owns routing,
 # runtime dispatch, terminal correlation, LLM inference, and quality gating.
 if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELEGATION_BEHAVIOR" != "off" ]]; then
-    _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
+    _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/handler_delegate_skill.py"
     if [[ -f "$_BRIDGE_SCRIPT" ]]; then
         (
             _BRIDGE_PROMPT="$(printf '%s' "$PROMPT_B64" | base64 -d 2>/dev/null || echo "")"
@@ -635,7 +635,7 @@ if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELE
         disown
         log "Delegation bridge: submitted to market adapter (corr=$CORRELATION_ID)"
     else
-        log "WARNING: delegation bridge run.py not found at $_BRIDGE_SCRIPT — market adapter submit skipped"
+        log "WARNING: delegation bridge handler_delegate_skill.py not found at $_BRIDGE_SCRIPT — Kafka publish skipped"
     fi
 fi
 

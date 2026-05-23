@@ -35,7 +35,7 @@ and portable workflow packages belong in [omnimarket](https://github.com/OmniNod
 | Agent routing | `plugins/onex/hooks/lib/route_via_events_wrapper.py` | Fuzzy + LLM agent selection |
 | Agent YAML definitions | `plugins/onex/agents/configs/` | Per-domain agent configs |
 | Skill stubs | `plugins/onex/skills/*/SKILL.md` | Thin UX triggers dispatching to Market nodes |
-| Slash commands | `plugins/onex/commands/` | User-facing command definitions |
+| Skill-driven workflows | `plugins/onex/skills/` | User-facing workflow entrypoints |
 | Hook Pydantic models | `src/omniclaude/hooks/schemas.py` | Hook payload schemas |
 | Context injection | `plugins/onex/hooks/lib/context_injection_wrapper.py` | Pattern enrichment |
 | Plugin daemon venv | `plugins/onex/lib/.venv` | Brew-interpreter venv for macOS LAN access |
