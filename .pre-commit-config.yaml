@@ -204,6 +204,17 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-11944: block new hardcoded LLM model IDs, endpoint URLs, timeout
+      # literals in LLM call paths, direct provider construction, and undeclared
+      # routing fallbacks. Pre-existing violations are in llm_hardcode_allowlist.json.
+      - id: no-hardcoded-llm-refs
+        name: No hardcoded LLM model IDs or endpoint refs (OMN-11944)
+        entry: python3 scripts/validation/validate_no_hardcoded_llm_refs.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'

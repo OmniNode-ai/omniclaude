@@ -1,0 +1,64 @@
+---
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# detect-hardcoded-llm-refs.yml
+#
+# CI gate: reject PRs that introduce new hardcoded LLM model IDs, endpoint URLs,
+# timeout literals in LLM call paths, direct provider construction bypassing the
+# router, or undeclared routing fallbacks.
+#
+# Pre-existing violations are captured in scripts/validation/llm_hardcode_allowlist.json.
+# New violations added by a PR will fail this gate.
+#
+# Suppression: add `# llm-hardcode-ok: <reason>` to the flagged line.
+# Allowlist: add a structured entry to scripts/validation/llm_hardcode_allowlist.json
+#            with: path, lineno, reason, ticket, owner.
+#
+# Implements OMN-11944.
+
+name: Detect Hardcoded LLM Refs
+
+on:
+  workflow_call:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'plugins/**'
+      - 'scripts/**'
+      - 'scripts/validation/llm_hardcode_allowlist.json'
+
+jobs:
+  detect-hardcoded-llm-refs:
+    name: detect-hardcoded-llm-refs
+    # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
+    runs-on: >-
+      ${{
+        github.event_name != 'pull_request'
+        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+      }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.26"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run hardcoded LLM reference detector
+        run: uv run python scripts/validation/validate_no_hardcoded_llm_refs.py
+
+      - name: Upload detector results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-hardcode-detector-results
+          path: .onex_state/llm_hardcode_detector_results.json
+          if-no-files-found: ignore
