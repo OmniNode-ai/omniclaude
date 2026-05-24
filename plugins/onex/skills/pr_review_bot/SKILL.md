@@ -5,6 +5,7 @@ version: 1.0.0
 level: intermediate
 debug: false
 category: review
+boundary_exempt: true
 tags:
   - review
   - pr
