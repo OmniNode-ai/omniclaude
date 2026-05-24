@@ -56,13 +56,13 @@ Runs the full PR review bot FSM pipeline:
 ## Quick Start
 
 ```
-/pr_review_bot 42 --reviewer-models qwen3-coder
-/pr_review_bot 42 OmniNode-ai/omnimarket --reviewer-models qwen3-coder
-/pr_review_bot 42 --dry-run --reviewer-models qwen3-coder
-/pr_review_bot 42 --severity-threshold CRITICAL --reviewer-models qwen3-coder
+/pr_review_bot 42 --reviewer-models <reviewer-key>
+/pr_review_bot 42 OmniNode-ai/omnimarket --reviewer-models <reviewer-key>
+/pr_review_bot 42 --dry-run --reviewer-models <reviewer-key>
+/pr_review_bot 42 --severity-threshold CRITICAL --reviewer-models <reviewer-key>
 ```
 
-(`qwen3-coder` above is illustrative; substitute any key registered in
+(`<reviewer-key>` above is illustrative; substitute any key registered in
 `ModelInferenceBridgeConfig.model_configs` for your deployment. Unknown keys
 now raise `ValueError` per OMN-9112 fail-loud policy.)
 

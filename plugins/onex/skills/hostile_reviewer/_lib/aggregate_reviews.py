@@ -21,8 +21,8 @@
     See: docs/plans/2026-04-07-unified-llm-workflow-migration.md — Task 11
     Epic: OMN-7781
 
-Runs Gemini CLI, Codex CLI, Qwen3-Coder, and DeepSeek-R1 as independent
-reviewers in parallel. Writes aggregated JSON to stdout; all errors to stderr.
+Runs configured local and frontier reviewers in parallel. Writes aggregated JSON
+to stdout; all errors to stderr.
 Exit code: 0 on success, 1 on total failure (no models ran).
 
 Token budget contract:
@@ -386,7 +386,7 @@ def _emit_codex_cost() -> None:
 
 
 # =============================================================================
-# HttpDriver (Qwen3-Coder, DeepSeek-R1)
+# HttpDriver (configured local HTTP endpoints)
 # =============================================================================
 
 _HTTP_PROMPT_TEMPLATE = (
@@ -512,44 +512,51 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
         head_sha = ""
 
     coder_url = os.environ.get("LLM_CODER_URL", "")
-    deepseek_url = os.environ.get("LLM_DEEPSEEK_R1_URL", "")
+    coder_model = os.environ.get("LLM_CODER_MODEL_NAME", "")
+    reasoning_url = os.environ.get("LLM_DEEPSEEK_R1_URL", "")
+    reasoning_model = os.environ.get("LLM_DEEPSEEK_R1_MODEL_NAME", "")
+    config_errors: list[str] = []
 
     drivers: list[tuple[str, Callable[[], list[dict[str, str]]]]] = [
         ("gemini", lambda: run_gemini(diff)),
         ("codex", lambda: run_codex(head_sha)),
     ]
     if coder_url:
-        _url = coder_url
-        drivers.append(
-            (
-                "qwen3-coder",
-                lambda: run_http_model(
-                    "qwen3-coder",
-                    _url,
-                    "cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit",
-                    diff,
-                ),
+        if not coder_model:
+            config_errors.append(
+                "LLM_CODER_MODEL_NAME is required when LLM_CODER_URL is set"
             )
-        )
-    if deepseek_url:
-        _ds_url = deepseek_url
-        drivers.append(
-            (
-                "deepseek-r1",
-                lambda: run_http_model(
-                    "deepseek-r1",
-                    _ds_url,
-                    "mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit",
-                    diff,
-                ),
+        else:
+            _url = coder_url
+            _model = coder_model
+            drivers.append(
+                (
+                    "local-coder",
+                    lambda: run_http_model("local-coder", _url, _model, diff),
+                )
             )
-        )
+    if reasoning_url:
+        if not reasoning_model:
+            config_errors.append(
+                "LLM_DEEPSEEK_R1_MODEL_NAME is required when LLM_DEEPSEEK_R1_URL is set"
+            )
+        else:
+            _url = reasoning_url
+            _model = reasoning_model
+            drivers.append(
+                (
+                    "local-reasoning",
+                    lambda: run_http_model("local-reasoning", _url, _model, diff),
+                )
+            )
 
     per_model: list[list[dict[str, str]]] = []
     per_model_raw: dict[str, list[dict[str, str]]] = {}  # preserved for event bus
     models_run: list[str] = []
     models_clean: list[str] = []  # completed successfully with zero findings
-    models_failed: list[str] = []
+    models_failed: list[str] = config_errors.copy()
+    for error in config_errors:
+        print(f"[config] {error}", file=sys.stderr)
 
     # Per-model timeouts: gemini=60s, codex=120s, http=90s — use 210s coordinator cap
     # future.result(timeout=5) gives the completed future 5s to unpack (it's already done)

@@ -1,5 +1,5 @@
 ---
-description: Multi-model adversarial code review (Gemini, Codex, Qwen3-Coder, DeepSeek-R1, Claude) with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
+description: Multi-model adversarial code review with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
 mode: full
 version: 6.0.0
 level: intermediate
@@ -84,7 +84,7 @@ args:
 ## What this skill does
 
 Dispatches through `onex run-node node_hostile_reviewer`. The node owns multi-model
-review dispatch (Codex, DeepSeek-R1, Qwen3-Coder), finding aggregation, convergence
+review dispatch, finding aggregation, convergence
 loop, and artifact persistence. This shim contains no inline review logic.
 
 **Announce at start:** "I'm using the hostile-reviewer skill."
