@@ -5,11 +5,7 @@ title: "Migrate maintained skills off hardcoded model defaults"
 summary: "Remove hardcoded model IDs from hostile_reviewer and pr_review_bot skills. Skills defer model selection to the node contract rather than owning model configuration."
 is_seam_ticket: false
 interface_change: false
-interfaces_touched:
-  - plugins/onex/skills/hostile_reviewer/SKILL.md
-  - plugins/onex/skills/hostile_reviewer/prompt.md
-  - plugins/onex/skills/pr_review_bot/SKILL.md
-  - plugins/onex/skills/pr_review_bot/prompt.md
+interfaces_touched: []
 evidence_requirements:
   - kind: tests
     description: "Pre-commit skill boundary and compliance hooks pass on changed skill files."
