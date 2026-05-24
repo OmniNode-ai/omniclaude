@@ -1,7 +1,7 @@
 ---
 description: End-to-end design workflow — brainstorm ideas into structured implementation plans with optional launch
 mode: full
-version: 2.0.0
+version: 2.1.0
 level: intermediate
 debug: false
 category: planning
@@ -33,11 +33,12 @@ args:
 # /onex:design_to_plan — Design to Plan Orchestrator
 
 **Skill ID**: `onex:design_to_plan`
-**Version**: 2.0.0
+**Version**: 2.1.0
 **Backing node**: `node_design_to_plan`
 
 ## Changelog
 
+- **2.1.0** — Added Phase 0 knowledge preload via `node_design_plan_context_compute` (OMN-11940).
 - **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_design_to_plan`.
 - **1.1.0** — Added Phase 3 launch path.
 
@@ -69,6 +70,21 @@ Contract target: `node_design_to_plan`
 Command topic: `onex.cmd.omnimarket.design-to-plan-start.v1`
 
 Terminal event: `onex.evt.omnimarket.design-to-plan-completed.v1`
+
+
+## Knowledge Preload (Phase 0)
+
+Before dispatching to `node_design_to_plan`, invoke `node_design_plan_context_compute`
+(omnimarket) to assemble an Architecture Context block. Inject the resulting
+`architecture_context_block` field into the node input as `knowledge_preload`.
+
+The node accepts pre-resolved results from three sources scoped to `repos_mentioned`:
+- **Repowise** `get_why` — architectural decisions to honor
+- **Antipattern registry** — patterns to avoid
+- **Memgraph** dependency impact — downstream systems affected
+
+Output fields: `systems_affected`, `decisions_to_honor`, `antipatterns_to_avoid`, `impact_summary`,
+and the formatted `architecture_context_block` (four `###` sections ready for prompt injection).
 
 ## Phase 2b: Adversarial Review — R11 Doctrine Compliance (Advisory)
 
