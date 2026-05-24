@@ -554,7 +554,7 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
     per_model_raw: dict[str, list[dict[str, str]]] = {}  # preserved for event bus
     models_run: list[str] = []
     models_clean: list[str] = []  # completed successfully with zero findings
-    models_failed: list[str] = config_errors.copy()
+    models_failed: list[str] = []
     for error in config_errors:
         print(f"[config] {error}", file=sys.stderr)
 
