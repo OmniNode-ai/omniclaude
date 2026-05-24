@@ -1,0 +1,43 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11917
+title: "Contract-Driven LLM Ecosystem Update"
+summary: >
+  Parent epic for migrating OmniNode LLM configuration from scattered hardcoded
+  served-model defaults to contract/overlay-driven logical routing surfaces.
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+  - "protocols"
+  - "public_api"
+  - "events"
+evidence_requirements:
+  - kind: "tests"
+    description: "Omniclaude routing migration focused tests pass without hidden served-model defaults."
+    command: "uv run pytest tests/delegation/test_runner.py tests/routing/test_handler_routing_llm.py tests/unit/config/test_llm_endpoint_registry_frontier.py tests/unit/config/test_model_local_llm_config.py tests/unit/hooks/lib/test_shadow_validation.py tests/unit/verification/test_local_verifier.py -q"
+  - kind: "manual"
+    description: "Central OCC evidence records deploy-gate and downstream PR binding for OMN-11917."
+    command: "grep -q '^status: PASS$' drift/dod_receipts/OMN-11917/dod-deploy/command.yaml"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-focused-tests"
+    description: "Focused Omniclaude tests pass for the LLM routing migration path."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/delegation/test_runner.py tests/routing/test_handler_routing_llm.py tests/unit/config/test_llm_endpoint_registry_frontier.py tests/unit/config/test_model_local_llm_config.py tests/unit/hooks/lib/test_shadow_validation.py tests/unit/verification/test_local_verifier.py -q"
+  - id: "dod-no-hidden-defaults"
+    description: "Runtime model config no longer silently substitutes served-model defaults when contract/overlay data is missing."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "git diff origin/main...HEAD -- src/omniclaude/config/model_local_llm_config.py src/omniclaude/verification/local_verifier.py src/omniclaude/delegation/runner.py src/omniclaude/nodes/node_agent_routing_compute/handler_routing_llm.py | rg 'No LLM endpoint|missing|served_model_id|model_name'"
+  - id: "dod-deploy"
+    description: "Post-merge deploy verification is required before production promotion; central OCC records the deploy-gate proof surface."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "deploy verification after merge: docker exec omninode-runtime uv run python -c 'from omniclaude.config.model_local_llm_config import LocalLLMConfig; print(LocalLLMConfig)'"

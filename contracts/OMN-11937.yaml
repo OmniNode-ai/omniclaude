@@ -1,0 +1,47 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11937
+title: "Omniclaude LLM routing migration"
+summary: >
+  Remove hardcoded served-model defaults from Omniclaude routing, verification,
+  Bifrost delegation, transition selection, and hook hint surfaces. Runtime
+  behavior must resolve through declared contract/overlay data and fail visibly
+  when required model routing configuration is missing.
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+  - "protocols"
+  - "public_api"
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused Omniclaude routing/config test suite passes."
+    command: "uv run pytest tests/delegation/test_runner.py tests/routing/test_handler_routing_llm.py tests/unit/config/test_llm_endpoint_registry_frontier.py tests/unit/config/test_model_local_llm_config.py tests/unit/hooks/lib/test_session_intent.py tests/unit/hooks/lib/test_shadow_validation.py tests/unit/nodes/node_agent_routing_compute/test_handler_routing_llm_tokens.py tests/unit/verification/test_local_verifier.py -q"
+  - kind: "manual"
+    description: "No hardcoded served-model fallback remains in touched Omniclaude runtime/config files."
+    command: "git diff origin/main...HEAD -- src/omniclaude plugins/onex/hooks/lib tests | rg 'claude-3|gpt-|qwen|deepseek|model_name|served_model_id'"
+  - kind: "manual"
+    description: "Central OCC evidence binds OMN-11937 to Omniclaude PR #1646."
+    command: "grep -q '^status: PASS$' drift/dod_receipts/OMN-11937/dod-omniclaude-pr-1646/command.yaml"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-focused-tests"
+    description: "Focused Omniclaude routing/config tests passed after removing model defaults."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/delegation/test_runner.py tests/routing/test_handler_routing_llm.py tests/unit/config/test_llm_endpoint_registry_frontier.py tests/unit/config/test_model_local_llm_config.py tests/unit/hooks/lib/test_session_intent.py tests/unit/hooks/lib/test_shadow_validation.py tests/unit/nodes/node_agent_routing_compute/test_handler_routing_llm_tokens.py tests/unit/verification/test_local_verifier.py -q"
+  - id: "dod-no-hidden-defaults"
+    description: "Touched runtime/config files remove hidden served-model fallbacks and require declared endpoint/model data."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "git diff origin/main...HEAD -- src/omniclaude/config/model_local_llm_config.py src/omniclaude/delegation/runner.py src/omniclaude/verification/local_verifier.py src/omniclaude/nodes/node_agent_routing_compute/handler_routing_llm.py src/omniclaude/nodes/node_transition_selector_effect/node.py"
+  - id: "dod-deploy"
+    description: "Post-merge deploy verification imports the changed runtime config and routing surfaces in the runtime container."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "deploy verification after merge: docker exec omninode-runtime uv run python -c 'from omniclaude.config.model_local_llm_config import LocalLLMConfig; from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import HandlerRoutingLLM; print(LocalLLMConfig, HandlerRoutingLLM)'"
