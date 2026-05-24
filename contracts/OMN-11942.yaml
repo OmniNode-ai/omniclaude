@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11942
+title: "Migrate maintained skills off hardcoded model defaults"
+summary: "Remove hardcoded model IDs from hostile_reviewer and pr_review_bot skills. Skills defer model selection to the node contract rather than owning model configuration."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched:
+  - plugins/onex/skills/hostile_reviewer/SKILL.md
+  - plugins/onex/skills/hostile_reviewer/prompt.md
+  - plugins/onex/skills/pr_review_bot/SKILL.md
+  - plugins/onex/skills/pr_review_bot/prompt.md
+evidence_requirements:
+  - kind: tests
+    description: "Pre-commit skill boundary and compliance hooks pass on changed skill files."
+    command: "uv run pre-commit run --files plugins/onex/skills/hostile_reviewer/SKILL.md plugins/onex/skills/hostile_reviewer/prompt.md plugins/onex/skills/pr_review_bot/SKILL.md plugins/onex/skills/pr_review_bot/prompt.md"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-skills-no-hardcoded-models
+    description: "hostile_reviewer and pr_review_bot skills pass null for models/judge_model, deferring to node contract."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "! grep -E '\"(codex|deepseek-r1|qwen3-coder|mlx-community|cyankiwi)\"' plugins/onex/skills/hostile_reviewer/SKILL.md plugins/onex/skills/hostile_reviewer/prompt.md plugins/onex/skills/pr_review_bot/SKILL.md"
+  - id: dod-skill-boundary-passes
+    description: "Skill-node boundary validator passes for hostile_reviewer and pr_review_bot."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run python scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills --skill hostile_reviewer --strict && uv run python scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills --skill pr_review_bot --strict"
