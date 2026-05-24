@@ -35,7 +35,7 @@ args:
     description: Linear ticket ID for loading TCB constraints
     required: false
   - name: models
-    description: "Comma-separated model list (default codex,deepseek-r1)."
+    description: "Comma-separated model list. Defaults to the node contract's configured models when omitted."
     required: false
   - name: passes
     description: "Fixed number of passes to run. Default: iterates until 2 consecutive clean passes."
@@ -96,7 +96,7 @@ loop, and artifact persistence. This shim contains no inline review logic.
 uv run onex run-node node_hostile_reviewer --input '{
   "pr": <pr_number>,
   "repo": "<owner/repo>",
-  "models": ["codex", "deepseek-r1"],
+  "models": null,
   "passes": null,
   "gate": false,
   "gate_only": false,
@@ -108,7 +108,7 @@ uv run onex run-node node_hostile_reviewer --input '{
 ```bash
 uv run onex run-node node_hostile_reviewer --input '{
   "file": "<path>",
-  "models": ["codex", "deepseek-r1"],
+  "models": null,
   "passes": null
 }' 2>/dev/null
 ```

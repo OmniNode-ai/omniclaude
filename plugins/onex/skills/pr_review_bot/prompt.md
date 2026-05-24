@@ -16,7 +16,7 @@ Use this skill when you need to run automated multi-model adversarial review on 
 Run the node via `onex run-node`:
 
 ```bash
-uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "owner/repo", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"], "judge_model": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16"}'  # pragma: allowlist secret
+uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "owner/repo", "reviewer_models": ["<key-from-ModelInferenceBridgeConfig>"]}'
 ```
 
 ## Arguments
@@ -26,22 +26,19 @@ uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "ow
 | `pr_number` | int | Yes | — | PR number to review |
 | `repo` | string | Yes | — | GitHub repo in `owner/repo` format |
 | `reviewer_models` | list | Yes | — | Models to use for review (must be registered in ModelInferenceBridgeConfig) |
-| `judge_model` | string | No | `mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16` | Judge model for thread verification; must be a fully qualified identifier registered in `ModelInferenceBridgeConfig`. |
+| `judge_model` | string | No | node contract default | Judge model for thread verification; must be a key registered in `ModelInferenceBridgeConfig`. |
 | `severity_threshold` | string | No | `MAJOR` | Minimum severity to post (MAJOR, CRITICAL) |
 | `dry_run` | bool | No | `false` | Run without posting to GitHub |
 | `max_findings_per_pr` | int | No | 20 | Cap on threads to post |
 
 ## Example
 
-All examples use the manifest-canonical runtime dispatcher.
+All examples use the manifest-canonical runtime dispatcher. Replace `<reviewer-key>` with a key registered in `ModelInferenceBridgeConfig.model_configs` for your deployment.
 
 ```bash
-# Full review with defaults
-uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"]}'  # pragma: allowlist secret
+# Full review
+uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["<reviewer-key>"]}'
 
 # Dry run to test
-uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"], "dry_run": true}'  # pragma: allowlist secret
-
-# Custom models
-uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"], "judge_model": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16"}'  # pragma: allowlist secret
+uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["<reviewer-key>"], "dry_run": true}'
 ```
