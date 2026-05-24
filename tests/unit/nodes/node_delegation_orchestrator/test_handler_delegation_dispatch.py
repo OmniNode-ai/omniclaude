@@ -10,6 +10,9 @@ from omniclaude.config.model_local_llm_config import LocalLlmEndpointRegistry
 from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_dispatch import (
     select_backend,
 )
+from tests.constants import MODEL_CLOUD_GLM
+
+_OPENROUTER_MODEL = MODEL_CLOUD_GLM
 
 
 @pytest.fixture
@@ -70,7 +73,7 @@ def test_openrouter_is_primary_when_keyed(
     assert route is not None
     assert route.backend == "openrouter"
     assert route.base_url == "https://openrouter.ai/api/v1"
-    assert route.model == "z-ai/glm-4.7-flash"
+    assert route.model == _OPENROUTER_MODEL
     assert route.api_key == "test-openrouter-key"
     assert route.timeout == 60
 

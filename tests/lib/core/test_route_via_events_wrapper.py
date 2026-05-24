@@ -34,6 +34,10 @@ from route_via_events_wrapper import (
     route_via_events,
 )
 
+from tests.constants import MODEL_LOCAL_GENERAL
+
+_ROUTING_MODEL = MODEL_LOCAL_GENERAL
+
 
 class TestComputeRoutingPath:
     """Tests for the _compute_routing_path helper function."""
@@ -945,7 +949,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",
@@ -961,7 +965,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",
@@ -977,7 +981,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",
@@ -1001,7 +1005,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",
@@ -1039,7 +1043,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",
@@ -1076,7 +1080,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",
@@ -1133,7 +1137,7 @@ class TestRouteViaLlmFallback:
         with (
             patch(
                 "route_via_events_wrapper._get_llm_routing_url",
-                return_value=("http://localhost:8200", "qwen2.5-14b"),
+                return_value=("http://localhost:8200", _ROUTING_MODEL),
             ),
             patch(
                 "route_via_events_wrapper._run_async",

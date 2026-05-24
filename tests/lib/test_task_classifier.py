@@ -21,6 +21,9 @@ from omniclaude.lib.task_classifier import (
     TaskContext,
     TaskIntent,
 )
+from tests.constants import MODEL_LOCAL_GENERAL
+
+_DELEGATE_MODEL = MODEL_LOCAL_GENERAL
 
 # =============================================================================
 # Fixtures
@@ -854,13 +857,13 @@ class TestModelDelegationScore:
         """ModelDelegationScore can be instantiated for a delegatable result."""
         score = ModelDelegationScore(
             delegatable=True,
-            delegate_to_model="qwen2.5-14b",
+            delegate_to_model=_DELEGATE_MODEL,
             confidence=0.95,
             estimated_savings_usd=0.0112,
             reasons=["intent 'document' is in the delegation allow-list"],
         )
         assert score.delegatable is True
-        assert score.delegate_to_model == "qwen2.5-14b"
+        assert score.delegate_to_model == _DELEGATE_MODEL
         assert score.confidence == 0.95
         assert score.estimated_savings_usd == 0.0112
         assert len(score.reasons) == 1

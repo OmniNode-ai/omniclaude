@@ -59,6 +59,10 @@ pytestmark = pytest.mark.skipif(
     ),
 )
 
+from tests.constants import MODEL_LOCAL_GENERAL  # noqa: E402
+
+_ROUTING_MODEL = MODEL_LOCAL_GENERAL
+
 
 def _inject_path(p: Path) -> None:
     s = str(p)
@@ -130,7 +134,7 @@ def _fake_routing_decision(task_type: str = "document") -> Any:
     return ModelRoutingDecision(
         correlation_id=uuid.uuid4(),
         task_type=task_type,
-        selected_model="qwen2.5-14b",
+        selected_model=_ROUTING_MODEL,
         selected_backend_id=uuid.uuid4(),
         endpoint_url="http://localhost:9999",
         cost_tier="low",
@@ -185,7 +189,7 @@ class TestHappyPathDocumentDelegation:
             _MOCKED_DOCUMENT_RESPONSE,
             {"prompt_tokens": 50, "completion_tokens": 80, "total_tokens": 130},
             42,
-            "qwen2.5-14b",
+            _ROUTING_MODEL,
         )
 
         with (
@@ -206,7 +210,7 @@ class TestHappyPathDocumentDelegation:
 
         assert result.quality_passed is True
         assert result.content == _MOCKED_DOCUMENT_RESPONSE
-        assert result.model_used == "qwen2.5-14b"
+        assert result.model_used == _ROUTING_MODEL
         assert result.failure_reason == ""
 
     def test_full_e2e_pipeline_document_path(
@@ -238,7 +242,7 @@ class TestHappyPathDocumentDelegation:
             _MOCKED_DOCUMENT_RESPONSE,
             {"prompt_tokens": 50, "completion_tokens": 80, "total_tokens": 130},
             42,
-            "qwen2.5-14b",
+            _ROUTING_MODEL,
         )
         with (
             patch.object(

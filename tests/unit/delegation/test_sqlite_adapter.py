@@ -20,6 +20,7 @@ from omniclaude.delegation.sqlite_adapter import (
     SQLiteProjectionAdapter,
     make_adapter,
 )
+from tests.constants import MODEL_LOCAL_CODER
 
 
 @pytest.fixture
@@ -58,7 +59,7 @@ def _llm_metric(
 ) -> ModelLlmCallMetric:
     base = {
         "input_hash": input_hash,
-        "model_id": "qwen3-coder-30b",
+        "model_id": MODEL_LOCAL_CODER,
         "prompt_tokens": 1024,
         "completion_tokens": 512,
         "estimated_cost_usd": 0.001,

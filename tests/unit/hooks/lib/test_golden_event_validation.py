@@ -48,6 +48,12 @@ _LIB_PATH = str(
 if _LIB_PATH not in sys.path:
     sys.path.insert(0, _LIB_PATH)
 
+
+from tests.constants import MODEL_CLOUD_SONNET, MODEL_LOCAL_CODER
+
+_MODEL_SONNET = MODEL_CLOUD_SONNET
+_MODEL_LOCAL_CODER = MODEL_LOCAL_CODER
+
 # All tests in this module are unit tests
 pytestmark = pytest.mark.unit
 
@@ -565,8 +571,8 @@ class TestGoldenHostileReviewerCompleted:
             emit_hostile_reviewer_completed(
                 mode="file",
                 target="docs/plans/my-plan.md",
-                models_attempted=["claude-sonnet-4-20250514"],
-                models_succeeded=["claude-sonnet-4-20250514"],
+                models_attempted=[_MODEL_SONNET],
+                models_succeeded=[_MODEL_SONNET],
                 verdict="risks_noted",
                 total_findings=3,
                 critical_count=0,
@@ -606,7 +612,7 @@ class TestGoldenPlanReviewCompleted:
                 total_rounds=3,
                 final_status="converged",
                 findings_by_severity={"CRITICAL": 0, "MAJOR": 1, "MINOR": 2},
-                models_used=["claude-sonnet-4-20250514"],
+                models_used=[_MODEL_SONNET],
                 correlation_id="corr-plan-001",
             )
 
@@ -776,7 +782,7 @@ class TestGoldenEnrichmentEvent:
             session_id="sess-enrich-golden-001",
             correlation_id="corr-enrich-golden-001",
             enrichment_type="summarization",
-            model_used="qwen3-coder-30b",
+            model_used=_MODEL_LOCAL_CODER,
             latency_ms=45.7,
             result_token_count=200,
             relevance_score=None,

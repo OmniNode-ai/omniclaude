@@ -15,6 +15,7 @@ from omniclaude.shared.models.model_evidence_written_event import (
 from omniclaude.shared.models.model_task_assigned_event import ModelTaskAssignedEvent
 from omniclaude.shared.models.model_task_completed_event import ModelTaskCompletedEvent
 from omniclaude.shared.models.model_task_progress_event import ModelTaskProgressEvent
+from tests.constants import MODEL_LOCAL_FAST, MODEL_LOCAL_REASONING
 
 
 @pytest.mark.unit
@@ -47,7 +48,7 @@ class TestTeamEventModels:
             session_id="sess-abc",
             correlation_id="corr-123",
             dispatch_surface="local_llm",
-            agent_model="qwen3-14b",
+            agent_model=MODEL_LOCAL_FAST,
             verification_verdict="PASS",
             evidence_path=".onex_state/evidence/task-1/",
             emitted_at=datetime(2026, 3, 30, 12, 5, 0, tzinfo=UTC),
@@ -80,7 +81,7 @@ class TestTeamEventModels:
             session_id="sess-ghi",
             correlation_id="corr-789",
             dispatch_surface="team_worker",
-            agent_model="deepseek-r1",
+            agent_model=MODEL_LOCAL_REASONING,
             evidence_type="self_check",
             evidence_path=".onex_state/evidence/task-3/self-check.yaml",
             passed=True,

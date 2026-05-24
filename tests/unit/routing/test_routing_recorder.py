@@ -13,6 +13,7 @@ import json
 import pytest
 
 from omniclaude.routing.routing_recorder import ModelRoutingDecision, RoutingRecorder
+from tests.constants import MODEL_LOCAL_FAST
 
 
 @pytest.mark.unit
@@ -25,7 +26,7 @@ class TestRoutingRecorder:
         recorder.record(
             task_id="task-1",
             dispatch_surface="local_llm",
-            agent_model="qwen3-14b",
+            agent_model=MODEL_LOCAL_FAST,
             rationale="Mechanical verification, read-only, bounded context",
             fallback="claude-opus-4-6",
         )
@@ -36,7 +37,7 @@ class TestRoutingRecorder:
         assert d.task_id == "task-1"
         assert d.intended_surface == "local_llm"
         assert d.executed_surface == "local_llm"
-        assert d.agent_model == "qwen3-14b"
+        assert d.agent_model == MODEL_LOCAL_FAST
         assert d.rationale == "Mechanical verification, read-only, bounded context"
         assert d.fallback == "claude-opus-4-6"
         assert d.reroute_reason is None
@@ -107,7 +108,7 @@ class TestRoutingRecorder:
             task_id="t1",
             intended_surface="local_llm",
             executed_surface="local_llm",
-            agent_model="qwen3-14b",
+            agent_model=MODEL_LOCAL_FAST,
             rationale="test",
         )
         with pytest.raises(Exception):

@@ -868,12 +868,12 @@ class TestSummarizationMarkdownParsing:
         # covers both localhost and production-style host/port combinations.
         summary = (
             "## Summary\n\n"
-            "The `HandlerLlmOpenaiCompatible` handler calls `qwen3-coder-30b-a3b-instruct` at "
+            f"The `HandlerLlmOpenaiCompatible` handler calls `{_SUMMARIZATION_DEFAULT_MODEL}` at "
             "`http://localhost:8100/v1/chat/completions` with a 3-minute timeout.\n"
         )
         result = _make_summarization_result(summary_markdown=summary)
         assert "HandlerLlmOpenaiCompatible" in result.summary_markdown
-        assert "qwen3-coder-30b-a3b-instruct" in result.summary_markdown
+        assert _SUMMARIZATION_DEFAULT_MODEL in result.summary_markdown
 
 
 # ============================================================================
@@ -1092,10 +1092,10 @@ class TestSummarizationBadOutputRecovery:
     def test_net_guard_model_used_is_set(self) -> None:
         """Even when net-token guard fires, model_used is set (LLM was called)."""
         result = _make_summarization_result(
-            model_used="qwen3-coder-30b-a3b-instruct",
+            model_used=_SUMMARIZATION_DEFAULT_MODEL,
             relevance_score=1.0,
         )
-        assert result.model_used == "qwen3-coder-30b-a3b-instruct"
+        assert result.model_used == _SUMMARIZATION_DEFAULT_MODEL
         assert result.model_used != _SUMMARIZATION_PASSTHROUGH_MODEL
 
     def test_empty_context_passthrough_result_is_valid(self) -> None:

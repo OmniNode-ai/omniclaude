@@ -20,10 +20,12 @@ from omniclaude.delegation.sqlite_adapter import (
     ModelDelegationEvent,
     SQLiteProjectionAdapter,
 )
+from tests.constants import MODEL_LOCAL_CODER
 
 _MIGRATIONS_DIR = (
     Path(__file__).parents[2] / "src" / "omniclaude" / "delegation" / "migrations"
 )
+_CODER_MODEL = MODEL_LOCAL_CODER
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +165,7 @@ class TestWriteDelegationEventCompliance:
             session_id="sess-001",
             task_type="document",
             delegated_to="qwen3-coder",
-            model_name="qwen3-coder-30b",
+            model_name=_CODER_MODEL,
             tokens_to_compliance=4200,
             compliance_attempts=3,
         )

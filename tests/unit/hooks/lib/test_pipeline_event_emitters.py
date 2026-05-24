@@ -9,6 +9,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.constants import MODEL_CLOUD_SONNET
+
+_MODEL = MODEL_CLOUD_SONNET  # used in assertions below
+
 
 @pytest.fixture
 def mock_emit_fn() -> MagicMock:
@@ -309,8 +313,8 @@ class TestEmitHostileReviewerCompleted:
         emit_hostile_reviewer_completed(
             mode="file",
             target="docs/plans/my-plan.md",
-            models_attempted=["claude-sonnet-4-20250514"],
-            models_succeeded=["claude-sonnet-4-20250514"],
+            models_attempted=[_MODEL],
+            models_succeeded=[_MODEL],
             verdict="risks_noted",
             total_findings=3,
             critical_count=0,
@@ -324,8 +328,8 @@ class TestEmitHostileReviewerCompleted:
         assert topic == "hostile.reviewer.completed"
         assert payload["mode"] == "file"
         assert payload["target"] == "docs/plans/my-plan.md"
-        assert payload["models_attempted"] == ["claude-sonnet-4-20250514"]
-        assert payload["models_succeeded"] == ["claude-sonnet-4-20250514"]
+        assert payload["models_attempted"] == [_MODEL]
+        assert payload["models_succeeded"] == [_MODEL]
         assert payload["verdict"] == "risks_noted"
         assert payload["total_findings"] == 3
         assert payload["critical_count"] == 0

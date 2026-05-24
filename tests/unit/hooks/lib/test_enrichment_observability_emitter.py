@@ -46,6 +46,8 @@ if _LIB_PATH not in sys.path:
 
 import enrichment_observability_emitter as eoe
 
+from tests.constants import MODEL_LOCAL_GENERAL
+
 # All tests in this module are unit tests
 pytestmark = pytest.mark.unit
 
@@ -99,7 +101,7 @@ class TestBuildEnrichmentEventPayload:
             session_id="sess-001",
             correlation_id="corr-abc",
             enrichment_type="summarization",
-            model_used="qwen2.5-14b",
+            model_used=MODEL_LOCAL_GENERAL,
             latency_ms=42.7,
             result_token_count=150,
             relevance_score=0.87,
