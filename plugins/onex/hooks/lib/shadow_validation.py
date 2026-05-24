@@ -25,9 +25,9 @@ Feature flags:
     SHADOW_EXIT_THRESHOLD=0.95           (float, default 0.95)
     SHADOW_EXIT_WINDOW_DAYS=30           (int, default 30)
     SHADOW_CONSECUTIVE_PASSING_DAYS=0    (int, updated by exit-criteria reducer)
-    SHADOW_MODEL=claude-sonnet-4-6       (model identifier for shadow calls)
+    SHADOW_MODEL=<served model id>       (required model identifier for shadow calls)
     SHADOW_CLAUDE_API_KEY=<key>          (Anthropic API key for shadow calls)
-    SHADOW_CLAUDE_BASE_URL=              (optional override, default https://api.anthropic.com)
+    SHADOW_CLAUDE_BASE_URL=<url>         (required API base URL for shadow calls)
     SHADOW_CALL_TIMEOUT_S=30             (float, default 30 seconds)
     SHADOW_MAX_TOKENS=2048               (int, max tokens for shadow API call, default 2048)
 
@@ -105,9 +105,6 @@ _DEFAULT_SHADOW_TIMEOUT_S: float = 30.0
 
 # Default max tokens for the shadow Claude API call.
 _DEFAULT_SHADOW_MAX_TOKENS: int = 2048
-
-# Default shadow model identifier.
-_DEFAULT_SHADOW_MODEL: str = "claude-sonnet-4-6"
 
 # Default exit criteria thresholds.
 _DEFAULT_EXIT_THRESHOLD: float = 0.95
@@ -451,9 +448,9 @@ def _call_shadow_claude(
 
     Args:
         prompt: The user prompt to send (already redacted by delegation_orchestrator).
-        model: Claude model identifier (e.g., "claude-sonnet-4-6").
+        model: Served model identifier supplied by runtime config.
         api_key: Anthropic API key.
-        base_url: API base URL (default: https://api.anthropic.com).
+        base_url: API base URL supplied by runtime config.
         timeout_s: HTTP timeout in seconds.
         max_tokens: Maximum number of tokens in the shadow response.
 
@@ -811,11 +808,16 @@ def run_shadow_validation(
             )
             return False
 
-        # Resolve shadow model configuration
-        shadow_model = (
-            os.environ.get("SHADOW_MODEL", _DEFAULT_SHADOW_MODEL).strip()
-            or _DEFAULT_SHADOW_MODEL
-        )
+        # Resolve shadow model configuration. Runtime model and endpoint truth
+        # must be supplied by env/overlay; this hook must not invent provider
+        # defaults when the routing surface is incomplete.
+        shadow_model = os.environ.get("SHADOW_MODEL", "").strip()
+        if not shadow_model:
+            logger.warning(
+                "SHADOW_MODEL not set; shadow validation skipped for correlation=%s",
+                correlation_id,
+            )
+            return False
 
         api_key = os.environ.get(  # noqa: secrets  # pragma: allowlist secret
             "SHADOW_CLAUDE_API_KEY", ""
@@ -827,10 +829,14 @@ def run_shadow_validation(
             )
             return False
 
-        base_url = (
-            os.environ.get("SHADOW_CLAUDE_BASE_URL", "").strip()
-            or "https://api.anthropic.com"
-        )
+        base_url = os.environ.get("SHADOW_CLAUDE_BASE_URL", "").strip()
+        if not base_url:
+            logger.warning(
+                "SHADOW_CLAUDE_BASE_URL not set; shadow validation skipped for "
+                "correlation=%s",
+                correlation_id,
+            )
+            return False
 
         # Security: Reject non-HTTPS base URLs unless they point to loopback.
         # _LOCAL_PREFIXES is defined at module level (see above).

@@ -162,10 +162,10 @@ class TestGetHintForIntent:
     """Tests for intent-to-model mapping."""
 
     def test_known_class_returns_correct_model(self) -> None:
-        """SECURITY intent maps to opus model."""
+        """SECURITY intent maps to a logical routing role."""
         hint = imh.get_hint_for_intent("SECURITY")
         assert hint.intent_class == "SECURITY"
-        assert "opus" in hint.recommended_model.lower()
+        assert hint.recommended_model == "intent_security"
         assert hint.temperature_hint < 0.3
         assert "security_audit" in hint.validators
         assert hint.sandbox == "enforced"

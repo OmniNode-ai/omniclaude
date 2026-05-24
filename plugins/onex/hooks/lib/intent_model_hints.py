@@ -14,17 +14,17 @@ that Claude can act on, but is NOT an override — explicit user instructions
 always take precedence.
 
 Environment variables (prefix: OMNICLAUDE_INTENT_):
-    OMNICLAUDE_INTENT_SECURITY_MODEL=claude-opus-4-6
+    OMNICLAUDE_INTENT_SECURITY_MODEL=intent_security
     OMNICLAUDE_INTENT_SECURITY_TEMPERATURE=0.1
     OMNICLAUDE_INTENT_SECURITY_VALIDATORS=security_audit,least_privilege
     OMNICLAUDE_INTENT_SECURITY_SANDBOX=enforced
 
-    OMNICLAUDE_INTENT_CODE_MODEL=claude-sonnet-4-6
+    OMNICLAUDE_INTENT_CODE_MODEL=intent_code
     OMNICLAUDE_INTENT_CODE_TEMPERATURE=0.3
     OMNICLAUDE_INTENT_CODE_VALIDATORS=code_quality,style
     OMNICLAUDE_INTENT_CODE_SANDBOX=standard
 
-    OMNICLAUDE_INTENT_GENERAL_MODEL=claude-sonnet-4-6
+    OMNICLAUDE_INTENT_GENERAL_MODEL=intent_general
     OMNICLAUDE_INTENT_GENERAL_TEMPERATURE=0.5
     OMNICLAUDE_INTENT_GENERAL_VALIDATORS=
     OMNICLAUDE_INTENT_GENERAL_SANDBOX=none
@@ -52,62 +52,63 @@ class IntentModelHint:
 
 
 # ---------------------------------------------------------------------------
-# Default hint table (overridable via env vars)
+# Default logical-role hint table (overridable via env vars). Values here are
+# stable routing identities, not provider/runtime served model IDs.
 # ---------------------------------------------------------------------------
 
 _DEFAULT_HINTS: dict[str, IntentModelHint] = {
     "SECURITY": IntentModelHint(
         intent_class="SECURITY",
-        recommended_model="claude-opus-4-6",
+        recommended_model="intent_security",
         temperature_hint=0.1,
         validators=["security_audit", "least_privilege"],
         sandbox="enforced",
     ),
     "CODE": IntentModelHint(
         intent_class="CODE",
-        recommended_model="claude-sonnet-4-6",
+        recommended_model="intent_code",
         temperature_hint=0.3,
         validators=["code_quality"],
         sandbox="standard",
     ),
     "REFACTOR": IntentModelHint(
         intent_class="REFACTOR",
-        recommended_model="claude-sonnet-4-6",
+        recommended_model="intent_code",
         temperature_hint=0.3,
         validators=["code_quality", "style"],
         sandbox="standard",
     ),
     "TESTING": IntentModelHint(
         intent_class="TESTING",
-        recommended_model="claude-sonnet-4-6",
+        recommended_model="intent_testing",
         temperature_hint=0.2,
         validators=["test_coverage"],
         sandbox="standard",
     ),
     "DOCUMENTATION": IntentModelHint(
         intent_class="DOCUMENTATION",
-        recommended_model="claude-sonnet-4-6",
+        recommended_model="intent_documentation",
         temperature_hint=0.5,
         validators=[],
         sandbox="none",
     ),
     "REVIEW": IntentModelHint(
         intent_class="REVIEW",
-        recommended_model="claude-opus-4-6",
+        recommended_model="intent_review",
         temperature_hint=0.2,
         validators=["code_quality", "style"],
         sandbox="standard",
     ),
     "DEBUGGING": IntentModelHint(
         intent_class="DEBUGGING",
-        recommended_model="claude-sonnet-4-6",
+        recommended_model="intent_debugging",
         temperature_hint=0.2,
         validators=[],
         sandbox="standard",
     ),
     "GENERAL": IntentModelHint(
         intent_class="GENERAL",
-        recommended_model="claude-sonnet-4-6",
+        recommended_model="intent_general",
         temperature_hint=0.5,
         validators=[],
         sandbox="none",
@@ -116,7 +117,7 @@ _DEFAULT_HINTS: dict[str, IntentModelHint] = {
 
 _FALLBACK_HINT = IntentModelHint(
     intent_class="GENERAL",
-    recommended_model="claude-sonnet-4-6",
+    recommended_model="intent_general",
     temperature_hint=0.5,
     validators=[],
     sandbox="none",

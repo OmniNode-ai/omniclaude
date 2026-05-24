@@ -55,6 +55,12 @@ def _enable_shadow(monkeypatch: pytest.MonkeyPatch, rate: str = "1.0") -> None:
     monkeypatch.setenv("SHADOW_EXIT_WINDOW_DAYS", "30")
 
 
+def _configure_shadow_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Configure explicit shadow model routing inputs for runtime tests."""
+    monkeypatch.setenv("SHADOW_MODEL", "configured-shadow-model")
+    monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "https://shadow.example.com")
+
+
 # ---------------------------------------------------------------------------
 # Feature flag tests
 # ---------------------------------------------------------------------------
@@ -472,7 +478,7 @@ class TestRunShadowValidation:
         """With all config present, a thread is started and True is returned."""
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
-        monkeypatch.setenv("SHADOW_MODEL", "claude-test-model")
+        _configure_shadow_route(monkeypatch)
 
         started_threads: list[Any] = []
 
@@ -501,6 +507,7 @@ class TestRunShadowValidation:
         """run_shadow_validation never raises even when threading.Thread raises."""
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        _configure_shadow_route(monkeypatch)
 
         with patch("threading.Thread", side_effect=RuntimeError("boom")):
             # Must not raise
@@ -544,7 +551,7 @@ class TestRunShadowValidation:
         """
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
-        monkeypatch.setenv("SHADOW_MODEL", "claude-test-model")
+        _configure_shadow_route(monkeypatch)
 
         with patch("threading.Thread.start", MagicMock()):
             with pytest.raises(
@@ -566,6 +573,7 @@ class TestRunShadowValidation:
         """Non-HTTPS external URL (http://api.example.com) is rejected for security."""
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "configured-shadow-model")
         monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://api.example.com")
         result = sv.run_shadow_validation(
             prompt="document this",
@@ -584,6 +592,7 @@ class TestRunShadowValidation:
         """Non-HTTPS localhost URL (http://localhost) is accepted for local dev/testing."""
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "configured-shadow-model")
         monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://localhost:8000")
 
         started_threads: list[Any] = []
@@ -611,6 +620,7 @@ class TestRunShadowValidation:
         """Non-HTTPS loopback URL (http://127.0.0.1) is accepted for local dev/testing."""
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "configured-shadow-model")
         monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://127.0.0.1:8000")
 
         started_threads: list[Any] = []
@@ -638,6 +648,7 @@ class TestRunShadowValidation:
         """Non-HTTPS IPv6 loopback URL (http://[::1]) is accepted for local dev/testing."""
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "configured-shadow-model")
         monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://[::1]:8000")
 
         started_threads: list[Any] = []
@@ -673,6 +684,7 @@ class TestRunShadowValidation:
 
         _enable_shadow(monkeypatch)
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        _configure_shadow_route(monkeypatch)
 
         # Pass a UUID object (non-string) as correlation_id
         non_string_corr_id = uuid.uuid4()
@@ -706,7 +718,7 @@ class TestRunShadowValidation:
         monkeypatch.setenv("SHADOW_CONSECUTIVE_PASSING_DAYS", "29")
         monkeypatch.setenv("SHADOW_EXIT_WINDOW_DAYS", "30")
         monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
-        monkeypatch.setenv("SHADOW_MODEL", "claude-test-model")
+        _configure_shadow_route(monkeypatch)
 
         worker_calls: list[dict[str, Any]] = []
 
@@ -736,6 +748,48 @@ class TestRunShadowValidation:
         assert result is True
         assert len(worker_calls) == 1
         assert worker_calls[0]["auto_disable_triggered"] is True
+
+    def test_missing_shadow_model_returns_false_without_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing SHADOW_MODEL must not silently substitute a Claude model ID."""
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "https://shadow.example.com")
+        monkeypatch.delenv("SHADOW_MODEL", raising=False)
+
+        result = sv.run_shadow_validation(
+            prompt="document this",
+            local_response="response",
+            local_model="configured-local-model",
+            session_id="sess-1",
+            correlation_id=_FIXED_CORR_ID,
+            task_type="document",
+            emitted_at=_FIXED_EMITTED_AT,
+        )
+
+        assert result is False
+
+    def test_missing_shadow_base_url_returns_false_without_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing base URL must not silently substitute an Anthropic endpoint."""
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "configured-shadow-model")
+        monkeypatch.delenv("SHADOW_CLAUDE_BASE_URL", raising=False)
+
+        result = sv.run_shadow_validation(
+            prompt="document this",
+            local_response="response",
+            local_model="configured-local-model",
+            session_id="sess-1",
+            correlation_id=_FIXED_CORR_ID,
+            task_type="document",
+            emitted_at=_FIXED_EMITTED_AT,
+        )
+
+        assert result is False
 
 
 # ---------------------------------------------------------------------------

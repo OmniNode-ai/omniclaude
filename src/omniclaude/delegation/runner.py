@@ -134,7 +134,7 @@ class ModelDelegationBackendContract(BaseModel):
 
     backend_id: str
     endpoint_url: str = ""
-    model_name: str
+    model_name: str = ""
     tier: str
     timeout_ms: int = Field(default=30000, gt=0)
     capabilities: tuple[str, ...] = ()
@@ -780,6 +780,12 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
                 backend.tier,
             )
             continue
+        if not backend.model_name.strip():
+            raise RuntimeError(
+                f"model_name is required for configured backend "
+                f"{backend.backend_id}; no hardcoded Bifrost model fallback is "
+                "available"
+            )
         backends[backend.backend_id] = ModelBifrostBackendConfig(
             backend_id=backend.backend_id,
             base_url=url,

@@ -1,10 +1,13 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Route verification (B) to local Qwen3-14B via HTTP.
+"""Route verification (B) to a configured local verifier model via HTTP.
 
 Sends contract checks as a structured prompt to LLM_CODER_FAST_URL and parses
-the JSON response into a typed ModelLocalVerifierResult.  Self-check status is
-treated as advisory only -- the local verifier prefers explicit evidence.
+the JSON response into a typed ModelLocalVerifierResult. The served model ID is
+configuration, not code truth: callers may pass it explicitly or provide
+OMNICLAUDE_LOCAL_VERIFIER_MODEL_NAME in the runtime environment. Self-check
+status is treated as advisory only -- the local verifier prefers explicit
+evidence.
 
 Fallback: if the local LLM is unreachable, the caller should escalate to the
 Claude Code verifier.  Both the attempted route and the actual route are recorded
@@ -26,6 +29,8 @@ from omniclaude.verification.self_check import ModelTaskContract
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT_SECONDS = 30.0
+_LOCAL_VERIFIER_MODEL_ENV_VAR = "OMNICLAUDE_LOCAL_VERIFIER_MODEL_NAME"
+_LOCAL_VERIFIER_ENDPOINT_ENV_VAR = "LLM_CODER_FAST_URL"
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +76,7 @@ class ModelLocalVerifierResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     task_id: str
-    verifier_model: str = Field(default="qwen3-14b")
+    verifier_model: str
     verdict: EnumVerdict
     passed: bool
     checks: list[ModelLocalVerifierCheckResult] = Field(default_factory=list)
@@ -134,7 +139,9 @@ def build_local_verification_prompt(
 # ---------------------------------------------------------------------------
 
 
-def parse_verification_response(raw: str, task_id: str) -> ModelLocalVerifierResult:
+def parse_verification_response(
+    raw: str, task_id: str, verifier_model: str
+) -> ModelLocalVerifierResult:
     """Parse local LLM JSON response into typed verification result.
 
     Returns a typed ModelLocalVerifierResult, NOT a plain dict.
@@ -152,6 +159,7 @@ def parse_verification_response(raw: str, task_id: str) -> ModelLocalVerifierRes
     except (json.JSONDecodeError, TypeError):
         return ModelLocalVerifierResult(
             task_id=task_id,
+            verifier_model=verifier_model,
             verdict=EnumVerdict.INSUFFICIENT_EVIDENCE,
             passed=False,
             checks=[],
@@ -179,6 +187,7 @@ def parse_verification_response(raw: str, task_id: str) -> ModelLocalVerifierRes
 
     return ModelLocalVerifierResult(
         task_id=task_id,
+        verifier_model=verifier_model,
         verdict=verdict,
         passed=passed,
         checks=typed_checks,
@@ -195,20 +204,32 @@ async def run_local_verification(
     contract: ModelTaskContract,
     self_check_passed: bool,
     endpoint_url: str | None = None,
+    verifier_model: str | None = None,
 ) -> ModelLocalVerifierResult:
-    """Send verification request to local Qwen3-14B via HTTP.
+    """Send verification request to configured local verifier model via HTTP.
 
     Args:
         contract: Task contract to verify.
         self_check_passed: Whether self-check (A) reported PASS.
         endpoint_url: Override for LLM endpoint (default: LLM_CODER_FAST_URL).
+        verifier_model: Override for served model ID. If omitted, the value is
+            read from OMNICLAUDE_LOCAL_VERIFIER_MODEL_NAME.
 
     Returns:
         ModelLocalVerifierResult with verdict.  On connection failure, returns
         a result with is_fallback=True indicating the caller should escalate
         to the Claude Code verifier.
     """
-    url = endpoint_url or os.environ["LLM_CODER_FAST_URL"]
+    url = endpoint_url or os.environ[_LOCAL_VERIFIER_ENDPOINT_ENV_VAR]
+    model_id = (
+        verifier_model or os.environ.get(_LOCAL_VERIFIER_MODEL_ENV_VAR, "")
+    ).strip()
+    if not model_id:
+        raise RuntimeError(
+            f"{_LOCAL_VERIFIER_MODEL_ENV_VAR} is not set. "
+            "The local verifier requires an explicit served model ID; no "
+            "hardcoded verifier model fallback is available."
+        )
     prompt = build_local_verification_prompt(contract, self_check_passed)
 
     try:
@@ -218,6 +239,7 @@ async def run_local_verification(
             response = await client.post(
                 f"{url}/v1/chat/completions",
                 json={
+                    "model": model_id,
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 500,
                     "temperature": 0.0,
@@ -225,13 +247,14 @@ async def run_local_verification(
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-            return parse_verification_response(content, contract.task_id)
+            return parse_verification_response(content, contract.task_id, model_id)
     except (httpx.HTTPError, KeyError, IndexError) as exc:
         logger.warning(
             "Local LLM unreachable at %s, marking for fallback: %s", url, exc
         )
         return ModelLocalVerifierResult(
             task_id=contract.task_id,
+            verifier_model=model_id,
             verdict=EnumVerdict.INSUFFICIENT_EVIDENCE,
             passed=False,
             checks=[],

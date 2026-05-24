@@ -12,6 +12,7 @@ Tests added as part of the Crenshaw architecture review fixes:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -40,9 +41,19 @@ from omniclaude.nodes.node_transition_selector_effect.models.model_typed_action 
 from omniclaude.nodes.node_transition_selector_effect.node import (
     NodeTransitionSelectorEffect,
     _resolve_endpoint,
+    _resolve_model_id,
 )
 
 pytestmark = pytest.mark.unit
+
+_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "src"
+    / "omniclaude"
+    / "nodes"
+    / "node_transition_selector_effect"
+    / "contract.yaml"
+)
 
 
 # =============================================================================
@@ -113,6 +124,48 @@ class TestResolveEndpoint:
                 match="LLM_CODER_FAST_URL",
             ):
                 _resolve_endpoint()
+
+
+class TestContractRoutingBoundary:
+    """Contract declares required config keys, not served model defaults."""
+
+    def test_contract_has_no_served_model_default(self) -> None:
+        text = _CONTRACT_PATH.read_text(encoding="utf-8")
+
+        assert "qwen3-14b" not in text
+        assert "model: " not in text
+        assert "OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME" in text
+        assert "no_contract_served_model_defaults: true" in text
+
+
+class TestResolveModelId:
+    """Tests for served model configuration fail-fast behavior."""
+
+    def test_model_id_not_configured_raises_configuration_error(self) -> None:
+        """Node must fail fast when served model config is not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(
+                RuntimeError,
+                match="OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME",
+            ):
+                _resolve_model_id()
+
+    def test_model_id_configured_returns_value(self) -> None:
+        """_resolve_model_id returns the configured served model ID."""
+        with patch.dict(
+            os.environ,
+            {"OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME": "configured-selector"},
+        ):
+            assert _resolve_model_id() == "configured-selector"
+
+    def test_model_id_empty_string_raises(self) -> None:
+        """Empty string is treated as unset."""
+        with patch.dict(os.environ, {"OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME": ""}):
+            with pytest.raises(
+                RuntimeError,
+                match="OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME",
+            ):
+                _resolve_model_id()
 
     def test_endpoint_configured_returns_url(self) -> None:
         """_resolve_endpoint returns the configured URL."""

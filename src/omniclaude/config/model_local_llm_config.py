@@ -11,38 +11,38 @@ environment variables and provides lookup methods by purpose.
 Environment variables:
     LLM_CODER_URL: Qwen3-Coder-30B-A3B endpoint for code generation (RTX 5090).
     LLM_CODER_MODEL_NAME: Model ID sent in API requests to the coder endpoint.
-        Default: "Qwen3-Coder-30B-A3B-Instruct". Must be non-empty if set.
+        Required when LLM_CODER_URL is set.
     LLM_CODER_FAST_URL: Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx).
     LLM_CODER_FAST_MODEL_NAME: Model ID sent in API requests to the mid-tier endpoint.
-        Default: "Qwen/Qwen3-14B-AWQ". Must be non-empty if set.
+        Required when LLM_CODER_FAST_URL is set.
     LLM_CODER_FAST_MAX_LATENCY_MS: Max acceptable latency (ms) for the mid-tier endpoint.
         Default: 1000. Range: 100-60000.
     LLM_EMBEDDING_URL: Qwen3-Embedding-8B-4bit embedding endpoint.
     LLM_EMBEDDING_MODEL_NAME: Model ID sent in API requests to the embedding endpoint.
-        Default: "Qwen3-Embedding-8B-4bit". Must be non-empty if set.
+        Required when LLM_EMBEDDING_URL is set.
     LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap).
     LLM_FUNCTION_MODEL_NAME: Model ID sent in API requests to the function calling endpoint.
-        Default: "Qwen2.5-7B". Must be non-empty if set.
-    LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap).
+        Required when LLM_FUNCTION_URL is set.
+    LLM_DEEPSEEK_LITE_URL: Lightweight reasoning endpoint (optional, hot-swap).
     LLM_DEEPSEEK_LITE_MODEL_NAME: Model ID sent in API requests to the DeepSeek-Lite endpoint.
-        Default: "DeepSeek-V2-Lite". Must be non-empty if set.
+        Required when LLM_DEEPSEEK_LITE_URL is set.
     LLM_QWEN_72B_URL: Qwen3-Coder-30B-A3B reasoning endpoint (was Qwen2.5-72B).
     LLM_QWEN_72B_MODEL_NAME: Model ID sent in API requests to the reasoning endpoint.
-        Default: "Qwen3-Coder-30B-A3B-Instruct". Override for MLX or renamed model builds. Must be non-empty if set.
+        Required when LLM_QWEN_72B_URL is set.
     LLM_VISION_URL: Qwen2-VL vision endpoint.
     LLM_VISION_MODEL_NAME: Model ID sent in API requests to the vision endpoint.
-        Default: "Qwen2-VL". Must be non-empty if set.
-    LLM_DEEPSEEK_R1_URL: DeepSeek-R1-Distill reasoning endpoint (optional, hot-swap).
+        Required when LLM_VISION_URL is set.
+    LLM_DEEPSEEK_R1_URL: Advanced reasoning endpoint (optional, hot-swap).
     LLM_DEEPSEEK_R1_MODEL_NAME: Model ID sent in API requests to the DeepSeek-R1 endpoint.
-        Default: "DeepSeek-R1-Distill". Must be non-empty if set.
+        Required when LLM_DEEPSEEK_R1_URL is set.
     LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint.
     LLM_QWEN_14B_MODEL_NAME: Model ID sent in API requests to the Qwen 14B endpoint.
-        Default: "Qwen2.5-14B". Must be non-empty if set.
+        Required when LLM_QWEN_14B_URL is set.
     OPENROUTER_API_KEY: OpenRouter API key for hosted code generation.
     LLM_OPENROUTER_URL: OpenRouter OpenAI-compatible API base URL.
-        Default: "https://openrouter.ai/api/v1".
+        Required when OPENROUTER_API_KEY is set.
     LLM_OPENROUTER_MODEL_NAME: OpenRouter model ID for code generation.
-        Default: "z-ai/glm-4.7-flash". Must be non-empty if set.
+        Required when OPENROUTER_API_KEY is set.
 
 Example:
     >>> from omniclaude.config.model_local_llm_config import (
@@ -106,7 +106,7 @@ class LlmEndpointConfig(BaseModel):
 
     Attributes:
         url: HTTP URL of the LLM endpoint.
-        model_name: Human-readable model identifier (e.g., "Qwen3-Coder-30B-A3B").
+        model_name: Human-readable model identifier supplied by runtime config.
         purpose: Primary purpose this endpoint is optimized for.
         max_latency_ms: Maximum acceptable latency in milliseconds (from E0 SLOs).
         priority: Selection priority (1-10, higher is preferred).
@@ -190,13 +190,13 @@ class LocalLlmEndpointRegistry(BaseSettings):
         llm_embedding_model_name: Model ID sent in API requests to the embedding endpoint.
         llm_function_url: Function-calling endpoint (Qwen2.5-7B, hot-swap).
         llm_function_model_name: Model ID sent in API requests to the function calling endpoint.
-        llm_deepseek_lite_url: Lightweight reasoning endpoint (DeepSeek-V2-Lite, hot-swap).
+        llm_deepseek_lite_url: Lightweight reasoning endpoint.
         llm_deepseek_lite_model_name: Model ID sent in API requests to the DeepSeek-Lite endpoint.
         llm_qwen_72b_url: Large model endpoint (Qwen3-Coder-30B-A3B, was Qwen2.5-72B).
         llm_qwen_72b_model_name: Model ID sent in API requests to the 72B endpoint.
         llm_vision_url: Vision endpoint (Qwen2-VL).
         llm_vision_model_name: Model ID sent in API requests to the vision endpoint.
-        llm_deepseek_r1_url: Advanced reasoning endpoint (DeepSeek-R1-Distill, hot-swap).
+        llm_deepseek_r1_url: Advanced reasoning endpoint.
         llm_deepseek_r1_model_name: Model ID sent in API requests to the DeepSeek-R1 endpoint.
         llm_qwen_14b_url: General purpose endpoint (Qwen2.5-14B).
         llm_qwen_14b_model_name: Model ID sent in API requests to the Qwen 14B endpoint.
@@ -227,18 +227,16 @@ class LocalLlmEndpointRegistry(BaseSettings):
         default=None,
         description="Qwen3-Coder-30B-A3B endpoint for code generation (RTX 5090)",
     )
-    llm_coder_model_name: str = Field(
-        default="Qwen3-Coder-30B-A3B-Instruct",
-        min_length=1,
+    llm_coder_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the coder endpoint",
     )
     llm_coder_fast_url: HttpUrl | None = Field(
         default=None,
         description="Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx)",
     )
-    llm_coder_fast_model_name: str = Field(
-        default="Qwen/Qwen3-14B-AWQ",
-        min_length=1,
+    llm_coder_fast_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the mid-tier endpoint (override via LLM_CODER_FAST_MODEL_NAME)",
     )
     llm_coder_fast_max_latency_ms: int = Field(
@@ -251,63 +249,56 @@ class LocalLlmEndpointRegistry(BaseSettings):
         default=None,
         description="Qwen3-Embedding-8B-4bit endpoint for embeddings (M2 Ultra)",
     )
-    llm_embedding_model_name: str = Field(
-        default="Qwen3-Embedding-8B-4bit",
-        min_length=1,
+    llm_embedding_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the embedding endpoint",
     )
     llm_function_url: HttpUrl | None = Field(
         default=None,
         description="Qwen2.5-7B endpoint for function calling (RTX 4090, hot-swap)",
     )
-    llm_function_model_name: str = Field(
-        default="Qwen2.5-7B",
-        min_length=1,
+    llm_function_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the function calling endpoint",
     )
     llm_deepseek_lite_url: HttpUrl | None = Field(
         default=None,
-        description="DeepSeek-V2-Lite endpoint for lightweight reasoning (RTX 4090, hot-swap)",
+        description="Lightweight reasoning endpoint",
     )
-    llm_deepseek_lite_model_name: str = Field(
-        default="DeepSeek-V2-Lite",
-        min_length=1,
+    llm_deepseek_lite_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the DeepSeek-Lite endpoint",
     )
     llm_qwen_72b_url: HttpUrl | None = Field(
         default=None,
         description="Qwen3-Coder-30B-A3B endpoint for documentation and analysis (M2 Ultra)",
     )
-    llm_qwen_72b_model_name: str = Field(
-        default="Qwen3-Coder-30B-A3B-Instruct",
-        min_length=1,
+    llm_qwen_72b_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the reasoning endpoint (override for mlx or renamed models)",
     )
     llm_vision_url: HttpUrl | None = Field(
         default=None,
         description="Qwen2-VL endpoint for vision and multimodal (M2 Ultra)",
     )
-    llm_vision_model_name: str = Field(
-        default="Qwen2-VL",
-        min_length=1,
+    llm_vision_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the vision endpoint",
     )
     llm_deepseek_r1_url: HttpUrl | None = Field(
         default=None,
-        description="DeepSeek-R1-Distill endpoint for advanced reasoning (M2 Ultra, hot-swap)",
+        description="Advanced reasoning endpoint",
     )
-    llm_deepseek_r1_model_name: str = Field(
-        default="DeepSeek-R1-Distill",
-        min_length=1,
+    llm_deepseek_r1_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the DeepSeek-R1 endpoint",
     )
     llm_qwen_14b_url: HttpUrl | None = Field(
         default=None,
         description="Qwen2.5-14B endpoint for general purpose tasks (M2 Pro)",
     )
-    llm_qwen_14b_model_name: str = Field(
-        default="Qwen2.5-14B",
-        min_length=1,
+    llm_qwen_14b_model_name: str | None = Field(
+        default=None,
         description="Model ID to send in API requests for the Qwen 14B endpoint",
     )
 
@@ -322,9 +313,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
         default=None,
         description="API key for Google Gemini",
     )
-    llm_gemini_model_name: str = Field(
-        default="gemini-2.5-flash",
-        min_length=1,
+    llm_gemini_model_name: str | None = Field(
+        default=None,
         description="Model ID for Gemini API requests",
     )
     llm_glm_url: HttpUrl | None = Field(
@@ -335,22 +325,20 @@ class LocalLlmEndpointRegistry(BaseSettings):
         default=None,
         description="API key for Z.AI GLM",
     )
-    llm_glm_model_name: str = Field(
-        default="glm-4-plus",
-        min_length=1,
+    llm_glm_model_name: str | None = Field(
+        default=None,
         description="Model ID for GLM API requests",
     )
     openrouter_api_key: str | None = Field(
         default=None,
         description="API key for OpenRouter hosted code generation",
     )
-    llm_openrouter_url: HttpUrl = Field(
-        default=HttpUrl("https://openrouter.ai/api/v1"),
+    llm_openrouter_url: HttpUrl | None = Field(
+        default=None,
         description="OpenRouter OpenAI-compatible API base URL",
     )
-    llm_openrouter_model_name: str = Field(
-        default="z-ai/glm-4.7-flash",
-        min_length=1,
+    llm_openrouter_model_name: str | None = Field(
+        default=None,
         description="OpenRouter model ID for delegated code generation",
     )
 
@@ -475,14 +463,27 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of LlmEndpointConfig for all configured (non-None) endpoints.
         """
-        # Each spec: (url, model_name, purpose, max_latency, priority, api_key, chat_path)
+        # Each spec: (
+        #   url, model_name, model_env_name, purpose, max_latency, priority,
+        #   api_key, chat_path
+        # )
         _default_path = "/v1/chat/completions"
         endpoint_specs: list[
-            tuple[HttpUrl | None, str, LlmEndpointPurpose, int, int, str | None, str]
+            tuple[
+                HttpUrl | None,
+                str | None,
+                str,
+                LlmEndpointPurpose,
+                int,
+                int,
+                str | None,
+                str,
+            ]
         ] = [
             (
                 self.llm_coder_fast_url,
                 self.llm_coder_fast_model_name,
+                "LLM_CODER_FAST_MODEL_NAME",
                 LlmEndpointPurpose.ROUTING,
                 self.llm_coder_fast_max_latency_ms,
                 9,  # Mid-tier model for routing classification (RTX 4090, 40K ctx)
@@ -492,6 +493,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_coder_url,
                 self.llm_coder_model_name,
+                "LLM_CODER_MODEL_NAME",
                 LlmEndpointPurpose.CODE_ANALYSIS,
                 self.llm_coder_max_latency_ms,
                 9,  # High priority: dedicated GPU (RTX 5090)
@@ -501,6 +503,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_embedding_url,
                 self.llm_embedding_model_name,
+                "LLM_EMBEDDING_MODEL_NAME",
                 LlmEndpointPurpose.EMBEDDING,
                 self.llm_embedding_max_latency_ms,
                 9,  # High priority: currently running
@@ -510,6 +513,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_function_url,
                 self.llm_function_model_name,
+                "LLM_FUNCTION_MODEL_NAME",
                 LlmEndpointPurpose.FUNCTION_CALLING,
                 self.llm_function_max_latency_ms,
                 5,  # Medium priority: hot-swap, may not be running
@@ -519,6 +523,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_deepseek_lite_url,
                 self.llm_deepseek_lite_model_name,
+                "LLM_DEEPSEEK_LITE_MODEL_NAME",
                 LlmEndpointPurpose.GENERAL,
                 self.llm_deepseek_lite_max_latency_ms,
                 3,  # Lower priority: hot-swap, lightweight fallback
@@ -528,6 +533,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_qwen_72b_url,
                 self.llm_qwen_72b_model_name,
+                "LLM_QWEN_72B_MODEL_NAME",
                 LlmEndpointPurpose.REASONING,
                 self.llm_qwen_72b_max_latency_ms,
                 8,  # High priority: best for complex reasoning
@@ -537,6 +543,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_vision_url,
                 self.llm_vision_model_name,
+                "LLM_VISION_MODEL_NAME",
                 LlmEndpointPurpose.VISION,
                 self.llm_vision_max_latency_ms,
                 9,  # High priority: only vision model
@@ -546,6 +553,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_deepseek_r1_url,
                 self.llm_deepseek_r1_model_name,
+                "LLM_DEEPSEEK_R1_MODEL_NAME",
                 LlmEndpointPurpose.REASONING,
                 self.llm_deepseek_r1_max_latency_ms,
                 7,  # Medium-high: hot-swap with 72B
@@ -555,6 +563,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             (
                 self.llm_qwen_14b_url,
                 self.llm_qwen_14b_model_name,
+                "LLM_QWEN_14B_MODEL_NAME",
                 LlmEndpointPurpose.GENERAL,
                 self.llm_qwen_14b_max_latency_ms,
                 6,  # Medium: always available, balanced
@@ -569,10 +578,22 @@ class LocalLlmEndpointRegistry(BaseSettings):
 
         if os.environ.get("DELEGATION_DISABLE_FRONTIER_ROUTING", "").lower() != "true":
             if self.openrouter_api_key:
+                if self.llm_openrouter_url is None:
+                    raise RuntimeError(
+                        "LLM_OPENROUTER_URL is required when OPENROUTER_API_KEY "
+                        "is configured. No hardcoded endpoint fallback is available."
+                    )
+                if not self.llm_openrouter_model_name:
+                    raise RuntimeError(
+                        "LLM_OPENROUTER_MODEL_NAME is required when "
+                        "OPENROUTER_API_KEY is configured. No hardcoded model "
+                        "fallback is available."
+                    )
                 endpoint_specs.append(
                     (
                         self.llm_openrouter_url,
                         self.llm_openrouter_model_name,
+                        "LLM_OPENROUTER_MODEL_NAME",
                         LlmEndpointPurpose.OPENROUTER,
                         self.llm_openrouter_max_latency_ms,
                         10,  # Primary hosted code-gen backend when explicitly keyed.
@@ -585,6 +606,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                     (
                         self.llm_gemini_url,
                         self.llm_gemini_model_name,
+                        "LLM_GEMINI_MODEL_NAME",
                         LlmEndpointPurpose.GEMINI,
                         self.llm_gemini_max_latency_ms,
                         7,  # Frontier: preferred for research/review when available
@@ -594,6 +616,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                     (
                         self.llm_glm_url,
                         self.llm_glm_model_name,
+                        "LLM_GLM_MODEL_NAME",
                         LlmEndpointPurpose.GLM,
                         self.llm_glm_max_latency_ms,
                         6,  # Frontier: fallback to Gemini
@@ -607,6 +630,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         for (
             url,
             model_name,
+            model_env_name,
             purpose,
             max_latency,
             priority,
@@ -614,6 +638,12 @@ class LocalLlmEndpointRegistry(BaseSettings):
             chat_path,
         ) in endpoint_specs:
             if url is not None:
+                if not model_name:
+                    raise RuntimeError(
+                        f"{model_env_name} is required when endpoint URL for "
+                        f"purpose={purpose.value} is configured. No hardcoded "
+                        "model fallback is available."
+                    )
                 configs.append(
                     LlmEndpointConfig(
                         url=url,

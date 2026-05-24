@@ -101,13 +101,18 @@ prompt_template:
 # Handler routing
 handler_routing:
   routing_strategy: backend_match
-  default_backend: qwen3_fast
+  default_backend: local_transition_selector
+  model_config_source: runtime_env_or_overlay
+  required_runtime_config:
+    endpoint_env: LLM_CODER_FAST_URL
+    model_env: OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME
+  no_contract_served_model_defaults: true
   backends:
-    - backend: qwen3_fast
-      handler_key: qwen3_fast
+    - backend: local_transition_selector
+      handler_key: local_transition_selector
       endpoint_env: LLM_CODER_FAST_URL
       default_endpoint: null  # REQUIRED: set LLM_CODER_FAST_URL in environment
-      model: qwen3-14b
+      model_env: OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME
 
 # Error handling
 error_handling:

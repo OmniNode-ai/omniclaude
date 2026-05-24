@@ -18,9 +18,9 @@ from omniclaude.nodes.node_transition_selector_effect.models.model_transition_se
 class ProtocolTransitionSelector(Protocol):
     """Runtime-checkable protocol for transition selector backends.
 
-    Implementors call the local model to classify over a bounded action set.
-    All methods must be async. The default implementation uses Qwen3-14B
-    at the endpoint configured via LLM_CODER_FAST_URL.
+    Implementors call the configured local model to classify over a bounded
+    action set. All methods must be async. The default implementation requires
+    explicit endpoint and served-model configuration from runtime env/overlay.
 
     Operation mapping (from node contract io_operations):
         - select operation -> select()
@@ -28,7 +28,7 @@ class ProtocolTransitionSelector(Protocol):
 
     @property
     def handler_key(self) -> str:
-        """Backend identifier for handler routing (e.g., 'qwen3_fast')."""
+        """Backend identifier for handler routing."""
         ...
 
     async def select(

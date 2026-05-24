@@ -132,7 +132,9 @@ class TestHandlerRoutingLlmTokens:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        handler = HandlerRoutingLlm(llm_url="http://fake-llm:8001")
+        handler = HandlerRoutingLlm(
+            llm_url="http://fake-llm:8001", model_name="configured-router"
+        )
 
         with patch(
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
@@ -181,7 +183,9 @@ class TestHandlerRoutingLlmTokens:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        handler = HandlerRoutingLlm(llm_url="http://fake-llm:8001")
+        handler = HandlerRoutingLlm(
+            llm_url="http://fake-llm:8001", model_name="configured-router"
+        )
 
         with patch(
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",

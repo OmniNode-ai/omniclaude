@@ -306,8 +306,10 @@ _CODER_FAST_URL = (
 )
 
 
-def _write_bifrost_with_endpoints(tmp_path, endpoints: dict[str, str]):
-    """Write a bifrost contract with endpoint_url populated for given backends."""
+def _write_bifrost_with_endpoints(
+    tmp_path, endpoints: dict[str, str], models: dict[str, str] | None = None
+):
+    """Write a bifrost contract with endpoint/model overlay for given backends."""
     import shutil
 
     src = (
@@ -327,6 +329,8 @@ def _write_bifrost_with_endpoints(tmp_path, endpoints: dict[str, str]):
         bid = backend.get("backend_id", "")
         if bid in endpoints:
             backend["endpoint_url"] = endpoints[bid]
+        if models and bid in models:
+            backend["model_name"] = models[bid]
     dst.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
     return dst
 
@@ -346,29 +350,46 @@ def test_packaged_bifrost_contract_has_empty_endpoint_urls() -> None:
     data = yaml.safe_load(src.read_text())
 
     endpoints = [backend.get("endpoint_url", "") for backend in data["backends"]]
+    model_names = [backend.get("model_name", "") for backend in data["backends"]]
 
     assert endpoints
     assert all(endpoint == "" for endpoint in endpoints)
+    assert all(model_name == "" for model_name in model_names)
 
 
 @pytest.mark.unit
 def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -> None:
     """_build_env_config loads from contract and reads endpoint_url directly."""
     dst = _write_bifrost_with_endpoints(
-        tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
+        tmp_path,
+        {"local-deepseek-r1-14b": _CODER_FAST_URL},
+        {"local-deepseek-r1-14b": "configured-deepseek"},
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(tmp_path / "missing-overlay.yaml"))
 
     cfg = _build_env_config()
 
     assert cfg is not None
     assert "local-deepseek-r1-14b" in cfg.backends
     assert cfg.backends["local-deepseek-r1-14b"].base_url == _CODER_FAST_URL
-    assert (
-        cfg.backends["local-deepseek-r1-14b"].model_name
-        == "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"
-    )
+    assert cfg.backends["local-deepseek-r1-14b"].model_name == "configured-deepseek"
     assert len(cfg.routing_rules) >= 1
+
+
+@pytest.mark.unit
+def test_build_env_config_fails_when_endpoint_has_no_model(
+    monkeypatch, tmp_path
+) -> None:
+    """Configured endpoint must not silently inherit a packaged model name."""
+    dst = _write_bifrost_with_endpoints(
+        tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
+    )
+    monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(tmp_path / "missing-overlay.yaml"))
+
+    with pytest.raises(RuntimeError, match="model_name is required"):
+        _build_env_config()
 
 
 @pytest.mark.unit
@@ -390,6 +411,7 @@ def test_build_env_config_merges_default_contract_with_overlay(
         "backends:\n"
         "  - backend_id: local-deepseek-r1-14b\n"
         f'    endpoint_url: "{_CODER_FAST_URL}"\n'
+        '    model_name: "configured-deepseek"\n'
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(default_path))
     monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(overlay_path))
@@ -399,10 +421,7 @@ def test_build_env_config_merges_default_contract_with_overlay(
     assert cfg is not None
     assert "local-deepseek-r1-14b" in cfg.backends
     assert cfg.backends["local-deepseek-r1-14b"].base_url == _CODER_FAST_URL
-    assert (
-        cfg.backends["local-deepseek-r1-14b"].model_name
-        == "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"
-    )
+    assert cfg.backends["local-deepseek-r1-14b"].model_name == "configured-deepseek"
 
 
 @pytest.mark.unit

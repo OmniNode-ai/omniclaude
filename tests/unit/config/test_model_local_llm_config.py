@@ -220,6 +220,7 @@ class TestLocalLlmEndpointRegistry:
     def full_env(self, monkeypatch: pytest.MonkeyPatch, _clean_env: None) -> None:
         """Set all LLM endpoint env vars to known values."""
         monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+        monkeypatch.setenv("LLM_CODER_FAST_URL", "http://llm-fast-router-host:8004")
         monkeypatch.setenv("LLM_EMBEDDING_URL", "http://llm-embedding-host:8002")
         monkeypatch.setenv("LLM_FUNCTION_URL", "http://llm-fast-host:8001")
         monkeypatch.setenv("LLM_DEEPSEEK_LITE_URL", "http://llm-lite-host:8003")
@@ -227,6 +228,15 @@ class TestLocalLlmEndpointRegistry:
         monkeypatch.setenv("LLM_VISION_URL", "http://llm-vision-host:8102")
         monkeypatch.setenv("LLM_DEEPSEEK_R1_URL", "http://llm-reasoning-host:8101")
         monkeypatch.setenv("LLM_QWEN_14B_URL", "http://llm-mid-host:8200")
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "configured-coder")
+        monkeypatch.setenv("LLM_CODER_FAST_MODEL_NAME", "configured-fast")
+        monkeypatch.setenv("LLM_EMBEDDING_MODEL_NAME", "configured-embedding")
+        monkeypatch.setenv("LLM_FUNCTION_MODEL_NAME", "configured-function")
+        monkeypatch.setenv("LLM_DEEPSEEK_LITE_MODEL_NAME", "configured-lite")
+        monkeypatch.setenv("LLM_QWEN_72B_MODEL_NAME", "configured-reasoning")
+        monkeypatch.setenv("LLM_VISION_MODEL_NAME", "configured-vision")
+        monkeypatch.setenv("LLM_DEEPSEEK_R1_MODEL_NAME", "configured-deepseek-r1")
+        monkeypatch.setenv("LLM_QWEN_14B_MODEL_NAME", "configured-general")
 
     @pytest.fixture
     def partial_env(self, monkeypatch: pytest.MonkeyPatch, _clean_env: None) -> None:
@@ -236,6 +246,11 @@ class TestLocalLlmEndpointRegistry:
         monkeypatch.setenv("LLM_QWEN_72B_URL", "http://llm-embedding-host:8100")
         monkeypatch.setenv("LLM_VISION_URL", "http://llm-vision-host:8102")
         monkeypatch.setenv("LLM_QWEN_14B_URL", "http://llm-mid-host:8200")
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "configured-coder")
+        monkeypatch.setenv("LLM_EMBEDDING_MODEL_NAME", "configured-embedding")
+        monkeypatch.setenv("LLM_QWEN_72B_MODEL_NAME", "configured-reasoning")
+        monkeypatch.setenv("LLM_VISION_MODEL_NAME", "configured-vision")
+        monkeypatch.setenv("LLM_QWEN_14B_MODEL_NAME", "configured-general")
 
     @pytest.fixture
     def make_registry(self) -> Callable[..., LocalLlmEndpointRegistry]:
@@ -259,10 +274,10 @@ class TestLocalLlmEndpointRegistry:
     def test_full_env_loads_all_endpoints(
         self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
-        """All 8 endpoints are loaded when all env vars are set."""
+        """All 9 endpoints are loaded when all env vars are set."""
         registry = make_registry()
         endpoints = registry.get_all_endpoints()
-        assert len(endpoints) == 8
+        assert len(endpoints) == 9
 
     @pytest.mark.unit
     def test_partial_env_loads_available_endpoints(
@@ -273,15 +288,15 @@ class TestLocalLlmEndpointRegistry:
         endpoints = registry.get_all_endpoints()
         assert len(endpoints) == 5
         model_names = {ep.model_name for ep in endpoints}
-        assert "Qwen3-Coder-30B-A3B-Instruct" in model_names
-        assert "Qwen3-Embedding-8B-4bit" in model_names
-        assert "Qwen3-Coder-30B-A3B-Instruct" in model_names
-        assert "Qwen2-VL" in model_names
-        assert "Qwen2.5-14B" in model_names
+        assert "configured-coder" in model_names
+        assert "configured-embedding" in model_names
+        assert "configured-reasoning" in model_names
+        assert "configured-vision" in model_names
+        assert "configured-general" in model_names
         # Hot-swap models should not be present
-        assert "Qwen2.5-7B" not in model_names
-        assert "DeepSeek-V2-Lite" not in model_names
-        assert "DeepSeek-R1-Distill" not in model_names
+        assert "configured-function" not in model_names
+        assert "configured-lite" not in model_names
+        assert "configured-deepseek-r1" not in model_names
 
     @pytest.mark.unit
     def test_get_all_endpoints_returns_defensive_copy(
@@ -302,7 +317,7 @@ class TestLocalLlmEndpointRegistry:
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         assert endpoint is not None
-        assert endpoint.model_name == "Qwen3-Coder-30B-A3B-Instruct"
+        assert endpoint.model_name == "configured-coder"
         assert endpoint.priority == 9
 
     @pytest.mark.unit
@@ -317,10 +332,11 @@ class TestLocalLlmEndpointRegistry:
     def test_get_endpoint_routing_not_configured(
         self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
-        """ROUTING purpose has no default endpoint (reserved for future use)."""
+        """ROUTING purpose uses explicitly configured endpoint/model pairs."""
         registry = make_registry()
-        # No endpoint is assigned ROUTING purpose by default
-        assert registry.get_endpoint(LlmEndpointPurpose.ROUTING) is None
+        endpoint = registry.get_endpoint(LlmEndpointPurpose.ROUTING)
+        assert endpoint is not None
+        assert endpoint.model_name == "configured-fast"
 
     @pytest.mark.unit
     def test_get_endpoints_by_purpose_sorted_by_priority(
@@ -328,28 +344,26 @@ class TestLocalLlmEndpointRegistry:
     ) -> None:
         """Multiple endpoints for same purpose are sorted by priority descending."""
         registry = make_registry()
-        # REASONING has two endpoints: Qwen3-Coder-30B-A3B-Instruct (priority 8) and DeepSeek-R1 (priority 7)
         reasoning_endpoints = registry.get_endpoints_by_purpose(
             LlmEndpointPurpose.REASONING
         )
         assert len(reasoning_endpoints) == 2
         assert reasoning_endpoints[0].priority >= reasoning_endpoints[1].priority
-        assert reasoning_endpoints[0].model_name == "Qwen3-Coder-30B-A3B-Instruct"
-        assert reasoning_endpoints[1].model_name == "DeepSeek-R1-Distill"
+        assert reasoning_endpoints[0].model_name == "configured-reasoning"
+        assert reasoning_endpoints[1].model_name == "configured-deepseek-r1"
 
     @pytest.mark.unit
     def test_get_endpoints_by_purpose_general(
         self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
-        """GENERAL purpose returns DeepSeek-V2-Lite and Qwen2.5-14B."""
+        """GENERAL purpose returns explicitly configured general endpoints."""
         registry = make_registry()
         general_endpoints = registry.get_endpoints_by_purpose(
             LlmEndpointPurpose.GENERAL
         )
         assert len(general_endpoints) == 2
-        # Qwen2.5-14B (priority 6) should come before DeepSeek-V2-Lite (priority 3)
-        assert general_endpoints[0].model_name == "Qwen2.5-14B"
-        assert general_endpoints[1].model_name == "DeepSeek-V2-Lite"
+        assert general_endpoints[0].model_name == "configured-general"
+        assert general_endpoints[1].model_name == "configured-lite"
 
     @pytest.mark.unit
     def test_get_endpoints_by_purpose_empty(
@@ -368,6 +382,7 @@ class TestLocalLlmEndpointRegistry:
     ) -> None:
         """Invalid URL in env var causes validation error."""
         monkeypatch.setenv("LLM_CODER_URL", "not-a-valid-url")
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "configured-coder")
         with pytest.raises(ValidationError):
             make_registry()
 
@@ -380,6 +395,7 @@ class TestLocalLlmEndpointRegistry:
     ) -> None:
         """Latency budgets can be overridden via environment variables."""
         monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "configured-coder")
         monkeypatch.setenv("LLM_CODER_MAX_LATENCY_MS", "500")
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
@@ -405,7 +421,7 @@ class TestLocalLlmEndpointRegistry:
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.VISION)
         assert endpoint is not None
-        assert endpoint.model_name == "Qwen2-VL"
+        assert endpoint.model_name == "configured-vision"
         assert "8102" in str(endpoint.url)
 
     @pytest.mark.unit
@@ -416,7 +432,7 @@ class TestLocalLlmEndpointRegistry:
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.FUNCTION_CALLING)
         assert endpoint is not None
-        assert endpoint.model_name == "Qwen2.5-7B"
+        assert endpoint.model_name == "configured-function"
 
     @pytest.mark.unit
     def test_extra_env_vars_ignored(
@@ -427,6 +443,7 @@ class TestLocalLlmEndpointRegistry:
     ) -> None:
         """Unknown env vars are ignored (extra='ignore')."""
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "configured-coder")
         monkeypatch.setenv("LLM_UNKNOWN_THING", "http://localhost:9999")
         # Should not raise
         registry = make_registry()
@@ -499,26 +516,42 @@ class TestLocalLlmEndpointRegistry:
         _clean_env: None,
         make_registry: Callable[..., LocalLlmEndpointRegistry],
     ) -> None:
-        """OpenRouter has a default URL but is unavailable until keyed."""
+        """OpenRouter is unavailable until keyed and explicitly routed."""
         registry = make_registry()
         assert registry.get_endpoint(LlmEndpointPurpose.OPENROUTER) is None
 
     @pytest.mark.unit
-    def test_openrouter_endpoint_defaults_to_glm_flash(
+    def test_openrouter_endpoint_requires_explicit_route_config(
         self,
         monkeypatch: pytest.MonkeyPatch,
         _clean_env: None,
         make_registry: Callable[..., LocalLlmEndpointRegistry],
     ) -> None:
-        """OPENROUTER_API_KEY enables GLM-4.7-Flash via OpenRouter."""
+        """OPENROUTER_API_KEY alone must not create a hidden route default."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+        registry = make_registry()
+
+        with pytest.raises(RuntimeError, match="LLM_OPENROUTER_URL"):
+            registry.get_endpoint(LlmEndpointPurpose.OPENROUTER)
+
+    @pytest.mark.unit
+    def test_openrouter_endpoint_uses_explicit_route_config(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+    ) -> None:
+        """OPENROUTER_API_KEY uses explicitly supplied URL and model."""
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+        monkeypatch.setenv("LLM_OPENROUTER_URL", "https://openrouter.example.com/api")
+        monkeypatch.setenv("LLM_OPENROUTER_MODEL_NAME", "configured-openrouter")
         registry = make_registry()
 
         endpoint = registry.get_endpoint(LlmEndpointPurpose.OPENROUTER)
 
         assert endpoint is not None
-        assert str(endpoint.url) == "https://openrouter.ai/api/v1"
-        assert endpoint.model_name == "z-ai/glm-4.7-flash"
+        assert str(endpoint.url) == "https://openrouter.example.com/api"
+        assert endpoint.model_name == "configured-openrouter"
         assert endpoint.api_key == "test-openrouter-key"
         assert endpoint.chat_completions_path == "/chat/completions"
         assert endpoint.priority == 10

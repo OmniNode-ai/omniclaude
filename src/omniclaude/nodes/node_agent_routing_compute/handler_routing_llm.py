@@ -144,10 +144,10 @@ def _parse_agent_from_response(
 
 
 class HandlerRoutingLlm:
-    """LLM-based routing handler that uses Qwen-14B to select agents.
+    """LLM-based routing handler that uses configured model to select agents.
 
     Uses TriggerMatcher for fast candidate generation, then delegates
-    the final selection to Qwen-14B (via OpenAI-compatible API). Falls
+    the final selection to the configured model (via OpenAI-compatible API). Falls
     back to the highest-confidence trigger candidate when the LLM is
     unavailable or returns an unrecognized agent name.
 
@@ -158,7 +158,7 @@ class HandlerRoutingLlm:
     def __init__(
         self,
         llm_url: str,
-        model_name: str = "Qwen2.5-14B",
+        model_name: str,
         timeout: float = _LLM_TIMEOUT_SECONDS,
     ) -> None:
         """Initialize the LLM routing handler.
@@ -169,6 +169,11 @@ class HandlerRoutingLlm:
             model_name: Model identifier sent in the API request.
             timeout: HTTP request timeout in seconds.
         """
+        if not model_name.strip():
+            raise ValueError(
+                "model_name must be supplied explicitly; no hardcoded routing "
+                "model fallback is available"
+            )
         self._llm_url = llm_url.rstrip("/")
         self._model_name = model_name
         self._timeout = timeout

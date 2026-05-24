@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for local verifier (B) -- routes verification to local Qwen3-14B."""
+"""Unit tests for local verifier (B) -- routes verification to configured LLM."""
 
 from __future__ import annotations
 
@@ -75,9 +75,12 @@ class TestParseVerificationResponse:
                 "checks": [{"criterion": "Tests pass", "status": "PASS"}],
             }
         )
-        result = parse_verification_response(raw, task_id="task-1")
+        result = parse_verification_response(
+            raw, task_id="task-1", verifier_model="configured-local-verifier"
+        )
 
         assert isinstance(result, ModelLocalVerifierResult)
+        assert result.verifier_model == "configured-local-verifier"
         assert result.passed is True
         assert result.verdict == EnumVerdict.PASS
         assert len(result.checks) == 1
@@ -92,19 +95,25 @@ class TestParseVerificationResponse:
                 "checks": [{"criterion": "Tests pass", "status": "FAIL"}],
             }
         )
-        result = parse_verification_response(raw, task_id="task-1")
+        result = parse_verification_response(
+            raw, task_id="task-1", verifier_model="configured-local-verifier"
+        )
 
         assert result.passed is False
         assert result.verdict == EnumVerdict.FAIL
 
     def test_empty_checks_returns_insufficient_evidence(self) -> None:
         raw = json.dumps({"passed": False, "checks": []})
-        result = parse_verification_response(raw, task_id="task-1")
+        result = parse_verification_response(
+            raw, task_id="task-1", verifier_model="configured-local-verifier"
+        )
 
         assert result.verdict == EnumVerdict.INSUFFICIENT_EVIDENCE
 
     def test_invalid_json_returns_insufficient_evidence(self) -> None:
-        result = parse_verification_response("not json", task_id="task-1")
+        result = parse_verification_response(
+            "not json", task_id="task-1", verifier_model="configured-local-verifier"
+        )
 
         assert result.verdict == EnumVerdict.INSUFFICIENT_EVIDENCE
         assert result.passed is False
@@ -152,12 +161,20 @@ class TestRunLocalVerification:
             mock_cls.return_value = mock_client
 
             result = await run_local_verification(
-                contract, self_check_passed=True, endpoint_url="http://test:8001"
+                contract,
+                self_check_passed=True,
+                endpoint_url="http://test:8001",
+                verifier_model="configured-local-verifier",
             )
 
         assert result.passed is True
         assert result.verdict == EnumVerdict.PASS
         assert result.is_fallback is False
+        assert result.verifier_model == "configured-local-verifier"
+        mock_client.post.assert_awaited_once()
+        assert mock_client.post.await_args.kwargs["json"]["model"] == (
+            "configured-local-verifier"
+        )
 
     @pytest.mark.asyncio
     async def test_unreachable_llm_returns_fallback(self) -> None:
@@ -182,10 +199,36 @@ class TestRunLocalVerification:
             mock_cls.return_value = mock_client
 
             result = await run_local_verification(
-                contract, self_check_passed=True, endpoint_url="http://test:8001"
+                contract,
+                self_check_passed=True,
+                endpoint_url="http://test:8001",
+                verifier_model="configured-local-verifier",
             )
 
         assert result.is_fallback is True
+        assert result.verifier_model == "configured-local-verifier"
         assert result.attempted_route == EnumDispatchSurface.LOCAL_LLM
         assert result.actual_route == EnumDispatchSurface.CLAUDE_CODE
         assert result.verdict == EnumVerdict.INSUFFICIENT_EVIDENCE
+
+    @pytest.mark.asyncio
+    async def test_missing_verifier_model_fails_without_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing model config must not silently substitute a local model ID."""
+        monkeypatch.delenv("OMNICLAUDE_LOCAL_VERIFIER_MODEL_NAME", raising=False)
+        contract = ModelTaskContract(
+            task_id="task-1",
+            definition_of_done=[
+                ModelMechanicalCheck(
+                    criterion="Tests pass",
+                    check="uv run pytest",
+                    check_type=EnumCheckType.COMMAND_EXIT_0,
+                )
+            ],
+        )
+
+        with pytest.raises(RuntimeError, match="OMNICLAUDE_LOCAL_VERIFIER_MODEL_NAME"):
+            await run_local_verification(
+                contract, self_check_passed=True, endpoint_url="http://test:8001"
+            )

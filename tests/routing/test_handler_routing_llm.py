@@ -236,6 +236,11 @@ class TestHandlerRoutingLlm:
     def test_handler_key_is_llm(self, handler: HandlerRoutingLlm) -> None:
         assert handler.handler_key == "llm"
 
+    @pytest.mark.unit
+    def test_model_name_is_required(self) -> None:
+        with pytest.raises(ValueError, match="model_name"):
+            HandlerRoutingLlm(llm_url="http://localhost:8200", model_name="")
+
     # -- explicit agent request (no LLM call needed) --
 
     @pytest.mark.unit

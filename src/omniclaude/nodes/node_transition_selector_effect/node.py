@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Node Transition Selector Effect — local model as constrained transition selector.
+"""Node Transition Selector Effect — configured local model as transition selector.
 
-This effect node wires the local model (Qwen3-14B via LLM_CODER_FAST_URL) into
-the agent graph navigation loop as a constrained transition selector. The model
-is given a bounded typed action set and selects exactly one transition.
+This effect node wires the configured local model endpoint into the agent graph
+navigation loop as a constrained transition selector. The model is given a
+bounded typed action set and selects exactly one transition.
 
 Design constraints (from OMN-2569 spec):
 - The model classifies over a CLOSED set — it never invents new actions.
@@ -69,6 +69,18 @@ def _resolve_endpoint() -> str:
     return url
 
 
+def _resolve_model_id() -> str:
+    """Resolve served model ID from environment. Fail fast if not configured."""
+    model_id = os.environ.get("OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME", "").strip()
+    if not model_id:
+        raise RuntimeError(
+            "OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME is not set. "
+            "The transition selector requires an explicit served model ID; no "
+            "hardcoded model fallback is available."
+        )
+    return model_id
+
+
 # Selection timeout in seconds (matches contract.yaml error_handling.selection_timeout_seconds).
 # asyncio.wait_for is the authoritative timeout; httpx timeout is set slightly higher so that
 # asyncio cancellation fires first and produces a clean SELECTION_TIMEOUT error rather than
@@ -81,7 +93,8 @@ class NodeTransitionSelectorEffect(NodeEffect):
     """Effect node: local model as constrained transition selector.
 
     Implements TransitionSelector.select() per OMN-2569 spec. Presents the
-    bounded action_set to Qwen3-14B as a numbered classification problem.
+    bounded action_set to the configured local model as a numbered classification
+    problem.
 
     Invariants:
     - Prompt contains ONLY data from current_state, goal, action_set, context.
@@ -442,10 +455,11 @@ class NodeTransitionSelectorEffect(NodeEffect):
             ValueError: If model returns no choices.
         """
         endpoint = _resolve_endpoint().rstrip("/")
+        model_id = _resolve_model_id()
         url = f"{endpoint}/v1/chat/completions"
 
         payload = {
-            "model": "qwen3-14b",
+            "model": model_id,
             "messages": [
                 {
                     "role": "user",
