@@ -28,6 +28,13 @@ except ImportError:
     print("Warning: httpx not available, AI scoring will be disabled", file=sys.stderr)
 
 
+_BIFROST_YAML_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "delegation"
+    / "bifrost_delegation.yaml"
+)
+
+
 def _resolve_llm_coder_url() -> str:
     """Resolve LLM_CODER_URL from environment. Fail fast if not configured."""
     url = os.environ.get("LLM_CODER_URL", "")
@@ -38,6 +45,59 @@ def _resolve_llm_coder_url() -> str:
             "Set LLM_CODER_URL in ~/.omnibase/.env or your environment."
         )
     return url
+
+
+def _build_default_models_from_bifrost() -> list["ModelConfig"]:
+    """Build DEFAULT_MODELS from bifrost_delegation.yaml backends.
+
+    Maps tier → ModelProvider:
+      local        → OPENAI_COMPATIBLE (endpoint resolved lazily via LLM_CODER_URL)
+      frontier_api → GEMINI if model_name contains "gemini", else OPENAI
+
+    Falls back to the legacy hardcoded list if the YAML is missing or corrupt.
+    """
+    try:
+        raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8"))
+        backends = raw.get("backends", [])
+        models: list[ModelConfig] = []
+        for b in backends:
+            tier = b.get("tier", "")
+            model_name = str(b["model_name"])
+            weight = float(b.get("weight", 1.0)) if "weight" in b else 1.0
+            timeout = float(b.get("timeout_ms", 10000)) / 1000.0
+
+            if tier == "local":
+                provider = ModelProvider.OPENAI_COMPATIBLE
+                endpoint = None  # resolved lazily via LLM_CODER_URL
+            elif "gemini" in model_name.lower():
+                provider = ModelProvider.GEMINI
+                endpoint = None  # set by ModelConfig.__post_init__
+            else:
+                provider = ModelProvider.OPENAI
+                endpoint = None
+
+            models.append(
+                ModelConfig(
+                    name=model_name,
+                    provider=provider,
+                    weight=weight,
+                    endpoint=endpoint,
+                    timeout=timeout,
+                )
+            )
+        if models:
+            return models
+    except Exception:  # noqa: BLE001 — fail-safe: never crash quorum at import
+        pass
+    # Legacy fallback if YAML is missing/corrupt
+    return [
+        ModelConfig(
+            name="qwen3-coder-30b",
+            provider=ModelProvider.OPENAI_COMPATIBLE,
+            weight=1.5,
+        ),
+        ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
+    ]
 
 
 class ModelProvider(Enum):
@@ -135,15 +195,7 @@ class AIQuorum:
     Phase 3-4: Full AI model evaluation
     """
 
-    DEFAULT_MODELS = [
-        ModelConfig(
-            name="qwen3-coder-30b",
-            provider=ModelProvider.OPENAI_COMPATIBLE,
-            weight=1.5,  # Higher weight for code-specialized model
-            # Endpoint: LLM_CODER_URL (Qwen3-Coder-30B-A3B AWQ-4bit, RTX 5090, 64K ctx)
-        ),
-        ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
-    ]
+    DEFAULT_MODELS: list[ModelConfig] = _build_default_models_from_bifrost()
 
     def __init__(  # stub-ok: implemented __init__
         self,

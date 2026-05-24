@@ -11,8 +11,42 @@ Used to guide manifest section selection and relevance filtering.
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
+
+import yaml
+
+_BIFROST_YAML_PATH = (
+    Path(__file__).parent.parent / "delegation" / "bifrost_delegation.yaml"
+)
+
+
+def _load_delegate_model_name() -> str:
+    """Return the model_name of the first local code_generation backend in bifrost_delegation.yaml.
+
+    Falls back to the first local backend, then to the first backend overall.
+    This avoids hardcoding the model name in Python source.
+    """
+    try:
+        raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8"))
+        backends = raw.get("backends", [])
+        # Prefer local backends with code_generation capability
+        for b in backends:
+            if b.get("tier") == "local" and "code_generation" in b.get(
+                "capabilities", []
+            ):
+                return str(b["model_name"])
+        # Fallback: any local backend
+        for b in backends:
+            if b.get("tier") == "local":
+                return str(b["model_name"])
+        # Last resort: first backend
+        if backends:
+            return str(backends[0]["model_name"])
+    except Exception:  # noqa: BLE001 — fail-safe: never crash classifier at import
+        pass
+    return "qwen2.5-14b"  # legacy fallback if YAML is missing/corrupt
 
 
 class TaskIntent(Enum):
@@ -442,8 +476,8 @@ class TaskClassifier:
         }
     )
 
-    #: Name/identifier of the default delegate model.
-    _DELEGATE_MODEL_NAME: str = "qwen2.5-14b"
+    #: Name/identifier of the default delegate model — resolved from bifrost_delegation.yaml.
+    _DELEGATE_MODEL_NAME: str = _load_delegate_model_name()
 
     # ---------------------------------------------------------------------------
     # Internal helpers
