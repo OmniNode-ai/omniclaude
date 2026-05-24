@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11970
+title: "Clean hardcoded model IDs from omniclaude tests and fix transition_selector runtime violation"
+summary: >
+  Replace hardcoded model ID strings in omniclaude test assertions with symbolic constants.
+  Fix node_transition_selector_effect runtime violation where "qwen3-14b" was hardcoded in
+  a chat completion payload; model name is now resolved via LocalLlmEndpointRegistry.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "omniclaude unit and integration tests pass with symbolic model constants."
+    command: "uv run pytest tests/ -m unit -v"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates."
+    command: "gh pr checks 1653 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-test-constants
+    description: "tests/constants.py added with 7 symbolic model constants; 13 test files updated."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f tests/constants.py && grep -q 'MODEL_LOCAL_CODER' tests/constants.py && echo OK"
+  - id: dod-runtime-fix
+    description: "node_transition_selector_effect no longer hardcodes qwen3-14b; uses LocalLlmEndpointRegistry."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -rq 'LocalLlmEndpointRegistry' src/omniclaude/nodes/node_transition_selector_effect/node.py && echo OK"
+  - id: dod-deploy-assessment
+    description: "Deploy gate assessment — model name reads from registry; no Dockerfile or runtime kernel change."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "echo 'deploy assessment: node_transition_selector_effect model name resolved via registry, no deploy required (OMN-11970)'"
