@@ -23,10 +23,11 @@ _BIFROST_YAML_PATH = (
 
 
 def _load_delegate_model_name() -> str:
-    """Return the model_name of the first local code_generation backend in bifrost_delegation.yaml.
+    """Return the backend_id of the first local code_generation backend.
 
-    Falls back to the first local backend, then to the first backend overall.
-    This avoids hardcoding the model name in Python source.
+    Packaged bifrost contracts intentionally leave served model names empty;
+    concrete model IDs belong in overlays. The classifier only needs a stable
+    logical routing target, so it resolves a contract-declared backend_id.
     """
     if not _BIFROST_YAML_PATH.exists():
         raise RuntimeError(
@@ -43,19 +44,19 @@ def _load_delegate_model_name() -> str:
             "'backends' must be a list."
         )
 
-    # Prefer local backends with code_generation capability
+    # Prefer local backends with code_generation capability.
     for b in backends:
         if b.get("tier") == "local" and "code_generation" in b.get(
             "capabilities", []
         ):
-            return str(b["model_name"])
+            return str(b["backend_id"])
     # Fallback: any local backend declared by the same contract.
     for b in backends:
         if b.get("tier") == "local":
-            return str(b["model_name"])
+            return str(b["backend_id"])
     # Last resort: first contract-declared backend.
     if backends:
-        return str(backends[0]["model_name"])
+        return str(backends[0]["backend_id"])
 
     raise RuntimeError(
         f"No backends declared in bifrost delegation contract: {_BIFROST_YAML_PATH}. "

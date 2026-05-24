@@ -42,17 +42,17 @@ def _load_bifrost() -> dict:
         return yaml.safe_load(f)
 
 
-def _bifrost_backend_model_names() -> set[str]:
-    """Return all model_name values from bifrost backends."""
+def _bifrost_backend_ids() -> set[str]:
+    """Return all backend_id values from bifrost backends."""
     bifrost = _load_bifrost()
-    return {b["model_name"] for b in bifrost.get("backends", [])}
+    return {b["backend_id"] for b in bifrost.get("backends", [])}
 
 
-def _bifrost_local_backend_model_names() -> set[str]:
-    """Return model_name values for local-tier backends only."""
+def _bifrost_local_backend_ids() -> set[str]:
+    """Return backend_id values for local-tier backends only."""
     bifrost = _load_bifrost()
     return {
-        b["model_name"] for b in bifrost.get("backends", []) if b.get("tier") == "local"
+        b["backend_id"] for b in bifrost.get("backends", []) if b.get("tier") == "local"
     }
 
 
@@ -66,22 +66,22 @@ class TestTaskClassifierDelegateModelName:
     """TaskClassifier._DELEGATE_MODEL_NAME must not be a hardcoded string literal."""
 
     def test_delegate_model_name_exists_in_bifrost_backends(self) -> None:
-        """The delegate model name must match a backend in bifrost_delegation.yaml.
+        """The delegate route must match a backend in bifrost_delegation.yaml.
 
         This test FAILS when _DELEGATE_MODEL_NAME = "qwen2.5-14b" is hardcoded
-        and "qwen2.5-14b" is not a model_name in any bifrost backend.
+        and "qwen2.5-14b" is not a backend_id in any bifrost backend.
 
         Fix: derive _DELEGATE_MODEL_NAME from bifrost_delegation.yaml by reading
-        the model_name of the first local-tier code_generation backend.
+        the backend_id of the first local-tier code_generation backend.
         """
         from omniclaude.lib.task_classifier import TaskClassifier
 
         delegate_model = TaskClassifier._DELEGATE_MODEL_NAME
-        bifrost_model_names = _bifrost_backend_model_names()
+        bifrost_backend_ids = _bifrost_backend_ids()
 
-        assert delegate_model in bifrost_model_names, (
+        assert delegate_model in bifrost_backend_ids, (
             f"TaskClassifier._DELEGATE_MODEL_NAME='{delegate_model}' is not a "
-            f"model_name in bifrost_delegation.yaml backends: {sorted(bifrost_model_names)}. "
+            f"backend_id in bifrost_delegation.yaml backends: {sorted(bifrost_backend_ids)}. "
             "Fix: derive _DELEGATE_MODEL_NAME from the bifrost contract."
         )
 
@@ -94,20 +94,19 @@ class TestTaskClassifierDelegateModelName:
         from omniclaude.lib.task_classifier import TaskClassifier
 
         delegate_model = TaskClassifier._DELEGATE_MODEL_NAME
-        local_models = _bifrost_local_backend_model_names()
+        local_backends = _bifrost_local_backend_ids()
 
-        assert delegate_model in local_models, (
+        assert delegate_model in local_backends, (
             f"TaskClassifier._DELEGATE_MODEL_NAME='{delegate_model}' is not in "
-            f"local-tier bifrost backends: {sorted(local_models)}. "
+            f"local-tier bifrost backends: {sorted(local_backends)}. "
             "The delegate model should be local to achieve zero marginal API cost."
         )
 
     def test_delegate_model_name_not_bare_qwen2_literal(self) -> None:
         """_DELEGATE_MODEL_NAME must not be the bare legacy 'qwen2.5-14b' string.
 
-        The old value 'qwen2.5-14b' is an informal alias, not a canonical model_name
-        from any contract. bifrost_delegation.yaml uses full model IDs like
-        'cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit'.
+        The old value 'qwen2.5-14b' is an informal alias, not a canonical
+        backend_id from any contract. Served model IDs are overlay-owned.
         """
         from omniclaude.lib.task_classifier import TaskClassifier
 
@@ -124,23 +123,23 @@ class TestTaskClassifierDelegateModelName:
 
 @pytest.mark.unit
 class TestQuorumDefaultModels:
-    """AIQuorum.DEFAULT_MODELS model names must come from bifrost_delegation.yaml."""
+    """AIQuorum.DEFAULT_MODELS route names must come from bifrost_delegation.yaml."""
 
     def test_quorum_default_model_names_exist_in_bifrost(self) -> None:
-        """Every model name in DEFAULT_MODELS must be in bifrost backends.
+        """Every route name in DEFAULT_MODELS must be a bifrost backend_id.
 
         This test FAILS when DEFAULT_MODELS contains "qwen3-coder-30b" (an
-        informal name) that is not a model_name in bifrost_delegation.yaml.
+        informal name) that is not a backend_id in bifrost_delegation.yaml.
 
         Fix: derive DEFAULT_MODELS from bifrost_delegation.yaml backends.
         """
         from omniclaude.lib.utils.consensus.quorum import AIQuorum
 
-        bifrost_model_names = _bifrost_backend_model_names()
+        bifrost_backend_ids = _bifrost_backend_ids()
         for model_cfg in AIQuorum.DEFAULT_MODELS:
-            assert model_cfg.name in bifrost_model_names, (
+            assert model_cfg.name in bifrost_backend_ids, (
                 f"AIQuorum.DEFAULT_MODELS contains '{model_cfg.name}' which is not "
-                f"a model_name in bifrost_delegation.yaml: {sorted(bifrost_model_names)}. "
+                f"a backend_id in bifrost_delegation.yaml: {sorted(bifrost_backend_ids)}. "
                 "Fix: build DEFAULT_MODELS from the bifrost contract."
             )
 

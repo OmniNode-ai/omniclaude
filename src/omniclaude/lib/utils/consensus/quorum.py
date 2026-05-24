@@ -50,9 +50,9 @@ def _resolve_llm_coder_url() -> str:
 def _build_default_models_from_bifrost() -> list["ModelConfig"]:
     """Build DEFAULT_MODELS from bifrost_delegation.yaml backends.
 
-    Maps tier → ModelProvider:
+    Maps tier -> ModelProvider:
       local        → OPENAI_COMPATIBLE (endpoint resolved lazily via LLM_CODER_URL)
-      frontier_api → GEMINI if model_name contains "gemini", else OPENAI
+      frontier_api -> GEMINI if backend_id contains "gemini", else OPENAI
 
     Raises when the contract cannot provide a routing surface. Silent hardcoded
     model fallback is forbidden.
@@ -75,14 +75,14 @@ def _build_default_models_from_bifrost() -> list["ModelConfig"]:
     models: list[ModelConfig] = []
     for b in backends:
         tier = b.get("tier", "")
-        model_name = str(b["model_name"])
+        backend_id = str(b["backend_id"])
         weight = float(b.get("weight", 1.0)) if "weight" in b else 1.0
         timeout = float(b.get("timeout_ms", 10000)) / 1000.0
 
         if tier == "local":
             provider = ModelProvider.OPENAI_COMPATIBLE
             endpoint = None  # resolved lazily via LLM_CODER_URL
-        elif "gemini" in model_name.lower():
+        elif "gemini" in backend_id.lower():
             provider = ModelProvider.GEMINI
             endpoint = None  # set by ModelConfig.__post_init__
         else:
@@ -91,7 +91,7 @@ def _build_default_models_from_bifrost() -> list["ModelConfig"]:
 
         models.append(
             ModelConfig(
-                name=model_name,
+                name=backend_id,
                 provider=provider,
                 weight=weight,
                 endpoint=endpoint,
