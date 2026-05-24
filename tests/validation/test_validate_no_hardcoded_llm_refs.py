@@ -94,21 +94,21 @@ class TestModelIdDetection:
 class TestEndpointUrlDetection:
     def test_vllm_endpoint_flagged(self, tmp_path: Path) -> None:
         f = tmp_path / "client.py"
-        f.write_text('base_url = "http://192.168.86.201:8000/v1"\n')
+        f.write_text('base_url = "http://192.168.86.201:8000/v1"\n')  # onex-allow-internal-ip
         violations = _scan_file(f, set(), [])
         assert violations
         assert any("llm_endpoint_url" in v for v in violations)
 
     def test_embedding_endpoint_flagged(self, tmp_path: Path) -> None:
         f = tmp_path / "client.py"
-        f.write_text('EMBED_URL = "http://192.168.86.200:8100/v1/embeddings"\n')
+        f.write_text('EMBED_URL = "http://192.168.86.200:8100/v1/embeddings"\n')  # onex-allow-internal-ip
         violations = _scan_file(f, set(), [])
         assert violations
 
     def test_non_llm_ip_not_flagged(self, tmp_path: Path) -> None:
         f = tmp_path / "client.py"
         # Non-LLM port — should not match
-        f.write_text('postgres_url = "192.168.86.201:5432"\n')
+        f.write_text('postgres_url = "192.168.86.201:5432"\n')  # onex-allow-internal-ip
         violations = _scan_file(f, set(), [])
         # Port 5432 is not an LLM port — should not flag
         llm_violations = [v for v in violations if "llm_endpoint_url" in v]
@@ -117,8 +117,8 @@ class TestEndpointUrlDetection:
     def test_suppressed_endpoint_passes(self, tmp_path: Path) -> None:
         f = tmp_path / "client.py"
         f.write_text(
-            'url = "http://192.168.86.201:8000/v1"  # llm-hardcode-ok: local dev only\n'
-        )
+            'url = "http://192.168.86.201:8000/v1"  # llm-hardcode-ok: local dev only\n'  # onex-allow-internal-ip
+        )  # onex-allow-internal-ip
         violations = _scan_file(f, set(), [])
         assert violations == []
 

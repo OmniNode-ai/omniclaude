@@ -19,6 +19,9 @@
 
 name: Detect Hardcoded LLM Refs
 
+permissions:
+  contents: read
+
 on:
   workflow_call:
   pull_request:
