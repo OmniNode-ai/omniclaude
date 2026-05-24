@@ -28,25 +28,39 @@ def _load_delegate_model_name() -> str:
     Falls back to the first local backend, then to the first backend overall.
     This avoids hardcoding the model name in Python source.
     """
-    try:
-        raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8"))
-        backends = raw.get("backends", [])
-        # Prefer local backends with code_generation capability
-        for b in backends:
-            if b.get("tier") == "local" and "code_generation" in b.get(
-                "capabilities", []
-            ):
-                return str(b["model_name"])
-        # Fallback: any local backend
-        for b in backends:
-            if b.get("tier") == "local":
-                return str(b["model_name"])
-        # Last resort: first backend
-        if backends:
-            return str(backends[0]["model_name"])
-    except Exception:  # noqa: BLE001 — fail-safe: never crash classifier at import
-        pass
-    return "qwen2.5-14b"  # legacy fallback if YAML is missing/corrupt
+    if not _BIFROST_YAML_PATH.exists():
+        raise RuntimeError(
+            f"Missing bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+            "TaskClassifier requires contract-declared model routing; "
+            "hardcoded model fallbacks are forbidden."
+        )
+
+    raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8")) or {}
+    backends = raw.get("backends", [])
+    if not isinstance(backends, list):
+        raise RuntimeError(
+            f"Invalid bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+            "'backends' must be a list."
+        )
+
+    # Prefer local backends with code_generation capability
+    for b in backends:
+        if b.get("tier") == "local" and "code_generation" in b.get(
+            "capabilities", []
+        ):
+            return str(b["model_name"])
+    # Fallback: any local backend declared by the same contract.
+    for b in backends:
+        if b.get("tier") == "local":
+            return str(b["model_name"])
+    # Last resort: first contract-declared backend.
+    if backends:
+        return str(backends[0]["model_name"])
+
+    raise RuntimeError(
+        f"No backends declared in bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+        "TaskClassifier cannot resolve a delegate model."
+    )
 
 
 class TaskIntent(Enum):

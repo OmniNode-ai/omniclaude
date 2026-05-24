@@ -9,34 +9,34 @@ purpose, latency budget, and priority. The registry loads endpoint URLs from
 environment variables and provides lookup methods by purpose.
 
 Environment variables:
-    LLM_CODER_URL: Qwen3-Coder-30B-A3B endpoint for code generation (RTX 5090).
+    LLM_CODER_URL: Code generation endpoint.
     LLM_CODER_MODEL_NAME: Model ID sent in API requests to the coder endpoint.
         Required when LLM_CODER_URL is set.
-    LLM_CODER_FAST_URL: Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx).
+    LLM_CODER_FAST_URL: Mid-tier endpoint for routing classification and long-context tasks.
     LLM_CODER_FAST_MODEL_NAME: Model ID sent in API requests to the mid-tier endpoint.
         Required when LLM_CODER_FAST_URL is set.
     LLM_CODER_FAST_MAX_LATENCY_MS: Max acceptable latency (ms) for the mid-tier endpoint.
         Default: 1000. Range: 100-60000.
-    LLM_EMBEDDING_URL: Qwen3-Embedding-8B-4bit embedding endpoint.
+    LLM_EMBEDDING_URL: Embedding endpoint.
     LLM_EMBEDDING_MODEL_NAME: Model ID sent in API requests to the embedding endpoint.
         Required when LLM_EMBEDDING_URL is set.
-    LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap).
+    LLM_FUNCTION_URL: Function-calling endpoint.
     LLM_FUNCTION_MODEL_NAME: Model ID sent in API requests to the function calling endpoint.
         Required when LLM_FUNCTION_URL is set.
     LLM_DEEPSEEK_LITE_URL: Lightweight reasoning endpoint (optional, hot-swap).
-    LLM_DEEPSEEK_LITE_MODEL_NAME: Model ID sent in API requests to the DeepSeek-Lite endpoint.
+    LLM_DEEPSEEK_LITE_MODEL_NAME: Model ID sent in API requests to the lightweight reasoning endpoint.
         Required when LLM_DEEPSEEK_LITE_URL is set.
-    LLM_QWEN_72B_URL: Qwen3-Coder-30B-A3B reasoning endpoint (was Qwen2.5-72B).
+    LLM_QWEN_72B_URL: Large reasoning endpoint.
     LLM_QWEN_72B_MODEL_NAME: Model ID sent in API requests to the reasoning endpoint.
         Required when LLM_QWEN_72B_URL is set.
-    LLM_VISION_URL: Qwen2-VL vision endpoint.
+    LLM_VISION_URL: Vision endpoint.
     LLM_VISION_MODEL_NAME: Model ID sent in API requests to the vision endpoint.
         Required when LLM_VISION_URL is set.
     LLM_DEEPSEEK_R1_URL: Advanced reasoning endpoint (optional, hot-swap).
-    LLM_DEEPSEEK_R1_MODEL_NAME: Model ID sent in API requests to the DeepSeek-R1 endpoint.
+    LLM_DEEPSEEK_R1_MODEL_NAME: Model ID sent in API requests to the advanced reasoning endpoint.
         Required when LLM_DEEPSEEK_R1_URL is set.
-    LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint.
-    LLM_QWEN_14B_MODEL_NAME: Model ID sent in API requests to the Qwen 14B endpoint.
+    LLM_QWEN_14B_URL: General purpose endpoint.
+    LLM_QWEN_14B_MODEL_NAME: Model ID sent in API requests to the general purpose endpoint.
         Required when LLM_QWEN_14B_URL is set.
     OPENROUTER_API_KEY: OpenRouter API key for hosted code generation.
     LLM_OPENROUTER_URL: OpenRouter OpenAI-compatible API base URL.
@@ -181,25 +181,25 @@ class LocalLlmEndpointRegistry(BaseSettings):
         class; construct a new instance instead.
 
     Attributes:
-        llm_coder_url: Code generation endpoint (Qwen3-Coder-30B-A3B, RTX 5090).
+        llm_coder_url: Code generation endpoint.
         llm_coder_model_name: Model ID sent in API requests to the coder endpoint.
-        llm_coder_fast_url: Mid-tier endpoint for routing classification and long-context tasks (Qwen3-14B-AWQ, RTX 4090, 40K ctx).
+        llm_coder_fast_url: Mid-tier endpoint for routing classification and long-context tasks.
         llm_coder_fast_model_name: Model ID sent in API requests to the mid-tier endpoint.
         llm_coder_fast_max_latency_ms: Max latency (ms) for the mid-tier endpoint (default 1000).
-        llm_embedding_url: Embedding endpoint (Qwen3-Embedding-8B-4bit).
+        llm_embedding_url: Embedding endpoint.
         llm_embedding_model_name: Model ID sent in API requests to the embedding endpoint.
-        llm_function_url: Function-calling endpoint (Qwen2.5-7B, hot-swap).
+        llm_function_url: Function-calling endpoint.
         llm_function_model_name: Model ID sent in API requests to the function calling endpoint.
         llm_deepseek_lite_url: Lightweight reasoning endpoint.
-        llm_deepseek_lite_model_name: Model ID sent in API requests to the DeepSeek-Lite endpoint.
-        llm_qwen_72b_url: Large model endpoint (Qwen3-Coder-30B-A3B, was Qwen2.5-72B).
-        llm_qwen_72b_model_name: Model ID sent in API requests to the 72B endpoint.
-        llm_vision_url: Vision endpoint (Qwen2-VL).
+        llm_deepseek_lite_model_name: Model ID sent in API requests to the lightweight reasoning endpoint.
+        llm_qwen_72b_url: Large reasoning endpoint.
+        llm_qwen_72b_model_name: Model ID sent in API requests to the reasoning endpoint.
+        llm_vision_url: Vision endpoint.
         llm_vision_model_name: Model ID sent in API requests to the vision endpoint.
         llm_deepseek_r1_url: Advanced reasoning endpoint.
-        llm_deepseek_r1_model_name: Model ID sent in API requests to the DeepSeek-R1 endpoint.
-        llm_qwen_14b_url: General purpose endpoint (Qwen2.5-14B).
-        llm_qwen_14b_model_name: Model ID sent in API requests to the Qwen 14B endpoint.
+        llm_deepseek_r1_model_name: Model ID sent in API requests to the advanced reasoning endpoint.
+        llm_qwen_14b_url: General purpose endpoint.
+        llm_qwen_14b_model_name: Model ID sent in API requests to the general purpose endpoint.
 
     Example:
         >>> import os
@@ -225,7 +225,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     # =========================================================================
     llm_coder_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen3-Coder-30B-A3B endpoint for code generation (RTX 5090)",
+        description="Code generation endpoint",
     )
     llm_coder_model_name: str | None = Field(
         default=None,
@@ -233,7 +233,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_coder_fast_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx)",
+        description="Mid-tier endpoint for routing classification and long-context tasks",
     )
     llm_coder_fast_model_name: str | None = Field(
         default=None,
@@ -247,7 +247,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_embedding_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen3-Embedding-8B-4bit endpoint for embeddings (M2 Ultra)",
+        description="Embedding endpoint",
     )
     llm_embedding_model_name: str | None = Field(
         default=None,
@@ -255,7 +255,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_function_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen2.5-7B endpoint for function calling (RTX 4090, hot-swap)",
+        description="Function-calling endpoint",
     )
     llm_function_model_name: str | None = Field(
         default=None,
@@ -267,11 +267,11 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_deepseek_lite_model_name: str | None = Field(
         default=None,
-        description="Model ID to send in API requests for the DeepSeek-Lite endpoint",
+        description="Model ID to send in API requests for the lightweight reasoning endpoint",
     )
     llm_qwen_72b_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen3-Coder-30B-A3B endpoint for documentation and analysis (M2 Ultra)",
+        description="Large reasoning endpoint for documentation and analysis",
     )
     llm_qwen_72b_model_name: str | None = Field(
         default=None,
@@ -279,7 +279,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_vision_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen2-VL endpoint for vision and multimodal (M2 Ultra)",
+        description="Vision and multimodal endpoint",
     )
     llm_vision_model_name: str | None = Field(
         default=None,
@@ -291,15 +291,15 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_deepseek_r1_model_name: str | None = Field(
         default=None,
-        description="Model ID to send in API requests for the DeepSeek-R1 endpoint",
+        description="Model ID to send in API requests for the advanced reasoning endpoint",
     )
     llm_qwen_14b_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen2.5-14B endpoint for general purpose tasks (M2 Pro)",
+        description="General purpose endpoint",
     )
     llm_qwen_14b_model_name: str | None = Field(
         default=None,
-        description="Model ID to send in API requests for the Qwen 14B endpoint",
+        description="Model ID to send in API requests for the general purpose endpoint",
     )
 
     # =========================================================================
@@ -486,7 +486,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 "LLM_CODER_FAST_MODEL_NAME",
                 LlmEndpointPurpose.ROUTING,
                 self.llm_coder_fast_max_latency_ms,
-                9,  # Mid-tier model for routing classification (RTX 4090, 40K ctx)
+                9,  # Mid-tier model for routing classification.
                 None,
                 _default_path,
             ),
@@ -496,7 +496,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 "LLM_CODER_MODEL_NAME",
                 LlmEndpointPurpose.CODE_ANALYSIS,
                 self.llm_coder_max_latency_ms,
-                9,  # High priority: dedicated GPU (RTX 5090)
+                9,  # High priority: dedicated code-generation backend.
                 None,
                 _default_path,
             ),
@@ -556,7 +556,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 "LLM_DEEPSEEK_R1_MODEL_NAME",
                 LlmEndpointPurpose.REASONING,
                 self.llm_deepseek_r1_max_latency_ms,
-                7,  # Medium-high: hot-swap with 72B
+                7,  # Medium-high: hot-swap reasoning backend.
                 None,
                 _default_path,
             ),

@@ -54,50 +54,57 @@ def _build_default_models_from_bifrost() -> list["ModelConfig"]:
       local        → OPENAI_COMPATIBLE (endpoint resolved lazily via LLM_CODER_URL)
       frontier_api → GEMINI if model_name contains "gemini", else OPENAI
 
-    Falls back to the legacy hardcoded list if the YAML is missing or corrupt.
+    Raises when the contract cannot provide a routing surface. Silent hardcoded
+    model fallback is forbidden.
     """
-    try:
-        raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8"))
-        backends = raw.get("backends", [])
-        models: list[ModelConfig] = []
-        for b in backends:
-            tier = b.get("tier", "")
-            model_name = str(b["model_name"])
-            weight = float(b.get("weight", 1.0)) if "weight" in b else 1.0
-            timeout = float(b.get("timeout_ms", 10000)) / 1000.0
+    if not _BIFROST_YAML_PATH.exists():
+        raise RuntimeError(
+            f"Missing bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+            "AIQuorum requires contract-declared model routing; hardcoded model "
+            "fallbacks are forbidden."
+        )
 
-            if tier == "local":
-                provider = ModelProvider.OPENAI_COMPATIBLE
-                endpoint = None  # resolved lazily via LLM_CODER_URL
-            elif "gemini" in model_name.lower():
-                provider = ModelProvider.GEMINI
-                endpoint = None  # set by ModelConfig.__post_init__
-            else:
-                provider = ModelProvider.OPENAI
-                endpoint = None
+    raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8")) or {}
+    backends = raw.get("backends", [])
+    if not isinstance(backends, list):
+        raise RuntimeError(
+            f"Invalid bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+            "'backends' must be a list."
+        )
 
-            models.append(
-                ModelConfig(
-                    name=model_name,
-                    provider=provider,
-                    weight=weight,
-                    endpoint=endpoint,
-                    timeout=timeout,
-                )
+    models: list[ModelConfig] = []
+    for b in backends:
+        tier = b.get("tier", "")
+        model_name = str(b["model_name"])
+        weight = float(b.get("weight", 1.0)) if "weight" in b else 1.0
+        timeout = float(b.get("timeout_ms", 10000)) / 1000.0
+
+        if tier == "local":
+            provider = ModelProvider.OPENAI_COMPATIBLE
+            endpoint = None  # resolved lazily via LLM_CODER_URL
+        elif "gemini" in model_name.lower():
+            provider = ModelProvider.GEMINI
+            endpoint = None  # set by ModelConfig.__post_init__
+        else:
+            provider = ModelProvider.OPENAI
+            endpoint = None
+
+        models.append(
+            ModelConfig(
+                name=model_name,
+                provider=provider,
+                weight=weight,
+                endpoint=endpoint,
+                timeout=timeout,
             )
-        if models:
-            return models
-    except Exception:  # noqa: BLE001 — fail-safe: never crash quorum at import
-        pass
-    # Legacy fallback if YAML is missing/corrupt
-    return [
-        ModelConfig(
-            name="qwen3-coder-30b",
-            provider=ModelProvider.OPENAI_COMPATIBLE,
-            weight=1.5,
-        ),
-        ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
-    ]
+        )
+    if models:
+        return models
+
+    raise RuntimeError(
+        f"No backends declared in bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+        "AIQuorum cannot build DEFAULT_MODELS."
+    )
 
 
 class ModelProvider(Enum):
@@ -558,9 +565,7 @@ Provide your evaluation:"""
     ) -> tuple[ModelConfig, dict[str, Any]]:
         """Score using an OpenAI-compatible endpoint (vLLM, etc.).
 
-        The default endpoint is LLM_CODER_URL (Qwen3-Coder-30B-A3B AWQ-4bit,
-        RTX 5090, 64K context window). Replaces the decommissioned Ollama
-        endpoint (OMN-4798).
+        The endpoint is resolved from the model config or LLM_CODER_URL.
 
         Args:
             model: Model configuration with OPENAI_COMPATIBLE provider.
