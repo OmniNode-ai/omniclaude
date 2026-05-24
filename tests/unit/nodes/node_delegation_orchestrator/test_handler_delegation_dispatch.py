@@ -24,8 +24,23 @@ def clean_backend_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LLM_CODER_MODEL_NAME",
         "LLM_CODER_FAST_URL",
         "LLM_CODER_FAST_MODEL_NAME",
+        "LLM_EMBEDDING_URL",
+        "LLM_EMBEDDING_MODEL_NAME",
+        "LLM_FUNCTION_URL",
+        "LLM_FUNCTION_MODEL_NAME",
+        "LLM_DEEPSEEK_LITE_URL",
+        "LLM_DEEPSEEK_LITE_MODEL_NAME",
+        "LLM_QWEN_72B_URL",
+        "LLM_QWEN_72B_MODEL_NAME",
+        "LLM_VISION_URL",
+        "LLM_VISION_MODEL_NAME",
         "LLM_DEEPSEEK_R1_URL",
         "LLM_DEEPSEEK_R1_MODEL_NAME",
+        "LLM_QWEN_14B_URL",
+        "LLM_QWEN_14B_MODEL_NAME",
+        "LLM_GEMINI_URL",
+        "LLM_GEMINI_API_KEY",
+        "LLM_GEMINI_MODEL_NAME",
         "LLM_GLM_URL",
         "LLM_GLM_API_KEY",
         "LLM_GLM_MODEL_NAME",
@@ -45,7 +60,10 @@ def test_openrouter_is_primary_when_keyed(
     clean_backend_env: None,
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setenv("LLM_OPENROUTER_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("LLM_OPENROUTER_MODEL_NAME", "z-ai/glm-4.7-flash")
     monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+    monkeypatch.setenv("LLM_CODER_MODEL_NAME", "Qwen3-Coder-30B-A3B-Instruct")
 
     route = select_backend(_registry())
 
@@ -63,6 +81,7 @@ def test_openrouter_without_key_falls_back_to_local_qwen(
     clean_backend_env: None,
 ) -> None:
     monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+    monkeypatch.setenv("LLM_CODER_MODEL_NAME", "Qwen3-Coder-30B-A3B-Instruct")
 
     route = select_backend(_registry())
 
@@ -79,7 +98,9 @@ def test_local_qwen_coder_precedes_fast_routing_model(
     clean_backend_env: None,
 ) -> None:
     monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+    monkeypatch.setenv("LLM_CODER_MODEL_NAME", "Qwen3-Coder-30B-A3B-Instruct")
     monkeypatch.setenv("LLM_CODER_FAST_URL", "http://llm-fast-host:8001")
+    monkeypatch.setenv("LLM_CODER_FAST_MODEL_NAME", "Qwen3-14B-Instruct-AWQ")
 
     route = select_backend(_registry())
 
@@ -96,6 +117,7 @@ def test_direct_glm_uses_typed_registry_after_cli_fallbacks(
 ) -> None:
     monkeypatch.setenv("LLM_GLM_URL", "https://open.bigmodel.cn/api/paas/v4")
     monkeypatch.setenv("LLM_GLM_API_KEY", "test-glm-key")
+    monkeypatch.setenv("LLM_GLM_MODEL_NAME", "glm-4-plus")
 
     route = select_backend(_registry())
 

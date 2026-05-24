@@ -428,7 +428,9 @@ def test_build_env_config_merges_default_contract_with_overlay(
 def test_build_env_config_stable_rule_id_across_calls(monkeypatch, tmp_path) -> None:
     """Contract-derived rule_ids are stable across loads."""
     dst = _write_bifrost_with_endpoints(
-        tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
+        tmp_path,
+        {"local-deepseek-r1-14b": _CODER_FAST_URL},
+        {"local-deepseek-r1-14b": "configured-deepseek"},
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
 
@@ -448,6 +450,10 @@ def test_build_env_config_multiple_backends(monkeypatch, tmp_path) -> None:
         {
             "local-qwen-coder-30b": "http://host:8000",
             "local-deepseek-r1-14b": "http://host:8001",
+        },
+        {
+            "local-qwen-coder-30b": "configured-qwen-coder",
+            "local-deepseek-r1-14b": "configured-deepseek",
         },
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
