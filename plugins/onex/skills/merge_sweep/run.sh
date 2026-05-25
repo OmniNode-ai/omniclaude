@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 #
 # run.sh — thin wrapper for /onex:merge_sweep.
-# Delegates to _lib/run.py which dispatches through the runtime ingress
-# (SSH socket → HTTP → Kafka) instead of calling onex run-node directly.
+# Delegates to _lib/run.py which publishes to the contract-driven Kafka topic
+# instead of calling onex run-node directly.
 
 set -euo pipefail
 

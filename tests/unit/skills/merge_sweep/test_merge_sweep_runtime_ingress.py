@@ -1,12 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for merge_sweep/_lib/run.py runtime ingress dispatch."""
+"""Unit tests for merge_sweep/_lib/run.py Kafka dispatch."""
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -72,13 +70,9 @@ def test_resolve_command_topic_returns_empty_without_omni_home(monkeypatch) -> N
 
 @pytest.mark.unit
 def test_dispatch_merge_sweep_kafka_missing_bootstrap(monkeypatch) -> None:
-    """When KAFKA_BOOTSTRAP_SERVERS is unset and no SSH/HTTP transports are set,
-    dispatch fails with a clear error rather than silently dropping."""
+    """When KAFKA_BOOTSTRAP_SERVERS is unset, dispatch fails with a clear error."""
     mod = _import_lib_run()
     monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
-    monkeypatch.delenv("ONEX_RUNTIME_SSH_HOST", raising=False)
-    monkeypatch.delenv("ONEX_RUNTIME_SOCKET_PATH", raising=False)
-    monkeypatch.delenv("ONEX_RUNTIME_URL", raising=False)
     monkeypatch.setattr(mod, "_resolve_command_topic", lambda: _EXPECTED_TOPIC)
 
     result = mod.dispatch_merge_sweep(
@@ -91,40 +85,30 @@ def test_dispatch_merge_sweep_kafka_missing_bootstrap(monkeypatch) -> None:
 
 
 @pytest.mark.unit
-def test_dispatch_merge_sweep_http_dispatches_correct_payload(monkeypatch) -> None:
-    """HTTP transport must send node_pr_lifecycle_orchestrator with the correct payload."""
+def test_dispatch_merge_sweep_kafka_publishes_correct_payload(monkeypatch) -> None:
+    """Kafka transport must publish the full payload fields to the contract topic."""
     mod = _import_lib_run()
-    monkeypatch.delenv("ONEX_RUNTIME_SSH_HOST", raising=False)
-    monkeypatch.delenv("ONEX_RUNTIME_SOCKET_PATH", raising=False)
-    monkeypatch.setenv("ONEX_RUNTIME_URL", "http://runtime.test:8085")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-test-broker:9092")
     monkeypatch.setattr(mod, "_resolve_command_topic", lambda: _EXPECTED_TOPIC)
 
     captured: list[dict] = []
 
-    def fake_dispatch_via_http(request, runtime_url, timeout_seconds):
+    def fake_kafka_dispatch(payload, correlation_id_str, topic):
         captured.append(
-            {
-                "command_name": request.command_name,
-                "payload": dict(request.payload),
-                "runtime_url": runtime_url,
-            }
+            {"payload": payload, "correlation_id": correlation_id_str, "topic": topic}
         )
-        mock_resp = MagicMock()
-        mock_resp.ok = True
-        mock_resp.correlation_id = uuid.UUID(request.payload["correlation_id"])
-        mock_resp.command_name = request.command_name
-        mock_resp.command_topic = _EXPECTED_TOPIC
-        mock_resp.terminal_event = (
-            "onex.evt.omnimarket.pr-lifecycle-orchestrator-completed.v1"
-        )
-        mock_resp.dispatch_result = MagicMock(status="dispatched")
-        mock_resp.output_payloads = None
-        return mock_resp
+        return {
+            "success": True,
+            "correlation_id": correlation_id_str,
+            "topic": topic,
+            "path": "kafka",
+            "dispatch_status": "published",
+        }
 
-    monkeypatch.setattr(mod, "_dispatch_via_http", fake_dispatch_via_http)
+    monkeypatch.setattr(mod, "_dispatch_via_kafka", fake_kafka_dispatch)
 
     result = mod.dispatch_merge_sweep(
-        run_id="http-test-run",
+        run_id="payload-test-run",
         dry_run=True,
         inventory_only=True,
         repos="OmniNode-ai/omniclaude",
@@ -132,14 +116,13 @@ def test_dispatch_merge_sweep_http_dispatches_correct_payload(monkeypatch) -> No
     )
 
     assert result["success"] is True
-    assert result["path"] == "http"
+    assert result["path"] == "kafka"
     assert len(captured) == 1
 
-    req = captured[0]
-    assert req["command_name"] == "node_pr_lifecycle_orchestrator"
-    assert req["runtime_url"] == "http://runtime.test:8085"
-    p = req["payload"]
-    assert p["run_id"] == "http-test-run"
+    pub = captured[0]
+    assert pub["topic"] == _EXPECTED_TOPIC
+    p = pub["payload"]
+    assert p["run_id"] == "payload-test-run"
     assert p["dry_run"] is True
     assert p["inventory_only"] is True
     assert p["repos"] == "OmniNode-ai/omniclaude"

@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""merge_sweep skill — dispatch through runtime ingress.
+"""merge_sweep skill — dispatch through Kafka transport.
 
-Invoked when the user runs /onex:merge_sweep. Builds a ModelPrLifecycleStartCommand
-payload and dispatches to the runtime via transport priority:
-  1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH both set)
-  2. HTTP (ONEX_RUNTIME_URL is set and non-empty)
-  3. Kafka (contract-driven, topic onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1)
-     Uses KAFKA_BOOTSTRAP_SERVERS — fail-fast if unset.
+Invoked when the user runs /onex:merge_sweep. Builds a pr-lifecycle-orchestrator-start
+payload and publishes it to the contract-driven Kafka topic.
 
-Optional env vars:
-  ONEX_RUNTIME_SSH_HOST    — SSH target for remote socket dispatch, e.g. user@host
-  ONEX_RUNTIME_SOCKET_PATH — Unix socket path on the SSH host
-  ONEX_RUNTIME_URL         — HTTP endpoint for direct HTTP dispatch
-  KAFKA_BOOTSTRAP_SERVERS  — Required for the Kafka fallback transport
+Required env vars:
+  KAFKA_BOOTSTRAP_SERVERS  — Kafka bootstrap address (fail-fast if unset)
+  OMNI_HOME                — Path to the omni_home monorepo root (for contract resolution)
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -39,23 +32,6 @@ if _HOOKS_LIB.exists() and str(_HOOKS_LIB) not in sys.path:
 _SRC_PATH = _PLUGIN_ROOT.parent.parent / "src"
 if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
     sys.path.insert(0, str(_SRC_PATH))
-
-# ---------------------------------------------------------------------------
-# Runtime model imports — graceful fallback if package unavailable
-# ---------------------------------------------------------------------------
-try:
-    from omnibase_core.models.runtime import (
-        ModelRuntimeSkillRequest,
-        ModelRuntimeSkillResponse,
-    )
-    from omnibase_infra.clients.runtime_skill_client import LocalRuntimeSkillClient
-
-    _RUNTIME_IMPORT_ERROR: ImportError | None = None
-except ImportError as exc:
-    ModelRuntimeSkillRequest = None  # type: ignore[assignment]
-    ModelRuntimeSkillResponse = None  # type: ignore[assignment]
-    LocalRuntimeSkillClient = None  # type: ignore[assignment]
-    _RUNTIME_IMPORT_ERROR = exc
 
 _PR_LIFECYCLE_COMMAND_NAME = "node_pr_lifecycle_orchestrator"
 _CONTRACT_RELATIVE_PATH = (
@@ -94,89 +70,6 @@ def _resolve_correlation_id(correlation_id: str | None) -> uuid.UUID:
         except ValueError:
             pass
     return uuid.uuid4()
-
-
-def _runtime_import_error(exc: ImportError) -> dict:  # type: ignore[type-arg]
-    return {
-        "success": False,
-        "error": (
-            "Runtime skill client unavailable - install omnibase_core and "
-            f"omnibase_infra in the plugin environment: {exc}"
-        ),
-    }
-
-
-def _dispatch_via_ssh_socket(
-    payload_json: str,
-    ssh_host: str,
-    socket_path: str,
-    timeout_seconds: float,
-) -> dict:  # type: ignore[type-arg]
-    import base64  # noqa: PLC0415
-
-    script_src = f"""import socket, sys
-sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-sock.connect({socket_path!r})
-sock.settimeout({timeout_seconds})
-data = sys.stdin.buffer.read()
-sock.sendall(data if data.endswith(b'\\n') else data + b'\\n')
-resp = b''
-while True:
-    chunk = sock.recv(65536)
-    if not chunk:
-        break
-    resp += chunk
-    if b'\\n' in resp:
-        break
-sock.close()
-print(resp.decode('utf-8', errors='replace').strip())
-"""
-    encoded = base64.b64encode(script_src.encode()).decode()
-    remote_cmd = f"python3 -c \"import base64,sys; exec(base64.b64decode('{encoded}').decode())\""
-
-    proc = subprocess.run(  # noqa: S603
-        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", ssh_host, remote_cmd],
-        input=payload_json.encode("utf-8"),
-        capture_output=True,
-        timeout=timeout_seconds + 15,
-        check=False,
-    )
-
-    if proc.returncode != 0:
-        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-        raise OSError(f"SSH dispatch failed (exit {proc.returncode}): {stderr}")
-
-    raw_output = proc.stdout.decode("utf-8", errors="replace").strip()
-    if not raw_output:
-        raise OSError("SSH dispatch returned empty response")
-
-    return json.loads(raw_output)  # type: ignore[return-value]
-
-
-def _dispatch_via_http(
-    request: object,
-    runtime_url: str,
-    timeout_seconds: float,
-) -> object:
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
-
-    payload = request.model_dump_json(exclude_none=True).encode("utf-8")  # type: ignore[attr-defined]
-    req = urllib.request.Request(  # noqa: S310
-        f"{runtime_url.rstrip('/')}/skill",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:  # noqa: S310
-            raw = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.URLError:
-        raise
-
-    from omnibase_core.models.runtime import ModelRuntimeSkillResponse  # noqa: PLC0415
-
-    return ModelRuntimeSkillResponse.model_validate(raw)
 
 
 def _dispatch_via_kafka(
@@ -285,16 +178,13 @@ def dispatch_merge_sweep(
     correlation_id: str | None = None,
     timeout_ms: int = 300_000,
 ) -> dict:  # type: ignore[type-arg]
-    """Dispatch node_pr_lifecycle_orchestrator via runtime ingress.
+    """Dispatch node_pr_lifecycle_orchestrator via Kafka.
 
-    Transport priority:
-      1. SSH socket (ONEX_RUNTIME_SSH_HOST + ONEX_RUNTIME_SOCKET_PATH)
-      2. HTTP (ONEX_RUNTIME_URL)
-      3. Kafka (contract-driven topic resolved from node contract.yaml)
+    Kafka is the canonical inter-service transport. The topic is resolved
+    contract-first from the node's contract.yaml (event_bus.subscribe_topics[0]).
     """
     correlation_uuid = _resolve_correlation_id(correlation_id)
     correlation_id_str = str(correlation_uuid)
-    timeout_seconds = timeout_ms / 1000.0
 
     command_topic = _resolve_command_topic()
 
@@ -316,123 +206,6 @@ def dispatch_merge_sweep(
         "verify_timeout_seconds": verify_timeout_seconds,
     }
 
-    ssh_host = os.environ.get("ONEX_RUNTIME_SSH_HOST", "").strip()
-    ssh_socket_path = os.environ.get("ONEX_RUNTIME_SOCKET_PATH", "").strip()
-    runtime_url = os.environ.get("ONEX_RUNTIME_URL", "").strip()
-
-    if ssh_host and ssh_socket_path:
-        ssh_payload = {
-            "command_name": _PR_LIFECYCLE_COMMAND_NAME,
-            "payload": payload,
-            "correlation_id": correlation_id_str,
-            "timeout_ms": timeout_ms,
-        }
-        _ssh_transport_error: str | None = None
-        try:
-            raw = _dispatch_via_ssh_socket(
-                payload_json=json.dumps(ssh_payload),
-                ssh_host=ssh_host,
-                socket_path=ssh_socket_path,
-                timeout_seconds=timeout_seconds,
-            )
-        except (OSError, json.JSONDecodeError) as exc:
-            _ssh_transport_error = str(exc)
-            raw = None
-        if raw is not None:
-            ok = raw.get("ok", False)
-            if not ok:
-                error = raw.get("error") or {}
-                is_structured = isinstance(error, dict) and (
-                    "code" in error or "message" in error or "retryable" in error
-                )
-                if is_structured:
-                    return {
-                        "success": False,
-                        "error": error.get("message", "runtime dispatch failed"),
-                        "error_code": error.get("code", "dispatch_error"),
-                        "retryable": error.get("retryable", False),
-                        "correlation_id": raw.get("correlation_id", correlation_id_str),
-                        "command_name": _PR_LIFECYCLE_COMMAND_NAME,
-                        "topic": raw.get("command_topic") or command_topic,
-                        "path": "ssh",
-                    }
-                _ssh_transport_error = str(error) if error else "runtime unreachable"
-            else:
-                return {
-                    "success": True,
-                    "correlation_id": raw.get("correlation_id", correlation_id_str),
-                    "command_name": raw.get("command_name", _PR_LIFECYCLE_COMMAND_NAME),
-                    "topic": raw.get("command_topic") or command_topic,
-                    "terminal_event": raw.get("terminal_event"),
-                    "dispatch_status": raw.get("dispatch_result", {}).get("status"),
-                    "output_payloads": raw.get("output_payloads"),
-                    "path": "ssh",
-                }
-
-    if runtime_url:
-        if _RUNTIME_IMPORT_ERROR is not None or ModelRuntimeSkillRequest is None:
-            return _runtime_import_error(
-                _RUNTIME_IMPORT_ERROR or ImportError("missing runtime classes")
-            )
-        request = ModelRuntimeSkillRequest(
-            command_name=_PR_LIFECYCLE_COMMAND_NAME,
-            payload=payload,
-            correlation_id=correlation_uuid,
-            timeout_ms=timeout_ms,
-        )
-        import urllib.error  # noqa: PLC0415
-
-        _http_transport_error: str | None = None
-        try:
-            response = _dispatch_via_http(request, runtime_url, timeout_seconds)
-        except urllib.error.URLError as exc:
-            _http_transport_error = (
-                f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}"
-            )
-            response = None  # type: ignore[assignment]
-        if response is not None:
-            if not response.ok:  # type: ignore[union-attr]
-                error = response.error  # type: ignore[union-attr]
-                is_structured = error is not None and hasattr(error, "code")
-                if is_structured:
-                    return {
-                        "success": False,
-                        "error": error.message if error else "runtime dispatch failed",
-                        "error_code": error.code if error else "dispatch_error",
-                        "retryable": error.retryable if error else False,
-                        "correlation_id": str(
-                            getattr(response, "correlation_id", None)
-                            or correlation_uuid
-                        ),
-                        "command_name": getattr(
-                            response, "command_name", _PR_LIFECYCLE_COMMAND_NAME
-                        ),
-                        "topic": getattr(response, "command_topic", None)
-                        or command_topic,
-                        "path": "http",
-                    }
-                _http_transport_error = (
-                    error.message if error else "runtime unreachable via HTTP"
-                )
-            else:
-                return {
-                    "success": True,
-                    "correlation_id": str(
-                        getattr(response, "correlation_id", None) or correlation_uuid
-                    ),
-                    "command_name": getattr(
-                        response, "command_name", _PR_LIFECYCLE_COMMAND_NAME
-                    ),
-                    "topic": getattr(response, "command_topic", None) or command_topic,
-                    "terminal_event": getattr(response, "terminal_event", None),
-                    "dispatch_status": response.dispatch_result.status  # type: ignore[union-attr]
-                    if getattr(response, "dispatch_result", None)
-                    else None,
-                    "output_payloads": getattr(response, "output_payloads", None),
-                    "path": "http",
-                }
-
-    # Kafka: contract-driven transport — topic resolved from node contract.yaml
     if not command_topic:
         return {
             "success": False,
@@ -454,7 +227,7 @@ def main() -> None:
     import argparse  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(
-        description="merge_sweep skill — dispatch through runtime SSH socket, HTTP, or Kafka"
+        description="merge_sweep skill — dispatch via Kafka"
     )
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--repos", default="")
@@ -511,7 +284,7 @@ def main() -> None:
         print(
             f"\nmerge_sweep dispatched ({result.get('path')}) - "
             f"correlation_id={result['correlation_id']}\n"
-            f"command_name={result.get('command_name')}\n"
+            f"command_name={_PR_LIFECYCLE_COMMAND_NAME}\n"
             f"dispatch_status={result.get('dispatch_status')}",
             file=sys.stderr,
         )
