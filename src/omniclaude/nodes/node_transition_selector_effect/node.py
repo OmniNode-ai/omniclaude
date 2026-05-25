@@ -57,14 +57,6 @@ logger = logging.getLogger(__name__)
 _PROMPT_TEMPLATE_VERSION = "1.0.0"
 
 
-def _resolve_model_name() -> str:
-    """Resolve routing model name from registry. Falls back to env var default."""
-    from omniclaude.config.model_local_llm_config import LocalLlmEndpointRegistry
-
-    registry = LocalLlmEndpointRegistry()
-    return registry.llm_coder_fast_model_name
-
-
 def _resolve_endpoint() -> str:
     """Resolve LLM endpoint from environment. Fail fast if not configured."""
     url = os.environ.get("LLM_CODER_FAST_URL", "")
@@ -466,7 +458,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         url = f"{endpoint}/v1/chat/completions"
 
         payload = {
-            "model": _resolve_model_name(),
+            "model": _resolve_model_id(),
             "messages": [
                 {
                     "role": "user",
