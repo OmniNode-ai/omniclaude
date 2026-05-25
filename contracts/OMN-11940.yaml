@@ -1,0 +1,25 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11940
+title: "Add Phase 0 knowledge preload section to design-to-plan skill"
+summary: >
+  Document the Phase 0 knowledge preload flow for the design-to-plan skill so downstream agents can
+  consistently gather context before planning implementation work.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: validation
+    description: "PR contract validation passes for OMN-11940."
+    command: "uv run python /Users/jonah/Code/omni_home/omnibase_infra/scripts/validate_pr_contracts.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-pr-contract
+    description: "Repo-local PR contract exists for the design-to-plan skill documentation update."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f contracts/OMN-11940.yaml && grep -q 'ticket_id: OMN-11940' contracts/OMN-11940.yaml"
