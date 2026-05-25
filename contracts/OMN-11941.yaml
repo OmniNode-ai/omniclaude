@@ -1,0 +1,25 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11941
+title: "Document ticket-work research enrichment flow"
+summary: >
+  Document the ticket-work research enrichment flow so the skill references the canonical
+  ticket research enrichment node behavior and evidence expectations.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: validation
+    description: "PR contract validation passes for OMN-11941."
+    command: "uv run python /Users/jonah/Code/omni_home/omnibase_infra/scripts/validate_pr_contracts.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-pr-contract
+    description: "Repo-local PR contract exists for the ticket-work skill documentation update."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f contracts/OMN-11941.yaml && grep -q 'ticket_id: OMN-11941' contracts/OMN-11941.yaml"
