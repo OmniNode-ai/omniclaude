@@ -15,6 +15,7 @@
 
 # Contract identifiers
 name: node_git_effect
+version: "0.1.0"
 contract_name: node_git_effect
 node_name: node_git_effect
 

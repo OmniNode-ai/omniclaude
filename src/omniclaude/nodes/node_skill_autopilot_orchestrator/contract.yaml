@@ -14,6 +14,7 @@
 
 # Contract identifiers
 name: node_skill_autopilot_orchestrator
+version: "0.1.0"
 contract_name: node_skill_autopilot_orchestrator
 node_name: node_skill_autopilot_orchestrator
 
