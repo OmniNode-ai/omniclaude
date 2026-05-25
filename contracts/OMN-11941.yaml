@@ -9,7 +9,7 @@ is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 evidence_requirements:
-  - kind: validation
+  - kind: manual
     description: "PR contract validation passes for OMN-11941."
     command: "uv run python /Users/jonah/Code/omni_home/omnibase_infra/scripts/validate_pr_contracts.py"
 emergency_bypass:
