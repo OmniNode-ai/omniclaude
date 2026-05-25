@@ -1,0 +1,25 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-11938
+title: "Extend recall skill with scoped knowledge federation"
+summary: >
+  Add scoped recall behavior so the skill can route knowledge federation queries through the requested
+  project or repository scope while preserving existing recall behavior.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: validation
+    description: "PR contract validation passes for OMN-11938."
+    command: "uv run python /Users/jonah/Code/omni_home/omnibase_infra/scripts/validate_pr_contracts.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-pr-contract
+    description: "Repo-local PR contract exists for the recall skill enhancement."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f contracts/OMN-11938.yaml && grep -q 'ticket_id: OMN-11938' contracts/OMN-11938.yaml"
