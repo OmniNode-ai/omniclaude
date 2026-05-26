@@ -524,6 +524,15 @@ ignore = [
 # Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta
 # CLI entrypoints — intentional user-facing print() output
 "src/omniclaude/runtime/__main__.py" = ["T201"]
+"src/omniclaude/hook_runtime/__main__.py" = ["T201"]
+# Hooks: pre_tool_use, post_tool_use, and handler files emit blocks/decisions to stdout for Claude Code protocol
+"src/omniclaude/hooks/pre_tool_use_*.py" = ["T201"]
+"src/omniclaude/hooks/post_tool_use_*.py" = ["T201"]
+"src/omniclaude/hooks/handlers/audit_dispatch_validator.py" = ["T201"]
+"src/omniclaude/hooks/handlers/context_scope_auditor.py" = ["T201"]
+"src/omniclaude/hooks/lib/test_offloader.py" = ["T201"]
+# CI output — print() is the output mechanism for GH Actions
+"src/omniclaude/quirks/ci/run_checks.py" = ["T201"]
 # Subscribers use print() for CLI __main__ output and JSON stdout
 "src/omniclaude/hooks/lib/compliance_result_subscriber.py" = ["T201"]
 "src/omniclaude/hooks/lib/decision_record_subscriber.py" = ["T201"]

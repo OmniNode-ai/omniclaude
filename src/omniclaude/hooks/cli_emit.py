@@ -637,8 +637,8 @@ def _emit_tool_content(content: ModelToolExecutionContent) -> ModelEventPublishR
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    import os  # noqa: PLC0415
-    import sys  # noqa: PLC0415
+    import os
+    import sys
 
     # Resolve emit_client_wrapper from the plugin lib directory.
     # The module path is constructed relative to CLAUDE_PLUGIN_ROOT so the
@@ -651,7 +651,7 @@ def _emit_tool_content(content: ModelToolExecutionContent) -> ModelEventPublishR
     topic = build_topic(TopicBase.TOOL_CONTENT)
 
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
 
         payload = json.loads(content.model_dump_json())
         success = emit_event("tool.content", payload)

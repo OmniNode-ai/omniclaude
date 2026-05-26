@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint — reads stdin, writes stdout, returns exit code."""
     stdin_data = sys.stdin.read()
     exit_code, output = run_guardrail(stdin_data)
-    print(output)  # noqa: T201
+    print(output)
     return exit_code
 
 

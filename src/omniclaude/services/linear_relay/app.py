@@ -50,7 +50,7 @@ _dedup_store: DedupStore | None = None
 
 def _get_dedup_store() -> DedupStore:
     """Get or create the module-level dedup store."""
-    global _dedup_store  # noqa: PLW0603
+    global _dedup_store
     if _dedup_store is None:
         _dedup_store = DedupStore()
     return _dedup_store
@@ -58,7 +58,7 @@ def _get_dedup_store() -> DedupStore:
 
 def _reset_dedup_store(store: DedupStore | None = None) -> None:
     """Replace the dedup store. For testing only."""
-    global _dedup_store  # noqa: PLW0603
+    global _dedup_store
     _dedup_store = store
 
 

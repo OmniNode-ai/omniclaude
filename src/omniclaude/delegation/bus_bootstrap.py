@@ -134,7 +134,7 @@ async def bootstrap_delegation_bus(
             return
 
         try:
-            from omnimarket.nodes.node_projection_delegation.handlers.handler_projection_delegation import (  # noqa: PLC0415
+            from omnimarket.nodes.node_projection_delegation.handlers.handler_projection_delegation import (
                 HandlerProjectionDelegation,
                 ModelTaskDelegatedEvent,
             )

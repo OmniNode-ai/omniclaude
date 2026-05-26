@@ -28,7 +28,7 @@ from omniclaude.services.linear_relay.models import LinearEpicClosedCommand
 logger = logging.getLogger(__name__)
 
 # Kafka topic for feature-dashboard commands
-FEATURE_DASHBOARD_TOPIC = "onex.cmd.omniclaude.feature-dashboard.v1"  # noqa: arch-topic-naming  # onex-topic-allow: pending contract auto-wiring
+FEATURE_DASHBOARD_TOPIC = "onex.cmd.omniclaude.feature-dashboard.v1"  # onex-topic-allow: pending contract auto-wiring
 
 
 class _KafkaProducer(Protocol):
@@ -90,7 +90,7 @@ async def _get_producer() -> _KafkaProducer:
     Raises:
         ImportError: If ``aiokafka`` is not installed.
     """
-    global _producer  # noqa: PLW0603
+    global _producer
     if _producer is None:
         try:
             from aiokafka import AIOKafkaProducer
@@ -159,7 +159,7 @@ async def publish_command(command: LinearEpicClosedCommand) -> None:
 
 async def close_producer() -> None:
     """Close the Kafka producer. Call on application shutdown."""
-    global _producer  # noqa: PLW0603
+    global _producer
     if _producer is not None:
         await _producer.stop()
         _producer = None

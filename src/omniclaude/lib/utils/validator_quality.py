@@ -133,7 +133,7 @@ def _emit_enforcement_event(event_type: str, payload: dict[str, Any]) -> bool:
         otherwise.  Callers must treat ``False`` as non-fatal.
     """
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
 
         return bool(emit_event(event_type, payload))
     except Exception:
@@ -1178,12 +1178,12 @@ class QualityEnforcer:
             return
 
         try:
-            import uuid as _uuid  # noqa: PLC0415
-            from datetime import UTC  # noqa: PLC0415
+            import uuid as _uuid
+            from datetime import UTC
             from datetime import datetime as _datetime
 
             from plugins.onex.hooks.lib.session_id import (
-                resolve_session_id,  # noqa: PLC0415
+                resolve_session_id,
             )
 
             session_id = resolve_session_id(default="")

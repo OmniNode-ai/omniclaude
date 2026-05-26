@@ -67,13 +67,13 @@ logger = logging.getLogger(__name__)
 def _resolve_session_id_canonical() -> str:
     try:
         from session_id import (
-            resolve_session_id,  # type: ignore[import-not-found]  # noqa: PLC0415
+            resolve_session_id,  # type: ignore[import-not-found]
         )
     except ModuleNotFoundError as exc:
         if exc.name != "session_id":
             raise
         from plugins.onex.hooks.lib.session_id import (
-            resolve_session_id,  # noqa: PLC0415
+            resolve_session_id,
         )
     return resolve_session_id()
 
@@ -99,7 +99,7 @@ def _get_default_registry_path() -> str:
         return path
 
     # Default to ONEX state directory
-    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import state_path
 
     return str(state_path("agents", "onex", "agent-registry.yaml"))
 
@@ -277,7 +277,7 @@ class AgentRouter:
         Import is deferred to avoid hard dependency on plugin sys.path.
         """
         try:
-            from emit_client_wrapper import emit_event  # noqa: PLC0415
+            from emit_client_wrapper import emit_event
 
             return emit_event
         except ImportError:

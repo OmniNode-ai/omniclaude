@@ -144,7 +144,7 @@ _BUDGET_STATE_FILE_PATTERN = "context_budget_{task_id}.json"
 
 
 def _get_default_state_dir() -> Path:
-    from omniclaude.hooks.lib.onex_state import ensure_state_dir  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir
 
     return ensure_state_dir("hooks", ".state")
 
@@ -243,7 +243,7 @@ def _emit_event(
         payload: Event payload dict.
     """
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
     except ImportError:
         logger.debug("emit_client_wrapper not available; event dropped: %s", event_type)
         return
@@ -418,7 +418,7 @@ class ContextScopeAuditor:
         Returns None if the registry cannot be loaded (non-fatal).
         """
         try:
-            from plugins.onex.hooks.lib.correlation_manager import (  # noqa: PLC0415
+            from plugins.onex.hooks.lib.correlation_manager import (
                 get_registry,
             )
 
@@ -664,7 +664,7 @@ def run_hook(stdin_data: str | None = None) -> int:
         hook_data = json.loads(raw)
     except json.JSONDecodeError:
         logger.debug("context_scope_auditor: invalid JSON from stdin, allowing")
-        print(raw, end="")  # noqa: T201 — hook protocol: pass through to stdout
+        print(raw, end="")
         return 0
 
     tool_name: str = hook_data.get("tool_name", "")
@@ -693,11 +693,11 @@ def run_hook(stdin_data: str | None = None) -> int:
                 ),
             }
         )
-        print(block_json)  # noqa: T201 — hook protocol: emit block decision to stdout
+        print(block_json)
         return 2
 
     # Allow: pass through the original hook_data
-    print(raw, end="")  # noqa: T201 — hook protocol: pass through to stdout
+    print(raw, end="")
     return 0
 
 

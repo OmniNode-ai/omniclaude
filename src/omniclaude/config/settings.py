@@ -169,13 +169,15 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
-    omniclaude_db_url: SecretStr = Field(  # noqa: secrets — Pydantic field, value sourced from env var OMNICLAUDE_DB_URL
-        default=SecretStr(""),
-        description=(
-            "Full PostgreSQL connection URL for omniclaude database. "
-            "When set, takes precedence over individual POSTGRES_* fields. "
-            "Format: postgresql://user:password@host:port/dbname"
-        ),
+    omniclaude_db_url: SecretStr = (
+        Field(  # Pydantic field, value sourced from env var OMNICLAUDE_DB_URL
+            default=SecretStr(""),
+            description=(
+                "Full PostgreSQL connection URL for omniclaude database. "
+                "When set, takes precedence over individual POSTGRES_* fields. "
+                "Format: postgresql://user:password@host:port/dbname"
+            ),
+        )
     )
     enable_postgres: bool = Field(
         default=False,
@@ -487,9 +489,13 @@ class Settings(BaseSettings):
                 )
             dsn = raw_url
             if async_driver and dsn.startswith("postgresql://"):
-                dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]  # noqa: secrets — URL scheme substitution, not a hardcoded credential
+                dsn = (
+                    "postgresql+asyncpg://" + dsn[len("postgresql://") :]
+                )  # URL scheme substitution, not a hardcoded credential
             elif async_driver and dsn.startswith("postgres://"):
-                dsn = "postgresql+asyncpg://" + dsn[len("postgres://") :]  # noqa: secrets — URL scheme substitution, not a hardcoded credential
+                dsn = (
+                    "postgresql+asyncpg://" + dsn[len("postgres://") :]
+                )  # URL scheme substitution, not a hardcoded credential
             return dsn
         return self.get_postgres_dsn(async_driver=async_driver)
 

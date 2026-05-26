@@ -376,11 +376,11 @@ def _publish_audit_event(
     python_cmd = sys.executable
     payload_json = json.dumps(payload, default=str)
     try:
-        subprocess.Popen(  # noqa: S603
+        subprocess.Popen(
             [
                 python_cmd,
                 "-m",
-                "omniclaude.hooks.cli_emit",  # noqa: arch-topic-naming — module path, not a Kafka topic
+                "omniclaude.hooks.cli_emit",  # module path, not a Kafka topic
                 "audit-event",
                 "--topic",
                 topic,

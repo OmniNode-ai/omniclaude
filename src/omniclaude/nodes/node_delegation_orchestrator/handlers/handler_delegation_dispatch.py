@@ -208,7 +208,7 @@ def handle_cross_cli_dispatch(
             "handle_cross_cli_dispatch requires explicit recipient; got recipient='auto'. "
             "Use handle_delegation_dispatch() for auto-routing."
         )
-    from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_cross_cli_invoker import (  # noqa: PLC0415
+    from omniclaude.nodes.node_delegation_orchestrator.handlers.handler_cross_cli_invoker import (
         HandlerCrossCLIInvoker,
     )
 

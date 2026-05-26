@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_TOPIC_PATTERN = "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore  # noqa: arch-topic-naming  # onex-topic-allow: pending contract auto-wiring
+_TOPIC_PATTERN = "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore# onex-topic-allow: pending contract auto-wiring
 _DISPATCHER_ID = "dispatcher.skill.command"
 _ROUTE_ID = "skill-command-router"
 _COMPLETION_TOPIC = TopicBase.SKILL_COMPLETED
@@ -607,7 +607,7 @@ class SkillCommandDispatcher:
                 backend_result=backend_result,
                 duration_ms=duration_ms,
             )
-            token_cost = sum(  # noqa: secrets
+            token_cost = sum(
                 call.input_tokens + call.output_tokens for call in model_calls
             )
             dollars_cost = sum(call.cost_dollars for call in model_calls)
@@ -725,8 +725,8 @@ def _extract_model_calls(
     extra = getattr(backend_result, "extra", None)
     extra_dict = extra if isinstance(extra, dict) else {}
     output = _skill_result_output(backend_result)
-    input_tokens = _int_from_extra(extra_dict, "input_tokens", "prompt_tokens")  # noqa: secrets
-    output_tokens = _int_from_extra(  # noqa: secrets
+    input_tokens = _int_from_extra(extra_dict, "input_tokens", "prompt_tokens")
+    output_tokens = _int_from_extra(
         extra_dict,
         "output_tokens",
         "completion_tokens",
@@ -1100,7 +1100,7 @@ class QuirkFindingDispatcher:
         Returns ``None`` if the bridge is not registered or resolution fails.
         """
         try:
-            from omniclaude.quirks.memory_bridge import (  # noqa: PLC0415
+            from omniclaude.quirks.memory_bridge import (
                 NodeQuirkMemoryBridgeEffect,
             )
 

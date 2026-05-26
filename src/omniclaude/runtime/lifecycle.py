@@ -489,7 +489,7 @@ async def start_workers(
     existing = state.workers.get(worker_name)
     if existing is None or not existing.is_alive:
         try:
-            from omniclaude.hooks.lib.compliance_result_subscriber import (  # noqa: PLC0415
+            from omniclaude.hooks.lib.compliance_result_subscriber import (
                 run_subscriber_background as _compliance_run_bg,
             )
 
@@ -531,7 +531,7 @@ async def start_workers(
     existing = state.workers.get(worker_name)
     if existing is None or not existing.is_alive:
         try:
-            from omniclaude.hooks.lib.decision_record_subscriber import (  # noqa: PLC0415
+            from omniclaude.hooks.lib.decision_record_subscriber import (
                 run_subscriber_background as _decision_run_bg,
             )
 
@@ -570,7 +570,7 @@ async def start_workers(
     # Skill node introspection (best-effort, non-blocking)
     # ----------------------------------------------------------------
     try:
-        from omniclaude.runtime.introspection import (  # noqa: PLC0415
+        from omniclaude.runtime.introspection import (
             SkillNodeIntrospectionProxy,
         )
 

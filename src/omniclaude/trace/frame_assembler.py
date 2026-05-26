@@ -112,8 +112,8 @@ def run_git_diff_patch(repo_root: str) -> str:
         Unified diff string, or empty string if no changes or git fails
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "diff", "HEAD", "--patch"],  # noqa: S607
+        result = subprocess.run(
+            ["git", "diff", "HEAD", "--patch"],
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -123,8 +123,8 @@ def run_git_diff_patch(repo_root: str) -> str:
         diff = result.stdout.strip()
         if not diff:
             # Also try staged-only diff
-            result2 = subprocess.run(  # noqa: S603
-                ["git", "diff", "--cached", "--patch"],  # noqa: S607
+            result2 = subprocess.run(
+                ["git", "diff", "--cached", "--patch"],
                 capture_output=True,
                 text=True,
                 cwd=repo_root,
@@ -158,8 +158,8 @@ def _diff_untracked_files(repo_root: str) -> str:
         Concatenated unified diff for all untracked files, or empty string
     """
     try:
-        ls_result = subprocess.run(  # noqa: S603
-            ["git", "ls-files", "--others", "--exclude-standard"],  # noqa: S607
+        ls_result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -173,8 +173,8 @@ def _diff_untracked_files(repo_root: str) -> str:
     parts: list[str] = []
     for rel_path in untracked_files:
         try:
-            diff_result = subprocess.run(  # noqa: S603
-                ["git", "diff", "--no-index", "/dev/null", rel_path],  # noqa: S607
+            diff_result = subprocess.run(
+                ["git", "diff", "--no-index", "/dev/null", rel_path],
                 capture_output=True,
                 text=True,
                 cwd=repo_root,
@@ -202,8 +202,8 @@ def get_current_commit(repo_root: str) -> str:
         Full 40-char commit SHA, or empty string on failure
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "rev-parse", "HEAD"],  # noqa: S607
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -222,8 +222,8 @@ def get_current_branch(repo_root: str) -> str:
         Branch name, or "unknown" on failure
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -242,8 +242,8 @@ def get_repo_name(repo_root: str) -> str:
         Remote URL or local directory name as fallback
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "remote", "get-url", "origin"],  # noqa: S607
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -357,7 +357,7 @@ def run_checks(
 
     for spec in checks:
         try:
-            proc = subprocess.run(  # noqa: S603
+            proc = subprocess.run(
                 spec.command,
                 capture_output=True,
                 text=True,
@@ -411,8 +411,8 @@ def _compute_environment_hash(repo_root: str) -> str:
         SHA-256 hash of environment snapshot
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["uv", "pip", "freeze"],  # noqa: S607
+        result = subprocess.run(
+            ["uv", "pip", "freeze"],
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -592,7 +592,7 @@ def persist_frame_to_jsonl(frame: ChangeFrame, session_id: str) -> Path:
     Returns:
         Path to the JSONL file
     """
-    from omniclaude.hooks.lib.onex_state import ensure_state_dir  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir
 
     trace_dir = ensure_state_dir("trace")
 
@@ -629,7 +629,7 @@ def emit_change_frame(frame: ChangeFrame, session_id: str) -> bool:
         True if the event was successfully queued by the daemon, False otherwise
     """
     try:
-        from emit_client_wrapper import emit_event  # noqa: I001, PLC0415
+        from emit_client_wrapper import emit_event  # noqa: I001
     except ImportError:
         logger.debug("emit_client_wrapper not available, skipping ChangeFrame emission")
         return False

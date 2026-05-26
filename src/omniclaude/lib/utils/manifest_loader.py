@@ -58,7 +58,7 @@ def load_manifest(
         search_paths.append(Path(project_path) / "agents" / "lib")
 
     # Add ONEX state directory
-    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import state_path
 
     search_paths.append(state_path("agents", "lib"))
 

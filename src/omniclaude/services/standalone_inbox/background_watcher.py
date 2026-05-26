@@ -30,7 +30,7 @@ INBOX_TTL_SECONDS = 7200
 
 def _inbox_dir() -> Path:
     """Get the inbox directory, creating it if needed."""
-    from omniclaude.hooks.lib.onex_state import ensure_state_dir  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir
 
     return ensure_state_dir("pr-inbox")
 
