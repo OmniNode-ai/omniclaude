@@ -3,7 +3,37 @@
 # SPDX-License-Identifier: MIT
 
 """
-Agent Router - Standalone Routing Module
+Agent Router - Standalone Routing Module (Hooks Runtime Layer)
+
+ARCHITECTURE NOTE (OMN-11592):
+  This is the standalone runtime copy of the agent router for the Claude Code
+  hooks layer. It intentionally duplicates the behavioral contract of
+  src/omniclaude/lib/core/agent_router.py (the canonical package implementation).
+
+  WHY TWO COPIES EXIST:
+  - The hooks runtime executes outside the installed omniclaude package context.
+    Python sys.path in the hook subprocess does not include the package install,
+    so ``from omniclaude.lib.core.agent_router import AgentRouter`` cannot work.
+  - This copy is imported as a bare module via sys.path manipulation:
+    ``sys.path.insert(0, str(HOOKS_LIB_DIR)); from agent_router import AgentRouter``
+
+  WHICH IS CANONICAL:
+  - src/omniclaude/lib/core/agent_router.py is canonical for ALL package consumers
+    (tests, internal services, CLI, routing_event_client).
+  - This file is the hooks-runtime implementation. It mirrors the behavioral
+    contract of the src version, with additional hooks-specific features:
+      * _build_registry_from_configs() — builds from a directory of agent YAMLs
+        rather than a single consolidated agent-registry.yaml
+      * disallowed_tools — hooks enforce tool restrictions per-agent
+      * OMNICLAUDE_MODE filtering (lite/full) — for reduced footprint
+      * _SENSITIVE_PREFIXES security guard — protects CLAUDE_PLUGIN_ROOT
+      * is_explicit field on AgentRecommendation — for CLI routing display
+
+  BEHAVIORAL DRIFT RULE:
+  When modifying the routing algorithm in the src version, apply the same
+  changes here. The golden fixture tests in tests/golden/test_agent_router_golden.py
+  test the src version; the hooks integration tests (route_via_events_wrapper)
+  test this version indirectly.
 
 Local agent routing with trigger matching and confidence scoring.
 Works standalone without external service dependencies.
