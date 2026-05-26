@@ -1,7 +1,7 @@
 ---
-description: End-to-end data flow verification — for each Kafka topic in omnidash topics.yaml, verify producer emits, consumer receives (0 lag), DB table has rows, dashboard page shows data. Auto-creates Linear tickets for broken flows.
+description: End-to-end data flow verification — dispatches to node_data_flow_sweep which handles all metadata collection (rpk/psql probes) and flow classification internally.
 mode: full
-version: 1.0.0
+version: 2.0.0
 level: advanced
 debug: false
 category: verification
@@ -16,10 +16,7 @@ args:
     description: "Check a single topic only"
     required: false
   - name: --skip-playwright
-    description: "Skip Phase 4 dashboard page verification"
-    required: false
-  - name: --flows
-    description: "JSON array of pre-collected flow objects (topic, handler_name, table_name, producer_status, ...)"
+    description: "Skip Phase 3 dashboard page verification"
     required: false
 ---
 
@@ -42,40 +39,34 @@ args:
 
 - `--dry-run` → report only, no ticket creation; zero side effects
 - `--topic` → filter to single topic
-- `--skip-playwright` → skip Phase 4 dashboard verification
-- `--flows` → JSON array of pre-collected flow metadata (skips live Kafka/DB checks)
+- `--skip-playwright` → skip Phase 3 dashboard verification
 
-### Phase 2 — Collect flow metadata (unless `--flows` provided)
-
-For each topic in `omnidash/topics.yaml`:
-1. Check producer status via `rpk topic describe` — classify as `ACTIVE` | `EMPTY` | `MISSING`
-2. Check consumer group lag via `rpk group describe omnidash-read-model-v1`
-3. Check DB table row count via `psql -c "SELECT COUNT(*) FROM omnidash_analytics.<table>"`
-4. Verify field mapping: compare fields against projection handler and DB schema
-
-Classify each flow: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN`
-
-### Phase 3 — Run node
+### Phase 2 — Dispatch to node
 
 ```bash
 onex node node_data_flow_sweep -- \
-  [--flows '<json-array>'] \
+  --collect \
   [--topic <topic>] \
   [--dry-run]
 ```
+
+The node handles all metadata collection internally:
+- Producer status via `rpk topic describe`
+- Consumer group lag via `rpk group describe`
+- DB table row counts and recency via `psql`
+- Flow classification: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN` | `TOPIC_STALE`
 
 Capture stdout (JSON: `DataFlowSweepResult`). Exit 0 = healthy, exit 1 = issues found.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
-### Phase 4 — Dashboard verification (unless `--skip-playwright`)
+### Phase 3 — Dashboard verification (unless `--skip-playwright`)
 
-For each `FLOWING` table, use Playwright MCP to navigate to the dashboard route and verify
-data renders (not "No data", no JS errors).
+For each `FLOWING` table in the result, use Playwright MCP to navigate to the dashboard route and verify data renders (not "No data", no JS errors).
 
-### Phase 5 — Report + ticket creation (no tickets if `--dry-run`)
+### Phase 4 — Report + ticket creation (no tickets if `--dry-run`)
 
-Display health matrix:
+Display health matrix from the node result:
 
 | Topic | Producer | Consumer | DB Table | Dashboard | Status |
 |-------|----------|----------|----------|-----------|--------|
@@ -107,9 +98,17 @@ Use `general-purpose` routing for parallel topic checks.
 ## Architecture
 
 ```
-SKILL.md   -> thin shell (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_data_flow_sweep/ (flow verification logic)
+SKILL.md   -> thin dispatch shim (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_data_flow_sweep/ (collection + classification)
 contract   -> node_data_flow_sweep/contract.yaml
+collector  -> node_data_flow_sweep/collector.py (rpk/psql probes — inside the node)
 ```
 
-**Routing contract:** dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
+**Routing contract:** dispatch must use `onex node <node_name> -- --collect` (not `onex run`).
+Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
+
+## Migration note (v1 to v2)
+
+v1 ran `rpk`/`psql` probes inline in the skill before dispatching pre-collected data via `--flows`.
+v2 dispatches with `--collect` — the node runs the probes internally.
+The `--flows` flag on the node CLI remains available for testing with pre-collected data.

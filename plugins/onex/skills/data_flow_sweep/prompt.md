@@ -5,7 +5,7 @@ You are executing the data-flow-sweep skill. This verifies end-to-end data flow 
 ## Argument Parsing
 
 ```
-/data_flow_sweep [--dry-run] [--topic <topic_name>] [--skip-playwright] [--flows '<json>']
+/data_flow_sweep [--dry-run] [--topic <topic_name>] [--skip-playwright]
 ```
 
 ```python
@@ -27,128 +27,35 @@ if "--topic" in args:
 
 ---
 
-## Phase 1 — Topic Discovery
+## Phase 1 — Dispatch to node
 
-Read `omnidash/topics.yaml` to extract all `read_model_topics` entries.
+Run the node with `--collect` so it performs all rpk/psql metadata collection internally:
 
 ```bash
-OMNIDASH_PATH="${OMNIDASH_PATH:-}"
-for candidate in \
-  "${ONEX_REGISTRY_ROOT:?ONEX_REGISTRY_ROOT required}/omnidash"; do
-  if [ -f "$candidate/topics.yaml" ]; then
-    OMNIDASH_PATH="$candidate"
-    break
-  fi
-done
+onex node node_data_flow_sweep -- \
+  --collect \
+  ${single_topic:+--topic "$single_topic"} \
+  ${dry_run:+--dry-run}
 ```
 
-For each topic entry, build a manifest:
-1. Parse `topics.yaml` — extract each topic name and its handler name
-2. Map each handler to its projection file in `omnidash/server/projections/`
-3. Map each projection to its target DB table(s) by reading `omnidash/shared/intelligence-schema.ts`
-4. Determine the dashboard route that renders data from each table
+Capture JSON stdout as `sweep_result`. Exit 0 = healthy, exit 1 = issues found.
 
-If `--topic` is specified, filter the manifest to only that topic.
+On non-zero exit, surface the `SkillRoutingError` JSON envelope verbatim — do not produce prose.
 
-**Output**: Topic manifest table:
-
-| Topic | Handler | Projection File | DB Table(s) | Dashboard Route |
-|-------|---------|-----------------|-------------|-----------------|
+The node collects and classifies each flow in one pass:
+- Producer status (`ACTIVE` | `EMPTY` | `MISSING`) via `rpk topic describe`
+- Consumer lag via `rpk group describe`
+- DB table row count and recency via `psql`
+- Flow status: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN` | `TOPIC_STALE`
 
 ---
 
-## Phase 2 — Producer Verification
-
-For each topic in the manifest, verify the producer is actively emitting:
-
-```bash
-KAFKA_BROKERS="${KAFKA_BOOTSTRAP_SERVERS:-localhost:19092}"
-
-# Check if topic exists and has messages
-docker exec omnibase-infra-redpanda rpk topic describe "$TOPIC" 2>&1
-
-# If docker is not available, try kcat directly
-kcat -L -b "$KAFKA_BROKERS" -t "$TOPIC" 2>&1 | head -5
-
-# Check latest offset
-kcat -C -b "$KAFKA_BROKERS" -t "$TOPIC" -o end -c 1 -e 2>&1 | head -3
-```
-
-Classify each topic:
-- `ACTIVE`: topic exists, has recent messages (offset > 0)
-- `EMPTY`: topic exists but 0 messages
-- `MISSING`: topic does not exist in broker metadata
-
----
-
-## Phase 3 — Consumer + DB Verification
-
-For each topic with `ACTIVE` producer status:
-
-```bash
-INFRA_HOST="${POSTGRES_HOST:-localhost}"
-POSTGRES_PORT="${POSTGRES_PORT:-5436}"
-
-# Check consumer group lag
-docker exec omnibase-infra-redpanda rpk group describe omnidash-read-model-v2 2>&1
-
-# Check DB table row count
-psql -h "$INFRA_HOST" -p "$POSTGRES_PORT" -U postgres -d omnidash_analytics \
-  -tAc "SELECT count(*) FROM $TABLE_NAME;"
-
-# Check latest row timestamp
-psql -h "$INFRA_HOST" -p "$POSTGRES_PORT" -U postgres -d omnidash_analytics \
-  -tAc "SELECT max(created_at) FROM $TABLE_NAME;"
-```
-
-Classify each flow:
-- `FLOWING`: lag=0, table has recent rows (within 24h)
-- `STALE`: lag=0 but table data older than 24h
-- `LAGGING`: consumer lag > 0
-- `EMPTY_TABLE`: messages in topic but 0 rows in DB
-- `MISSING_TABLE`: table does not exist
-
----
-
-## Phase 3b — Field Mapping Verification
-
-For each topic-to-projection-to-DB chain, verify field alignment:
-
-1. **Consume 1 message** from the topic:
-```bash
-kcat -C -b "$KAFKA_BROKERS" -t "$TOPIC" -o end -c 1 -e 2>&1
-```
-
-2. **Parse the JSON payload** — extract top-level field names
-
-3. **Read the projection handler source** — extract field names it reads from `data.*`:
-```bash
-grep -oP 'data\.\K\w+' "$PROJECTION_FILE" | sort -u
-```
-
-4. **Read the DB table schema** — extract column names:
-```sql
-SELECT column_name FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = '$TABLE_NAME';
-```
-
-5. **Assert**: every field the projection reads from the message exists in the message
-6. **Assert**: every column the projection writes to exists in the DB table
-
-### Critical Chains to Verify (Minimum)
-
-These three chains must always be checked regardless of filter:
-1. `onex.evt.platform.node-introspection.v1` -> `platform-projections.ts:projectNodeIntrospection` -> `node_service_registry`
-2. `onex.evt.omniintelligence.pattern-learned.v1` -> `omniintelligence-projections.ts:projectPatternLearned` -> `pattern_learning_artifacts`
-3. `onex.evt.omniclaude.routing-decision.v1` -> `omniclaude-projections.ts:projectRoutingDecision` -> `agent_routing_decisions`
-
----
-
-## Phase 4 — Dashboard Page Verification (Optional)
+## Phase 2 — Dashboard Page Verification (Optional)
 
 **Skip this phase if `--skip-playwright` is set.**
 
-For each table with `FLOWING` status, navigate to the associated dashboard route using Playwright MCP.
+For each flow with `flow_status == "FLOWING"` in `sweep_result.flow_results`, navigate to
+the associated `dashboard_route` using Playwright MCP.
 
 ```
 Use mcp__playwright__browser_navigate to load http://localhost:3000{dashboard_route}
@@ -168,12 +75,12 @@ Classify:
 
 ---
 
-## Phase 5 — Report + Ticket Creation
+## Phase 3 — Report + Ticket Creation
 
 ### Summary Table
 
 ```
-Data Flow Sweep: {OVERALL_STATUS}
+Data Flow Sweep: {sweep_result.status}
 
 | Topic | Producer | Consumer | DB | Dashboard | Status |
 |-------|----------|----------|----|-----------|--------|
@@ -183,7 +90,7 @@ Data Flow Sweep: {OVERALL_STATUS}
 
 ### Ticket Creation
 
-For each broken flow (anything not FLOWING+VISIBLE), auto-create a Linear ticket:
+For each broken flow (anything not `FLOWING`), auto-create a Linear ticket.
 
 **Only if `--dry-run` is NOT set:**
 
@@ -193,12 +100,11 @@ Project: Active Sprint
 Labels: data-flow, sweep
 Description:
   - Topic: {topic}
-  - Handler: {handler}
-  - Projection: {projection_file}
-  - DB table: {table}
-  - Dashboard route: {route}
-  - Failure point: {classification}
-  - Evidence: {rpk output / psql output / screenshot}
+  - Handler: {handler_name}
+  - DB table: {table_name}
+  - Dashboard route: {dashboard_route}
+  - Failure point: {flow_status}
+  - Evidence: {node JSON output excerpt}
 ```
 
 When `--dry-run` is set:
