@@ -1,5 +1,5 @@
 ---
-description: Dispatch-only wrapper for Linear ticket triage node
+description: Dispatch-only wrapper around the Linear ticket-triage node
 mode: full
 version: 2.0.0
 level: intermediate

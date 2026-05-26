@@ -72,7 +72,7 @@ Display health matrix from the node result:
 |-------|----------|----------|----------|-----------|--------|
 | ...   | ACTIVE   | 0 lag    | rows     | visible   | FLOWING |
 
-For each broken flow, create a Linear ticket:
+When the node reports broken flows, render the returned Linear ticket payloads:
 
 ```
 Title: fix(data-flow): {topic} — {failure_classification}

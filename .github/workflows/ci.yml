@@ -1132,7 +1132,7 @@ jobs:
           fi
 
           mapfile -t changed_skills < <(
-            git diff --name-only "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
+            git diff --name-only --diff-filter=ACMRT "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
               awk -F/ '{print $4}' |
               sort -u
           )
@@ -1226,7 +1226,7 @@ jobs:
 
       - name: Export requirements
         working-directory: ${{ github.workspace }}
-        run: uv pip compile pyproject.toml -o requirements.txt
+        run: uv export --frozen --all-extras --format requirements-txt -o requirements.txt
 
       - name: Bandit security scan
         working-directory: ${{ github.workspace }}
