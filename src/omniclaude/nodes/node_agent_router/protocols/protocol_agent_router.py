@@ -46,7 +46,7 @@ class ProtocolAgentRouter(Protocol):
         The node contract's handler_routing.backends configuration maps
         backend keys to handler implementations.
         """
-        ...
+        raise NotImplementedError
 
     async def route(
         self,
@@ -63,4 +63,4 @@ class ProtocolAgentRouter(Protocol):
             ModelAgentRouterResult with ranked recommendations and routed flag.
             Returns empty result (routed=False) on failure — never raises.
         """
-        ...
+        raise NotImplementedError

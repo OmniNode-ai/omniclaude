@@ -479,7 +479,7 @@ class TestGenerateDynamicManifestIntelligenceDisabled:
 
     def test_force_refresh_bypasses_cache(self) -> None:
         injector = self._injector_no_intel()
-        first = injector.generate_dynamic_manifest(_CORRELATION_ID)
+        injector.generate_dynamic_manifest(_CORRELATION_ID)
         second = injector.generate_dynamic_manifest(_CORRELATION_ID, force_refresh=True)
         # Content should be equivalent (same structure) but may be different objects
         assert "manifest_metadata" in second

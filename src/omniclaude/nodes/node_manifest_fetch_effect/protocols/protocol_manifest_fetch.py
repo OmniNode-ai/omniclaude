@@ -30,7 +30,7 @@ class ProtocolManifestFetch(Protocol):
     @property
     def handler_key(self) -> str:
         """Backend identifier for handler routing (e.g., 'http')."""
-        ...
+        raise NotImplementedError
 
     async def fetch(
         self, request: ModelManifestFetchRequest
@@ -47,7 +47,7 @@ class ProtocolManifestFetch(Protocol):
             status=UNAVAILABLE if the runtime is not reachable.
             status=ERROR for any other failure.
         """
-        ...
+        raise NotImplementedError
 
 
 __all__ = ["ProtocolManifestFetch"]

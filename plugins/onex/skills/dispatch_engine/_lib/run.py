@@ -44,17 +44,11 @@ if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
 # Runtime model imports — graceful fallback if package unavailable
 # ---------------------------------------------------------------------------
 try:
-    from omnibase_core.models.runtime import (
-        ModelRuntimeSkillRequest,
-        ModelRuntimeSkillResponse,
-    )
-    from omnibase_infra.clients.runtime_skill_client import LocalRuntimeSkillClient
+    from omnibase_core.models.runtime import ModelRuntimeSkillRequest
 
     _RUNTIME_IMPORT_ERROR: ImportError | None = None
 except ImportError as exc:
     ModelRuntimeSkillRequest = None  # type: ignore[assignment]
-    ModelRuntimeSkillResponse = None  # type: ignore[assignment]
-    LocalRuntimeSkillClient = None  # type: ignore[assignment]
     _RUNTIME_IMPORT_ERROR = exc
 
 _DISPATCH_ENGINE_COMMAND_NAME = "node_skill_dispatch_engine_orchestrator"
@@ -307,7 +301,6 @@ def dispatch_dispatch_engine(
             "correlation_id": correlation_id_str,
             "timeout_ms": timeout_ms,
         }
-        _ssh_transport_error: str | None = None
         try:
             raw = _dispatch_via_ssh_socket(
                 payload_json=json.dumps(ssh_payload),
@@ -315,8 +308,7 @@ def dispatch_dispatch_engine(
                 socket_path=ssh_socket_path,
                 timeout_seconds=timeout_seconds,
             )
-        except (OSError, json.JSONDecodeError) as exc:
-            _ssh_transport_error = str(exc)
+        except (OSError, json.JSONDecodeError):
             raw = None
         if raw is not None:
             ok = raw.get("ok", False)
@@ -336,7 +328,6 @@ def dispatch_dispatch_engine(
                         "topic": raw.get("command_topic") or command_topic,
                         "path": "ssh",
                     }
-                _ssh_transport_error = str(error) if error else "runtime unreachable"
             else:
                 return {
                     "success": True,
@@ -364,13 +355,9 @@ def dispatch_dispatch_engine(
         )
         import urllib.error  # noqa: PLC0415
 
-        _http_transport_error: str | None = None
         try:
             response = _dispatch_via_http(request, runtime_url, timeout_seconds)
-        except urllib.error.URLError as exc:
-            _http_transport_error = (
-                f"HTTP dispatch to ONEX_RUNTIME_URL failed: {exc.reason}"
-            )
+        except urllib.error.URLError:
             response = None  # type: ignore[assignment]
         if response is not None:
             if not response.ok:  # type: ignore[union-attr]
@@ -393,9 +380,6 @@ def dispatch_dispatch_engine(
                         or command_topic,
                         "path": "http",
                     }
-                _http_transport_error = (
-                    error.message if error else "runtime unreachable via HTTP"
-                )
             else:
                 return {
                     "success": True,
