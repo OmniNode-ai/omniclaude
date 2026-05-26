@@ -74,7 +74,7 @@ Poll GitHub PR review status. Auto-fix review comments (Critical/Major/Minor by 
 `pr-review-dev`. Exit when PR reaches a terminal state: `approved`, `changes_requested_fixed`
 (all blocking issues resolved), `timeout`, or `capped` (max fix cycles reached).
 
-**Announce at start:** "I'm using the pr-watch skill to monitor reviews for PR #{pr_number}."
+**Announce at start:** "I'm using the pr-watch skill to monitor review state on PR #{pr_number}."
 
 **Implements**: OMN-2524
 

@@ -1132,7 +1132,7 @@ jobs:
           fi
 
           mapfile -t changed_skills < <(
-            git diff --name-only "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
+            git diff --name-only --diff-filter=AM "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
               awk -F/ '{print $4}' |
               sort -u
           )

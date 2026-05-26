@@ -125,13 +125,7 @@ class HandlerAgentRouter:
         Thread-safe: uses a lock to prevent double-initialization.
         If initialization previously failed, returns None immediately.
         """
-        if self._router is not None:
-            return self._router
-        if self._init_failed:
-            return None
-
         with self._init_lock:
-            # Double-checked locking
             if self._router is not None:
                 return self._router
             if self._init_failed:

@@ -216,16 +216,16 @@ Create worktrees for each affected repo:
   BRANCH=jonah/omn-5057-fix-{domain_id}
 
   For each repo in {repos_likely_affected}:
-    git -C $OMNI_HOME/{repo} worktree add \
-      $OMNI_HOME/omni_worktrees/OMN-5057/{repo}-{domain_id} \
+    git -C $ONEX_WORKTREES_ROOT/../{repo} worktree add \
+      $ONEX_WORKTREES_ROOT/OMN-5057/{repo}-{domain_id} \
       -b {BRANCH}
 
-## NEVER edit files in $OMNI_HOME/<repo>/ directly. Always use worktrees.
+## NEVER edit files in canonical repo roots directly. Always use worktrees.
 
 ## Fix Requirements
 - Fix the root cause (not just the symptom)
 - Run: uv run pre-commit run --all-files (must pass before commit)
-- For TypeScript repos: cd $OMNI_HOME/omni_worktrees/OMN-5057/{repo}-{domain_id} && npx tsc --noEmit
+- For TypeScript repos: cd $ONEX_WORKTREES_ROOT/OMN-5057/{repo}-{domain_id} && npx tsc --noEmit
 
 ## Output Contract
 Write fix summary to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json
@@ -264,7 +264,7 @@ After all debug agents complete, for each domain with `status=fix_ready`:
 
 **Create PR** (title MUST contain `OMN-XXXX` — CI blocks merge without it):
 ```bash
-cd $OMNI_HOME/omni_worktrees/OMN-5057/{repo}-{domain_id}
+cd $ONEX_WORKTREES_ROOT/OMN-5057/{repo}-{domain_id}
 git push -u origin jonah/omn-5057-fix-{domain_id}
 gh pr create \
   --repo OmniNode-ai/{repo} \
@@ -337,7 +337,7 @@ Skip when ANY of: `--deploy` not set, `DRY_RUN=true`, no PRs merged.
 
 **Local deployment:**
 ```bash
-cd $OMNI_HOME
+cd $ONEX_WORKTREES_ROOT/..
 docker compose up --build --force-recreate <affected-services>
 ```
 
