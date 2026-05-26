@@ -54,15 +54,15 @@ jobs:
 
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
-        run: git clone --depth=1 https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence
+        run: git clone --depth=1 --branch main https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence
 
       - name: Clone omnibase_core
         working-directory: ${{ github.workspace }}
-        run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
+        run: git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
 
       - name: Clone omnibase_compat
         working-directory: ${{ github.workspace }}
-        run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat
+        run: git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
