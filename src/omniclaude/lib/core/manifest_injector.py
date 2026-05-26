@@ -72,14 +72,6 @@ from uuid import UUID
 # No sys.path manipulation needed when package is properly installed.
 from omniclaude.config import settings
 
-# Import nest_asyncio for nested event loop support
-try:
-    import nest_asyncio
-
-    nest_asyncio.apply()  # Enable nested event loops globally
-except ImportError:
-    nest_asyncio = None
-
 # FAIL FAST: Required dependencies
 # FAIL FAST: Required ONEX error classes
 from omniclaude.hooks.topics import TopicBase
@@ -927,9 +919,6 @@ class ManifestInjector:
         This is a synchronous wrapper around generate_dynamic_manifest_async()
         for use in hooks and synchronous contexts.
 
-        Uses nest_asyncio to support nested event loops when called from
-        async contexts (like Claude Code).
-
         Args:
             correlation_id: Correlation ID for tracking
             force_refresh: Force refresh even if cache is valid
@@ -948,29 +937,30 @@ class ManifestInjector:
             else:
                 return self._manifest_data
 
-        # Run async query in event loop
+        # Run async query in a fresh event loop.
+        # If a loop is already running (e.g. called from an async context), fall
+        # back to a thread so asyncio.run() gets its own dedicated loop.
         try:
-            loop = asyncio.get_event_loop()
-            # With nest_asyncio.apply(), we can run_until_complete even in running loop
-            return loop.run_until_complete(
+            return asyncio.run(
                 self.generate_dynamic_manifest_async(
                     correlation_id, force_refresh=force_refresh
                 )
             )
         except RuntimeError as e:
-            if "no running event loop" in str(e).lower():
-                # Create new event loop if none exists
-                self.logger.debug("Creating new event loop")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    return loop.run_until_complete(
+            if "cannot be called from a running event loop" in str(e).lower():
+                import concurrent.futures
+
+                self.logger.debug(
+                    "Running manifest generation in thread (called from async context)"
+                )
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(
+                        asyncio.run,
                         self.generate_dynamic_manifest_async(
                             correlation_id, force_refresh=force_refresh
-                        )
+                        ),
                     )
-                finally:
-                    loop.close()
+                    return future.result()
             else:
                 self.logger.error(
                     f"Failed to generate dynamic manifest: {e}", exc_info=True
@@ -5421,9 +5411,6 @@ def inject_manifest(
     backward compatibility. Prefer using inject_manifest_async() directly
     in async contexts for better resource management.
 
-    Uses nest_asyncio to support nested event loops when called from
-    async contexts (like Claude Code).
-
     Args:
         correlation_id: Optional correlation ID for tracking
         sections: Optional list of sections to include
@@ -5436,25 +5423,24 @@ def inject_manifest(
 
     correlation_id = correlation_id or str(uuid4())
 
-    # Run async version in event loop
-    # With nest_asyncio, we can always use run_until_complete
+    # Run async version in a fresh event loop.
+    # If a loop is already running (e.g. called from an async context), fall
+    # back to a thread so asyncio.run() gets its own dedicated loop.
     try:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(
-            inject_manifest_async(correlation_id, sections, agent_name)
-        )
+        return asyncio.run(inject_manifest_async(correlation_id, sections, agent_name))
     except RuntimeError as e:
-        if "no running event loop" in str(e).lower():
-            # Create new event loop if none exists
-            logger.debug("Creating new event loop")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    inject_manifest_async(correlation_id, sections, agent_name)
+        if "cannot be called from a running event loop" in str(e).lower():
+            import concurrent.futures
+
+            logger.debug(
+                "Running inject_manifest in thread (called from async context)"
+            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(
+                    asyncio.run,
+                    inject_manifest_async(correlation_id, sections, agent_name),
                 )
-            finally:
-                loop.close()
+                return future.result()
         else:
             logger.error(f"Failed to run inject_manifest_async: {e}", exc_info=True)
             # Fallback to minimal manifest
