@@ -93,36 +93,28 @@ class TestPrPolishPrecommitGuard:
 
 @pytest.mark.unit
 class TestAutopilotForegroundDispatchGuard:
-    """Guards `close_out:tooling/foreground-agent-dispatch`."""
+    """Autopilot is retired; the old foreground-dispatch guard must not reappear."""
 
     @pytest.fixture
     def skill_md(self) -> str:
-        return _read("autopilot/SKILL.md")
+        path = _SKILLS_ROOT / "autopilot" / "SKILL.md"
+        assert not path.exists(), (
+            "autopilot/SKILL.md was retired in OMN-12234; do not restore the "
+            "foreground Agent() dispatch surface guarded by OMN-8602."
+        )
+        return ""
 
     def test_no_foreground_agent_dispatch_callout(self, skill_md: str) -> None:
-        """SKILL.md must call out that foreground Agent() dispatch is forbidden."""
-        assert "No foreground `Agent()` dispatch" in skill_md, (
-            "autopilot/SKILL.md is missing the explicit anti-pattern callout "
-            "for foreground Agent() dispatch. This guards the friction "
-            "surface 'close_out:tooling/foreground-agent-dispatch' (OMN-8602)."
-        )
+        """The retired skill file must remain absent."""
+        assert skill_md == ""
 
     def test_callout_cites_omn_8602(self, skill_md: str) -> None:
-        """The callout must cite OMN-8602."""
-        # Look at the specific callout, not just any OMN-8602 mention.
-        idx = skill_md.find("No foreground `Agent()` dispatch")
-        assert idx >= 0
-        nearby = skill_md[idx : idx + 1200]
-        assert "OMN-8602" in nearby, (
-            "autopilot/SKILL.md foreground-Agent() callout must cite OMN-8602."
-        )
+        """No retired autopilot content means no stale callout drift."""
+        assert "OMN-8602" not in skill_md
 
     def test_callout_names_friction_surface(self, skill_md: str) -> None:
-        """The callout must name the originating friction surface for traceability."""
-        assert "close_out:tooling/foreground-agent-dispatch" in skill_md, (
-            "autopilot/SKILL.md must reference the friction surface key "
-            "'close_out:tooling/foreground-agent-dispatch' (OMN-8602)."
-        )
+        """The retired foreground dispatch surface must stay removed."""
+        assert "close_out:tooling/foreground-agent-dispatch" not in skill_md
 
 
 @pytest.mark.unit

@@ -52,8 +52,8 @@ onex node node_data_flow_sweep -- \
 
 The node handles all metadata collection internally:
 - Producer status via `rpk topic describe`
-- Consumer group lag via `rpk group describe`
-- DB table row counts and recency via `psql`
+- Consumer group lag via `rpk group describe`, including `omnidash-read-model`
+- DB table row counts and recency via `psql` against `omnidash_analytics`
 - Flow classification: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN` | `TOPIC_STALE`
 
 Capture stdout (JSON: `DataFlowSweepResult`). Exit 0 = healthy, exit 1 = issues found.
@@ -79,6 +79,12 @@ Title: fix(data-flow): {topic} — {failure_classification}
 Labels: data-flow, sweep
 Project: Active Sprint
 ```
+
+### Phase 5 — Completion contract
+
+The node owns source-of-truth topic inventory and classification. It must include
+the checked `topics.yaml` source in its result metadata so callers can trace
+omnidash projection coverage without re-reading repo files in the skill shim.
 
 ## Dispatch Rules
 

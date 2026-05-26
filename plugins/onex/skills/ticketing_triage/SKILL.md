@@ -76,6 +76,12 @@ by the backing node and the path is returned as output.
 
 The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epic-org`.
 
+## Enumeration completeness (OMN-10543)
+
+The backing node MUST enumerate **every** orphan before writing the TriageReport.
+The `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`; do not
+cap, sample, or truncate this list before handing it to `ticketing-epic-org`.
+
 ## See Also
 
 - `@_lib/contracts/helpers.md` — TicketContract, TriageReport schemas
