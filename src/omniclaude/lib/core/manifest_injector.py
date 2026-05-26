@@ -5213,7 +5213,7 @@ class ManifestInjector:
 
         # Performance and infrastructure note
         output.append("  Performance: <5ms overhead per action, non-blocking")
-        output.append("  Kafka Topic: onex.evt.omniclaude.agent-actions.v1")
+        output.append(f"  Kafka Topic: {TopicBase.AGENT_ACTIONS}")
         output.append(
             "  Benefits: Complete traceability, debug intelligence, performance metrics"
         )
