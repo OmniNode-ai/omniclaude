@@ -142,19 +142,3 @@ def test_local_review_no_verbose_pytest() -> None:
             "local_review: pytest called with -v/--verbose — use -q --tb=short instead\n"
             f"Block:\n{block[:300]}"
         )
-
-
-# ── begin_day ────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.unit
-def test_begin_day_pull_all_output_capped() -> None:
-    """pull-all.sh in begin_day must pipe to | tail -N or redirect to /dev/null."""
-    content = _prompt("begin_day")
-    for block in _bash_blocks(content):
-        if "pull-all.sh" not in block:
-            continue
-        assert "| tail" in block or ">/dev/null" in block or "2>/dev/null" in block, (
-            "begin_day: pull-all.sh output uncapped — add '2>&1 | tail -20'\n"
-            f"Block:\n{block[:300]}"
-        )

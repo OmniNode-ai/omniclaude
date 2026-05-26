@@ -91,7 +91,7 @@ For each skill, classify into one of three tiers based on the skill name and SKI
 Skills that create PRs, dispatch agent teams, trigger releases, or write to external systems:
 
 ```
-epic_team, autopilot, build_loop, release, redeploy, merge_sweep, overnight,
+epic_team, build_loop, release, redeploy, merge_sweep, overnight,
 ticket_pipeline, ticket_work, create_ticket, create_followup_tickets,
 plan_to_tickets, wave_scheduler, dispatch_worker, coderabbit_triage,
 pr_polish, pr_review, pr_review_bot, auto_merge, dep_cascade_dedup,
@@ -107,7 +107,7 @@ close-day, runner
 Skills requiring interactive session context or that modify session state:
 
 ```
-session, onboarding, handoff, crash_recovery, begin_day, executing_plans,
+session, onboarding, handoff, executing_plans,
 resume_session, set_session, login, using_git_worktrees, demo,
 systematic_debugging, writing_skills, insights_to_plan, authorize,
 worktree, decompose_epic, ticket_plan, rrh

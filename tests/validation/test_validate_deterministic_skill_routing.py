@@ -22,7 +22,6 @@ from validate_deterministic_skill_routing import (  # noqa: E402
     CHECK_DISPATCH,
     CHECK_PROSE_FALLBACK,
     CHECK_ROUTING_ERROR,
-    DEPRECATED_SKILLS,
     ENFORCED_SKILLS,
     scan_skill,
     scan_skills_root,
@@ -202,11 +201,10 @@ class TestEnforcedSkillsSet:
         assert "session" in ENFORCED_SKILLS
 
     def test_retired_skills_not_in_enforced(self) -> None:
-        # OMN-9428: retired skills are not user-invocable deterministic
-        # dispatch surfaces and must not be enforced as active shims.
-        for skill in ("autopilot", "begin_day"):
-            assert skill in DEPRECATED_SKILLS
-            assert skill not in ENFORCED_SKILLS
+        # OMN-9428: retired skills were not user-invocable deterministic dispatch surfaces.
+        # OMN-12234: autopilot and begin_day deleted; DEPRECATED_SKILLS is now empty.
+        assert "autopilot" not in ENFORCED_SKILLS
+        assert "begin_day" not in ENFORCED_SKILLS
 
     def test_pr_review_bot_in_enforced(self) -> None:
         # OMN-10269: pr_review_bot is a thin runtime-backed skill surface over

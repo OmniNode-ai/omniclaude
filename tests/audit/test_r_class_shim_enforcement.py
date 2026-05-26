@@ -13,20 +13,17 @@ import pytest
 
 SKILLS_ROOT = Path(__file__).resolve().parents[2] / "plugins" / "onex" / "skills"
 
-# 47 R-class skills per SD-05 plan (§ 5.2)
+# R-class skills per SD-05 plan (§ 5.2) — autopilot, begin_day, crash_recovery deleted in OMN-12234
 R_CLASS_SKILLS = {
     "aislop_sweep",
     "agent_healthcheck",
-    "autopilot",
     "baseline",
-    "begin_day",
     "build_loop",
     "bus_audit",
     "checkpoint",
     "compliance_sweep",
     "contract_sweep",
     "coverage_sweep",
-    "crash_recovery",
     "dashboard_sweep",
     "data_flow_sweep",
     "database_sweep",

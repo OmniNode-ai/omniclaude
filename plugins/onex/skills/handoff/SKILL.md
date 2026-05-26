@@ -123,6 +123,6 @@ if not context.get("recent_commits") and not context.get("message"):
 ### Recovery Path
 
 After a session crash or `/clear` without explicit `/handoff`:
-1. Next session's `/onex:crash_recovery` reads the latest auto-checkpoint
+1. Next session's `/onex:session` reads the latest auto-checkpoint (crash_recovery deleted in OMN-12234)
 2. Provides: last commit, branch, files changed, PR status
 3. This makes session resumption seamless even without explicit handoff
