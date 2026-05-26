@@ -1,7 +1,7 @@
 ---
-description: Full autonomous audit-debug-fix loop for all dashboard pages — HTTP recon, node dispatch, parallel systematic-debug, fix, PR, Linear ticket, iterate until clean. Supports local and cloud targets with optional post-fix redeployment.
+description: Full autonomous audit-debug-fix loop for all dashboard pages — node dispatch with built-in HTTP recon, parallel systematic-debug, fix, PR, Linear ticket, iterate until clean. Supports local and cloud targets with optional post-fix redeployment.
 mode: full
-version: 4.0.0
+version: 2.0.0
 level: advanced
 debug: false
 category: quality
@@ -26,10 +26,10 @@ args:
     description: "Skip re-audit after fixes land"
     required: false
   - name: --triage-only
-    description: "Run recon + triage only, no fixes"
+    description: "Run node dispatch + triage only, no fixes"
     required: false
   - name: --fix-only
-    description: "Skip recon, use existing triage report from $ONEX_STATE_DIR/dashboard-sweep/latest/"
+    description: "Skip node dispatch, use existing triage report from $ONEX_STATE_DIR/dashboard-sweep/latest/"
     required: false
   - name: --max-iterations
     description: "Maximum fix iterations before stopping (default: 3)"
@@ -41,7 +41,7 @@ args:
     description: "Auto-deploy after fixes: restart local containers or trigger cloud redeploy"
     required: false
   - name: --pages
-    description: "JSON array of pre-collected page objects (route, status_code, content_type, body_size)"
+    description: "JSON array of pre-classified page objects (ModelPageInput shape) to pass directly to the node, skipping HTTP recon"
     required: false
 ---
 
@@ -55,8 +55,8 @@ args:
 /dashboard-sweep                           # Full sweep of localhost:3000
 /dashboard-sweep --target cloud            # cloud: https://dash.dev.omninode.ai
 /dashboard-sweep --url http://localhost:3000
-/dashboard-sweep --triage-only             # Recon + triage only, no fixes
-/dashboard-sweep --fix-only                # Skip recon, use existing triage
+/dashboard-sweep --triage-only             # Node dispatch + triage only, no fixes
+/dashboard-sweep --fix-only                # Skip dispatch, use existing triage
 /dashboard-sweep --dry-run
 /dashboard-sweep --max-iterations 5
 /dashboard-sweep --deploy
@@ -68,29 +68,30 @@ args:
 
 - `--target` → `local` (default) or `cloud`
 - `--url` → explicit URL override (wins over `--target`)
-- `--pages` → JSON array of pre-collected page data (skip HTTP recon)
+- `--pages` → pre-classified ModelPageInput objects; passed to node directly (skips HTTP recon)
 - Other flags pass through to the orchestration phases
 
-### Step 2 — HTTP recon (unless `--fix-only`)
+### Step 2 — Dispatch to node
 
-Use `curl` to collect page metadata across all dashboard routes. For each page:
-1. Fetch HTTP status, content-type, body size via `curl -sS -o /dev/null -w '...' -L --max-time 10`
-2. Capture first 2000 chars of body for structure analysis
-3. Record: route, status_code, content_type, body_size, body_snippet
-
-### Step 3 — Dispatch to node
-
-Pass the collected page data to the node for classification and triage:
+Pass the resolved URL to the node. The node handles all HTTP recon internally:
 
 ```bash
 onex run-node node_dashboard_sweep \
-  --input '{"pages": [], "max_iterations": 3, "dry_run": false}' \
+  --input '{"base_url": "{url}", "max_iterations": 3, "dry_run": false}' \
+  --timeout 300
+```
+
+When `--pages` is supplied instead:
+
+```bash
+onex run-node node_dashboard_sweep \
+  --input '{"pages": [...], "max_iterations": 3, "dry_run": false}' \
   --timeout 300
 ```
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = issues found.
 
-### Step 4 — Fix loop (unless `--triage-only` or `--dry-run`)
+### Step 3 — Fix loop (unless `--triage-only` or `--dry-run`)
 
 Dispatch one `systematic-debugging` agent per `CODE_BUG`/`DATA_PIPELINE`/`SCHEMA_MISMATCH` domain.
 All dispatches happen in a single message for parallelism. Wait for all agents, then:
@@ -98,7 +99,7 @@ All dispatches happen in a single message for parallelism. Wait for all agents, 
 - Deploy if `--deploy`
 - Iterate up to `--max-iterations`
 
-### Step 5 — Render report
+### Step 4 — Render report
 
 Display final page status table, fixes applied, PRs merged, tickets created, and any remaining open items.
 
@@ -125,9 +126,11 @@ Display final page status table, fixes applied, PRs merged, tickets created, and
 ## Architecture
 
 ```
-SKILL.md   -> thin dispatcher: HTTP recon -> node dispatch -> render results
+SKILL.md   -> thin dispatcher: resolve URL -> node dispatch -> render results
 node       -> omnimarket/src/omnimarket/nodes/node_dashboard_sweep/
 contract   -> node_dashboard_sweep/contract.yaml
 ```
 
-All classification and triage logic lives in the node handler. This skill owns only HTTP-based page recon and result rendering.
+All HTTP recon, classification, and triage logic lives in the node handler.
+The skill resolves the target URL and dispatches; it does not perform any
+inline curl, HTTP checks, or endpoint probing.

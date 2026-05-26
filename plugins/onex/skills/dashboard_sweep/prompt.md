@@ -5,7 +5,10 @@ Apply the persona profile above when generating outputs.
 # Dashboard Sweep Orchestration
 
 You are executing the dashboard-sweep skill. This prompt defines the complete orchestration
-logic across four phases: arguments, HTTP recon, node dispatch + fix loop, and render.
+logic across three phases: arguments + setup, node dispatch + fix loop, and render.
+
+HTTP recon (route discovery and per-page probing) is handled by the node internally —
+this skill does not perform any inline curl commands or HTTP checks.
 
 ---
 
@@ -25,6 +28,7 @@ Parse from `$ARGUMENTS`:
 | `--deploy` | false | Auto-deploy after fixes merge |
 | `--release` | false | Run /release before /redeploy (cloud only) |
 | `--skip-deploy` | true | Explicit no-deploy (default) |
+| `--pages <json>` | null | Pre-classified ModelPageInput objects; bypasses node HTTP recon |
 
 ### URL and Target Resolution
 
@@ -58,7 +62,7 @@ Password:     in k8s secret omninode-service-roles (namespace: dev)
 
 ### Freshness Check
 
-Before auditing, verify the running omnidash instance is up-to-date:
+Before dispatching, verify the running omnidash instance is up-to-date:
 
 ```bash
 build_info=$(curl -sf "{url}/api/build-info" 2>/dev/null)
@@ -99,107 +103,41 @@ If `--dry-run`:
 
 ---
 
-## Phase 2 — HTTP Recon
+## Phase 2 — Node Dispatch & Fix Loop
 
-### 2.1 Route Discovery
+### 2.1 Dispatch to Node
 
-Fetch the base URL and extract navigation links from the returned HTML.
-Parse `<a href>`, `<nav>`, sidebar items, and breadcrumbs. Filter to same-origin only.
-Deduplicate routes. Add any known routes that were not discovered via links.
+Pass `{url}` as `base_url` so the node performs HTTP recon, route discovery,
+classification, and triage in a single call.
 
-### 2.2 Per-Page HTTP Recon
-
-For each route, collect metadata using `curl`:
-
-```bash
-# Collect status, content-type, body size
-metadata=$(curl -sS -o /dev/null -w '{"status":%{http_code},"content_type":"%{content_type}","size":%{size_download}}' -L --max-time 10 "{url}{route}")
-
-# Capture first 2000 chars of body for structure analysis
-body_snippet=$(curl -sS -L --max-time 10 "{url}{route}" | head -c 2000)
-```
-
-Record per page:
-- `route`: the URL path
-- `status_code`: HTTP status code
-- `content_type`: response content-type header
-- `body_size`: response body size in bytes
-- `body_snippet`: first 2000 chars of HTML for structure analysis
-- `has_error_text`: whether body contains error indicators
-
-**Error indicators** in body snippet: `Error:`, `500 Internal Server Error`,
-`Application error`, `ChunkLoadError`, `Failed to fetch`
-
-**Route slug**: replace `/` with `-`; strip leading `-`. E.g. `/agents` → `agents`,
-`/agents/123` → `agents-123`.
-
-### 2.3 Pre-collected Pages
-
-If `--pages` was provided, use those directly (skip HTTP recon).
-Expected format:
-```json
-[{"route": "/agents", "status_code": 200, "content_type": "text/html", "body_size": 12345}]
-```
-
-### 2.4 Recon Output
-
-Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json`:
-
-```json
-{
-  "run_id": "{run_id}",
-  "url": "{url}",
-  "recon_at": "{ISO timestamp}",
-  "pages": [
-    {
-      "route": "/agents",
-      "slug": "agents",
-      "status_code": 200,
-      "content_type": "text/html",
-      "body_size": 12345,
-      "body_snippet": "<!DOCTYPE html>...",
-      "has_error_text": false
-    }
-  ]
-}
-```
-
-Print human summary:
-```
-[dashboard-sweep] Phase 2 complete — {total} pages reconnoitered
-  HTTP 2xx:     {n}
-  HTTP 4xx/5xx: {n}
-  Timeout:      {n}
-```
-
-If `--triage-only`: emit the recon report and stop.
-
----
-
-## Phase 3 — Node Dispatch & Fix Loop
-
-### 3.1 Dispatch to Node
-
-Pass the collected page data to the node for classification and triage:
-
+**Standard dispatch (HTTP recon mode):**
 ```bash
 onex run-node node_dashboard_sweep \
-  --input '{"pages": [{...}, ...], "max_iterations": 3, "dry_run": false}' \
+  --input '{"base_url": "{url}", "max_iterations": {max_iterations}, "dry_run": {dry_run}}' \
   --timeout 300
 ```
 
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = issues found.
+**Pre-classified pages dispatch** (when `--pages` was supplied):
+```bash
+onex run-node node_dashboard_sweep \
+  --input '{"pages": [...], "max_iterations": {max_iterations}, "dry_run": {dry_run}}' \
+  --timeout 300
+```
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly,
+do not produce prose. Exit 0 = clean, exit 1 = issues found.
 
 The node returns:
 - `page_statuses`: per-page classification (HEALTHY, EMPTY, MOCK, BROKEN, FLAG_GATED)
 - `domains`: grouped problem domains with fix tiers
+- `recon_results`: raw HTTP recon results (populated when `base_url` was set)
 - `summary`: aggregated counts by status and tier
 
 Write node output to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json`.
 
 Print human summary:
 ```
-[dashboard-sweep] Node dispatch complete — {n} domains triaged
+[dashboard-sweep] Node dispatch complete — {n} pages classified, {m} domains triaged
   CODE_BUG:       {n}
   DATA_PIPELINE:  {n}
   SCHEMA_MISMATCH:{n}
@@ -207,7 +145,9 @@ Print human summary:
   FLAG_GATE:      {n} (document only)
 ```
 
-### 3.2 Feature Gap Ticket Creation
+If `--triage-only`: emit the triage report and stop.
+
+### 2.2 Feature Gap Ticket Creation
 
 For each domain with `fix_tier=FEATURE_GAP`, create a Linear ticket immediately:
 
@@ -239,7 +179,7 @@ Triage: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
 
 Record ticket ID in `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/feature_gap_tickets.json`.
 
-### 3.3 Fix Agent Dispatch
+### 2.3 Fix Agent Dispatch
 
 For each domain with `fix_tier` in `[CODE_BUG, DATA_PIPELINE, SCHEMA_MISMATCH]`,
 use this prompt template when dispatching the general-purpose agent:
@@ -260,7 +200,6 @@ Repos:       {repos_likely_affected}
 ## Context
 Dashboard URL: {url}
 Sweep Run ID:  {run_id}
-Recon data:    $ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json
 Triage data:   $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
 
 ## Required Process
@@ -277,16 +216,16 @@ Create worktrees for each affected repo:
   BRANCH=jonah/omn-5057-fix-{domain_id}
 
   For each repo in {repos_likely_affected}:
-    git -C ~/Code/omni_home/{repo} worktree add \
-      ~/Code/omni_worktrees/OMN-5057/{repo}-{domain_id} \
+    git -C $OMNI_HOME/{repo} worktree add \
+      $OMNI_HOME/omni_worktrees/OMN-5057/{repo}-{domain_id} \
       -b {BRANCH}
 
-## NEVER edit files in ~/Code/omni_home/ directly. Always use worktrees.
+## NEVER edit files in $OMNI_HOME/<repo>/ directly. Always use worktrees.
 
 ## Fix Requirements
 - Fix the root cause (not just the symptom)
 - Run: uv run pre-commit run --all-files (must pass before commit)
-- For TypeScript repos: cd ~/Code/omni_worktrees/OMN-5057/{repo}-{domain_id} && npx tsc --noEmit
+- For TypeScript repos: cd $OMNI_HOME/omni_worktrees/OMN-5057/{repo}-{domain_id} && npx tsc --noEmit
 
 ## Output Contract
 Write fix summary to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json
@@ -319,13 +258,13 @@ Do NOT dispatch sequentially. Do NOT await each before dispatching the next.
 
 Wait for all agents to complete before proceeding.
 
-### 3.4 PR + Ticket Creation
+### 2.4 PR + Ticket Creation
 
 After all debug agents complete, for each domain with `status=fix_ready`:
 
 **Create PR** (title MUST contain `OMN-XXXX` — CI blocks merge without it):
 ```bash
-cd ~/Code/omni_worktrees/OMN-5057/{repo}-{domain_id}
+cd $OMNI_HOME/omni_worktrees/OMN-5057/{repo}-{domain_id}
 git push -u origin jonah/omn-5057-fix-{domain_id}
 gh pr create \
   --repo OmniNode-ai/{repo} \
@@ -392,13 +331,13 @@ gh pr merge --auto --squash {pr_number} --repo OmniNode-ai/{repo}
 - Create a Linear ticket with `priority=1` (urgent)
 - Do NOT create a PR
 
-### 3.5 Deploy (if `--deploy`)
+### 2.5 Deploy (if `--deploy`)
 
 Skip when ANY of: `--deploy` not set, `DRY_RUN=true`, no PRs merged.
 
 **Local deployment:**
 ```bash
-cd ~/Code/omni_home
+cd $OMNI_HOME
 docker compose up --build --force-recreate <affected-services>
 ```
 
@@ -420,12 +359,11 @@ If confirmed: dispatch `/redeploy` skill, poll for pod readiness.
 
 Write deploy record to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/deploy.json`.
 
-### 3.6 Iteration
+### 2.6 Iteration
 
 If open pages remain and `iteration < max_iterations`:
-- Re-run HTTP recon (Phase 2) on affected routes
-- Re-dispatch to node with updated data
-- Continue fix loop (3.3 → 3.4 → 3.5)
+- Re-dispatch to node with `base_url` (node re-runs HTTP recon automatically)
+- Continue fix loop (2.3 → 2.4 → 2.5)
 
 Stop conditions:
 - All pages HEALTHY → emit final report
@@ -434,7 +372,7 @@ Stop conditions:
 
 ---
 
-## Phase 4 — Render Report
+## Phase 3 — Render Report
 
 Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/report.md`:
 
@@ -477,7 +415,6 @@ Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/report.md`:
 - Deploy status: {local-restarted | cloud-redeployed | declined | skipped}
 
 ## Artifacts
-- Recon: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json
 - Triage: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
 - Fixes: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/
 - Deploy: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/deploy.json (if --deploy set)
@@ -491,8 +428,8 @@ Print the report path and key metrics to stdout.
 
 | Error | Action |
 |-------|--------|
-| HTTP recon timeout | Classify page as `BROKEN`; continue |
-| Dev server unreachable | Emit error, stop sweep, suggest `npm run dev` or `docker compose up` |
+| Node dispatch fails (non-zero exit) | Surface `SkillRoutingError` JSON envelope; do not produce prose |
+| Dev server unreachable | Node will return network-error classifications; emit warning, proceed with triage |
 | Agent dispatch fails | Log failure, mark domain as `blocked`, continue with other domains |
 | Pre-commit fails in fix agent | Agent must fix pre-commit errors before marking `fix_ready` |
 | PR creation fails | Log error with `gh` output, mark domain as `pr_failed`, continue |
