@@ -25,7 +25,6 @@ import time
 import traceback
 from collections.abc import Callable
 from datetime import datetime
-from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -39,7 +38,7 @@ class PatternTrackingLogger:
             # Create log file in user's home directory with date
             log_dir = os.path.expanduser("~/Library/Logs")
             os.makedirs(log_dir, exist_ok=True)
-            today = datetime.now().strftime("%Y%m%d")
+            today = datetime.now(timezone.utc).strftime("%Y%m%d")
             self.log_file = f"{log_dir}/pattern_tracking_{today}.log"
 
         # Configure logging
@@ -235,7 +234,9 @@ class CircuitBreaker:
         self.last_failure_time: float | None = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
 
-    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:  # Why: generic circuit breaker — wraps arbitrary callables
+    def call(
+        self, func: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:  # Why: generic circuit breaker — wraps arbitrary callables
         """Execute function with circuit breaker protection"""
         if self.state == "OPEN":
             if (
@@ -275,7 +276,11 @@ def safe_execute_operation(
     """
     for attempt in range(max_retries + 1):
         try:
-            result = circuit_breaker.call(operation_func) if circuit_breaker else operation_func()
+            result = (
+                circuit_breaker.call(operation_func)
+                if circuit_breaker
+                else operation_func()
+            )
 
             if attempt > 0:
                 logger.log_success(
@@ -362,7 +367,9 @@ def log_success(operation: str, details: dict[str, Any]) -> None:
     get_default_logger().log_success(operation, details)
 
 
-def log_error(operation: str, error: Exception, context: dict[str, Any] | None = None) -> None:
+def log_error(
+    operation: str, error: Exception, context: dict[str, Any] | None = None
+) -> None:
     """Quick error logging"""
     get_default_logger().log_error(operation, error, context)
 
