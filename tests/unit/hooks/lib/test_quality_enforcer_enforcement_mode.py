@@ -32,7 +32,7 @@ if str(_SRC) not in sys.path:
 # ---------------------------------------------------------------------------
 import types
 
-_QE_MOD_NAME = "omniclaude.lib.utils.quality_enforcer"
+_QE_MOD_NAME = "omniclaude.lib.utils.validator_quality"
 
 
 def _ensure_real_module() -> types.ModuleType:
@@ -158,7 +158,7 @@ class TestEnforcementModeBanner:
             / "omniclaude"
             / "lib"
             / "utils"
-            / "quality_enforcer.py"
+            / "validator_quality.py"
         )
         source = source_path.read_text()
 

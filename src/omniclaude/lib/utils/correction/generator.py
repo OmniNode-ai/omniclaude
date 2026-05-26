@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
-# Import Violation from naming_validator to ensure type consistency
-from omniclaude.lib.utils.naming_validator import Violation
+# Import Violation from validator_naming_conventions to ensure type consistency
+from omniclaude.lib.utils.validator_naming_conventions import Violation
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def _get_intelligence_client_class() -> type[IntelligenceClientProtocol] | None:
     try:
         from archon_intelligence import ArchonIntelligence
 
-        return cast(type[IntelligenceClientProtocol], ArchonIntelligence)
+        return cast("type[IntelligenceClientProtocol]", ArchonIntelligence)
     except ImportError:
         logger.debug("archon_intelligence not available - using fallback mode")
         return None
@@ -67,13 +67,19 @@ class IntelligenceClientStub:
         self, agent_type: str, task_context: dict[str, Any]
     ) -> dict[str, Any]:
         """Return fallback response when RAG is unavailable."""
-        return {"fallback": True, "results": [], "error": "intelligence client not available"}
+        return {
+            "fallback": True,
+            "results": [],
+            "error": "intelligence client not available",
+        }
 
 
 class CorrectionGenerator:
     """Generate intelligent corrections for naming violations using RAG intelligence."""
 
-    def __init__(self, intelligence_url: str | None = None, timeout: float = 5.0) -> None:
+    def __init__(
+        self, intelligence_url: str | None = None, timeout: float = 5.0
+    ) -> None:
         """
         Initialize the correction generator.
 
@@ -268,7 +274,9 @@ class CorrectionGenerator:
             "variable": self._to_snake_case,
             "class": self._to_pascal_case,
             "constant": self._to_upper_snake_case,
-            "interface": lambda n: f"I{CorrectionGenerator._to_pascal_case(n.lstrip('I'))}",
+            "interface": lambda n: (
+                f"I{CorrectionGenerator._to_pascal_case(n.lstrip('I'))}"
+            ),
         }
 
         transform_func = transformations.get(violation.type, lambda x: x)
@@ -372,7 +380,9 @@ class CorrectionGenerator:
         """Convert name to UPPER_SNAKE_CASE."""
         return CorrectionGenerator._to_snake_case(name).upper()
 
-    async def close(self) -> None:  # stub-ok: close() is intentional no-op for stateless generator
+    async def close(
+        self,
+    ) -> None:  # stub-ok: close() is intentional no-op for stateless generator
         """
         Cleanup resources.
 

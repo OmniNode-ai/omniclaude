@@ -8,7 +8,7 @@ Covers:
 - redact_config_dict: safe config dict logging (OMN-5414)
 
 Note: Imports are done lazily via pytest fixtures to avoid triggering
-``omniclaude.lib.utils.__init__``, which pulls in ``debug_utils`` → a pre-existing
+``omniclaude.lib.utils.__init__``, which pulls in ``diagnostics`` → a pre-existing
 circular-import issue (``settings.intelligence_service_url``) unrelated to this PR.
 """
 

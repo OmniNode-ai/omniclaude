@@ -39,7 +39,7 @@ if str(_HOOKS_LIB) not in sys.path:
 # ---------------------------------------------------------------------------
 import types
 
-_QE_MOD_NAME = "omniclaude.lib.utils.quality_enforcer"
+_QE_MOD_NAME = "omniclaude.lib.utils.validator_quality"
 
 
 def _ensure_real_module() -> types.ModuleType:
@@ -126,27 +126,27 @@ class TestQualityEnforcerEmission:
 
         with (
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_1_VALIDATION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_1_VALIDATION",
                 True,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_2_RAG",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_2_RAG",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_3_CORRECTION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_3_CORRECTION",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_4_AI_QUORUM",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_4_AI_QUORUM",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.QualityEnforcer._run_phase_1_validation",
+                "omniclaude.lib.utils.validator_quality.QualityEnforcer._run_phase_1_validation",
                 new=AsyncMock(return_value=[violation]),
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer._emit_enforcement_event",
+                "omniclaude.lib.utils.validator_quality._emit_enforcement_event",
                 side_effect=record_emit,
             ),
         ):
@@ -174,15 +174,15 @@ class TestQualityEnforcerEmission:
 
         with (
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_1_VALIDATION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_1_VALIDATION",
                 True,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.QualityEnforcer._run_phase_1_validation",
+                "omniclaude.lib.utils.validator_quality.QualityEnforcer._run_phase_1_validation",
                 new=AsyncMock(return_value=[]),  # No violations
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer._emit_enforcement_event",
+                "omniclaude.lib.utils.validator_quality._emit_enforcement_event",
                 side_effect=record_emit,
             ),
         ):
@@ -213,27 +213,27 @@ class TestQualityEnforcerEmission:
 
         with (
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_1_VALIDATION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_1_VALIDATION",
                 True,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_2_RAG",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_2_RAG",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_3_CORRECTION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_3_CORRECTION",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_4_AI_QUORUM",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_4_AI_QUORUM",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.QualityEnforcer._run_phase_1_validation",
+                "omniclaude.lib.utils.validator_quality.QualityEnforcer._run_phase_1_validation",
                 new=AsyncMock(return_value=[violation]),
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer._emit_enforcement_event",
+                "omniclaude.lib.utils.validator_quality._emit_enforcement_event",
                 side_effect=record_emit,
             ),
         ):
@@ -275,27 +275,27 @@ class TestQualityEnforcerEmission:
 
         with (
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_1_VALIDATION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_1_VALIDATION",
                 True,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_2_RAG",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_2_RAG",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_3_CORRECTION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_3_CORRECTION",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_4_AI_QUORUM",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_4_AI_QUORUM",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.QualityEnforcer._run_phase_1_validation",
+                "omniclaude.lib.utils.validator_quality.QualityEnforcer._run_phase_1_validation",
                 new=AsyncMock(return_value=[violation]),
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer._emit_enforcement_event",
+                "omniclaude.lib.utils.validator_quality._emit_enforcement_event",
                 side_effect=record_emit,
             ),
         ):
@@ -320,27 +320,27 @@ class TestQualityEnforcerEmission:
 
         with (
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_1_VALIDATION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_1_VALIDATION",
                 True,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_2_RAG",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_2_RAG",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_3_CORRECTION",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_3_CORRECTION",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.ENABLE_PHASE_4_AI_QUORUM",
+                "omniclaude.lib.utils.validator_quality.ENABLE_PHASE_4_AI_QUORUM",
                 False,
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer.QualityEnforcer._run_phase_1_validation",
+                "omniclaude.lib.utils.validator_quality.QualityEnforcer._run_phase_1_validation",
                 new=AsyncMock(return_value=[violation]),
             ),
             patch(
-                "omniclaude.lib.utils.quality_enforcer._emit_enforcement_event",
+                "omniclaude.lib.utils.validator_quality._emit_enforcement_event",
                 side_effect=failing_emit,
             ),
         ):
@@ -361,9 +361,9 @@ class TestQualityEnforcerEmission:
         )
 
     def test_emit_enforcement_event_is_importable(self) -> None:
-        """_emit_enforcement_event must be importable from quality_enforcer module."""
-        from omniclaude.lib.utils import quality_enforcer
+        """_emit_enforcement_event must be importable from validator_quality module."""
+        from omniclaude.lib.utils import validator_quality
 
-        assert hasattr(quality_enforcer, "_emit_enforcement_event"), (
-            "quality_enforcer must expose _emit_enforcement_event() for testability"
+        assert hasattr(validator_quality, "_emit_enforcement_event"), (
+            "validator_quality must expose _emit_enforcement_event() for testability"
         )

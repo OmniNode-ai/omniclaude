@@ -102,7 +102,7 @@ def _sanitize_for_logging(text: str) -> str:
 # Import internal modules (fail fast - no fallbacks for required internal dependencies)
 from .consensus.quorum import AIQuorum
 from .correction.generator import CorrectionGenerator
-from .naming_validator import NamingValidator, Violation
+from .validator_naming_conventions import NamingValidator, Violation
 
 # =============================================================================
 # Pattern Enforcement Kafka Emission (OMN-2378)

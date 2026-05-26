@@ -37,7 +37,7 @@ class TestCircularImportRegression:
             [
                 sys.executable,
                 "-c",
-                "from omniclaude.lib.utils.quality_enforcer import QualityEnforcer; print(QualityEnforcer)",
+                "from omniclaude.lib.utils.validator_quality import QualityEnforcer; print(QualityEnforcer)",
             ],
             capture_output=True,
             text=True,
@@ -53,7 +53,7 @@ class TestCircularImportRegression:
             [
                 sys.executable,
                 "-c",
-                "from omniclaude.lib.utils.debug_utils import INTELLIGENCE_SERVICE_URL; print('OK')",
+                "from omniclaude.lib.utils.diagnostics import INTELLIGENCE_SERVICE_URL; print('OK')",
             ],
             capture_output=True,
             text=True,
