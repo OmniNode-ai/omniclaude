@@ -235,25 +235,30 @@ def validate_contract_yaml(yaml_str: str) -> tuple[bool, str | None]:
     # Shallow walk: strings, lists of strings, lists of dicts with string values.
     from plugins.onex.hooks.lib.sanitize import check_field_injection
 
-    for key, value in parsed.items():
+    def _check_injection_in_value(value: object, field_label: str) -> str | None:
+        """Return an injection error string, or None if clean."""
         if isinstance(value, str):
-            injection_err = check_field_injection(value, str(key))
-            if injection_err:
-                return False, injection_err
-        elif isinstance(value, list):
+            return check_field_injection(value, field_label)
+        if isinstance(value, list):
             for i, item in enumerate(value):
                 if isinstance(item, str):
-                    injection_err = check_field_injection(item, f"{key}[{i}]")
-                    if injection_err:
-                        return False, injection_err
+                    err = check_field_injection(item, f"{field_label}[{i}]")
+                    if err:
+                        return err
                 elif isinstance(item, dict):
                     for sub_key, sub_value in item.items():
                         if isinstance(sub_value, str):
-                            injection_err = check_field_injection(
-                                sub_value, f"{key}[{i}].{sub_key}"
+                            err = check_field_injection(
+                                sub_value, f"{field_label}[{i}].{sub_key}"
                             )
-                            if injection_err:
-                                return False, injection_err
+                            if err:
+                                return err
+        return None
+
+    for key, value in parsed.items():
+        injection_err = _check_injection_in_value(value, str(key))
+        if injection_err:
+            return False, injection_err
 
     return True, None
 

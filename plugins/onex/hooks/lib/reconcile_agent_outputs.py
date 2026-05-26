@@ -442,6 +442,170 @@ def _build_summary(
     return "\n".join(lines)
 
 
+def _resolve_orthogonal(
+    field: str,
+    sorted_agents: list[str],
+    agent_values: dict[str, Any],
+    logger: Callable[[dict], None] | None,
+) -> tuple[Any, str]:
+    """Merge ORTHOGONAL values; returns (chosen_value, rationale)."""
+    vals = list(agent_values.values())
+    if all(isinstance(v, dict) for v in vals):
+        seen_keys: dict[str, str] = {}
+        overlapping: list[tuple[str, str, str]] = []
+        for agent_name, v in zip(sorted_agents, vals):
+            for k in v:  # type: ignore[union-attr]
+                if k in seen_keys:
+                    overlapping.append((k, seen_keys[k], agent_name))
+                else:
+                    seen_keys[k] = agent_name
+        if overlapping:
+            overlap_details = "; ".join(
+                f"key={k!r}: {fa} value dropped in favour of {la}"
+                for k, fa, la in overlapping
+            )
+            _log.warning(
+                "ORTHOGONAL dict-merge has overlapping keys on field %r"
+                " -- earlier agent values silently overwritten: %s",
+                field,
+                overlap_details,
+            )
+            if logger:
+                logger(
+                    {
+                        "event": "orthogonal_overlap_warning",
+                        "field": field,
+                        "overlapping_keys": [
+                            {"key": k, "dropped_agent": fa, "kept_agent": la}
+                            for k, fa, la in overlapping
+                        ],
+                    }
+                )
+        merged: dict[str, Any] = {}
+        for v in vals:
+            merged.update(v)  # type: ignore[union-attr]
+        return merged, (
+            f"Agents modified non-overlapping aspects. "
+            f"Merged from: {', '.join(sorted_agents)}."
+        )
+    first_agent = sorted_agents[0]
+    return agent_values[first_agent], (
+        f"Orthogonal non-dict values; selected from {first_agent} (lexically first)."
+    )
+
+
+def _resolve_conflict(
+    field: str,
+    conflict_type: str,
+    sorted_agents: list[str],
+    agent_values: dict[str, Any],
+    logger: Callable[[dict], None] | None,
+) -> tuple[FieldDecision, bool, bool]:
+    """Return (FieldDecision, is_auto_resolved, needs_review) for one field.
+
+    is_auto_resolved is True when the decision does not require approval.
+    needs_review is True for CONFLICTING decisions.
+    """
+    first_agent = sorted_agents[0]
+    sources = tuple(sorted_agents)
+
+    if conflict_type == IDENTICAL:
+        return (
+            FieldDecision(
+                field=field,
+                conflict_type=IDENTICAL,
+                sources=sources,
+                chosen_value=agent_values[first_agent],
+                rationale="All agents produced the same value.",
+                needs_approval=False,
+                needs_review=False,
+            ),
+            True,
+            False,
+        )
+
+    if conflict_type == ORTHOGONAL:
+        value, rationale = _resolve_orthogonal(
+            field, sorted_agents, agent_values, logger
+        )
+        return (
+            FieldDecision(
+                field=field,
+                conflict_type=ORTHOGONAL,
+                sources=sources,
+                chosen_value=value,
+                rationale=rationale,
+                needs_approval=False,
+                needs_review=False,
+            ),
+            True,
+            False,
+        )
+
+    if conflict_type == LOW_CONFLICT:
+        return (
+            FieldDecision(
+                field=field,
+                conflict_type=LOW_CONFLICT,
+                sources=sources,
+                chosen_value=agent_values[first_agent],
+                rationale=(
+                    f"Minor difference. Chose value from lexically-first "
+                    f"agent {first_agent}."
+                ),
+                needs_approval=False,
+                needs_review=False,
+            ),
+            True,
+            True,  # added to optional_review_fields despite needs_review=False on decision
+        )
+
+    if conflict_type == CONFLICTING:
+        return (
+            FieldDecision(
+                field=field,
+                conflict_type=CONFLICTING,
+                sources=sources,
+                chosen_value=agent_values[first_agent],
+                rationale=(
+                    f"Significant difference. Chose value from lexically-first "
+                    f"agent {first_agent}. Review recommended."
+                ),
+                needs_approval=False,
+                needs_review=True,
+            ),
+            True,
+            True,
+        )
+
+    # OPPOSITE, AMBIGUOUS, or unknown — GI-3: excluded from merged_values
+    value_descriptions = ", ".join(f"{a}={agent_values[a]!r}" for a in sorted_agents)
+    effective_type: ConflictType = (
+        conflict_type if conflict_type in (OPPOSITE, AMBIGUOUS) else AMBIGUOUS  # type: ignore[assignment]
+    )
+    rationale = (
+        f"Cannot auto-resolve. Candidate values: {value_descriptions}."
+        if conflict_type in (OPPOSITE, AMBIGUOUS)
+        else (
+            f"Unknown conflict type {conflict_type!r}. "
+            f"Candidate values: {value_descriptions}."
+        )
+    )
+    return (
+        FieldDecision(
+            field=field,
+            conflict_type=effective_type,
+            sources=sources,
+            chosen_value=None,
+            rationale=rationale,
+            needs_approval=True,
+            needs_review=False,
+        ),
+        False,
+        False,
+    )
+
+
 def reconcile_outputs(
     base_values: dict[str, Any],
     agent_outputs: dict[str, dict[str, Any]],
@@ -558,172 +722,21 @@ def reconcile_outputs(
         # 4. Route based on conflict_type
         first_agent = sorted_agents[0]
 
-        if conflict_type == IDENTICAL:
-            value = agent_values[first_agent]
-            merged_values[field] = value
-            auto_resolved.append(field)
-            field_decisions[field] = FieldDecision(
-                field=field,
-                conflict_type=IDENTICAL,
-                sources=tuple(sorted_agents),
-                chosen_value=value,
-                rationale="All agents produced the same value.",
-                needs_approval=False,
-                needs_review=False,
-            )
-
-        elif conflict_type == ORTHOGONAL:
-            # Dict-merge non-overlapping subkeys when all values are dicts
-            vals = list(agent_values.values())
-            # Defensive: unreachable via reconcile_outputs (flatten produces
-            # leaf values only), but guards against direct _classify callers
-            # passing dict values.
-            if all(isinstance(v, dict) for v in vals):
-                # Overlap check: the ORTHOGONAL classification assumes
-                # non-overlapping keys.  If the classifier returns
-                # ORTHOGONAL for dicts with partially-overlapping keys,
-                # the update() loop below would silently overwrite earlier
-                # agent values.  Detect and warn so data loss is visible.
-                seen_keys: dict[str, str] = {}  # key -> first agent name
-                overlapping: list[
-                    tuple[str, str, str]
-                ] = []  # (key, first_agent, later_agent)
-                agent_names_iter = iter(sorted_agents)
-                for v in vals:
-                    agent_name = next(agent_names_iter)
-                    for k in v:  # type: ignore[union-attr]
-                        if k in seen_keys:
-                            overlapping.append((k, seen_keys[k], agent_name))
-                        else:
-                            seen_keys[k] = agent_name
-                if overlapping:
-                    overlap_details = "; ".join(
-                        f"key={k!r}: {first_agent} value dropped in "
-                        f"favour of {later_agent}"
-                        for k, first_agent, later_agent in overlapping
-                    )
-                    _log.warning(
-                        "ORTHOGONAL dict-merge has overlapping keys on "
-                        "field %r -- earlier agent values silently "
-                        "overwritten: %s",
-                        field,
-                        overlap_details,
-                    )
-                    if logger:
-                        logger(
-                            {
-                                "event": "orthogonal_overlap_warning",
-                                "field": field,
-                                "overlapping_keys": [
-                                    {
-                                        "key": k,
-                                        "dropped_agent": first_agent,
-                                        "kept_agent": later_agent,
-                                    }
-                                    for k, first_agent, later_agent in overlapping
-                                ],
-                            }
-                        )
-
-                merged: dict[str, Any] = {}
-                for v in vals:
-                    merged.update(v)  # type: ignore[union-attr]
-                merged_values[field] = merged
-                value = merged
-                ortho_rationale = (
-                    f"Agents modified non-overlapping aspects. "
-                    f"Merged from: {', '.join(sorted_agents)}."
-                )
-            else:
-                value = agent_values[first_agent]
-                merged_values[field] = value
-                ortho_rationale = (
-                    f"Orthogonal non-dict values; selected from "
-                    f"{first_agent} (lexically first)."
-                )
-            auto_resolved.append(field)
-            field_decisions[field] = FieldDecision(
-                field=field,
-                conflict_type=ORTHOGONAL,
-                sources=tuple(sorted_agents),
-                chosen_value=value,
-                rationale=ortho_rationale,
-                needs_approval=False,
-                needs_review=False,
-            )
-
-        elif conflict_type == LOW_CONFLICT:
-            value = agent_values[first_agent]
-            merged_values[field] = value
-            auto_resolved.append(field)
-            review_fields.append(field)
-            field_decisions[field] = FieldDecision(
-                field=field,
-                conflict_type=LOW_CONFLICT,
-                sources=tuple(sorted_agents),
-                chosen_value=value,
-                rationale=(
-                    f"Minor difference. Chose value from lexically-first "
-                    f"agent {first_agent}."
-                ),
-                needs_approval=False,
-                needs_review=False,
-            )
-
-        elif conflict_type == CONFLICTING:
-            value = agent_values[first_agent]
-            merged_values[field] = value
-            auto_resolved.append(field)
-            review_fields.append(field)
-            field_decisions[field] = FieldDecision(
-                field=field,
-                conflict_type=CONFLICTING,
-                sources=tuple(sorted_agents),
-                chosen_value=value,
-                rationale=(
-                    f"Significant difference. Chose value from lexically-first "
-                    f"agent {first_agent}. Review recommended."
-                ),
-                needs_approval=False,
-                needs_review=True,
-            )
-
-        elif conflict_type in (OPPOSITE, AMBIGUOUS):
-            # GI-3 enforcement: chosen_value=None, excluded from merged_values
-            value_descriptions = ", ".join(
-                f"{a}={agent_values[a]!r}" for a in sorted_agents
-            )
+        decision, _resolved, needs_review = _resolve_conflict(
+            field=field,
+            conflict_type=conflict_type,
+            sorted_agents=sorted_agents,
+            agent_values=agent_values,
+            logger=logger,
+        )
+        field_decisions[field] = decision
+        if decision.needs_approval:
             approval_fields.append(field)
-            field_decisions[field] = FieldDecision(
-                field=field,
-                conflict_type=conflict_type,
-                sources=tuple(sorted_agents),
-                chosen_value=None,
-                rationale=(
-                    f"Cannot auto-resolve. Candidate values: {value_descriptions}."
-                ),
-                needs_approval=True,
-                needs_review=False,
-            )
-
         else:
-            # Unknown conflict type -- treat as AMBIGUOUS
-            value_descriptions = ", ".join(
-                f"{a}={agent_values[a]!r}" for a in sorted_agents
-            )
-            approval_fields.append(field)
-            field_decisions[field] = FieldDecision(
-                field=field,
-                conflict_type=AMBIGUOUS,
-                sources=tuple(sorted_agents),
-                chosen_value=None,
-                rationale=(
-                    f"Unknown conflict type {conflict_type!r}. "
-                    f"Candidate values: {value_descriptions}."
-                ),
-                needs_approval=True,
-                needs_review=False,
-            )
+            merged_values[field] = decision.chosen_value
+            auto_resolved.append(field)
+            if needs_review:
+                review_fields.append(field)
 
     summary = _build_summary(
         auto_resolved, review_fields, approval_fields, field_decisions
