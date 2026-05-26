@@ -241,6 +241,7 @@ override-dependencies = [
     "omnibase-core>=0.42.0,<0.43.0",
     "omnibase-spi>=0.22.0,<0.23.0",
     "omnibase-infra>=0.37.0,<0.38.0",
+    "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@main",
 ]
 
 [tool.uv.sources]
@@ -248,7 +249,7 @@ override-dependencies = [
 omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.42.0" }
 omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", tag = "v0.37.0" }
 omnibase-spi = { git = "https://github.com/OmniNode-ai/omnibase_spi.git", tag = "v0.22.0" }
-onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
+onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "main" }
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.24.0" }
 omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "v0.4.0" }
 
