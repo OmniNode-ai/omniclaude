@@ -1,0 +1,112 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeManifestFetchEffect
+#
+# Capability-oriented effect node for fetching the ONEX runtime manifest.
+# Named by capability ("manifest.fetch"), not by transport (HTTP).
+# Principle: "I'm interested in what you do, not what you are"
+#
+# Fetches the structured system manifest from the ONEX runtime
+# /v1/introspection/manifest endpoint. First step toward migrating
+# manifest_injector logic into the node system (OMN-11597).
+
+# Contract identifiers
+name: node_manifest_fetch_effect
+contract_name: node_manifest_fetch_effect
+node_name: node_manifest_fetch_effect
+
+contract_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for fetching the ONEX runtime manifest.
+  Calls the /v1/introspection/manifest endpoint on the configured ONEX
+  runtime and returns the structured manifest payload. Supports configurable
+  runtime URL and request timeout. Graceful fallback to empty manifest on
+  timeout or unavailability.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelManifestFetchRequest
+  module: omniclaude.nodes.node_manifest_fetch_effect.models
+
+output_model:
+  name: ModelManifestFetchResult
+  module: omniclaude.nodes.node_manifest_fetch_effect.models
+
+# Capabilities
+capabilities:
+  - name: manifest.fetch
+    description: Fetch the ONEX runtime manifest via HTTP
+    version: 0.1.0
+
+# IO operations
+io_operations:
+  - operation: fetch
+    description: Fetch the ONEX runtime manifest from the runtime endpoint
+    protocol_method: fetch
+    input_fields:
+      - runtime_url: str
+      - timeout_ms: int
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelManifestFetchResult
+    idempotent: true
+
+# Dependencies
+dependencies:
+  - name: protocol_manifest_fetch
+    type: protocol
+    class_name: ProtocolManifestFetch
+    module: omniclaude.nodes.node_manifest_fetch_effect.protocols
+    pluggable: true
+
+# Handler routing
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: http
+  backends:
+    - backend: http
+      handler_key: http
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 2
+    initial_delay_ms: 500
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - ManifestFetchTimeoutError
+      - ManifestFetchConnectionError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-11597
+  maturity: alpha
+  tags:
+    - effect
+    - manifest
+    - introspection
+    - runtime
