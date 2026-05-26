@@ -950,7 +950,29 @@ class ManifestInjector:
 
         # Run async query in event loop
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Create new event loop when called from a synchronous context.
+            self.logger.debug("Creating new event loop")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(
+                    self.generate_dynamic_manifest_async(
+                        correlation_id, force_refresh=force_refresh
+                    )
+                )
+            except Exception as refresh_error:  # noqa: BLE001
+                self.logger.error(
+                    f"Failed to generate dynamic manifest: {refresh_error}",
+                    exc_info=True,
+                )
+                return self._get_minimal_manifest()
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+
+        try:
             # With nest_asyncio.apply(), we can run_until_complete even in running loop
             return loop.run_until_complete(
                 self.generate_dynamic_manifest_async(
@@ -958,24 +980,10 @@ class ManifestInjector:
                 )
             )
         except RuntimeError as e:
-            if "no running event loop" in str(e).lower():
-                # Create new event loop if none exists
-                self.logger.debug("Creating new event loop")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    return loop.run_until_complete(
-                        self.generate_dynamic_manifest_async(
-                            correlation_id, force_refresh=force_refresh
-                        )
-                    )
-                finally:
-                    loop.close()
-            else:
-                self.logger.error(
-                    f"Failed to generate dynamic manifest: {e}", exc_info=True
-                )
-                return self._get_minimal_manifest()
+            self.logger.error(
+                f"Failed to generate dynamic manifest: {e}", exc_info=True
+            )
+            return self._get_minimal_manifest()
         except Exception as e:
             self.logger.error(
                 f"Failed to generate dynamic manifest: {e}", exc_info=True

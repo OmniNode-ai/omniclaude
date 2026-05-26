@@ -28,6 +28,7 @@ mocked. No network calls are made during these tests.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -483,6 +484,21 @@ class TestGenerateDynamicManifestIntelligenceDisabled:
         second = injector.generate_dynamic_manifest(_CORRELATION_ID, force_refresh=True)
         # Content should be equivalent (same structure) but may be different objects
         assert "manifest_metadata" in second
+
+    def test_closed_event_loop_uses_fresh_loop(self) -> None:
+        injector = self._injector_no_intel()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.close()
+
+        try:
+            result = injector.generate_dynamic_manifest(_CORRELATION_ID)
+        finally:
+            asyncio.set_event_loop(None)
+
+        assert "filesystem" in result
+        assert "debug_loop" in result
+        assert injector._manifest_data is result
 
 
 # ---------------------------------------------------------------------------
