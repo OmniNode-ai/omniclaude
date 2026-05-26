@@ -93,36 +93,16 @@ class TestPrPolishPrecommitGuard:
 
 @pytest.mark.unit
 class TestAutopilotForegroundDispatchGuard:
-    """Guards `close_out:tooling/foreground-agent-dispatch`."""
+    """Retired autopilot must not re-open foreground dispatch."""
 
-    @pytest.fixture
-    def skill_md(self) -> str:
-        return _read("autopilot/SKILL.md")
+    def test_autopilot_skill_remains_retired(self) -> None:
+        """OMN-12234 removed autopilot as a user-invocable foreground shim."""
+        assert not (_SKILLS_ROOT / "autopilot" / "SKILL.md").exists()
 
-    def test_no_foreground_agent_dispatch_callout(self, skill_md: str) -> None:
-        """SKILL.md must call out that foreground Agent() dispatch is forbidden."""
-        assert "No foreground `Agent()` dispatch" in skill_md, (
-            "autopilot/SKILL.md is missing the explicit anti-pattern callout "
-            "for foreground Agent() dispatch. This guards the friction "
-            "surface 'close_out:tooling/foreground-agent-dispatch' (OMN-8602)."
-        )
-
-    def test_callout_cites_omn_8602(self, skill_md: str) -> None:
-        """The callout must cite OMN-8602."""
-        # Look at the specific callout, not just any OMN-8602 mention.
-        idx = skill_md.find("No foreground `Agent()` dispatch")
-        assert idx >= 0
-        nearby = skill_md[idx : idx + 1200]
-        assert "OMN-8602" in nearby, (
-            "autopilot/SKILL.md foreground-Agent() callout must cite OMN-8602."
-        )
-
-    def test_callout_names_friction_surface(self, skill_md: str) -> None:
-        """The callout must name the originating friction surface for traceability."""
-        assert "close_out:tooling/foreground-agent-dispatch" in skill_md, (
-            "autopilot/SKILL.md must reference the friction surface key "
-            "'close_out:tooling/foreground-agent-dispatch' (OMN-8602)."
-        )
+    def test_session_orchestrator_replaces_autopilot(self) -> None:
+        """Session orchestrator is the supported close-out control surface."""
+        session_skill = _read("session/SKILL.md")
+        assert "node_session_orchestrator" in session_skill
 
 
 @pytest.mark.unit

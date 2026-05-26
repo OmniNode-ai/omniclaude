@@ -56,6 +56,11 @@ The node handles all metadata collection internally:
 - DB table row counts and recency via `psql`
 - Flow classification: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN` | `TOPIC_STALE`
 
+Default runtime anchors:
+- Topic source of truth: omnidash `topics.yaml`
+- Consumer group: `omnidash-read-model`
+- Analytics database: `omnidash_analytics`
+
 Capture stdout (JSON: `DataFlowSweepResult`). Exit 0 = healthy, exit 1 = issues found.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
@@ -79,6 +84,11 @@ Title: fix(data-flow): {topic} — {failure_classification}
 Labels: data-flow, sweep
 Project: Active Sprint
 ```
+
+### Phase 5 — Exit contract
+
+Exit 0 only when all requested flows are healthy. Exit non-zero when the node
+reports broken flows, probe failures, or contract validation errors.
 
 ## Dispatch Rules
 
