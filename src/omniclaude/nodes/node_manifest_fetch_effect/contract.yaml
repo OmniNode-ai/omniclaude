@@ -78,11 +78,16 @@ dependencies:
 
 # Handler routing
 handler_routing:
-  routing_strategy: backend_match
-  default_backend: http
-  backends:
-    - backend: http
-      handler_key: http
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "manifest.fetch"
+      handler:
+        name: "HandlerManifestFetch"
+        module: "omniclaude.nodes.node_manifest_fetch_effect.handlers.handler_manifest_fetch"
+        handler_type: "HTTP"
+      description: "Fetch the ONEX runtime manifest over HTTP"
+  execution_mode: "single"
+  max_timeout_seconds: 30
 
 # Error handling
 error_handling:

@@ -74,11 +74,15 @@ io_operations:
 
 # Handler routing
 handler_routing:
-  routing_strategy: backend_match
-  default_backend: default
-  backends:
-    - backend: default
-      handler_key: default
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "agent.router.route"
+      handler:
+        name: "HandlerAgentRouter"
+        module: "omniclaude.nodes.node_agent_router.handlers.handler_agent_router"
+      description: "Route prompts through the legacy AgentRouter compatibility wrapper"
+  execution_mode: "single"
+  max_timeout_seconds: 30
 
 # Dependencies
 dependencies:
