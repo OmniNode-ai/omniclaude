@@ -1,0 +1,32 @@
+# Imperative Skill Pattern Baseline (OMN-12237)
+#
+# Pre-existing imperative patterns in SKILL.md files being migrated as
+# part of Wave 7 (38-skill imperative-to-dispatch migration).
+#
+# DO NOT add new entries. New violations must be fixed before merging.
+# Remove entries as each skill completes its Wave 7 migration.
+#
+# Format: one skill directory path (relative to repo root) per line.
+# Comments start with #. Trailing slashes are stripped.
+#
+# Tracked pre-existing violations (Wave 7 migration backlog):
+plugins/onex/skills/baseline
+plugins/onex/skills/begin_day
+plugins/onex/skills/dashboard_sweep
+plugins/onex/skills/decompose_epic
+plugins/onex/skills/demo_readiness_team
+plugins/onex/skills/dep_cascade_dedup
+plugins/onex/skills/dispatch_watchdog
+plugins/onex/skills/epic_team
+plugins/onex/skills/executing_plans
+plugins/onex/skills/generate_node
+plugins/onex/skills/multi_agent
+plugins/onex/skills/recall
+plugins/onex/skills/runner
+plugins/onex/skills/self_healing_dispatch
+plugins/onex/skills/start_environment
+plugins/onex/skills/status
+plugins/onex/skills/system_status/check_database_health
+plugins/onex/skills/system_status/check_infrastructure
+plugins/onex/skills/ticketing_triage
+plugins/onex/skills/verification_sweep

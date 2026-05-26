@@ -569,6 +569,21 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/
+      # OMN-12237 (Wave 7): Reject new imperative patterns in skills/*/SKILL.md.
+      # Imperative inline logic (Agent(, TeamCreate, curl, gh api, psql, ssh,
+      # asyncio.run, direct http://localhost/192.168 calls) must live in nodes.
+      # Escape hatch: append '# imperative-ok' to suppress a single line.
+      # Allowlisted (PURE-SKILL) dirs: handoff, login, preflight, record_friction,
+      # set_session, systematic_debugging, unstick_queue, using_git_worktrees,
+      # worktree, writing_skills, authorize.
+      - id: reject-imperative-skill-patterns
+        name: Reject imperative patterns in skills (OMN-12237)
+        entry: .pre-commit-hooks/reject-imperative-skill-patterns.sh
+        language: script
+        pass_filenames: true
+        stages: [pre-commit]
+        files: ^plugins/onex/skills/.*/SKILL\.md$
+
       # Topic naming lint — validate onex.{kind}.{producer}.{event}.v{n} convention
       # (OMN-3259) Triggers on any *.py change; always scans full source tree.
       # Pre-existing violations suppressed by scripts/validation/topic_naming_baseline.txt

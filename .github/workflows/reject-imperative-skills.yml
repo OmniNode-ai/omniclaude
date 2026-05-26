@@ -1,0 +1,125 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-12237 (Wave 7): CI gate — reject new imperative patterns in skills/*/SKILL.md.
+#
+# Detects inline business logic that should live in omnimarket nodes:
+#   - Bare Agent( calls
+#   - TeamCreate references
+#   - curl / wget commands
+#   - gh api / gh pr commands
+#   - psql / pg_ commands
+#   - ssh commands
+#   - asyncio.run( calls
+#   - http://localhost or http://192.168 direct endpoint calls
+#
+# Required status check. Hard fail — no warn-only mode.
+# Escape hatch: append '# imperative-ok' to suppress a single line.
+# CLAUDE.md Rule #5 (enforcement, not detection) + Rule #10 (no bypass).
+
+name: Reject imperative patterns in skills
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+    paths:
+      - 'plugins/onex/skills/**/SKILL.md'
+      - '.pre-commit-hooks/reject-imperative-skill-patterns.sh'
+      - '.github/workflows/reject-imperative-skills.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/onex/skills/**/SKILL.md'
+      - '.pre-commit-hooks/reject-imperative-skill-patterns.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  scan-imperative-skills:
+    name: gate / reject-imperative-skill-patterns
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan changed SKILL.md files for imperative patterns
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TICKET_REF: OMN-12237
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          BASE_SHA="${GITHUB_BASE_SHA:-}"
+          HEAD_SHA="${GITHUB_HEAD_SHA:-HEAD}"
+
+          chmod +x .pre-commit-hooks/reject-imperative-skill-patterns.sh
+
+          git fetch --no-tags --prune --depth=200 origin "${BASE_REF}" >/dev/null 2>&1 || true
+
+          if [[ -n "$BASE_SHA" ]] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            DIFF_BASE="$BASE_SHA"
+          elif git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            DIFF_BASE="$(git merge-base "origin/${BASE_REF}" "$HEAD_SHA")"
+          else
+            echo "::notice::Unable to resolve base ref '${BASE_REF}'; scanning all SKILL.md files."
+            DIFF_BASE=""
+          fi
+
+          if [[ -n "$DIFF_BASE" ]]; then
+            mapfile -t CHANGED_FILES < <(
+              git diff --name-only --diff-filter=AM "${DIFF_BASE}...${HEAD_SHA}" \
+                -- 'plugins/onex/skills/*/SKILL.md' \
+                   'plugins/onex/skills/**/SKILL.md' \
+              2>/dev/null || true
+            )
+          else
+            mapfile -t CHANGED_FILES < <(find plugins/onex/skills -name 'SKILL.md' 2>/dev/null || true)
+          fi
+
+          # De-duplicate (glob expansion can produce duplicates)
+          readarray -t CHANGED_FILES < <(printf '%s\n' "${CHANGED_FILES[@]}" | sort -u)
+
+          if [[ ${#CHANGED_FILES[@]} -eq 0 ]]; then
+            echo "::notice::No SKILL.md files changed. Nothing to scan."
+            exit 0
+          fi
+
+          echo "::notice::Scanning ${#CHANGED_FILES[@]} SKILL.md file(s) for imperative patterns..."
+
+          VIOLATION_FILES=()
+          for skill_file in "${CHANGED_FILES[@]}"; do
+            [[ -f "$skill_file" ]] || continue
+            exit_code=0
+            # Pass file path directly; hook reads from working tree when not in index
+            .pre-commit-hooks/reject-imperative-skill-patterns.sh "$skill_file" 2>&1 \
+              | while IFS= read -r line; do echo "::error::$line"; done \
+              || exit_code=$?
+            if [[ "$exit_code" -ne 0 ]]; then
+              VIOLATION_FILES+=("$skill_file")
+            fi
+          done
+
+          if [[ ${#VIOLATION_FILES[@]} -gt 0 ]]; then
+            echo "::error::${#VIOLATION_FILES[@]} SKILL.md file(s) contain imperative patterns."
+            echo "::error::Move inline logic into omnimarket nodes and dispatch via 'onex run-node'."
+            echo "::error::Escape hatch: append '# imperative-ok' to suppress a single line."
+            echo "::error::Ticket: ${TICKET_REF}"
+            exit 1
+          fi
+
+          echo "::notice::All changed SKILL.md files pass the imperative pattern check. OK."
