@@ -114,9 +114,9 @@ if [[ ! "$TOOL_NAME" =~ ^(Write|Edit|MultiEdit)$ ]]; then
 fi
 
 # Check for quality enforcer script
-QUALITY_SCRIPT="${HOOKS_DIR}/scripts/quality_enforcer.py"
+QUALITY_SCRIPT="${HOOKS_DIR}/scripts/validator_quality.py"
 if [[ ! -f "$QUALITY_SCRIPT" ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [CID:${CORRELATION_ID:0:8}] quality_enforcer.py not found, passing through" >> "$LOG_FILE"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [CID:${CORRELATION_ID:0:8}] validator_quality.py not found, passing through" >> "$LOG_FILE"
     echo "$TOOL_INFO"
     exit 0
 fi

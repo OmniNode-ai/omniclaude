@@ -14,7 +14,7 @@ This package contains utility functions and classes for:
 
 All re-exported names are resolved lazily on first access to prevent
 the circular import chain that occurs when config -> aggregators ->
-hooks -> lib.utils -> quality_enforcer -> config.
+hooks -> lib.utils -> validator_quality -> config.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from typing import Any
 
 # Maps every re-exported name to its source submodule (relative to this package).
 _LAZY_IMPORTS: dict[str, str] = {
-    # debug_utils
-    "check_network_connectivity": ".debug_utils",
-    "check_pattern_tracking_files": ".debug_utils",
-    "check_python_environment": ".debug_utils",
-    "check_running_services": ".debug_utils",
-    "print_debug_status": ".debug_utils",
-    "test_pattern_tracking_flow": ".debug_utils",
+    # diagnostics (renamed from debug_utils)
+    "check_network_connectivity": ".diagnostics",
+    "check_pattern_tracking_files": ".diagnostics",
+    "check_python_environment": ".diagnostics",
+    "check_running_services": ".diagnostics",
+    "print_debug_status": ".diagnostics",
+    "test_pattern_tracking_flow": ".diagnostics",
     # error_handling
     "CircuitBreaker": ".error_handling",
     "PatternTrackingErrorPolicy": ".error_handling",
@@ -47,9 +47,9 @@ _LAZY_IMPORTS: dict[str, str] = {
     "Phase4HealthChecker": ".health_checks",
     # manifest_loader
     "load_manifest": ".manifest_loader",
-    # naming_validator
-    "NamingValidator": ".naming_validator",
-    "Violation": ".naming_validator",
+    # validator_naming_conventions (renamed from naming_validator)
+    "NamingValidator": ".validator_naming_conventions",
+    "Violation": ".validator_naming_conventions",
     # pattern_tracker
     "BatchAggregator": ".pattern_tracker",
     "PatternTracker": ".pattern_tracker",
@@ -58,9 +58,9 @@ _LAZY_IMPORTS: dict[str, str] = {
     "PerformanceMonitor": ".pattern_tracker",
     "ProcessingMode": ".pattern_tracker",
     "get_tracker": ".pattern_tracker",
-    # quality_enforcer
-    "QualityEnforcer": ".quality_enforcer",
-    "ViolationsLogger": ".quality_enforcer",
+    # validator_quality (renamed from quality_enforcer)
+    "QualityEnforcer": ".validator_quality",
+    "ViolationsLogger": ".validator_quality",
 }
 
 __all__ = sorted(_LAZY_IMPORTS.keys())

@@ -5,6 +5,7 @@
 # Node: NodeChannelReplyDispatcher
 
 name: node_channel_reply_dispatcher
+version: "0.1.0"
 contract_name: node_channel_reply_dispatcher
 node_name: node_channel_reply_dispatcher
 

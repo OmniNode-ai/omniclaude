@@ -2,8 +2,24 @@
 # SPDX-License-Identifier: MIT
 
 """
-Agent Router - Phase 1
-----------------------
+Agent Router - Canonical Package Implementation (OMN-11592)
+
+This is the CANONICAL agent router for all package consumers (tests, internal
+services, CLI, routing_event_client). Import from here for all non-hooks code:
+  from omniclaude.lib.core.agent_router import AgentRouter
+
+ARCHITECTURE NOTE (OMN-11592):
+  A standalone runtime copy exists at plugins/onex/hooks/lib/agent_router.py.
+  That copy is required because the hooks subprocess cannot import the installed
+  omniclaude package. It mirrors this file's behavioral contract with additional
+  hooks-specific features. See that file's docstring for details.
+
+  BEHAVIORAL DRIFT RULE:
+  Core routing algorithm changes (TriggerMatcher, ConfidenceScorer, scoring
+  weights, HARD_FLOOR) must be applied to BOTH this file and the plugins copy.
+  The golden fixture tests (tests/golden/test_agent_router_golden.py) test THIS
+  version. Route the plugins version's integration tests through
+  route_via_events_wrapper to catch drift.
 
 Main orchestration component that ties all Phase 1 features together.
 

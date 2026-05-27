@@ -679,7 +679,7 @@ _queue_heal() {
   local org="OmniNode-ai"
   # Repos that use merge queues — must match the org's queue-enabled repos.
   # Sourced from ONEX_QUEUE_REPOS env var (CSV) or falls back to the known set.
-  local repos_csv="${ONEX_QUEUE_REPOS:-omniclaude,omnibase_core,omnibase_spi,omnibase_infra,omnibase_compat,omniintelligence,omnimemory,omninode_infra,onex_change_control}"
+  local repos_csv="${ONEX_QUEUE_REPOS:-omniclaude,omnibase_core,omnibase_spi,omnibase_infra,omnibase_compat,omniintelligence,omnimemory,omninode_infra,onex_change_control,omnimarket}"
   # Configurable dequeue→requeue pause (seconds). Default 2. Override for tests.
   local heal_sleep="${ONEX_QUEUE_HEAL_SLEEP:-2}"
   local heal_count=0

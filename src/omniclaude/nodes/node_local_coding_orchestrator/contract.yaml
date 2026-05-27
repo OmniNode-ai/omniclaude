@@ -18,6 +18,7 @@
 
 # Contract identifiers
 name: node_local_coding_orchestrator
+version: "0.1.0"
 contract_name: node_local_coding_orchestrator
 node_name: node_local_coding_orchestrator
 

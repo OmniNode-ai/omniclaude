@@ -34,7 +34,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 TIER1_DETERMINISTIC_SKILLS: set[str] = {
-    "autopilot",
     "aislop_sweep",
     "build_loop",
     "ci_watch",
@@ -65,10 +64,7 @@ MISSING_NODE_SKILLS: set[str] = {
     "pr_watch",
 }
 
-DEPRECATED_SKILLS: set[str] = {
-    "autopilot",
-    "begin_day",
-}
+DEPRECATED_SKILLS: set[str] = set()  # autopilot, begin_day deleted in OMN-12234
 
 ENFORCED_SKILLS = TIER1_DETERMINISTIC_SKILLS - DEPRECATED_SKILLS
 

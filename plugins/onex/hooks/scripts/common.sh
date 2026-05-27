@@ -55,6 +55,17 @@ onex_hook_gate() {
 # Scope: macOS Apple Silicon only (ARM Homebrew prefix /opt/homebrew).
 # Intel Mac (/usr/local) and Linux are not supported runtime profiles for these hooks.
 # Version is intentionally pinned to 3.13 per the one-Python policy (OMN-10079).
+#
+# NOTE FOR AGENTS WORKING IN GIT WORKTREES (OMN-11422):
+# These hook scripts export PYTHONPATH into the Claude Code session environment.
+# That value propagates to every subprocess, including agent tool invocations.
+# In a worktree the local src/ layout differs from the canonical clone, so the
+# inherited PYTHONPATH silently shadows the worktree's packages.
+# Rule: all Python invocations inside worktrees MUST be prefixed with env -u PYTHONPATH:
+#   env -u PYTHONPATH uv run pytest tests/ -v
+#   env -u PYTHONPATH uv run python -m <module>
+#   env -u PYTHONPATH python3 <script>
+# uv run alone is NOT sufficient — uv preserves inherited env vars.
 BREW_PY="/opt/homebrew/bin/python3.13"
 export BREW_PY
 

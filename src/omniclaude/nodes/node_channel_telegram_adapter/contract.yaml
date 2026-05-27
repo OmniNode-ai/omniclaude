@@ -5,6 +5,7 @@
 # Node: NodeChannelTelegramAdapter
 
 name: node_channel_telegram_adapter
+version: "0.1.0"
 contract_name: node_channel_telegram_adapter
 node_name: node_channel_telegram_adapter
 

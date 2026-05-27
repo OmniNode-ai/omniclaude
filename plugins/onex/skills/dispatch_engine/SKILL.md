@@ -1,7 +1,7 @@
 ---
-description: Poll work backlog and dispatch builders for gaps via node_skill_dispatch_engine_orchestrator (scaffold)
+description: Thin dispatch-only shim for the dispatch_engine pipeline. Builds the contract-canonical node_skill_dispatch_engine_orchestrator start envelope and invokes the manifest-canonical onex run-node path. No inline orchestration logic.
 mode: full
-version: "1.0.0"
+version: "2.0.0"
 debug: false
 category: dispatch
 level: advanced
@@ -9,7 +9,8 @@ foreground_orchestrator: true
 tags:
   - dispatch
   - orchestration
-  - scaffold
+  - dispatch-only
+  - routing-enforced
 author: omninode
 args:
   - name: --dry-run
@@ -18,22 +19,93 @@ args:
   - name: --repo
     description: "Restrict dispatch scan to a single repository"
     required: false
+inputs:
+  - name: envelope
+    description: "ModelEventEnvelope[ModelSkillRequest]"
+outputs:
+  - name: orchestrator_result
+    description: "ModelSkillResult JSON"
 ---
 
-> **SCAFFOLD ONLY.** Live dispatch returns a `"dispatched"` placeholder. Real
-> dispatch wiring (backlog poll, gap detection, builder fan-out) is follow-up
-> work; this surface exists so downstream callers can bind to a stable skill
-> name and contract today.
+# /onex:dispatch_engine — Dispatch Engine Shim
 
-# Dispatch Engine
+**Skill ID**: `onex:dispatch_engine`
+**Version**: 2.0.0
+**Owner**: omniclaude
+**Ticket**: OMN-12236
+**Backing node**: `node_skill_dispatch_engine_orchestrator`
 
 **Announce at start:** "I'm using the dispatch_engine skill to poll the work backlog and dispatch builders for gaps."
 
-## Overview
+## Changelog
 
-Thin skill wrapper around `node_skill_dispatch_engine_orchestrator` in omnimarket. The orchestrator node is the scheduled dispatch-engine tick's execution surface: pull backlog, detect gaps, dispatch builders. All dispatch logic will live in `HandlerSkillRequested`; in this scaffold the handler returns a `"dispatched"` placeholder for live runs and `"dry_run"` when `--dry-run` is supplied.
+- **2.0.0** — Breaking dispatch contract change. The shim now builds a
+  `ModelSkillRequest` payload and invokes the manifest-canonical
+  `uv run onex run-node node_skill_dispatch_engine_orchestrator` path.
+  No inline placeholder logic remains in the skill surface.
+- **1.0.0** — Scaffold only. Returned a `"dispatched"` placeholder.
 
-The SKILL.md is the SkillSurface (platform-specific invocation wrapper); the omnimarket node is the NodeUnit (contract-backed execution). Wrappers own no business logic.
+## What this skill does
+
+Dispatches through `onex run-node node_skill_dispatch_engine_orchestrator`. The node owns
+backlog polling, gap detection, and builder fan-out. This shim contains no orchestration
+logic, no inline placeholder returns, and no direct Kafka publish.
+
+## Wire Schema
+
+Contract target:
+`node_skill_dispatch_engine_orchestrator`
+
+Command topic:
+`onex.cmd.omnimarket.dispatch_engine.v1`
+
+Dispatch declaration for deterministic routing gates:
+`plugins/onex/skills/dispatch_engine/run.sh` invokes
+`uv run onex run-node node_skill_dispatch_engine_orchestrator --input <envelope>`
+through the manifest-canonical runtime path.
+
+Event type alias:
+`omnimarket.dispatch_engine`
+
+Terminal events:
+- Success: `onex.evt.omnimarket.dispatch_engine-completed.v1`
+- Failure: `onex.evt.omnimarket.dispatch_engine-failed.v1`
+
+Envelope shape:
+
+```json
+{
+  "event_type": "omnimarket.dispatch_engine",
+  "correlation_id": "<uuid>",
+  "payload": {
+    "skill_name": "dispatch_engine",
+    "skill_path": "<absolute-path-to-SKILL.md>",
+    "args": {},
+    "dry_run": false
+  }
+}
+```
+
+## Dispatch
+
+```bash
+plugins/onex/skills/dispatch_engine/run.sh \
+  [--dry-run] \
+  [--repo <repo>]
+```
+
+The launcher dispatches through `onex run-node node_skill_dispatch_engine_orchestrator`
+and prints the `ModelSkillResult` JSON returned by the backing node.
+Surface non-zero exits directly. On routing failure raise `SkillRoutingError`;
+do not produce prose.
+
+**Fallback path (local/offline):**
+
+```bash
+onex node node_skill_dispatch_engine_orchestrator --input <envelope_json_file>
+```
+
+Where `<envelope_json_file>` contains a `ModelEventEnvelope[ModelSkillRequest]` JSON blob.
 
 ## Quick Start
 
@@ -41,48 +113,15 @@ The SKILL.md is the SkillSurface (platform-specific invocation wrapper); the omn
 # Dry-run: inspect what would be dispatched
 /onex:dispatch_engine --dry-run
 
-# Live dispatch (scaffold: returns "dispatched" placeholder)
+# Live dispatch
 /onex:dispatch_engine
+
+# Restrict to a single repo
+/onex:dispatch_engine --repo OmniNode-ai/omnimarket
 ```
-
-## Execution Steps
-
-### 1. Build the skill request
-
-Construct the handler input with:
-
-- `skill_name`: `dispatch_engine`
-- `skill_path`: absolute path to this `SKILL.md`
-- `args`: `{}` or any caller-supplied flags as `dict[str, str]`
-- `dry_run`: `true` if `--dry-run` was supplied, else `false`
-
-### 2. Publish to the command topic
-
-Topics are declared in `node_skill_dispatch_engine_orchestrator/contract.yaml`:
-
-- Subscribe topic: `onex.cmd.omnimarket.dispatch_engine.v1`
-- Consumer group: `omnimarket.skill.dispatch_engine`
-
-### 3. Await the outcome event
-
-- Success: `onex.evt.omnimarket.dispatch_engine-completed.v1`
-- Failure: `onex.evt.omnimarket.dispatch_engine-failed.v1`
-
-Parse the result dict. Scaffold returns `{"status": "dispatched" | "dry_run", ...}`.
-
-### 4. Display the verdict
-
-Render `status` back to the caller. On future live-dispatch wiring, also surface the count of builders dispatched and the ticket IDs they were assigned.
-
-## Acceptance Criteria
-
-- Request validated: `skill_path` ends with `SKILL.md`; `skill_name` is non-blank.
-- Publication lands on `onex.cmd.omnimarket.dispatch_engine.v1` with the declared consumer group.
-- Handler returns a dict whose `status` ∈ `{"dispatched", "dry_run"}`.
-- `--dry-run` always short-circuits to `"dry_run"` with no side effects.
 
 ## See Also
 
 - `node_skill_dispatch_engine_orchestrator/contract.yaml` — topic wiring and I/O schema
 - `node_skill_overseer_verify_orchestrator` — canonical skill orchestrator pattern
-- `dispatch_worker` skill — downstream builder dispatch target (future wiring)
+- `dispatch_worker` skill — downstream builder dispatch target

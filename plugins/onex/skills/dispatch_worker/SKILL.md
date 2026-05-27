@@ -145,8 +145,11 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
    `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
    canonical repo clone. The worktree guard hook enforces this.
 
-4. **Full test suite before push.** Run `uv run pytest tests/ -v` with NO `-k` filter
-   as the final pre-push check. Narrow filters miss contract tests and pre-commit hooks.
+4. **Full test suite before push.** Run `env -u PYTHONPATH uv run pytest tests/ -v` with
+   NO `-k` filter as the final pre-push check. The `env -u PYTHONPATH` prefix is required:
+   omniclaude hooks export PYTHONPATH into the parent environment, and that value shadows
+   the worktree's local `src/` layout, causing import failures. Always prefix `uv run`
+   and direct `python` invocations inside worktrees with `env -u PYTHONPATH`.
 
 5. **Never bypass pre-commit hooks.** Never use `--no-verify`, `--no-gpg-sign`, or any
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.

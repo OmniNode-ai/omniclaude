@@ -287,7 +287,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Phase 1: Validate
     print("[PostToolUse] Starting validation...", file=sys.stderr)
-    from omniclaude.lib.utils.naming_validator import NamingValidator
+    from omniclaude.lib.utils.validator_naming_conventions import NamingValidator
 
     validator = NamingValidator()
     violations = validator.validate_content(original_content, str(file_path))

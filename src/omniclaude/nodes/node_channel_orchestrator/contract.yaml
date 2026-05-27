@@ -9,6 +9,7 @@
 # injection, response generation), and emits reply-requested events.
 
 name: node_channel_orchestrator
+version: "0.1.0"
 contract_name: node_channel_orchestrator
 node_name: node_channel_orchestrator
 

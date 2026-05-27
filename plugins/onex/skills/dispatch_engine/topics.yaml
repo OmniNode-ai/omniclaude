@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: dispatch-engine
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+#
+# v2.0.0 (OMN-12236): Skill dispatches the contract-canonical
+# node_skill_dispatch_engine_orchestrator start envelope through the omnimarket module CLI.
+
+topics:
+  - onex.cmd.omnimarket.dispatch_engine.v1
+  - onex.evt.omnimarket.dispatch_engine-completed.v1
+  - onex.evt.omnimarket.dispatch_engine-failed.v1

@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
     "rel_path",
     [
         "src/omniclaude/nodes/node_agent_chat/handler_auto_emit.py",
-        "src/omniclaude/lib/utils/quality_enforcer.py",
+        "src/omniclaude/lib/utils/validator_quality.py",
         "src/omniclaude/lib/core/agent_router.py",
     ],
 )
@@ -38,7 +38,7 @@ def test_no_legacy_env_var_reads(rel_path: str) -> None:
     "rel_path",
     [
         "src/omniclaude/nodes/node_agent_chat/handler_auto_emit.py",
-        "src/omniclaude/lib/utils/quality_enforcer.py",
+        "src/omniclaude/lib/utils/validator_quality.py",
         "src/omniclaude/lib/core/agent_router.py",
     ],
 )
