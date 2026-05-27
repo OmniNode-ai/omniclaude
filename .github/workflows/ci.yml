@@ -1414,7 +1414,7 @@ jobs:
   # selected_paths activate the smart-selection pytest step.
   test:
     name: Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
-    needs: [quality-gate, detect-changes]
+    needs: [zone-filter, quality-gate, detect-changes]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1423,7 +1423,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: always() && needs.quality-gate.result == 'success'
+    if: always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
     timeout-minutes: 15
     strategy:
       fail-fast: false
