@@ -93,28 +93,31 @@ class TestPrPolishPrecommitGuard:
 
 @pytest.mark.unit
 class TestAutopilotForegroundDispatchGuard:
-    """Autopilot is retired; the old foreground-dispatch guard must not reappear."""
+    """Autopilot is retired; the compatibility shim must keep dispatch disabled."""
 
     @pytest.fixture
     def skill_md(self) -> str:
-        path = _SKILLS_ROOT / "autopilot" / "SKILL.md"
-        assert not path.exists(), (
-            "autopilot/SKILL.md was retired in OMN-12234; do not restore the "
-            "foreground Agent() dispatch surface guarded by OMN-8602."
-        )
-        return ""
+        return _read("autopilot/SKILL.md")
 
-    def test_no_foreground_agent_dispatch_callout(self, skill_md: str) -> None:
-        """The retired skill file must remain absent."""
-        assert skill_md == ""
+    def test_retired_compatibility_shim(self, skill_md: str) -> None:
+        """The restored deterministic-routing shim must remain retired."""
+        assert "user_invocable: false" in skill_md
+        assert "retired: true" in skill_md
+        assert "replacement_skill: session" in skill_md
 
     def test_callout_cites_omn_8602(self, skill_md: str) -> None:
-        """No retired autopilot content means no stale callout drift."""
-        assert "OMN-8602" not in skill_md
+        """The retired shim must preserve the foreground-dispatch guard citation."""
+        assert "OMN-8602" in skill_md
 
     def test_callout_names_friction_surface(self, skill_md: str) -> None:
-        """The retired foreground dispatch surface must stay removed."""
-        assert "close_out:tooling/foreground-agent-dispatch" not in skill_md
+        """The retired shim must preserve the historical friction surface."""
+        assert "close_out:tooling/foreground-agent-dispatch" in skill_md
+
+    def test_forbids_foreground_agent_dispatch(self, skill_md: str) -> None:
+        """The compatibility shim must still forbid operator-session dispatch."""
+        assert "No foreground `Agent()` dispatch (OMN-8602)" in skill_md
+        assert "must NEVER be dispatched" in skill_md
+        assert "not from the operator session" in skill_md
 
 
 @pytest.mark.unit
