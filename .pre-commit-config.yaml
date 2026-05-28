@@ -680,9 +680,11 @@ repos:
       # Hook bitmask drift check (OMN-9615)
       # Regenerates hook_bits.sh from EnumHookBit and fails if the committed
       # artifact is stale. Fires when hook_bits.sh is modified.
+      # Uses scripts/run-hook-bits-drift.sh to resolve omnibase_core via
+      # $OMNI_HOME, supporting both omni_home and worktree layouts (OMN-12398).
       - id: hook-bits-drift
         name: hook_bits.sh drift check (regenerate if EnumHookBit changes)
-        entry: uv --directory ../omnibase_core run python scripts/gen_hook_bits.py --check ../omniclaude/plugins/onex/hooks/lib/hook_bits.sh
+        entry: bash scripts/run-hook-bits-drift.sh
         language: system
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$
