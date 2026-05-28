@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 name: node_stub
 node_not_implemented: true
-

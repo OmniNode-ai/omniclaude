@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 from omnimarket.nodes.node_real.handlers.handler_real import HandlerReal
 
 

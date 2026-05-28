@@ -1,7 +1,7 @@
 # OMN-11613: manifest_injector Deletion Plan
 
-**Status:** Migration documented — deletion pending caller migration  
-**Date:** 2026-05-26  
+**Status:** Migration documented — deletion pending caller migration
+**Date:** 2026-05-26
 **Ticket:** OMN-11613 (Wave 4B Step 9)
 
 ---
