@@ -108,6 +108,17 @@ try:
 except ImportError:  # pragma: no cover
     check_agentic_quality = None  # type: ignore[assignment]
 
+try:
+    from hook_quality_gate import (  # type: ignore[import-not-found]
+        ModelHookQualityGateInput,
+        ModelHookQualityGateResult,
+        run_hook_quality_gate,
+    )
+except ImportError:  # pragma: no cover
+    ModelHookQualityGateInput = None  # type: ignore[assignment,misc]
+    ModelHookQualityGateResult = None  # type: ignore[assignment,misc]
+    run_hook_quality_gate = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Agentic job types (OMN-5725)
@@ -261,10 +272,44 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 tool_calls_count = job.result.tool_calls_count
                 tool_names = sorted(job.result.tool_names_used)
 
-                # Quality gate check (OMN-5729, OMN-8548): non-blocking — log and
-                # annotate the result but do not block delegation on gate failure.
+                # Quality gate (T19): run_hook_quality_gate is the primary gate;
+                # check_agentic_quality is kept as a secondary check for backward compat.
+                # Both are NON-AUTHORITATIVE and non-blocking — failures are logged and
+                # included in telemetry but do not prevent the result from reaching Claude.
                 quality_gate_reason = ""
-                if check_agentic_quality is not None:
+                hook_gate_result_dict: dict[str, Any] = {}
+
+                if (
+                    run_hook_quality_gate is not None
+                    and ModelHookQualityGateInput is not None
+                ):
+                    try:
+                        hook_gate_input = ModelHookQualityGateInput(
+                            correlation_id=job.correlation_id or job_id,
+                            task_type=job.task_type,
+                            llm_response_content=content,
+                            tool_calls_count=tool_calls_count,
+                            iterations=iterations,
+                        )
+                        hook_gate = run_hook_quality_gate(hook_gate_input)
+                        hook_gate_result_dict = hook_gate.to_dict()
+                        if not hook_gate.passed:
+                            quality_gate_reason = (
+                                "; ".join(hook_gate.failure_reasons)
+                                or "quality_gate_failed"
+                            )
+                            logger.warning(
+                                "hook_quality_gate failed for job %s (score=%.3f): %s",
+                                job_id,
+                                hook_gate.quality_score,
+                                quality_gate_reason,
+                            )
+                    except Exception as exc:
+                        logger.debug(
+                            "hook_quality_gate raised for job %s: %s", job_id, exc
+                        )
+                elif check_agentic_quality is not None:
+                    # Backward-compat fallback when hook_quality_gate unavailable
                     try:
                         gate_result = check_agentic_quality(
                             content=content,
@@ -312,6 +357,9 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 }
                 if quality_gate_reason:
                     completed["quality_gate_reason"] = quality_gate_reason
+                if hook_gate_result_dict:
+                    # Include full gate result for T18 telemetry consumers
+                    completed["hook_quality_gate_result"] = hook_gate_result_dict
                 return completed
             if job.status == AgenticJobStatus.FAILED:
                 error = job.error or "unknown"
@@ -574,6 +622,42 @@ def _handle_request(data: bytes) -> bytes:
                         "reason": "agentic_loop_started",
                     }
                 ).encode()
+
+        # --- Synchronous quality gate (T19) ---
+        # When the orchestrator returns a text response (delegated=True, response_content
+        # present), run the hook quality gate on the content and annotate the result.
+        # NON-AUTHORITATIVE: advisory only; does not block delegation.
+        response_content = (
+            result.get("response_content", "") if isinstance(result, dict) else ""
+        )
+        if (
+            response_content
+            and run_hook_quality_gate is not None
+            and ModelHookQualityGateInput is not None
+        ):
+            try:
+                _sync_task_type = (
+                    cached_classification.get("intent", "general")
+                    if cached_classification
+                    else "general"
+                )
+                sync_gate_input = ModelHookQualityGateInput(
+                    correlation_id=correlation_id or session_id,
+                    task_type=_sync_task_type,
+                    llm_response_content=response_content,
+                )
+                sync_gate = run_hook_quality_gate(sync_gate_input)
+                if isinstance(result, dict):
+                    result = dict(result)
+                    result["hook_quality_gate_result"] = sync_gate.to_dict()
+                    if not sync_gate.passed:
+                        logger.warning(
+                            "hook_quality_gate failed for sync delegation (score=%.3f): %s",
+                            sync_gate.quality_score,
+                            "; ".join(sync_gate.failure_reasons),
+                        )
+            except Exception as exc:
+                logger.debug("hook_quality_gate raised for sync delegation: %s", exc)
 
         return json.dumps(result).encode()
     except Exception as exc:

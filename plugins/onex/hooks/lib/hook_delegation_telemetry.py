@@ -13,10 +13,12 @@ hook-path events alongside runtime-path events, but they carry reduced fidelity:
   - tokens_input / tokens_output: always 0 — the hook path does not observe LLM
     token usage; it classifies at the shell level before any LLM call.
   - cost_usd: always 0.0 — same reason.
-  - quality_result.passed: reflects check_agentic_quality(), which is non-blocking
-    and log-only; not the FSM quality gate in node_delegation_orchestrator.
+  - quality_result.passed: reflects run_hook_quality_gate() (T19), which is
+    non-blocking and advisory only; not the FSM quality gate in
+    node_delegation_orchestrator. fail_category is "pass" or "fail_heuristic" only.
 
 Source: docs/architecture/omniclaude-delegation-classification.md (T17)
+Quality gate: plugins/onex/hooks/lib/hook_quality_gate.py (T19)
 """
 
 from __future__ import annotations
@@ -120,6 +122,31 @@ class ModelHookDelegationTelemetry:
 # ---------------------------------------------------------------------------
 
 
+def hook_quality_result_from_gate(
+    gate_result_dict: dict[str, object],
+) -> HookQualityResult:
+    """Build a HookQualityResult from a ModelHookQualityGateResult.to_dict() payload (T19).
+
+    Bridges the T19 quality gate output into the T18 telemetry envelope so the
+    quality_result field in ModelHookDelegationTelemetry reflects the actual gate
+    verdict rather than the default passed=True placeholder.
+
+    Args:
+        gate_result_dict: Output of ModelHookQualityGateResult.to_dict().
+
+    Returns:
+        HookQualityResult with passed/reason populated from the gate.
+    """
+    passed = bool(gate_result_dict.get("passed", True))
+    reasons = gate_result_dict.get("failure_reasons", [])
+    reason = (
+        "; ".join(str(r) for r in reasons)
+        if isinstance(reasons, list)
+        else str(reasons)
+    )
+    return HookQualityResult(passed=passed, reason=reason)
+
+
 def build_routing_policy_hash() -> str:
     """Return a SHA-256 hash identifying the local routing rules config.
 
@@ -142,4 +169,5 @@ __all__: list[str] = [
     "HookQualityResult",
     "ModelHookDelegationTelemetry",
     "build_routing_policy_hash",
+    "hook_quality_result_from_gate",
 ]
