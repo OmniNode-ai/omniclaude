@@ -134,6 +134,8 @@ class AgenticJob:
     session_id: str
     prompt: str
     correlation_id: str = ""
+    # NON-AUTHORITATIVE: from local TaskClassifier, not node_routing_policy_engine
+    task_type: str = "agentic"
     started_at: float = field(default_factory=time.monotonic)
     completed_at: float | None = None
     status: AgenticJobStatus = AgenticJobStatus.RUNNING
@@ -176,6 +178,7 @@ def _start_agentic_job(
     endpoint_url: str,
     working_dir: str | None = None,
     correlation_id: str = "",
+    task_type: str = "agentic",
 ) -> str:
     """Start an agentic loop in a background thread and return the job ID.
 
@@ -186,6 +189,7 @@ def _start_agentic_job(
         endpoint_url: Base URL of the LLM endpoint.
         working_dir: Optional working directory for tool operations.
         correlation_id: Correlation ID for distributed tracing.
+        task_type: NON-AUTHORITATIVE task type from local TaskClassifier.
 
     Returns:
         A unique job_id string.
@@ -196,6 +200,7 @@ def _start_agentic_job(
         session_id=session_id,
         prompt=prompt,
         correlation_id=correlation_id,
+        task_type=task_type,
     )
 
     with _agentic_jobs_lock:
@@ -280,12 +285,14 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
 
                 # Remove job after delivery and emit terminal success event
                 latency_ms = int((time.monotonic() - job.started_at) * 1000)
+                # NON-AUTHORITATIVE: task_type from local TaskClassifier
+                _job_task_type = job.task_type
                 del _agentic_jobs[job_id]
                 if _emit_delegation_event is not None:
                     _emit_delegation_event(
                         session_id=job.session_id,
                         correlation_id=job.correlation_id,
-                        task_type="agentic",
+                        task_type=_job_task_type,
                         handler_name="agentic_loop",
                         model_name="agentic",
                         quality_gate_passed=not bool(quality_gate_reason),
@@ -309,12 +316,14 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
             if job.status == AgenticJobStatus.FAILED:
                 error = job.error or "unknown"
                 latency_ms = int((time.monotonic() - job.started_at) * 1000)
+                # NON-AUTHORITATIVE: task_type from local TaskClassifier
+                _job_task_type = job.task_type
                 del _agentic_jobs[job_id]
                 if _emit_delegation_event is not None:
                     _emit_delegation_event(
                         session_id=job.session_id,
                         correlation_id=job.correlation_id,
-                        task_type="agentic",
+                        task_type=_job_task_type,
                         handler_name="agentic_loop",
                         model_name="agentic",
                         quality_gate_passed=False,
@@ -543,12 +552,19 @@ def _handle_request(data: bytes) -> bytes:
             system_prompt = result.get("agentic_system_prompt", "")
             endpoint_url = result.get("agentic_endpoint_url", "")
             if endpoint_url and system_prompt:
+                # NON-AUTHORITATIVE: pull task_type from cached classification
+                _cached_task_type = (
+                    cached_classification.get("intent", "agentic")
+                    if cached_classification
+                    else "agentic"
+                )
                 job_id = _start_agentic_job(
                     session_id=session_id,
                     prompt=agentic_prompt,
                     system_prompt=system_prompt,
                     endpoint_url=endpoint_url,
                     correlation_id=correlation_id,
+                    task_type=_cached_task_type,
                 )
                 return json.dumps(
                     {
