@@ -12,9 +12,9 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=6406ab7a" },
-    { name = "omnibase-infra", specifier = "==0.36.0" },
-    { name = "omnibase-spi", specifier = "==0.20.6" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2" },
+    { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
 ]
 
 [[package]]
@@ -2351,8 +2351,8 @@ wheels = [
 
 [[package]]
 name = "omnibase-compat"
-version = "0.3.1"
-source = { git = "https://github.com/OmniNode-ai/omnibase_compat.git?rev=3e34ab94fad0a9db1c3b59f0e100c5da659b0792#3e34ab94fad0a9db1c3b59f0e100c5da659b0792" }
+version = "0.5.0"
+source = { git = "https://github.com/OmniNode-ai/omnibase_compat.git?tag=v0.5.0#748aedda8f8b7b808a27a81ee9cbe74d547d3dec" }
 dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
@@ -2360,8 +2360,8 @@ dependencies = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.41.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=6406ab7a#6406ab7ad8a3b0fa4b6f884b2442e4286f3b2c54" }
+version = "0.42.0"
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0#fc211e3648681a79f609c2c153a254baaef682ab" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -2379,8 +2379,8 @@ dependencies = [
 
 [[package]]
 name = "omnibase-infra"
-version = "0.36.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.37.2"
+source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2#7d7836de0316a0c70af9b3acbc978794eb424f91" }
 dependencies = [
     { name = "a2a-sdk" },
     { name = "aiofiles" },
@@ -2429,29 +2429,25 @@ dependencies = [
     { name = "uvicorn" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/9d/ffee802f88611629763e9f71609737595f69728944dc648adddb44d1d9e0/omnibase_infra-0.36.0.tar.gz", hash = "sha256:918494b283f983ead2e6e6e17ba995dd9778586ddd10da2cdecb063a90a86a8c", size = 8167794, upload-time = "2026-05-21T02:30:51.869Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/d9/13c471d6ad8b6bab98d941c576c0297d6a3eca71e06dea1d7b7bc744d19e/omnibase_infra-0.36.0-py3-none-any.whl", hash = "sha256:108812d3bfaff4da1608db983db9c198ff38d02acb82a021fb863ef45be83c93", size = 4833735, upload-time = "2026-05-21T02:31:03.254Z" },
-]
 
 [[package]]
 name = "omnibase-spi"
-version = "0.20.6"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "omnibase-core" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/52/d7623f3d4a063364639768240fe9d981ed95e4d631f9d477aca54499ed96/omnibase_spi-0.20.6.tar.gz", hash = "sha256:89c70b21fe1aeaa61a7622ae40bcf21e925ebb6d5282039ce5f4258eae22da48", size = 1135612, upload-time = "2026-05-04T02:20:10.286Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/7d/219a855c2e556030be09255dee9d5320cf21360a5372e05f91be042d84bb/omnibase_spi-0.22.0.tar.gz", hash = "sha256:a527e1e4fcff790d11ba78a5345cb9c58f1e36158a38bf83cf1c27ad22f87c66", size = 1115850, upload-time = "2026-05-26T13:51:00.209Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/68/b8b917f1c6de94c5cca26a5af673fd164ee656953503000254edad4bd090/omnibase_spi-0.20.6-py3-none-any.whl", hash = "sha256:1e32893d1fabb9215a1cb2e314ca03a5362b89495be5f3ec049491ec4cc0d041", size = 792937, upload-time = "2026-05-04T02:20:08.691Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/33/c8e98b6200f9a078b2d9205091467c6eddf2fd4a1cce9ca989b7ca256d1b/omnibase_spi-0.22.0-py3-none-any.whl", hash = "sha256:54f7f49a4e33c6d3f4fe185926e440c822671962da5ab976214db30af110c0af", size = 744687, upload-time = "2026-05-26T13:50:58.213Z" },
 ]
 
 [[package]]
 name = "omnimarket"
-version = "0.2.0"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git#bb095af08aa2e6fa0acf9803f74e16c085ca87b9" }
+version = "0.4.0"
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=v0.4.0#597fc11af2ad49ca8c780fcd8cb99b8895765398" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -2481,7 +2477,7 @@ dependencies = [
 
 [[package]]
 name = "omninode-claude"
-version = "0.24.0"
+version = "0.25.0"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
@@ -2569,11 +2565,11 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=6406ab7a" },
-    { name = "omnibase-infra", specifier = "==0.36.0" },
-    { name = "omnibase-spi", specifier = "==0.20.6" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git" },
-    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.23.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2" },
+    { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=v0.4.0" },
+    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
@@ -2619,13 +2615,15 @@ dev = [
 
 [[package]]
 name = "omninode-intelligence"
-version = "0.23.0"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.23.0#bd2702fd69f77e9f71ec04dbe250819590e998af" }
+version = "0.24.0"
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0#1ebf54c0f06e798e3676a39bc6e3661be0901899" }
 dependencies = [
     { name = "adaptive-classifier" },
     { name = "confluent-kafka" },
     { name = "httpx" },
+    { name = "omnibase-core" },
     { name = "omnibase-infra" },
+    { name = "omnimarket" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
@@ -2637,7 +2635,7 @@ dependencies = [
 [[package]]
 name = "omninode-memory"
 version = "0.15.0"
-source = { git = "https://github.com/OmniNode-ai/omnimemory.git?rev=9843dd18cedaa4f5939289ba527532262b87003c#9843dd18cedaa4f5939289ba527532262b87003c" }
+source = { git = "https://github.com/OmniNode-ai/omnimemory.git?tag=v0.15.0#44dd478264c67aa7a0bd307e4a6ed36bbdce2a9b" }
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
