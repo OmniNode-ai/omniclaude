@@ -1,28 +1,36 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Delegation dispatch handler.
+"""Delegation dispatch handler (DEPRECATED).
 
-Classifies incoming prompts, selects the appropriate LLM backend, and
-routes to the selected effect node. correlation_id-keyed, replay-safe.
+.. deprecated::
+    This module is superseded by ``omnimarket.nodes.node_delegate_skill_orchestrator``
+    which uses bifrost config-driven routing (``bifrost_delegation.yaml`` +
+    ``~/.omninode/delegation/bifrost_overrides.yaml``).
 
-Backend selection fallback chain:
+    The ``/onex:delegate`` skill dispatches to the omnimarket node, NOT this handler.
+    This module remains wired in the omniclaude ``contract.yaml`` for backwards
+    compatibility with the cross-CLI dispatch path (``handle_cross_cli_dispatch``).
+
+Legacy backend selection fallback chain (hardcoded, not config-driven):
     1. OpenRouter GLM-4.7-Flash (if API key configured)
     2. Local vLLM Qwen coder (fallback)
     3. Gemini CLI (if installed, <60s)
     4. Codex CLI (if installed, <120s)
     5. GLM/Z.AI (if API key set, cloud fallback)
-    6. Fail — emit delegation-failed event
+    6. Fail -- emit delegation-failed event
 
 Related:
     - OMN-7109: Implement delegation orchestrator dispatch handler
     - OMN-7103: Node-Based LLM Delegation Workflow
+    - Replacement: omnimarket/nodes/node_delegate_skill_orchestrator
 """
 
 from __future__ import annotations
 
 import logging
 import shutil
+import warnings
 from dataclasses import dataclass
 
 from omniclaude.config.model_local_llm_config import (
@@ -76,12 +84,24 @@ def select_backend(
 ) -> DelegationRoute | None:
     """Select the best available LLM backend via fallback chain.
 
+    .. deprecated::
+        Use ``omnimarket.nodes.node_delegate_skill_orchestrator`` with bifrost
+        config-driven routing instead. This function uses a hardcoded fallback
+        chain that does not respect ``bifrost_delegation.yaml`` or the user
+        overlay at ``~/.omninode/delegation/bifrost_overrides.yaml``.
+
     Args:
         registry: Optional typed endpoint registry, injected by tests.
 
     Returns:
         DelegationRoute if a backend is available, None otherwise.
     """
+    warnings.warn(
+        "select_backend() is deprecated. Use omnimarket "
+        "node_delegate_skill_orchestrator with bifrost config routing.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     endpoint_registry = registry or LocalLlmEndpointRegistry()
 
     # 1. Hosted OpenRouter code generation. It is only registered when
@@ -132,12 +152,23 @@ def handle_delegation_dispatch(
 ) -> ModelDelegationDispatchResult:
     """Classify prompt, select backend, return routing decision.
 
+    .. deprecated::
+        Use ``omnimarket.nodes.node_delegate_skill_orchestrator`` instead.
+        This handler uses the hardcoded ``select_backend()`` fallback chain
+        rather than bifrost config-driven routing.
+
     Args:
         command: Typed delegation command from the hook or Kafka consumer.
 
     Returns:
         Typed dispatch result with routing decision or failure reason.
     """
+    warnings.warn(
+        "handle_delegation_dispatch() is deprecated. Use omnimarket "
+        "node_delegate_skill_orchestrator with bifrost config routing.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if not command.prompt:
         return ModelDelegationDispatchResult(
             routed=False,
