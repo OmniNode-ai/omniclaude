@@ -32,7 +32,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_bus_audit_compute. Dispatch path is correctly wired. Handler raises NotImplementedError (node_not_implemented: true in contract.yaml) pending OMN-8760 implementation. When OMN-8760 lands, remove this comment. -->
+<!-- routing-enforced: dispatches to node_bus_audit_compute. Fully implemented. -->
 
 # Bus Audit
 

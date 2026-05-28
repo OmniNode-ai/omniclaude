@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-10424
+title: "Refresh omniclaude skill shims to match omnimarket backing nodes"
+summary: >
+  Refresh omniclaude onex skill shim documentation so dispatch surfaces and durable evidence behavior
+  match the current omnimarket backing nodes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: manual
+    description: "Focused skill shim pre-commit verification passes."
+    command: "uv run pre-commit run --files plugins/onex/skills/bus_audit/SKILL.md plugins/onex/skills/dod_verify/SKILL.md plugins/onex/skills/gap/SKILL.md plugins/onex/skills/integration_sweep/SKILL.md contracts/OMN-10424.yaml"
+  - kind: manual
+    description: "Central OCC evidence is merged and cited by the PR body."
+    command: "Evidence-Source: e0163c4e70162dbda59f3b4f67ff9c45016df23c"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-skill-shim-precommit
+    description: "Focused pre-commit verification passes for the changed skill shim docs and repo-local contract."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pre-commit run --files plugins/onex/skills/bus_audit/SKILL.md plugins/onex/skills/dod_verify/SKILL.md plugins/onex/skills/gap/SKILL.md plugins/onex/skills/integration_sweep/SKILL.md contracts/OMN-10424.yaml"
+  - id: dod-occ-evidence
+    description: "Central OCC evidence for the skill shim refresh is merged and referenced by this PR body."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'Evidence-Source: e0163c4e70162dbda59f3b4f67ff9c45016df23c' /tmp/pr_body.txt"
