@@ -8,7 +8,6 @@ Model ownership: PRIVATE to omniclaude.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,11 +39,9 @@ class ModelManifestFetchResult(BaseModel):
         ...,
         description="Outcome of the fetch operation",
     )
-    manifest: dict[str, Any] = (
-        Field(  # ONEX_EXCLUDE: dict_str_any - external API response shape
-            default_factory=dict,
-            description="Raw manifest payload from /v1/introspection/manifest",
-        )
+    manifest: dict[str, object] = Field(
+        default_factory=dict,
+        description="Raw manifest payload from /v1/introspection/manifest",
     )
     runtime_url: str = Field(
         ...,
