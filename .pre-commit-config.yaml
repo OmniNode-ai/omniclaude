@@ -110,6 +110,18 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-4421: Block commits containing expired @shim annotations.
+      # Uses node_shim_scanner (OMN-4419) via `onex run-node`.
+      # BLOCKING — enforcement, not advisory. Suppression per-line: # shim-expiry-ok: <reason>
+      - id: check-expired-shims
+        name: Block expired @shim annotations (OMN-4421)
+        entry: .pre-commit-hooks/check-expired-shims.sh
+        language: script
+        types: [python]
+        pass_filenames: true
+        stages: [pre-commit]
+        exclude: '^tests/'
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
