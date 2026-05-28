@@ -46,9 +46,7 @@ def _load_delegate_model_name() -> str:
 
     # Prefer local backends with code_generation capability.
     for b in backends:
-        if b.get("tier") == "local" and "code_generation" in b.get(
-            "capabilities", []
-        ):
+        if b.get("tier") == "local" and "code_generation" in b.get("capabilities", []):
             return str(b["backend_id"])
     # Fallback: any local backend declared by the same contract.
     for b in backends:
@@ -482,13 +480,17 @@ class TaskClassifier:
     _DELEGATE_MODEL_COST_PER_1K: float = 0.001
 
     #: Average estimated token count per intent type, used for savings calculation.
-    _INTENT_AVG_TOKENS: ClassVar[MappingProxyType[TaskIntent, int]] = MappingProxyType(# pragma: allowlist secret
-        {
-            TaskIntent.DOCUMENT: 800,
-            TaskIntent.TEST: 600,
-            TaskIntent.RESEARCH: 400,
-            TaskIntent.IMPLEMENT: 1000,
-        }
+    # fmt: off
+    _INTENT_AVG_TOKENS: ClassVar[MappingProxyType[TaskIntent, int]] = (  # secret-ok: token usage estimate
+    # fmt: on
+        MappingProxyType(
+            {
+                TaskIntent.DOCUMENT: 800,
+                TaskIntent.TEST: 600,
+                TaskIntent.RESEARCH: 400,
+                TaskIntent.IMPLEMENT: 1000,
+            }
+        )
     )
 
     #: Name/identifier of the default delegate model — resolved from bifrost_delegation.yaml.
@@ -754,7 +756,9 @@ class TaskClassifier:
         The formula uses per-1k-token pricing and an average token estimate
         per intent category.  Returns 0.0 for intents not in the allow-list.
         """
-        avg_tokens = self._INTENT_AVG_TOKENS.get(intent, 0)# pragma: allowlist secret
+        avg_tokens = (  # secret-ok: token usage estimate
+            self._INTENT_AVG_TOKENS.get(intent, 0)
+        )
         if avg_tokens == 0:
             return 0.0
         cost_delta = self._PRIMARY_MODEL_COST_PER_1K - self._DELEGATE_MODEL_COST_PER_1K

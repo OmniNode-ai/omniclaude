@@ -38,24 +38,30 @@ class ModelSensitivityResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 # API keys / tokens
-_RE_BEARER = re.compile(r"\bBearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
+_RE_BEARER = re.compile(  # secret-ok: compiled detector pattern, not a credential
+    r"\bBearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE
+)
 _RE_SK_PREFIX = re.compile(r"\bsk-[A-Za-z0-9]{20,}", re.IGNORECASE)
 _RE_PK_PREFIX = re.compile(r"\bpk_[A-Za-z0-9]{20,}", re.IGNORECASE)
 _RE_AKIA = re.compile(r"\bAKIA[A-Z0-9]{16}\b")
-_RE_GH_TOKEN = re.compile(r"\bghp_[A-Za-z0-9]{36}\b")
-_RE_SLACK_TOKEN = re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}", re.IGNORECASE)
-_RE_GENERIC_TOKEN = re.compile(
+_RE_GH_TOKEN = re.compile(  # secret-ok: compiled detector pattern, not a credential
+    r"\bghp_[A-Za-z0-9]{36}\b"
+)
+_RE_SLACK_TOKEN = re.compile(  # secret-ok: compiled detector pattern, not a credential
+    r"\bxox[baprs]-[A-Za-z0-9\-]{10,}", re.IGNORECASE
+)
+_RE_GENERIC_TOKEN = re.compile(  # secret-ok: compiled detector pattern, not a credential
     r"\b(?:api[_-]?key|access[_-]?token|auth[_-]?token)\s*[:=]\s*['\"]?[A-Za-z0-9\-._~+/]{16,}",
     re.IGNORECASE,
 )
 
 # Private keys
-_RE_PRIVATE_KEY = re.compile(
+_RE_PRIVATE_KEY = re.compile(  # secret-ok: compiled detector pattern, not a credential
     r"-----BEGIN\s+(?:[A-Z\s]+\s+)?PRIVATE KEY-----", re.IGNORECASE
 )
 
 # Credentials in key=value patterns
-_RE_PASSWORD_KV = re.compile(
+_RE_PASSWORD_KV = re.compile(  # secret-ok: compiled detector pattern, not a credential
     r"\b(?:password|passwd|secret|token)\s*[=:]\s*[^\s,;\"']{4,}", re.IGNORECASE
 )
 

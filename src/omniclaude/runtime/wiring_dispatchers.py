@@ -607,7 +607,7 @@ class SkillCommandDispatcher:
                 backend_result=backend_result,
                 duration_ms=duration_ms,
             )
-            token_cost = sum(
+            token_cost = sum(  # secret-ok: token usage metric
                 call.input_tokens + call.output_tokens for call in model_calls
             )
             dollars_cost = sum(call.cost_dollars for call in model_calls)
@@ -725,8 +725,12 @@ def _extract_model_calls(
     extra = getattr(backend_result, "extra", None)
     extra_dict = extra if isinstance(extra, dict) else {}
     output = _skill_result_output(backend_result)
-    input_tokens = _int_from_extra(extra_dict, "input_tokens", "prompt_tokens")
-    output_tokens = _int_from_extra(
+    input_tokens = _int_from_extra(  # secret-ok: token usage metric
+        extra_dict,
+        "input_tokens",
+        "prompt_tokens",
+    )
+    output_tokens = _int_from_extra(  # secret-ok: token usage metric
         extra_dict,
         "output_tokens",
         "completion_tokens",

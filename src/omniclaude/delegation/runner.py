@@ -163,7 +163,14 @@ class ModelDelegationRoutingRuleContract(BaseModel):
     match_operation_types: tuple[str, ...] = ()
     match_capabilities: tuple[str, ...] = ()
     latency_sla_ms: int | None = Field(default=None, gt=0)
-    cost_ceiling_usd_per_1k_tokens: float | None = Field(default=None, gt=0)
+    # fmt: off
+    cost_ceiling_usd_per_1k_tokens: float | None = (  # secret-ok: cost limit config field, not a credential
+    # fmt: on
+        Field(
+            default=None,
+            gt=0,
+        )
+    )
     backend_ids: tuple[str, ...]
     fallback_policy: ModelDelegationFallbackPolicyContract
     shadow_policy_id: UUID

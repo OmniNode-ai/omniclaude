@@ -169,7 +169,7 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
-    omniclaude_db_url: SecretStr = (
+    omniclaude_db_url: SecretStr = (  # secret-ok: config field, value read from env
         Field(  # Pydantic field, value sourced from env var OMNICLAUDE_DB_URL
             default=SecretStr(""),
             description=(
