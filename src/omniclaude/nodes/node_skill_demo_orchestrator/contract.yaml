@@ -34,7 +34,9 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the demo skill.
-  Cofounder demo — fan out a curated task across multiple LLM paths (Gemini Flash, Claude Opus, Claude Sonnet, deterministic stub) and render an ASCII cost comparison chart. SCAFFOLDING ONLY — full fan-out lives in a follow-up PR.
+  Cofounder demo — fan out curated tasks across multiple LLM paths (Gemini Flash,
+  Claude Opus, Claude Sonnet, deterministic ONEX path) and render an ASCII cost
+  comparison chart through native OmniMarket demo nodes.
   Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
@@ -120,7 +122,7 @@ metadata:
   author: OmniNode Team
   license: MIT
   generated_by: generate_skill_node.py
-  maturity: stub
+  maturity: runtime
   tags:
     - orchestrator
     - skill

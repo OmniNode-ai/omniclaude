@@ -1,18 +1,14 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Tests for the /onex:demo delegation skill scaffolding.
+"""Tests for the /onex:demo delegation skill runtime dispatcher.
 
-This test stub verifies:
+This verifies:
 - SKILL.md exists and parses as YAML frontmatter
 - Required frontmatter keys are present
 - The dispatcher module is importable
-- The dispatcher returns a structured failure envelope when downstream
-  dependencies are missing (scaffolding mode)
+- The dispatcher routes through runtime-dispatched OmniMarket demo nodes
 - The dispatcher rejects unknown subcommands
-
-It does NOT verify end-to-end multi-model fan-out — that is deferred to
-follow-up PRs. See docs/plans/2026-04-10-demo-skill-plan.md.
 """
 
 from __future__ import annotations
@@ -26,7 +22,7 @@ import yaml
 
 @pytest.mark.unit
 class TestDemoSkillScaffolding:
-    """Verify the /onex:demo skill scaffolding is wired correctly."""
+    """Verify the /onex:demo skill runtime shim is wired correctly."""
 
     SKILL_DIR = (
         Path(__file__).resolve().parents[2] / "plugins" / "onex" / "skills" / "demo"
@@ -74,8 +70,7 @@ class TestDemoSkillScaffolding:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         assert hasattr(module, "dispatch")
-        assert hasattr(module, "SCAFFOLD_MARKER")
-        assert module.SCAFFOLD_MARKER == "demo-skill-scaffolding"
+        assert hasattr(module, "SUPPORTED_SUBCOMMANDS")
 
     def _load_dispatch(self):
         dispatch_path = self.SKILL_DIR / "_lib" / "dispatch.py"
@@ -92,20 +87,62 @@ class TestDemoSkillScaffolding:
         result = module.dispatch("totally-not-a-subcommand")
         assert result["success"] is False
         assert "Unknown subcommand" in result["error"]
-        assert result["scaffold_marker"] == "demo-skill-scaffolding"
 
-    def test_dispatch_delegation_returns_scaffold_failure(self) -> None:
-        """Until the fan-out handler lands, delegation returns structured failure."""
+    def test_dispatch_delegation_routes_native_demo_nodes(self, monkeypatch) -> None:
         module = self._load_dispatch()
+        calls: list[str] = []
+
+        def fake_dispatch_runtime(*, command_name, payload, response_topic):
+            calls.append(command_name)
+            if command_name == "demo_fanout_orchestrator":
+                assert payload["dry_run"] is True
+                return {
+                    "results": [
+                        {
+                            "model_id": "gemini/gemini-2.0-flash",
+                            "prompt_tokens": 1,
+                            "completion_tokens": 1,
+                            "latency_ms": 1.0,
+                            "output_text": "ok",
+                        },
+                        {
+                            "model_id": "onex-deterministic",
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "latency_ms": 0.0,
+                            "output_text": "ok",
+                        },
+                    ]
+                }
+            if command_name == "demo_cost_compute":
+                return {
+                    "costs": [
+                        {
+                            "model_id": "gemini/gemini-2.0-flash",
+                            "total_cost_usd": 0.01,
+                        },
+                        {
+                            "model_id": "onex-deterministic",
+                            "total_cost_usd": 0.0,
+                        },
+                    ],
+                    "cheapest_model_id": "onex-deterministic",
+                }
+            if command_name == "demo_renderer_effect":
+                return {"chart_lines": ["chart", "Cheapest: onex-deterministic"]}
+            raise AssertionError(command_name)
+
+        monkeypatch.setattr(module, "_dispatch_runtime", fake_dispatch_runtime)
+
         result = module.dispatch("delegation", count=3, dry_run=True)
-        # In scaffolding mode the downstream import fails and we get a
-        # structured envelope. If follow-up PRs have already landed the
-        # dispatcher will raise NotImplementedError instead — in that case
-        # this test should be rewritten, not silently passed.
-        assert result["success"] is False
-        assert result["scaffold_marker"] == "demo-skill-scaffolding"
-        assert result["missing_dependency"] == (
-            "omnimarket.nodes.node_demo_fanout_orchestrator"
-        )
-        assert result["plan_path"].endswith("demo-skill-plan.md")
+
+        assert result["success"] is True
         assert result["dry_run"] is True
+        assert result["runtime_path"] == "omnimarket.native_nodes"
+        assert calls == [
+            "demo_fanout_orchestrator",
+            "demo_cost_compute",
+            "demo_renderer_effect",
+        ]
+        assert result["cheapest_llm_model"] == "gemini/gemini-2.0-flash"
+        assert result["cheapest_overall_path"] == "onex-deterministic"
