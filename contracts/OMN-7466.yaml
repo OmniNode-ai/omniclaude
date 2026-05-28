@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-7466
+title: "Build loop: ship dirty canonical work through a skill shim"
+summary: >
+  Adds the omniclaude ship_dirty_canonical dispatch-only skill shim and generated
+  orchestrator node for routing dirty canonical rescue requests to the omnimarket
+  node_dirty_canonical_sweep backing node. Includes hook-generated autopilot
+  orchestrator files required by the repo's skill-node generation hook.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Skill monorepo-reference and backing-node validation pass."
+    command: "OMNIMARKET_ROOT=${OMNI_HOME}/omnimarket uv run pytest tests/unit/skills/_lib/test_validate_skill_backing_node.py tests/skills/test_no_monorepo_refs_in_plugin_skills.py -q"
+  - kind: "ci"
+    description: "omniclaude PR #1695 CI green across required gates."
+    command: "gh pr checks 1695 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-pr-1695-skill-validation"
+    description: "ship_dirty_canonical skill text passes monorepo-reference validation and backing-node checks."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "OMNIMARKET_ROOT=${OMNI_HOME}/omnimarket uv run pytest tests/unit/skills/_lib/test_validate_skill_backing_node.py tests/skills/test_no_monorepo_refs_in_plugin_skills.py -q"
+  - id: "dod-omniclaude-pr-1695-deploy-impact"
+    description: "Deploy impact reviewed for the omniclaude dispatch-only skill shim and generated orchestrator shells."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "echo 'deploy impact review passed: omniclaude PR #1695 adds dispatch-only skill/node shells; omnimarket backing node owns dirty canonical side effects'"

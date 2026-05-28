@@ -11,18 +11,12 @@ Say: "I'm using the shim-audit skill."
 Extract from `$ARGUMENTS`:
 
 - `--dry-run` — default: false
-- `--repos <names>` — comma-separated repo names; default: all repos under `$OMNI_HOME`
+- `--repos <names>` — comma-separated repo names; default: repos discovered by the backing node
 - `--warn-days <n>` — default: 30
 
 ## Resolve repos
 
-If `--repos` was not provided, list repos:
-
-```bash
-ls "$OMNI_HOME"
-```
-
-Filter to directories that contain Python source (`src/` or `tests/`).
+If `--repos` was not provided, let the backing node discover eligible repos.
 
 ## Scan each repo
 
