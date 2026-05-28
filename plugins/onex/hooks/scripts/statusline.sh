@@ -431,9 +431,12 @@ if [ "$HAS_JQ" -eq 1 ]; then
       first=1
       for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control" "market:omnimarket" "sea:onex-self-extending-agent"; do
         short="${pair%%:*}"; repo="${pair##*:}"
-        cnt=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json number --jq 'length' 2>/dev/null || echo "0")
+        # One call per repo; split open PRs by base branch (main vs dev/develop).
+        bases=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json baseRefName --jq '[.[].baseRefName]' 2>/dev/null || echo "[]")
+        main_cnt=$(printf '%s' "$bases" | jq '[.[] | select(. == "main" or . == "master")] | length' 2>/dev/null || echo "0")
+        dev_cnt=$(printf '%s' "$bases" | jq '[.[] | select(. == "dev" or . == "develop")] | length' 2>/dev/null || echo "0")
         [ "$first" -eq 1 ] || result="${result},"
-        result="${result}\"${short}\":${cnt}"
+        result="${result}\"${short}\":\"${main_cnt}/${dev_cnt}\""
         first=0
       done
       result="${result}}"
@@ -450,10 +453,15 @@ if [ "$HAS_JQ" -eq 1 ]; then
     fi
     PR_PARTS=""
     for short in core infra spi claude node dash intel mem web cc market sea; do
-      cnt=$(printf '%s' "$PR_DATA" | jq -r ".${short} // 0" 2>/dev/null) || cnt=0
-      [[ "$cnt" =~ ^[1-9] ]] && PR_PARTS="${PR_PARTS}${short}·${cnt} "
+      # Value is "main/dev" (e.g. "2/1"); tolerate legacy flat integer form.
+      val=$(printf '%s' "$PR_DATA" | jq -r ".${short} // \"0/0\"" 2>/dev/null) || val="0/0"
+      case "$val" in */*) : ;; *) val="${val}/0" ;; esac
+      m="${val%%/*}"; d="${val##*/}"
+      if [[ "$m" =~ ^[1-9] ]] || [[ "$d" =~ ^[1-9] ]]; then
+        PR_PARTS="${PR_PARTS}${short}·${m}/${d} "
+      fi
     done
-    [ -n "$PR_PARTS" ] && PR_LINE="${SEP}${DIM}PRs:${RESET} ${PR_PARTS% }"
+    [ -n "$PR_PARTS" ] && PR_LINE="${SEP}${DIM}PRs(main/dev):${RESET} ${PR_PARTS% }"
   fi
 
   SVC="${DIM}pg:${RESET}${PG_DOT} ${DIM}rp:${RESET}${RP_DOT} ${DIM}vk:${RESET}${VK_DOT} ${DIM}rt:${RESET}${RT_DOT} ${DIM}intel:${RESET}${INTEL_DOT} ${DIM}phx:${RESET}${PHX_DOT}"
