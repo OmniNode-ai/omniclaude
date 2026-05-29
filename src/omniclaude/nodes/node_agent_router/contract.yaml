@@ -1,0 +1,118 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeAgentRouter
+#
+# Capability-oriented compute node for agent routing.
+# Named by capability ("agent.router"), not by implementation.
+# Principle: "I'm interested in what you do, not what you are"
+#
+# Wraps the legacy AgentRouter class from lib/core/agent_router.py.
+# This node adds the proper ONEX contract boundary around the existing
+# routing logic. The underlying AgentRouter stays in place for hook
+# compatibility during the migration program (OMN-11599).
+
+# Contract identifiers
+name: node_agent_router
+contract_name: node_agent_router
+node_name: node_agent_router
+
+contract_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type — routing is a pure computation (no I/O side effects)
+node_type: COMPUTE_GENERIC
+
+# Description
+description: >
+  Capability-oriented compute node for agent routing decisions.
+  Wraps the AgentRouter class from lib/core/agent_router.py behind a
+  proper ONEX node contract. Evaluates user prompts against the on-disk
+  agent registry and returns ranked agent recommendations with confidence
+  scoring. Designed as a transitional wrapper: the underlying AgentRouter
+  stays in place for hook compatibility while this node provides the
+  contract-compliant surface.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelAgentRouterRequest
+  module: omniclaude.nodes.node_agent_router.models
+
+output_model:
+  name: ModelAgentRouterResult
+  module: omniclaude.nodes.node_agent_router.models
+
+# Capabilities
+capabilities:
+  - name: agent.router
+    description: Route user prompts to the best-matching agent via registry lookup
+    version: 0.1.0
+
+# IO operations
+io_operations:
+  - operation: route
+    description: Route a user prompt to best-matching agent(s) via AgentRouter
+    protocol_method: route
+    input_fields:
+      - user_request: str
+      - context: dict | None
+      - max_recommendations: int
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelAgentRouterResult
+    idempotent: true
+
+# Handler routing
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "agent.router.route"
+      handler:
+        name: "HandlerAgentRouter"
+        module: "omniclaude.nodes.node_agent_router.handlers.handler_agent_router"
+      description: "Route prompts through the legacy AgentRouter compatibility wrapper"
+  execution_mode: "single"
+  max_timeout_seconds: 30
+
+# Dependencies
+dependencies:
+  - name: protocol_agent_router
+    type: protocol
+    class_name: ProtocolAgentRouter
+    module: omniclaude.nodes.node_agent_router.protocols
+    pluggable: true
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 0
+    initial_delay_ms: 0
+    max_delay_ms: 0
+    exponential_base: 2
+    retry_on: []
+  circuit_breaker:
+    enabled: false
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-11599
+  maturity: alpha
+  tags:
+    - compute
+    - agent-routing
+    - capability-oriented
+    - migration-wrapper
