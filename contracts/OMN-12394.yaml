@@ -33,3 +33,9 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run ruff check src/omniclaude/nodes/node_skill_autopilot_orchestrator && uv run ruff format --check src/omniclaude/nodes/node_skill_autopilot_orchestrator && python3 -m py_compile src/omniclaude/nodes/node_skill_autopilot_orchestrator/node.py"
+  - id: dod-deploy-assessment
+    description: "No production deploy required: this PR adds only the stateless autopilot skill shell and matching skill surface."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'No production deploy required' contracts/OMN-12394.yaml"
