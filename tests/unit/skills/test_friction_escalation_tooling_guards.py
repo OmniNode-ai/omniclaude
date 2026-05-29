@@ -93,11 +93,13 @@ class TestPrPolishPrecommitGuard:
 
 @pytest.mark.unit
 class TestAutopilotForegroundDispatchGuard:
-    """Retired autopilot must not re-open foreground dispatch."""
+    """Autopilot must not re-open foreground dispatch."""
 
-    def test_autopilot_skill_remains_retired(self) -> None:
-        """OMN-12234 removed autopilot as a user-invocable foreground shim."""
-        assert not (_SKILLS_ROOT / "autopilot" / "SKILL.md").exists()
+    def test_autopilot_skill_routes_through_backing_node(self) -> None:
+        """OMN-12394 restores autopilot only as a node-backed dispatch surface."""
+        autopilot_skill = _read("autopilot/SKILL.md")
+        assert "node_skill_autopilot_orchestrator" in autopilot_skill
+        assert "foreground_orchestrator: true" not in autopilot_skill
 
     def test_session_orchestrator_replaces_autopilot(self) -> None:
         """Session orchestrator is the supported close-out control surface."""
