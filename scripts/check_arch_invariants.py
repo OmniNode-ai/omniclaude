@@ -12,7 +12,7 @@ Validates that:
 1. Reducer and orchestrator modules do not import I/O packages directly.
 2. Production code does not contain raw topic literal strings (onex.evt.* / onex.cmd.*).
    All topic references must go through the canonical topics.py constants file.
-   Suppress with: # noqa: arch-topic-naming
+   Suppress with: # noqa: arch-topic-naming or # arch-topic-naming: ignore
 
 Uses ast.parse() to handle all Python import forms:
   - import x
@@ -63,8 +63,9 @@ ORCHESTRATOR_GLOBS = ["src/**/orchestrator_*.py", "src/**/orchestrators/*.py"]
 # Pattern that catches raw topic literals: onex.evt.* or onex.cmd.*
 _RAW_TOPIC_PATTERN = re.compile(r"""["']onex\.(evt|cmd)\.[a-z]""")
 
-# Suppress marker — same convention as existing arch-topic-naming noqa
-_TOPIC_SUPPRESS_MARKER = "noqa: arch-topic-naming"
+# Suppress markers — keep the existing noqa convention and the Ruff-neutral
+# marker supported by scripts/validation/validate_topic_naming.py.
+_TOPIC_SUPPRESS_MARKERS = ("noqa: arch-topic-naming", "arch-topic-naming: ignore")
 
 # Scan these trees for raw topic literals
 TOPIC_SCAN_GLOBS = [
@@ -103,7 +104,7 @@ def extract_raw_topic_literals(path: Path) -> list[tuple[int, str]]:
     """Scan *path* for raw topic literal strings outside the allowlist.
 
     Returns a list of (lineno, description) tuples for each violation.
-    Lines containing ``# noqa: arch-topic-naming`` are suppressed.
+    Lines containing an arch-topic-naming suppression marker are suppressed.
     Lines inside docstrings or comments are skipped.
     """
     # Skip allowlisted filenames
@@ -141,7 +142,7 @@ def extract_raw_topic_literals(path: Path) -> list[tuple[int, str]]:
 
     for lineno, line in enumerate(source_lines, start=1):
         # Skip suppressed lines
-        if _TOPIC_SUPPRESS_MARKER in line:
+        if any(marker in line for marker in _TOPIC_SUPPRESS_MARKERS):
             continue
         # Skip pure comment lines
         if line.strip().startswith("#"):

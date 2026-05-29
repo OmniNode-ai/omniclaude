@@ -693,7 +693,7 @@ def build_topic(base: str) -> str:
 # Base prefix for per-agent directed inbox topics (OMN-8634).
 # Not a TopicBase member — not a full canonical topic name.
 # Full topic: AGENT_INBOX_DIRECTED_BASE + "." + agent_id + ".v1"
-AGENT_INBOX_DIRECTED_BASE: str = "onex.evt.omniclaude.agent-inbox"
+AGENT_INBOX_DIRECTED_BASE: str = "onex.evt.omniclaude.agent-inbox"  # arch-topic-naming: ignore
 
 
 def build_agent_inbox_directed_topic(agent_id: str) -> str:

@@ -146,8 +146,12 @@ def main() -> int:
         # Skip contract loader references
         if "contract.yaml" in stripped or "contract_loader" in stripped:
             continue
-        # Respect inline suppression: # noqa: arch-topic-naming or # aislop: ignore
-        if "noqa: arch-topic-naming" in stripped or "aislop: ignore" in stripped:
+        # Respect inline suppression markers shared with the architecture gates.
+        if (
+            "noqa: arch-topic-naming" in stripped
+            or "arch-topic-naming: ignore" in stripped
+            or "aislop: ignore" in stripped
+        ):
             continue
         # Skip docstring / >>> examples
         if stripped.startswith("#") or stripped.startswith(">>>"):

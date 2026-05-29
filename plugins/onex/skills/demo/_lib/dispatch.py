@@ -23,7 +23,7 @@ MODEL_CONFIGS: tuple[dict[str, object], ...] = (
         "model_id": "gemini/gemini-2.0-flash",
         "endpoint_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "provider": "openai_compatible",
-        "api_key_env_var": "GEMINI_API_KEY",
+        "api_key_env_var": "GEMINI_API_KEY",  # pragma: allowlist secret
     },
     {
         "model_id": "claude-opus-4-5",
@@ -136,7 +136,7 @@ def dispatch(
                 "dry_run": effective_dry_run,
                 "provider_fixtures": PROVIDER_FIXTURES,
             },
-            response_topic="onex.evt.omnibase-infra.demo-fanout-skill.v1",
+            response_topic="onex.evt.omnibase-infra.demo-fanout-skill.v1",  # arch-topic-naming: ignore
         )
         inference_results = fanout["results"]
         cost = _dispatch_runtime(
@@ -145,7 +145,7 @@ def dispatch(
                 "inference_results": inference_results,
                 "pricing_table": PRICING_TABLE,
             },
-            response_topic="onex.evt.omnibase-infra.demo-cost-skill.v1",
+            response_topic="onex.evt.omnibase-infra.demo-cost-skill.v1",  # arch-topic-naming: ignore
         )
         render = _dispatch_runtime(
             command_name="demo_renderer_effect",
@@ -157,7 +157,7 @@ def dispatch(
                 "bar_width": 40,
                 "title": "ONEX Demo Delegation Cost Comparison",
             },
-            response_topic="onex.evt.omnibase-infra.demo-render-skill.v1",
+            response_topic="onex.evt.omnibase-infra.demo-render-skill.v1",  # arch-topic-naming: ignore
         )
     except Exception as exc:
         return {

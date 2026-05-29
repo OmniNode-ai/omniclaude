@@ -34,9 +34,9 @@ class IntelligenceEventClient:
     """Kafka client for intelligence events using RequestResponseWiring."""
 
     # Canonical topic names per onex.cmd/evt convention (OMN-2367)
-    TOPIC_REQUEST = "onex.cmd.omniintelligence.code-analysis.v1"# onex-topic-allow: pending contract auto-wiring
-    TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"# onex-topic-allow: pending contract auto-wiring
-    TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"# onex-topic-allow: pending contract auto-wiring
+    TOPIC_REQUEST = "onex.cmd.omniintelligence.code-analysis.v1"  # arch-topic-naming: ignore
+    TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"  # arch-topic-naming: ignore
+    TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"  # arch-topic-naming: ignore
 
     _INSTANCE_NAME = "intelligence"
 
