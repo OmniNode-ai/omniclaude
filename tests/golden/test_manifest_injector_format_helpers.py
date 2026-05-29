@@ -437,7 +437,7 @@ class TestSerializeForJson:
         url = TypeAdapter(AnyUrl).validate_python("https://example.com")
         result = self._serialize(url)
         assert isinstance(result, str)
-        assert "example.com" in result
+        assert result == "https://example.com/"
 
     def test_nested_list_in_dict_recursed(self) -> None:
         data = {"items": [1, 2, {"nested": True}]}
