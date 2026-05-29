@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 name: node_stub
+description: Stub fixture node used by the full market skill inventory validator.
 node_not_implemented: true
