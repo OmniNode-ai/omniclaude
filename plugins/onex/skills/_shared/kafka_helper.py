@@ -42,16 +42,12 @@ import subprocess
 try:
     from .kafka_types import (
         KafkaConnectionResult,
-        KafkaConsumerGroupsResult,
-        KafkaMessageCountResult,
         KafkaTopicsResult,
         KafkaTopicStatsResult,
     )
 except ImportError:
     from kafka_types import (
         KafkaConnectionResult,
-        KafkaConsumerGroupsResult,
-        KafkaMessageCountResult,
         KafkaTopicsResult,
         KafkaTopicStatsResult,
     )
@@ -423,95 +419,6 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
         }
 
 
-def get_consumer_groups() -> KafkaConsumerGroupsResult:
-    """
-    List all consumer groups.
-
-    Returns:
-        KafkaConsumerGroupsResult with:
-        - success: True if groups retrieved, False otherwise
-        - groups: List of consumer group names (empty list on failure)
-        - count: Number of consumer groups found
-        - error: Error message on failure, None on success
-        - implemented: Whether the operation is implemented (False for placeholder)
-        - return_code: Process return code if applicable
-
-    Note:
-        This operation is not yet fully implemented.
-        Requires kafka-consumer-groups command or Kafka Admin API.
-
-    Example:
-        >>> result = get_consumer_groups()
-        >>> if result["success"] and result["implemented"]:
-        ...     print(f"Found {result['count']} consumer groups")
-        ... elif not result["implemented"]:
-        ...     print("Consumer group listing not yet implemented")
-        ... else:
-        ...     print(f"Failed: {result['error']}")
-    """
-    bootstrap_servers = get_kafka_bootstrap_servers()
-
-    try:
-        result = subprocess.run(
-            ["kcat", "-L", "-b", bootstrap_servers],
-            capture_output=True,
-            text=True,
-            timeout=get_timeout_seconds(),
-            check=False,
-        )
-
-        if result.returncode != 0:
-            return {
-                "success": False,
-                "groups": [],
-                "count": 0,
-                "error": f"kcat failed: {result.stderr.strip()}",
-                "implemented": False,
-                "return_code": result.returncode,
-            }
-
-        # Note: kcat -L doesn't show consumer groups
-        # This would require kafka-consumer-groups command or admin API
-        # For now, return placeholder
-        return {
-            "success": False,
-            "groups": [],
-            "count": 0,
-            "error": "Consumer group listing not yet implemented (requires kafka-consumer-groups command or Kafka Admin API)",
-            "implemented": False,
-            "return_code": 1,
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "groups": [],
-            "count": 0,
-            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
-            "implemented": False,
-            "return_code": 1,
-        }
-    except FileNotFoundError:
-        return {
-            "success": False,
-            "groups": [],
-            "count": 0,
-            "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
-            "implemented": False,
-            "return_code": 1,
-        }
-    except (subprocess.SubprocessError, OSError) as e:
-        # SubprocessError: subprocess-related failures
-        # OSError: system-level errors (permissions, resource limits, etc.)
-        return {
-            "success": False,
-            "groups": [],
-            "count": 0,
-            "error": f"Subprocess error: {str(e)}",
-            "implemented": False,
-            "return_code": 1,
-        }
-
-
 def check_topic_exists(topic_name: str) -> bool:
     """
     Check if a topic exists.
@@ -527,140 +434,6 @@ def check_topic_exists(topic_name: str) -> bool:
         return False
 
     return topic_name in topics_result["topics"]
-
-
-def get_recent_message_count(
-    topic_name: str, timeout_seconds: int = 2
-) -> KafkaMessageCountResult:
-    """
-    Get count of recent messages in a topic (sample).
-
-    Args:
-        topic_name: Name of the topic
-        timeout_seconds: How long to consume messages (default: 2s)
-
-    Returns:
-        KafkaMessageCountResult with:
-        - success: True if operation succeeded, False otherwise
-        - topic: Topic name
-        - messages_sampled: Number of messages found (0 on failure)
-        - sample_duration_s: Sampling duration in seconds
-        - error: Error message on failure, None on success
-        - return_code: Process return code if applicable
-
-    Note:
-        Distinguishes between:
-        - "0 messages found" (success=True, messages_sampled=0)
-        - "operation failed" (success=False, error contains details)
-
-    Example:
-        >>> result = get_recent_message_count("my-topic", timeout_seconds=5)
-        >>> if result["success"]:
-        ...     print(f"Found {result['messages_sampled']} messages in {result['sample_duration_s']}s")
-        ... else:
-        ...     print(f"Failed to sample messages: {result['error']}")
-    """
-    bootstrap_servers = get_kafka_bootstrap_servers()
-
-    try:
-        # Consume from end for a short time to estimate throughput
-        # Use Python's built-in timeout for cross-platform compatibility
-        result = subprocess.run(
-            [
-                "kcat",
-                "-C",
-                "-b",
-                bootstrap_servers,
-                "-t",
-                topic_name,
-                "-o",
-                "end",
-                "-e",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            check=False,
-        )
-
-        # Check if kcat command failed (non-zero exit code)
-        if result.returncode != 0:
-            return {
-                "success": False,
-                "topic": topic_name,
-                "messages_sampled": 0,
-                "sample_duration_s": timeout_seconds,
-                "error": f"kcat failed (exit {result.returncode}): {result.stderr.strip()}",
-                "return_code": result.returncode,
-            }
-
-        # Check stderr for connection/broker errors even when returncode is 0
-        # kcat may exit 0 but report broker issues in stderr
-        stderr_lower = result.stderr.lower()
-        error_indicators = [
-            "failed to connect",
-            "connection refused",
-            "no brokers",
-            "broker transport failure",
-            "all broker connections are down",
-            "timed out",
-            "authentication failure",
-            "sasl authentication",
-        ]
-        for indicator in error_indicators:
-            if indicator in stderr_lower:
-                return {
-                    "success": False,
-                    "topic": topic_name,
-                    "messages_sampled": 0,
-                    "sample_duration_s": timeout_seconds,
-                    "error": f"kcat connection error: {result.stderr.strip()}",
-                    "return_code": result.returncode,
-                }
-
-        # Count lines (each line is a message)
-        message_count = len(
-            [line for line in result.stdout.split("\n") if line.strip()]
-        )
-
-        return {
-            "success": True,
-            "topic": topic_name,
-            "messages_sampled": message_count,
-            "sample_duration_s": timeout_seconds,
-            "error": None,
-            "return_code": 0,
-        }
-    except subprocess.TimeoutExpired:
-        # Timeout occurred - kcat didn't complete in time (likely broker unreachable)
-        return {
-            "success": False,
-            "topic": topic_name,
-            "messages_sampled": 0,
-            "sample_duration_s": timeout_seconds,
-            "error": f"kcat timed out after {timeout_seconds}s (broker may be unreachable)",
-            "return_code": 1,
-        }
-    except FileNotFoundError:
-        return {
-            "success": False,
-            "topic": topic_name,
-            "messages_sampled": 0,
-            "sample_duration_s": timeout_seconds,
-            "error": "kcat command not found. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
-            "return_code": 1,
-        }
-    except (subprocess.SubprocessError, OSError) as e:
-        # SubprocessError: subprocess-related failures
-        # OSError: system-level errors (permissions, resource limits, etc.)
-        return {
-            "success": False,
-            "topic": topic_name,
-            "messages_sampled": 0,
-            "sample_duration_s": timeout_seconds,
-            "error": f"Subprocess error: {str(e)}",
-            "return_code": 1,
-        }
 
 
 if __name__ == "__main__":

@@ -77,7 +77,7 @@ def emit_event(event: ModelEvidenceWrittenEvent) -> None:
     """Emit an EvidenceWritten event to Kafka. Fail-open: logs on error."""
     try:
         from omnimarket.nodes.node_emit_daemon.client import (
-            EmitClient,  # noqa: PLC0415, I001
+            EmitClient,  # noqa: I001
         )
 
         from omniclaude.hooks.topics import TopicBase, build_topic

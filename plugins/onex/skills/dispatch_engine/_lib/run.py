@@ -308,7 +308,7 @@ def dispatch_dispatch_engine(
                 socket_path=ssh_socket_path,
                 timeout_seconds=timeout_seconds,
             )
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, json.JSONDecodeError):
             raw = None
         if raw is not None:
             ok = raw.get("ok", False)
@@ -357,7 +357,7 @@ def dispatch_dispatch_engine(
 
         try:
             response = _dispatch_via_http(request, runtime_url, timeout_seconds)
-        except urllib.error.URLError as exc:
+        except urllib.error.URLError:
             response = None  # type: ignore[assignment]
         if response is not None:
             if not response.ok:  # type: ignore[union-attr]

@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     stdin_data = sys.stdin.read()
     exit_code, output = run_guard(stdin_data)
-    print(output)  # noqa: T201
+    print(output)
     return exit_code
 
 

@@ -67,7 +67,7 @@ def _emit_budget_cap_hit(
     Fire-and-forget; never raises.
     """
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
     except ImportError:
         return
     try:

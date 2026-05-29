@@ -379,7 +379,7 @@ def _emit_audit_dispatch_event(
 
         import subprocess
 
-        subprocess.Popen(  # noqa: S603
+        subprocess.Popen(
             [
                 sys.executable,
                 str(emit_wrapper),
@@ -838,7 +838,7 @@ def main(argv: list[str] | None = None) -> int:
             "reason": result.reason,
         }
     )
-    print(block_output)  # noqa: T201
+    print(block_output)
     return 2
 
 

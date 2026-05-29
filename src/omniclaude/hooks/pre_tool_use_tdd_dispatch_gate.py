@@ -107,7 +107,7 @@ def run_gate(stdin_json: str) -> tuple[int, str]:
 def main(argv: list[str] | None = None) -> int:
     stdin_data = sys.stdin.read()
     exit_code, output = run_gate(stdin_data)
-    print(output)  # noqa: T201
+    print(output)
     return exit_code
 
 

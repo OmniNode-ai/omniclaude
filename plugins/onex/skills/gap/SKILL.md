@@ -91,7 +91,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_gap_compute. Dispatch path is correctly wired. Handler raises NotImplementedError (node_not_implemented: true in contract.yaml) pending OMN-8761 implementation. When OMN-8761 lands, remove this comment. -->
+<!-- routing-enforced: dispatches to node_gap_compute. Fully implemented. -->
 
 # Gap
 
@@ -105,7 +105,7 @@ args:
         v
 uv run onex run node_gap_compute -- --subcommand <subcommand> [flags]
   omnimarket/src/omnimarket/nodes/node_gap_compute/
-  contract.yaml → subscribe: onex.cmd.omnimarket.gap-compute-start.v1 (pending OMN-8761)
+  contract.yaml → subscribe: onex.cmd.omnimarket.gap-compute-start.v1
         |
         v
 node_gap_compute returns ModelGapComputeResult { status: str }

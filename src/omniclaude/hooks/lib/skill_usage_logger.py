@@ -30,7 +30,7 @@ from typing import Any
 
 def _resolve_default_usage_log() -> Path:
     """Lazily resolve the default usage-log path under ONEX_STATE_DIR."""
-    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import state_path
 
     return state_path("onex-skill-usage.log")
 

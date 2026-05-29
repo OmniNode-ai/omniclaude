@@ -599,6 +599,40 @@ class NamingValidator:
 
     # Omninode-specific validation helpers
 
+    @dataclass
+    class _FileClassTypes:
+        has_model: bool = False
+        has_enum: bool = False
+        has_typeddict: bool = False
+        has_node_service: bool = False
+        has_protocol: bool = False
+
+    def _detect_file_class_types(self, tree: ast.Module) -> "_FileClassTypes":
+        """Scan AST for the presence of Omninode class-type markers."""
+        result = self._FileClassTypes()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            base_names = [
+                base.id
+                if isinstance(base, ast.Name)
+                else base.attr
+                if isinstance(base, ast.Attribute)
+                else None
+                for base in node.bases
+            ]
+            if node.name.startswith("Model"):
+                result.has_model = True
+            elif node.name.startswith("Enum"):
+                result.has_enum = True
+            elif node.name.startswith("TypedDict"):
+                result.has_typeddict = True
+            elif self.NODE_SERVICE_PATTERN.match(node.name):
+                result.has_node_service = True
+            elif "Protocol" in base_names:
+                result.has_protocol = True
+        return result
+
     def _validate_file_naming(self, file_path: str, tree: ast.Module) -> None:
         """
         Validate Omninode file naming patterns.
@@ -611,53 +645,13 @@ class NamingValidator:
         path = Path(file_path)
         filename = path.name
 
-        # Skip __init__.py and test files
         if filename == "__init__.py" or filename.startswith("test_"):
             return
 
-        # Check for class types in file
-        has_model_class = False
-        has_enum_class = False
-        has_typeddict_class = False
-        has_node_service_class = False
-        has_protocol_class = False
+        types = self._detect_file_class_types(tree)
 
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                # Check base classes
-                base_names = [
-                    (
-                        base.id
-                        if isinstance(base, ast.Name)
-                        else base.attr
-                        if isinstance(base, ast.Attribute)
-                        else None
-                    )
-                    for base in node.bases
-                ]
-
-                # Check if class starts with Model
-                if node.name.startswith("Model"):
-                    has_model_class = True
-                # Check if class starts with Enum
-                elif node.name.startswith("Enum"):
-                    has_enum_class = True
-                # Check if class starts with TypedDict
-                elif node.name.startswith("TypedDict"):
-                    has_typeddict_class = True
-                # Check if class is Node service pattern
-                elif self.NODE_SERVICE_PATTERN.match(node.name):
-                    has_node_service_class = True
-                # Check if class is Protocol
-                elif "Protocol" in base_names:
-                    has_protocol_class = True
-
-        # Validate file naming based on class types
         # Priority order: Model > TypedDict > NodeService > Protocol > Enum
-        # This handles mixed files where multiple class types exist
-        # Only check the highest priority type present
-        if has_model_class:
-            # Model class takes priority - only check model_*.py naming
+        if types.has_model:
             if not self.MODEL_FILE_PATTERN.match(
                 filename
             ) and not self.SUBCONTRACT_FILE_PATTERN.match(filename):
@@ -672,8 +666,7 @@ class NamingValidator:
                         message="Omninode files with Model classes should use 'model_*.py' naming (93% adherence in codebase)",
                     )
                 )
-        elif has_typeddict_class:
-            # TypedDict takes priority if no Model class
+        elif types.has_typeddict:
             if not self.TYPED_DICT_FILE_PATTERN.match(filename):
                 self.violations.append(
                     Violation(
@@ -686,8 +679,7 @@ class NamingValidator:
                         message="Omninode files with TypedDict classes should use 'typed_dict_*.py' naming (100% adherence in codebase)",
                     )
                 )
-        elif has_node_service_class:
-            # Node service pattern if no Model or TypedDict
+        elif types.has_node_service:
             if not self.NODE_SERVICE_FILE_PATTERN.match(filename):
                 self.violations.append(
                     Violation(
@@ -700,12 +692,7 @@ class NamingValidator:
                         message="Omninode files with Node service classes should use 'node_<type>_service.py' naming",
                     )
                 )
-        elif has_protocol_class:
-            # Protocol pattern - only suggested, not enforced strictly
-            # Protocols can exist in various files, especially in SPI modules
-            pass
-        elif has_enum_class:
-            # Enum is checked only if no other priority types
+        elif not types.has_protocol and types.has_enum:
             if not self.ENUM_FILE_PATTERN.match(filename):
                 self.violations.append(
                     Violation(

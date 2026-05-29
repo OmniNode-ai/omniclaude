@@ -259,7 +259,7 @@ Also write a human-readable summary to `${ONEX_STATE_DIR}/skill-audits/latest-su
 If `--fail-on-facade` is true (default):
 
 1. Collect all skills with verdict `FACADE`, `STUB`, or `PARTIAL`
-2. Verify the node-reported Linear ticket coverage from each skill record's `linear_ticket` field
+2. Confirm the skill records include Linear ticket coverage in each `linear_ticket` field
 3. If ANY facade/stub/partial has no `linear_ticket`: **FAIL** (exit nonzero)
 4. If all facade/stub/partial skills have tracked Linear tickets: **PASS** (exit 0, log warning)
 

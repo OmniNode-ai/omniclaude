@@ -119,7 +119,7 @@ class RoutingRecorder:
     def _emit_kafka_event(self, decision: ModelRoutingDecision) -> None:
         """Emit routing decision as Kafka event. Fail-open: errors are logged."""
         try:
-            from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415, I001
+            from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: I001
 
             socket_path = os.getenv("OMNICLAUDE_EMIT_SOCKET", "")
             if not socket_path:

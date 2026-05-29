@@ -82,7 +82,7 @@ def _emit_via_daemon(
         sys.path.insert(0, hooks_lib)
 
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
 
         success = emit_event(_EVENT_TYPE, payload)
         if success:

@@ -100,21 +100,6 @@ def test_kafka_error_handling():
         )
         print("  ✅ PASS (Kafka unavailable)\n")
 
-    # Test 3: Get recent message count (fixed function)
-    print("Test 3: Get recent message count (testing the fix)")
-    result = kafka_helper.get_recent_message_count(
-        "nonexistent_topic_xyz", timeout_seconds=1
-    )
-    print(f"  Success: {result['success']}")
-    print(f"  Return code: {result.get('return_code', 'MISSING')}")
-    if result.get("error"):
-        print(f"  Error: {result['error'][:80]}...")
-    # The key fix: This should check returncode and NOT always return success: True
-    assert "return_code" in result, "Should include return_code field"
-    if result["success"]:
-        assert result.get("return_code") == 0, "Success should have return_code=0"
-    print("  ✅ PASS\n")
-
 
 def test_return_code_consistency():
     """Verify return_code is consistently included in all responses."""

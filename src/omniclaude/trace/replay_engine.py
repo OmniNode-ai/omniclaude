@@ -118,7 +118,7 @@ def load_frame_from_jsonl(
         ChangeFrame if found, None if not found
     """
     if trace_dir is None:
-        from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+        from omniclaude.hooks.lib.onex_state import state_path
 
         trace_dir = state_path("trace")
 
@@ -163,8 +163,8 @@ def _clone_repo_to_tempdir(repo_root: str, tmpdir: str) -> bool:
         True if clone succeeded, False otherwise
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "clone", "--local", repo_root, tmpdir],  # noqa: S607
+        result = subprocess.run(
+            ["git", "clone", "--local", repo_root, tmpdir],
             capture_output=True,
             text=True,
             timeout=60,
@@ -186,8 +186,8 @@ def _checkout_commit(commit_sha: str, cwd: str) -> bool:
         True if checkout succeeded
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "checkout", commit_sha],  # noqa: S607
+        result = subprocess.run(
+            ["git", "checkout", commit_sha],
             capture_output=True,
             text=True,
             cwd=cwd,
@@ -214,8 +214,8 @@ def _apply_patch(diff_patch: str, cwd: str) -> bool:
     patch_path = Path(cwd) / "_replay.patch"
     try:
         patch_path.write_text(diff_patch, encoding="utf-8")
-        result = subprocess.run(  # noqa: S603
-            ["git", "apply", str(patch_path)],  # noqa: S607
+        result = subprocess.run(
+            ["git", "apply", str(patch_path)],
             capture_output=True,
             text=True,
             cwd=cwd,
@@ -390,7 +390,7 @@ class ReplayEngine:
         if mode == ReplayMode.FULL:
             tool_events = getattr(frame, "tool_events", [])
             if tool_events:
-                import logging  # noqa: PLC0415
+                import logging
 
                 _logger = logging.getLogger(__name__)
                 _logger.info(

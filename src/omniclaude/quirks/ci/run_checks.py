@@ -124,7 +124,7 @@ def emit_annotations(
                 level = "error"
                 title = f"Quirk BLOCKED: {qt.value} [BLOCK]"
 
-        print(  # noqa: T201 — intentional output to stdout for GH Actions
+        print(
             _gh_annotation(
                 level=level,
                 title=title,
@@ -191,7 +191,7 @@ async def run_checks(
                     "CI: BLOCK-stage quirk %s exempted (reason: %s)", qt.value, reason
                 )
                 # Emit a structured log so the override is not silent.
-                print(  # noqa: T201
+                print(
                     f"[QUIRK EXEMPT] {qt.value} overridden by PR exemption. "
                     f"Reason: {reason}"
                 )
@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
 
     diff_path = Path(args.diff_file)
     if not diff_path.exists():
-        print(f"Error: diff file not found: {diff_path}", file=sys.stderr)  # noqa: T201
+        print(f"Error: diff file not found: {diff_path}", file=sys.stderr)
         return 2
 
     diff_content = diff_path.read_text(encoding="utf-8")

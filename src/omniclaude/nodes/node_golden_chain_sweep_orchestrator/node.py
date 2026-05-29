@@ -120,7 +120,7 @@ def _write_evidence(
             base_dir = _state_dir
         else:
             from plugins.onex.hooks.lib.onex_state import (
-                ensure_state_dir,  # noqa: PLC0415
+                ensure_state_dir,
             )
 
             base_dir = ensure_state_dir("golden-chain-sweep")

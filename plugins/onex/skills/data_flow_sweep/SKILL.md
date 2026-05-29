@@ -52,9 +52,14 @@ onex node node_data_flow_sweep -- \
 
 The node handles all metadata collection internally:
 - Producer status via `rpk topic describe`
-- Consumer group lag via `rpk group describe`, including `omnidash-read-model`
-- DB table row counts and recency via `psql` against `omnidash_analytics`
+- Consumer group lag via `rpk group describe`
+- DB table row counts and recency via `psql`
 - Flow classification: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN` | `TOPIC_STALE`
+
+Default runtime anchors:
+- Topic source of truth: omnidash `topics.yaml`
+- Consumer group: `omnidash-read-model`
+- Analytics database: `omnidash_analytics`
 
 Capture stdout (JSON: `DataFlowSweepResult`). Exit 0 = healthy, exit 1 = issues found.
 
@@ -72,7 +77,7 @@ Display health matrix from the node result:
 |-------|----------|----------|----------|-----------|--------|
 | ...   | ACTIVE   | 0 lag    | rows     | visible   | FLOWING |
 
-When the node reports broken flows, render the returned Linear ticket payloads:
+Create Linear tickets from the node-reported broken-flow list:
 
 ```
 Title: fix(data-flow): {topic} — {failure_classification}
@@ -80,11 +85,10 @@ Labels: data-flow, sweep
 Project: Active Sprint
 ```
 
-### Phase 5 — Completion contract
+### Phase 5 — Exit contract
 
-The node owns source-of-truth topic inventory and classification. It must include
-the checked `topics.yaml` source in its result metadata so callers can trace
-omnidash projection coverage without re-reading repo files in the skill shim.
+Exit 0 only when all requested flows are healthy. Exit non-zero when the node
+reports broken flows, probe failures, or contract validation errors.
 
 ## Dispatch Rules
 

@@ -245,19 +245,19 @@ def _run_offloaded(
         )
     except FileNotFoundError:
         # Target binary disappeared between check and execution
-        print(  # noqa: T201
+        print(
             f"[test_offloader] {target} not found, falling back to direct",
             file=sys.stderr,
         )
         return _run_direct(command, cmd_type)
     except subprocess.TimeoutExpired:
-        print(  # noqa: T201
+        print(
             f"[test_offloader] {target} timed out, falling back to direct",
             file=sys.stderr,
         )
         return _run_direct(command, cmd_type)
     except (OSError, ValueError) as e:
-        print(  # noqa: T201
+        print(
             f"[test_offloader] {target} failed: {e}, falling back to direct",
             file=sys.stderr,
         )
@@ -266,10 +266,10 @@ def _run_offloaded(
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: test_offloader.py <command>", file=sys.stderr)  # noqa: T201
+        print("Usage: test_offloader.py <command>", file=sys.stderr)
         sys.exit(1)
 
     command = " ".join(sys.argv[1:])
     decision = offload_command(command)
-    print(json.dumps(decision.model_dump(), default=str))  # noqa: T201
+    print(json.dumps(decision.model_dump(), default=str))
     sys.exit(decision.exit_code)

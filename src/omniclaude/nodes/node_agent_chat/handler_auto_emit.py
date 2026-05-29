@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_session_id() -> str:
-    from plugins.onex.hooks.lib.session_id import resolve_session_id  # noqa: PLC0415
+    from plugins.onex.hooks.lib.session_id import resolve_session_id
 
     return resolve_session_id()
 

@@ -36,9 +36,9 @@ async def persist_sweep_results(
         chain_results: Per-chain run results.
         db_dsn: PostgreSQL DSN for omnidash_analytics.
     """
-    import psycopg2  # noqa: PLC0415
+    import psycopg2
 
-    from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (  # noqa: PLC0415
+    from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (
         GOLDEN_CHAIN_DEFINITIONS,
     )
 

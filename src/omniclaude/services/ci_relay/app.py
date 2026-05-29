@@ -37,7 +37,7 @@ _rate_limiter = RateLimiter()
 
 def _reset_rate_limiter() -> None:
     """Reset the rate limiter. For testing only."""
-    global _rate_limiter  # noqa: PLW0603
+    global _rate_limiter
     _rate_limiter = RateLimiter()
 
 

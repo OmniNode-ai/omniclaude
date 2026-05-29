@@ -66,9 +66,9 @@ _DEFAULT_AUDIT_LOG_PATH: Path | None = None
 
 def _get_default_audit_log_path() -> Path:
     """Return the default audit-log path, lazily resolved on first call."""
-    global _DEFAULT_AUDIT_LOG_PATH  # noqa: PLW0603
+    global _DEFAULT_AUDIT_LOG_PATH
     if _DEFAULT_AUDIT_LOG_PATH is None:
-        from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+        from omniclaude.hooks.lib.onex_state import ensure_state_path
 
         _DEFAULT_AUDIT_LOG_PATH = ensure_state_path("decision_audit.jsonl")
     return _DEFAULT_AUDIT_LOG_PATH
@@ -82,7 +82,7 @@ def _get_default_audit_log_path() -> Path:
 def _get_kafka_consumer_class() -> type | None:
     """Import KafkaConsumer lazily; return None if kafka-python not installed."""
     try:
-        from kafka import KafkaConsumer  # noqa: PLC0415
+        from kafka import KafkaConsumer
 
         result: type = KafkaConsumer
         return result
@@ -399,7 +399,7 @@ def main() -> None:
 
             stop_event = threading.Event()
 
-            import signal  # noqa: PLC0415
+            import signal
 
             def _handle_signal(sig: int, frame: FrameType | None) -> None:
                 stop_event.set()

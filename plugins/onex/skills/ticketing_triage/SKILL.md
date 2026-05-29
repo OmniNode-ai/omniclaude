@@ -1,5 +1,5 @@
 ---
-description: Dispatch-only wrapper around the Linear ticket-triage node
+description: Dispatch-only wrapper around the Linear ticket triage node
 mode: full
 version: 2.0.0
 level: intermediate
@@ -76,11 +76,11 @@ by the backing node and the path is returned as output.
 
 The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epic-org`.
 
-## Enumeration completeness (OMN-10543)
+## Enumeration completeness
 
-The backing node MUST enumerate **every** orphan before writing the TriageReport.
-The `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`; do not
-cap, sample, or truncate this list before handing it to `ticketing-epic-org`.
+OMN-10543 regression guard: the backing node MUST enumerate **every** orphan in
+`orphaned_tickets`; it must not cap, sample, truncate, or emit a "top N" subset.
+Before publishing the report, `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`.
 
 ## See Also
 

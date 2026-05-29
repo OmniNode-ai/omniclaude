@@ -110,6 +110,18 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-4421: Block commits containing expired @shim annotations.
+      # Uses node_shim_scanner (OMN-4419) via `onex run-node`.
+      # BLOCKING — enforcement, not advisory. Suppression per-line: # shim-expiry-ok: <reason>
+      - id: check-expired-shims
+        name: Block expired @shim annotations (OMN-4421)
+        entry: .pre-commit-hooks/check-expired-shims.sh
+        language: script
+        types: [python]
+        pass_filenames: true
+        stages: [pre-commit]
+        exclude: '^tests/'
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
@@ -668,9 +680,11 @@ repos:
       # Hook bitmask drift check (OMN-9615)
       # Regenerates hook_bits.sh from EnumHookBit and fails if the committed
       # artifact is stale. Fires when hook_bits.sh is modified.
+      # Uses scripts/run-hook-bits-drift.sh to resolve omnibase_core via
+      # $OMNI_HOME, supporting both omni_home and worktree layouts (OMN-12398).
       - id: hook-bits-drift
         name: hook_bits.sh drift check (regenerate if EnumHookBit changes)
-        entry: uv --directory ../omnibase_core run python scripts/gen_hook_bits.py --check ../omniclaude/plugins/onex/hooks/lib/hook_bits.sh
+        entry: bash scripts/run-hook-bits-drift.sh
         language: system
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$
