@@ -24,7 +24,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import requests
@@ -38,7 +38,7 @@ class PatternTrackingLogger:
             # Create log file in user's home directory with date
             log_dir = os.path.expanduser("~/Library/Logs")
             os.makedirs(log_dir, exist_ok=True)
-            today = datetime.now(timezone.utc).strftime("%Y%m%d")
+            today = datetime.now(UTC).strftime("%Y%m%d")
             self.log_file = f"{log_dir}/pattern_tracking_{today}.log"
 
         # Configure logging
