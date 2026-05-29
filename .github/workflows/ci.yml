@@ -1226,7 +1226,7 @@ jobs:
 
       - name: Export requirements
         working-directory: ${{ github.workspace }}
-        run: uv export --format requirements.txt --no-hashes --output-file requirements.txt
+        run: uv export --format requirements-txt --no-hashes --output-file requirements.txt
 
       - name: Bandit security scan
         working-directory: ${{ github.workspace }}
