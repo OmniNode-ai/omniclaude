@@ -308,8 +308,11 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                         logger.debug(
                             "hook_quality_gate raised for job %s: %s", job_id, exc
                         )
-                elif check_agentic_quality is not None:
-                    # Backward-compat fallback when hook_quality_gate unavailable
+
+                if check_agentic_quality is not None:
+                    # Secondary backward-compat gate. Keep running this even when
+                    # hook_quality_gate is present so grounding/tool-use failures
+                    # still annotate delivered agentic results.
                     try:
                         gate_result = check_agentic_quality(
                             content=content,
@@ -317,7 +320,11 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                             iterations=iterations,
                         )
                         if not gate_result.passed:
-                            quality_gate_reason = gate_result.reason
+                            quality_gate_reason = (
+                                f"{quality_gate_reason}; {gate_result.reason}"
+                                if quality_gate_reason
+                                else gate_result.reason
+                            )
                             logger.warning(
                                 "agentic_quality_gate failed for job %s: %s",
                                 job_id,
