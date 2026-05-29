@@ -195,7 +195,7 @@ class TestFormatInfrastructureText:
     def _pg_infra(
         self,
         *,
-        host: str = "192.168.86.201",
+        host: str = "db.test.internal",
         port: str = "5432",
         database: str = "onex",
         status: str = "connected",
