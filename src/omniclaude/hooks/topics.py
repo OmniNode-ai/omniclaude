@@ -202,7 +202,7 @@ class TopicBase(StrEnum):
     # Multi-producer: producer segment intentionally omitted (consumed by
     # omniintelligence node_pattern_storage_effect as a domain-level event).
     # ==========================================================================
-    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"
+    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"  # arch-topic-naming: ignore
     """Published by omniclaude when a pattern is discovered during a session."""
 
     # ==========================================================================
@@ -693,7 +693,9 @@ def build_topic(base: str) -> str:
 # Base prefix for per-agent directed inbox topics (OMN-8634).
 # Not a TopicBase member — not a full canonical topic name.
 # Full topic: AGENT_INBOX_DIRECTED_BASE + "." + agent_id + ".v1"
-AGENT_INBOX_DIRECTED_BASE: str = "onex.evt.omniclaude.agent-inbox"  # arch-topic-naming: ignore
+AGENT_INBOX_DIRECTED_BASE: str = (
+    "onex.evt.omniclaude.agent-inbox"  # arch-topic-naming: ignore
+)
 
 
 def build_agent_inbox_directed_topic(agent_id: str) -> str:

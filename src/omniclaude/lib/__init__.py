@@ -27,7 +27,8 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     if name in _SUBPACKAGES:
-        mod = importlib.import_module(f"omniclaude.lib.{name}")
+        module_name = f"omniclaude.lib.{name}"  # arch-topic-naming: ignore
+        mod = importlib.import_module(module_name)
         globals()[name] = mod  # cache so __getattr__ is only called once
         return mod
     raise AttributeError(f"module 'omniclaude.lib' has no attribute {name!r}")

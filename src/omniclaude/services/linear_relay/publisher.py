@@ -28,7 +28,9 @@ from omniclaude.services.linear_relay.models import LinearEpicClosedCommand
 logger = logging.getLogger(__name__)
 
 # Kafka topic for feature-dashboard commands
-FEATURE_DASHBOARD_TOPIC = "onex.cmd.omniclaude.feature-dashboard.v1"  # arch-topic-naming: ignore
+FEATURE_DASHBOARD_TOPIC = (
+    "onex.cmd.omniclaude.feature-dashboard.v1"  # arch-topic-naming: ignore
+)
 
 
 class _KafkaProducer(Protocol):

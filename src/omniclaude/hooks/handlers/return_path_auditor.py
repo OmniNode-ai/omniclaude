@@ -380,7 +380,7 @@ def _publish_audit_event(
             [
                 python_cmd,
                 "-m",
-                "omniclaude.hooks.cli_emit",  # module path, not a Kafka topic
+                "omniclaude.hooks.cli_emit",  # module path, not a Kafka topic; arch-topic-naming: ignore
                 "audit-event",
                 "--topic",
                 topic,
