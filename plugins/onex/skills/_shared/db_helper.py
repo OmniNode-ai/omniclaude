@@ -21,7 +21,6 @@ from typing import Any
 
 import psycopg2
 from psycopg2.extensions import connection as psycopg_connection
-from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
 from omniclaude.lib.utils.sanitize import _redact_dsn
@@ -200,117 +199,15 @@ def release_connection(conn: psycopg_connection | None) -> None:
         logger.error(f"Database error releasing connection: {e}")
 
 
-def execute_query(
-    sql: str, params: tuple[Any, ...] | None = None, fetch: bool = True
-) -> dict[str, Any]:
-    """
-    Execute a SQL query safely with parameterized inputs.
-
-    Args:
-        sql: SQL query with %s placeholders
-        params: Tuple of parameters to substitute
-        fetch: If True, return query results (default: True)
-
-    Returns:
-        Dict with query results:
-        {
-            "success": bool,
-            "rows": list of dicts (if fetch=True) or None,
-            "error": str or None,
-            "host": str,
-            "port": int,
-            "database": str
-        }
-
-    Examples:
-        >>> # Correct usage - always check success and extract rows
-        >>> result = execute_query("SELECT * FROM users WHERE id = %s", (123,))
-        >>> if result["success"] and result["rows"]:
-        >>>     user = result["rows"][0]
-        >>>     print(user["name"])
-        >>> else:
-        >>>     print(f"Error: {result['error']}")
-        >>>
-        >>> # For INSERT/UPDATE with RETURNING
-        >>> result = execute_query(
-        >>>     "INSERT INTO logs (message) VALUES (%s) RETURNING id",
-        >>>     ("test message",)
-        >>> )
-        >>> if result["success"] and result["rows"]:
-        >>>     new_id = result["rows"][0]["id"]
-        >>>
-        >>> # For non-fetch operations
-        >>> result = execute_query("UPDATE users SET active = TRUE", fetch=False)
-        >>> if result["success"]:
-        >>>     print("Update successful")
-    """
-    conn = None
-    try:
-        conn = get_connection()
-        if not conn:
-            return {
-                "success": False,
-                "rows": None,
-                "error": "Failed to get database connection",
-                "host": _get_db_config().get("host", "unknown"),
-                "port": _get_db_config().get("port", "unknown"),
-                "database": _get_db_config().get("database", "unknown"),
-            }
-
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(sql, params or ())
-            conn.commit()
-
-            rows = cur.fetchall() if fetch else None
-
-            return {
-                "success": True,
-                "rows": rows,
-                "error": None,
-                "host": _get_db_config().get("host", "unknown"),
-                "port": _get_db_config().get("port", "unknown"),
-                "database": _get_db_config().get("database", "unknown"),
-            }
-
-    except psycopg2.Error as e:
-        # psycopg2.Error: SQL errors, constraint violations, connection issues
-        if conn:
-            conn.rollback()
-        logger.error(f"Database query failed: {e}")
-        logger.error(f"SQL: {sql}")
-        logger.error(f"Params: {params}")
-        return {
-            "success": False,
-            "rows": None,
-            "error": str(e),
-            "host": _get_db_config().get("host", "unknown"),
-            "port": _get_db_config().get("port", "unknown"),
-            "database": _get_db_config().get("database", "unknown"),
-        }
-    except (TypeError, ValueError) as e:
-        # TypeError/ValueError: parameter type mismatches, data conversion errors
-        if conn:
-            conn.rollback()
-        logger.error(f"Query parameter error: {e}")
-        logger.error(f"SQL: {sql}")
-        logger.error(f"Params: {params}")
-        return {
-            "success": False,
-            "rows": None,
-            "error": f"Parameter error: {str(e)}",
-            "host": _get_db_config().get("host", "unknown"),
-            "port": _get_db_config().get("port", "unknown"),
-            "database": _get_db_config().get("database", "unknown"),
-        }
-    finally:
-        if conn:
-            release_connection(conn)
-
-
 def get_correlation_id() -> str:
     """
     Get or generate a correlation ID for tracking related operations.
     Checks environment variable first, then generates new UUID.
+
+    KEEP: live caller — imported by three skill executor files via sys.path injection:
+      _lib/request_intelligence/execute.py:94
+      _lib/request_agent_routing/execute_direct.py:80
+      _lib/request_agent_routing/execute_kafka.py:79
     """
     # Try to get from environment (set by hooks)
     corr_id = os.environ.get("CORRELATION_ID")
