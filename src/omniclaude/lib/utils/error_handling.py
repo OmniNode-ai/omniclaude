@@ -21,9 +21,7 @@ import json
 import logging
 import os
 import sys
-import time
 import traceback
-from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -222,122 +220,6 @@ class PatternTrackingErrorPolicy:
         }
 
         return self.handle_api_error(operation, error, context)
-
-
-class CircuitBreaker:
-    """Simple circuit breaker to prevent cascading failures"""
-
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60) -> None:
-        self.failure_threshold = failure_threshold
-        self.timeout = timeout
-        self.failure_count = 0
-        self.last_failure_time: float | None = None
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-
-    def call(
-        self, func: Callable[..., Any], *args: Any, **kwargs: Any
-    ) -> Any:  # Why: generic circuit breaker — wraps arbitrary callables
-        """Execute function with circuit breaker protection"""
-        if self.state == "OPEN":
-            if (
-                self.last_failure_time is not None
-                and time.time() - self.last_failure_time > self.timeout
-            ):
-                self.state = "HALF_OPEN"
-            else:
-                raise Exception("Circuit breaker is OPEN")
-
-        try:
-            result = func(*args, **kwargs)
-            if self.state == "HALF_OPEN":
-                self.state = "CLOSED"
-                self.failure_count = 0
-            return result
-        except Exception as e:
-            self.failure_count += 1
-            self.last_failure_time = time.time()
-
-            if self.failure_count >= self.failure_threshold:
-                self.state = "OPEN"
-
-            raise e
-
-
-def safe_execute_operation(
-    operation_name: str,
-    operation_func: Callable[[], dict[str, Any]],
-    logger: PatternTrackingLogger,
-    error_handler: PatternTrackingErrorPolicy,
-    max_retries: int = 3,
-    circuit_breaker: CircuitBreaker | None = None,
-) -> dict[str, Any]:
-    """
-    Safely execute an operation with retries and error handling
-    """
-    for attempt in range(max_retries + 1):
-        try:
-            result = (
-                circuit_breaker.call(operation_func)
-                if circuit_breaker
-                else operation_func()
-            )
-
-            if attempt > 0:
-                logger.log_success(
-                    operation_name,
-                    {
-                        "message": f"Operation succeeded after {attempt} retries",
-                        "attempt": attempt + 1,
-                        "result": "success",
-                    },
-                )
-            else:
-                logger.log_success(
-                    operation_name, {"attempt": attempt + 1, "result": "success"}
-                )
-
-            return {"success": True, "result": result, "attempts": attempt + 1}
-
-        except Exception as e:
-            context = {"attempt": attempt + 1, "max_retries": max_retries + 1}
-            error_info = error_handler.handle_api_error(operation_name, e, context)
-
-            if attempt < max_retries and error_info.get("retry_suggested", False):
-                retry_delay = error_info.get("retry_delay_seconds", 5)
-                logger.log_warning(
-                    operation_name,
-                    {
-                        "message": f"Retrying in {retry_delay} seconds...",
-                        "attempt": attempt + 1,
-                        "max_attempts": max_retries + 1,
-                    },
-                )
-                time.sleep(retry_delay)
-                continue
-            else:
-                logger.log_error(
-                    operation_name,
-                    e,
-                    {
-                        "final_attempt": True,
-                        "total_attempts": attempt + 1,
-                        "max_retries_exceeded": True,
-                    },
-                )
-
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "error_info": error_info,
-                    "attempts": attempt + 1,
-                }
-
-    # This should never be reached
-    return {
-        "success": False,
-        "error": "Unknown error in safe_execute_operation",
-        "attempts": max_retries + 1,
-    }
 
 
 # Global instances for easy import

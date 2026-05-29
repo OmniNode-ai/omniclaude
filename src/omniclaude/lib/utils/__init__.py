@@ -32,7 +32,6 @@ _LAZY_IMPORTS: dict[str, str] = {
     "print_debug_status": ".diagnostics",
     "test_pattern_tracking_flow": ".diagnostics",
     # error_handling
-    "CircuitBreaker": ".error_handling",
     "PatternTrackingErrorPolicy": ".error_handling",
     "PatternTrackingLogger": ".error_handling",
     "get_default_error_handler": ".error_handling",
@@ -40,7 +39,6 @@ _LAZY_IMPORTS: dict[str, str] = {
     "handle_error": ".error_handling",
     "log_error": ".error_handling",
     "log_success": ".error_handling",
-    "safe_execute_operation": ".error_handling",
     # health_checks
     "HealthCheckResult": ".health_checks",
     "HealthStatus": ".health_checks",
