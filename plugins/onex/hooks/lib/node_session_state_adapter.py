@@ -248,9 +248,9 @@ def cmd_set_active_run(stdin_data: dict) -> dict:
     Returns:
         {"active_run_id": "..."} on success, {} on failure.
 
-    UNCERTAIN: no shell call site found in session-start.sh or session-end.sh as of
-      OMN-12368 verification (2026-05-28). Leaving in place; needs a follow-up
-      decision — either wire it or delete it in a future ticket.
+    UNCERTAIN: no shell call site found in session-start.sh or session-end.sh during
+      verification on 2026-05-28. Leaving in place; needs a follow-up decision —
+      either wire it or delete it in a future ticket.
     """
     from node_session_state_effect import (
         LockResult,

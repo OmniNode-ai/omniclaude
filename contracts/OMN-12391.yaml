@@ -3,7 +3,7 @@ schema_version: "1.0.0"
 ticket_id: "OMN-12391"
 title: "Reconcile unused omniclaude skill helper exports and consumers"
 summary: >
-  OMN-12368 verification sweep confirmed three dead exports in omniclaude skill helpers
+  Prior verification confirmed three dead exports in omniclaude skill helpers
   (get_recent_message_count, get_consumer_groups in kafka_helper.py; execute_query in
   db_helper.py) and identified live surfaces that static analysis mis-flagged as dead.
   This ticket removes the confirmed-dead exports and annotates live surfaces so future
