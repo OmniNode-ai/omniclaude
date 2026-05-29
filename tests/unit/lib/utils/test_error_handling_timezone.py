@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Regression test: PatternTrackingLogger.__init__ must not raise NameError on timezone.utc."""
+"""Regression test: PatternTrackingLogger.__init__ must not raise NameError on UTC."""
 
 from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -16,13 +17,13 @@ class TestPatternTrackingLoggerTimezone:
     """Verify that PatternTrackingLogger instantiation does not raise NameError."""
 
     def test_pattern_tracking_logger_instantiates_without_nameerror(
-        self, tmp_path: pytest.TempPathFactory
+        self, tmp_path: Path
     ) -> None:
-        """Instantiating PatternTrackingLogger() must not raise NameError for timezone.
+        """Instantiating PatternTrackingLogger() must not raise NameError for UTC.
 
-        This is a regression test for the missing `timezone` import in
-        error_handling.py — the __init__ method called datetime.now(timezone.utc)
-        but only `datetime` was imported, not `timezone`.
+        This is a regression test for the missing UTC import in error_handling.py —
+        the __init__ method called datetime.now(UTC) but UTC was not imported from
+        the datetime module.
         """
         log_file = str(tmp_path / "test.log")
         result = subprocess.run(
@@ -73,16 +74,15 @@ class TestPatternTrackingLoggerTimezone:
         )
         assert "OK" in result.stdout
 
-    def test_timezone_importable_from_module(self) -> None:
-        """The error_handling module must export timezone in its namespace."""
+    def test_utc_importable_from_datetime_module(self) -> None:
+        """The error_handling module must import UTC from datetime without NameError."""
         result = subprocess.run(
             [
                 sys.executable,
                 "-c",
                 (
-                    "import omniclaude.lib.utils.error_handling as m; "
-                    "from datetime import timezone; "
-                    "assert hasattr(m, 'timezone') or True; "  # module-level import present
+                    "import omniclaude.lib.utils.error_handling; "
+                    "from datetime import UTC; "  # UTC must be importable (Python 3.11+)
                     "print('OK')"
                 ),
             ],
@@ -92,7 +92,6 @@ class TestPatternTrackingLoggerTimezone:
             check=False,
         )
         assert result.returncode == 0, (
-            f"timezone not importable from error_handling context.\n"
-            f"stderr: {result.stderr}"
+            f"UTC not importable from datetime.\nstderr: {result.stderr}"
         )
         assert "OK" in result.stdout

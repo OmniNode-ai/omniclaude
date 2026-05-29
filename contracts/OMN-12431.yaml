@@ -1,11 +1,12 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-12431
-title: "Fix latent timezone NameError in error_handling.py PatternTrackingLogger"
+title: "Fix latent NameError in error_handling.py PatternTrackingLogger"
 summary: >
-  PatternTrackingLogger.__init__ called datetime.now(timezone.utc) but the module only imported
-  `from datetime import datetime`, omitting `timezone`. Adds `timezone` to the import and a
-  regression test suite (3 tests) covering instantiation with and without a log_file argument.
+  PatternTrackingLogger.__init__ called datetime.now(UTC) but the module only imported
+  `from datetime import datetime`, omitting the UTC constant. Adds UTC to the import (ruff
+  rewrites `timezone.utc` to the Python 3.11+ `UTC` constant) and a regression test suite
+  (3 tests) covering instantiation with and without a log_file argument.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
