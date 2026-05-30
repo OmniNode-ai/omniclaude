@@ -75,3 +75,12 @@ def test_contract_proof_resolution_gate_is_blocking() -> None:
     assert "exit 1" in run
     assert "|| echo" not in run
     assert "Phase 1" not in step["name"]
+
+
+def test_dod_evidence_checkout_uses_cross_repo_token() -> None:
+    workflow = _load_workflow(CI_WORKFLOW_PATH)
+    step = _step(_job(workflow, "dod-evidence-check"), "Checkout central DoD evidence")
+
+    assert step["uses"] == "actions/checkout@v6"
+    assert step["with"]["repository"] == "OmniNode-ai/onex_change_control"
+    assert step["with"]["token"] == "${{ secrets.CROSS_REPO_PAT || github.token }}"
