@@ -44,7 +44,7 @@ def test_reusable_deploy_gate_uses_retrying_occ_contract_checkout() -> None:
     workflow = _load_workflow()
     job = _deploy_gate_job(workflow)
 
-    assert job["timeout-minutes"] == 15
+    assert job["timeout-minutes"] == 25
 
     step = _step(
         job, "Checkout onex_change_control contracts (canonical contract source)"
