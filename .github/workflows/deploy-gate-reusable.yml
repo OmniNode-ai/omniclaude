@@ -54,13 +54,18 @@ jobs:
         if: github.event_name != 'merge_group'
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || secrets.GITHUB_TOKEN }}
           OCC_REF: dev
           OCC_REPO_URL: https://github.com/OmniNode-ai/onex_change_control.git
         run: |
           set -euo pipefail
 
-          git_auth_header="AUTHORIZATION: bearer ${GH_TOKEN}"
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::OCC contracts checkout requires CROSS_REPO_PAT or GITHUB_TOKEN"
+            exit 1
+          fi
+
+          git_auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')"
           retry_delays=(0 10 20 30 45)
 
           for index in "${!retry_delays[@]}"; do
