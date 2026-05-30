@@ -56,8 +56,16 @@ def test_reusable_deploy_gate_uses_retrying_occ_contract_checkout() -> None:
         step["env"]["OCC_REPO_URL"]
         == "https://github.com/OmniNode-ai/onex_change_control.git"
     )
+    assert (
+        step["env"]["GH_TOKEN"]
+        == "${{ secrets.CROSS_REPO_PAT || secrets.GITHUB_TOKEN }}"
+    )
 
     run = step["run"]
+    assert "OCC contracts checkout requires CROSS_REPO_PAT or GITHUB_TOKEN" in run
+    assert "AUTHORIZATION: basic" in run
+    assert "x-access-token:%s" in run
+    assert "| base64 | tr -d '\\n'" in run
     assert "retry_delays=(0 10 20 30 45)" in run
     assert "git -C _occ sparse-checkout init --cone" in run
     assert "git -C _occ sparse-checkout set contracts" in run
