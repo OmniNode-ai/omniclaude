@@ -44,20 +44,55 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout caller repo
         uses: actions/checkout@v6
 
-      - name: Checkout onex_change_control (canonical contract source)
+      - name: Checkout onex_change_control contracts (canonical contract source)
         if: github.event_name != 'merge_group'
-        uses: actions/checkout@v6
-        with:
-          repository: OmniNode-ai/onex_change_control
-          path: _occ
-          sparse-checkout: contracts
-          sparse-checkout-cone-mode: false
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCC_REF: dev
+          OCC_REPO_URL: https://github.com/OmniNode-ai/onex_change_control.git
+        run: |
+          set -euo pipefail
+
+          git_auth_header="AUTHORIZATION: bearer ${GH_TOKEN}"
+          retry_delays=(0 10 20 30 45)
+
+          for index in "${!retry_delays[@]}"; do
+            attempt=$((index + 1))
+            delay="${retry_delays[$index]}"
+
+            if [ "$delay" -gt 0 ]; then
+              echo "::notice::Retrying OCC contracts checkout in ${delay}s (attempt ${attempt}/${#retry_delays[@]})"
+              sleep "$delay"
+            fi
+
+            rm -rf _occ
+            git init _occ
+            git -C _occ remote add origin "$OCC_REPO_URL"
+            git -C _occ sparse-checkout init --cone
+            git -C _occ sparse-checkout set contracts
+
+            if timeout 90 git -C _occ \
+                -c http.version=HTTP/1.1 \
+                -c "http.https://github.com/.extraheader=${git_auth_header}" \
+                fetch --depth=1 --filter=blob:none origin "$OCC_REF" \
+              && git -C _occ checkout --force FETCH_HEAD \
+              && test -d _occ/contracts; then
+              echo "::notice::OCC contracts checkout succeeded on attempt ${attempt}"
+              exit 0
+            fi
+
+            echo "::warning::OCC contracts checkout attempt ${attempt}/${#retry_delays[@]} failed"
+          done
+
+          echo "::error::OCC contracts checkout failed after ${#retry_delays[@]} attempts"
+          exit 1
 
       - name: Skip on merge_group
         if: github.event_name == 'merge_group'
