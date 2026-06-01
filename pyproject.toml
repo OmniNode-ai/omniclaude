@@ -241,9 +241,9 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
-# Release v0.25.0: pin to release tags
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main" }
-omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", branch = "main" }
+# Release v0.25.1: pin to paired release PR heads until tags are published.
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "4ffca7643294fcad4f9654f4d1839ca8002b4454" }
+omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "bdce5edcbda8fb70838b84ab3a89e2c7ce4524e1" }
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.24.0" }
 omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "v0.4.0" }
