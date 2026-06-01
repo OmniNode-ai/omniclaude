@@ -3,16 +3,16 @@
 
 [project]
 name = "omninode-claude"
-version = "0.25.0"
+version = "0.25.1"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core>=0.42.0,<0.43.0",
+    "omnibase-core>=0.43.0,<0.44.0",
     "omnibase-spi>=0.22.0,<0.23.0",
-    "omnibase-infra>=0.37.0,<0.38.0",
+    "omnibase-infra>=0.38.0,<0.39.0",
     "omnimarket>=0.4.0",
     "omninode-intelligence>=0.24.0,<0.25.0",
     "pydantic>=2.12.5,<3.0.0",
@@ -235,15 +235,15 @@ build-backend = "hatchling.build"
 [tool.uv]
 # Override transitive pins so our direct pins win.
 override-dependencies = [
-    "omnibase-core>=0.42.0,<0.43.0",
+    "omnibase-core>=0.43.0,<0.44.0",
     "omnibase-spi>=0.22.0,<0.23.0",
-    "omnibase-infra>=0.37.0,<0.38.0",
+    "omnibase-infra>=0.38.0,<0.39.0",
 ]
 
 [tool.uv.sources]
 # Release v0.25.0: pin to release tags
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.42.0" }
-omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", tag = "v0.37.2" }
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main" }
+omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", branch = "main" }
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.24.0" }
 omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "v0.4.0" }
