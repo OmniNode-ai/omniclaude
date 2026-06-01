@@ -10,8 +10,8 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?branch=main" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?branch=main" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
 ]
 
@@ -1929,7 +1929,7 @@ dependencies = [
 [[package]]
 name = "omnibase-core"
 version = "0.42.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0#fc211e3648681a79f609c2c153a254baaef682ab" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?branch=main#875a4ff7c1e7026fe5c619a0125a974ff6d0731b" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1948,7 +1948,7 @@ dependencies = [
 [[package]]
 name = "omnibase-infra"
 version = "0.37.2"
-source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2#7d7836de0316a0c70af9b3acbc978794eb424f91" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?branch=main#7d7836de0316a0c70af9b3acbc978794eb424f91" }
 dependencies = [
     { name = "a2a-sdk" },
     { name = "aiofiles" },
@@ -2045,7 +2045,7 @@ dependencies = [
 
 [[package]]
 name = "omninode-claude"
-version = "0.25.0"
+version = "0.25.1"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
@@ -2133,8 +2133,8 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?branch=main" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?branch=main" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=v0.4.0" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0" },
@@ -2164,7 +2164,7 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.4.0" },
     { name = "kafka-python", specifier = ">=2.3.0" },
     { name = "mypy", specifier = ">=1.17.0" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=main" },
+    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=4877d3c223517cb0c7e1eca462ba0f4d38916314" },
     { name = "opentelemetry-api", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.23.0,<2.0.0" },
@@ -2234,7 +2234,7 @@ dependencies = [
 [[package]]
 name = "onex-change-control"
 version = "0.5.0"
-source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=main#5ecfa8b7da28e9b9755b11172ece79a18062ec04" }
+source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=4877d3c223517cb0c7e1eca462ba0f4d38916314#4877d3c223517cb0c7e1eca462ba0f4d38916314" }
 dependencies = [
     { name = "colorama" },
     { name = "omnibase-core" },

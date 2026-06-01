@@ -1,3 +1,19 @@
+## v0.25.1 (2026-05-31)
+
+### Bug Fixes
+- fix(OMN-12431): import timezone in error_handling.py to fix PatternTrackingLogger NameError (#1708)
+
+### Changed
+- chore(OMN-12430): remove dead CircuitBreaker + safe_execute_operation (#1706)
+- ci(OMN-12433): extend deploy gate retry budget (#1713)
+- ci(OMN-12447): retry OCC deploy-gate checkout (#1710)
+- ci(OMN-12477): remove hotfix/* bypass from main-target-guard (#1715)
+- And 46+ additional commits since v0.25.0
+
+### Release metadata
+- Bumps omnibase-core to >=0.43.0,<0.44.0
+- Bumps omnibase-infra to >=0.38.0,<0.39.0
+
 ## v0.22.0 (2026-04-03)
 
 ### Features
