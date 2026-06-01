@@ -50,9 +50,35 @@ jobs:
       - name: Checkout caller repo
         uses: actions/checkout@v6
 
+      # OMN-12564: the OCC checkout logic lives in omniclaude (this repo), but
+      # the job's GITHUB_WORKSPACE holds the *caller* repo's tree. Pull just the
+      # hardened checkout script from omniclaude@main into a side path so the
+      # step below can invoke it without polluting the caller checkout.
+      - name: Fetch OCC checkout script (omniclaude)
+        if: github.event_name != 'merge_group'
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: main
+          path: .omniclaude-deploy-gate
+          sparse-checkout: scripts/deploy-gate/checkout-occ-contracts.sh
+          sparse-checkout-cone-mode: false
+
       - name: Checkout onex_change_control contracts (canonical contract source)
         if: github.event_name != 'merge_group'
         shell: bash
+        # OMN-12564: the OCC checkout is delegated to a standalone, unit-tested
+        # script that bounds BOTH the fetch AND the checkout with a hard
+        # `timeout`. The old inline step only bounded the fetch, so a wedged
+        # blobless-partial-clone checkout (`git -C _occ checkout --force
+        # FETCH_HEAD`) spun until the 25-min job timeout on #1786/#1788. The
+        # script drops `--filter=blob:none` for a deterministic full-ref
+        # checkout and, on stall, emits a diagnostic block (ref, fetch command,
+        # elapsed, last git subprocess, process tree) so future hangs are
+        # diagnosable from the log alone. The step-level `timeout-minutes` below
+        # is the outer bound; the script is the inner, self-diagnosing
+        # git-level bound.
+        timeout-minutes: 12
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OCC_REF: dev
@@ -60,39 +86,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          git_auth_header="AUTHORIZATION: bearer ${GH_TOKEN}"
-          retry_delays=(0 10 20 30 45)
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::OCC contracts checkout requires GITHUB_TOKEN"
+            exit 1
+          fi
 
-          for index in "${!retry_delays[@]}"; do
-            attempt=$((index + 1))
-            delay="${retry_delays[$index]}"
-
-            if [ "$delay" -gt 0 ]; then
-              echo "::notice::Retrying OCC contracts checkout in ${delay}s (attempt ${attempt}/${#retry_delays[@]})"
-              sleep "$delay"
-            fi
-
-            rm -rf _occ
-            git init _occ
-            git -C _occ remote add origin "$OCC_REPO_URL"
-            git -C _occ sparse-checkout init --cone
-            git -C _occ sparse-checkout set contracts
-
-            if timeout 90 git -C _occ \
-                -c http.version=HTTP/1.1 \
-                -c "http.https://github.com/.extraheader=${git_auth_header}" \
-                fetch --depth=1 --filter=blob:none origin "$OCC_REF" \
-              && git -C _occ checkout --force FETCH_HEAD \
-              && test -d _occ/contracts; then
-              echo "::notice::OCC contracts checkout succeeded on attempt ${attempt}"
-              exit 0
-            fi
-
-            echo "::warning::OCC contracts checkout attempt ${attempt}/${#retry_delays[@]} failed"
-          done
-
-          echo "::error::OCC contracts checkout failed after ${#retry_delays[@]} attempts"
-          exit 1
+          bash "${GITHUB_WORKSPACE}/.omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh"
 
       - name: Skip on merge_group
         if: github.event_name == 'merge_group'
