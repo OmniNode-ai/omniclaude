@@ -6,6 +6,7 @@
 **Source design:** `omni_home/docs/tracking/2026-06-01-infra-durable-issues.md` (Issue #8)
 **Runbook context:** `omni_home/docs/runbooks/codex-nightly-controller.md` (§8 Merge Queue Driver)
 **Ledger interface:** OMN-12569 — durable, reconstructable PR ledger (Task 4.1)
+**OCC evidence:** `onex_change_control` PR #2044 (contract + receipts), merged as commit `35bd864ae5c55b37c558e1eb3151d8bd6c81f29b`
 
 ---
 
