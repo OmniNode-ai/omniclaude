@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-12637
+title: "fix: ship_dirty_canonical documents a dead onex run-node dispatch path"
+summary: >
+  Repoints the /onex:ship_dirty_canonical SKILL.md "## Dispatch" section away from the dead
+  `onex run-node node_dirty_canonical_sweep` path — which routes over Kafka and times out
+  (SkillRoutingError; no live bus consumer) and which the omnibase_infra-pinned onex node/run
+  alias cannot resolve (Unknown node) — to the working synchronous in-process module entrypoint
+  `python -m omnimarket.nodes.node_dirty_canonical_sweep`. Docs + test only; the backing
+  node_dirty_canonical_sweep handler dirty-file logic is owned by the sibling handler-fix PRs and
+  is not touched. Epic OMN-7466.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "TDD dispatch regression test passes for the ship_dirty_canonical skill."
+    command: "uv run pytest tests/unit/skills/test_ship_dirty_canonical_dispatch.py -q"
+  - kind: "ci"
+    description: "omniclaude PR #1723 CI green across required gates."
+    command: "gh pr checks 1723 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-pr-1723-skill-validation"
+    description: "ship_dirty_canonical dispatch repoint passes the TDD regression test and skill validators."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/skills/test_ship_dirty_canonical_dispatch.py -q"
+  - id: "dod-omniclaude-pr-1723-deploy-impact"
+    description: "Deploy impact reviewed for the docs/test-only ship_dirty_canonical dispatch repoint."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "echo 'deploy impact review passed: omniclaude PR #1723 changes SKILL.md dispatch docs + adds a unit test; backing node handler logic untouched (OMN-12635/12636)'"
