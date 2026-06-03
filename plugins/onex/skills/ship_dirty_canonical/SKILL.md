@@ -1,5 +1,5 @@
 ---
-description: Detect uncommitted files in canonical omni_home repo clones and auto-ship each dirty repo to a worktree + PR. Dispatches to node_dirty_canonical_sweep (omnimarket, OMN-7466).
+description: Detect uncommitted files in canonical omni_home repo clones and auto-ship each dirty repo to a worktree + PR. Runs node_dirty_canonical_sweep in-process via its module entrypoint (omnimarket, OMN-7466).
 mode: full
 version: 1.0.0
 level: advanced
@@ -10,8 +10,7 @@ tags:
   - worktree
   - auto-ship
   - build-loop
-  - dispatch-only
-  - routing-enforced
+  - in-process-node
 author: OmniClaude Team
 composable: true
 args:
@@ -32,7 +31,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_dirty_canonical_sweep. Fully implemented (OMN-7466). -->
+<!-- in-process: runs node_dirty_canonical_sweep via its module entrypoint, not the bus. Fully implemented (OMN-7466); dead `onex run-node` dispatch removed (OMN-12637). -->
 
 # /onex:ship_dirty_canonical — Auto-ship dirty canonical repos
 
@@ -72,19 +71,36 @@ This skill detects dirty canonicals and rescues the edits by:
 
 ## Dispatch
 
+The backing handler is fully synchronous in-process `git`/`gh` subprocess work
+(detect → worktree → copy → commit → push → PR → restore). It runs locally via
+the packaged module entrypoint — pass options as argparse flags, not a JSON
+payload:
+
 ```bash
-INPUT_JSON='{"dry_run":false,"repos":null,"omni_home":null,"worktrees_root":null,"pr_label":"auto-ship"}'
-uv run onex run-node node_dirty_canonical_sweep --input "${INPUT_JSON}"
+# Run from the omnimarket project so the node package is importable.
+uv run --project "${OMNI_HOME:?set OMNI_HOME}/omnimarket" \
+  python -m omnimarket.nodes.node_dirty_canonical_sweep \
+  [--dry-run] [--repos REPO ...] [--omni-home PATH] \
+  [--worktrees-root PATH] [--pr-label LABEL] [--base-branch BRANCH]
 ```
 
-The node returns `ModelDirtyCanonicalSweepResult`:
+> **Do not dispatch this node via `onex run-node` (the Kafka path).** That
+> command routes over the bus and waits for a terminal event, but this node has
+> no live consumer, so it always fails with
+> `SkillRoutingError "Timeout after 30s waiting for response"`. The local
+> `onex node`/`onex run` alias is pinned to `--project omnibase_infra`, whose
+> installed metadata does not register this node's `onex.nodes` entry point, so
+> it raises `Unknown node` as well. The in-process module entrypoint above is
+> the only path that resolves and runs.
+
+The entrypoint prints `ModelDirtyCanonicalSweepResult` as JSON on stdout:
 - `repos_checked`: total repos inspected
 - `repos_dirty`: repos that had uncommitted changes
 - `repos_shipped`: repos successfully shipped to PRs
 - `repos_failed`: repos where ship failed
 - `results`: per-repo `ModelDirtyRepoShipResult` entries (only dirty repos)
 
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
+A non-zero exit means the handler raised; surface its error output directly and do not produce prose.
 
 ---
 
