@@ -10,8 +10,8 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=v0.43.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
 ]
 
@@ -1928,8 +1928,8 @@ dependencies = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.43.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=v0.43.0#1df6b8119506dc3c03f849db3f1fbd33b5e78f05" }
+version = "0.42.0"
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0#fc211e3648681a79f609c2c153a254baaef682ab" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1947,8 +1947,8 @@ dependencies = [
 
 [[package]]
 name = "omnibase-infra"
-version = "0.38.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.0#c610df9c7216a9b9ec43fd69f1268a39c3bb560e" }
+version = "0.37.2"
+source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2#7d7836de0316a0c70af9b3acbc978794eb424f91" }
 dependencies = [
     { name = "a2a-sdk" },
     { name = "aiofiles" },
@@ -2045,7 +2045,7 @@ dependencies = [
 
 [[package]]
 name = "omninode-claude"
-version = "0.25.1"
+version = "0.25.0"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
@@ -2133,8 +2133,8 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=v0.43.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=v0.42.0" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?tag=v0.37.2" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=v0.4.0" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0" },
