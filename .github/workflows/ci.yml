@@ -1169,6 +1169,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Checkout canonical omnimarket registry
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: dev
+          path: _registry/omnimarket
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -1192,7 +1199,10 @@ jobs:
 
       - name: Validate golden chain registry
         working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validation/validate_golden_chain_integrity.py
+        run: >-
+          uv run python scripts/validation/validate_golden_chain_integrity.py
+          --canonical-registry
+          _registry/omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml
 
   # ============================================================================
   # SECURITY CHECKS
