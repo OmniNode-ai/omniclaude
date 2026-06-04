@@ -147,6 +147,18 @@ class TestBuildPayloads:
                 assert a.expected == p.correlation_id
                 assert "__CORRELATION_ID__" not in str(a.expected)
 
+    def test_lookup_assertions_resolve_sentinel(self) -> None:
+        payloads = build_payloads()
+        for p in payloads:
+            lookup_assertions = [
+                a for a in p.assertions if str(a.expected) == p.lookup_value
+            ]
+            if p.lookup_column == "correlation_id":
+                continue
+            assert lookup_assertions
+            for a in lookup_assertions:
+                assert "__LOOKUP_VALUE__" not in str(a.expected)
+
     def test_alt_lookup_payloads_have_unique_fixture_values(self) -> None:
         payloads = build_payloads()
         for p in payloads:

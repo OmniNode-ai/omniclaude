@@ -180,9 +180,12 @@ def test_golden_chain_live_is_required_service_container_gate(
     env = job.get("env")
     assert isinstance(env, dict)
     assert env.get("KAFKA_BOOTSTRAP_SERVERS") == "localhost:9092"
-    assert "OMNIDASH_ANALYTICS_DB_URL" in env
 
     run_step = _step(job, "Run live golden-chain sweep")
+    step_env = run_step.get("env")
+    assert isinstance(step_env, dict)
+    assert "OMNIDASH_ANALYTICS_DB_URL" in step_env
+    assert "golden_chain:test" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
     assert run_step.get("continue-on-error") is not True
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
 

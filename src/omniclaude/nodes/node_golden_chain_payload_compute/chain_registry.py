@@ -35,7 +35,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             ModelChainAssertion(
                 field="selected_agent", op="eq", expected="golden-chain-test-agent"
             ),
-            ModelChainAssertion(field="confidence_score", op="gte", expected="0.0000"),
+            ModelChainAssertion(field="confidence_score", op="gte", expected=0),
             ModelChainAssertion(
                 field="correlation_id", op="eq", expected="__CORRELATION_ID__"
             ),
@@ -55,7 +55,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
         },
         assertions=(
             ModelChainAssertion(
-                field="pattern_name", op="eq", expected="golden-chain-test-pattern"
+                field="pattern_name", op="eq", expected="__LOOKUP_VALUE__"
             ),
             ModelChainAssertion(
                 field="pattern_type", op="eq", expected="golden-chain-test"
