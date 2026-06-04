@@ -17,7 +17,6 @@ import os
 import signal
 import sys
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -380,8 +379,10 @@ async def run_gate(bootstrap_servers: str, db_dsn: str, timeout_ms: int) -> int:
         return await _run_sweep_subprocess(bootstrap_servers, db_dsn, timeout_ms)
     finally:
         consumer_task.cancel()
-        with suppress(asyncio.CancelledError):
+        try:
             await consumer_task
+        except asyncio.CancelledError:
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:
