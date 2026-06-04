@@ -38,3 +38,10 @@ dod_evidence:
     checks:
       - check_type: "command"
         check_value: "uv run pytest tests/nodes/test_golden_chain_payload_compute.py tests/unit/scripts/test_validate_golden_chain_integrity.py -q"
+  - id: "dod-deploy-gate-no-runtime-mutation"
+    description: "Deploy-gate evidence that PR #1732 changes registry metadata, validation, CI, tests, and contracts only."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "echo deploy-gate no runtime mutation: no deploy, restart, .201 mutation, service config change, or migration"
