@@ -25,5 +25,5 @@ permissions:
 jobs:
   call-reject-skip-token:
     # self-gating-ok: omniclaude is the host repo for this reusable workflow; the caller is intentionally cross-repo and not a self-gating check on omniclaude's own required status checks
-    uses: OmniNode-ai/omniclaude/.github/workflows/reject-deploy-gate-skip.yml@113c250c3e87963cca5f66f7f62b3bcbceea8598
+    uses: OmniNode-ai/omniclaude/.github/workflows/reject-deploy-gate-skip.yml@a61119416cad0a6ac3221e29166887cc06748387
     secrets: inherit
