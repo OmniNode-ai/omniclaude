@@ -1232,7 +1232,6 @@ jobs:
           - 5432/tcp
     env:
       KAFKA_BOOTSTRAP_SERVERS: localhost:9092
-      OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:golden_chain@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
       GOLDEN_CHAIN_TIMEOUT_MS: "30000"
     steps:
       - name: Checkout code
@@ -1261,6 +1260,8 @@ jobs:
 
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
+        env:
+          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:golden_chain@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
 
   # ============================================================================
