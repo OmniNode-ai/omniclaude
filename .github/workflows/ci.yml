@@ -1194,6 +1194,75 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_golden_chain_integrity.py
 
+  # Live golden-chain gate (OMN-12690)
+  golden-chain-live:
+    name: Golden Chain Live
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 20
+    services:
+      redpanda:
+        image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
+        options: >-
+          --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 9092:9092
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: golden_chain
+          POSTGRES_PASSWORD: golden_chain
+          POSTGRES_DB: omnidash_analytics
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432/tcp
+    env:
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+      OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:golden_chain@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
+      GOLDEN_CHAIN_TIMEOUT_MS: "30000"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
+        uses: actions/cache/restore@v5
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen --group dev --extra kafka
+
+      - name: Run live golden-chain sweep
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/ci/run_golden_chain_live.py
+
   # ============================================================================
   # SECURITY CHECKS
   # ============================================================================
@@ -2540,6 +2609,7 @@ jobs:
       - hooks-tests
       - agent-framework-tests
       - database-validation
+      - golden-chain-live
     if: always()
     steps:
       - name: Check test results
@@ -2552,7 +2622,8 @@ jobs:
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
-            "database-validation=${{ needs.database-validation.result }}"; do
+            "database-validation=${{ needs.database-validation.result }}" \
+            "golden-chain-live=${{ needs.golden-chain-live.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
@@ -2705,9 +2776,10 @@ jobs:
           tests="${{ needs.tests-gate.result }}"
           security="${{ needs.security-gate.result }}"
           compliance="${{ needs.compliance.result }}"
+          contract_compliance="${{ needs.contract-compliance.result }}"
 
           FAILED=false
-          for result in "$quality" "$tests" "$security"; do
+          for result in "$quality" "$tests" "$security" "$contract_compliance"; do
             if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
               FAILED=true
             fi
@@ -2724,6 +2796,7 @@ jobs:
             echo "  Tests Gate: $tests"
             echo "  Security Gate: $security"
             echo "  Compliance: $compliance"
+            echo "  Contract Compliance: $contract_compliance"
             exit 1
           fi
           echo "All required jobs passed"

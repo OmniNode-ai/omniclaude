@@ -168,6 +168,53 @@ def test_database_validation_uses_public_schema_qualified_tables(
     assert "\\d claude_session_snapshots" not in run
 
 
+def test_golden_chain_live_is_required_service_container_gate(
+    ci_workflow: dict[str, Any],
+) -> None:
+    job = _job(ci_workflow, "golden-chain-live")
+    services = job.get("services")
+    assert isinstance(services, dict)
+    assert "redpanda" in services
+    assert "postgres" in services
+
+    env = job.get("env")
+    assert isinstance(env, dict)
+    assert env.get("KAFKA_BOOTSTRAP_SERVERS") == "localhost:9092"
+    assert "OMNIDASH_ANALYTICS_DB_URL" in env
+
+    run_step = _step(job, "Run live golden-chain sweep")
+    assert run_step.get("continue-on-error") is not True
+    assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
+
+    tests_gate = _job(ci_workflow, "tests-gate")
+    needs = tests_gate.get("needs")
+    assert isinstance(needs, list)
+    assert "golden-chain-live" in needs
+    gate_run = _step(tests_gate, "Check test results")["run"]
+    assert "golden-chain-live=${{ needs.golden-chain-live.result }}" in gate_run
+
+
+def test_ci_summary_checks_contract_compliance_result(
+    ci_workflow: dict[str, Any],
+) -> None:
+    summary = _job(ci_workflow, "ci-summary")
+    needs = summary.get("needs")
+    assert isinstance(needs, list)
+    assert "contract-compliance" in needs
+
+    run = _step(summary, "Check all jobs passed")["run"]
+    assert 'contract_compliance="${{ needs.contract-compliance.result }}"' in run
+    assert '"$quality" "$tests" "$security" "$contract_compliance"' in run
+
+
+def test_legacy_integration_tests_workflow_remains_manual_only() -> None:
+    loaded = yaml.safe_load(INTEGRATION_TESTS_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    triggers = loaded.get(True)
+    assert isinstance(triggers, dict)
+    assert set(triggers) == {"workflow_dispatch"}
+
+
 @pytest.mark.parametrize(
     "workflow_path",
     [
