@@ -116,41 +116,29 @@ Fields:
 
 ## Integration Snippet
 
+> **Consumer removed (OMN-12674).** The reviewdog reusable workflow and its
+> caller were deleted from this repo. The rdjsonl format defined here remains
+> valid — it is the GitHub-standard reviewdog Diagnostic Format (rdjsonl), a
+> wire format independent of the reviewdog binary. When OMN-10111 re-enables
+> hostile_reviewer, wire the converter output into whatever annotation surface
+> the repo uses at that time. The historical reviewdog pipe commands have been
+> dropped to avoid referencing deleted workflow files.
+
 When OMN-10111 closes and hostile_reviewer is re-enabled, invoke the converter
 via `findings-to-rdjsonl.py` (Task 6 of OMN-10928). The format key lives inside
 the JSON payload — it is **not** a CLI flag:
 
 ```bash
-# Pipe hostile_reviewer output JSON to the converter, then to reviewdog
 echo '{
   "format": "hostile_reviewer",
   "findings": [...]
-}' | python3 .github/scripts/findings-to-rdjsonl.py \
-  | reviewdog -f=rdjsonl -name=hostile-reviewer \
-    -reporter=github-pr-check \
-    -filter-mode=added \
-    -fail-level=error
+}' | python3 .github/scripts/findings-to-rdjsonl.py
 ```
 
-Minimal GitHub Actions step (add under reviewdog job in
-`.github/workflows/reviewdog-review.yml`):
-
-```yaml
-- name: hostile-reviewer findings
-  if: inputs.hostile-reviewer-enabled
-  env:
-    REVIEWDOG_GITHUB_API_TOKEN: ${{ steps.reporter.outputs.token }}
-  run: |
-    python3 .github/scripts/findings-to-rdjsonl.py < hostile-reviewer-findings.json \
-      | reviewdog -f=rdjsonl -name=hostile-reviewer \
-        -reporter=github-pr-check \
-        -filter-mode=added \
-        -fail-level=${{ inputs.fail-level }}
-```
-
-The upstream hostile_reviewer node must write its output to
-`hostile-reviewer-findings.json` (or pipe directly) in the payload format
-defined in the **Input Schema** section above.
+The converter emits one rdjsonl Diagnostic line per finding (see **Output
+Schema** above) to stdout. The upstream hostile_reviewer node must write its
+output in the payload format defined in the **Input Schema** section above
+before piping it to the converter.
 
 ---
 
