@@ -1,0 +1,47 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-12692
+title: "ci: enforce golden-chain registry parity"
+summary: >
+  Reconciles omniclaude's live golden-chain registry with omnimarket's canonical
+  golden-chain metadata registry by adding a typed metadata surface for every
+  canonical chain, preserving the explicitly runnable live subset, and enforcing
+  cross-repo parity in the Golden Chain Integrity CI gate.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - "topics"
+  - "public_api"
+evidence_requirements:
+  - kind: "tests"
+    description: "Golden-chain payload and registry-integrity tests pass."
+    command: "uv run pytest tests/nodes/test_golden_chain_payload_compute.py tests/unit/scripts/test_validate_golden_chain_integrity.py -q"
+  - kind: "manual"
+    description: "Registry integrity validator passes against omnimarket's canonical registry."
+    command: "uv run python scripts/validation/validate_golden_chain_integrity.py --canonical-registry ../omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-golden-chain-registry-parity"
+    description: "omniclaude metadata registry matches omnimarket canonical golden_chains.yaml."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_golden_chain_integrity.py --canonical-registry ../omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml"
+  - id: "dod-omniclaude-golden-chain-registry-tests"
+    description: "Payload-compute and validator unit tests cover runnable subset, metadata surface, and parity failure detection."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/nodes/test_golden_chain_payload_compute.py tests/unit/scripts/test_validate_golden_chain_integrity.py -q"
+  - id: "dod-deploy-gate-no-runtime-mutation"
+    description: "Deploy-gate evidence that PR #1732 changes registry metadata, validation, CI, tests, and contracts only."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "echo deploy-gate no runtime mutation: no deploy, restart, .201 mutation, service config change, or migration"

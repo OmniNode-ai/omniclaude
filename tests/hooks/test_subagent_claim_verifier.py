@@ -99,6 +99,18 @@ def test_missing_report_block_blocks() -> None:
     assert verdict.reason == "missing_json_report_block"
 
 
+def test_skip_token_in_final_message_blocks_even_with_report() -> None:
+    """OMN-12696: SubagentStop must block surfaced [skip-*] bypass tokens."""
+    body = (
+        "I would use [skip-receipt-gate: docs only].\n\n```json-report\n"
+        + json.dumps({"kind": "diagnosis", "ticket": "OMN-12696"})
+        + "\n```"
+    )
+    verdict = verify_stop(body)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert verdict.reason == "unauthorized_skip_token_surface"
+
+
 def test_valid_report_with_verified_pr_allows() -> None:
     """Plan test 2: verified MERGED PR → decision=allow."""
     body = (

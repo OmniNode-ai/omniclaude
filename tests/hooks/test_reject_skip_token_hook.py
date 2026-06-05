@@ -55,6 +55,20 @@ def test_rejects_skip_deploy_gate_bare() -> None:
 
 
 @pytest.mark.unit
+def test_rejects_session_evidence_json_skip_token(tmp_path: Path) -> None:
+    """OMN-12696: committed .onex_state/evidence JSON is in scanner scope."""
+    evidence = tmp_path / ".onex_state" / "evidence" / "session.json"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text(
+        '{"claim": "[skip-receipt-gate: no receipt]"}',
+        encoding="utf-8",
+    )
+
+    rc = run_hook(evidence)
+    assert rc != 0, "Expected hook to reject skip token in session evidence JSON"
+
+
+@pytest.mark.unit
 def test_accepts_clean_pr_body() -> None:
     """A PR body with no skip tokens must pass unconditionally."""
     rc = run_hook(FIXTURES / "accept_clean_pr_body.md")

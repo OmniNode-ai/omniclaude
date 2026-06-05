@@ -57,4 +57,18 @@ class ModelChainDefinition(BaseModel):
     )
 
 
-__all__ = ["ModelChainAssertion", "ModelChainDefinition"]
+class ModelChainMetadata(BaseModel):
+    """Canonical chain metadata shared with the omnimarket sweep registry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(..., description="Canonical chain name")
+    head_topic: str = Field(..., description="Kafka topic that starts the chain")
+    tail_table: str = Field(..., description="Projection table or event-bus tail")
+    expected_fields: tuple[str, ...] = Field(default=())
+    proof_classification: str = Field(default="diagnostic")
+    replay_status: str = Field(default="replay-not-applicable")
+    stages: tuple[dict[str, Any], ...] = Field(default=())
+
+
+__all__ = ["ModelChainAssertion", "ModelChainDefinition", "ModelChainMetadata"]

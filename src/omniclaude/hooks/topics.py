@@ -483,6 +483,20 @@ class TopicBase(StrEnum):
     DELEGATION_REQUEST = "onex.cmd.omnibase-infra.delegation-request.v1"
     """Canonical delegation command topic owned by omnibase_infra orchestrator (OMN-10834)."""
 
+    DELEGATION_ROUTING_DECISION = "onex.evt.omnibase-infra.routing-decision.v1"
+    """Canonical delegation routing event owned by omnibase_infra."""
+
+    DELEGATION_INFERENCE_REQUEST = (
+        "onex.cmd.omnibase-infra.delegation-inference-request.v1"
+    )
+    """Canonical delegation inference command owned by omnibase_infra."""
+
+    DELEGATION_INFERENCE_RESPONSE = "onex.evt.omnibase-infra.inference-response.v1"
+    """Canonical delegation inference response event owned by omnibase_infra."""
+
+    DELEGATION_INFRA_COMPLETED = "onex.evt.omnibase-infra.delegation-completed.v1"
+    """Canonical delegation completion event owned by omnibase_infra."""
+
     DELEGATION_COMPLETED = "onex.evt.omniclaude.delegation-completed.v1"
     """Emitted when a delegation pipeline run completes successfully."""
 

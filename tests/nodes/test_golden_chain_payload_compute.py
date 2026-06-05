@@ -8,7 +8,9 @@ import re
 
 from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (
     GOLDEN_CHAIN_DEFINITIONS,
+    GOLDEN_CHAIN_METADATA,
     get_chain_definitions,
+    get_chain_metadata,
 )
 from omniclaude.nodes.node_golden_chain_payload_compute.node import build_payloads
 
@@ -23,7 +25,7 @@ _ALT_LOOKUP_CHAINS = {"pattern_learning"}
 class TestChainRegistry:
     """Tests for chain registry definitions."""
 
-    def test_all_five_chains_defined(self) -> None:
+    def test_all_five_runnable_chains_defined(self) -> None:
         assert len(GOLDEN_CHAIN_DEFINITIONS) == 5
         names = {c.name for c in GOLDEN_CHAIN_DEFINITIONS}
         assert names == {
@@ -32,6 +34,33 @@ class TestChainRegistry:
             "delegation",
             "routing",
             "evaluation",
+        }
+
+    def test_canonical_metadata_includes_convergence_chains(self) -> None:
+        names = {c.name for c in GOLDEN_CHAIN_METADATA}
+        assert len(names) == 13
+        assert {
+            "registration",
+            "pattern_learning",
+            "delegation",
+            "routing",
+            "evaluation",
+            "sea_acceptance",
+            "d3_local_routing",
+            "d1_d2_scaffold",
+            "d4_blank_content",
+            "d9_wheel_module",
+            "f1_publish_loop",
+            "delegation_inference_round_trip",
+            "delegation_projection_materialization",
+        } == names
+
+    def test_metadata_filter_returns_subset(self) -> None:
+        filtered = get_chain_metadata(["sea_acceptance", "d4_blank_content"])
+        assert len(filtered) == 2
+        assert {c.name for c in filtered} == {
+            "sea_acceptance",
+            "d4_blank_content",
         }
 
     def test_filter_returns_subset(self) -> None:

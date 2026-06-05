@@ -74,6 +74,15 @@ allowed_extras:
     reason: Tool content CMD (file contents, access-restricted); predates contract governance (OMN-1702).
     ticket: OMN-3294
 
+  - topic: "onex.cmd.omnibase-infra.delegation-inference-request.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain delegation inference command owned by omnibase_infra. This
+      TopicBase member exists so omniclaude golden-chain metadata can reference
+      the canonical registry without hardcoded topic literals; omniclaude does
+      not publish or consume this topic.
+    ticket: OMN-12692
+
   - topic: "onex.cmd.omniintelligence.utilization-scoring.v1"
     lifecycle: integration
     reason: Utilization scoring CMD for LLM-based pattern utilization scoring (OMN-5505).
@@ -221,6 +230,33 @@ allowed_extras:
     lifecycle: observability
     reason: Injection tracking event (OMN-1673); predates contract governance.
     ticket: OMN-3294
+
+  - topic: "onex.evt.omnibase-infra.delegation-completed.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain delegation completion event owned by omnibase_infra. This
+      TopicBase member exists so omniclaude golden-chain metadata can reference
+      the canonical registry without hardcoded topic literals; omniclaude does
+      not publish or consume this topic.
+    ticket: OMN-12692
+
+  - topic: "onex.evt.omnibase-infra.inference-response.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain delegation inference response event owned by omnibase_infra.
+      This TopicBase member exists so omniclaude golden-chain metadata can
+      reference the canonical registry without hardcoded topic literals;
+      omniclaude does not publish or consume this topic.
+    ticket: OMN-12692
+
+  - topic: "onex.evt.omnibase-infra.routing-decision.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain delegation routing event owned by omnibase_infra. This
+      TopicBase member exists so omniclaude golden-chain metadata can reference
+      the canonical registry without hardcoded topic literals; omniclaude does
+      not publish or consume this topic.
+    ticket: OMN-12692
 
   - topic: "onex.evt.omniclaude.intent-commit-bound.v1"
     lifecycle: observability
