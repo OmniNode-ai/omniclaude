@@ -6,20 +6,25 @@
 
 set -eo pipefail
 
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
-PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd || pwd)}"
-HOOKS_DIR="${PLUGIN_ROOT}/hooks"
+: "${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT must be set}"
+: "${CLAUDE_PROJECT_DIR:?CLAUDE_PROJECT_DIR must be set}"
+
+SKIP_TOKEN_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+SKIP_TOKEN_PROJECT_ROOT="${CLAUDE_PROJECT_DIR}"
+
+PLUGIN_ROOT="${SKIP_TOKEN_PLUGIN_ROOT}"
+PROJECT_ROOT="${SKIP_TOKEN_PROJECT_ROOT}"
+HOOKS_DIR="${SKIP_TOKEN_PLUGIN_ROOT}/hooks"
 export PLUGIN_ROOT PROJECT_ROOT HOOKS_DIR
 
 # shellcheck source=/dev/null
-source "${HOOKS_DIR}/scripts/common.sh"
+source "${SKIP_TOKEN_PLUGIN_ROOT}/hooks/scripts/common.sh"
 
 HOOK_EVENT_NAME="${OMNICLAUDE_SKIP_TOKEN_HOOK_EVENT:-Stop}"
 STDIN_JSON="$(cat || true)"
 
 set +e
-OUTPUT="$(printf '%s' "${STDIN_JSON}" | "${PYTHON_CMD}" "${PLUGIN_ROOT}/hooks/lib/skip_token_surface_guard.py" \
+OUTPUT="$(printf '%s' "${STDIN_JSON}" | "${PYTHON_CMD}" "${SKIP_TOKEN_PLUGIN_ROOT}/hooks/lib/skip_token_surface_guard.py" \
     --hook-event "${HOOK_EVENT_NAME}" \
     --scan-session-evidence \
     2>/dev/null)"

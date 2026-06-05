@@ -6,6 +6,7 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+: "${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT must be set}"
+
 export OMNICLAUDE_SKIP_TOKEN_HOOK_EVENT="SubagentStop"
-exec "${SCRIPT_DIR}/skip_token_surface_guard.sh"
+exec "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skip_token_surface_guard.sh"
