@@ -35,6 +35,7 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+from skip_token_surface_guard import find_unauthorized_skip_tokens
 
 # Degrade reasons that indicate genuine verification (not fail-open). Used by
 # verify_stop() to decide whether an ALLOW verdict should carry a
@@ -372,6 +373,22 @@ def verify_stop(
     Network-error modes (rate limit, auth failure, endpoint unreachable) are
     fail-open per Task 8 semantics; ``reason`` still records why.
     """
+
+    skip_token_findings = find_unauthorized_skip_tokens(
+        message,
+        surface="SubagentStop final assistant message",
+    )
+    if skip_token_findings:
+        return ModelSubagentStopReport(
+            decision=EnumVerdict.BLOCK,
+            reason="unauthorized_skip_token_surface",
+            diff={
+                "skip_tokens": [
+                    {"surface": finding.surface, "path": finding.path}
+                    for finding in skip_token_findings
+                ]
+            },
+        )
 
     extraction = extract_report(message)
     if not extraction.found:
