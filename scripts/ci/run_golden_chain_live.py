@@ -303,7 +303,11 @@ def project_envelope(envelope: dict[str, Any], db_dsn: str) -> None:
     PROJECTORS[table](payload, db_dsn)
 
 
-async def _consume_until_cancelled(bootstrap_servers: str, db_dsn: str) -> None:
+async def _consume_until_cancelled(
+    bootstrap_servers: str,
+    db_dsn: str,
+    consumer_ready: asyncio.Event,
+) -> None:
     from aiokafka import AIOKafkaConsumer
 
     consumer = AIOKafkaConsumer(
@@ -327,6 +331,13 @@ async def _consume_until_cancelled(bootstrap_servers: str, db_dsn: str) -> None:
             await asyncio.sleep(2)
     else:
         raise RuntimeError("Kafka consumer did not start") from last_error
+    for _ in range(30):
+        if consumer.assignment():
+            consumer_ready.set()
+            break
+        await asyncio.sleep(1)
+    else:
+        raise RuntimeError("Kafka consumer did not receive partition assignment")
     try:
         async for message in consumer:
             value = message.value
@@ -371,11 +382,12 @@ async def _run_sweep_subprocess(
 
 async def run_gate(bootstrap_servers: str, db_dsn: str, timeout_ms: int) -> int:
     initialize_database(db_dsn)
+    consumer_ready = asyncio.Event()
     consumer_task = asyncio.create_task(
-        _consume_until_cancelled(bootstrap_servers, db_dsn)
+        _consume_until_cancelled(bootstrap_servers, db_dsn, consumer_ready)
     )
-    await asyncio.sleep(5)
     try:
+        await asyncio.wait_for(consumer_ready.wait(), timeout=65)
         return await _run_sweep_subprocess(bootstrap_servers, db_dsn, timeout_ms)
     finally:
         consumer_task.cancel()
