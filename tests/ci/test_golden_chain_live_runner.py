@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from omniclaude.hooks.topics import TopicBase
 from scripts.ci import run_golden_chain_live as runner
 
 pytestmark = pytest.mark.unit
@@ -51,7 +52,7 @@ def test_project_envelope_ignores_unregistered_topic(
     ("topic", "expected_table", "payload"),
     [
         (
-            "onex.evt.omniclaude.routing-decision.v1",
+            str(TopicBase.ROUTING_DECISION),
             "agent_routing_decisions",
             {
                 "correlation_id": "00000000-0000-0000-0000-000000000001",
@@ -60,7 +61,7 @@ def test_project_envelope_ignores_unregistered_topic(
             },
         ),
         (
-            "onex.evt.omniintelligence.pattern-stored.v1",
+            str(TopicBase.PATTERN_STORED),
             "pattern_learning_artifacts",
             {
                 "correlation_id": "golden-chain-pattern-1",
@@ -70,7 +71,7 @@ def test_project_envelope_ignores_unregistered_topic(
             },
         ),
         (
-            "onex.evt.omniclaude.task-delegated.v1",
+            str(TopicBase.TASK_DELEGATED),
             "delegation_events",
             {
                 "correlation_id": "golden-chain-delegation-1",
@@ -79,7 +80,7 @@ def test_project_envelope_ignores_unregistered_topic(
             },
         ),
         (
-            "onex.evt.omniclaude.llm-routing-decision.v1",
+            str(TopicBase.LLM_ROUTING_DECISION),
             "llm_routing_decisions",
             {
                 "correlation_id": "00000000-0000-0000-0000-000000000002",
@@ -88,7 +89,7 @@ def test_project_envelope_ignores_unregistered_topic(
             },
         ),
         (
-            "onex.evt.omniintelligence.run-evaluated.v1",
+            str(TopicBase.SESSION_OUTCOME_EVT),
             "session_outcomes",
             {
                 "correlation_id": "golden-chain-evaluation-1",
