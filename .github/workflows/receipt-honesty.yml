@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Receipt-Honesty Gate (OMN-12791 validator; wired by OMN-12825).
+#
+# Runs the omnibase_core receipt-honesty validator
+# (`python -m omnibase_core.validation.validator_receipt_honesty`) against any
+# ModelDodReceipt YAML files changed in the PR. The validator fails on gamed
+# probes (no-op echo marked PASS), deferred evidence (PENDING/TBD/TODO in PASS
+# receipts), self-attestation (verifier==runner), fake human verifiers, and
+# deploy-keyword evidence backed only by an echo probe_command.
+#
+# Queue-safety: triggers on BOTH pull_request and merge_group so that, when
+# later promoted to a required status check, it cannot permanently wedge the
+# merge queue. omniclaude carries no committed receipt YAMLs of its own, so the
+# gate is a no-op (PASS) unless a PR introduces receipt files.
+#
+# Required-status-check name (when later flipped): `receipt-honesty / receipt-honesty`
+
+name: receipt-honesty
+
+on:
+  pull_request:
+    branches: [main, dev]
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: receipt-honesty-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  receipt-honesty:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Clone omnibase_core (provides the receipt-honesty validator)
+        run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Install omnibase_core (validator package) into a uv venv
+        run: |
+          set -euo pipefail
+          uv venv .honesty-venv --python 3.12
+          uv pip install --python .honesty-venv/bin/python ../omnibase_core
+      - name: Identify changed DoD receipt YAMLs
+        id: receipts
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            # merge_group: compare against the base of the queued group
+            base_sha="${{ github.event.merge_group.base_sha }}"
+            head_sha="${{ github.event.merge_group.head_sha }}"
+          fi
+          # Ensure both endpoints are present locally (base may be unfetched).
+          git fetch --no-tags --depth=1 origin "$base_sha" 2>/dev/null || true
+          git fetch --no-tags --depth=1 origin "$head_sha" 2>/dev/null || true
+          # Restrict to receipt files (matches the omnibase_core pre-commit
+          # hook's `files: drift/dod_receipts/.*\.yaml$` filter).
+          changed=$(git diff --name-only --diff-filter=d "$base_sha" "$head_sha" \
+            | grep -E 'drift/dod_receipts/.*\.yaml$' || true)
+          {
+            echo "files<<EOF"
+            echo "$changed"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ -z "$changed" ]; then
+            echo "No DoD receipt YAMLs changed in this PR — honesty gate is a no-op."
+          else
+            echo "Changed receipt files:"
+            echo "$changed"
+          fi
+      - name: Run receipt-honesty validator
+        run: |
+          set -euo pipefail
+          files="${{ steps.receipts.outputs.files }}"
+          if [ -z "$files" ]; then
+            echo "RECEIPT HONESTY GATE PASSED: 0 changed receipt files to scan."
+            exit 0
+          fi
+          # Pass explicit changed receipt paths; validator exits non-zero on any
+          # honesty violation.
+          # shellcheck disable=SC2086
+          .honesty-venv/bin/python -m omnibase_core.validation.validator_receipt_honesty $files
