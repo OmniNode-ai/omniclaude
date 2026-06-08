@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-12719
+title: "SubagentStop claim verifier blocks every subagent stop on newer Claude Code payload shapes"
+summary: >
+  Makes the SubagentStop claim verifier robust to newer Claude Code payload
+  shapes. _extract_last_assistant_message now accepts the last_assistant_message
+  direct field and reads the transcript_path / agent_transcript_path JSONL files,
+  scanning assistant entries only. The verifier still fails closed on genuinely
+  missing claim data (missing fence, malformed JSON, unreadable or malformed
+  transcript, non-assistant report entries) — it does not silently pass on a
+  recognized-but-reshaped payload.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "SubagentStop claim verifier tests pass (old + new payload shapes, fail-closed cases)"
+    command: "uv run pytest tests/hooks/test_subagent_claim_verifier.py -v"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-new-payload-shapes-accepted
+    description: "Newer SubagentStop payload shapes (last_assistant_message, transcript_path, agent_transcript_path) yield decision=allow for a well-formed report"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_subagent_claim_verifier.py -k 'last_assistant_message or transcript_path' -q"
+  - id: dod-fail-closed-preserved
+    description: "Missing/malformed/unreadable transcripts and non-assistant report entries still block (no silent pass-through)"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_subagent_claim_verifier.py -k 'fails_closed or ignores_user_report or missing_report_block' -q"
