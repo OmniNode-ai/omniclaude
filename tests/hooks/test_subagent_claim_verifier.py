@@ -36,6 +36,7 @@ from subagent_claim_verifier import (  # noqa: E402
     EnumVerdict,
     EnumWorkerReportKind,
     ModelWorkerReport,
+    _extract_last_assistant_message,
     extract_report,
     verify_linear_claim,
     verify_pr_claim,
@@ -86,6 +87,18 @@ def _gh_rate_limit() -> object:
     return _runner
 
 
+def _diagnosis_report(ticket: str = "OMN-12719") -> str:
+    return (
+        "Done.\n\n```json-report\n"
+        + json.dumps({"kind": "diagnosis", "ticket": ticket})
+        + "\n```"
+    )
+
+
+def _jsonl_line(payload: dict[str, object]) -> str:
+    return json.dumps(payload) + "\n"
+
+
 # ---------------------------------------------------------------------------
 # Required acceptance-criteria tests (6 from the plan)
 # ---------------------------------------------------------------------------
@@ -109,6 +122,109 @@ def test_skip_token_in_final_message_blocks_even_with_report() -> None:
     verdict = verify_stop(body)
     assert verdict.decision == EnumVerdict.BLOCK
     assert verdict.reason == "unauthorized_skip_token_surface"
+
+
+def test_last_assistant_message_payload_shape_allows() -> None:
+    """OMN-12719: newer SubagentStop payloads expose last_assistant_message."""
+    event = {"last_assistant_message": _diagnosis_report()}
+    message = _extract_last_assistant_message(event)
+    verdict = verify_stop(message)
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_transcript_path_jsonl_assistant_entry_allows(tmp_path: pathlib.Path) -> None:
+    """OMN-12719: transcript_path JSONL must use assistant entries only."""
+    transcript_path = tmp_path / "transcript.jsonl"
+    transcript_path.write_text(
+        _jsonl_line({"type": "user", "message": {"role": "user", "content": "go"}})
+        + _jsonl_line(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": _diagnosis_report()}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    message = _extract_last_assistant_message({"transcript_path": str(transcript_path)})
+    verdict = verify_stop(message)
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_agent_transcript_path_jsonl_assistant_entry_allows(
+    tmp_path: pathlib.Path,
+) -> None:
+    """OMN-12719: agent_transcript_path is accepted for subagent transcripts."""
+    transcript_path = tmp_path / "agent-transcript.jsonl"
+    transcript_path.write_text(
+        _jsonl_line(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": _diagnosis_report()}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    message = _extract_last_assistant_message(
+        {"agent_transcript_path": str(transcript_path)}
+    )
+    verdict = verify_stop(message)
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_jsonl_transcript_ignores_user_report_false_positive(
+    tmp_path: pathlib.Path,
+) -> None:
+    """OMN-12719: json-report in a non-assistant entry is not authoritative."""
+    transcript_path = tmp_path / "transcript.jsonl"
+    transcript_path.write_text(
+        _jsonl_line(
+            {
+                "type": "user",
+                "message": {"role": "user", "content": _diagnosis_report()},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    message = _extract_last_assistant_message({"transcript_path": str(transcript_path)})
+    verdict = verify_stop(message)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert verdict.reason == "missing_json_report_block"
+
+
+def test_malformed_transcript_path_fails_closed(tmp_path: pathlib.Path) -> None:
+    """OMN-12719: malformed JSONL blocks instead of scanning raw transcript."""
+    transcript_path = tmp_path / "transcript.jsonl"
+    transcript_path.write_text(
+        '{ "type": "assistant", "message": '
+        + json.dumps({"role": "assistant", "content": _diagnosis_report()})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    message = _extract_last_assistant_message({"transcript_path": str(transcript_path)})
+    verdict = verify_stop(message)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert verdict.reason == "missing_json_report_block"
+
+
+def test_unreadable_transcript_path_fails_closed(tmp_path: pathlib.Path) -> None:
+    """OMN-12719: unreadable transcript_path yields missing report block."""
+    missing_path = tmp_path / "missing.jsonl"
+    message = _extract_last_assistant_message({"transcript_path": str(missing_path)})
+    verdict = verify_stop(message)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert verdict.reason == "missing_json_report_block"
 
 
 def test_valid_report_with_verified_pr_allows() -> None:
