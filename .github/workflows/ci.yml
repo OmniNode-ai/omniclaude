@@ -1911,10 +1911,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
+          if [[ -z "$BODY" && -n "$REF" ]]; then
+            BODY="$(
+              gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --head "$REF" \
+                --state open \
+                --json body \
+                --jq '.[0].body // ""' 2>/dev/null || true
+            )"
+          fi
           SOURCE="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-source" {print $2; exit}' | tr -d '\r' | xargs || true)"
           TICKET="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-ticket" {print $2; exit}' | tr -d '\r' | xargs || true)"
           if [[ -z "$TICKET" ]]; then
-            REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
             if [[ "$REF" =~ [Oo][Mm][Nn]-([0-9]+) ]]; then
               TICKET="OMN-${BASH_REMATCH[1]}"
             fi
