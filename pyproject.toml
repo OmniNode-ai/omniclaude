@@ -10,7 +10,7 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core>=0.43.0,<0.44.0",
+    "omnibase-core>=0.43.0,<0.45.0",
     "omnibase-spi>=0.22.0,<0.23.0",
     "omnibase-infra>=0.38.0,<0.39.0",
     "omnimarket>=0.4.0",
@@ -235,7 +235,7 @@ build-backend = "hatchling.build"
 [tool.uv]
 # Override transitive pins so our direct pins win.
 override-dependencies = [
-    "omnibase-core>=0.43.0,<0.44.0",
+    "omnibase-core>=0.43.0,<0.45.0",
     "omnibase-spi>=0.22.0,<0.23.0",
     "omnibase-infra>=0.38.0,<0.39.0",
 ]
