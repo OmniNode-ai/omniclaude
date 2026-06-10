@@ -56,11 +56,12 @@ jobs:
       # step below can invoke it without polluting the caller checkout.
       - name: Fetch deploy-gate support scripts (omniclaude)
         if: github.event_name != 'merge_group'
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           repository: OmniNode-ai/omniclaude
           ref: main
           path: .omniclaude-deploy-gate
+          persist-credentials: false
           sparse-checkout: |
             scripts/deploy-gate/checkout-occ-contracts.sh
             .github/actions/deploy-gate/validate_pr_deploy_required.py

@@ -158,7 +158,7 @@ def parse_evidence_metadata(pr_body: str) -> EvidenceMetadata:
     )
 
 
-def _run_gh_json(args: list[str]) -> dict | list | str | None:
+def _run_gh_json(args: list[str]) -> dict | list | str | int | float | bool | None:
     """Run gh and parse JSON output. Separated for focused unit tests."""
     completed = subprocess.run(
         ["gh", *args],

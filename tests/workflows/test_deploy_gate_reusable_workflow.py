@@ -63,8 +63,12 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     # A dedicated sparse checkout of the omniclaude script is wired in.
     fetch_step = _step(job, "Fetch deploy-gate support scripts (omniclaude)")
     assert fetch_step["if"] == "github.event_name != 'merge_group'"
-    assert fetch_step["uses"].startswith("actions/checkout@")
+    assert (
+        fetch_step["uses"]
+        == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+    )
     assert fetch_step["with"]["repository"] == "OmniNode-ai/omniclaude"
+    assert fetch_step["with"]["persist-credentials"] is False
     sparse_checkout = fetch_step["with"]["sparse-checkout"]
     assert "scripts/deploy-gate/checkout-occ-contracts.sh" in sparse_checkout
     assert (
