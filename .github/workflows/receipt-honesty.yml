@@ -35,13 +35,13 @@ jobs:
   receipt-honesty:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Clone omnibase_core (provides the receipt-honesty validator)
         run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
       - name: Set up Python 3.12
