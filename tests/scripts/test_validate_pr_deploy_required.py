@@ -23,8 +23,10 @@ import yaml
 ACTION_DIR = Path(__file__).parent.parent.parent / ".github" / "actions" / "deploy-gate"
 sys.path.insert(0, str(ACTION_DIR))
 
+import validate_pr_deploy_required as validator  # noqa: E402
 from validate_pr_deploy_required import (  # noqa: E402
     find_runtime_paths,
+    resolve_occ_evidence_source,
     validate_pr_deploy_gate,
 )
 
@@ -220,3 +222,119 @@ class TestValidatePrDeployGate:
         )
         assert not result.passed
         assert "cites no OMN-XXXX ticket" in result.message
+
+    def test_runtime_diff_with_open_occ_evidence_source_passes(
+        self, tmp_path: Path
+    ) -> None:
+        _write_contract(tmp_path, "OMN-12889", has_deploy=True)
+        result = validate_pr_deploy_gate(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body=(
+                "Ticket: OMN-12889\n"
+                "Evidence-Source: OCC#2408\n"
+                "Evidence-Ticket: OMN-12889\n"
+            ),
+            contracts_dir=tmp_path,
+        )
+        assert result.passed
+        assert result.tickets_checked == ["OMN-12889"]
+
+    def test_evidence_source_requires_evidence_ticket(self, tmp_path: Path) -> None:
+        _write_contract(tmp_path, "OMN-12889", has_deploy=True)
+        result = validate_pr_deploy_gate(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body="Ticket: OMN-12889\nEvidence-Source: OCC#2408\n",
+            contracts_dir=tmp_path,
+        )
+        assert not result.passed
+        assert "missing Evidence-Ticket" in result.message
+
+    def test_missing_contract_at_pinned_occ_source_fails(self, tmp_path: Path) -> None:
+        _write_contract(tmp_path, "OMN-1111", has_deploy=True)
+        result = validate_pr_deploy_gate(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body=(
+                "Ticket: OMN-1111\n"
+                "Evidence-Source: OCC#2408\n"
+                "Evidence-Ticket: OMN-12889\n"
+            ),
+            contracts_dir=tmp_path,
+        )
+        assert not result.passed
+        assert result.tickets_checked == ["OMN-12889"]
+        assert "OMN-12889" in result.message
+
+
+@pytest.mark.unit
+class TestResolveOccEvidenceSource:
+    def test_no_runtime_paths_skip_before_resolving_bad_source(self) -> None:
+        result = resolve_occ_evidence_source(
+            changed_files=["docs/architecture.md"],
+            pr_body="Evidence-Source: not-an-occ-source",
+        )
+        assert result.passed
+        assert result.skipped
+        assert not result.deploy_gate_required
+        assert result.occ_ref == "dev"
+
+    def test_runtime_paths_without_evidence_source_use_canonical_ref(self) -> None:
+        result = resolve_occ_evidence_source(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body="Ticket: OMN-12889",
+        )
+        assert result.passed
+        assert result.deploy_gate_required
+        assert result.occ_ref == "dev"
+        assert result.source_kind == "canonical"
+
+    def test_open_occ_pr_source_resolves_to_head_sha(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        expected_sha = "8684a96935323e1b2990180ef053dd2da1bc03b0"
+
+        def fake_run_gh_json(args: list[str]) -> dict[str, object]:
+            assert args[:4] == [
+                "pr",
+                "view",
+                "2408",
+                "--repo",
+            ]
+            return {
+                "state": "OPEN",
+                "headRefOid": expected_sha,
+                "mergeCommit": None,
+            }
+
+        monkeypatch.setattr(validator, "_run_gh_json", fake_run_gh_json)
+        result = resolve_occ_evidence_source(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body=(
+                "Ticket: OMN-12889\n"
+                "Evidence-Source: OCC#2408\n"
+                "Evidence-Ticket: OMN-12889\n"
+            ),
+        )
+        assert result.passed
+        assert result.occ_ref == expected_sha
+        assert result.source_kind == "open-pr"
+        assert result.evidence_ticket == "OMN-12889"
+
+    def test_evidence_source_without_evidence_ticket_fails(self) -> None:
+        result = resolve_occ_evidence_source(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body="Ticket: OMN-12889\nEvidence-Source: OCC#2408\n",
+        )
+        assert not result.passed
+        assert "missing Evidence-Ticket" in result.message
+
+    def test_invalid_evidence_source_fails_hard(self) -> None:
+        result = resolve_occ_evidence_source(
+            changed_files=["src/omnimarket/services/delegation_quality.py"],
+            pr_body=(
+                "Ticket: OMN-12889\n"
+                "Evidence-Source: onex_change_control/main\n"
+                "Evidence-Ticket: OMN-12889\n"
+            ),
+        )
+        assert not result.passed
+        assert "not valid" in result.message

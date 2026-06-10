@@ -61,23 +61,33 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     assert CHECKOUT_SCRIPT.is_file(), f"checkout script missing: {CHECKOUT_SCRIPT}"
 
     # A dedicated sparse checkout of the omniclaude script is wired in.
-    fetch_step = _step(job, "Fetch OCC checkout script (omniclaude)")
+    fetch_step = _step(job, "Fetch deploy-gate support scripts (omniclaude)")
     assert fetch_step["if"] == "github.event_name != 'merge_group'"
     assert fetch_step["uses"].startswith("actions/checkout@")
     assert fetch_step["with"]["repository"] == "OmniNode-ai/omniclaude"
+    sparse_checkout = fetch_step["with"]["sparse-checkout"]
+    assert "scripts/deploy-gate/checkout-occ-contracts.sh" in sparse_checkout
     assert (
-        fetch_step["with"]["sparse-checkout"]
-        == "scripts/deploy-gate/checkout-occ-contracts.sh"
+        ".github/actions/deploy-gate/validate_pr_deploy_required.py" in sparse_checkout
     )
+
+    resolve_step = _step(job, "Resolve deploy-gate OCC evidence source")
+    assert resolve_step["if"] == "github.event_name != 'merge_group'"
+    assert resolve_step["id"] == "resolve_occ_evidence"
+    assert "--resolve-occ-ref" in resolve_step["run"]
+    assert '--github-output "$GITHUB_OUTPUT"' in resolve_step["run"]
 
     step = _step(
         job, "Checkout onex_change_control contracts (canonical contract source)"
     )
-    assert step["if"] == "github.event_name != 'merge_group'"
+    assert (
+        step["if"]
+        == "github.event_name != 'merge_group' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'"
+    )
     assert "uses" not in step
     # Step-level hard timeout (outer bound) is present.
     assert step["timeout-minutes"] == 12
-    assert step["env"]["OCC_REF"] == "dev"
+    assert step["env"]["OCC_REF"] == "${{ steps.resolve_occ_evidence.outputs.occ_ref }}"
     assert (
         step["env"]["OCC_REPO_URL"]
         == "https://github.com/OmniNode-ai/onex_change_control.git"
