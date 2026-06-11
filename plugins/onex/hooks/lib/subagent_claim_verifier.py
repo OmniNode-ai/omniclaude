@@ -18,11 +18,34 @@ Sub-phases (plan Task 2, mini-epic):
         endpoints fail-open with warning friction per Task 8 semantics.
     2e. Hook wrapper — see ``scripts/subagent_stop_claim_verifier.sh``.
 
+Worker-misreport ratchet [OMN-12963, OMN-12825 lineage]:
+    The pre-ratchet verifier had a process hole exploited twice — a worker
+    could assert "merged / fixed / deployed" in free-form prose with **no**
+    structured handle, and the verifier passed because ``kind != pr_ship``
+    skipped the GitHub probe entirely. The ratchet closes that hole and
+    hardens the re-probe so the check runs BEFORE receipt acceptance, not
+    after (an accepted-then-audited receipt has already propagated the false
+    claim):
+
+    R1. ``state=MERGED`` PR claims MUST carry the verifiable ``merge_sha``
+        handle, and the verifier re-probes ``mergeCommit.oid`` — a MERGED
+        claim with a missing or mismatched SHA is a BLOCK, not a pass.
+    R2. ``kind=deploy`` reports MUST carry the ``deploy.container_digest``
+        handle (digest or image@sha256). A deploy claim with no digest is a
+        BLOCK. The .201 digest re-probe is unreachable from the hook
+        subprocess and fails-open like Linear — but the structured-handle
+        requirement itself blocks unconditionally.
+    R3. Completion-claim prose guard — if the final assistant message asserts
+        merged / shipped / deployed in free text but the structured report
+        does not carry the matching verifiable handle, BLOCK. This is the
+        gate on the original twice-caught hole.
+
 Refs:
     * OMN-9063 canonical ``ModelWorkerReport`` (fallback until it lands)
     * OMN-9055 ``node_evidence_bundle.resolve()`` integration (inline probes
       until that ticket ships)
     * OMN-9072 ``hookSpecificOutput.hookEventName`` requirement
+    * OMN-12963 worker-misreport ratchet (this module's R1/R2/R3)
 """
 
 from __future__ import annotations
@@ -41,8 +64,38 @@ from skip_token_surface_guard import find_unauthorized_skip_tokens
 # Degrade reasons that indicate genuine verification (not fail-open). Used by
 # verify_stop() to decide whether an ALLOW verdict should carry a
 # "verified_fail_open" suffix propagating the degraded upstream reason.
-_CLEAN_GH_REASONS: frozenset[str] = frozenset({"state_match", "not_pr_ship"})
+_CLEAN_GH_REASONS: frozenset[str] = frozenset(
+    {"state_match", "merge_sha_match", "not_pr_ship"}
+)
 _CLEAN_LINEAR_REASONS: frozenset[str] = frozenset({"state_match", "no_linear_claim"})
+_CLEAN_DEPLOY_REASONS: frozenset[str] = frozenset(
+    {"digest_present", "not_deploy", "no_deploy_claim"}
+)
+
+# Completion-claim language that, when present in free-form prose WITHOUT a
+# matching verifiable handle in the structured report, is a misreport [R3,
+# OMN-12963]. Each entry pairs a compiled prose pattern with the handle that
+# must back it. The prose patterns are deliberately scoped to first-person
+# completion assertions ("I merged", "PR is merged", "deployed to") to avoid
+# firing on quoted instructions or descriptions of remaining work.
+_MERGED_CLAIM_RE = re.compile(
+    r"\b(?:"
+    r"(?:has|have|is|was|been|now|successfully)\s+(?:been\s+)?merged"
+    r"|merged\s+(?:the\s+)?pr"
+    r"|pr\s+(?:#?\d+\s+)?(?:is|was|has been|now)\s+merged"
+    r"|landed\s+(?:the\s+)?(?:pr|change|fix)"
+    r")\b",
+    re.IGNORECASE,
+)
+_DEPLOYED_CLAIM_RE = re.compile(
+    r"\b(?:"
+    r"deployed\s+(?:to|the|it|this|onto)"
+    r"|(?:has|have|is|was|been|now|successfully)\s+(?:been\s+)?deployed"
+    r"|redeploy(?:ed)?\s+(?:the\s+)?(?:runtime|service|container|image|node)"
+    r"|rolled\s+out\s+(?:to|the)"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 class EnumWorkerReportKind(StrEnum):
@@ -53,19 +106,42 @@ class EnumWorkerReportKind(StrEnum):
     """
 
     PR_SHIP = "pr_ship"
+    DEPLOY = "deploy"
     TICKET_UPDATE = "ticket_update"
     DIAGNOSIS = "diagnosis"
     RESEARCH = "research"
 
 
 class ModelWorkerReportPR(BaseModel):
-    """Nested PR claim inside a ``kind=pr_ship`` worker report."""
+    """Nested PR claim inside a ``kind=pr_ship`` worker report.
+
+    ``merge_sha`` is the verifiable handle required by the worker-misreport
+    ratchet [R1, OMN-12963] whenever ``state`` claims ``MERGED``: a merged
+    claim is only acceptable if it carries the merge commit SHA that the
+    verifier can re-probe against ``gh pr view --json mergeCommit``.
+    """
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
     number: int
     state: str
     repo: str | None = None
+    merge_sha: str | None = None
+
+
+class ModelWorkerReportDeploy(BaseModel):
+    """Nested deploy claim inside a ``kind=deploy`` worker report.
+
+    ``container_digest`` is the verifiable handle required by the ratchet
+    [R2, OMN-12963] for any deploy assertion. It is the image digest the
+    deploy produced (``sha256:...`` or ``image@sha256:...``). A deploy claim
+    with no digest is unverifiable and is blocked unconditionally.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    target: str | None = None
+    container_digest: str | None = None
 
 
 class ModelWorkerReport(BaseModel):
@@ -81,6 +157,7 @@ class ModelWorkerReport(BaseModel):
     kind: EnumWorkerReportKind
     ticket: str | None = None
     pr: ModelWorkerReportPR | None = None
+    deploy: ModelWorkerReportDeploy | None = None
     linear: dict[str, Any] | None = None
 
 
@@ -187,6 +264,13 @@ def verify_pr_claim(
     ``gh_runner`` is an optional callable ``(args: list[str]) -> subprocess.CompletedProcess``
     for tests. Production uses ``subprocess.run`` with a short timeout. Non-pr_ship
     reports are a no-op pass.
+
+    Worker-misreport ratchet [R1, OMN-12963]: when the report claims
+    ``state=MERGED`` it MUST carry ``pr.merge_sha`` and that SHA must match the
+    live ``mergeCommit.oid``. A merged claim with a missing or mismatched SHA
+    is a BLOCK even when the live state happens to read MERGED — the verifiable
+    handle is the whole point of the ratchet, so an unbacked merged claim is
+    never accepted on state alone.
     """
 
     if report.kind != EnumWorkerReportKind.PR_SHIP:
@@ -198,7 +282,25 @@ def verify_pr_claim(
             reason="pr_ship report missing 'pr' body",
         )
 
-    args = ["gh", "pr", "view", str(report.pr.number), "--json", "state,mergedAt"]
+    claimed = report.pr.state.upper()
+
+    # R1 — a MERGED claim with no merge_sha handle is unverifiable. Block
+    # before any network probe; the absence of the handle is itself the fault.
+    if claimed == "MERGED" and not (report.pr.merge_sha or "").strip():
+        return GhVerifyResult(
+            ok=False,
+            actual_state=None,
+            reason="merged_claim_missing_merge_sha",
+        )
+
+    args = [
+        "gh",
+        "pr",
+        "view",
+        str(report.pr.number),
+        "--json",
+        "state,mergedAt,mergeCommit",
+    ]
     if report.pr.repo:
         args.extend(["--repo", report.pr.repo])
 
@@ -236,14 +338,58 @@ def verify_pr_claim(
         )
 
     actual = str(payload.get("state", "")).upper() or None
-    claimed = report.pr.state.upper()
     if actual != claimed:
         return GhVerifyResult(
             ok=False,
             actual_state=actual,
             reason=f"state_mismatch: claimed={claimed} actual={actual}",
         )
+
+    # R1 — re-probe the merge SHA for MERGED claims. The handle was already
+    # asserted present above; now confirm it is the real merge commit.
+    if claimed == "MERGED":
+        merge_commit = payload.get("mergeCommit")
+        actual_sha = (
+            str(merge_commit.get("oid", "")) if isinstance(merge_commit, dict) else ""
+        )
+        claimed_sha = (report.pr.merge_sha or "").strip()
+        if not actual_sha:
+            # Live PR reads MERGED but exposes no merge commit oid — cannot
+            # confirm the handle. Block rather than accept on state alone.
+            return GhVerifyResult(
+                ok=False,
+                actual_state=actual,
+                reason="merge_sha_unverifiable: no mergeCommit.oid from gh",
+            )
+        if not _sha_matches(claimed_sha, actual_sha):
+            return GhVerifyResult(
+                ok=False,
+                actual_state=actual,
+                reason=(
+                    f"merge_sha_mismatch: claimed={claimed_sha[:12]} "
+                    f"actual={actual_sha[:12]}"
+                ),
+            )
+        return GhVerifyResult(ok=True, actual_state=actual, reason="merge_sha_match")
+
     return GhVerifyResult(ok=True, actual_state=actual, reason="state_match")
+
+
+def _sha_matches(claimed: str, actual: str) -> bool:
+    """Compare a claimed git SHA against the live one, allowing short SHAs.
+
+    Git short SHAs (>=7 chars) are accepted as a prefix of the full oid so a
+    worker that reports an abbreviated merge commit still verifies. Comparison
+    is case-insensitive; SHAs are hex.
+    """
+
+    claimed = claimed.strip().lower()
+    actual = actual.strip().lower()
+    if not claimed or not actual:
+        return False
+    if len(claimed) < 7:
+        return False
+    return actual.startswith(claimed) or claimed.startswith(actual)
 
 
 def _default_gh_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -347,6 +493,106 @@ def _extract_claimed_linear_state(report: ModelWorkerReport) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# R2. Deploy-claim verification [OMN-12963]
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DeployVerifyResult:
+    """Outcome of a deploy-claim handle check."""
+
+    ok: bool
+    reason: str
+
+
+def verify_deploy_claim(report: ModelWorkerReport) -> DeployVerifyResult:
+    """Require a verifiable container digest for any ``kind=deploy`` claim.
+
+    Worker-misreport ratchet [R2, OMN-12963]: a deploy assertion is only
+    acceptable if it carries ``deploy.container_digest`` — the image digest
+    the deploy produced. Non-deploy reports pass through. The live .201 digest
+    re-probe is intentionally NOT done here: the hook subprocess cannot reach
+    the runtime host, so confirming the digest *value* against the running
+    container is a fail-open concern. But the *presence and shape* of the
+    handle is enforced unconditionally — a deploy claim with no digest is the
+    exact misreport the ratchet exists to block.
+    """
+
+    if report.kind != EnumWorkerReportKind.DEPLOY:
+        return DeployVerifyResult(ok=True, reason="not_deploy")
+    if report.deploy is None:
+        return DeployVerifyResult(
+            ok=False,
+            reason="deploy report missing 'deploy' body",
+        )
+
+    digest = (report.deploy.container_digest or "").strip()
+    if not digest:
+        return DeployVerifyResult(
+            ok=False,
+            reason="deploy_claim_missing_container_digest",
+        )
+    if "sha256:" not in digest.lower():
+        return DeployVerifyResult(
+            ok=False,
+            reason=f"deploy_digest_malformed: {digest[:60]}",
+        )
+    return DeployVerifyResult(ok=True, reason="digest_present")
+
+
+# ---------------------------------------------------------------------------
+# R3. Completion-claim prose guard [OMN-12963]
+# ---------------------------------------------------------------------------
+
+
+def _report_has_merge_handle(report: ModelWorkerReport | None) -> bool:
+    """True when the structured report carries a backed merged-PR handle."""
+
+    if report is None or report.pr is None:
+        return False
+    if report.pr.state.upper() != "MERGED":
+        return False
+    return bool((report.pr.merge_sha or "").strip())
+
+
+def _report_has_deploy_handle(report: ModelWorkerReport | None) -> bool:
+    """True when the structured report carries a deploy digest handle."""
+
+    if report is None or report.deploy is None:
+        return False
+    return bool((report.deploy.container_digest or "").strip())
+
+
+def detect_unbacked_completion_claims(
+    message: str,
+    report: ModelWorkerReport | None,
+) -> list[str]:
+    """Return reasons for completion claims in prose that lack a handle.
+
+    Worker-misreport ratchet [R3, OMN-12963] — the twice-caught hole. A worker
+    can assert "merged" / "deployed" in free-form prose and, pre-ratchet, slip
+    past the verifier whenever the structured report did not declare a
+    ``pr_ship`` / ``deploy`` kind (so the ground-truth probes were skipped).
+    This guard scans the assistant prose for first-person completion
+    assertions and, for each, requires the structured report to carry the
+    matching verifiable handle:
+
+    * a "merged" assertion needs ``pr.state=MERGED`` + ``pr.merge_sha``
+    * a "deployed" assertion needs ``deploy.container_digest``
+
+    Any prose claim without its handle yields a block reason. Returns an empty
+    list when prose and structured handles agree.
+    """
+
+    reasons: list[str] = []
+    if _MERGED_CLAIM_RE.search(message) and not _report_has_merge_handle(report):
+        reasons.append("merged_claimed_in_prose_without_merge_sha_handle")
+    if _DEPLOYED_CLAIM_RE.search(message) and not _report_has_deploy_handle(report):
+        reasons.append("deploy_claimed_in_prose_without_container_digest_handle")
+    return reasons
+
+
+# ---------------------------------------------------------------------------
 # 2a+2b+2c+2d entrypoints
 # ---------------------------------------------------------------------------
 
@@ -406,6 +652,39 @@ def verify_stop(
     report = extraction.parsed
     diff: dict[str, Any] = {}
     degrade_reasons: list[str] = []
+
+    # R3 [OMN-12963] — completion-claim prose guard. Block BEFORE any
+    # ground-truth probe: a worker that asserts merged/deployed in prose
+    # without the matching structured handle is misreporting regardless of
+    # what the (unrelated) structured kind says. This closes the twice-caught
+    # hole where a non-pr_ship / non-deploy report skipped the probes entirely.
+    prose_claim_reasons = detect_unbacked_completion_claims(message, report)
+    if prose_claim_reasons:
+        diff["unbacked_prose_claims"] = prose_claim_reasons
+        return ModelSubagentStopReport(
+            decision=EnumVerdict.BLOCK,
+            reason=f"unbacked_completion_claim: {'; '.join(prose_claim_reasons)}",
+            report=report,
+            diff=diff,
+        )
+
+    # R2 [OMN-12963] — deploy claims must carry a container digest handle.
+    deploy_result = verify_deploy_claim(report)
+    if not deploy_result.ok:
+        diff["deploy"] = {
+            "claimed_digest": (
+                report.deploy.container_digest if report.deploy else None
+            ),
+            "reason": deploy_result.reason,
+        }
+        return ModelSubagentStopReport(
+            decision=EnumVerdict.BLOCK,
+            reason=f"deploy_verification_failed: {deploy_result.reason}",
+            report=report,
+            diff=diff,
+        )
+    if deploy_result.reason not in _CLEAN_DEPLOY_REASONS:
+        degrade_reasons.append(f"deploy:{deploy_result.reason}")
 
     # TODO(OMN-9055): delegate to node_evidence_bundle.resolve() once the
     # resolver lands so PR + Linear checks flow through the canonical pipeline.
