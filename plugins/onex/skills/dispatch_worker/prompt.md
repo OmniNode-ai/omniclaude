@@ -135,7 +135,7 @@ with these rules regardless of role or spec contents:
    ```json-report
    {"kind": "pr_ship", "ticket": "OMN-XXXX",
     "pr": {"number": 1234, "state": "MERGED",
-           "merge_sha": "abc123def456", "repo": "OmniNode-ai/<repo>"}}
+           "merge_sha": "<full-or-short-merge-commit-sha>", "repo": "OmniNode-ai/<repo>"}}
    ```
    ````
 
