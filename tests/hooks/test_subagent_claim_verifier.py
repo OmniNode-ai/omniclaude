@@ -37,7 +37,9 @@ from subagent_claim_verifier import (  # noqa: E402
     EnumWorkerReportKind,
     ModelWorkerReport,
     _extract_last_assistant_message,
+    detect_unbacked_completion_claims,
     extract_report,
+    verify_deploy_claim,
     verify_linear_claim,
     verify_pr_claim,
     verify_schema_only,
@@ -52,8 +54,13 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-def _gh_ok(state: str = "MERGED"):
-    payload = json.dumps({"state": state, "mergedAt": "2026-04-17T12:00:00Z"})
+def _gh_ok(state: str = "MERGED", merge_oid: str = "abc123def4567890"):
+    body: dict[str, object] = {"state": state, "mergedAt": "2026-04-17T12:00:00Z"}
+    if state == "MERGED":
+        body["mergeCommit"] = {"oid": merge_oid}
+    else:
+        body["mergeCommit"] = None
+    payload = json.dumps(body)
 
     def _runner(_args: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
@@ -228,19 +235,23 @@ def test_unreadable_transcript_path_fails_closed(tmp_path: pathlib.Path) -> None
 
 
 def test_valid_report_with_verified_pr_allows() -> None:
-    """Plan test 2: verified MERGED PR → decision=allow."""
+    """Plan test 2: verified MERGED PR with matching merge_sha → decision=allow."""
     body = (
         "All done.\n\n```json-report\n"
         + json.dumps(
             {
                 "kind": "pr_ship",
                 "ticket": "OMN-1",
-                "pr": {"number": 42, "state": "MERGED"},
+                "pr": {
+                    "number": 42,
+                    "state": "MERGED",
+                    "merge_sha": "abc123def4567890",
+                },
             }
         )
         + "\n```\n"
     )
-    verdict = verify_stop(body, gh_runner=_gh_ok("MERGED"))
+    verdict = verify_stop(body, gh_runner=_gh_ok("MERGED", "abc123def4567890"))
     assert verdict.decision == EnumVerdict.ALLOW
     assert verdict.reason == "verified"
 
@@ -253,7 +264,11 @@ def test_fabricated_pr_blocks() -> None:
             {
                 "kind": "pr_ship",
                 "ticket": "OMN-1",
-                "pr": {"number": 99999999, "state": "MERGED"},
+                "pr": {
+                    "number": 99999999,
+                    "state": "MERGED",
+                    "merge_sha": "abc123def4567890",
+                },
             }
         )
         + "\n```"
@@ -418,7 +433,11 @@ def test_verify_stop_propagates_fail_open_reason() -> None:
             {
                 "kind": "pr_ship",
                 "ticket": "OMN-1",
-                "pr": {"number": 1, "state": "MERGED"},
+                "pr": {
+                    "number": 1,
+                    "state": "MERGED",
+                    "merge_sha": "abc123def4567890",
+                },
             }
         )
         + "\n```"
@@ -437,7 +456,15 @@ def test_verify_stop_propagates_fail_open_reason() -> None:
 def test_2c_rate_limit_fails_open() -> None:
     """2c gate: rate-limit from gh → ok=True (fail-open) with reason."""
     report = ModelWorkerReport.model_validate(
-        {"kind": "pr_ship", "ticket": "OMN-1", "pr": {"number": 1, "state": "MERGED"}}
+        {
+            "kind": "pr_ship",
+            "ticket": "OMN-1",
+            "pr": {
+                "number": 1,
+                "state": "MERGED",
+                "merge_sha": "abc123def4567890",
+            },
+        }
     )
     result = verify_pr_claim(report, gh_runner=_gh_rate_limit())
     assert result.ok is True
@@ -489,3 +516,235 @@ def test_2d_no_linear_claim_skips_check() -> None:
     result = verify_linear_claim(report, linear_runner=exploder)
     assert result.ok is True
     assert result.reason == "no_linear_claim"
+
+
+# ---------------------------------------------------------------------------
+# Worker-misreport ratchet [OMN-12963] — R1 merge_sha, R2 deploy digest,
+# R3 unbacked completion-claim prose guard.
+# ---------------------------------------------------------------------------
+
+
+def _pr_ship_report(
+    *,
+    state: str = "MERGED",
+    merge_sha: str | None = "abc123def4567890",
+    prose: str = "Work complete.",
+) -> str:
+    pr: dict[str, object] = {
+        "number": 42,
+        "state": state,
+        "repo": "OmniNode-ai/omniclaude",
+    }
+    if merge_sha is not None:
+        pr["merge_sha"] = merge_sha
+    return (
+        f"{prose}\n\n```json-report\n"
+        + json.dumps({"kind": "pr_ship", "ticket": "OMN-12963", "pr": pr})
+        + "\n```\n"
+    )
+
+
+def test_r1_merged_claim_missing_merge_sha_blocks_before_probe() -> None:
+    """R1: a MERGED pr_ship claim with no merge_sha is blocked pre-probe."""
+
+    def exploder(_args: list[str]) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("gh must not be probed when handle is absent")
+
+    body = _pr_ship_report(merge_sha=None)
+    verdict = verify_stop(body, gh_runner=exploder)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert "merged_claim_missing_merge_sha" in verdict.reason
+
+
+def test_r1_merge_sha_mismatch_blocks() -> None:
+    """R1: a merge_sha that does not match the live mergeCommit.oid blocks."""
+    body = _pr_ship_report(merge_sha="deadbeefdeadbeef")
+    verdict = verify_stop(body, gh_runner=_gh_ok("MERGED", "abc123def4567890"))
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert "merge_sha_mismatch" in verdict.reason
+    assert verdict.diff["pr"]["reason"].startswith("merge_sha_mismatch")
+
+
+def test_r1_merge_sha_match_allows() -> None:
+    """R1: a merge_sha matching the live oid passes (verified)."""
+    body = _pr_ship_report(merge_sha="abc123def4567890")
+    verdict = verify_stop(body, gh_runner=_gh_ok("MERGED", "abc123def4567890"))
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_r1_short_merge_sha_prefix_matches() -> None:
+    """R1: an abbreviated (short) SHA prefix of the live oid verifies."""
+    body = _pr_ship_report(merge_sha="abc123d")
+    verdict = verify_stop(body, gh_runner=_gh_ok("MERGED", "abc123def4567890"))
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_r1_merged_state_but_no_merge_commit_oid_blocks() -> None:
+    """R1: live PR reads MERGED but exposes no mergeCommit.oid → block."""
+
+    def _runner(_args: list[str]) -> subprocess.CompletedProcess[str]:
+        payload = json.dumps({"state": "MERGED", "mergeCommit": None})
+        return subprocess.CompletedProcess(
+            args=_args, returncode=0, stdout=payload, stderr=""
+        )
+
+    body = _pr_ship_report(merge_sha="abc123def4567890")
+    verdict = verify_stop(body, gh_runner=_runner)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert "merge_sha_unverifiable" in verdict.reason
+
+
+def test_r2_deploy_claim_missing_container_digest_blocks() -> None:
+    """R2: a kind=deploy report with no container_digest is blocked."""
+    body = (
+        "Deploy finished.\n\n```json-report\n"
+        + json.dumps(
+            {"kind": "deploy", "ticket": "OMN-12963", "deploy": {"target": ".201-dev"}}
+        )
+        + "\n```"
+    )
+    verdict = verify_stop(body)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert "deploy_claim_missing_container_digest" in verdict.reason
+
+
+def test_r2_deploy_digest_malformed_blocks() -> None:
+    """R2: a container_digest without a sha256: component is malformed."""
+    report = ModelWorkerReport.model_validate(
+        {
+            "kind": "deploy",
+            "ticket": "OMN-12963",
+            "deploy": {"target": ".201-dev", "container_digest": "latest"},
+        }
+    )
+    result = verify_deploy_claim(report)
+    assert result.ok is False
+    assert result.reason.startswith("deploy_digest_malformed")
+
+
+def test_r2_deploy_digest_present_allows() -> None:
+    """R2: a well-formed sha256 container_digest passes."""
+    body = (
+        "Deploy complete.\n\n```json-report\n"
+        + json.dumps(
+            {
+                "kind": "deploy",
+                "ticket": "OMN-12963",
+                "deploy": {
+                    "target": ".201-dev",
+                    "container_digest": (
+                        "omninode-runtime@sha256:"
+                        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    ),
+                },
+            }
+        )
+        + "\n```"
+    )
+    verdict = verify_stop(body)
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_r3_prose_merged_claim_without_handle_blocks() -> None:
+    """R3 — the twice-caught hole: prose asserts merged, report has no handle.
+
+    The structured report is a benign ``diagnosis`` kind (so the old verifier
+    skipped the GitHub probe entirely), yet the prose asserts the PR is merged.
+    The prose-claim guard must block.
+    """
+    body = (
+        "I merged the PR and everything is green.\n\n```json-report\n"
+        + json.dumps({"kind": "diagnosis", "ticket": "OMN-12963"})
+        + "\n```"
+    )
+    verdict = verify_stop(body)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert "unbacked_completion_claim" in verdict.reason
+    assert (
+        "merged_claimed_in_prose_without_merge_sha_handle"
+        in verdict.diff["unbacked_prose_claims"]
+    )
+
+
+def test_r3_prose_deployed_claim_without_handle_blocks() -> None:
+    """R3: prose asserts deployed, structured report carries no deploy digest."""
+    body = (
+        "I deployed the runtime to .201 and it is healthy.\n\n```json-report\n"
+        + json.dumps({"kind": "diagnosis", "ticket": "OMN-12963"})
+        + "\n```"
+    )
+    verdict = verify_stop(body)
+    assert verdict.decision == EnumVerdict.BLOCK
+    assert "unbacked_completion_claim" in verdict.reason
+    assert (
+        "deploy_claimed_in_prose_without_container_digest_handle"
+        in verdict.diff["unbacked_prose_claims"]
+    )
+
+
+def test_r3_prose_merged_claim_with_handle_allows() -> None:
+    """R3: prose asserts merged AND the report carries the backed handle → pass.
+
+    Uses a first-person authorship claim ("I merged the PR") so the prose
+    pattern genuinely fires and the with-handle allow path is exercised.
+    """
+    body = _pr_ship_report(
+        merge_sha="abc123def4567890",
+        prose="I merged the PR; everything is green.",
+    )
+    verdict = verify_stop(body, gh_runner=_gh_ok("MERGED", "abc123def4567890"))
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason == "verified"
+
+
+def test_r3_contextual_passive_merged_prose_does_not_block() -> None:
+    """R3 must not over-block contextual/passive state descriptions [CodeRabbit].
+
+    Phrasing like "the base branch is merged into dev" or "once OMN-X is
+    merged" describes context, not a first-person completion claim. The
+    tightened prose patterns must not fire on these, even with no handle.
+    """
+    for prose in (
+        "The base branch is merged into dev upstream.",
+        "Once OMN-12950 is merged this unblocks.",
+        "This config has been merged into the overlay by an earlier wave.",
+    ):
+        reasons = detect_unbacked_completion_claims(
+            prose,
+            ModelWorkerReport.model_validate(
+                {"kind": "diagnosis", "ticket": "OMN-12963"}
+            ),
+        )
+        assert reasons == [], f"over-blocked on contextual prose: {prose!r}"
+
+
+def test_r3_honest_pending_prose_does_not_block() -> None:
+    """R3 must not fire on honest 'still open / not merged' prose."""
+    body = (
+        "The PR is open and not yet merged; CI is still running.\n\n```json-report\n"
+        + json.dumps({"kind": "diagnosis", "ticket": "OMN-12963"})
+        + "\n```"
+    )
+    verdict = verify_stop(body)
+    assert verdict.decision == EnumVerdict.ALLOW
+
+
+def test_r3_detect_helper_returns_empty_when_handles_present() -> None:
+    """detect_unbacked_completion_claims yields no reasons when backed."""
+    report = ModelWorkerReport.model_validate(
+        {
+            "kind": "pr_ship",
+            "ticket": "OMN-12963",
+            "pr": {"number": 42, "state": "MERGED", "merge_sha": "abc123def4567890"},
+        }
+    )
+    reasons = detect_unbacked_completion_claims("I merged the PR.", report)
+    assert reasons == []
+
+
+def test_deploy_kind_is_recognized_enum_member() -> None:
+    """The ratchet adds DEPLOY as a first-class worker report kind."""
+    assert EnumWorkerReportKind("deploy") is EnumWorkerReportKind.DEPLOY

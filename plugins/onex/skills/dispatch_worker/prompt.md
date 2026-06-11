@@ -116,6 +116,29 @@ with these rules regardless of role or spec contents:
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
    Fix the issue instead of bypassing the gate.
 
+6. **Verifiable-handle reporting (worker-misreport ratchet, OMN-12963).** Your final
+   message MUST end with a fenced ```json-report``` block, and any claim of completion
+   MUST carry its verifiable handle — claims without handles are BLOCKED at SubagentStop
+   by the receipt-honesty verifier (`subagent_claim_verifier.py`), re-probed against live
+   GitHub BEFORE the orchestrator accepts your receipt:
+   - A **merged** claim requires `kind: pr_ship` with `pr: {number, state: MERGED, merge_sha, repo}`.
+     The verifier re-probes `gh pr view --json mergeCommit`; a missing or mismatched
+     `merge_sha` is a block. Never assert "merged" in prose without this block.
+   - A **deploy** claim requires `kind: deploy` with `deploy: {target, container_digest}`
+     (digest must contain `sha256:`). Never assert "deployed/redeployed" in prose without it.
+   - Asserting merged/deployed in free-form prose while the structured report lacks the
+     matching handle is itself a block (prose-claim guard). Report only what you can prove;
+     if a PR is still open or a deploy is pending, say so honestly.
+
+   Example terminal block:
+   ````
+   ```json-report
+   {"kind": "pr_ship", "ticket": "OMN-XXXX",
+    "pr": {"number": 1234, "state": "MERGED",
+           "merge_sha": "<full-or-short-merge-commit-sha>", "repo": "OmniNode-ai/<repo>"}}
+   ```
+   ````
+
 ---
 ```
 

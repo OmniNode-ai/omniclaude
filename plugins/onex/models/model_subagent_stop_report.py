@@ -24,6 +24,7 @@ from subagent_claim_verifier import (  # type: ignore[import-not-found]  # noqa:
     ModelExtractionResult,
     ModelSubagentStopReport,
     ModelWorkerReport,
+    ModelWorkerReportDeploy,
     ModelWorkerReportPR,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "ModelExtractionResult",
     "ModelSubagentStopReport",
     "ModelWorkerReport",
+    "ModelWorkerReportDeploy",
     "ModelWorkerReportPR",
 ]
