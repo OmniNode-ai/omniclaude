@@ -79,21 +79,22 @@ _CLEAN_DEPLOY_REASONS: frozenset[str] = frozenset(
 # completion assertions ("I merged", "PR is merged", "deployed to") to avoid
 # firing on quoted instructions or descriptions of remaining work.
 _MERGED_CLAIM_RE = re.compile(
-    r"\b(?:"
-    r"(?:has|have|is|was|been|now|successfully)\s+(?:been\s+)?merged"
-    r"|merged\s+(?:the\s+)?pr"
-    r"|pr\s+(?:#?\d+\s+)?(?:is|was|has been|now)\s+merged"
-    r"|landed\s+(?:the\s+)?(?:pr|change|fix)"
-    r")\b",
+    r"(?:"
+    # First-person authorship: "I merged", "we landed the PR/change/fix".
+    r"\b(?:i|we)\s+(?:have\s+)?(?:merged|landed)\b"
+    # Explicit PR-state assertion: "PR #1234 is/was/has been/now merged".
+    r"|\bpr\s+#?\d+\s+(?:is|was|has\s+been|now)\s+merged\b"
+    r")",
     re.IGNORECASE,
 )
 _DEPLOYED_CLAIM_RE = re.compile(
-    r"\b(?:"
-    r"deployed\s+(?:to|the|it|this|onto)"
-    r"|(?:has|have|is|was|been|now|successfully)\s+(?:been\s+)?deployed"
-    r"|redeploy(?:ed)?\s+(?:the\s+)?(?:runtime|service|container|image|node)"
-    r"|rolled\s+out\s+(?:to|the)"
-    r")\b",
+    r"(?:"
+    # First-person authorship: "I/we deployed/redeployed/rolled out".
+    r"\b(?:i|we)\s+(?:have\s+)?(?:deployed|redeployed|rolled\s+out)\b"
+    # Explicit target assertion: "deployed/redeployed the runtime/service/...".
+    r"|\b(?:deployed|redeployed)\s+(?:to|the)\s+"
+    r"(?:runtime|service|container|image|node|prod|stability|dev|\.201)\b"
+    r")",
     re.IGNORECASE,
 )
 
@@ -138,7 +139,7 @@ class ModelWorkerReportDeploy(BaseModel):
     with no digest is unverifiable and is blocked unconditionally.
     """
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     target: str | None = None
     container_digest: str | None = None
@@ -497,15 +498,16 @@ def _extract_claimed_linear_state(report: ModelWorkerReport) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class DeployVerifyResult:
+class ModelDeployVerifyResult(BaseModel):
     """Outcome of a deploy-claim handle check."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     ok: bool
     reason: str
 
 
-def verify_deploy_claim(report: ModelWorkerReport) -> DeployVerifyResult:
+def verify_deploy_claim(report: ModelWorkerReport) -> ModelDeployVerifyResult:
     """Require a verifiable container digest for any ``kind=deploy`` claim.
 
     Worker-misreport ratchet [R2, OMN-12963]: a deploy assertion is only
@@ -519,25 +521,25 @@ def verify_deploy_claim(report: ModelWorkerReport) -> DeployVerifyResult:
     """
 
     if report.kind != EnumWorkerReportKind.DEPLOY:
-        return DeployVerifyResult(ok=True, reason="not_deploy")
+        return ModelDeployVerifyResult(ok=True, reason="not_deploy")
     if report.deploy is None:
-        return DeployVerifyResult(
+        return ModelDeployVerifyResult(
             ok=False,
             reason="deploy report missing 'deploy' body",
         )
 
     digest = (report.deploy.container_digest or "").strip()
     if not digest:
-        return DeployVerifyResult(
+        return ModelDeployVerifyResult(
             ok=False,
             reason="deploy_claim_missing_container_digest",
         )
     if "sha256:" not in digest.lower():
-        return DeployVerifyResult(
+        return ModelDeployVerifyResult(
             ok=False,
             reason=f"deploy_digest_malformed: {digest[:60]}",
         )
-    return DeployVerifyResult(ok=True, reason="digest_present")
+    return ModelDeployVerifyResult(ok=True, reason="digest_present")
 
 
 # ---------------------------------------------------------------------------

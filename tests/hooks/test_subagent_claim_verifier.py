@@ -686,14 +686,39 @@ def test_r3_prose_deployed_claim_without_handle_blocks() -> None:
 
 
 def test_r3_prose_merged_claim_with_handle_allows() -> None:
-    """R3: prose asserts merged AND the report carries the backed handle → pass."""
+    """R3: prose asserts merged AND the report carries the backed handle → pass.
+
+    Uses a first-person authorship claim ("I merged the PR") so the prose
+    pattern genuinely fires and the with-handle allow path is exercised.
+    """
     body = _pr_ship_report(
         merge_sha="abc123def4567890",
-        prose="The PR has been merged.",
+        prose="I merged the PR; everything is green.",
     )
     verdict = verify_stop(body, gh_runner=_gh_ok("MERGED", "abc123def4567890"))
     assert verdict.decision == EnumVerdict.ALLOW
     assert verdict.reason == "verified"
+
+
+def test_r3_contextual_passive_merged_prose_does_not_block() -> None:
+    """R3 must not over-block contextual/passive state descriptions [CodeRabbit].
+
+    Phrasing like "the base branch is merged into dev" or "once OMN-X is
+    merged" describes context, not a first-person completion claim. The
+    tightened prose patterns must not fire on these, even with no handle.
+    """
+    for prose in (
+        "The base branch is merged into dev upstream.",
+        "Once OMN-12950 is merged this unblocks.",
+        "This config has been merged into the overlay by an earlier wave.",
+    ):
+        reasons = detect_unbacked_completion_claims(
+            prose,
+            ModelWorkerReport.model_validate(
+                {"kind": "diagnosis", "ticket": "OMN-12963"}
+            ),
+        )
+        assert reasons == [], f"over-blocked on contextual prose: {prose!r}"
 
 
 def test_r3_honest_pending_prose_does_not_block() -> None:
@@ -716,7 +741,7 @@ def test_r3_detect_helper_returns_empty_when_handles_present() -> None:
             "pr": {"number": 42, "state": "MERGED", "merge_sha": "abc123def4567890"},
         }
     )
-    reasons = detect_unbacked_completion_claims("PR has been merged.", report)
+    reasons = detect_unbacked_completion_claims("I merged the PR.", report)
     assert reasons == []
 
 
