@@ -186,12 +186,14 @@ class TestSweepPreflightCache:
         parsed = json.loads(stdout.strip())
         assert parsed["tool_name"] == "Bash"
 
-    def test_cached_block_returns_block(self):
-        """A fresh 'block' cache emits a block decision on stderr.
+    def test_cached_block_clears_cache_and_rechecks(self):
+        """A cached 'block' entry is cleared and the hook re-runs infrastructure checks.
 
-        Note: error-guard.sh converts exit 2 → exit 0 (hooks never crash Claude Code),
-        but the block JSON is already written to stderr before the trap fires.
-        Claude Code reads the stderr decision JSON to determine blocking.
+        The hook intentionally does NOT honor cached blocks so that transient
+        failures (expired auth, rate limit) recover immediately on the next
+        sweep command.  Verify: (a) the cache file is removed before the
+        actual gh/rate-limit checks run, and (b) the hook completes with a
+        valid exit code (0 = pass, 2 = still blocked after re-check).
         """
         tmp = tempfile.mkdtemp()
         cache_dir = pathlib.Path(tmp) / ".claude" / "hooks" / ".cache"
@@ -209,14 +211,19 @@ class TestSweepPreflightCache:
 
         tool_info = _make_bash_tool_info("gh pr merge --auto")
         env = {"HOME": tmp, "LOG_FILE": os.path.join(tmp, "hooks.log")}
-        exit_code, _, stderr = _run_hook(tool_info, env_overrides=env)
-        # error-guard.sh may swallow exit 2 → 0, but the block decision is on stderr
-        assert "block" in stderr.lower(), (
-            f"Expected block decision on stderr, got: {stderr}"
-        )
-        # Verify the JSON is parseable
-        decision = json.loads(stderr.strip().split("\n")[-1])
-        assert decision["decision"] == "block"
+        exit_code, _, _ = _run_hook(tool_info, env_overrides=env)
+        # The hook re-runs checks and either passes (0) or blocks again (2).
+        # Either outcome is correct; the important invariant is that the hook
+        # did NOT short-circuit on the stale block entry.
+        assert exit_code in (0, 2), f"Unexpected exit code: {exit_code}"
+        # The stale block cache must have been cleared (hook re-wrote or removed it).
+        if cache_file.exists():
+            new_data = json.loads(cache_file.read_text())
+            # Cache was rewritten by the live check — timestamp must differ from
+            # the sentinel value written above.
+            assert new_data.get("checked_at") != "2026-03-30T00:00:00Z", (
+                "Stale cached-block entry was not replaced by a live check result"
+            )
 
 
 @pytest.mark.unit
