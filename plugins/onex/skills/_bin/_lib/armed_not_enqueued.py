@@ -198,6 +198,8 @@ def _fetch_queue_events(repo: str, pr_number: int) -> list[dict[str, Any]]:
                 if isinstance(page, list):
                     events.extend(page)
             except json.JSONDecodeError:
+                # Malformed lines from --jq pagination output are silently skipped;
+                # partial/empty lines do not represent actionable events.
                 pass
     return events
 
