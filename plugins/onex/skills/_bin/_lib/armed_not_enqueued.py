@@ -139,7 +139,10 @@ class ModelArmedNotEnqueuedScanResult(BaseModel):
 
 
 def _fetch_pr_list(repo: str) -> list[dict[str, Any]]:
-    """Fetch all open PRs with auto-merge and merge-state fields."""
+    """Fetch all open PRs with auto-merge and merge-state fields.
+
+    Uses ``--paginate`` so repos with >100 open PRs are fully scanned.
+    """
     result = run_gh(
         [
             "pr",
@@ -152,9 +155,14 @@ def _fetch_pr_list(repo: str) -> list[dict[str, Any]]:
             "number,title,headRefName,autoMergeRequest,mergeStateStatus",
             "--limit",
             "100",
+            "--paginate",
         ]
     )
-    return json.loads(result.stdout) if result.stdout.strip() else []
+    if not result.stdout.strip():
+        return []
+    # gh --paginate with --json returns a single merged JSON array.
+    raw = json.loads(result.stdout)
+    return raw if isinstance(raw, list) else []
 
 
 def _fetch_queue_events(repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -285,16 +293,32 @@ def detect_armed_not_enqueued(
                 queue_event_count=queue_event_count,
             )
 
-    # No queue event after arming — compute how long since arming
-    minutes_armed = 0.0
-    if armed_at_dt is not None:
-        delta = now - armed_at_dt
-        minutes_armed = max(0.0, delta.total_seconds() / 60.0)
-    else:
-        # Cannot determine arming time — use threshold as conservative lower bound
-        # to flag immediately (we know it's armed and CLEAN without a queue event)
-        minutes_armed = float(threshold_minutes) + 1.0
+    # No queue event after arming — compute how long since arming.
+    # When enabledAt is missing/unparsable we cannot determine elapsed time,
+    # so we skip flagging (unknown ≠ overdue).
+    if armed_at_dt is None:
+        logger.debug(
+            "[armed-not-enqueued] %s#%d: enabledAt missing or unparsable — "
+            "cannot determine elapsed time; not flagging",
+            repo,
+            pr_number,
+        )
+        return ModelArmedNotEnqueuedFinding(
+            repo=repo,
+            pr_number=pr_number,
+            pr_title=pr_title,
+            head_ref=head_ref,
+            status=EnumArmedNotEnqueuedStatus.ARMED_NOT_ENQUEUED,
+            armed_at=armed_at_str,
+            last_queue_event_at=last_queue_event_at,
+            merge_state_status=merge_state,
+            minutes_armed_without_queue=0.0,
+            queue_event_count=queue_event_count,
+            flagged=False,
+        )
 
+    delta = now - armed_at_dt
+    minutes_armed = max(0.0, delta.total_seconds() / 60.0)
     flagged = minutes_armed > threshold_minutes
 
     return ModelArmedNotEnqueuedFinding(

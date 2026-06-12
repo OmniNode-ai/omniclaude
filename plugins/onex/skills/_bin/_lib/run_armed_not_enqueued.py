@@ -37,6 +37,19 @@ from .base import ScriptStatus, atomic_write_json, default_log_dir, default_run_
 from .repo_aliases import AliasResolutionError, resolve
 
 
+def _positive_int(value: str) -> int:
+    """Argparse type validator: accepts only positive integers."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid integer")
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(
+            f"threshold-minutes must be a positive integer, got {ivalue}"
+        )
+    return ivalue
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="run_armed_not_enqueued",
@@ -52,10 +65,10 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--threshold-minutes",
-        type=int,
+        type=_positive_int,
         default=ARMED_NOT_ENQUEUED_THRESHOLD_MINUTES,
         dest="threshold_minutes",
-        help=f"Minutes before flagging (default: {ARMED_NOT_ENQUEUED_THRESHOLD_MINUTES})",
+        help=f"Minutes before flagging — must be a positive integer (default: {ARMED_NOT_ENQUEUED_THRESHOLD_MINUTES})",
     )
     parser.add_argument(
         "--format",

@@ -169,18 +169,21 @@ class TestDetectArmedNotEnqueued:
         assert finding.flagged is False  # Only 10 min, under threshold
 
     @patch("_lib.armed_not_enqueued._fetch_queue_events")
-    def test_missing_enabled_at_uses_conservative_threshold(
-        self, mock_events: MagicMock
-    ) -> None:
-        """Missing enabledAt treats PR as over threshold (conservative — flag it)."""
+    def test_missing_enabled_at_not_flagged(self, mock_events: MagicMock) -> None:
+        """Missing enabledAt: cannot determine elapsed time, so PR is not flagged.
+
+        Unknown elapsed time is not the same as overdue — we do not fabricate
+        a duration when the arming timestamp is absent or unparsable.
+        """
         mock_events.return_value = []
         pr = _make_pr(auto_merge={})  # No enabledAt
 
         finding = detect_armed_not_enqueued("org/repo", pr, now=NOW)
 
-        # Conservative: no timestamp = assume it's been a long time
+        # Unknown timestamp = not flagged (unknown ≠ overdue)
         assert finding.status == EnumArmedNotEnqueuedStatus.ARMED_NOT_ENQUEUED
-        assert finding.flagged is True
+        assert finding.flagged is False
+        assert finding.minutes_armed_without_queue == 0.0
 
     @patch("_lib.armed_not_enqueued._fetch_queue_events")
     def test_custom_threshold(self, mock_events: MagicMock) -> None:
@@ -399,7 +402,7 @@ class TestScanAllQueueRepos:
         mock_scan.return_value = ([], [])
         result = scan_all_queue_repos(repos=("org/r",), now=NOW)
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             result.flagged_count = 99  # type: ignore[misc]
 
 
