@@ -84,6 +84,19 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13023 (retro B-11): UTC timestamp discipline in handoff/evidence docs.
+      # Rejects Z-suffixed clock times cited next to file-mtime markers (ls -l,
+      # mtime, Finder, last modified) — local mtimes relabeled as UTC manufactured
+      # a false outage narrative on 2026-06-11 (PROCESS_FAILURE_RETRO.md §5.1).
+      # Hard fail — no warn-only (CLAUDE.md Rule #5). Escape: 'utc-ok: <reason>'.
+      - id: check-utc-timestamp-discipline
+        name: Reject Z-suffixed times adjacent to mtime citations (OMN-13023)
+        entry: .pre-commit-hooks/check-utc-timestamp-discipline.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
       # approval receipt (# skip-token-allowed: <receipt-id>).
