@@ -1,0 +1,22 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13064"
+title: "Referenced prerequisite context for OMN-13090"
+summary: >
+  Repo-local context contract for a prerequisite ticket referenced by PR contract validation metadata.
+  OMN-13090 is the active delivery ticket for this PR.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-context-reference"
+    description: "Context-only repo-local contract so PR contract validation has a ticket file for the referenced ID."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f contracts/OMN-13064.yaml"
