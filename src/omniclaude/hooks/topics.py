@@ -292,6 +292,18 @@ class TopicBase(StrEnum):
     """Derived from skill.completed; consumed by omnidash skill_invocations projection (OMN-6800)."""
 
     # ==========================================================================
+    # Durable capture topics (OMN-13092)
+    # Duty-critical: suppression of tool output from the LLM context is only
+    # allowed when the full bytes are content-addressed in the artifact store
+    # and an event records the capture (no-hidden-loss invariant).
+    # ==========================================================================
+    ARTIFACT_CAPTURED = "onex.evt.omnimarket.artifact-captured.v1"
+    """Content-addressed artifact captured in the artifact store; partition key is correlation_id."""
+
+    TOOL_OUTPUT_CAPTURED = "onex.evt.omnimarket.tool-output-captured.v1"
+    """Tool output captured with artifact refs and suppression decision; partition key is correlation_id."""
+
+    # ==========================================================================
     # Friction observation topics (OMN-5747)
     # ==========================================================================
     FRICTION_OBSERVED = "onex.evt.omniclaude.friction-observed.v1"

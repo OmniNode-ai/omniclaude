@@ -110,6 +110,8 @@ class TestModuleImport:
             "llm.cost.completed",  # OMN-7570 - LLM cost telemetry for omnidash llm_cost_aggregates
             "agent.action",  # wire-missing-producers - Per-tool agent action
             "diagnostic.daemon.health",  # OMN-10126 - Runtime daemon health probe
+            "artifact.captured",  # OMN-13092 - Content-addressed artifact captured (duty_critical)
+            "tool.output.captured",  # OMN-13092 - Tool output captured with artifact refs (duty_critical)
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
