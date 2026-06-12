@@ -73,6 +73,7 @@ def _resolve_daemon_registry_path() -> Path:
         "OMNIMARKET_TOPICS_REGISTRY_PATH, no $OMNI_HOME/omnimarket checkout). "
         "The registry-consistency CI job provides blocking coverage."
     )
+    raise AssertionError("pytest.skip returned unexpectedly")
 
 
 def _load_daemon_events() -> dict[str, object]:
