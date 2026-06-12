@@ -1,5 +1,6 @@
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 """CLI entrypoint for the live golden-chain sweep orchestrator."""
 
 from __future__ import annotations

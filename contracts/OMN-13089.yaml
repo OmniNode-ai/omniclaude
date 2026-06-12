@@ -1,0 +1,22 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13089"
+title: "Skill output suppression epic context"
+summary: >
+  Repo-local context contract for the skill-output-suppression epic referenced by OMN-13090 probe evidence.
+  This PR does not implement the epic; it records Phase 0a probe findings used by later work.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-context-reference"
+    description: "The OMN-13090 probe document references this epic as context only."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'OMN-13089' docs/research/2026-06-12-updated-tool-output-shape-probe.md"

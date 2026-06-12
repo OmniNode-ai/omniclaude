@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 """Run the required live golden-chain CI gate.
 
 The gate exercises the authoritative omniclaude sweep over real Redpanda and
