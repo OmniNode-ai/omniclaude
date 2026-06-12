@@ -141,7 +141,11 @@ class ModelArmedNotEnqueuedScanResult(BaseModel):
 def _fetch_pr_list(repo: str) -> list[dict[str, Any]]:
     """Fetch all open PRs with auto-merge and merge-state fields.
 
-    Uses ``--paginate`` so repos with >100 open PRs are fully scanned.
+    Uses a high ``--limit`` to avoid truncating large repos. The GitHub REST
+    API caps PR list results at 1000; repos above that threshold are
+    theoretical edge cases for queue repos, which typically have <100 open PRs.
+    ``gh pr list`` does not support ``--paginate``; use ``gh api`` if true
+    pagination is needed in the future.
     """
     result = run_gh(
         [
@@ -154,13 +158,11 @@ def _fetch_pr_list(repo: str) -> list[dict[str, Any]]:
             "--json",
             "number,title,headRefName,autoMergeRequest,mergeStateStatus",
             "--limit",
-            "100",
-            "--paginate",
+            "1000",
         ]
     )
     if not result.stdout.strip():
         return []
-    # gh --paginate with --json returns a single merged JSON array.
     raw = json.loads(result.stdout)
     return raw if isinstance(raw, list) else []
 
