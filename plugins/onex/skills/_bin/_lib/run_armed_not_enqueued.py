@@ -24,8 +24,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+
+_OWNER_REPO_RE = re.compile(r"^[^/]+/[^/]+$")
 
 from .armed_not_enqueued import (
     ARMED_NOT_ENQUEUED_THRESHOLD_MINUTES,
@@ -104,14 +107,17 @@ def _resolve_repos(repos_arg: str | None) -> tuple[str, ...]:
         try:
             resolved.append(resolve(raw))
         except AliasResolutionError:
-            # Accept full slugs that aren't in the alias registry
-            if "/" in raw:
+            # Accept full slugs that aren't in the alias registry, but reject
+            # malformed values (e.g. "owner/", "owner/repo/extra") that would
+            # only produce a confusing gh fetch error later.
+            if _OWNER_REPO_RE.match(raw):
                 resolved.append(raw)
             else:
                 print(
-                    f"WARNING: unknown repo alias {raw!r} — skipping",
+                    f"ERROR: invalid repo slug {raw!r} — expected owner/repo format",
                     file=sys.stderr,
                 )
+                sys.exit(1)
     return tuple(resolved)
 
 

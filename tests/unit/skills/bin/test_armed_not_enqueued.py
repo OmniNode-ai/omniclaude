@@ -568,3 +568,38 @@ class TestModelInvariants:
             "OmniNode-ai/omnimarket",
         }
         assert set(QUEUE_REPOS) == expected
+
+
+class TestResolveRepos:
+    """Tests for the _resolve_repos slug-validation boundary in run_armed_not_enqueued."""
+
+    def test_valid_slug_accepted(self) -> None:
+        """A valid owner/repo slug not in alias registry is accepted via fallback."""
+        from _lib.run_armed_not_enqueued import _resolve_repos  # noqa: PLC0415
+
+        result = _resolve_repos("OmniNode-ai/some-new-repo")
+        assert result == ("OmniNode-ai/some-new-repo",)
+
+    def test_malformed_slug_trailing_slash_exits(self) -> None:
+        """A slug like 'owner/' (trailing slash) must exit with code 1."""
+        from _lib.run_armed_not_enqueued import _resolve_repos  # noqa: PLC0415
+
+        with pytest.raises(SystemExit) as exc_info:
+            _resolve_repos("owner/")
+        assert exc_info.value.code == 1
+
+    def test_malformed_slug_extra_slash_exits(self) -> None:
+        """A slug like 'owner/repo/extra' (too many slashes) must exit with code 1."""
+        from _lib.run_armed_not_enqueued import _resolve_repos  # noqa: PLC0415
+
+        with pytest.raises(SystemExit) as exc_info:
+            _resolve_repos("owner/repo/extra")
+        assert exc_info.value.code == 1
+
+    def test_malformed_slug_no_slash_no_alias_exits(self) -> None:
+        """A slug with no slash that isn't a registered alias exits with code 1."""
+        from _lib.run_armed_not_enqueued import _resolve_repos  # noqa: PLC0415
+
+        with pytest.raises(SystemExit) as exc_info:
+            _resolve_repos("just-a-name-no-slash")
+        assert exc_info.value.code == 1
