@@ -22,6 +22,7 @@ import pytest
 _BIN_DIR = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "skills" / "_bin"
 sys.path.insert(0, str(_BIN_DIR))
 
+import pydantic  # noqa: E402
 from _lib.armed_not_enqueued import (  # noqa: E402
     ARMED_NOT_ENQUEUED_THRESHOLD_MINUTES,
     QUEUE_REPOS,
@@ -533,7 +534,7 @@ class TestModelInvariants:
             pr_number=1,
             status=EnumArmedNotEnqueuedStatus.NOT_ARMED,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             f.flagged = True  # type: ignore[misc]
 
     def test_scan_result_frozen(self) -> None:
@@ -543,11 +544,11 @@ class TestModelInvariants:
             findings=[],
             flagged_count=0,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             r.flagged_count = 99  # type: ignore[misc]
 
     def test_finding_extra_forbid(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             ModelArmedNotEnqueuedFinding(
                 repo="org/r",
                 pr_number=1,
