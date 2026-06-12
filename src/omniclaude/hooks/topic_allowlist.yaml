@@ -827,3 +827,35 @@ allowed_extras:
       omnibase_infra). This stub is retained in TopicBase for backward-compat
       reference only and will be removed in a follow-up cleanup ticket.
     ticket: OMN-10834
+
+  # ---------------------------------------------------------------------------
+  # Durable capture topics (OMN-13092)
+  # Producer-side contract ownership lives in omnimarket:
+  # node_emit_daemon/contract.yaml declares both topics in publish_topics and
+  # registries/topics.yaml registers them at duty_critical tier. omniclaude's
+  # TopicBase carries the reference so hook-side emitters (parent-epic Phase 3
+  # suppressor backstop) can register the event types; no omniclaude node
+  # contract can own an omnimarket-domain topic.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omnimarket.artifact-captured.v1"
+    lifecycle: integration
+    reason: >
+      Duty-critical capture-trail event (no-hidden-loss invariant, OMN-13089).
+      Topic is owned and contract-declared by omnimarket node_emit_daemon
+      (contract.yaml publish_topics + registries/topics.yaml duty_critical
+      registration). omniclaude only references it for hook-side event-type
+      registration; the contract schema here cannot declare a foreign-domain
+      publish topic.
+    ticket: OMN-13092
+
+  - topic: "onex.evt.omnimarket.tool-output-captured.v1"
+    lifecycle: integration
+    reason: >
+      Duty-critical capture-trail event (no-hidden-loss invariant, OMN-13089).
+      Topic is owned and contract-declared by omnimarket node_emit_daemon
+      (contract.yaml publish_topics + registries/topics.yaml duty_critical
+      registration). omniclaude only references it for hook-side event-type
+      registration; the contract schema here cannot declare a foreign-domain
+      publish topic.
+    ticket: OMN-13092

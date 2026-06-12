@@ -1199,6 +1199,44 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         ],
     ),
     # =========================================================================
+    # Durable Capture Events (OMN-13092)
+    # =========================================================================
+    # Duty-critical capture trail for the skill-output-suppression slice:
+    # suppression of tool output from the LLM context is only allowed when the
+    # full bytes are content-addressed in the artifact store and an event
+    # records the capture (no-hidden-loss invariant).
+    "artifact.captured": EventRegistration(
+        event_type="artifact.captured",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.ARTIFACT_CAPTURED,
+                transform=None,  # Passthrough — event carries refs/hashes, never raw bytes
+                description="Content-addressed artifact captured in the artifact store",
+            ),
+        ],
+        partition_key_field="correlation_id",
+        required_fields=[
+            "artifact_ref",
+            "artifact_hash",
+            "artifact_size_bytes",
+            "artifact_kind",
+            "source_system",
+            "correlation_id",
+        ],
+    ),
+    "tool.output.captured": EventRegistration(
+        event_type="tool.output.captured",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TOOL_OUTPUT_CAPTURED,
+                transform=None,  # Passthrough — event carries refs and a bounded summary
+                description="Tool output captured with artifact refs and suppression decision",
+            ),
+        ],
+        partition_key_field="correlation_id",
+        required_fields=["tool_name", "suppression_decision", "correlation_id"],
+    ),
+    # =========================================================================
     # LLM Cost Telemetry (OMN-7570)
     # =========================================================================
     # Emitted by session-end hook with session-level token usage and cost data.

@@ -1168,6 +1168,65 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Checkout canonical omnimarket registry
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: dev
+          path: _registry/omnimarket
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
+        uses: actions/cache/restore@v5
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen --group dev
+
+      - name: Validate golden chain registry
+        working-directory: ${{ github.workspace }}
+        run: >-
+          uv run python scripts/validation/validate_golden_chain_integrity.py
+          --canonical-registry
+          _registry/omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml
+
+  # Cross-registry consistency gate (OMN-13092)
+  # Hook frozenset (emit_client_wrapper.SUPPORTED_EVENT_TYPES) must be a
+  # subset of the omnimarket emit-daemon YAML registry. Checks out
+  # omnimarket@dev so the comparison targets the live routing authority.
+  registry-consistency:
+    name: Registry Consistency
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - name: Checkout canonical omnimarket registry
         uses: actions/checkout@v6
@@ -1197,12 +1256,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
-      - name: Validate golden chain registry
+      - name: Run registry consistency tests
         working-directory: ${{ github.workspace }}
-        run: >-
-          uv run python scripts/validation/validate_golden_chain_integrity.py
-          --canonical-registry
-          _registry/omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml
+        env:
+          OMNIMARKET_TOPICS_REGISTRY_PATH: ${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml
+        run: uv run pytest tests/hooks/test_registry_consistency.py -v
 
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
@@ -2621,6 +2679,7 @@ jobs:
       - agent-framework-tests
       - database-validation
       - golden-chain-live
+      - registry-consistency
     if: always()
     steps:
       - name: Check test results
@@ -2634,7 +2693,8 @@ jobs:
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
             "database-validation=${{ needs.database-validation.result }}" \
-            "golden-chain-live=${{ needs.golden-chain-live.result }}"; do
+            "golden-chain-live=${{ needs.golden-chain-live.result }}" \
+            "registry-consistency=${{ needs.registry-consistency.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then

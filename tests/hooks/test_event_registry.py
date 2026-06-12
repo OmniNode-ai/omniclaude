@@ -852,6 +852,9 @@ class TestEventRegistryIntegration:
             "llm.cost.completed",
             # Per-tool agent action (wire-missing-producers)
             "agent.action",
+            # Durable capture events (OMN-13092)
+            "artifact.captured",
+            "tool.output.captured",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
