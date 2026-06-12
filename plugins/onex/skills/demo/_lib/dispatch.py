@@ -9,8 +9,22 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+# Sibling topic-constant module must resolve under every load mode this file
+# supports: package import, script execution, and importlib file loading
+# (tests/skills/test_demo_skill.py uses spec_from_file_location).
+_LIB_DIR = str(Path(__file__).resolve().parent)
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
+
+from topics import (  # noqa: E402
+    TOPIC_DEMO_COST_SKILL_RESPONSE,
+    TOPIC_DEMO_FANOUT_SKILL_RESPONSE,
+    TOPIC_DEMO_RENDER_SKILL_RESPONSE,
+)
 
 SUPPORTED_SUBCOMMANDS = frozenset({"delegation"})
 CURATED_TASKS = (
@@ -136,7 +150,7 @@ def dispatch(
                 "dry_run": effective_dry_run,
                 "provider_fixtures": PROVIDER_FIXTURES,
             },
-            response_topic="onex.evt.omnibase-infra.demo-fanout-skill.v1",  # arch-topic-naming: ignore
+            response_topic=TOPIC_DEMO_FANOUT_SKILL_RESPONSE,
         )
         inference_results = fanout["results"]
         cost = _dispatch_runtime(
@@ -145,7 +159,7 @@ def dispatch(
                 "inference_results": inference_results,
                 "pricing_table": PRICING_TABLE,
             },
-            response_topic="onex.evt.omnibase-infra.demo-cost-skill.v1",  # arch-topic-naming: ignore
+            response_topic=TOPIC_DEMO_COST_SKILL_RESPONSE,
         )
         render = _dispatch_runtime(
             command_name="demo_renderer_effect",
@@ -157,7 +171,7 @@ def dispatch(
                 "bar_width": 40,
                 "title": "ONEX Demo Delegation Cost Comparison",
             },
-            response_topic="onex.evt.omnibase-infra.demo-render-skill.v1",  # arch-topic-naming: ignore
+            response_topic=TOPIC_DEMO_RENDER_SKILL_RESPONSE,
         )
     except Exception as exc:
         return {

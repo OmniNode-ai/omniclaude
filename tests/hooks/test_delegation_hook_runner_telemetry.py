@@ -221,6 +221,10 @@ def test_telemetry_correlation_id_from_env_fallback() -> None:
                 stdin,
                 env={
                     "HOOK_CORRELATION_ID": "env-corr",
+                    # Mask any ambient Claude Code session so the legacy-alias
+                    # fallback path is exercised deterministically (empty value
+                    # falls through in resolve_session_id's lookup order).
+                    "CLAUDE_CODE_SESSION_ID": "",
                     "CLAUDE_SESSION_ID": "env-sess",
                 },
             )

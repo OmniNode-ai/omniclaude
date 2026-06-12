@@ -126,7 +126,13 @@ def main() -> int:
     if not correlation_id:
         correlation_id = os.environ.get("HOOK_CORRELATION_ID", "")
     if not session_id:
-        session_id = os.environ.get("CLAUDE_SESSION_ID", "")
+        try:
+            from .session_id import resolve_session_id  # noqa: PLC0415
+        except ImportError:
+            from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
+                resolve_session_id,
+            )
+        session_id = resolve_session_id(default="")
 
     # Flatten tool_input to a string for gate + classifier
     tool_input = (
