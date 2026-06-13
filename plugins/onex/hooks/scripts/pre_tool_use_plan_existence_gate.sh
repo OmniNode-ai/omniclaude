@@ -58,6 +58,18 @@ if [[ ! "$CURRENT_BRANCH" =~ /omn-[0-9]+-[a-zA-Z0-9_-]+ ]]; then
     exit 0
 fi
 
+# OMN-13139: OCC evidence branches (e.g. jonah/omn-XXXX-occ) record verification
+# evidence — OCC contracts + DoD receipts — for a fix implemented in ANOTHER repo.
+# They do not implement a plan, and onex_change_control is not where plans live
+# (plans live under $OMNI_HOME/docs/plans). Requiring a docs/plans/ file in the OCC
+# repo is a category error with no bootstrap path (the gate would block the very
+# Write that creates the first plan). Exempt OCC evidence branches.
+if [[ "$CURRENT_BRANCH" =~ -occ$ ]]; then
+    # OCC evidence branch — pass through
+    printf '%s\n' "$TOOL_INFO"
+    exit 0
+fi
+
 # -----------------------------------------------------------------------
 # Locate the repo root (where docs/plans/ should live)
 # -----------------------------------------------------------------------
