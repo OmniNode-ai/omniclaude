@@ -43,7 +43,7 @@ dod_evidence:
     status: "verified"
     checks:
       - check_type: "command"
-        check_value: "grep -c 'RUNTIME_HEALTH\|CONTAINER_HEALTH\|GITHUB_CI' plugins/onex/skills/integration_sweep/SKILL.md"
+        check_value: "grep -c RUNTIME_HEALTH plugins/onex/skills/integration_sweep/SKILL.md"
   - id: "dod-golden-chain-sweep-harness-removed"
     description: >-
       golden_chain_sweep prompt.md harness sections (publish/poll/assert/cleanup/INSERT) removed.
