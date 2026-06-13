@@ -2,12 +2,20 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# PostToolUse Output Suppressor Hook [OMN-6733]
-# Reduces Claude context token usage by suppressing verbose output from
-# skill-related commands (pytest, mypy, ruff, pre-commit, etc.)
+# PostToolUse Output Suppressor Hook [OMN-6733, rewritten OMN-13095]
+# Layer C backstop of the skill-output-suppression plan (epic OMN-13089):
+# captures verbose matched Bash output to the content-addressed artifact
+# store, then replaces the Claude-visible tool result via
+# hookSpecificOutput.updatedToolOutput (object form — probe OMN-13090).
 #
-# Budget: <50ms (Python does the detection; most invocations are passthrough)
-# Safety: Always exits 0. Errors pass through unchanged.
+# Protocol (probe-verified, CLI 2.1.175):
+#   - Passthrough emits NOTHING on stdout (plain stdout is debug-log-only).
+#   - Suppression emits exactly ONE JSON object: the hookSpecificOutput
+#     envelope (with "hookEventName": "PostToolUse") produced by
+#     skill_output_suppressor.py.
+#
+# Budget: <100ms (Python does the detection; most invocations are passthrough)
+# Safety: Always exits 0. On any failure the original output reaches Claude.
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -32,21 +40,28 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 
 # --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
+# Passthrough = NO stdout (OMN-13095): without ONEX_STATE_DIR we cannot log
+# or derive the artifact store root, so exit silently — the model sees the
+# original tool output unchanged.
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; ONEX_REGISTRY_ROOT may be unset. Hook cannot write log." \
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; suppressor passthrough." \
         >> /tmp/onex-hook-error.log
-    cat
     exit 0
 fi
 LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/output-suppressor.log"
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 
-# Detect project root
+# Detect project root (required by common.sh)
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
 if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
     PROJECT_ROOT="${CLAUDE_PROJECT_DIR}"
 fi
 
-mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+# --- Artifact store root injection [OMN-13095, probe OMN-13090 Probe 4] ---
+# Hook processes inherit ONEX_STATE_DIR but NOT ONEX_ARTIFACT_STORE_ROOT.
+# The artifact store fails fast (KeyError) without it, so derive it here
+# from the canonical state convention. No hardcoded absolute paths.
+export ONEX_ARTIFACT_STORE_ROOT="${ONEX_ARTIFACT_STORE_ROOT:-${ONEX_STATE_DIR}/artifacts}"
 
 # Source common.sh for PYTHON_CMD
 source "${HOOKS_DIR}/scripts/common.sh"
@@ -54,26 +69,27 @@ onex_hook_gate POST_TOOL_OUTPUT_SUPPRESSOR || exit 0
 
 SUPPRESSOR="${HOOKS_LIB}/skill_output_suppressor.py"
 if [[ ! -f "$SUPPRESSOR" ]]; then
-    cat  # pass through unchanged
+    # Passthrough: emit nothing.
     exit 0
 fi
 
-# Read stdin, pipe through suppressor, output result
+# Read stdin once.
 TOOL_INFO=$(cat)
 
 # Quick check: only process Bash tool calls (avoid Python startup for non-Bash)
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL_NAME=""
 if [[ "$TOOL_NAME" != "Bash" ]]; then
-    printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
-# Run suppressor
+# Run suppressor. Python prints either nothing (passthrough) or exactly one
+# hookSpecificOutput JSON object (suppression). Its stderr goes to the log.
 RESULT=$(printf '%s' "$TOOL_INFO" | "$PYTHON_CMD" "$SUPPRESSOR" 2>>"$LOG_FILE") || {
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Suppressor failed, passing through" >> "$LOG_FILE"
-    printf '%s\n' "$TOOL_INFO"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Suppressor failed, passthrough (no output)" >> "$LOG_FILE"
     exit 0
 }
 
-printf '%s\n' "$RESULT"
+if [[ -n "$RESULT" ]]; then
+    printf '%s\n' "$RESULT"
+fi
 exit 0
