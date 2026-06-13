@@ -5,7 +5,7 @@ You are executing the golden-chain-sweep skill. This validates end-to-end Kafka-
 ## Argument Parsing
 
 ```
-/golden_chain_sweep [--chains <chain1,chain2,...>] [--timeout-ms <ms>] [--projected-rows '<json>']
+/golden_chain_sweep [--chains <chain1,chain2,...>] [--timeout-ms <ms>] [--projected-rows '<json>'] [--dry-run]
 ```
 
 ```python
@@ -14,6 +14,7 @@ args = "$ARGUMENTS".split() if "$ARGUMENTS".strip() else []
 chains_filter = None
 timeout_ms = 15000
 projected_rows = {}
+dry_run = "--dry-run" in args
 
 if "--chains" in args:
     idx = args.index("--chains")
@@ -48,7 +49,8 @@ Dispatch to `node_golden_chain_sweep` with the resolved arguments:
 onex node node_golden_chain_sweep -- \
   [--chains <comma-list>] \
   [--timeout-ms <ms>] \
-  [--projected-rows '<json>']
+  [--projected-rows '<json>'] \
+  [--dry-run]
 ```
 
 Capture stdout (JSON: `GoldenChainSweepResult`). Exit 0 = all chains pass, exit 1 = partial/fail.

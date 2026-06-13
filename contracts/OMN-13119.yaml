@@ -28,4 +28,8 @@ dod_evidence:
     status: "verified"
     checks:
       - check_type: "command"
-        check_value: "test -f contracts/OMN-13119.yaml"
+        check_value: >-
+          gh pr view 1756 --repo OmniNode-ai/omniclaude --json body --jq '.body' |
+          grep -q 'Evidence-Ticket: OMN-13126' &&
+          gh pr view 1206 --repo OmniNode-ai/omnimarket --json body --jq '.body' |
+          grep -q 'Evidence-Ticket: OMN-13126'
