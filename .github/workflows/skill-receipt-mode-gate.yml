@@ -67,7 +67,15 @@ jobs:
         run: |
           set -euo pipefail
           uv venv .skill-receipt-venv --python 3.12
-          uv pip install --python .skill-receipt-venv/bin/python ./_omnibase_core
+          # Build omnibase_core from the freshly-checked-out dev source
+          # (./_omnibase_core) into a wheel, then install THAT wheel by path. The
+          # validator (OMN-13098) lands on omnibase_core dev before any release bump,
+          # so a published index wheel does not yet contain it — installing the
+          # directly-built wheel is the only way to guarantee the dev source (with the
+          # validator) is what gets installed, never a stale registry version.
+          uv build --wheel --out-dir .skill-receipt-wheel ./_omnibase_core
+          uv pip install --python .skill-receipt-venv/bin/python \
+            .skill-receipt-wheel/*.whl
       - name: Run skill receipt-mode gate
         run: |
           set -euo pipefail
