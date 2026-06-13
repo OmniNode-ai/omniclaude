@@ -68,15 +68,28 @@ _BARE_SKILL_NAME="${SKILL_NAME#*:}"
 _SKILL_MD="${_PLUGIN_ROOT}/skills/${_BARE_SKILL_NAME}/SKILL.md"
 
 if [[ -f "$_SKILL_MD" ]]; then
-    # Extract first YAML frontmatter block (between first pair of --- delimiters)
-    if awk '/^---$/{c++; if(c==2) exit; next} c==1{print}' "$_SKILL_MD" \
-        | grep -qE '^foreground_orchestrator:[[:space:]]*true[[:space:]]*$'; then
-        # Foreground orchestrator: skip enforcement, emit empty no-op output
+    # Extract the first YAML frontmatter block (between the first pair of ---
+    # delimiters) once, then test both exemption signals against it.
+    _FRONTMATTER="$(awk '/^---$/{c++; if(c==2) exit; next} c==1{print}' "$_SKILL_MD")"
+
+    # Exemption 1 — foreground_orchestrator: true (OMN-10261). The LLM must
+    # orchestrate inline; it cannot delegate to a subagent.
+    #
+    # Exemption 2 — skill_kind: dispatch (OMN-13096). A dispatch skill is now
+    # ONE CLI call (e.g. `onex delegate "<prompt>"`) that prints one typed
+    # ModelSkillResult; forcing a ~95k-token general-purpose subagent spawn to
+    # run one bounded command defeats the purpose of delegation. Dispatch
+    # skills are handled inline like informational skills.
+    if printf '%s\n' "$_FRONTMATTER" \
+        | grep -qE '^foreground_orchestrator:[[:space:]]*true[[:space:]]*$' \
+        || printf '%s\n' "$_FRONTMATTER" \
+        | grep -qE '^skill_kind:[[:space:]]*dispatch[[:space:]]*$'; then
+        # Exempt: skip enforcement, emit empty no-op output.
         jq -n '{hookSpecificOutput: {}}'
         exit 0
     fi
 fi
-unset _BARE_SKILL_NAME _SKILL_MD _PLUGIN_ROOT
+unset _BARE_SKILL_NAME _SKILL_MD _PLUGIN_ROOT _FRONTMATTER
 
 # Notify daemon that a skill was loaded (tightens thresholds) [OMN-5308]
 if [[ -n "$SESSION_ID" ]]; then

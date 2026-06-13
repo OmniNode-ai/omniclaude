@@ -48,9 +48,25 @@ def test_run_py_has_no_legacy_dispatch_helpers() -> None:
 def test_legacy_python_bridge_is_deleted() -> None:
     assert not _RUN_PATH.exists()
     skill = _SKILL_PATH.read_text(encoding="utf-8")
-    prompt = _PROMPT_PATH.read_text(encoding="utf-8")
     assert "node_delegate_skill_orchestrator" in skill
-    assert "uv run onex node node_delegate_skill_orchestrator" in prompt
+
+
+def test_prompt_is_single_command_not_bare_onex_node() -> None:
+    """OMN-13096 (criterion 10): the prompt invokes the single `onex delegate`
+    command and contains NO bare `onex node`/`cat workflow_result.json` form."""
+    prompt = _PROMPT_PATH.read_text(encoding="utf-8")
+    assert "onex delegate" in prompt
+    # The eliminated multi-step shim artifacts must be gone.
+    assert "uv run onex node node_delegate_skill_orchestrator" not in prompt
+    assert "workflow_result.json" not in prompt
+    assert "mktemp" not in prompt
+
+
+def test_skill_kind_dispatch_declared() -> None:
+    """The delegate skill must declare skill_kind: dispatch so the delegation
+    enforcer exempts it from the subagent mandate (OMN-13096)."""
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+    assert "skill_kind: dispatch" in skill
 
 
 def test_no_runtime_transport_env_vars_read_by_skill_surface() -> None:
