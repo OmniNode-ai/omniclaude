@@ -103,7 +103,7 @@ args:
 /gap <subcommand> [args]
         |
         v
-onex run-node node_gap_compute -- --subcommand <subcommand> [flags]
+uv run onex run node_gap_compute -- --subcommand <subcommand> [flags]
   omnimarket/src/omnimarket/nodes/node_gap_compute/
   contract.yaml → subscribe: onex.cmd.omnimarket.gap-compute-start.v1
         |

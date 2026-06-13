@@ -63,7 +63,7 @@ From the JSON output display:
 | pattern_learning | `onex.evt.omniintelligence.pattern-stored.v1` | `pattern_learning_artifacts` |
 | delegation | `onex.evt.omniclaude.task-delegated.v1` | `delegation_events` |
 | routing | `onex.evt.omniclaude.llm-routing-decision.v1` | `llm_routing_decisions` |
-| evaluation | `onex.evt.omniclaude.session-outcome.v1` | `session_outcomes` |
+| evaluation | `onex.evt.omniintelligence.run-evaluated.v1` | `session_outcomes` |
 
 ## Architecture
 

@@ -25,7 +25,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_dod_sweep_orchestrator. -->
+<!-- routing-enforced: dispatches to node_dod_sweep_orchestrator (stub). functionally-complete requires real node implementation. -->
 
 # DoD Compliance Sweep
 

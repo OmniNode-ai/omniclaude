@@ -37,7 +37,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_env_parity_compute. -->
+<!-- routing-enforced: dispatches to node_env_parity_compute (stub). functionally-complete requires real node implementation. -->
 
 # Env Parity Checker
 

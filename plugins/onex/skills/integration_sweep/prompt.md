@@ -15,13 +15,21 @@ Say: "I'm using the integration-sweep skill to dispatch node_integration_sweep_o
 
 | Flag | Default |
 |------|---------|
+| `--date <iso-date>` | today |
+| `--tickets <ids>` | (empty) |
+| `--mode <scope>` | `omniclaude-only` |
 | `--dry-run` | unset |
+| `--output <path>` | auto |
 
 ## Dispatch
 
 ```bash
 onex run node_integration_sweep_orchestrator -- \
-  ${DRY_RUN:+--dry-run}
+  ${DATE:+--date "$DATE"} \
+  ${TICKETS:+--tickets "$TICKETS"} \
+  ${MODE:+--mode "$MODE"} \
+  ${DRY_RUN:+--dry-run} \
+  ${OUTPUT:+--output "$OUTPUT"}
 ```
 
 Surface the JSON output from stdout. The node produces a `ModelSkillResult` with `status`, `run_id`, and `message`.

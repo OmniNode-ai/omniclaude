@@ -64,7 +64,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_pr_watch_orchestrator. -->
+<!-- routing-enforced: dispatches to node_pr_watch_orchestrator (stub). functionally-complete requires real node implementation. -->
 
 # PR Watch
 

@@ -1,5 +1,5 @@
 ---
-description: Org-wide coordinated release pipeline (structural placeholder — full handler implementation tracked in OMN-8004) — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
+description: Org-wide coordinated release pipeline — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
 mode: full
 version: 2.0.0
 level: advanced
