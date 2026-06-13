@@ -1,5 +1,7 @@
 ---
-description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, hardcoded absolute paths and LAN IPs, agent-left TODO/FIXME markers, and empty implementations.
+description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown,
+  backwards compat shims, prohibited env var patterns, hardcoded topic strings, hardcoded absolute paths
+  and LAN IPs, agent-left TODO/FIXME markers, and empty implementations.
 version: 3.1.0
 mode: full
 level: advanced
@@ -14,27 +16,18 @@ tags:
 author: OmniClaude Team
 composable: true
 args:
-  - name: --repos
-    description: "Comma-separated repo names (default: all supported repos)"
+  - name: --target-dirs
+    description: string list arg
     required: false
   - name: --checks
-    description: "Comma-separated check categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,hardcoded-paths,todo-fixme,todo-stale,empty-impls (default: all)"
-    required: false
-  - name: --dry-run
-    description: Scan and report only — no tickets, no fixes
-    required: false
-  - name: --ticket
-    description: Create Linear tickets for findings above severity threshold
+    description: string list arg
     required: false
   - name: --severity-threshold
-    description: "Minimum severity to act on: WARNING | ERROR (default: WARNING)"
+    description: string arg
     required: false
-inputs:
-  - name: repos
-    description: "list[str] — repos to scan; empty = all"
-outputs:
-  - name: skill_result
-    description: "ModelSkillResult JSON; aislop-specific findings (by severity and check) are delivered in the model's output field"
+  - name: --dry-run
+    description: boolean flag
+    required: false
 skill_kind: dispatch
 ---
 

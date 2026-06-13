@@ -1,5 +1,6 @@
 ---
-description: Auto-triage CodeRabbit review threads — classify severity and auto-reply to Minor/Nitpick findings with acknowledgment, resolving the thread so it no longer blocks merge.
+description: Auto-triage CodeRabbit review threads — classify severity and auto-reply to Minor/Nitpick
+  findings with acknowledgment, resolving the thread so it no longer blocks merge.
 mode: full
 version: 2.0.0
 level: intermediate
@@ -15,14 +16,14 @@ tags:
 author: OmniClaude Team
 composable: true
 args:
-  - name: repo
-    description: "GitHub repo in owner/name format (e.g., OmniNode-ai/omniclaude)"
+  - name: --repo
+    description: string arg (required)
     required: true
-  - name: pr
-    description: "PR number to triage"
+  - name: --pr-number
+    description: integer arg (required)
     required: true
   - name: --dry-run
-    description: "Classify threads but do not post replies or resolve"
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

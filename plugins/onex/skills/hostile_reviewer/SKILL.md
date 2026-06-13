@@ -1,5 +1,7 @@
 ---
-description: Multi-model adversarial code review with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
+description: Multi-model adversarial code review with weighted-union finding aggregation and iterative
+  convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error
+  handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
 mode: full
 version: 6.0.0
 level: intermediate
@@ -19,53 +21,20 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: pr
-    description: PR number to review (mutually exclusive with --file).
+  - name: --pr-number
+    description: integer arg
     required: false
-  - name: repo
-    description: Target GitHub repo (e.g., OmniNode-ai/omniclaude). Required with --pr.
+  - name: --repo
+    description: string arg
     required: false
-  - name: file
-    description: "Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path."
+  - name: --file-path
+    description: string arg
     required: false
-  - name: plan-path
-    description: "Alias for --file: path to a plan or design document to review adversarially"
+  - name: --models
+    description: string list arg
     required: false
-  - name: ticket_id
-    description: Linear ticket ID for loading TCB constraints
-    required: false
-  - name: models
-    description: "Comma-separated model list. Defaults to the node contract's configured models when omitted."
-    required: false
-  - name: passes
-    description: "Fixed number of passes to run. Default: iterates until 2 consecutive clean passes."
-    required: false
-  - name: gate
-    description: "Gate mode: structured pass/fail/block verdict suitable for merge gating."
-    required: false
-  - name: gate-only
-    description: "Review-only gate mode (no fix-apply). Safe to invoke from sub-agent context."
-    required: false
-  - name: strict
-    description: "In --gate mode: block on MINOR+ findings (default blocks on MAJOR+)"
-    required: false
-  - name: static
-    description: "Static-analysis-only mode: 7 code quality checks without adversarial review."
-    required: false
-  - name: repos
-    description: "Comma-separated repo names to scan in --static mode"
-    required: false
-  - name: categories
-    description: "Comma-separated finding categories for --static mode"
-    required: false
-  - name: dry-run
-    description: "In --static mode: scan and report only, no tickets created."
-    required: false
-  - name: ticket
-    description: "In --static mode: create Linear tickets for findings"
-    required: false
-  - name: max-tickets
-    description: "In --static mode: hard cap on tickets created per run (default: 10)"
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

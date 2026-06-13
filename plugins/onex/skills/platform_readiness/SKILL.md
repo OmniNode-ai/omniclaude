@@ -1,5 +1,7 @@
 ---
-description: Thin dispatch-only shim for the platform readiness gate. Routes to node_platform_readiness in omnimarket, which aggregates 7 verification dimensions (contract completeness, golden chain, data flow, runtime wiring, dashboard, cost, CI) into a tri-state PASS/WARN/FAIL report. No inline probe aggregation.
+description: Thin dispatch-only shim for the platform readiness gate. Routes to node_platform_readiness
+  in omnimarket, which aggregates 7 verification dimensions (contract completeness, golden chain, data
+  flow, runtime wiring, dashboard, cost, CI) into a tri-state PASS/WARN/FAIL report. No inline probe aggregation.
 mode: full
 version: 2.0.0
 level: advanced
@@ -13,28 +15,7 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 composable: false
-inputs:
-  - name: json_output
-    type: bool
-    description: "Surface the node JSON directly instead of rendering a markdown table"
-    required: false
-outputs:
-  - name: overall
-    type: str
-    description: '"PASS" | "WARN" | "FAIL"'
-  - name: dimensions
-    type: list
-    description: "Per-dimension status, freshness, details"
-  - name: blockers
-    type: list
-    description: "FAIL dimensions with actionable items"
-  - name: degraded
-    type: list
-    description: "WARN dimensions with actionable recommendations"
-args:
-  - name: --json
-    description: "Surface the node JSON directly instead of rendering a markdown table"
-    required: false
+args: []
 skill_kind: dispatch
 ---
 

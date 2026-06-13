@@ -1,28 +1,28 @@
 ---
-description: Autonomous build loop — runs the ONEX build loop workflow locally via `onex run`
+description: Single-command dispatch shim. Runs `uv run onex skill build_loop` which resolves the declarative
+  skill->node mapping, dispatches node_build_loop in receipt mode, and prints one typed ModelSkillResult.
+  No inline logic; markdown only.
 mode: full
 version: 2.0.0
 level: advanced
 debug: false
 category: workflow
-tags: [build-loop, autonomous, automation, orchestrator]
+tags:
+  - build-loop
+  - autonomous
+  - automation
+  - orchestrator
 author: OmniClaude Team
 composable: true
 args:
   - name: --max-cycles
-    description: "Maximum cycles (default: 1)"
+    description: integer arg
     required: false
   - name: --skip-closeout
-    description: "Skip close-out phase"
+    description: boolean flag
     required: false
   - name: --dry-run
-    description: "No side effects — simulate the full loop"
-    required: false
-  - name: --max-tickets
-    description: "Max tickets to dispatch per fill cycle (default: 5)"
-    required: false
-  - name: --mode
-    description: "Execution mode: build, close_out, full, observe (default: build)"
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

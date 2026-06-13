@@ -1,5 +1,7 @@
 ---
-description: Thin dispatch-only shim for the org-wide PR merge sweep pipeline. Builds the contract-canonical pr_lifecycle_orchestrator start envelope and invokes the manifest-canonical onex run-node path. No inline GH script fallback, no direct Kafka publish, no orchestration logic.
+description: Single-command dispatch shim. Runs `uv run onex skill merge_sweep` which resolves the declarative
+  skill->node mapping, dispatches node_pr_lifecycle_orchestrator in receipt mode, and prints one typed
+  ModelSkillResult. No inline logic; markdown only.
 mode: full
 version: 7.0.0
 level: advanced
@@ -18,53 +20,32 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated org/repo names to scan; empty means all OmniNode repos"
+    description: string list arg
     required: false
   - name: --dry-run
-    description: "Run without side effects"
+    description: boolean flag
     required: false
   - name: --inventory-only
-    description: "Stop after inventory"
+    description: boolean flag
     required: false
   - name: --fix-only
-    description: "Only run the fix phase; skip merge"
+    description: boolean flag
     required: false
   - name: --merge-only
-    description: "Only run the merge phase; skip fix"
+    description: boolean flag
     required: false
   - name: --max-parallel-polish
-    description: "Maximum concurrent pr-polish agents during the fix phase"
-    required: false
-  - name: --enable-auto-rebase
-    description: "Auto-rebase stale PR branches before merge"
-    required: false
-  - name: --use-dag-ordering
-    description: "Order merge candidates by dependency DAG"
-    required: false
-  - name: --enable-trivial-comment-resolution
-    description: "Resolve trivial bot review threads before merge"
-    required: false
-  - name: --enable-admin-merge-fallback
-    description: "Admin-merge PRs stuck in queue past threshold"
+    description: integer arg
     required: false
   - name: --admin-fallback-threshold-minutes
-    description: "Minutes before a queued PR is considered stuck"
+    description: integer arg
     required: false
   - name: --verify
-    description: "Run verification_sweep per PR before merge"
+    description: boolean flag
     required: false
   - name: --verify-timeout-seconds
-    description: "Hard per-PR verification timeout in seconds"
+    description: integer arg
     required: false
-  - name: --run-id
-    description: "Identifier for this run; generated when omitted"
-    required: false
-inputs:
-  - name: envelope
-    description: "ModelEventEnvelope[ModelPrLifecycleStartCommand]"
-outputs:
-  - name: orchestrator_result
-    description: "ModelPrLifecycleResult JSON"
 skill_kind: dispatch
 ---
 

@@ -1,5 +1,6 @@
 ---
-description: Scan all OmniNode repos for expired or expiring @shim decorator annotations and create Linear tickets for each expired shim. Dispatches to node_shim_scanner; creates no tickets in dry-run mode.
+description: Scan all OmniNode repos for expired or expiring @shim decorator annotations and create Linear
+  tickets for each expired shim. Dispatches to node_shim_scanner; creates no tickets in dry-run mode.
 mode: full
 version: 1.0.0
 level: advanced
@@ -15,14 +16,14 @@ tags:
 author: omninode
 composable: true
 args:
-  - name: --dry-run
-    description: "Report findings without creating Linear tickets (default: false)"
+  - name: --paths
+    description: string list arg
     required: false
-  - name: --repos
-    description: "Comma-separated repo names to scan (default: all repos under OMNI_HOME)"
+  - name: --reference-date
+    description: string arg
     required: false
-  - name: --warn-days
-    description: "Days before expiry to report as EXPIRING (default: 30)"
+  - name: --warn-days-before-expiry
+    description: integer arg
     required: false
 skill_kind: dispatch
 ---

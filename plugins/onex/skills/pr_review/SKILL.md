@@ -14,14 +14,26 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: pr_number
-    description: PR number to review
+  - name: --pr-number
+    description: integer arg (required)
     required: true
-  - name: repo
-    description: GitHub repo (owner/repo)
+  - name: --repo
+    description: string arg (required)
     required: true
+  - name: --reviewer-models
+    description: string list arg
+    required: false
+  - name: --judge-model
+    description: string arg
+    required: false
+  - name: --severity-threshold
+    description: string arg
+    required: false
+  - name: --max-findings-per-pr
+    description: integer arg
+    required: false
   - name: --dry-run
-    description: Run without posting to GitHub
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

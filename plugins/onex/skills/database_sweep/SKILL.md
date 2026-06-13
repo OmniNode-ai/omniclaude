@@ -1,5 +1,7 @@
 ---
-description: Projection table health and migration tracking — checks row count, staleness for every table in omnidash_analytics, plus migration state across all ONEX databases (pending migrations, failed state, schema fingerprint). Auto-creates Linear tickets for stale/empty tables and migration drift.
+description: Projection table health and migration tracking — checks row count, staleness for every table
+  in omnidash_analytics, plus migration state across all ONEX databases (pending migrations, failed state,
+  schema fingerprint). Auto-creates Linear tickets for stale/empty tables and migration drift.
 mode: full
 version: 3.0.0
 level: advanced
@@ -16,14 +18,17 @@ tags:
 author: omninode
 composable: true
 args:
-  - name: --dry-run
-    description: "Report findings without creating Linear tickets (default: false)"
+  - name: --omni-home
+    description: string arg
     required: false
   - name: --table
-    description: "Check a single table only (e.g., agent_routing_decisions)"
+    description: string arg
     required: false
-  - name: --staleness-threshold
-    description: "Hours before data is considered stale (default: 24)"
+  - name: --staleness-threshold-hours
+    description: integer arg
+    required: false
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

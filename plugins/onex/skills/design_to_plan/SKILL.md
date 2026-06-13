@@ -1,5 +1,6 @@
 ---
-description: End-to-end design workflow — brainstorm ideas into structured implementation plans with optional launch
+description: End-to-end design workflow — brainstorm ideas into structured implementation plans with optional
+  launch
 mode: full
 version: 2.1.0
 level: intermediate
@@ -17,16 +18,22 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --phase
-    description: "Start at phase: brainstorm (Phase 1), plan (Phase 2), or launch (Phase 3). Default: brainstorm"
+    description: string arg
     required: false
   - name: --topic
-    description: "Topic or problem to brainstorm (Phase 1)"
+    description: string arg
     required: false
   - name: --plan-path
-    description: "Path to existing plan file (skip to Phase 2 or 3)"
+    description: string arg
     required: false
   - name: --no-launch
-    description: "Stop after plan save — do not prompt for launch"
+    description: boolean flag
+    required: false
+  - name: --plan-only
+    description: boolean flag
+    required: false
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

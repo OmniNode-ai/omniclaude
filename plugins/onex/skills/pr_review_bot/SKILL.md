@@ -1,5 +1,7 @@
 ---
-description: Run the ONEX PR review bot pipeline — fetches diff, dispatches multi-model adversarial review, posts thread comments, verifies resolutions, and posts a summary verdict. Thin wrapper over node_pr_review_bot WorkflowRunner.
+description: Run the ONEX PR review bot pipeline — fetches diff, dispatches multi-model adversarial review,
+  posts thread comments, verifies resolutions, and posts a summary verdict. Thin wrapper over node_pr_review_bot
+  WorkflowRunner.
 mode: full
 version: 1.0.0
 level: intermediate
@@ -13,26 +15,26 @@ tags:
   - omnimarket
 author: OmniClaude Team
 args:
-  - name: pr
-    description: "PR number to review (e.g., 42)"
+  - name: --pr-number
+    description: integer arg (required)
     required: true
-  - name: repo
-    description: "GitHub repo in owner/repo format (e.g., OmniNode-ai/omnimarket). Defaults to the current repo if omitted."
+  - name: --repo
+    description: string arg (required)
+    required: true
+  - name: --reviewer-models
+    description: string list arg
     required: false
-  - name: --dry-run
-    description: "Skip posting comments to GitHub — review runs but no threads are created (default: false)"
+  - name: --judge-model
+    description: string arg
     required: false
   - name: --severity-threshold
-    description: "Minimum severity to post a thread: CRITICAL, MAJOR, MINOR (default: MAJOR)"
+    description: string arg
     required: false
-  - name: --reviewer-models
-    description: "Comma-separated reviewer model list. Required — caller must pass model keys registered in ModelInferenceBridgeConfig.model_configs (e.g. LLM_CODER_URL-backed key). Prior hardcoded defaults produced a silent-clean verdict when the keys weren't in the registry (OMN-9112)."
-    required: true
-  - name: --judge-model
-    description: "Judge model identifier (key registered in ModelInferenceBridgeConfig). Omit to use the node contract's configured default."
+  - name: --max-findings-per-pr
+    description: integer arg
     required: false
-  - name: --max-findings
-    description: "Cap on review threads posted per PR (default: 20)"
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

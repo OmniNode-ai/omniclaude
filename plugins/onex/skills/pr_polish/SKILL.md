@@ -1,5 +1,6 @@
 ---
-description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures, then iterate local-review until N consecutive clean passes
+description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures,
+  then iterate local-review until N consecutive clean passes
 mode: full
 version: 3.0.0
 level: intermediate
@@ -15,35 +16,41 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: pr_number
-    description: PR number or URL (auto-detects from current branch if omitted)
+  - name: --repo
+    description: string arg (required)
+    required: true
+  - name: --pr-number
+    description: integer arg (required)
+    required: true
+  - name: --ticket-id
+    description: string arg
     required: false
   - name: --required-clean-runs
-    description: "Consecutive clean local-review passes required before done (default: 4)"
+    description: integer arg
     required: false
   - name: --max-iterations
-    description: "Maximum local-review cycles (default: 10)"
+    description: integer arg
     required: false
   - name: --skip-conflicts
-    description: Skip merge conflict resolution phase
+    description: boolean flag
     required: false
   - name: --skip-pr-review
-    description: Skip PR review comments and CI failures phase
+    description: boolean flag
     required: false
   - name: --skip-local-review
-    description: Skip local-review clean-pass loop phase
+    description: boolean flag
     required: false
   - name: --no-ci
-    description: Skip CI failure fetch in PR review phase
+    description: boolean flag
     required: false
   - name: --no-push
-    description: Apply all fixes locally without pushing to remote
-    required: false
-  - name: --dry-run
-    description: Log phase decisions without making changes
+    description: boolean flag
     required: false
   - name: --no-automerge
-    description: Skip enabling GitHub automerge after all phases complete
+    description: boolean flag
+    required: false
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

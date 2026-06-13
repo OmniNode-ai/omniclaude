@@ -1,10 +1,10 @@
 ---
 version: 2.0.0
-description: >
-  Detect duplicate definitions across repos: Drizzle table definitions,
-  Kafka topic registrations, migration prefixes, and Python model names.
-  Returns structured findings for autopilot halt decisions.
+description: 'Detect duplicate definitions across repos: Drizzle table definitions, Kafka topic registrations,
+  migration prefixes, and Python model names. Returns structured findings for autopilot halt decisions.
   Dispatches to node_duplication_sweep (omnimarket).
+
+  '
 mode: full
 user_invocable: true
 level: advanced
@@ -16,6 +16,13 @@ tags:
   - dispatch-only
   - routing-enforced
 skill_kind: dispatch
+args:
+  - name: --omni-home
+    description: string arg
+    required: false
+  - name: --checks
+    description: string list arg
+    required: false
 ---
 
 # /onex:duplication_sweep — one command, one typed result

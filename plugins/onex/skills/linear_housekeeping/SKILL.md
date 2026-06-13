@@ -1,5 +1,6 @@
 ---
-description: Orchestrate full Linear housekeeping — triage ticket status, organize orphans into epics, then sync MASTER_TICKET_PLAN.md. Human checkpoint between triage and apply.
+description: Orchestrate full Linear housekeeping — triage ticket status, organize orphans into epics,
+  then sync MASTER_TICKET_PLAN.md. Human checkpoint between triage and apply.
 mode: full
 version: 2.0.0
 level: intermediate
@@ -15,11 +16,17 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
+  - name: --threshold-days
+    description: integer arg
+    required: false
+  - name: --flag-only
+    description: boolean flag
+    required: false
   - name: --team
-    description: "Linear team name to scope housekeeping (default: Omninode)"
+    description: string arg
     required: false
   - name: --dry-run
-    description: "Report only, no mutations"
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

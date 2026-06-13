@@ -13,32 +13,35 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: title
-    description: Ticket title (mutually exclusive with --from-contract, --from-plan)
+  - name: --title
+    description: string arg
     required: false
   - name: --from-contract
-    description: Path to YAML contract file
+    description: string arg
     required: false
   - name: --from-plan
-    description: Path to plan markdown file
+    description: string arg
     required: false
   - name: --milestone
-    description: Milestone ID when using --from-plan (e.g., M4)
+    description: string arg
     required: false
   - name: --repo
-    description: Repository label (e.g., omniclaude, omnibase_core)
+    description: string arg
     required: false
   - name: --parent
-    description: Parent issue ID for epic relationship (e.g., OMN-1800)
+    description: string arg
     required: false
   - name: --blocked-by
-    description: Comma-separated issue IDs that block this ticket
+    description: string list arg
+    required: false
+  - name: --project
+    description: string arg
     required: false
   - name: --team
-    description: "Linear team name (default: Omninode)"
+    description: string arg
     required: false
-  - name: --dry-run
-    description: Show what would be created without creating
+  - name: --allow-arch-violation
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

@@ -1,22 +1,28 @@
 ---
-description: End-to-end data flow verification — dispatches to node_data_flow_sweep which handles all metadata collection (rpk/psql probes) and flow classification internally.
+description: End-to-end data flow verification — dispatches to node_data_flow_sweep which handles all
+  metadata collection (rpk/psql probes) and flow classification internally.
 mode: full
 version: 2.0.0
 level: advanced
 debug: false
 category: verification
-tags: [data-flow, kafka, projections, sweep, close-out]
+tags:
+  - data-flow
+  - kafka
+  - projections
+  - sweep
+  - close-out
 author: omninode
 composable: true
 args:
+  - name: --flows
+    description: string list arg
+    required: false
+  - name: --collect
+    description: boolean flag
+    required: false
   - name: --dry-run
-    description: "Report findings without creating Linear tickets (default: false)"
-    required: false
-  - name: --topic
-    description: "Check a single topic only"
-    required: false
-  - name: --skip-playwright
-    description: "Skip Phase 3 dashboard page verification"
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

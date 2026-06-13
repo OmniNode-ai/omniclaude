@@ -1,5 +1,6 @@
 ---
-description: Scan documentation files across repos for broken references, stale content, and CLAUDE.md accuracy. Generates freshness reports and optionally creates Linear tickets for broken/stale docs.
+description: Scan documentation files across repos for broken references, stale content, and CLAUDE.md
+  accuracy. Generates freshness reports and optionally creates Linear tickets for broken/stale docs.
 mode: full
 version: 2.0.0
 level: intermediate
@@ -17,23 +18,20 @@ tags:
 author: OmniClaude Team
 composable: true
 args:
-  - name: --repo
-    description: "Scan a single repo by name"
+  - name: --omni-home
+    description: string arg
+    required: false
+  - name: --repos
+    description: string list arg
     required: false
   - name: --claude-md-only
-    description: "Only check CLAUDE.md files (faster, used in close-out autopilot)"
+    description: boolean flag
     required: false
   - name: --broken-only
-    description: "Only report broken references (skip stale)"
-    required: false
-  - name: --create-tickets
-    description: "Create Linear tickets for broken/stale docs"
-    required: false
-  - name: --max-tickets
-    description: "Max tickets to create per run (default: 10)"
+    description: boolean flag
     required: false
   - name: --dry-run
-    description: "Report only, no ticket creation"
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

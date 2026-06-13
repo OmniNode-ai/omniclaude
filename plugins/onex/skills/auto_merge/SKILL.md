@@ -14,53 +14,24 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 composable: true
-inputs:
-  - name: pr_number
-    type: int
-    description: GitHub PR number to merge
-    required: true
-  - name: repo
-    type: str
-    description: "GitHub repo slug (org/repo)"
-    required: true
-  - name: strategy
-    type: str
-    description: "Merge strategy: squash | merge | rebase (default: squash)"
-    required: false
-  - name: gate_timeout_hours
-    type: float
-    description: "Wall-clock budget in hours for the CI readiness poll. Default: 24."
-    required: false
-  - name: delete_branch
-    type: bool
-    description: Delete branch after merge (default true)
-    required: false
-  - name: ticket_id
-    type: str
-    description: "Linear ticket identifier (e.g. OMN-1234) to mark Done after merge"
-    required: false
-outputs:
-  - name: skill_result
-    type: ModelSkillResult
-    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json"
 args:
-  - name: pr_number
-    description: GitHub PR number to merge
+  - name: --pr-number
+    description: integer arg (required)
     required: true
-  - name: repo
-    description: "GitHub repo slug (org/repo)"
+  - name: --repo
+    description: string arg (required)
     required: true
   - name: --strategy
-    description: "Merge strategy: squash|merge|rebase (default squash)"
+    description: string arg
     required: false
-  - name: --gate-timeout-hours
-    description: Hours to wait for CI readiness (default 24)
-    required: false
-  - name: --no-delete-branch
-    description: Don't delete branch after merge
+  - name: --delete-branch
+    description: boolean flag
     required: false
   - name: --ticket-id
-    description: Linear ticket ID to mark Done after merge (e.g. OMN-1234)
+    description: string arg
+    required: false
+  - name: --gate-timeout-hours
+    description: integer arg
     required: false
 skill_kind: dispatch
 ---

@@ -1,5 +1,6 @@
 ---
-description: Batch create Linear tickets from a plan markdown file - parses phases/milestones, creates epic if needed, links dependencies
+description: Batch create Linear tickets from a plan markdown file - parses phases/milestones, creates
+  epic if needed, links dependencies
 mode: full
 version: 2.0.0
 level: advanced
@@ -14,26 +15,32 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: plan-file
-    description: Path to plan markdown file
+  - name: plan_path
+    description: Positional plan_path (required).
     required: true
   - name: --project
-    description: Linear project name
+    description: string arg
     required: false
   - name: --epic-title
-    description: Title for epic (overrides auto-detection from plan)
+    description: string arg
     required: false
   - name: --no-create-epic
-    description: Fail if epic doesn't exist (don't auto-create)
-    required: false
-  - name: --dry-run
-    description: Show what would be created without creating
+    description: boolean flag
     required: false
   - name: --skip-existing
-    description: Skip tickets that already exist (don't ask)
+    description: boolean flag
     required: false
   - name: --team
-    description: "Linear team name (default: Omninode)"
+    description: string arg
+    required: false
+  - name: --repo
+    description: string arg
+    required: false
+  - name: --allow-arch-violation
+    description: boolean flag
+    required: false
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

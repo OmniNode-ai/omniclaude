@@ -1,5 +1,6 @@
 ---
-description: Measure test coverage across all Python repos under omni_home, flag modules below threshold, and auto-create Linear tickets for coverage gaps
+description: Measure test coverage across all Python repos under omni_home, flag modules below threshold,
+  and auto-create Linear tickets for coverage gaps
 version: 4.0.0
 mode: full
 level: intermediate
@@ -17,19 +18,13 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated repo names to scan (default: all Python repos)"
+    description: string list arg
     required: false
-  - name: --target
-    description: "Coverage target percentage (default: 50)"
+  - name: --target-pct
+    description: integer arg
     required: false
   - name: --dry-run
-    description: Scan and report only -- no ticket creation
-    required: false
-  - name: --max-tickets
-    description: "Maximum tickets to create per run (default: 20)"
-    required: false
-  - name: --force-rescan
-    description: Ignore cache and re-run coverage scans
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---

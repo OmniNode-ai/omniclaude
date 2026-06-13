@@ -1,5 +1,6 @@
 ---
-description: Run DoD evidence checks against a ticket contract and generate a verification receipt. Includes DurableEvidenceGate pre-Linear-Done checks (RECEIPT_TRACKED, CONTRACT_CITES_MERGE_COMMIT, CONTRACT_ON_OCC_MAIN).
+description: Run DoD evidence checks against a ticket contract and generate a verification receipt. Includes
+  DurableEvidenceGate pre-Linear-Done checks (RECEIPT_TRACKED, CONTRACT_CITES_MERGE_COMMIT, CONTRACT_ON_OCC_MAIN).
 mode: full
 level: intermediate
 debug: false
@@ -16,10 +17,13 @@ author: OmniClaude Team
 version: 2.1.0
 args:
   - name: ticket_id
-    description: Linear ticket ID (e.g., OMN-1234)
+    description: Positional ticket_id (required).
     required: true
   - name: --contract-path
-    description: Override path to contract YAML (default auto-detect)
+    description: string arg
+    required: false
+  - name: --dry-run
+    description: boolean flag
     required: false
 skill_kind: dispatch
 ---
