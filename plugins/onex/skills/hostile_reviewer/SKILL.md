@@ -67,75 +67,30 @@ args:
   - name: max-tickets
     description: "In --static mode: hard cap on tickets created per run (default: 10)"
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:hostile_reviewer — Multi-Model Adversarial Review
+# /onex:hostile_reviewer — one command, one typed result
 
-**Skill ID**: `onex:hostile_reviewer`
-**Version**: 6.0.0
-**Backing node**: `node_hostile_reviewer`
+**Skill ID**: `onex:hostile_reviewer` · **Command**: `uv run onex skill hostile_reviewer` (omnibase_infra) · **Backing node**: `node_hostile_reviewer` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelHostileReviewerCompletedEvent]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **6.0.0** — Re-enabled (OMN-7981). Contract-driven model routing: endpoints declared in contract.yaml model_routing, resolved from env vars at runtime. N-1 graceful degradation when endpoints are down.
-- **5.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_hostile_reviewer`.
-- **4.0.0** — Added DISABLED notice (OMN-10111).
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_hostile_reviewer`. The node owns multi-model
-review dispatch, finding aggregation, convergence
-loop, and artifact persistence. This shim contains no inline review logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the hostile-reviewer skill."
+## Related
 
-## Dispatch
-
-**PR mode:**
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "pr": <pr_number>,
-  "repo": "<owner/repo>",
-  "models": null,
-  "passes": null,
-  "gate": false,
-  "gate_only": false,
-  "strict": false
-}' 2>/dev/null
-```
-
-**File mode:**
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "file": "<path>",
-  "models": null,
-  "passes": null
-}' 2>/dev/null
-```
-
-**Static mode:**
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "static": true,
-  "repos": null,
-  "categories": null,
-  "dry_run": false,
-  "ticket": false,
-  "max_tickets": 10
-}' 2>/dev/null
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-**`2>/dev/null` is MANDATORY** on all invocations — models emit thousands of tokens of
-chain-of-thought to stderr; silencing it keeps context windows viable.
-
-## Wire Schema
-
-Contract target: `node_hostile_reviewer`
-
-Command topic: `onex.cmd.omnimarket.hostile-reviewer-start.v1`
-
-Terminal events:
-- `onex.evt.omnimarket.hostile-reviewer-phase-transition.v1`
-- `onex.evt.omnimarket.hostile-reviewer-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_hostile_reviewer.models.model_hostile_reviewer_completed_event.ModelHostileReviewerCompletedEvent`

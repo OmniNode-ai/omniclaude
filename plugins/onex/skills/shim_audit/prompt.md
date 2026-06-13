@@ -1,59 +1,30 @@
-# shim_audit prompt
+# /onex:shim_audit — one command, one typed result
 
-You are executing the **shim_audit** skill.
-
-## Announce
-
-Say: "I'm using the shim-audit skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `--dry-run` — default: false
-- `--repos <names>` — comma-separated repo names; default: repos discovered by the backing node
-- `--warn-days <n>` — default: 30
-
-## Resolve repos
-
-If `--repos` was not provided, let the backing node discover eligible repos.
-
-## Scan each repo
-
-For each repo path, dispatch:
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelShimScanResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_shim_scanner --input '{
-  "paths": ["<repo_path>/src"],
-  "reference_date": null,
-  "warn_days_before_expiry": <warn_days>
-}'
+uv run onex skill shim_audit [--paths <a,b>] [--reference-date <v>] [--warn-days-before-expiry <n>]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--paths` | string list |
+| `--reference-date` | string |
+| `--warn-days-before-expiry` | integer |
 
-## Report findings
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-Print a summary table:
+## Present the result
 
-| Status | Count |
-|--------|-------|
-| EXPIRED | N |
-| EXPIRING | N |
-| ACTIVE | N |
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
 
-For EXPIRED findings, list: file, line, function, ticket_id, expires_on, replacement.
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelShimScanResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
 
-## Create tickets (skip if --dry-run)
-
-For each EXPIRED finding:
-1. The `ticket_id` field on the finding is the *tracking* ticket — check if it is already open in Linear.
-2. If no open ticket exists, create one:
-   - Title: `Remove expired @shim: <function_name> (<ticket_id>)`
-   - Priority: High
-   - Body includes: file_path, line_number, reason, replacement, expires_on
-
-## Error handling
-
-- Never run AST parsing or filesystem scans inline — always route through `node_shim_scanner`.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

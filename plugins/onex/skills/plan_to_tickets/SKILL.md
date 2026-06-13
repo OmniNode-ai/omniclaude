@@ -35,47 +35,30 @@ args:
   - name: --team
     description: "Linear team name (default: Omninode)"
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:plan_to_tickets — Batch Ticket Creation from Plan
+# /onex:plan_to_tickets — one command, one typed result
 
-**Skill ID**: `onex:plan_to_tickets`
-**Version**: 2.0.0
-**Backing node**: `node_plan_to_tickets`
+**Skill ID**: `onex:plan_to_tickets` · **Command**: `uv run onex skill plan_to_tickets` (omnibase_infra) · **Backing node**: `node_plan_to_tickets` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelPlanToTicketsResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_plan_to_tickets`.
-- **1.0.0** — Original skill.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_plan_to_tickets`. The node owns plan parsing,
-epic creation, ticket creation, and dependency linking. This shim contains no
-inline parsing or Linear mutation logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the plan-to-tickets skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_plan_to_tickets --input '{
-  "plan_file": "<path>",
-  "project": null,
-  "epic_title": null,
-  "no_create_epic": false,
-  "dry_run": false,
-  "skip_existing": false,
-  "team": "Omninode"
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_plan_to_tickets`
-
-Command topic: `onex.cmd.omnimarket.plan-to-tickets-start.v1`
-
-Terminal event: `onex.evt.omnimarket.plan-to-tickets-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_plan_to_tickets.handlers.handler_plan_to_tickets.ModelPlanToTicketsResult`

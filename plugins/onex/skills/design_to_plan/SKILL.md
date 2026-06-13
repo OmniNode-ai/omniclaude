@@ -28,94 +28,30 @@ args:
   - name: --no-launch
     description: "Stop after plan save — do not prompt for launch"
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:design_to_plan — Design to Plan Orchestrator
+# /onex:design_to_plan — one command, one typed result
 
-**Skill ID**: `onex:design_to_plan`
-**Version**: 2.1.0
-**Backing node**: `node_design_to_plan`
+**Skill ID**: `onex:design_to_plan` · **Command**: `uv run onex skill design_to_plan` (omnibase_infra) · **Backing node**: `node_design_to_plan` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelDesignToPlanPhase3LaunchResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.1.0** — Added Phase 0 knowledge preload via `node_design_plan_context_compute` (OMN-11940).
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_design_to_plan`.
-- **1.1.0** — Added Phase 3 launch path.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_design_to_plan`. The node owns the three-phase
-workflow (brainstorm → plan → launch), adversarial review integration, and plan file
-persistence. This shim contains no inline design or planning logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the design-to-plan skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_design_to_plan --input '{
-  "phase": "brainstorm",
-  "topic": "<topic or null>",
-  "plan_path": null,
-  "no_launch": false
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_design_to_plan`
-
-Command topic: `onex.cmd.omnimarket.design-to-plan-start.v1`
-
-Terminal event: `onex.evt.omnimarket.design-to-plan-completed.v1`
-
-
-## Knowledge Preload (Phase 0)
-
-Before dispatching to `node_design_to_plan`, invoke `node_design_plan_context_compute`
-(omnimarket) to assemble an Architecture Context block. Inject the resulting
-`architecture_context_block` field into the node input as `knowledge_preload`.
-
-The node accepts pre-resolved results from three sources scoped to `repos_mentioned`:
-- **Repowise** `get_why` — architectural decisions to honor
-- **Antipattern registry** — patterns to avoid
-- **Memgraph** dependency impact — downstream systems affected
-
-Output fields: `systems_affected`, `decisions_to_honor`, `antipatterns_to_avoid`, `impact_summary`,
-and the formatted `architecture_context_block` (four `###` sections ready for prompt injection).
-
-## Phase 2b: Adversarial Review — R11 Doctrine Compliance (Advisory)
-
-After the R1-R10 adversarial review loop completes, run an R11 doctrine
-compliance check for plans that create or modify doctrine-governed surfaces.
-
-### R11 -- Doctrine Compliance (Advisory)
-
-For each task in the plan, check whether it touches a doctrine-governed surface:
-
-- **Kafka topics**: Any task creating a Kafka topic must reference doctrine clause DT-001
-- **Projections**: Any task creating a projection must declare freshness SLA (DT-003)
-- **API endpoints**: Any task adding an API endpoint must declare contract binding (DT-004)
-- **New data**: Any task creating new data must declare provenance (DT-005)
-
-**Severity:** All R11 findings are ADVISORY — they do not block ticketization.
-CI and runtime gates (Tasks 16-17) remain the authoritative enforcement layer.
-R11 findings must not be treated as completion proof.
-
-**Output format:**
-
-Emit exactly one of the following forms, not both alternatives joined together.
-
-If doctrine violations are found:
-
-```
-R11: checked -- [advisory: task 3 creates projection without DT-003 freshness declaration]
-```
-
-If no doctrine-governed surfaces are touched:
-
-```
-R11: checked -- [clean (no doctrine-governed surfaces touched)]
-```
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_design_to_plan.models.model_design_to_plan_phase3_launch.ModelDesignToPlanPhase3LaunchResult`

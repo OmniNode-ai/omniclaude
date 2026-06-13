@@ -1,32 +1,31 @@
-# database_sweep prompt
+# /onex:database_sweep — one command, one typed result
 
-You are executing the **database_sweep** skill.
-
-## Announce
-
-Say: "I'm using the database-sweep skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `--dry-run` — default: false
-- `--table <name>` — check single table only (default: all)
-- `--staleness-threshold <hours>` — default: 24
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[DatabaseSweepResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_database_sweep --input '{
-  "dry_run": <bool>,
-  "table": "<name or null>",
-  "staleness_threshold_hours": <n>
-}'
+uv run onex skill database_sweep [--omni-home <v>] [--table <v>] [--staleness-threshold-hours <n>] [--dry-run]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--omni-home` | string |
+| `--table` | string |
+| `--staleness-threshold-hours` | integer |
+| `--dry-run` | boolean, flag |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never run database queries or psql commands inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `DatabaseSweepResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

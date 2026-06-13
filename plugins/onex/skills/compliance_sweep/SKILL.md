@@ -28,22 +28,30 @@ outputs:
     description: "Integer count of violations across scanned repos"
   - name: by_type
     description: "Violation counts grouped by check type (see node_compliance_sweep contract for the enum)"
+skill_kind: dispatch
 ---
 
-# /onex:compliance_sweep — dispatch-only shim
+# /onex:compliance_sweep — one command, one typed result
 
-**Skill ID**: `onex:compliance_sweep` · **Backing node**: `omnimarket/src/omnimarket/nodes/node_compliance_sweep/` · **Ticket**: OMN-8754
+**Skill ID**: `onex:compliance_sweep` · **Command**: `uv run onex skill compliance_sweep` (omnibase_infra) · **Backing node**: `node_compliance_sweep` (omnimarket) · **Ticket**: OMN-13097
 
-## Routing Contract
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ComplianceSweepResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **Classification**: Deterministic
-- **Dispatch**: single invocation against `node_compliance_sweep` from the omnimarket worktree
-- **No inline scanning**: all compliance checks live in the handler, not this skill
-- **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — do not produce prose
+See `prompt.md` for the one command and how to present the typed result.
 
-```bash
-cd "$ONEX_WORKTREES_ROOT/omnimarket"
-uv run onex node node_compliance_sweep --input <envelope>
-```
+## What this skill does NOT do
 
-See `prompt.md` for envelope construction.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
+
+## Related
+
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_compliance_sweep.handlers.handler_compliance_sweep.ComplianceSweepResult`

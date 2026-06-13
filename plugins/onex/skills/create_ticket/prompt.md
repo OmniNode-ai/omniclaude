@@ -1,44 +1,37 @@
-# create_ticket prompt
+# /onex:create_ticket — one command, one typed result
 
-You are executing the **create_ticket** skill.
-
-## Announce
-
-Say: "I'm using the create-ticket skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `title` — ticket title (mutually exclusive with --from-contract, --from-plan)
-- `--from-contract <path>` — YAML contract file
-- `--from-plan <path>` — plan markdown file
-- `--milestone <id>` — milestone ID when using --from-plan
-- `--repo <name>` — repository label
-- `--parent <OMN-XXXX>` — parent epic
-- `--blocked-by <ids>` — comma-separated blocking issue IDs
-- `--team <name>` — default: Omninode
-- `--dry-run` — default: false
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelCreateTicketResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_create_ticket --input '{
-  "title": "<title or null>",
-  "from_contract": "<path or null>",
-  "from_plan": "<path or null>",
-  "milestone": "<id or null>",
-  "repo": "<repo or null>",
-  "parent": "<id or null>",
-  "blocked_by": "<ids or null>",
-  "team": "<team>",
-  "dry_run": <bool>
-}'
+uv run onex skill create_ticket [--title <v>] [--from-contract <v>] [--from-plan <v>] [--milestone <v>] [--repo <v>] [--parent <v>] [--blocked-by <a,b>] [--project <v>] [--team <v>] [--allow-arch-violation]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--title` | string |
+| `--from-contract` | string |
+| `--from-plan` | string |
+| `--milestone` | string |
+| `--repo` | string |
+| `--parent` | string |
+| `--blocked-by` | string list |
+| `--project` | string |
+| `--team` | string |
+| `--allow-arch-violation` | boolean, flag |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never create Linear tickets inline via MCP tools.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelCreateTicketResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

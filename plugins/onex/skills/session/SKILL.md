@@ -34,22 +34,30 @@ outputs:
     description: "Phase and reason that caused halt, empty on complete"
   - name: session_id
     description: "sess-{date}-{time} correlation prefix"
+skill_kind: dispatch
 ---
 
-# /onex:session — dispatch-only shim
+# /onex:session — one command, one typed result
 
-**Skill ID**: `onex:session` · **Backing node**: `omnimarket/src/omnimarket/nodes/node_session_orchestrator/` · **Ticket**: OMN-8750
+**Skill ID**: `onex:session` · **Command**: `uv run onex skill session` (omnibase_infra) · **Backing node**: `node_session_orchestrator` (omnimarket) · **Ticket**: OMN-13097
 
-## Routing Contract
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelSessionOrchestratorResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **Classification**: Deterministic
-- **Dispatch**: single invocation of `node_session_orchestrator`
-- **No inline orchestration**: phases 1/2/3 live in the handler, not this skill
-- **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
+See `prompt.md` for the one command and how to present the typed result.
 
-```bash
-cd "$ONEX_WORKTREES_ROOT/omnimarket"
-uv run onex node node_session_orchestrator --input <envelope>
-```
+## What this skill does NOT do
 
-See `prompt.md` for envelope construction.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
+
+## Related
+
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_session_orchestrator.handlers.handler_session_orchestrator.ModelSessionOrchestratorResult`

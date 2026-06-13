@@ -1,46 +1,39 @@
-# pr_polish prompt
+# /onex:pr_polish — one command, one typed result
 
-You are executing the **pr_polish** skill.
-
-## Announce
-
-Say: "I'm using the pr-polish skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `pr_number` — PR number or URL (auto-detect from branch if omitted)
-- `--required-clean-runs <n>` — default: 4
-- `--max-iterations <n>` — default: 10
-- `--skip-conflicts` — default: false
-- `--skip-pr-review` — default: false
-- `--skip-local-review` — default: false
-- `--no-ci` — default: false
-- `--no-push` — default: false
-- `--dry-run` — default: false
-- `--no-automerge` — default: false
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelPrPolishCompletedEvent]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_pr_polish --input '{
-  "pr_number": <pr_number or null>,
-  "required_clean_runs": <n>,
-  "max_iterations": <n>,
-  "skip_conflicts": <bool>,
-  "skip_pr_review": <bool>,
-  "skip_local_review": <bool>,
-  "no_ci": <bool>,
-  "no_push": <bool>,
-  "dry_run": <bool>,
-  "no_automerge": <bool>
-}'
+uv run onex skill pr_polish [--repo <v>] [--pr-number <n>] [--ticket-id <v>] [--required-clean-runs <n>] [--max-iterations <n>] [--skip-conflicts] [--skip-pr-review] [--skip-local-review] [--no-ci] [--no-push] [--no-automerge] [--dry-run]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--repo` | string, required |
+| `--pr-number` | integer, required |
+| `--ticket-id` | string |
+| `--required-clean-runs` | integer |
+| `--max-iterations` | integer |
+| `--skip-conflicts` | boolean, flag |
+| `--skip-pr-review` | boolean, flag |
+| `--skip-local-review` | boolean, flag |
+| `--no-ci` | boolean, flag |
+| `--no-push` | boolean, flag |
+| `--no-automerge` | boolean, flag |
+| `--dry-run` | boolean, flag |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never implement conflict resolution, review addressing, or local-review loops inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelPrPolishCompletedEvent`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

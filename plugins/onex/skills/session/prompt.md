@@ -1,28 +1,31 @@
-# /onex:session — dispatch-only shim
+# /onex:session — one command, one typed result
 
-Dispatch to `node_session_orchestrator` in omnimarket. Do not reimplement phases inline.
-
-## Parse `$ARGUMENTS`
-
-| Flag | Default |
-|------|---------|
-| `--mode <interactive\|autonomous>` | `interactive` |
-| `--phase <0\|1\|2\|3>` | `0` |
-| `--dry-run` | unset |
-| `--skip-health` | unset |
-| `--standing-orders <path>` | `.onex_state/session/standing_orders.json` |
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelSessionOrchestratorResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket worktree
-uv run onex run node_session_orchestrator -- \
-  --mode "${MODE:-interactive}" \
-  --phase "${PHASE:-0}" \
-  --state-dir "${STATE_DIR:-.onex_state/session}" \
-  ${DRY_RUN:+--dry-run} \
-  ${SKIP_HEALTH:+--skip-health} \
-  --output-json
+uv run onex skill session [--mode <v>] [--phase <v>] [--skip-health] [--dry-run]
 ```
 
-Surface the JSON verbatim. On non-zero exit, report `status`, `halt_reason`, and blocking `health_report` dimensions — no prose fallback, no inline orchestration. If dispatch cannot execute, raise `SkillRoutingError` with the failing component.
+| Argument | Type |
+|----------|------|
+| `--mode` | string |
+| `--phase` | string |
+| `--skip-health` | boolean, flag |
+| `--dry-run` | boolean, flag |
+
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
+
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelSessionOrchestratorResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

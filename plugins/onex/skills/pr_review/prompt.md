@@ -1,32 +1,34 @@
-# pr_review prompt
+# /onex:pr_review — one command, one typed result
 
-You are executing the **pr_review** skill.
-
-## Announce
-
-Say: "I'm using the pr-review skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `pr_number` (required) — PR number to review
-- `repo` (required) — GitHub repo (owner/repo)
-- `--dry-run` — default: false
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ReviewVerdict]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_pr_review_bot --input '{
-  "pr_number": <pr_number>,
-  "repo": "<repo>",
-  "dry_run": <bool>
-}'
+uv run onex skill pr_review [--pr-number <n>] [--repo <v>] [--reviewer-models <a,b>] [--judge-model <v>] [--severity-threshold <v>] [--max-findings-per-pr <n>] [--dry-run]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--pr-number` | integer, required |
+| `--repo` | string, required |
+| `--reviewer-models` | string list |
+| `--judge-model` | string |
+| `--severity-threshold` | string |
+| `--max-findings-per-pr` | integer |
+| `--dry-run` | boolean, flag |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never fetch PR diffs, post review comments, or run judge verification inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back to legacy bash scripts.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ReviewVerdict`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

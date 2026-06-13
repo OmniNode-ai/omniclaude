@@ -24,61 +24,30 @@ args:
   - name: --warn-days
     description: "Days before expiry to report as EXPIRING (default: 30)"
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:shim_audit — Shim Lifecycle Audit
+# /onex:shim_audit — one command, one typed result
 
-**Skill ID**: `onex:shim-audit`
-**Version**: 1.0.0
-**Backing node**: `node_shim_scanner`
+**Skill ID**: `onex:shim_audit` · **Command**: `uv run onex skill shim_audit` (omnibase_infra) · **Backing node**: `node_shim_scanner` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelShimScanResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **1.0.0** — Initial implementation (OMN-4420). Dispatch-only shim over node_shim_scanner.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Scans Python source files across OmniNode repos for `@shim` decorator annotations,
-classifies each as EXPIRED / EXPIRING / ACTIVE, and creates Linear tickets for
-every expired shim. Logic lives entirely in `node_shim_scanner`.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the shim-audit skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_shim_scanner --input '{
-  "paths": ["<repo_path>"],
-  "reference_date": null,
-  "warn_days_before_expiry": <warn_days>
-}'
-```
-
-Repeat for each repo. Aggregate results across all repos.
-
-## Arguments
-
-| Arg | Default | Effect |
-|-----|---------|--------|
-| `--dry-run` | false | Skip ticket creation; print findings only |
-| `--repos` | all | Limit scan to named repos (comma-separated) |
-| `--warn-days` | 30 | Days before expiry treated as EXPIRING |
-
-## Post-scan actions
-
-For each finding with `status == EXPIRED`:
-1. Check if a Linear ticket already exists for `ticket_id` (skip if already open).
-2. If `--dry-run` is false, create a Linear ticket:
-   - Title: `Remove expired @shim: <function_name> in <file_path>`
-   - Body: ticket_id, expires_on, reason, replacement, file_path, line_number
-   - Priority: High
-
-On non-zero exit from `onex run-node`, surface the error directly. Do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_shim_scanner`
-
-Command topic: `onex.cmd.omnimarket.shim-scan-start.v1`
-
-Terminal event: `onex.evt.omnimarket.shim-scan-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_shim_scanner.models.model_shim_scan_result.ModelShimScanResult`

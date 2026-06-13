@@ -35,94 +35,30 @@ inputs:
 outputs:
   - name: skill_result
     description: "ModelSkillResult JSON; aislop-specific findings (by severity and check) are delivered in the model's output field"
+skill_kind: dispatch
 ---
 
-# AI Slop Sweep
+# /onex:aislop_sweep — one command, one typed result
 
-**Announce at start:** "I'm using the aislop-sweep skill."
+**Skill ID**: `onex:aislop_sweep` · **Command**: `uv run onex skill aislop_sweep` (omnibase_infra) · **Backing node**: `node_aislop_sweep` (omnimarket) · **Ticket**: OMN-13097
 
-## Usage
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[AislopSweepResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-```
-/aislop-sweep                                   # Full scan, all repos
-/aislop-sweep --dry-run                         # Report only, no tickets
-/aislop-sweep --repos omniclaude,omnibase_core  # Limit repos
-/aislop-sweep --checks prohibited-patterns,hardcoded-topics
-/aislop-sweep --ticket                          # Create Linear tickets
-/aislop-sweep --severity-threshold ERROR        # Only ERROR+ findings
-```
+See `prompt.md` for the one command and how to present the typed result.
 
-## Execution
+## What this skill does NOT do
 
-### Step 1 — Parse arguments
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-- `--repos` → comma-separated list (default: all supported repos)
-- `--checks` → comma-separated check names (default: all)
-- `--dry-run` → pass through to node
-- `--ticket` → create Linear tickets for findings above severity threshold
-- `--severity-threshold` → pass through to node (default: WARNING)
+## Related
 
-### Step 2 — Run node
-
-Path exclusions: `.git/`, `.venv/`, `docs/`, `fixtures/` are always excluded from scanning.
-
-Dispatch to the omnimarket node via local RuntimeLocal (`onex node`). This is a
-dispatch-only shim — no script fallback, no inline grep, no subprocess wrappers.
-
-```bash
-uv run onex node node_aislop_sweep -- \
-  --repos "<comma-list>" \
-  --checks "<comma-list>" \
-  --severity-threshold WARNING \
-  [--dry-run] [--ticket]
-```
-
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = findings found.
-
-The node owns the default `AISLOP_REPOS` list (omniclaude, omnibase_core,
-omnibase_infra, omnibase_spi, omniintelligence, omnimemory, onex_change_control,
-omnibase_compat).
-
-### Step 3 — Render report
-
-From the JSON output display:
-- Summary: repos scanned, total findings, by-severity counts, by-check counts
-- Findings table grouped by severity (CRITICAL → ERROR → WARNING → INFO)
-- Each finding: repo, path:line, check, message, severity, confidence, ticketable, autofixable
-
-### Step 4 — Ticket creation (only if `--ticket`)
-
-For each finding where `ticketable=true` (confidence=HIGH, severity≥threshold),
-create a Linear ticket via `tracker.save_issue`. Deduplicate by
-searching for existing open tickets with the same title before creating.
-
-```
-Title: aislop: <check> in <repo>:<path>
-Project: Active Sprint
-Label: aislop-sweep
-```
-
-### Step 5 — Write skill result
-
-Write to `$ONEX_STATE_DIR/skill-results/<run_id>/aislop-sweep.json`:
-
-```json
-{
-  "skill": "aislop-sweep",
-  "status": "clean | findings | partial | error",
-  "repos_scanned": 0,
-  "total_findings": 0,
-  "by_severity": {},
-  "by_check": {}
-}
-```
-
-## Architecture
-
-```
-SKILL.md  → thin shell: parse args → node dispatch → render results
-node      → onex node node_aislop_sweep
-contract  → node_aislop_sweep
-```
-
-All scanning logic lives in the node handler. This skill does no scanning.
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_aislop_sweep.handlers.handler_aislop_sweep.AislopSweepResult`

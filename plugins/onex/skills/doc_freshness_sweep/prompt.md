@@ -1,38 +1,32 @@
-# doc_freshness_sweep prompt
+# /onex:doc_freshness_sweep — one command, one typed result
 
-You are executing the **doc_freshness_sweep** skill.
-
-## Announce
-
-Say: "I'm using the doc-freshness-sweep skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `--repo <name>` — scan single repo (default: all repos)
-- `--claude-md-only` — default: false
-- `--broken-only` — default: false
-- `--create-tickets` — default: false
-- `--max-tickets <n>` — default: 10
-- `--dry-run` — default: false
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[DocFreshnessSweepResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_doc_freshness_sweep --input '{
-  "repo": "<repo or null>",
-  "claude_md_only": <bool>,
-  "broken_only": <bool>,
-  "create_tickets": <bool>,
-  "max_tickets": <n>,
-  "dry_run": <bool>
-}'
+uv run onex skill doc_freshness_sweep [--omni-home <v>] [--repos <a,b>] [--claude-md-only] [--broken-only] [--dry-run]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--omni-home` | string |
+| `--repos` | string list |
+| `--claude-md-only` | boolean, flag |
+| `--broken-only` | boolean, flag |
+| `--dry-run` | boolean, flag |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never reimplement doc scanning or staleness detection inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back to direct file reads.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `DocFreshnessSweepResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.
