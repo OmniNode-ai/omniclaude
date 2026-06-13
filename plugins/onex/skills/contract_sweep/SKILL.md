@@ -292,7 +292,7 @@ boundaries            -> onex_change_control/boundaries/kafka_boundaries.yaml
 ```
 
 The skill wraps:
-- `onex run node_contract_sweep` (required-field + topic-naming compliance sweep, runtime mode)
+- `onex run-node node_contract_sweep` (required-field + topic-naming compliance sweep, runtime mode)
 - `onex_change_control/scripts/validation/check_contract_drift.py` (hash-based drift, drift mode)
 - `onex_change_control/handlers/handler_drift_analysis.py` (field-level analysis, drift mode)
 - `onex_change_control/boundaries/kafka_boundaries.yaml` (boundary manifest, drift mode)
