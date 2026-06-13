@@ -76,12 +76,14 @@ jobs:
           uv build --wheel --out-dir .skill-receipt-wheel ./_omnibase_core
           wheel="$(ls .skill-receipt-wheel/omnibase_core-*.whl)"
           echo "Installing locally-built wheel: ${wheel}"
-          # --reinstall-package forces uv to (re)install omnibase-core from the
-          # explicit local wheel rather than unifying onto a stale registry version
-          # (e.g. the published 0.44.0, which predates the validator). Transitive
-          # deps still resolve normally from the index.
+          # --no-config / --no-sources make uv ignore omniclaude's own pyproject.toml
+          # [tool.uv] + [tool.uv.sources] (which pin omnibase-core to a git rev / older
+          # release). Without them, running `uv pip install` from the repo root applies
+          # that pin and installs a stale omnibase-core (e.g. 0.44.0) that predates the
+          # validator, instead of the locally-built dev wheel passed on the command line.
+          # Transitive deps still resolve normally from the default index.
           uv pip install --python .skill-receipt-venv/bin/python \
-            --reinstall-package omnibase-core "${wheel}"
+            --no-config --no-sources --reinstall-package omnibase-core "${wheel}"
           # Hard assertion: the validator module must be importable, else the wrong
           # omnibase-core was installed and the gate result would be meaningless.
           .skill-receipt-venv/bin/python -c \
