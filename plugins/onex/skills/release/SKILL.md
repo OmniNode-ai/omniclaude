@@ -99,7 +99,7 @@ On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it
 Processes repos in dependency-tier order (tier 0 → tier N):
 
 1. **GATE**: Validate gate attestation (if provided) or proceed automatically
-2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__`
+2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__` <!-- skill-boundary-ok: repo iteration is performed by node_release, this skill only dispatches -->
 3. **PIN**: Update cross-repo dependency pins in downstream repos
 4. **PR**: Create release PR per repo via `gh pr create`; enable auto-merge
 5. **MERGE**: Wait for CI + merge queue; confirm merged
