@@ -54,6 +54,7 @@ def _run_hook(root: Path) -> subprocess.CompletedProcess[str]:
         input=_STDIN,
         capture_output=True,
         text=True,
+        check=False,
     )
 
 
