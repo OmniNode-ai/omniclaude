@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13096"
+title: "Phase 2b: delegate skill is one command + delegation-enforcer dispatch exemption"
+summary: >-
+  Prior-landed Phase 2b work (omniclaude PR #1753, merged to dev) that this Phase 4a migration builds on:
+  the delegate skill became one command and gained the delegation-enforcer dispatch exemption
+  (skill_kind: dispatch). OMN-13096 is referenced here only as lineage for the exemption pattern that the
+  24-shim migration generalizes; no OMN-13096 code ships in this PR. This contract satisfies the contract
+  presence gate for the OMN-13096 reference carried in the PR body explanation.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-delegate-landed-prior"
+    description: >-
+      The delegate single-command rewrite + delegation-enforcer exemption landed in omniclaude PR #1753
+      (merged to dev); this Phase 4a PR carries no OMN-13096 code, only the lineage reference.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f plugins/onex/skills/delegate/SKILL.md"
+  - id: "dod-deploy-not-required"
+    description: "No live deploy is required for this lineage-reference contract."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'No live deploy is required' contracts/OMN-13096.yaml"

@@ -13,76 +13,60 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: title
-    description: Ticket title (mutually exclusive with --from-contract, --from-plan)
+  - name: --title
+    description: string arg
     required: false
   - name: --from-contract
-    description: Path to YAML contract file
+    description: string arg
     required: false
   - name: --from-plan
-    description: Path to plan markdown file
+    description: string arg
     required: false
   - name: --milestone
-    description: Milestone ID when using --from-plan (e.g., M4)
+    description: string arg
     required: false
   - name: --repo
-    description: Repository label (e.g., omniclaude, omnibase_core)
+    description: string arg
     required: false
   - name: --parent
-    description: Parent issue ID for epic relationship (e.g., OMN-1800)
+    description: string arg
     required: false
   - name: --blocked-by
-    description: Comma-separated issue IDs that block this ticket
+    description: string list arg
+    required: false
+  - name: --project
+    description: string arg
     required: false
   - name: --team
-    description: "Linear team name (default: Omninode)"
+    description: string arg
     required: false
-  - name: --dry-run
-    description: Show what would be created without creating
+  - name: --allow-arch-violation
+    description: boolean flag
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:create_ticket — Single Ticket Creation
+# /onex:create_ticket — one command, one typed result
 
-**Skill ID**: `onex:create_ticket`
-**Version**: 2.0.0
-**Backing node**: `node_create_ticket`
+**Skill ID**: `onex:create_ticket` · **Command**: `uv run onex skill create_ticket` (omnibase_infra) · **Backing node**: `node_create_ticket` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelCreateTicketResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_create_ticket`.
-- **1.0.0** — Original skill.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_create_ticket`. The node owns contract parsing,
-conflict resolution, and Linear ticket creation. This shim contains no inline Linear
-mutation logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the create-ticket skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_create_ticket --input '{
-  "title": "<title or null>",
-  "from_contract": null,
-  "from_plan": null,
-  "milestone": null,
-  "repo": null,
-  "parent": null,
-  "blocked_by": null,
-  "team": "Omninode",
-  "dry_run": false
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_create_ticket`
-
-Command topic: `onex.cmd.omnimarket.create-ticket-start.v1`
-
-Terminal event: `onex.evt.omnimarket.create-ticket-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_create_ticket.handlers.handler_create_ticket.ModelCreateTicketResult`

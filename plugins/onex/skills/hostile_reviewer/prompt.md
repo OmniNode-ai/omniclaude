@@ -1,52 +1,32 @@
-# hostile_reviewer prompt
+# /onex:hostile_reviewer — one command, one typed result
 
-You are executing the **hostile_reviewer** skill.
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelHostileReviewerCompletedEvent]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
-## Announce
-
-Say: "I'm using the hostile-reviewer skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `--pr <N>` and `--repo <owner/repo>` — PR mode
-- `--file <path>` or `--plan-path <path>` — file mode
-- `--static` — static analysis mode
-- `--models <list>` — optional; omit to use the node contract's configured defaults
-- `--passes <n>` — fixed pass count (default: iterate to convergence)
-- `--gate` / `--gate-only` / `--strict` — gate mode flags
-- `--repos`, `--categories`, `--dry-run`, `--ticket`, `--max-tickets` — static mode
-
-## Dispatch
-
-PR mode:
 ```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "pr": <pr_number>,
-  "repo": "<repo>",
-  "models": <models_or_null>,
-  "gate": <bool>,
-  "gate_only": <bool>,
-  "strict": <bool>
-}' 2>/dev/null
+uv run onex skill hostile_reviewer [--pr-number <n>] [--repo <v>] [--file-path <v>] [--models <a,b>] [--dry-run]
 ```
 
-Where `<models_or_null>` is either a JSON array of model keys supplied via `--models`, or `null` to use the node contract's configured defaults.
+| Argument | Type |
+|----------|------|
+| `--pr-number` | integer |
+| `--repo` | string |
+| `--file-path` | string |
+| `--models` | string list |
+| `--dry-run` | boolean, flag |
 
-File mode:
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "file": "<path>",
-  "models": <models_or_null>
-}' 2>/dev/null
-```
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+## Present the result
 
-**`2>/dev/null` is MANDATORY** — models emit verbose chain-of-thought to stderr.
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
 
-## Error handling
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelHostileReviewerCompletedEvent`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
 
-- Never run model inference inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

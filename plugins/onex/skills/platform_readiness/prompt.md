@@ -1,39 +1,26 @@
-# /onex:platform_readiness — dispatch-only shim
+# /onex:platform_readiness — one command, one typed result
 
-Dispatch to `node_platform_readiness` in omnimarket. Do not aggregate probes
-inline — the backing node owns contract/golden-chain/data-flow/runtime/
-dashboard/cost/CI verification and freshness logic.
-
-## Announce
-
-"I'm running the platform readiness gate via node_platform_readiness."
-
-## Parse `$ARGUMENTS`
-
-| Flag | Default |
-|------|---------|
-| `--json` | unset |
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelPlatformReadinessResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket worktree
-
-uv run onex run-node node_platform_readiness --input '{}'
+uv run onex skill platform_readiness
 ```
 
-Capture the JSON output from stdout. The node produces a
-`ModelPlatformReadinessResult` with `overall`, `dimensions`, `blockers`,
-and `degraded`.
+_No arguments._
 
-## Post-dispatch: Render results
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-If `--json` was passed, surface the node JSON verbatim. Otherwise render
-the markdown readiness report from the node output — do not recompute
-status or freshness locally.
+## Present the result
 
-## Error handling
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
 
-On non-zero exit from the module runner, a `SkillRoutingError` JSON
-envelope is returned — surface it directly, do not produce prose. If the
-node is unavailable, stop — do not fall back to inline probe aggregation.
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelPlatformReadinessResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

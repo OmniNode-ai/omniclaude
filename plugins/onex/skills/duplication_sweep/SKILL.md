@@ -1,10 +1,10 @@
 ---
 version: 2.0.0
-description: >
-  Detect duplicate definitions across repos: Drizzle table definitions,
-  Kafka topic registrations, migration prefixes, and Python model names.
-  Returns structured findings for autopilot halt decisions.
+description: 'Detect duplicate definitions across repos: Drizzle table definitions, Kafka topic registrations,
+  migration prefixes, and Python model names. Returns structured findings for autopilot halt decisions.
   Dispatches to node_duplication_sweep (omnimarket).
+
+  '
 mode: full
 user_invocable: true
 level: advanced
@@ -15,49 +15,37 @@ tags:
   - enforcement
   - dispatch-only
   - routing-enforced
+skill_kind: dispatch
+args:
+  - name: --omni-home
+    description: string arg
+    required: false
+  - name: --checks
+    description: string list arg
+    required: false
 ---
 
-# /onex:duplication_sweep — Duplicate Definition Sweep
+# /onex:duplication_sweep — one command, one typed result
 
-**Skill ID**: `onex:duplication_sweep`
-**Version**: 2.0.0
-**Backing node**: `node_duplication_sweep`
+**Skill ID**: `onex:duplication_sweep` · **Command**: `uv run onex skill duplication_sweep` (omnibase_infra) · **Backing node**: `node_duplication_sweep` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[DuplicationSweepResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). Removed inline check implementations from prompt.md.
-- **1.0.0** — Original (OMN-10431).
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_duplication_sweep`. The node owns all scanning
-logic (D1–D4). This shim is a thin shell: parse args, dispatch, render results.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the duplication-sweep skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_duplication_sweep --input '{
-  "omni_home": null,
-  "checks": ["D1", "D2", "D3", "D4"]
-}'
-```
-
-Omit `omni_home` or `checks` to use defaults.
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_duplication_sweep`
-
-Command topic: `onex.cmd.omnimarket.duplication-sweep-start.v1`
-
-Terminal event: `onex.evt.omnimarket.duplication-sweep-completed.v1`
-
-## Usage
-
-```
-/duplication-sweep [--checks D1,D2] [--omni-home /path] [--json]
-```
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_duplication_sweep.handlers.handler_duplication_sweep.DuplicationSweepResult`

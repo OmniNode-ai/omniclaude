@@ -1,31 +1,29 @@
-# duplication_sweep prompt
+# /onex:duplication_sweep — one command, one typed result
 
-You are executing the **duplication_sweep** skill.
-
-## Announce
-
-Say: "I'm using the duplication-sweep skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `--checks <list>` — comma-separated check IDs (default: D1,D2,D3,D4)
-- `--omni-home <path>` — workspace root (default: auto-detect)
-- `--json` — emit machine-readable JSON output
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[DuplicationSweepResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_duplication_sweep --input '{
-  "omni_home": "<path or null>",
-  "checks": ["D1", "D2", "D3", "D4"]
-}'
+uv run onex skill duplication_sweep [--omni-home <v>] [--checks <a,b>]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--omni-home` | string |
+| `--checks` | string list |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never run D1–D4 checks inline via Bash or GitHub API calls.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `DuplicationSweepResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

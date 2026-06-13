@@ -1,51 +1,36 @@
-# merge_sweep prompt
+# /onex:merge_sweep — one command, one typed result
 
-ADR: The contract-canonical merge-sweep backing node is
-`node_pr_lifecycle_orchestrator`, because its contract terminal event is
-`onex.evt.omnimarket.pr-lifecycle-orchestrator-completed.v1`, which this skill
-uses as its completion signal.
-
-You are executing the **merge_sweep** skill. This skill builds a
-`ModelEventEnvelope[ModelPrLifecycleStartCommand]` and dispatches it through the
-manifest-canonical runtime path:
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelPrLifecycleResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-plugins/onex/skills/merge_sweep/run.sh $PARSED_ARGS
+uv run onex skill merge_sweep [--repos <a,b>] [--dry-run] [--inventory-only] [--fix-only] [--merge-only] [--max-parallel-polish <n>] [--admin-fallback-threshold-minutes <n>] [--verify] [--verify-timeout-seconds <n>]
 ```
 
-## Announce
+| Argument | Type |
+|----------|------|
+| `--repos` | string list |
+| `--dry-run` | boolean, flag |
+| `--inventory-only` | boolean, flag |
+| `--fix-only` | boolean, flag |
+| `--merge-only` | boolean, flag |
+| `--max-parallel-polish` | integer |
+| `--admin-fallback-threshold-minutes` | integer |
+| `--verify` | boolean, flag |
+| `--verify-timeout-seconds` | integer |
 
-Say: "I'm using the merge-sweep skill."
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-## Parse arguments
+## Present the result
 
-Extract from `$ARGUMENTS`:
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
 
-- `--repos <list>` — default: all OmniNode repos
-- `--dry-run` — default: false
-- `--inventory-only` — default: false
-- `--fix-only` — default: false
-- `--merge-only` — default: false
-- `--max-parallel-polish <n>` — default: 20
-- `--enable-auto-rebase <bool>` — default: true
-- `--use-dag-ordering <bool>` — default: true
-- `--enable-trivial-comment-resolution <bool>` — default: true
-- `--enable-admin-merge-fallback <bool>` — default: true
-- `--admin-fallback-threshold-minutes <n>` — default: 15
-- `--verify <bool>` — default: false
-- `--verify-timeout-seconds <n>` — default: 30
-- `--run-id <id>` — default: generated
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelPrLifecycleResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
 
-## Wire Schema
-
-The launcher sends `event_type:
-omnimarket.pr-lifecycle-orchestrator-start` with payload
-`ModelPrLifecycleStartCommand` to
-`uv run onex run-node node_pr_lifecycle_orchestrator --input`.
-
-## Error handling
-
-- Surface the backing command stdout/stderr directly.
-- If the backing command exits non-zero, stop.
-- Never re-implement merge sweep orchestration inline.
-- Never fall back to direct GitHub merge commands or direct Kafka publish.
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

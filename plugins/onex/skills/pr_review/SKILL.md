@@ -14,55 +14,51 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: pr_number
-    description: PR number to review
+  - name: --pr-number
+    description: integer arg (required)
     required: true
-  - name: repo
-    description: GitHub repo (owner/repo)
+  - name: --repo
+    description: string arg (required)
     required: true
-  - name: --dry-run
-    description: Run without posting to GitHub
+  - name: --reviewer-models
+    description: string list arg
     required: false
+  - name: --judge-model
+    description: string arg
+    required: false
+  - name: --severity-threshold
+    description: string arg
+    required: false
+  - name: --max-findings-per-pr
+    description: integer arg
+    required: false
+  - name: --dry-run
+    description: boolean flag
+    required: false
+skill_kind: dispatch
 ---
 
-# /onex:pr_review — PR Review Bot
+# /onex:pr_review — one command, one typed result
 
-**Skill ID**: `onex:pr_review`
-**Version**: 6.0.0
-**Backing node**: `node_pr_review_bot`
+**Skill ID**: `onex:pr_review` · **Command**: `uv run onex skill pr_review` (omnibase_infra) · **Backing node**: `node_pr_review_bot` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ReviewVerdict]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **6.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_pr_review_bot`.
-- **5.0.0** — Added node_pr_review_bot node-dispatch path.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_pr_review_bot`. The node owns diff fetching,
-multi-agent review, finding aggregation, verdict posting, and thread watching.
-This shim contains no inline review logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the pr-review skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_pr_review_bot --input '{
-  "pr_number": <pr_number>,
-  "repo": "<owner/repo>",
-  "dry_run": false
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_pr_review_bot`
-
-Command topic: `onex.cmd.omnimarket.pr-review-bot-start.v1`
-
-Terminal events:
-- `onex.evt.omnimarket.pr-review-bot-phase-transition.v1`
-- `onex.evt.omnimarket.pr-review-bot-thread-posted.v1`
-- `onex.evt.omnimarket.pr-review-bot-thread-verified.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_pr_review_bot.models.models.ReviewVerdict`

@@ -1,5 +1,6 @@
 ---
-description: Scan documentation files across repos for broken references, stale content, and CLAUDE.md accuracy. Generates freshness reports and optionally creates Linear tickets for broken/stale docs.
+description: Scan documentation files across repos for broken references, stale content, and CLAUDE.md
+  accuracy. Generates freshness reports and optionally creates Linear tickets for broken/stale docs.
 mode: full
 version: 2.0.0
 level: intermediate
@@ -17,63 +18,45 @@ tags:
 author: OmniClaude Team
 composable: true
 args:
-  - name: --repo
-    description: "Scan a single repo by name"
+  - name: --omni-home
+    description: string arg
+    required: false
+  - name: --repos
+    description: string list arg
     required: false
   - name: --claude-md-only
-    description: "Only check CLAUDE.md files (faster, used in close-out autopilot)"
+    description: boolean flag
     required: false
   - name: --broken-only
-    description: "Only report broken references (skip stale)"
-    required: false
-  - name: --create-tickets
-    description: "Create Linear tickets for broken/stale docs"
-    required: false
-  - name: --max-tickets
-    description: "Max tickets to create per run (default: 10)"
+    description: boolean flag
     required: false
   - name: --dry-run
-    description: "Report only, no ticket creation"
+    description: boolean flag
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:doc_freshness_sweep — Documentation Freshness Sweep
+# /onex:doc_freshness_sweep — one command, one typed result
 
-**Skill ID**: `onex:doc_freshness_sweep`
-**Version**: 2.0.0
-**Backing node**: `node_doc_freshness_sweep`
+**Skill ID**: `onex:doc_freshness_sweep` · **Command**: `uv run onex skill doc_freshness_sweep` (omnibase_infra) · **Backing node**: `node_doc_freshness_sweep` (omnimarket) · **Ticket**: OMN-13097
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[DocFreshnessSweepResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_doc_freshness_sweep`.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_doc_freshness_sweep`. The node owns repo
-scanning, reference extraction, staleness detection, and ticket creation.
-This shim contains no inline scanning logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the doc-freshness-sweep skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_doc_freshness_sweep --input '{
-  "repo": null,
-  "claude_md_only": false,
-  "broken_only": false,
-  "create_tickets": false,
-  "max_tickets": 10,
-  "dry_run": false
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_doc_freshness_sweep`
-
-Command topic: `onex.cmd.omnimarket.doc-freshness-sweep-start.v1`
-
-Terminal event: `onex.evt.omnimarket.doc-freshness-sweep-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_doc_freshness_sweep.handlers.handler_doc_freshness_sweep.DocFreshnessSweepResult`

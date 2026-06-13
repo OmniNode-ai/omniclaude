@@ -1,30 +1,30 @@
-# dod_verify prompt
+# /onex:dod_verify — one command, one typed result
 
-You are executing the **dod_verify** skill.
-
-## Announce
-
-Say: "I'm using the dod-verify skill."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `ticket_id` (required) — Linear ticket ID (e.g., OMN-1234)
-- `--contract-path <path>` — optional override path to contract YAML
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelDodVerifyState]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_dod_verify --input '{
-  "ticket_id": "<ticket_id>",
-  "contract_path": "<path or null>"
-}'
+uv run onex skill dod_verify "<ticket_id>" [--contract-path <v>] [--dry-run]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `<ticket_id>` | positional, required |
+| `--contract-path` | string |
+| `--dry-run` | boolean, flag |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never reimplement evidence verification inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelDodVerifyState`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.
