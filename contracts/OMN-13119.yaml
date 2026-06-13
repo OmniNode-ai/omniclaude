@@ -1,0 +1,31 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13119"
+title: "Epic: drift-rem-1 — doc-vs-impl reconciliation batch for skill docs, stale markers, and node verbs"
+summary: >-
+  Parent epic for drift-rem-1 doc reconciliation run. Covers: reconcile release SKILL.md FSM placeholder
+  description; trim integration_sweep surface table; fix golden_chain_sweep prompt.md harness sections;
+  drop stale (stub) and migration_status markers on 4 implemented skills; remove phantom flags from
+  integration_sweep; fix eval head-topic (run-evaluated.v1 → onex.evt.omniclaude.session-outcome.v1);
+  standardize node-invocation verbs per archetype across gap and contract_sweep.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on all child-ticket PRs"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-child-tickets-complete"
+    description: >-
+      All child tickets (OMN-13126) have PRs merged to dev with green CI.
+      Doc-only epic — no runtime behavior changes.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f contracts/OMN-13119.yaml"

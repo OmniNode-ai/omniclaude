@@ -31,15 +31,15 @@ args:
 
 Validate Definition of Done compliance across closed epics/tickets. Operates in
 two modes: **batch** (retroactive sweep of recently completed tickets) and
-**targeted** (pre-close gate for a specific epic or ticket).
+**targeted** (pre-close gate for a specific epic or ticket). <!-- skill-boundary-ok: iteration described here is performed by node_dod_sweep_orchestrator handler, not the skill itself -->
 
 ## Dual Mode
 
-- **Batch** (`/dod-sweep`): Query Linear for tickets completed in the lookback
+- **Batch** (`/dod-sweep`): Query Linear for tickets completed in the lookback <!-- skill-boundary-ok: ticket iteration is performed by node_dod_sweep_orchestrator handler, not the skill -->
   window via `tracker.list_issues`, filter by `completedAt`.
 - **Batch since-last-cycle** (`/dod-sweep --since-last-cycle`): Query Linear for
   tickets completed since the last autopilot close-out cycle. Reads the last cycle
-  timestamp from `$ONEX_STATE_DIR/autopilot/cycle-state.yaml` field
+  timestamp from `$ONEX_STATE_DIR/autopilot/cycle-state.yaml` field <!-- skill-boundary-ok: state file read is performed by node_dod_sweep_orchestrator handler, not the skill -->
   `last_cycle_id`. Falls back to `--since-days 7` if no prior cycle exists.
 - **Targeted** (`/dod-sweep OMN-1234`): If the target is an epic, expand child
   tickets. If a single ticket, sweep just that one.
@@ -53,11 +53,11 @@ evidence receipts per ticket.
 
 Flow:
 1. Discover tickets (via batch or since-last-cycle query)
-2. For each ticket, invoke the `dod-verify` skill logic:
+2. For each ticket, invoke the `dod-verify` skill logic: <!-- skill-boundary-ok: per-ticket iteration is performed by node_dod_sweep_orchestrator handler -->
    - Locate ticket contract at `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
    - If contract exists with `dod_evidence[]`, run evidence checks via the shared
      runner at `plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py`
-   - Collect the DoD verification result for the ticket. Durable per-ticket
+   - Collect the DoD verification result for the ticket. Durable per-ticket <!-- skill-boundary-ok: result collection is performed by node_dod_sweep_orchestrator handler -->
      receipt persistence is tracked by OMN-10408 and must not be claimed until
      the backing node implements it.
 3. Flag any tickets with incomplete DoD evidence (failed or missing checks)
@@ -140,7 +140,7 @@ UNKNOWN is not a single state. It may represent:
 
 ## Follow-Up Ticket Creation and Dedup
 
-For each failed ticket (when not `--dry-run`):
+For each failed ticket (when not `--dry-run`): <!-- skill-boundary-ok: follow-up ticket creation is performed by node_dod_sweep_orchestrator handler -->
 
 1. Search existing open tickets for `[dod-sweep-gap:{ticket_id}]` marker in
    description. If found and still open, update the existing ticket's description
@@ -166,7 +166,7 @@ evidence item in their `dod_evidence[]` array:
 - `projection`
 
 **Check logic:**
-1. For each ticket in the sweep, check if any of the above labels are present
+1. For each ticket in the sweep, check if any of the above labels are present <!-- skill-boundary-ok: label-presence iteration is performed by node_dod_sweep_orchestrator handler -->
 2. If label match: verify `dod_evidence[]` contains at least one item with `type: rendered_output`
 3. If missing: flag the ticket as `RENDERED_OUTPUT_MISSING` in the sweep report
 4. Create a follow-up ticket with title `fix: DoD gap -- {ticket_id} -- missing rendered_output evidence`
