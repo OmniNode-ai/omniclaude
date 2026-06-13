@@ -1,0 +1,102 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13126"
+title: "Doc-vs-impl reconciliation batch (skill docs, stale stub markers, phantom flags, eval head topic, node/run-node verbs)"
+summary: >-
+  Docs-only reconciliation: (1) release SKILL.md frontmatter — state FSM is a structural placeholder;
+  (2) integration_sweep SKILL.md — trim surface table to 3 implemented surfaces (RUNTIME_HEALTH,
+  CONTAINER_HEALTH, GITHUB_CI) + runtime_sha_match; (3) golden_chain_sweep prompt.md — remove
+  publish/poll/assert/cleanup harness (node is pure validator of pre-collected projected_rows);
+  fix node_golden_chain_sweep contract.yaml + metadata.yaml description; (4) drop stale (stub) and
+  migration_status: pending_node on 4 implemented skills: integration_sweep, dod_sweep, env_parity,
+  pr_watch; (5) remove phantom flags (--mode/--date/--tickets/--dry-run/--output) from integration_sweep;
+  (6) fix eval head-topic run-evaluated.v1 → onex.evt.omniclaude.session-outcome.v1;
+  (7) standardize node-invocation verbs: compute/pure sweeps → onex node; bus-dispatch → onex run-node.
+  No behavioral code changes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on both omniclaude and omnimarket PRs"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-release-skill-description-reconciled"
+    description: >-
+      release/SKILL.md frontmatter description updated to explicitly note FSM is a structural
+      placeholder. The description now matches the in-body note rather than contradicting it.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'structural placeholder' plugins/onex/skills/release/SKILL.md"
+  - id: "dod-integration-sweep-surface-table-trimmed"
+    description: >-
+      integration_sweep SKILL.md surface table trimmed from ~10 advertised surfaces to the 3
+      the node actually implements: RUNTIME_HEALTH, CONTAINER_HEALTH, GITHUB_CI + runtime_sha_match.
+      Phantom flags removed. stub/migration_status markers dropped.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q '| `RUNTIME_HEALTH` |' plugins/onex/skills/integration_sweep/SKILL.md &&
+          grep -q '| `CONTAINER_HEALTH` |' plugins/onex/skills/integration_sweep/SKILL.md &&
+          grep -q '| `GITHUB_CI` |' plugins/onex/skills/integration_sweep/SKILL.md &&
+          grep -q '| `runtime_sha_match` |' plugins/onex/skills/integration_sweep/SKILL.md &&
+          ! awk '/## Integration Surfaces/{flag=1; next}/## Halt Policy/{flag=0} flag'
+          plugins/onex/skills/integration_sweep/SKILL.md | grep -E '`(KAFKA|DB)`'
+  - id: "dod-golden-chain-sweep-harness-removed"
+    description: >-
+      golden_chain_sweep prompt.md harness sections (publish/poll/assert/cleanup/INSERT) removed.
+      Node description in omnimarket contract.yaml + metadata.yaml corrected to say pure validator
+      of pre-collected projected_rows.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          ! grep -E 'publish|poll|cleanup|INSERT' plugins/onex/skills/golden_chain_sweep/prompt.md &&
+          grep -q 'validating pre-collected projected_rows' plugins/onex/skills/golden_chain_sweep/prompt.md
+  - id: "dod-stub-markers-dropped"
+    description: >-
+      (stub) text and migration_status: pending_node removed from dod_sweep, env_parity, pr_watch,
+      integration_sweep SKILL.md files. Backing nodes confirmed present in omnimarket.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "! grep -r 'migration_status: pending_node' plugins/onex/skills/"
+  - id: "dod-eval-topic-corrected"
+    description: >-
+      run-evaluated.v1 replaced with onex.evt.omniclaude.session-outcome.v1 in all affected
+      skill SKILL.md, prompt.md, and node contract.yaml files.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "! grep -r 'run-evaluated.v1' plugins/onex/skills/"
+  - id: "dod-verb-standardization"
+    description: >-
+      Node invocation verbs standardized: compute/pure sweeps use onex node; bus-dispatch nodes
+      use onex run-node. Intra-file contradictions in gap and contract_sweep SKILL.md fixed.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'onex run-node' plugins/onex/skills/gap/SKILL.md &&
+          ! grep -q 'uv run onex run' plugins/onex/skills/gap/SKILL.md
+  - id: "dod-docs-only-no-deploy"
+    description: >-
+      This is a documentation-only change. No runtime behavior changes, no live deploy required.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          ! git diff --name-only origin/dev...HEAD | grep -Ev '^(contracts/.*\.ya?ml|plugins/onex/skills/.*\.(md|yaml))$'

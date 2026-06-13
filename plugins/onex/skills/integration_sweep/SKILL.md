@@ -18,24 +18,9 @@ tags:
   - playwright
 author: OmniClaude Team
 composable: true
-migration_status: pending_node
-migration_target: node_integration_sweep_orchestrator
-migration_epic: OMN-7538
 args:
-  - name: --date
-    description: "ISO date to sweep (default: today). Filters tickets by updatedAt >= date."
-    required: false
-  - name: --tickets
-    description: "Comma-separated ticket IDs to probe explicitly (skips Linear discovery)"
-    required: false
-  - name: --mode
-    description: "Scope of surface probing: omniclaude-only | full-infra (default: omniclaude-only)"
-    required: false
   - name: --dry-run
-    description: "Print results table but do NOT write the ModelIntegrationRecord artifact"
-    required: false
-  - name: --output
-    description: "Override artifact output path (default: $ONEX_CC_REPO_PATH/drift/integration/{date}.yaml)"
+    description: "Compute artifact path but do NOT write the ModelIntegrationRecord artifact"
     required: false
 inputs:
   - name: tickets
@@ -47,7 +32,7 @@ outputs:
     description: "clean | fail | partial"
 ---
 
-<!-- routing-enforced: dispatches to node_integration_sweep_orchestrator (stub). functionally-complete requires real node implementation. -->
+<!-- routing-enforced: dispatches to node_integration_sweep_orchestrator. -->
 
 # integration-sweep
 
@@ -61,7 +46,7 @@ outputs:
 
 ## Purpose
 
-Contract-driven post-merge verification. For each recently completed ticket:
+Contract-driven post-merge verification. For each recently completed ticket: <!-- skill-boundary-ok: ticket iteration is performed by node_integration_sweep_orchestrator handler, not the skill -->
 
 1. Extract the `ModelTicketContract` embedded in the ticket description (YAML block)
 2. Map `interfaces_touched` fields to `EnumIntegrationSurface` values
@@ -79,29 +64,21 @@ The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 
 ```
 /integration-sweep
-/integration-sweep --date 2026-03-18
-/integration-sweep --tickets OMN-5400,OMN-5401
-/integration-sweep --mode full-infra
 /integration-sweep --dry-run
-/integration-sweep --dry-run --tickets OMN-5436
 ```
 
 ---
 
 ## Integration Surfaces
 
+The following surfaces are implemented in the node (`surface_probes.py`). All other surfaces listed in the enum are defined but not yet probed by the node implementation.
+
 | EnumIntegrationSurface | What is probed |
 |------------------------|----------------|
-| `KAFKA` | Topic constants match consumer subscribe strings; producer and consumer models are compatible |
-| `DB` | Migration applied; ORM columns match DDL; no broken schema references |
-| `CI` | Required workflow files exist; no disabled checks; status badges passing |
-| `PLUGIN` | omniclaude plugin loads cleanly; skill files valid; no phantom callables |
-| `GITHUB_CI` | Branch protection rules; required status checks registered; auto-merge eligibility |
-| `SCRIPT` | Referenced scripts exist at declared paths; exit cleanly under `--dry-run` when applicable |
-| `CONTAINER_HEALTH` | Docker container state — all expected containers running (unconditional, every invocation) |
-| `RUNTIME_HEALTH` | HTTP health endpoints for runtime services (unconditional, every invocation) |
-| `CROSS_REPO_BOUNDARY` | Cross-repo Kafka boundary parity (topic constants + schema roundtrip) and live pipeline probe; reports boundary count from kafka_boundaries.yaml — unconditional, every invocation [OMN-6286] |
-| `PLAYWRIGHT_BEHAVIORAL` | Playwright smoke and data-flow E2E tests — smoke (no infra) and data-flow (live infra); unconditional, every invocation [OMN-6302] |
+| `RUNTIME_HEALTH` | HTTP health endpoints for runtime services — unconditional, every invocation |
+| `CONTAINER_HEALTH` | Docker container state via SSH — all expected containers running, unconditional, every invocation |
+| `GITHUB_CI` | Recent GitHub Actions run results for the configured repo — pass/fail counts | <!-- skill-boundary-ok: repo iteration is performed by node_integration_sweep_orchestrator handler -->
+| `runtime_sha_match` | Per-ticket SHA match from `dod_evidence` checks against the live runtime deployment |
 
 ---
 
@@ -186,7 +163,7 @@ Artifact: $ONEX_CC_REPO_PATH/drift/integration/2026-03-18.yaml
 ## Known Limitations
 
 - **Linear list_issues truncation (OMN-5473)**: The Linear `list_issues` API truncates
-  descriptions to ~500 characters. Discovery (Step 2) uses `list_issues` for ticket IDs
+  descriptions to ~500 characters. Discovery (Step 2) uses `list_issues` for ticket IDs <!-- skill-boundary-ok: issue listing is performed by node_integration_sweep_orchestrator handler -->
   only. Contract extraction (Step 3) MUST use `get_issue` per ticket to retrieve full
   descriptions. This adds ~1 API call per ticket but prevents contract parsing failures
   from truncated YAML blocks.

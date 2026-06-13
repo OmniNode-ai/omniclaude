@@ -1,5 +1,5 @@
 ---
-description: Org-wide coordinated release pipeline — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
+description: Org-wide coordinated release pipeline (structural placeholder — full handler implementation tracked in OMN-8004) — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
 mode: full
 version: 2.0.0
 level: advanced
@@ -99,7 +99,7 @@ On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it
 Processes repos in dependency-tier order (tier 0 → tier N):
 
 1. **GATE**: Validate gate attestation (if provided) or proceed automatically
-2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__`
+2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__` <!-- skill-boundary-ok: repo iteration is performed by node_release, this skill only dispatches -->
 3. **PIN**: Update cross-repo dependency pins in downstream repos
 4. **PR**: Create release PR per repo via `gh pr create`; enable auto-merge
 5. **MERGE**: Wait for CI + merge queue; confirm merged
