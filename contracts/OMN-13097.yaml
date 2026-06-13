@@ -1,0 +1,62 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13097"
+title: "Phase 4a: migrate 24 dispatch shims to the single-command onex skill receipt pattern (omniclaude markdown)"
+summary: >-
+  Migrate all 24 dispatch-only shim skills in omniclaude to the single-command `onex skill <name> [args]`
+  receipt pattern proven by delegate in Phase 2b. Each migrated skill's dispatch becomes ONE CLI call
+  printing exactly one ModelSkillResult[T]; SKILL.md declares skill_kind: dispatch (delegation-enforcer
+  exemption from OMN-13096); prompt.md procedure bodies are deleted to frontmatter + the one command +
+  result presentation; skill-local executable logic (merge_sweep/_lib, hostile_reviewer aggregator,
+  pr_review sub-skill scripts, delegate/_lib) is removed so a skill directory contains markdown only. The
+  onex skill subcommand + declarative skill_mapping.yaml and all 23 node-side typed result models landed
+  in omnibase_infra PR #1968 and prior omnimarket work respectively; this contract binds the omniclaude
+  markdown-migration slice. No bare onex run/node/run-node calls and no cat workflow_result.json remain in
+  any migrated dispatch shim.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on merge PR"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-dispatch-receipt-contract-tests"
+    description: >-
+      The parametrized dispatch-skill receipt contract suite passes for all 24 migrated skills
+      (test_dispatch_skill_receipt_contract.py): single-command onex skill form, no bare onex run/node,
+      no cat workflow_result.json, skill_kind: dispatch declared, no executable logic in skill directory.
+    source: "generated"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/skills/test_dispatch_skill_receipt_contract.py -q"
+  - id: "dod-skills-hooks-suite"
+    description: "Full skills + hooks unit suite passes after the migration and stale-test removals."
+    source: "generated"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/skills/ tests/unit/hooks/ -q"
+  - id: "dod-no-bare-dispatch"
+    description: >-
+      No migrated dispatch shim retains a bare onex run/node/run-node invocation or a
+      cat workflow_result.json step in its command body.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f contracts/OMN-13097.yaml"
+  - id: "dod-deploy-not-required"
+    description: >-
+      No live deploy is required for this markdown-only migration; the onex skill runtime surface it
+      targets landed via omnibase_infra PR #1968 (merged to dev).
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'No live deploy is required' contracts/OMN-13097.yaml"
