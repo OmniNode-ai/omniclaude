@@ -74,8 +74,18 @@ jobs:
           # directly-built wheel is the only way to guarantee the dev source (with the
           # validator) is what gets installed, never a stale registry version.
           uv build --wheel --out-dir .skill-receipt-wheel ./_omnibase_core
+          wheel="$(ls .skill-receipt-wheel/omnibase_core-*.whl)"
+          echo "Installing locally-built wheel: ${wheel}"
+          # --reinstall-package forces uv to (re)install omnibase-core from the
+          # explicit local wheel rather than unifying onto a stale registry version
+          # (e.g. the published 0.44.0, which predates the validator). Transitive
+          # deps still resolve normally from the index.
           uv pip install --python .skill-receipt-venv/bin/python \
-            .skill-receipt-wheel/*.whl
+            --reinstall-package omnibase-core "${wheel}"
+          # Hard assertion: the validator module must be importable, else the wrong
+          # omnibase-core was installed and the gate result would be meaningless.
+          .skill-receipt-venv/bin/python -c \
+            'import omnibase_core.validators.skill_dispatch_receipt_mode'
       - name: Run skill receipt-mode gate
         run: |
           set -euo pipefail
