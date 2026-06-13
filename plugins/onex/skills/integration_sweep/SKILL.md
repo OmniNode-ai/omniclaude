@@ -46,7 +46,7 @@ outputs:
 
 ## Purpose
 
-Contract-driven post-merge verification. For each recently completed ticket:
+Contract-driven post-merge verification. For each recently completed ticket: <!-- skill-boundary-ok: ticket iteration is performed by node_integration_sweep_orchestrator handler, not the skill -->
 
 1. Extract the `ModelTicketContract` embedded in the ticket description (YAML block)
 2. Map `interfaces_touched` fields to `EnumIntegrationSurface` values
@@ -77,7 +77,7 @@ The following surfaces are implemented in the node (`surface_probes.py`). All ot
 |------------------------|----------------|
 | `RUNTIME_HEALTH` | HTTP health endpoints for runtime services — unconditional, every invocation |
 | `CONTAINER_HEALTH` | Docker container state via SSH — all expected containers running, unconditional, every invocation |
-| `GITHUB_CI` | Recent GitHub Actions run results for the configured repo — pass/fail counts |
+| `GITHUB_CI` | Recent GitHub Actions run results for the configured repo — pass/fail counts | <!-- skill-boundary-ok: repo iteration is performed by node_integration_sweep_orchestrator handler -->
 | `runtime_sha_match` | Per-ticket SHA match from `dod_evidence` checks against the live runtime deployment |
 
 ---
@@ -163,7 +163,7 @@ Artifact: $ONEX_CC_REPO_PATH/drift/integration/2026-03-18.yaml
 ## Known Limitations
 
 - **Linear list_issues truncation (OMN-5473)**: The Linear `list_issues` API truncates
-  descriptions to ~500 characters. Discovery (Step 2) uses `list_issues` for ticket IDs
+  descriptions to ~500 characters. Discovery (Step 2) uses `list_issues` for ticket IDs <!-- skill-boundary-ok: issue listing is performed by node_integration_sweep_orchestrator handler -->
   only. Contract extraction (Step 3) MUST use `get_issue` per ticket to retrieve full
   descriptions. This adds ~1 API call per ticket but prevents contract parsing failures
   from truncated YAML blocks.
