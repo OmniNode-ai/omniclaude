@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Skill Receipt-Mode Gate (OMN-13098).
+#
+# Runs the omnibase_core validator
+# (`python -m omnibase_core.validators.skill_dispatch_receipt_mode`) against the
+# whole plugins/onex/skills tree, tolerating the not-yet-migrated skills listed
+# in .onex_ratchets/skill_receipt_mode_allowlist.yaml. The gate FAILS if:
+#   - a non-allowlisted dispatch skill has a bare `onex run|node|run-node`
+#     invocation, inline executable logic, a missing/invalid `skill_kind`, or a
+#     `cat workflow_result.json` / "surface JSON verbatim" instruction;
+#   - the allowlist grows, a listed skill is migrated (stale entry), or a listed
+#     skill no longer exists.
+#
+# The allowlist shrinks to empty as Phase 4a migrations land; the file is then
+# deleted and the gate becomes unconditional.
+#
+# Queue-safety: triggers on BOTH pull_request and merge_group so it cannot
+# permanently wedge the merge queue once promoted to a required status check.
+#
+# Required-status-check name (when flipped): `skill-receipt-mode-gate / skill-receipt-mode-gate`
+
+name: skill-receipt-mode-gate
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'plugins/onex/skills/**'
+      - '.onex_ratchets/skill_receipt_mode_allowlist.yaml'
+      - 'scripts/check_skill_dispatch_receipt_mode_wrapper.sh'
+      - '.github/workflows/skill-receipt-mode-gate.yml'
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-receipt-mode-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-receipt-mode-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Checkout omnibase_core (provides the skill receipt-mode validator)
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omnibase_core
+          # The validator lands on omnibase_core dev in this same ticket
+          # (OMN-13098). Track dev so omniclaude CI sees it once the paired
+          # core PR merges; promote to main after dev→main promotion.
+          ref: dev
+          path: _omnibase_core
+          token: ${{ github.token }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Install omnibase_core (validator package) into a uv venv
+        run: |
+          set -euo pipefail
+          uv venv .skill-receipt-venv --python 3.12
+          uv pip install --python .skill-receipt-venv/bin/python ./_omnibase_core
+      - name: Run skill receipt-mode gate
+        run: |
+          set -euo pipefail
+          allowlist=".onex_ratchets/skill_receipt_mode_allowlist.yaml"
+          if [ ! -f "$allowlist" ]; then
+            echo "::notice::Ratchet allowlist absent — gate is unconditional (all dispatch skills must be receipt-mode)."
+          fi
+          .skill-receipt-venv/bin/python -m omnibase_core.validators.skill_dispatch_receipt_mode \
+            --skills-root plugins/onex/skills \
+            --allowlist "$allowlist"

@@ -169,6 +169,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13098: dispatch-only shim skills must be a single receipt-mode
+      # `onex skill`/`onex delegate` CLI call — no bare `onex run|node|run-node`,
+      # no inline executable logic, no `cat workflow_result.json`. A ratchet
+      # allowlist (.onex_ratchets/skill_receipt_mode_allowlist.yaml) tolerates
+      # not-yet-migrated skills but must never grow. Whole-tree scan: ratchet
+      # semantics need every skill + the allowlist, so pass_filenames is false.
+      - id: validate-skill-dispatch-receipt-mode
+        name: enforce single receipt-mode dispatch in skills (OMN-13098)
+        entry: bash scripts/check_skill_dispatch_receipt_mode_wrapper.sh
+        language: system
+        files: '^(plugins/onex/skills/.*|\.onex_ratchets/skill_receipt_mode_allowlist\.yaml)$'
+        pass_filenames: false
+        stages: [pre-commit]
+
       # OMN-9072: regression guard — every hookSpecificOutput emission must
       # include hookEventName, else Claude Code silently drops the payload.
       - id: check-hook-event-names
