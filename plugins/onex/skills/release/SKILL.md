@@ -101,7 +101,7 @@ outputs:
 The node CLI (`omnimarket.nodes.node_release.__main__`) parses `repos`, `--all`,
 `--bump`, `--dry-run`, `--resume`, `--skip-pypi-wait`, `--autonomous`, and
 `--gate-attestation`, builds a `ModelReleaseStartCommand`, and prints it as JSON.
-This is for contract verification only — no repo is scanned, no commits are read.
+This supports contract verification only; it scans no repository and reads no commits.
 
 ### Step 2 — Initialize node (contract verification)
 
