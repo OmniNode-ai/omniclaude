@@ -12,7 +12,7 @@ summary: >-
   EnumReleasePhase FSM under a new "What actually executes today" section, and moves the
   aspirational pipeline under a clearly marked "Target design (NOT YET IMPLEMENTED)"
   section. The historical placeholder-origin ticket is cited as the migration tracker and
-  is NOT reopened. No behavioral code change.
+  is NOT reopened. No behavioral code change. Paired OCC receipt: onex_change_control PR #2622.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
