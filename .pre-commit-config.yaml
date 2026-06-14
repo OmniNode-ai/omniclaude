@@ -135,6 +135,21 @@ repos:
         stages: [pre-commit]
         exclude: '^tests/'
 
+      # OMN-13120: version-skew gate. Detects shared-package pin drift between
+      # the live plugin daemon venv (CLAUDE_PLUGIN_DATA/.venv) and the canonical
+      # uv.lock pins — both lock drift (stale .built-from marker) and in-place
+      # pin mutation. always_run so the live-venv check fires every commit, not
+      # only when uv.lock is staged. CI runs the same wrapper in lock-consistency
+      # mode (no live venv present). Fix on fire: bash scripts/repair-plugin-venv.sh.
+      # BLOCKING — enforcement, not advisory (CLAUDE.md Rule #5).
+      - id: check-daemon-venv-skew
+        name: Reject live daemon venv pin drift vs uv.lock (OMN-13120)
+        entry: .pre-commit-hooks/check-daemon-venv-skew.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
