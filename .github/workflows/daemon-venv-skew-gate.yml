@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Daemon Venv Skew Gate
+
+# OMN-13120: required status check. Detects shared-package pin drift between the
+# live plugin daemon venv and the canonical uv.lock pins. CI runners have no live
+# daemon venv, so this runs in lock-consistency mode: it parses the canonical
+# uv.lock and proves the pin set resolves (a malformed lock fails the gate). The
+# same wrapper runs locally as a pre-commit hook where, if a live daemon venv is
+# present, it additionally compares the marker hash + installed versions against
+# the lock and fails on drift. Enforcement, not detection (CLAUDE.md Rule #5).
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'uv.lock'
+      - 'scripts/check_daemon_venv_skew.py'
+      - '.pre-commit-hooks/check-daemon-venv-skew.sh'
+      - 'plugins/onex/hooks/scripts/ensure-plugin-venv.sh'
+      - '.github/workflows/daemon-venv-skew-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'uv.lock'
+      - 'scripts/check_daemon_venv_skew.py'
+      - '.pre-commit-hooks/check-daemon-venv-skew.sh'
+      - 'plugins/onex/hooks/scripts/ensure-plugin-venv.sh'
+      - '.github/workflows/daemon-venv-skew-gate.yml'
+  merge_group:
+
+# Least-privilege: this gate only reads the checked-out tree and runs a stdlib
+# validator. No write scopes (Checkov CKV2_GHA_1 / write-all default).
+permissions:
+  contents: read
+
+jobs:
+  daemon-venv-skew-gate:
+    name: Daemon Venv Skew Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Validate canonical pins resolve (lock-consistency mode)
+        working-directory: ${{ github.workspace }}
+        run: |
+          # tomllib is stdlib (Python 3.11+); no install step needed.
+          # No live daemon venv exists on CI runners, so the gate proves the
+          # canonical lock is well-formed and the pin set resolves. The wrapper
+          # exits 1 on an unparseable lock — never a silent pass.
+          bash .pre-commit-hooks/check-daemon-venv-skew.sh
