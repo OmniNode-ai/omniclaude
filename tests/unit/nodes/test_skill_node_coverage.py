@@ -48,6 +48,16 @@ def _get_skills() -> set[str]:
 
 
 def _get_node_skills() -> set[str]:
+    """Skill slugs for every real skill-orchestrator node on disk.
+
+    The canonical definition of an ONEX node is a directory containing a
+    ``contract.yaml`` (CONTRACT/NODE/HANDLER — a directory with no contract is
+    not a node). We therefore require ``contract.yaml`` to exist before counting
+    a ``node_skill_*_orchestrator`` directory as a node. Bare directories left
+    behind after a node deletion (e.g. a lingering ``__pycache__`` shell whose
+    source was removed) carry no contract and are not nodes, so they never
+    surface as false-positive orphans here.
+    """
     nodes_dir = Path("src/omniclaude/nodes")
     result = set()
     for d in nodes_dir.iterdir():
@@ -55,6 +65,7 @@ def _get_node_skills() -> set[str]:
             d.is_dir()
             and d.name.startswith("node_skill_")
             and d.name.endswith("_orchestrator")
+            and (d / "contract.yaml").is_file()
         ):
             snake = d.name[len("node_skill_") : -len("_orchestrator")]
             result.add(_normalize(snake))
