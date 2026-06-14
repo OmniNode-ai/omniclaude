@@ -1,0 +1,75 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13148"
+title: "release SKILL.md doc-honesty: align to node_release structural-placeholder reality"
+summary: >-
+  Docs-only reconciliation of plugins/onex/skills/release/SKILL.md. The skill body
+  documented a fully-executing release pipeline (a 14-state phase FSM plus per-repo
+  gh pr create / git tag / PyPI publish side effects, an idempotency dedup table, and
+  crash-safe state-file resume), but the routed node (node_release in omnimarket) is a
+  pure in-memory FSM bookkeeper that performs no git, gh, uv, or PyPI I/O. The fix adds
+  a STRUCTURAL PLACEHOLDER banner governing the whole body, documents the real 9-state
+  EnumReleasePhase FSM under a new "What actually executes today" section, and moves the
+  aspirational pipeline under a clearly marked "Target design (NOT YET IMPLEMENTED)"
+  section. The historical placeholder-origin ticket is cited as the migration tracker and
+  is NOT reopened. No behavioral code change.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on the omniclaude PR"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-placeholder-banner-governs-whole-body"
+    description: >-
+      A STRUCTURAL PLACEHOLDER banner is present near the top of release/SKILL.md and
+      states the node performs no git/gh/uv/PyPI I/O today. This governs the whole body,
+      not just Step 2.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'STRUCTURAL PLACEHOLDER' plugins/onex/skills/release/SKILL.md &&
+          grep -q 'performs NO git' plugins/onex/skills/release/SKILL.md
+  - id: "dod-real-fsm-documented"
+    description: >-
+      The real 9-state EnumReleasePhase FSM (IDLE, BUMP_VERSIONS, PIN_CROSS_REPO,
+      CREATE_PRS, MERGE, TAG, PUBLISH, DONE, FAILED) is documented under a
+      "What actually executes today" section, replacing the prior 14-state claim in the
+      body's primary description.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'What actually executes today' plugins/onex/skills/release/SKILL.md &&
+          grep -q 'BUMP_VERSIONS' plugins/onex/skills/release/SKILL.md &&
+          grep -q 'PIN_CROSS_REPO' plugins/onex/skills/release/SKILL.md
+  - id: "dod-aspirational-marked-not-implemented"
+    description: >-
+      The aspirational pipeline (per-phase git/gh/twine steps, the 14-phase FSM, the
+      idempotency dedup table) is moved under a "Target design (NOT YET IMPLEMENTED)"
+      section so an operator/agent does not believe /release performs real releases today.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'Target design (NOT YET IMPLEMENTED)' plugins/onex/skills/release/SKILL.md &&
+          grep -q 'NOT IMPLEMENTED' plugins/onex/skills/release/SKILL.md
+  - id: "dod-docs-only-no-deploy"
+    description: >-
+      Documentation-only change. No runtime behavior changes and no live deploy required.
+      The only changed files are the release SKILL.md and this contract evidence file.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          ! git diff --name-only origin/dev...HEAD | grep -Ev '^(contracts/.*\.ya?ml|plugins/onex/skills/release/SKILL\.md)$'
