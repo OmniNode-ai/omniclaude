@@ -30,6 +30,11 @@ on:
       - '.github/workflows/daemon-venv-skew-gate.yml'
   merge_group:
 
+# Least-privilege: this gate only reads the checked-out tree and runs a stdlib
+# validator. No write scopes (Checkov CKV2_GHA_1 / write-all default).
+permissions:
+  contents: read
+
 jobs:
   daemon-venv-skew-gate:
     name: Daemon Venv Skew Gate
