@@ -43,17 +43,11 @@ independently — they never hit thresholds.
 
 ## Per-hook gating: ONEX_HOOKS_MASK [OMN-9612]
 
-> **Rollout status:** The bitmask gate is being wired into hook wrappers by
-> OMN-9617 (Task 5 of the hook-bitmask plan). Until that ticket lands,
-> `ONEX_HOOKS_MASK` has no effect on hooks that have not yet been retrofitted.
-> The infrastructure (enum, CLI, shell library) is being built out in the
-> OMN-9609 epic wave.
-
-Once fully rolled out (post OMN-9617), every omniclaude hook wrapper will
-read `ONEX_HOOKS_MASK` and exit silently (exit 0, no side effect) when its
-bit is cleared. Default is `(1 << N) - 1` where `N = len(EnumHookBit)` —
-i.e. all bits on, width-matched to the enum, current behavior preserved.
-The bit positions are defined by `EnumHookBit` in
+Every omniclaude hook wrapper reads `ONEX_HOOKS_MASK` and exits silently
+(exit 0, no side effect) when its bit is cleared. This behavioral cutover
+merged in OMN-9617 (commit f0325f0be). Default is `(1 << N) - 1` where
+`N = len(EnumHookBit)` — i.e. all bits on, width-matched to the enum,
+current behavior preserved. The bit positions are defined by `EnumHookBit` in
 `omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`.
 
 **Important:** when `ONEX_HOOKS_MASK` is absent or unset, the default is
@@ -125,19 +119,11 @@ full policy.
 
 ### Migration note
 
-**Current state (pre-OMN-9617):** The legacy `OMNICLAUDE_HOOK_<NAME>=0/1`
-per-hook env vars are still active and work as before. Hook scripts such as
-`plugins/onex/hooks/post-tool-use-ruff.sh` and
-`plugins/onex/hooks/scripts/post-tool-use-test-reminder.sh` still branch on
-these variables. If you have scripts or `.env` entries that use them, they
-continue to work.
-
-**After OMN-9617 lands (Task 5 behavioral cutover):** The legacy per-hook
-env vars will be physically removed from every GATE hook wrapper and
-superseded by `ONEX_HOOKS_MASK`. At that point, any reference to
-`OMNICLAUDE_HOOK_<NAME>` in shells or scripts becomes a **no-op**. Migrate
-to `onex hooks disable <NAME>` before or immediately after OMN-9617 merges.
-Do not add new per-hook env vars of the legacy form.
+**OMN-9617 merged (commit f0325f0be):** The legacy `OMNICLAUDE_HOOK_<NAME>=0/1`
+per-hook env vars have been removed from every GATE hook wrapper and
+superseded by `ONEX_HOOKS_MASK`. Any reference to `OMNICLAUDE_HOOK_<NAME>`
+in shells or scripts is now a **no-op**. Use `onex hooks disable <NAME>`
+to disable individual hooks. Do not add new per-hook env vars of the legacy form.
 
 ---
 
@@ -918,5 +904,5 @@ Canonical spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`
 
 ---
 
-**Last Updated**: 2026-05-22
-**Version**: 0.3.1
+**Last Updated**: 2026-06-16
+**Version**: 0.25.1

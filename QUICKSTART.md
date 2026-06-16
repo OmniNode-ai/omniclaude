@@ -4,7 +4,7 @@ OmniClaude supports three integration tiers. **No tier selection is required** �
 detects available services automatically at every SessionStart and injects a banner:
 
 ```
-─── OmniClaude: STANDALONE (73 skills) (probe: 4s ago) ───
+─── OmniClaude: STANDALONE (109 skills) (probe: 4s ago) ───
 ─── OmniClaude: EVENT_BUS (routing + telemetry) (probe: 12s ago) ───
 ─── OmniClaude: FULL_ONEX (enrichment + memory) (probe: 8s ago) ───
 ```
@@ -24,7 +24,7 @@ uv sync
 # In Claude Code: /deploy-local-plugin
 ```
 
-**What you get:** 73 skills, 54 agents, all hooks fire, Kafka events silently dropped.
+**What you get:** 109 skills, 53 agents, all hooks fire, Kafka events silently dropped.
 
 > **Seeing STANDALONE but expected EVENT\_BUS?**
 > Set `KAFKA_BOOTSTRAP_SERVERS` in `.env` and restart your Claude Code session.
@@ -108,6 +108,6 @@ Delete the file to force an immediate re-probe on the next SessionStart.
 ## Next Steps
 
 - [CLAUDE.md](CLAUDE.md) — development guide and architecture reference
-- [plugins/onex/agents/configs/](plugins/onex/agents/configs/) — 54 agent YAML definitions
-- [plugins/onex/skills/](plugins/onex/skills/) — 73 skill definitions
+- [plugins/onex/agents/configs/](plugins/onex/agents/configs/) — 53 agent YAML definitions
+- [plugins/onex/skills/](plugins/onex/skills/) — 109 skill definitions
 - [docs/](docs/) — architecture decision records and proposals

@@ -5,9 +5,24 @@
 Hook handlers are Python modules in `plugins/onex/hooks/lib/`. They are called
 by the shell hook scripts in `plugins/onex/hooks/scripts/`.
 
-Hook configuration lives in `plugins/onex/hooks/hooks.json`. Each hook type
-(`SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`)
-maps to one or more shell scripts, which in turn call Python handler modules.
+Hook configuration lives in `plugins/onex/hooks/hooks.json`. The current
+hook event types and their Claude Code firing conditions are:
+
+| Hook Type | Fires when | Stdin payload fields |
+|-----------|-----------|----------------------|
+| `SessionStart` | A new Claude Code session opens | `sessionId`, `projectPath`, `cwd` |
+| `SessionEnd` | The Claude Code session closes | `sessionId` |
+| `UserPromptSubmit` | The user submits a prompt (before Claude responds) | `sessionId`, `prompt` |
+| `PreToolUse` | Before a tool call executes | `sessionId`, `tool_name`, `tool_input` |
+| `PostToolUse` | After a tool call completes | `sessionId`, `tool_name`, `tool_input`, `tool_response` |
+| `Stop` | Claude finishes responding (the turn ends) | `sessionId` |
+| `SubagentStart` | A Task() subagent session starts | `sessionId`, `parentSessionId` |
+| `SubagentStop` | A Task() subagent session ends | `sessionId`, `parentSessionId` |
+| `PermissionDenied` | Claude Code denies a permission request | `sessionId`, `tool_name`, `tool_input` |
+| `StopFailure` | The Stop hook exits non-zero | `sessionId` |
+| `PreCompact` | Before a context compaction | `sessionId` |
+
+Each hook type maps to one or more shell scripts, which in turn call Python handler modules.
 
 ---
 

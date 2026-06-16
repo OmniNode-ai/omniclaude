@@ -72,15 +72,21 @@ with:
 jq . plugins/onex/hooks/hooks.json
 ```
 
-Expected hooks registered (from the current `hooks.json`):
+Expected hook event types registered (from the current `hooks.json`):
 
-| Hook | Matcher | Script |
-|------|---------|--------|
-| `SessionStart` | (all) | `session-start.sh` |
-| `SessionEnd` | (all) | `session-end.sh` |
-| `UserPromptSubmit` | (all) | `user-prompt-submit.sh` |
-| `PreToolUse` | `^(Edit\|Write)$` | `pre_tool_use_authorization_shim.sh` |
-| `PostToolUse` | `^(Read\|Write\|Edit\|Bash\|Glob\|Grep\|Task\|Skill\|WebFetch\|WebSearch\|NotebookEdit\|NotebookRead)$` | `post-tool-use-quality.sh` |
+| Hook | Matcher | Notes |
+|------|---------|-------|
+| `SessionStart` | (all) | Session lifecycle logging, daemon startup, venv pin check |
+| `SessionEnd` | (all) | Session cleanup and finalization |
+| `UserPromptSubmit` | (all) | Agent routing, context injection, delegation enforcement |
+| `PreToolUse` | (various) | Authorization, branch protection, dispatch guards, model routing |
+| `PostToolUse` | `^(Read\|Write\|Edit\|Bash\|Glob\|Grep\|Task\|Skill\|...)$` | Quality enforcement, pattern tracking |
+| `Stop` | (all) | Graceful shutdown, quality gate, skip-token surface guard |
+| `SubagentStart` | (all) | Subagent session marker creation |
+| `SubagentStop` | (all) | Subagent claim verification, skip-token surface guard |
+| `PermissionDenied` | (all) | Permission denial logging |
+| `StopFailure` | (all) | Stop failure logging |
+| `PreCompact` | (all) | Pre-compaction hook |
 
 Verify hook scripts are executable:
 
@@ -159,7 +165,6 @@ routing falls back to the `general-purpose` (exit 0, no blocking).
 | `ENFORCEMENT_MODE` | `warn` | Quality enforcement: `warn`, `block`, `silent` |
 | `LLM_CODER_URL` | — | Local LLM endpoint for delegation (port 8000) |
 | `LLM_CODER_FAST_URL` | — | Fast LLM for delegation (port 8001) |
-| `OMNICLAUDE_PROJECT_ROOT` | — | Explicit project root for dev-mode venv resolution |
 | `PLUGIN_PYTHON_BIN` | — | Override Python interpreter path (escape hatch) |
 | `KAFKA_ENVIRONMENT` | — | Environment label for observability (not used for topic prefixing) |
 
@@ -167,7 +172,7 @@ routing falls back to the `general-purpose` (exit 0, no blocking).
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| Hook fails with exit 1 | Python interpreter not found | Set `OMNICLAUDE_PROJECT_ROOT` or `PLUGIN_PYTHON_BIN` |
+| Hook fails with exit 1 | Python interpreter not found | Set `PLUGIN_PYTHON_BIN` or run `scripts/repair-plugin-venv.sh` |
 | `daemon_running: false` | SessionStart hook did not run | Open/restart Claude Code session in project directory |
 | Events not arriving in Kafka | Daemon started but Kafka unreachable | Check `KAFKA_BOOTSTRAP_SERVERS`; verify port 29092 is accessible |
 | Routing always returns `general-purpose` | Routing service timeout (5 s) | Check network to Kafka; set `USE_EVENT_ROUTING=false` to disable |
