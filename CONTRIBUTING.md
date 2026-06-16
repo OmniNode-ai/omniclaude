@@ -34,7 +34,7 @@ omniclaude is the Claude Code agent plugin for the ONEX platform. It contains ho
 ```bash
 git clone https://github.com/OmniNode-ai/omniclaude.git
 cd omniclaude
-uv sync --all-extras
+uv sync --group dev
 uv run pre-commit install
 uv run pre-commit install --hook-type pre-push
 ```
@@ -57,10 +57,10 @@ Never use a uv-managed interpreter as the base for the plugin daemon venv. See `
 deploy_local_plugin --execute
 ```
 
-After deploy, verify with:
+After deploy, verify with the plugin verification skill inside an active Claude Code session:
 
-```bash
-uv run python -m omniclaude.verify_plugin
+```
+/verify_plugin
 ```
 
 ## Plugin Architecture

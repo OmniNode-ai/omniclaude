@@ -17,6 +17,6 @@ All business logic lives in omnimarket.
 - Intelligence/routing logic → omniintelligence
 
 ## Migration status
-- ~133 node dirs in `src/omniclaude/nodes/` are being migrated to omnimarket (OMN-8002 epic)
+- 142 node dirs in `src/omniclaude/nodes/` are being migrated to omnimarket (OMN-8002 epic)
 - Skill shims (node_skill_*) are thin dispatch-only wrappers — no custom handler code allowed
 - `plugin.py` + `onex.domain_plugins` entry points are dead code pending OMN-7868 removal
