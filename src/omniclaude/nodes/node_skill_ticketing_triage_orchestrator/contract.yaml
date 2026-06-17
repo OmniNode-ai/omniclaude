@@ -74,6 +74,13 @@ capabilities:
   - name: skill.ticketing_triage
     description: Dispatch ticketing-triage skill to general-purpose agent
     version: 1.0.0
+  - name: epic.autostart_ratchet
+    description: >
+      Transition any unstarted epic (Backlog/Todo) with >= 1 started or completed
+      child to In Progress on a single triage tick. Monotone / one-way: never
+      auto-completes an epic (no auto-Done). Self-heals the OMN-12952 class
+      (retro B-10, OMN-13039).
+    version: 1.0.0
 
 # IO operations
 io_operations:
@@ -92,6 +99,17 @@ io_operations:
       - error: str | None
       - correlation_id: UUID
     idempotent: false
+  - operation: reconcile_epic_states
+    description: >
+      Pure reconciliation compute (OMN-13039). Given a snapshot of every epic and
+      its children's status types, return the monotone In-Progress transitions to
+      apply. Idempotent: re-running over the post-transition snapshot is a no-op.
+    handler_method: reconcile_epic_states
+    input_fields:
+      - snapshots: list[ModelEpicSnapshot]
+    output_fields:
+      - transitions: list[ModelEpicStateTransition]
+    idempotent: true
 
 # Dependencies
 dependencies:
