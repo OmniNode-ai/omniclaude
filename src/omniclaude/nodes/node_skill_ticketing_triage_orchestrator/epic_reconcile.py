@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT
 """Epic auto-start ratchet for the ticketing-triage orchestrator (OMN-13039, retro B-10).
 
-The 2026-06-12 process-failure retro recorded that epic OMN-12952 sat ``Backlog``
-all day under 22 merged child PRs — detected twice, fixed zero times — until a
-human marked it ``In Progress`` per plan P7/P8.
+The 2026-06-12 process-failure retro recorded that an epic sat ``Backlog`` all day
+under 22 merged child PRs — detected twice, fixed zero times — until a human marked
+it ``In Progress`` per plan P7/P8.
 
 This module owns the pure, deterministic compute the orchestrator node runs each
 triage tick. Given a snapshot of every epic and the status of its children, it
@@ -77,7 +77,7 @@ class ModelEpicSnapshot(BaseModel):
     """Immutable snapshot of one epic and its children at a triage tick.
 
     Args:
-        epic_id: The epic's Linear identifier (e.g. ``"OMN-12952"``).
+        epic_id: The epic's Linear identifier (e.g. ``"OMN-13039"``).
         status_type: The epic's current workflow-state type.
         child_status_types: The workflow-state type of every direct child issue.
     """
@@ -140,7 +140,7 @@ def should_autostart_epic(snapshot: ModelEpicSnapshot) -> bool:
     """Return True if this epic is eligible for the auto-start ratchet.
 
     Eligible iff the epic is unstarted (``backlog``/``unstarted``) AND has at
-    least one started-or-completed child. This is the OMN-12952 shape.
+    least one started-or-completed child. This is the OMN-13039 headline shape.
     """
     return snapshot.status_type in _UNSTARTED_TYPES and _has_in_flight_child(snapshot)
 

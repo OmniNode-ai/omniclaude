@@ -174,9 +174,9 @@ If the gate fails (unstarted epic without exception line):
 Example failure message:
 ```
 GATE FAIL: epic_states_reconciled
-  OMN-12952 is in state 'Backlog' but has active children.
+  OMN-13039 is in state 'Backlog' but has active children.
   Run /onex:ticketing_triage to auto-start, or start manually.
-  To proceed with exception: add 'OMN-12952: EXCEPTION — <reason>' to --message.
+  To proceed with exception: add 'OMN-13039: EXCEPTION — <reason>' to --message.
 ```
 
 ### Passing the Gate

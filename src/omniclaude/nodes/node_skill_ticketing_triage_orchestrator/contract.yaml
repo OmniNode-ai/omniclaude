@@ -78,7 +78,7 @@ capabilities:
     description: >
       Transition any unstarted epic (Backlog/Todo) with >= 1 started or completed
       child to In Progress on a single triage tick. Monotone / one-way: never
-      auto-completes an epic (no auto-Done). Self-heals the OMN-12952 class
+      auto-completes an epic (no auto-Done). Self-heals the OMN-13039 headline class
       (retro B-10, OMN-13039).
     version: 1.0.0
 

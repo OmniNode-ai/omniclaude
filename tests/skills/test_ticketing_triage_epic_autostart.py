@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """OMN-13039 (retro B-10): Epic auto-start ratchet for ticketing-triage.
 
-The 2026-06-12 retro recorded that epic OMN-12952 sat ``Backlog`` all day
+The 2026-06-12 retro recorded that epic OMN-13039 sat ``Backlog`` all day
 underneath 22 merged child PRs — detected twice, fixed zero times — until a
 human marked it ``In Progress`` per plan P7/P8.
 
@@ -45,10 +45,10 @@ def _epic(
 def test_unstarted_epic_with_started_child_becomes_in_progress() -> None:
     """The headline DoD case: Backlog epic + started child -> In Progress on one tick.
 
-    This is the OMN-12952 shape and MUST self-heal on the first sweep tick.
+    This is the OMN-13039 headline shape and MUST self-heal on the first sweep tick.
     """
     snapshot = _epic(
-        "OMN-12952",
+        "OMN-13039",
         EnumLinearStatusType.BACKLOG,
         [EnumLinearStatusType.STARTED],
     )
@@ -59,12 +59,12 @@ def test_unstarted_epic_with_started_child_becomes_in_progress() -> None:
     assert len(result.transitions) == 1
     transition = result.transitions[0]
     assert isinstance(transition, ModelEpicStateTransition)
-    assert transition.epic_id == "OMN-12952"
+    assert transition.epic_id == "OMN-13039"
     assert transition.from_status_type == EnumLinearStatusType.BACKLOG
     assert transition.to_status_type == EnumLinearStatusType.STARTED
     # The ratchet returns the human-facing target state name for the tracker call.
     assert transition.target_state_name == "In Progress"
-    assert "OMN-12952" in result.transitioned_epic_ids
+    assert "OMN-13039" in result.transitioned_epic_ids
 
 
 @pytest.mark.unit
@@ -147,16 +147,16 @@ def test_reconcile_is_idempotent_on_second_tick() -> None:
     no further transition (no flapping, no auto-Done).
     """
     first = _epic(
-        "OMN-12952",
+        "OMN-13039",
         EnumLinearStatusType.BACKLOG,
         [EnumLinearStatusType.STARTED],
     )
     result_one = reconcile_epic_states([first])
-    assert result_one.transitioned_epic_ids == ("OMN-12952",)
+    assert result_one.transitioned_epic_ids == ("OMN-13039",)
 
     # Second tick: the epic is now started; same children.
     second = _epic(
-        "OMN-12952",
+        "OMN-13039",
         EnumLinearStatusType.STARTED,
         [EnumLinearStatusType.STARTED],
     )
