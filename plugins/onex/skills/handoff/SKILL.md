@@ -1,7 +1,7 @@
 ---
 description: Opt-in session continuity — save context before /clear for injection on next session start
 mode: full
-version: 1.0.0
+version: 1.1.0
 level: basic
 debug: false
 category: workflow
@@ -16,6 +16,10 @@ args:
   - name: --message
     description: "Optional message for the next session (free text context)"
     required: false
+required_fields:
+  - name: epic_states_reconciled
+    description: "REQUIRED gate (OMN-13039): every scorecard-cited epic must be In Progress or later, or carry an explicit exception line. FAIL if any cited epic is Backlog/Todo without an exception."
+    required: true
 ---
 
 > **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
@@ -126,3 +130,69 @@ After a session crash or `/clear` without explicit `/handoff`:
 1. Next session's `/onex:session` reads the latest auto-checkpoint (crash_recovery deleted in OMN-12234)
 2. Provides: last commit, branch, files changed, PR status
 3. This makes session resumption seamless even without explicit handoff
+
+## Required Gate: Epic States Reconciled (OMN-13039)
+
+**This gate is required and must be evaluated before writing the handoff manifest.**
+
+Before completing a handoff that cites any epic (parent ticket without a parent of its own,
+identified by an OMN-XXXX reference that is a parent issue in Linear), verify that every
+such epic is in a state of `In Progress` or later (`In Review`, `Done`).
+
+### Gate Evaluation
+
+For every epic mentioned in the handoff context (`active_ticket`, `--message`, or recent work):
+
+1. **Resolve the epic's current state** from Linear via:
+   ```bash
+   uv run onex run-node node_linear_triage --input '{"dry_run": true, "threshold_days": 0}'
+   ```
+   Or use the ProtocolProjectTracker interface (`get_issue_status`) — never hardcode
+   Linear MCP tool names directly in skills.
+2. **Check state**: if the epic is `Backlog` or `Todo`, the gate FAILS unless the handoff
+   includes an explicit exception line for that epic.
+
+### Exception Format
+
+To pass the gate when an epic is unstarted, include an exception line in `--message` or
+in the `epic_states_reconciled` field:
+
+```
+epic_states_reconciled:
+  OMN-XXXX: EXCEPTION — <reason why this epic is intentionally unstarted>
+```
+
+### Gate Failure
+
+If the gate fails (unstarted epic without exception line):
+
+1. **Do NOT write the handoff manifest.**
+2. Print the failed epic(s) and their current states.
+3. Suggest running `/onex:ticketing_triage` to trigger the auto-start ratchet, or
+   instruct the user to start the epic manually.
+
+Example failure message:
+```
+GATE FAIL: epic_states_reconciled
+  OMN-12952 is in state 'Backlog' but has active children.
+  Run /onex:ticketing_triage to auto-start, or start manually.
+  To proceed with exception: add 'OMN-12952: EXCEPTION — <reason>' to --message.
+```
+
+### Passing the Gate
+
+Record the reconciliation result in the handoff manifest:
+
+```json
+"epic_states_reconciled": {
+  "checked_at": "<ISO 8601 UTC>",
+  "epics": [
+    {"id": "OMN-XXXX", "state": "In Progress", "status": "ok"},
+    {"id": "OMN-YYYY", "state": "Backlog", "status": "exception", "reason": "..."}
+  ],
+  "result": "pass"
+}
+```
+
+A handoff manifest without `epic_states_reconciled` is considered malformed and will
+not be injected by session-start.sh (OMN-13039 enforcement).
