@@ -4,6 +4,29 @@
 
 When the user invokes `/handoff`, execute the following steps:
 
+### Gate: Epic States Reconciled (OMN-13039) — REQUIRED, runs BEFORE manifest write
+
+Scan the handoff context (active ticket, --message, recent commits) for any OMN-XXXX
+identifiers. For each OMN-XXXX that is an epic (a Linear issue with no parent):
+
+1. Fetch the epic's current state via `uv run onex run-node node_linear_triage` (dry_run mode)
+   or the ProtocolProjectTracker interface. Do not use Linear MCP tool names directly.
+2. If the state is `Backlog` or `Todo`:
+   - Check whether `--message` contains `OMN-XXXX: EXCEPTION — <reason>`.
+   - If no exception present: **STOP**. Print the failure message and do NOT write manifest.
+   - If exception present: record it in `epic_states_reconciled` with `status: exception`.
+
+Failure message template:
+```
+GATE FAIL: epic_states_reconciled
+  <OMN-XXXX> is in state '<state>' but has active children.
+  Run /onex:ticketing_triage to auto-start (OMN-13039 ratchet), or start it manually.
+  To proceed with exception: add '<OMN-XXXX>: EXCEPTION — <reason>' to --message.
+```
+
+3. If all cited epics are In Progress or later (or have exception lines): proceed to Gather Context.
+4. Append `epic_states_reconciled` to the manifest before writing (see Manifest Schema below).
+
 ### Gather Context
 
 Collect the current session context:
@@ -75,6 +98,18 @@ the handoff confirmation.
     "branch": "<branch name or null>",
     "recent_commits": ["<oneline>", ...],
     "working_files": ["<path>", ...]
+  },
+  "epic_states_reconciled": {
+    "checked_at": "<ISO 8601 UTC>",
+    "epics": [
+      {"id": "OMN-XXXX", "state": "In Progress", "status": "ok"},
+      {"id": "OMN-YYYY", "state": "Backlog", "status": "exception", "reason": "<reason>"}
+    ],
+    "result": "pass"
   }
 }
 ```
+
+A manifest without `epic_states_reconciled` is malformed and will not be injected by
+session-start.sh (OMN-13039 enforcement). If no epics are cited, write
+`"epic_states_reconciled": {"checked_at": "<ts>", "epics": [], "result": "pass"}`.
