@@ -3,7 +3,7 @@ schema_version: "1.0.0"
 ticket_id: "OMN-13039"
 title: "OMN-13039 — B-10: Epic auto-start ratchet + handoff epic-state gate"
 summary: >
-  Retro B-10 (PROCESS_FAILURE_RETRO.md §3.B): epic OMN-13039 sat unstarted all day under 22 merged PRs;
+  Retro B-10 (PROCESS_FAILURE_RETRO.md §3.B): an epic sat unstarted all day under 22 merged PRs;
   detected twice, fixed zero times; manually marked In Progress 2026-06-12. This PR adds the
   epic.autostart_ratchet capability to node_skill_ticketing_triage_orchestrator (epic_reconcile.py pure
   compute + frozen models + canonical EnumLinearStatusType; node.py exposes reconcile_epic_states();

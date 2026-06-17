@@ -140,7 +140,7 @@ def should_autostart_epic(snapshot: ModelEpicSnapshot) -> bool:
     """Return True if this epic is eligible for the auto-start ratchet.
 
     Eligible iff the epic is unstarted (``backlog``/``unstarted``) AND has at
-    least one started-or-completed child. This is the OMN-13039 headline shape.
+    least one started-or-completed child. This is the retro B-10 headline shape.
     """
     return snapshot.status_type in _UNSTARTED_TYPES and _has_in_flight_child(snapshot)
 

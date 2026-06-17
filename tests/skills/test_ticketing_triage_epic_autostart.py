@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT
 """OMN-13039 (retro B-10): Epic auto-start ratchet for ticketing-triage.
 
-The 2026-06-12 retro recorded that epic OMN-13039 sat ``Backlog`` all day
-underneath 22 merged child PRs — detected twice, fixed zero times — until a
-human marked it ``In Progress`` per plan P7/P8.
+The 2026-06-12 retro recorded that an epic sat ``Backlog`` all day underneath
+22 merged child PRs — detected twice, fixed zero times — until a human marked it
+``In Progress`` per plan P7/P8.
 
 The ratchet makes the ticketing-triage orchestrator self-heal that class:
 an unstarted epic (Backlog/Todo) with >= 1 started-or-completed child must
@@ -45,7 +45,7 @@ def _epic(
 def test_unstarted_epic_with_started_child_becomes_in_progress() -> None:
     """The headline DoD case: Backlog epic + started child -> In Progress on one tick.
 
-    This is the OMN-13039 headline shape and MUST self-heal on the first sweep tick.
+    This is the retro B-10 headline shape and MUST self-heal on the first sweep tick.
     """
     snapshot = _epic(
         "OMN-13039",
