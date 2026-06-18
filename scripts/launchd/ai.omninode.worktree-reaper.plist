@@ -7,9 +7,16 @@
   This is a CONTINUOUSLY-RUNNING daemon (KeepAlive=true), NOT a periodic launchd
   job. launchd periodic jobs do not fire reliably on this Mac
   (memory feedback_local_durability); a resident KeepAlive process sidesteps that
-  failure mode. The reaper's own --loop polls the pr-merged projection every
-  ONEX_REAPER_INTERVAL seconds and drives prune-worktrees.sh on each newly-merged
-  PR. If the process exits, launchd restarts it (KeepAlive).
+  failure mode. The reaper's own --loop runs BOTH GC layers (OMN-13230, T6):
+    - Layer 1 (event-first): polls the pr-merged projection every
+      ONEX_REAPER_INTERVAL seconds and drives prune-worktrees.sh on each
+      newly-merged PR.
+    - Layer 2 (timer-backstop): a cursor-independent catch-up reconciliation
+      sweep runs once on start and every ONEX_REAPER_CATCH_UP_INTERVAL seconds
+      (default 3600 = hourly), reaping ALL already-merged worktrees still present
+      to catch events missed during downtime. This is the Mac equivalent of the
+      .201 onex-disk-gc.timer backstop.
+  If the process exits, launchd restarts it (KeepAlive).
 
   Template: __OMNI_HOME__ and __HOME__ are expanded at install time by
   install-worktree-reaper-daemon.sh.

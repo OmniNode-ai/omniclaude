@@ -16,9 +16,14 @@
 # KeepAlive supervises the reaper process directly.
 #
 # Env (from the plist / ~/.omnibase/.env):
-#   OMNI_HOME             required — locates the omniclaude clone + worktrees roots
-#   ONEX_PROJECTION_URL   required — the .201 projection API base URL
-#   ONEX_REAPER_INTERVAL  optional — poll interval seconds (default 60)
+#   OMNI_HOME                    required — locates the omniclaude clone + worktrees roots
+#   ONEX_PROJECTION_URL          required — the .201 projection API base URL
+#   ONEX_REAPER_INTERVAL         optional — Layer 1 event-poll interval seconds (default 60)
+#   ONEX_REAPER_CATCH_UP_INTERVAL optional — Layer 2 catch-up backstop interval
+#                                seconds (default 3600 = hourly; 0 disables). The
+#                                Mac equivalent of the .201 onex-disk-gc.timer
+#                                (OMN-13230, T6). A catch-up sweep also runs once
+#                                on daemon start to reconcile downtime gaps.
 #
 # Manual run (for debugging, Ctrl-C to stop):
 #   bash scripts/worktree-reaper-daemon.sh
@@ -27,6 +32,7 @@ set -euo pipefail
 
 OMNI_HOME="${OMNI_HOME:?set OMNI_HOME to the omni_home path}"
 INTERVAL="${ONEX_REAPER_INTERVAL:-60}"
+CATCH_UP_INTERVAL="${ONEX_REAPER_CATCH_UP_INTERVAL:-3600}"
 REAPER="${OMNI_HOME}/omniclaude/scripts/worktree_reaper.py"
 
 if [[ ! -f "$REAPER" ]]; then
@@ -54,8 +60,12 @@ if [[ -z "$PYTHON_BIN" ]]; then
   exit 2
 fi
 
-echo "[worktree-reaper-daemon] starting loop interpreter=$PYTHON_BIN interval=${INTERVAL}s" >&2
+echo "[worktree-reaper-daemon] starting loop interpreter=$PYTHON_BIN interval=${INTERVAL}s catch_up_interval=${CATCH_UP_INTERVAL}s" >&2
 
 # exec so launchd KeepAlive supervises the reaper process directly. The reaper's
-# --loop handles the polling cadence; default roots cover all Mac worktree roots.
-exec "$PYTHON_BIN" "$REAPER" --execute --loop --interval "$INTERVAL"
+# --loop handles BOTH layers: the fast event poll every --interval seconds and the
+# catch-up backstop every --catch-up-interval seconds (plus once on start). Default
+# roots cover all Mac worktree roots.
+exec "$PYTHON_BIN" "$REAPER" --execute --loop \
+  --interval "$INTERVAL" \
+  --catch-up-interval "$CATCH_UP_INTERVAL"
