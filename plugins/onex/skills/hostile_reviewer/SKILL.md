@@ -41,7 +41,7 @@ skill_kind: dispatch
 
 # /onex:hostile_reviewer — one command, one typed result
 
-**Skill ID**: `onex:hostile_reviewer` · **Command**: `uv run onex skill hostile_reviewer` (omnibase_infra) · **Backing node**: `node_hostile_reviewer` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:hostile_reviewer` · **Command**: `uv run onex skill hostile_reviewer` (omnibase_infra) · **Backing node**: `node_hostile_reviewer_orchestrator` (omnimarket) · **Ticket**: OMN-13097
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative
@@ -62,4 +62,4 @@ See `prompt.md` for the one command and how to present the typed result.
 
 - **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
 - **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
-- **Result model**: `omnimarket.nodes.node_hostile_reviewer.models.model_hostile_reviewer_completed_event.ModelHostileReviewerCompletedEvent`
+- **Result model**: `omnimarket.nodes.node_hostile_reviewer_orchestrator.models.model_hostile_reviewer_completed_event.ModelHostileReviewerCompletedEvent`

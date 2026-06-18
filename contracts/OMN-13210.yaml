@@ -1,0 +1,59 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13210"
+title: "[B1] Repoint hostile_reviewer to node_hostile_reviewer_orchestrator (omniclaude surfaces)"
+summary: >-
+  Cross-repo repoint paired with the canonical node_hostile_reviewer rebuild (omnimarket PR #1260,
+  epic OMN-13205, OCC PR #2734). node_hostile_reviewer was rebuilt canonically as
+  node_hostile_reviewer_orchestrator (ORCHESTRATOR + COMPUTE/EFFECT split). This omniclaude change
+  repoints the plugin manifest + skill doc: plugins/onex/plugin-compat.yaml node entry +
+  topics (now hostile-reviewer-start.v1 subscribe + hostile-reviewer-completed.v1 publish; the legacy
+  hostile-reviewer-phase-transition.v1 topic is dropped because the in-process FSM that emitted it is
+  deleted with the shell), and plugins/onex/skills/hostile_reviewer/SKILL.md backing node + result-model
+  module path. The skill command surface (uv run onex skill hostile_reviewer) and the
+  ModelHostileReviewerCompletedEvent shape are preserved. No code change in omniclaude.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on the omniclaude PR"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-plugin-compat-repointed"
+    description: >-
+      plugins/onex/plugin-compat.yaml names node_hostile_reviewer_orchestrator with the start (subscribe)
+      and completed (publish) topics, and no longer references the deleted phase-transition topic.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'node: node_hostile_reviewer_orchestrator' plugins/onex/plugin-compat.yaml &&
+          grep -q 'onex.evt.omnimarket.hostile-reviewer-completed.v1' plugins/onex/plugin-compat.yaml &&
+          ! grep -q 'hostile-reviewer-phase-transition' plugins/onex/plugin-compat.yaml
+  - id: "dod-skill-backing-node-repointed"
+    description: >-
+      plugins/onex/skills/hostile_reviewer/SKILL.md names node_hostile_reviewer_orchestrator as the backing
+      node and uses the node_hostile_reviewer_orchestrator result-model module path.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'node_hostile_reviewer_orchestrator' plugins/onex/skills/hostile_reviewer/SKILL.md &&
+          grep -q 'node_hostile_reviewer_orchestrator.models.model_hostile_reviewer_completed_event' plugins/onex/skills/hostile_reviewer/SKILL.md
+  - id: "dod-docs-only-no-deploy"
+    description: >-
+      Documentation/plugin-manifest-only change. No omniclaude runtime behavior change and no live deploy
+      required. Paired OCC receipt: onex_change_control PR #2734 (carries the OMN-13210 contract + receipts).
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          ! git diff --name-only origin/dev...HEAD | grep -Ev '^(contracts/.*\.ya?ml|plugins/onex/plugin-compat\.yaml|plugins/onex/skills/hostile_reviewer/SKILL\.md)$'
