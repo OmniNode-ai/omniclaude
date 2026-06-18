@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13227"
+title: "Merged-PR projection dependency context"
+summary: >-
+  Repo-local context contract for the merged-PR projection ticket referenced by
+  the OMN-13228 Mac worktree reaper. The daemon consumes the materialized
+  projection over HTTP and does not open a Kafka client on the Mac.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-projection-reference"
+    description: >-
+      The reaper implementation references the projection dependency and tests
+      the mocked projection HTTP response path.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q "OMN-13227" scripts/worktree_reaper.py
+          && grep -q "projection" tests/scripts/test_worktree_reaper.py

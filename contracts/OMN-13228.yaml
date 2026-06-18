@@ -1,0 +1,54 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13228"
+title: "Mac launchd KeepAlive worktree reaper daemon"
+summary: >-
+  Adds the Mac launchd KeepAlive worktree reaper daemon. The daemon reads the
+  merged-PR projection over HTTP, keeps its cursor under .onex_state, defaults
+  to dry-run, and delegates deletion safety to the canonical prune-worktrees.sh
+  script. Packaging includes the launchd plist, shell launcher, install/status
+  helper, and unit tests with mocked projection responses. The PR is code-only;
+  live loading is an explicit deploy/orchestrator step.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-reaper-files-present"
+    description: >-
+      The Mac reaper daemon script, launchd plist, installer, launcher, and unit
+      tests are present in the PR.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          test -f scripts/worktree_reaper.py
+          && test -f scripts/worktree-reaper-daemon.sh
+          && test -f scripts/install-worktree-reaper-daemon.sh
+          && test -f scripts/launchd/ai.omninode.worktree-reaper.plist
+          && test -f tests/scripts/test_worktree_reaper.py
+  - id: "dod-reaper-unit-tests"
+    description: >-
+      Focused unit tests cover merged-clean pruning, skip-on-dirty/unpushed
+      behavior, cursor advancement, dry-run behavior, and projection fetch
+      failure handling.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/scripts/test_worktree_reaper.py -q"
+  - id: "dod-occ-binding"
+    description: >-
+      The PR body binds this repo-local contract to the central OCC evidence PR
+      for receipt-gate verification.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1772 --repo OmniNode-ai/omniclaude --json body --jq '.body'
+          | grep -q 'Evidence-Source: OCC#2754'
