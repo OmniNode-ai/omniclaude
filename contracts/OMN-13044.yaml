@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13044"
+title: "Dirty worktree salvage out-of-scope context"
+summary: >-
+  Repo-local context contract for the salvage ticket referenced by the OMN-13228
+  Mac worktree reaper implementation. The reaper deliberately preserves the
+  existing prune-worktrees.sh safety behavior: dirty, detached, missing-upstream,
+  or unpushed worktrees are skipped rather than salvaged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-salvage-out-of-scope-reference"
+    description: >-
+      The reaper implementation documents salvage as out of scope and delegates
+      cleanup safety to prune-worktrees.sh.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q "OMN-13044 owns" scripts/worktree_reaper.py

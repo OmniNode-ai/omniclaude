@@ -1,0 +1,28 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13008"
+title: "Merge-triggered worktree reaper epic context"
+summary: >-
+  Repo-local context contract for the merge-triggered worktree reaper epic
+  referenced by the OMN-13228 Mac launchd daemon implementation. The OMN-13228
+  PR implements the Mac daemon portion only; this contract exists so PR contract
+  validation can resolve the parent epic ticket references in the changed files.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-context-reference"
+    description: >-
+      The Mac worktree reaper implementation references the parent epic as
+      context in the changed scripts and tests.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -R "OMN-13008" scripts/worktree_reaper.py scripts/worktree-reaper-daemon.sh
+          scripts/launchd/ai.omninode.worktree-reaper.plist tests/scripts/test_worktree_reaper.py

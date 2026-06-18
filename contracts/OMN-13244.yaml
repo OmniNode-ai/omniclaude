@@ -1,11 +1,17 @@
 ---
 schema_version: "1.0.0"
 ticket_id: "OMN-13244"
-title: "Hooks-off baseline context"
+title: "Disable all onex plugin hooks (gut hooks.json) for a clean measurement baseline"
 summary: >-
-  Repo-local context contract for the hooks-off baseline cited by OMN-13278.
-  OMN-13278 measures from that zero-instrumentation baseline and does not
-  re-enable any hook tier in this PR.
+  Remove every hook registration from plugins/onex/hooks/hooks.json (set
+  hooks to an empty object) so Claude Code invokes no onex hooks. This
+  establishes a clean, no-instrumentation baseline for measuring whether the
+  hook surface helps or hurts before re-introducing hooks deliberately. The
+  hook scripts remain on disk; re-registration is a pure config change. The
+  two tests that asserted specific registrations in hooks.json are adjusted to
+  the empty-registration baseline. The dormant, unreferenced
+  hooks-delegation.v1.json (not loaded by Claude Code) is intentionally left
+  untouched.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -14,14 +20,25 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: "dod-reference-only"
+  - id: "dod-hooks-json-empty"
     description: >-
-      OMN-13244 is cited as the baseline context; the active code change is
-      owned by OMN-13278.
+      plugins/onex/hooks/hooks.json parses as valid JSON and registers no
+      hooks (hooks == {}), so Claude Code invokes no onex hooks.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "jq -e '.hooks == {}' plugins/onex/hooks/hooks.json"
+  - id: "dod-hooks-tests-pass"
+    description: >-
+      The hooks-json registration and script-path tests pass against the
+      empty-registration baseline (obsolete per-hook registration assertions
+      dropped; the workflow-guard matcher test skips when no PreToolUse hooks
+      are registered).
     source: "manual"
     status: "verified"
     checks:
       - check_type: "command"
         check_value: >-
-          gh pr view 1774 --repo OmniNode-ai/omniclaude --json body --jq '.body'
-          | grep -q 'OMN-13244'
+          uv run pytest tests/hooks/test_hooks_registration.py
+          tests/hooks/test_hooks_json_script_paths.py -m unit
