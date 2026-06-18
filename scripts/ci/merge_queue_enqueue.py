@@ -35,6 +35,18 @@ import sys
 from enum import StrEnum
 from typing import Any
 
+__all__ = [
+    "EnumEnqueueAction",
+    "is_no_merge_queue_error",
+    "is_benign_enqueue_error",
+    "is_armed",
+    "is_in_queue",
+    "is_behind",
+    "classify_pr",
+    "verify_enqueued",
+    "main",
+]
+
 
 class EnumEnqueueAction(StrEnum):
     """The action the workflow should take for a PR, derived from its state."""
@@ -218,9 +230,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # argparse subparsers are required=True, so an unknown command never reaches
-    # here; parser.error() is typed NoReturn (raises SystemExit) and satisfies the
-    # `-> int` contract without a dead `return`.
-    parser.error(f"unknown command: {args.command}")
+    # here. Terminate explicitly with a non-zero status (rather than falling
+    # through to an implicit None) so the function has no mixed implicit/explicit
+    # return path.
+    raise SystemExit(f"unknown command: {args.command}")
 
 
 if __name__ == "__main__":
