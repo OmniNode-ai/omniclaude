@@ -16,7 +16,7 @@
 #   8. `http://localhost` / `http://192.168` (direct endpoint calls bypass bus)
 #
 # ALLOWLISTED skill directories (PURE-SKILL — legitimately use some patterns):
-#   handoff, login, preflight, record_friction, set_session,
+#   login, preflight, record_friction, set_session,
 #   systematic_debugging, unstick_queue, using_git_worktrees, worktree,
 #   writing_skills, authorize
 #
@@ -39,7 +39,6 @@ BASELINE_FILE="${SCRIPT_DIR}/../plugins/onex/skills/_lib/imperative_skill_baseli
 # Allowlisted skill directory names (basename of skill dir only)
 # ──────────────────────────────────────────────────────────────────────────────
 ALLOWLISTED_SKILLS=(
-    "handoff"
     "login"
     "preflight"
     "record_friction"
@@ -204,11 +203,6 @@ if [[ "${1:-}" == "--self-test" ]]; then
     run_test "imperative-ok suppresses finding" \
         "plugins/onex/skills/my_skill/SKILL.md" \
         "Run Agent(prompt=...) # imperative-ok" \
-        0
-
-    run_test "allowlisted skill (handoff) passes with Agent(" \
-        "plugins/onex/skills/handoff/SKILL.md" \
-        "Run Agent(prompt=...) to invoke." \
         0
 
     run_test "allowlisted skill (authorize) passes with curl" \

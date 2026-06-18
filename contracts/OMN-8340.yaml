@@ -1,0 +1,66 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-8340"
+title: "Remove deprecated onex handoff skill"
+summary: >-
+  Removes the deprecated /onex:handoff skill, its dedicated
+  node_skill_handoff_orchestrator registration, and stale validator references.
+  The skill had already declared /onex:session as its replacement, and the PR
+  leaves the separate session-handoff document-writing machinery intact.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-handoff-skill-removed"
+    description: >-
+      The deprecated handoff skill directory and its dedicated shell node are
+      removed from the plugin and omniclaude node tree.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          test ! -d plugins/onex/skills/handoff
+          && test ! -d src/omniclaude/nodes/node_skill_handoff_orchestrator
+  - id: "dod-validator-lists-updated"
+    description: >-
+      Skill validator lists and allowlists no longer include the removed handoff
+      skill, while the existing pr_review/pr_review_bot backing-node metadata is
+      corrected to the live omniclaude shell nodes required by CI.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          ! grep -q 'handoff' .onex_ratchets/skill_receipt_mode_allowlist.yaml
+          && grep -q 'node_skill_pr_review_orchestrator' plugins/onex/skills/pr_review/SKILL.md
+          && grep -q 'node_skill_pr_review_bot_orchestrator' plugins/onex/skills/pr_review_bot/SKILL.md
+  - id: "dod-targeted-validation"
+    description: >-
+      Focused validation covers instructional routing, S-class skill inventory,
+      and skill backing-node liveness for the repaired metadata.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/validation/test_validate_instructional_skill_routing.py
+          tests/skills/test_no_omni_home_in_s_class_skills.py -q
+          && PYTHONPATH="$OMNI_HOME/omnibase_core/src" uv run python
+          plugins/onex/skills/_lib/validate_skill_backing_node.py .
+  - id: "dod-deploy-assessment"
+    description: >-
+      Runtime-impacting plugin skill and node registration removals require a
+      normal post-merge dev deploy or plugin refresh, followed by validation that
+      /onex:handoff is absent and /onex:session remains available.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          test -f contracts/OMN-8340.yaml
+          && grep -q 'post-merge dev deploy' contracts/OMN-8340.yaml

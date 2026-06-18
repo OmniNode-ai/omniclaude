@@ -100,7 +100,7 @@ branch: ${BRANCH}
 ## Recovery Notes
 
 This checkpoint was auto-generated after a git commit.
-Use \`/onex:crash_recovery\` or \`/onex:handoff\` to resume from this point.
+Use \`/onex:session\` to resume from this point.
 CHECKPOINT_EOF
 
 # -----------------------------------------------------------------------

@@ -627,7 +627,7 @@ repos:
       # Imperative inline logic (Agent(, TeamCreate, curl, gh api, psql, ssh,
       # asyncio.run, direct http://localhost/192.168 calls) must live in nodes.
       # Escape hatch: append '# imperative-ok' to suppress a single line.
-      # Allowlisted (PURE-SKILL) dirs: handoff, login, preflight, record_friction,
+      # Allowlisted (PURE-SKILL) dirs: login, preflight, record_friction,
       # set_session, systematic_debugging, unstick_queue, using_git_worktrees,
       # worktree, writing_skills, authorize.
       - id: reject-imperative-skill-patterns
