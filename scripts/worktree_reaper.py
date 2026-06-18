@@ -3,6 +3,8 @@
 
 """worktree_reaper.py — event-sourced "reap on merge" worktree GC (OMN-13228, T4).
 
+DoD evidence for this change is bound via OCC#2754 (Evidence-Ticket OMN-13228).
+
 The Mac per-machine reaper consumer for the merge-triggered worktree GC epic
 (OMN-13008). It is the *actual* "reap on merge" on this machine: instead of a blind
 periodic sweep, it reads the ``onex.evt.github.pr-merged.v1`` projection
