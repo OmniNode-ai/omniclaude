@@ -209,19 +209,19 @@ class TestAutoMergeStackedPrDetection:
 
 @pytest.mark.unit
 class TestAutoMergeWorkflowYaml:
-    """YAML-level invariants that protect the ``--squash`` flag and the
+    """YAML-level invariants that protect queue enrollment behavior and the
     stacked-PR detection block from regressions (OMN-9353)."""
 
-    def test_merge_command_passes_squash_flag(self) -> None:
-        """OMN-9547 precedent: ``--squash`` must be explicit on the
-        ``gh pr merge --auto`` invocation. The repo merge queue is
-        configured for SQUASH and ``allow_merge_commit`` is ``false``,
-        but ``enablePullRequestAutoMerge`` reads the repo default
-        ``merge_method`` and may arm a PR as MERGE -- which the queue
-        then silently drops. Naming the method removes the ambiguity."""
+    def test_merge_command_lets_queue_pick_method(self) -> None:
+        """OMN-13214: queue-controlled branches reject an explicit merge
+        method, so the workflow arms auto-merge without ``--squash`` and then
+        calls enqueuePullRequest explicitly."""
         text = WORKFLOW_PATH.read_text()
-        assert 'gh pr merge "$PR" --repo "$GH_REPO" --auto --squash' in text, (
-            "auto-merge.yml lost --squash flag (regression of OMN-9547)"
+        assert 'gh pr merge "$PR" --repo "$GH_REPO" --auto 2>&1' in text, (
+            "auto-merge.yml must arm auto-merge without an explicit merge method"
+        )
+        assert 'gh pr merge "$PR" --repo "$GH_REPO" --auto --squash' not in text, (
+            "auto-merge.yml must not pass --squash on queue-controlled branches"
         )
 
     def test_resolve_step_compares_base_to_default_branch(self) -> None:
