@@ -37,7 +37,7 @@ repos:
   # shared baseline at omnibase_core/src/omnibase_core/validation/baselines/url_authority_baseline.json.
   # Baseline is burn-down only. Suppress with: # url-authority-ok: <reason>
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 72b2208e2dad0246a0189a87f82324faeee2a7b2 # pragma: allowlist secret
+    rev: c93c98c92bd1a5b335d7aa504a8cf63dc029b3e7 # pragma: allowlist secret
     hooks:
       - id: check-url-authority
         args: [--repo, omniclaude, --repo-root, .]

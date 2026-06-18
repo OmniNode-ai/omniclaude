@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
+      - name: Install URL authority validator
+        run: uv pip install --reinstall "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@c93c98c92bd1a5b335d7aa504a8cf63dc029b3e7"
+
       - name: Run url-authority gate (full-repo, against frozen baseline)
         run: |
           uv run python -m omnibase_core.validation.validator_url_authority \
