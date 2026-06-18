@@ -22,18 +22,6 @@ from omniclaude.hook_measurement.models import (
     ModelWindowMetrics,
 )
 
-# Columns selected from the cost_records table (OMN-10619 schema).
-_COST_COLUMNS = (
-    "recorded_at",
-    "session_id",
-    "tool_name",
-    "is_delegated",
-    "input_tokens",
-    "output_tokens",
-    "token_provenance",
-    "actual_cost_usd",
-    "baseline_cost_usd",
-)
 _COST_SELECT_SQL = """
 SELECT
     recorded_at,
