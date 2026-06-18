@@ -17,3 +17,8 @@ tags:
 Dispatch surface for the `node_skill_autopilot_orchestrator` shell. The backing
 handler owns execution; this skill file exists so the skill registry and
 orchestrator inventory stay in sync.
+
+## Routing Contract
+
+The orchestrator dispatch path publishes to `onex.cmd.omniclaude.skill-autopilot-orchestrator.v1`
+through receipt-mode dispatch. If routing fails, surface `SkillRoutingError` directly; do not produce prose.
