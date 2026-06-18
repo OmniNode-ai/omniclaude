@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13244"
+title: "Hooks-off baseline context"
+summary: >-
+  Repo-local context contract for the hooks-off baseline cited by OMN-13278.
+  OMN-13278 measures from that zero-instrumentation baseline and does not
+  re-enable any hook tier in this PR.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-reference-only"
+    description: >-
+      OMN-13244 is cited as the baseline context; the active code change is
+      owned by OMN-13278.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1774 --repo OmniNode-ai/omniclaude --json body --jq '.body'
+          | grep -q 'OMN-13244'

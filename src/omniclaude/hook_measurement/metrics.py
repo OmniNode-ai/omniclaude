@@ -34,6 +34,20 @@ _COST_COLUMNS = (
     "actual_cost_usd",
     "baseline_cost_usd",
 )
+_COST_SELECT_SQL = """
+SELECT
+    recorded_at,
+    session_id,
+    tool_name,
+    is_delegated,
+    input_tokens,
+    output_tokens,
+    token_provenance,
+    actual_cost_usd,
+    baseline_cost_usd
+FROM cost_records
+ORDER BY recorded_at ASC
+"""
 
 
 def _parse_recorded_at(raw: str) -> datetime:
@@ -67,7 +81,6 @@ def load_cost_records(
         return []
 
     latency_map = latency_by_session_tool or {}
-    columns = ", ".join(_COST_COLUMNS)
     # Read-only connection; never mutate the live telemetry DB. This is a
     # read-only adapter bootstrap over an external on-disk telemetry surface
     # (the cost-accounting hook's DB), not an injectable repository.
@@ -75,9 +88,7 @@ def load_cost_records(
     records: list[ModelToolCallRecord] = []
     with sqlite3.connect(uri, uri=True) as conn:  # di-ok
         conn.row_factory = sqlite3.Row
-        for row in conn.execute(
-            f"SELECT {columns} FROM cost_records ORDER BY recorded_at ASC"  # noqa: S608
-        ):
+        for row in conn.execute(_COST_SELECT_SQL):
             session_id = row["session_id"]
             tool_name = row["tool_name"]
             latency = None

@@ -93,7 +93,7 @@ def _format_table(comparison: ModelHookComparison) -> str:
 def main(argv: list[str] | None = None) -> int:
     """Parse args, build the comparison, and print it."""
     parser = argparse.ArgumentParser(
-        prog="omniclaude.hook_measurement.cli",
+        prog="omniclaude.hook_measurement.cli",  # arch-topic-naming: ignore
         description="Compare hooks-off vs hooks-on telemetry windows (OMN-13278).",
     )
     parser.add_argument(
