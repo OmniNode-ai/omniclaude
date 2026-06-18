@@ -32,6 +32,16 @@ repos:
     rev: 458f44ef24564956c6430ae7671570aed035c853 # pragma: allowlist secret
     hooks:
       - id: check-stub-implementations
+  # URL Authority Gate (OMN-13298, child of OMN-12803).
+  # Ratchet: NEW fingerprints fail; existing violations grandfathered in the
+  # shared baseline at omnibase_core/src/omnibase_core/validation/baselines/url_authority_baseline.json.
+  # Baseline is burn-down only. Suppress with: # url-authority-ok: <reason>
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: 72b2208e2dad0246a0189a87f82324faeee2a7b2 # pragma: allowlist secret
+    hooks:
+      - id: check-url-authority
+        args: [--repo, omniclaude, --repo-root, .]
+        exclude: ^(tests/|archived/|archive/).*\.py$
 
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
