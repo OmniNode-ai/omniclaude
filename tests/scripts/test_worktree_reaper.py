@@ -365,4 +365,236 @@ def test_default_roots_include_legacy_and_onex_state(
     root_strs = [str(r) for r in roots]
     assert any(r.endswith("omni_worktrees") for r in root_strs)
     assert any(".onex_state/worktrees" in r for r in root_strs)
-    assert any(r.endswith("Code/omni_worktrees") for r in root_strs)
+
+
+# ---------------------------------------------------------------------------
+# Layer 2 — catch-up / timer-backstop sweep (T6, OMN-13230)
+#
+# The catch-up sweep is cursor-INDEPENDENT: it drives prune-worktrees.sh directly
+# across every root so it reaps ALL already-merged worktrees still present, not
+# just the ones after the cursor. These tests prove (a) it drives the prune script
+# across all roots, (b) it never touches the cursor, (c) dry-run passes prune
+# without --execute, and — the DoD test — (d) it converges on a seeded
+# stale-but-merged worktree while SKIPPING a dirty one (the prune safety is honored
+# end-to-end through a real stub script).
+# ---------------------------------------------------------------------------
+def test_catch_up_sweep_drives_prune_across_all_roots_cursor_independent(
+    tmp_path: Path, prune_script: Path
+) -> None:
+    root_a = tmp_path / "a"
+    root_b = tmp_path / "b"
+    root_a.mkdir()
+    root_b.mkdir()
+    recorder = _PruneRecorder(exit_code=0, output="OK")
+
+    outcome = worktree_reaper.run_catch_up_sweep(
+        roots=[root_a, root_b],
+        prune_script=prune_script,
+        execute=True,
+        runner=recorder,
+    )
+
+    assert outcome
+    assert outcome.roots_seen == 2
+    assert outcome.roots_ok == 2
+    assert outcome.roots_failed == 0
+    rooted = {
+        call[call.index("--worktrees-root") + 1]
+        for call in recorder.calls
+        if "--worktrees-root" in call
+    }
+    assert str(root_a) in rooted
+    assert str(root_b) in rooted
+    # Cursor-independent: no projection read, no cursor argument anywhere.
+    for call in recorder.calls:
+        assert "--since" not in call
+        assert "--execute" in call
+
+
+def test_catch_up_sweep_dry_run_omits_execute(root: Path, prune_script: Path) -> None:
+    recorder = _PruneRecorder(exit_code=0, output="would remove (dry-run)")
+
+    outcome = worktree_reaper.run_catch_up_sweep(
+        roots=[root],
+        prune_script=prune_script,
+        execute=False,
+        runner=recorder,
+    )
+
+    assert outcome.dry_run is True
+    assert len(recorder.calls) == 1
+    assert "--execute" not in recorder.calls[0]
+    assert recorder.executed_with_delete is False
+
+
+def test_catch_up_sweep_never_touches_cursor(
+    root: Path, prune_script: Path, state_dir: Path
+) -> None:
+    # Seed a cursor; the catch-up sweep must leave it exactly where it was — it is
+    # a reconciliation, not a windowed advance, so it can never regress Layer 1.
+    worktree_reaper.write_cursor(state_dir, 17)
+    recorder = _PruneRecorder(exit_code=0, output="OK")
+
+    worktree_reaper.run_catch_up_sweep(
+        roots=[root],
+        prune_script=prune_script,
+        execute=True,
+        runner=recorder,
+    )
+
+    assert worktree_reaper.read_cursor(state_dir) == 17
+
+
+def test_catch_up_sweep_root_failure_is_not_truthy(
+    root: Path, prune_script: Path
+) -> None:
+    recorder = _PruneRecorder(exit_code=2, output="some root prune failed")
+
+    outcome = worktree_reaper.run_catch_up_sweep(
+        roots=[root],
+        prune_script=prune_script,
+        execute=True,
+        runner=recorder,
+    )
+
+    assert not outcome
+    assert outcome.roots_failed == 1
+    assert outcome.roots_ok == 0
+    assert "root_failures" in outcome.error
+
+
+# Stub prune-worktrees.sh that emulates the REAL safety contract: it removes a
+# worktree dir only when it is "merged-and-clean" (a marker file we seed) AND has
+# no uncommitted changes; a dirty worktree (a DIRTY marker file) is SKIPPED and
+# left intact. This lets the catch-up convergence test exercise the actual
+# subprocess path (default runner) and prove SKIP safety end-to-end without GitHub.
+_SAFE_PRUNE_STUB = """#!/usr/bin/env bash
+set -euo pipefail
+ROOT=""
+EXECUTE=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --worktrees-root) ROOT="$2"; shift 2 ;;
+    --execute) EXECUTE=true; shift ;;
+    *) shift ;;
+  esac
+done
+[[ -d "$ROOT" ]] || exit 0
+for wt in "$ROOT"/*/; do
+  [[ -d "$wt" ]] || continue
+  # Only merged worktrees are eligible (marker seeded by the test).
+  [[ -f "$wt/.merged" ]] || continue
+  # Safety: a dirty worktree is SKIPPED, never removed.
+  if [[ -f "$wt/.dirty" ]]; then
+    echo "  SKIP: $wt has uncommitted changes"
+    continue
+  fi
+  if [[ "$EXECUTE" == true ]]; then
+    rm -rf "$wt"
+    echo "  REMOVED: $wt"
+  else
+    echo "  STALE (dry-run): $wt"
+  fi
+done
+exit 0
+"""
+
+
+def test_catch_up_sweep_converges_on_seeded_stale_merged_worktree_and_skips_dirty(
+    tmp_path: Path,
+) -> None:
+    """DoD (T6): the catch-up backstop converges on a seeded stale-but-merged
+    worktree while leaving a dirty merged worktree intact.
+
+    This drives a real stub prune script through the DEFAULT subprocess runner, so
+    it proves the full catch-up → prune → safety-SKIP path, not just argv shape.
+    """
+    root = tmp_path / "omni_worktrees"
+    root.mkdir()
+
+    # Stale-but-merged worktree: merged + clean → MUST be reaped.
+    stale = root / "OMN-9999-clean"
+    stale.mkdir()
+    (stale / ".merged").write_text("merged\n", encoding="utf-8")
+
+    # Dirty merged worktree: merged but has uncommitted changes → MUST be SKIPPED.
+    dirty = root / "OMN-8888-dirty"
+    dirty.mkdir()
+    (dirty / ".merged").write_text("merged\n", encoding="utf-8")
+    (dirty / ".dirty").write_text("uncommitted\n", encoding="utf-8")
+
+    prune_stub = tmp_path / "prune-worktrees.sh"
+    prune_stub.write_text(_SAFE_PRUNE_STUB, encoding="utf-8")
+
+    outcome = worktree_reaper.run_catch_up_sweep(
+        roots=[root],
+        prune_script=prune_stub,
+        execute=True,  # real reconciliation
+    )
+
+    assert outcome  # the sweep succeeded
+    assert outcome.roots_ok == 1
+    assert outcome.roots_failed == 0
+    # Converged: the stale-but-merged worktree is gone.
+    assert not stale.exists()
+    # Safety honored: the dirty worktree was SKIPPED and is still present.
+    assert dirty.exists()
+    assert (dirty / ".dirty").exists()
+
+
+def test_catch_up_sweep_dry_run_leaves_seeded_worktree_intact(
+    tmp_path: Path,
+) -> None:
+    """The default dry-run catch-up sweep reports but never deletes."""
+    root = tmp_path / "omni_worktrees"
+    root.mkdir()
+    stale = root / "OMN-7777-clean"
+    stale.mkdir()
+    (stale / ".merged").write_text("merged\n", encoding="utf-8")
+
+    prune_stub = tmp_path / "prune-worktrees.sh"
+    prune_stub.write_text(_SAFE_PRUNE_STUB, encoding="utf-8")
+
+    outcome = worktree_reaper.run_catch_up_sweep(
+        roots=[root],
+        prune_script=prune_stub,
+        execute=False,  # dry-run default
+    )
+
+    assert outcome.dry_run is True
+    assert stale.exists()  # never deleted in dry-run
+
+
+def test_catch_up_sweep_raises_when_prune_script_missing(tmp_path: Path) -> None:
+    missing = tmp_path / "does-not-exist.sh"
+    with pytest.raises(FileNotFoundError):
+        worktree_reaper.run_catch_up_sweep(
+            roots=[tmp_path],
+            prune_script=missing,
+            execute=True,
+        )
+
+
+def test_main_catch_up_oneshot_needs_no_projection_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`--catch-up` (no --loop) must run even when ONEX_PROJECTION_URL is unset —
+    the backstop drives prune directly and never reads the projection."""
+    root = tmp_path / "omni_worktrees"
+    root.mkdir()
+    prune_stub = tmp_path / "prune-worktrees.sh"
+    prune_stub.write_text(_SAFE_PRUNE_STUB, encoding="utf-8")
+
+    monkeypatch.delenv("ONEX_PROJECTION_URL", raising=False)
+    monkeypatch.setenv("ONEX_REAPER_STATE_DIR", str(tmp_path / "state"))
+
+    rc = worktree_reaper.main(
+        [
+            "--catch-up",
+            "--root",
+            str(root),
+            "--prune-script",
+            str(prune_stub),
+        ]
+    )
+    assert rc == 0

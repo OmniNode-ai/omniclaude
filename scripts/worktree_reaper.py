@@ -4,6 +4,8 @@
 """worktree_reaper.py — event-sourced "reap on merge" worktree GC (OMN-13228, T4).
 
 DoD evidence for this change is bound via OCC#2754 (Evidence-Ticket OMN-13228).
+The catch-up / timer-backstop layer (T6, OMN-13230) is bound via the OCC PR for
+OMN-13230.
 
 The Mac per-machine reaper consumer for the merge-triggered worktree GC epic
 (OMN-13008). It is the *actual* "reap on merge" on this machine: instead of a blind
@@ -11,6 +13,30 @@ periodic sweep, it reads the ``onex.evt.github.pr-merged.v1`` projection
 (materialized by the T3 projection node, OMN-13227) over plain HTTP and, for each
 newly-merged PR since a locally-persisted cursor, drives the canonical
 ``prune-worktrees.sh`` (this repo) across every configured worktrees root.
+
+Two-layer model (event-first + timer-backstop) — OMN-13008 / T4 / T6
+--------------------------------------------------------------------
+Both convergence layers of the epic run on the Mac through this reaper:
+
+* **Layer 1 — event-first (T4):** the fast ``run_reaper`` pass reads the
+  pr-merged projection ``?since=<cursor>`` and reaps each newly-merged PR within
+  one short poll interval (target <=60s). It advances a monotonic cursor so each
+  merge event is processed once.
+* **Layer 2 — catch-up / timer-backstop (T6):** ``run_catch_up_sweep`` is a
+  cursor-INDEPENDENT full reconciliation that drives ``prune-worktrees.sh``
+  directly across every root, reaping ALL already-merged worktrees that are still
+  present — not just the ones after the cursor. This catches merges whose events
+  were missed during daemon downtime or dropped before the cursor advanced. It
+  runs once on daemon start and then on a slow interval (default hourly), mirroring
+  the .201 ``onex-disk-gc.timer`` backstop that this layer is the Mac equivalent
+  of. The catch-up sweep deliberately does NOT touch the cursor: it is a
+  reconciliation, not a windowed advance, so it can never regress or skip the
+  event path's watermark.
+
+Both layers converge on the same end state (every merged-and-clean worktree
+removed) and reuse the SAME ``prune-worktrees.sh`` safety; the only difference is
+whether reaping is driven by the cursor window (Layer 1) or by a full scan
+(Layer 2).
 
 Why a resident daemon on the Mac
 --------------------------------
@@ -168,6 +194,28 @@ class ModelReapOutcome(BaseModel):
             **Non-standard __bool__ behavior**: returns ``True`` only when
             ``error`` is empty. Differs from default Pydantic truthiness.
         """
+        return self.error == ""
+
+
+class ModelCatchUpOutcome(BaseModel):
+    """Result of a single catch-up reconciliation sweep (Layer 2, T6).
+
+    The catch-up sweep is cursor-INDEPENDENT: it drives ``prune-worktrees.sh``
+    directly across every root, so it has no cursor fields. ``roots_ok`` counts
+    the roots whose prune invocation exited 0; ``roots_failed`` the rest. A sweep
+    is successful (truthy) only when every present root reaped cleanly.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    roots_seen: int = Field(default=0, ge=0)
+    roots_ok: int = Field(default=0, ge=0)
+    roots_failed: int = Field(default=0, ge=0)
+    dry_run: bool = Field(default=True)
+    error: str = Field(default="", description="Non-empty on a failed sweep")
+
+    def __bool__(self) -> bool:
+        """Truthy only when ``error`` is empty (non-standard, mirrors ModelReapOutcome)."""
         return self.error == ""
 
 
@@ -464,6 +512,76 @@ def run_reaper(
 
 
 # ---------------------------------------------------------------------------
+# Catch-up sweep (Layer 2 — timer-backstop, T6 / OMN-13230)
+# ---------------------------------------------------------------------------
+def run_catch_up_sweep(
+    *,
+    roots: Sequence[Path],
+    prune_script: Path,
+    execute: bool,
+    runner: PruneRunner | None = None,
+    log: Callable[[str], None] = lambda _msg: None,
+) -> ModelCatchUpOutcome:
+    """Run one cursor-INDEPENDENT full reconciliation sweep across all roots.
+
+    This is Layer 2 of the two-layer model (T6): unlike :func:`run_reaper`, which
+    reaps only the merged PRs *after* the persisted cursor, the catch-up sweep
+    drives ``prune-worktrees.sh`` directly over every root and lets the prune
+    script reap ALL already-merged worktrees that are still present — even ones
+    whose pr-merged event was missed during daemon downtime or dropped before the
+    cursor advanced.
+
+    The catch-up sweep reuses the SAME canonical safety: ``prune-worktrees.sh``
+    removes a worktree ONLY when its PR is MERGED (or the remote branch is gone)
+    AND the working tree is clean AND there are no unpushed commits — dirty /
+    no-upstream / detached worktrees are SKIPPED, never deleted. In dry-run mode
+    (``execute=False``) the prune script is invoked WITHOUT ``--execute``, so it
+    only reports. The sweep NEVER touches the cursor — it is a reconciliation, not
+    a windowed advance, so it can never regress the event path's watermark.
+    """
+    if not prune_script.is_file():
+        raise FileNotFoundError(f"prune script not found: {prune_script}")
+
+    run_fn = runner if runner is not None else _default_prune_runner
+    roots_seen = 0
+    roots_ok = 0
+    roots_failed = 0
+    for root in roots:
+        if not root.is_dir():
+            log(f"  catch-up: root absent, skipping: {root}")
+            continue
+        roots_seen += 1
+        argv: list[str] = [
+            "bash",
+            str(prune_script),
+            "--worktrees-root",
+            str(root),
+        ]
+        if execute:
+            argv.append("--execute")
+        code, output = run_fn(argv, root)
+        log(f"  catch-up: root={root} prune_exit={code}")
+        if output.strip():
+            for line in output.strip().splitlines():
+                log(f"    | {line}")
+        if code == 0:
+            roots_ok += 1
+        else:
+            # Default-SKIP on ambiguity: a non-zero prune exit means this root is
+            # not trusted this sweep; the next slow-interval sweep retries it.
+            roots_failed += 1
+
+    error = f"catch-up_root_failures={roots_failed}" if roots_failed else ""
+    return ModelCatchUpOutcome(
+        roots_seen=roots_seen,
+        roots_ok=roots_ok,
+        roots_failed=roots_failed,
+        dry_run=not execute,
+        error=error,
+    )
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def _default_prune_script() -> Path:
@@ -473,12 +591,35 @@ def _default_prune_script() -> Path:
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Event-sourced reap-on-merge worktree GC (OMN-13228, T4).",
+        description=(
+            "Event-sourced reap-on-merge worktree GC (OMN-13228, T4) with a "
+            "cursor-independent catch-up backstop (OMN-13230, T6)."
+        ),
     )
     parser.add_argument(
         "--execute",
         action="store_true",
         help="Really prune + advance the cursor (default: dry-run, never deletes).",
+    )
+    parser.add_argument(
+        "--catch-up",
+        action="store_true",
+        help=(
+            "Run ONE cursor-independent catch-up reconciliation sweep (Layer 2 "
+            "backstop: reap ALL already-merged worktrees, not just since-cursor) "
+            "and exit. Ignored when --loop is set (the loop runs catch-up on a "
+            "slow interval automatically)."
+        ),
+    )
+    parser.add_argument(
+        "--catch-up-interval",
+        type=int,
+        default=3600,
+        help=(
+            "In --loop mode, seconds between catch-up reconciliation sweeps "
+            "(default 3600 = hourly). A catch-up sweep also runs once on daemon "
+            "start. Set 0 to disable the periodic catch-up backstop."
+        ),
     )
     parser.add_argument(
         "--root",
@@ -544,16 +685,6 @@ def main(argv: list[str] | None = None) -> int:
     def log(msg: str) -> None:
         print(f"[worktree-reaper] {msg}", file=sys.stderr, flush=True)
 
-    try:
-        base_url = (
-            args.projection_url.strip()
-            if args.projection_url.strip()
-            else resolve_projection_base_url()
-        )
-    except KeyError as exc:
-        log(str(exc))
-        return 2
-
     roots = _resolve_roots(args.roots)
     if not roots:
         log("no worktrees roots resolved (pass --root or set OMNI_HOME)")
@@ -570,6 +701,43 @@ def main(argv: list[str] | None = None) -> int:
 
     state_dir = resolve_state_dir()
     mode = "EXECUTE" if args.execute else "DRY-RUN"
+
+    def catch_up_pass() -> int:
+        """Layer 2 backstop: one cursor-independent reconciliation sweep."""
+        outcome = run_catch_up_sweep(
+            roots=roots,
+            prune_script=prune_script,
+            execute=args.execute,
+            log=log,
+        )
+        log(
+            f"catch-up sweep done roots_seen={outcome.roots_seen} "
+            f"roots_ok={outcome.roots_ok} roots_failed={outcome.roots_failed} "
+            f"error={outcome.error or 'none'}"
+        )
+        return 0 if outcome else 1
+
+    # A pure one-shot catch-up sweep needs no projection URL — it drives the prune
+    # script directly. Resolve + run it before touching the event path so the
+    # backstop works even when the projection API is down.
+    if args.catch_up and not args.loop:
+        log(
+            f"start mode={mode} CATCH-UP roots={[str(r) for r in roots]} "
+            f"state_dir={state_dir}"
+        )
+        return catch_up_pass()
+
+    # The event path (Layer 1) needs the projection URL.
+    try:
+        base_url = (
+            args.projection_url.strip()
+            if args.projection_url.strip()
+            else resolve_projection_base_url()
+        )
+    except KeyError as exc:
+        log(str(exc))
+        return 2
+
     log(
         f"start mode={mode} url={base_url} roots={[str(r) for r in roots]} "
         f"state_dir={state_dir} loop={args.loop}"
@@ -602,10 +770,28 @@ def main(argv: list[str] | None = None) -> int:
     # Daemon loop: poll forever. This is what the launchd KeepAlive daemon runs —
     # the resident process keeps itself alive (sidestepping launchd's "doesn't fire
     # on this Mac" periodic failure mode). KeyboardInterrupt / SIGTERM ends it.
+    #
+    # Two-layer cadence (T6): the fast event path (Layer 1) runs every --interval
+    # seconds; the catch-up backstop (Layer 2) runs once on start and then every
+    # --catch-up-interval seconds (default hourly), the Mac equivalent of the .201
+    # onex-disk-gc.timer. --catch-up-interval 0 disables the periodic backstop.
     interval = max(args.interval, 5)
+    catch_up_interval = args.catch_up_interval
+    catch_up_enabled = catch_up_interval > 0
+    last_catch_up = 0.0
     try:
+        # Catch-up on daemon start: reconcile anything missed while we were down.
+        if catch_up_enabled:
+            log("catch-up backstop: running start-of-daemon reconciliation sweep")
+            catch_up_pass()
+            last_catch_up = time.monotonic()
         while True:
             one_pass()
+            if catch_up_enabled and (
+                time.monotonic() - last_catch_up >= catch_up_interval
+            ):
+                catch_up_pass()
+                last_catch_up = time.monotonic()
             time.sleep(interval)
     except KeyboardInterrupt:
         log("interrupted — exiting loop")
