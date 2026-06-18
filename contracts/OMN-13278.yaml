@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13278"
+title: "Hook measurement harness and tiered reintroduction design"
+summary: >-
+  Adds a read-only hook measurement harness and a tiered hook reintroduction
+  design without re-enabling hooks.json. The harness reads existing telemetry
+  surfaces and compares hooks-off versus hooks-on windows for token, latency,
+  and delegation metrics. The PR is design-first and keeps live hook behavior
+  disabled until the reintroduction tiers are reviewed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-harness-tests"
+    description: >-
+      Unit tests cover DB loading, aggregation, off/on split comparison,
+      trajectory latency reconstruction, end-to-end report building, and CLI
+      smoke behavior.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/hook_measurement -q"
+  - id: "dod-static-checks"
+    description: >-
+      Hook measurement code passes mypy strict, ruff, topic-naming validation,
+      and Bandit after replacing the query with a literal SQL constant.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run mypy src/omniclaude/hook_measurement --strict
+          && uv run ruff check src/omniclaude/hook_measurement tests/hook_measurement
+          && uv run python scripts/validation/validate_topic_naming.py
+  - id: "dod-occ-binding"
+    description: >-
+      The PR body binds this repo-local contract to central OCC evidence for
+      receipt-gate verification.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1774 --repo OmniNode-ai/omniclaude --json body --jq '.body'
+          | grep -q 'Evidence-Source: OCC#'
