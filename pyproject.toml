@@ -169,7 +169,6 @@ node_skill_friction_triage_orchestrator = "omniclaude.nodes.node_skill_friction_
 node_skill_gap_orchestrator = "omniclaude.nodes.node_skill_gap_orchestrator"
 node_skill_generate_node_orchestrator = "omniclaude.nodes.node_skill_generate_node_orchestrator"
 node_skill_golden_chain_sweep_orchestrator = "omniclaude.nodes.node_skill_golden_chain_sweep_orchestrator"
-node_skill_handoff_orchestrator = "omniclaude.nodes.node_skill_handoff_orchestrator"
 node_skill_hook_health_alert_orchestrator = "omniclaude.nodes.node_skill_hook_health_alert_orchestrator"
 node_skill_hostile_reviewer_orchestrator = "omniclaude.nodes.node_skill_hostile_reviewer_orchestrator"
 node_skill_insights_to_plan_orchestrator = "omniclaude.nodes.node_skill_insights_to_plan_orchestrator"

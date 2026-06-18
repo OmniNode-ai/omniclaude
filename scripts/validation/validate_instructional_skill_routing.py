@@ -24,7 +24,7 @@ mid-file mutation.
 
 Enforced skills mirror the Tier 3 list on OMN-8766:
   using_git_worktrees, onboarding, systematic_debugging, multi_agent,
-  observability, login, authorize, handoff, resume_session, set_session,
+  observability, login, authorize, resume_session, set_session,
   recall, rewind, crash_recovery, checkpoint, writing_skills
 
 Exit codes:
@@ -56,7 +56,6 @@ TIER3_INSTRUCTIONAL_SKILLS: set[str] = {
     "observability",
     "login",
     "authorize",
-    "handoff",
     "resume_session",
     "set_session",
     "recall",
