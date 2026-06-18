@@ -73,12 +73,18 @@ def test_exactly_one_onex_run_dispatch() -> None:
     )
 
 
-def test_dispatches_to_node_redeploy() -> None:
-    """The single dispatch must target node_redeploy, not some other node."""
+def test_dispatches_to_node_redeploy_orchestrator() -> None:
+    """The single dispatch must target the canonical redeploy orchestrator.
+
+    OMN-13211 / B3: the bespoke node_redeploy WorkflowPackage was decomposed into
+    the canonical ORCHESTRATOR (node_redeploy_orchestrator) + prod-gate COMPUTE +
+    deploy publish-monitor EFFECT + FSM REDUCER. The skill dispatches the
+    orchestrator's start surface.
+    """
     text = _skill_text()
     dispatch_matches = re.findall(r"onex run-node\s+(\S+)", text)
-    assert dispatch_matches == ["node_redeploy"], (
-        f"SKILL.md must dispatch to `node_redeploy` exactly once; "
+    assert dispatch_matches == ["node_redeploy_orchestrator"], (
+        f"SKILL.md must dispatch to `node_redeploy_orchestrator` exactly once; "
         f"found dispatch targets: {dispatch_matches}"
     )
 
