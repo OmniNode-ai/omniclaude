@@ -234,12 +234,12 @@ nodes:
         schema_version: v1
         role: subscribe
 
-  - node: node_hostile_reviewer
+  - node: node_hostile_reviewer_orchestrator
     topics:
       - name: onex.cmd.omnimarket.hostile-reviewer-start.v1
         schema_version: v1
         role: subscribe
-      - name: onex.evt.omnimarket.hostile-reviewer-phase-transition.v1
+      - name: onex.evt.omnimarket.hostile-reviewer-completed.v1
         schema_version: v1
         role: publish
 
