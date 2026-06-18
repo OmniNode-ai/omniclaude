@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13211"
+title: "Repoint redeploy skill to node_redeploy_orchestrator"
+summary: >-
+  Repoint the omniclaude redeploy skill from the retired bespoke node_redeploy
+  WorkflowPackage to the canonical omnimarket node_redeploy_orchestrator
+  surface. The command topic remains onex.cmd.omnimarket.redeploy-start.v1;
+  only the dispatched node name and skill documentation move to the canonical
+  orchestrator.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-redeploy-shim-test"
+    description: >-
+      The redeploy skill shim audit test passes with the expected canonical
+      node_redeploy_orchestrator dispatch target.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/audit/test_redeploy_shim.py"
+  - id: "dod-skill-precommit"
+    description: >-
+      Pre-commit hooks pass for the redeploy skill documentation and its audit
+      test.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          pre-commit run --files plugins/onex/skills/redeploy/SKILL.md
+          tests/audit/test_redeploy_shim.py
