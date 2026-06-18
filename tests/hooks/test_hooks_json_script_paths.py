@@ -104,8 +104,16 @@ def test_tracker_save_issue_covered_by_workflow_guard_matcher() -> None:
     """
     import re
 
+    pretooluse_matchers = _collect_pretooluse_matchers()
+    if not pretooluse_matchers:
+        pytest.skip(
+            "No PreToolUse hooks registered (hooks disabled for the OMN-13244 "
+            "measurement baseline). Re-enable this assertion when hooks are "
+            "re-registered."
+        )
+
     guard_script = "pre_tool_use_workflow_guard.sh"
-    for matcher, command in _collect_pretooluse_matchers():
+    for matcher, command in pretooluse_matchers:
         if command.endswith(guard_script):
             assert re.match(matcher, "tracker.save_issue"), (
                 f"hooks.json PreToolUse matcher for {guard_script!r} does not match "
