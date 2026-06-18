@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13244"
+title: "Disable all onex plugin hooks (gut hooks.json) for a clean measurement baseline"
+summary: >-
+  Remove every hook registration from plugins/onex/hooks/hooks.json (set
+  hooks to an empty object) so Claude Code invokes no onex hooks. This
+  establishes a clean, no-instrumentation baseline for measuring whether the
+  hook surface helps or hurts before re-introducing hooks deliberately. The
+  hook scripts remain on disk; re-registration is a pure config change. The
+  two tests that asserted specific registrations in hooks.json are adjusted to
+  the empty-registration baseline. The dormant, unreferenced
+  hooks-delegation.v1.json (not loaded by Claude Code) is intentionally left
+  untouched.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-hooks-json-empty"
+    description: >-
+      plugins/onex/hooks/hooks.json parses as valid JSON and registers no
+      hooks (hooks == {}), so Claude Code invokes no onex hooks.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "jq -e '.hooks == {}' plugins/onex/hooks/hooks.json"
+  - id: "dod-hooks-tests-pass"
+    description: >-
+      The hooks-json registration and script-path tests pass against the
+      empty-registration baseline (obsolete per-hook registration assertions
+      dropped; the workflow-guard matcher test skips when no PreToolUse hooks
+      are registered).
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/hooks/test_hooks_registration.py
+          tests/hooks/test_hooks_json_script_paths.py -m unit

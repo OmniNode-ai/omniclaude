@@ -511,6 +511,12 @@ def test_hook_script_exists_and_is_executable() -> None:
 def test_hook_registered_in_hooks_json() -> None:
     hooks_json = _REPO_ROOT / "plugins/onex/hooks/hooks.json"
     data = json.loads(hooks_json.read_text())
+    if not data["hooks"].get("PostToolUse"):
+        pytest.skip(
+            "No PostToolUse hooks registered (hooks disabled for the OMN-13244 "
+            "measurement baseline). Re-enable this assertion when hooks are "
+            "re-registered."
+        )
     found = any(
         "post_tool_use_output_suppressor.sh" in h["hooks"][0]["command"]
         for h in data["hooks"]["PostToolUse"]

@@ -197,6 +197,13 @@ class TestTeamObservabilityHooksJson:
         hooks_json_path = Path(WORKTREE_ROOT) / "plugins/onex/hooks/hooks.json"
         hooks_config = json.loads(hooks_json_path.read_text())
 
+        if not hooks_config["hooks"].get("PostToolUse"):
+            pytest.skip(
+                "No PostToolUse hooks registered (hooks disabled for the "
+                "OMN-13244 measurement baseline). Re-enable this assertion when "
+                "hooks are re-registered."
+            )
+
         post_tool_use = hooks_config["hooks"]["PostToolUse"]
         matchers = [entry.get("matcher", "") for entry in post_tool_use]
         assert any("TeamCreate" in m and "TaskUpdate" in m for m in matchers), (

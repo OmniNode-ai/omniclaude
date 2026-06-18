@@ -1,80 +1,24 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Tests asserting hooks.json registration and contract file existence (OMN-8930)."""
+"""Tests asserting hook contract file existence and shape (OMN-8930).
+
+The hook contract YAMLs are the durable spec for the dispatch-claim,
+idle-notification and verifier-role-guard hooks. They are asserted here
+independently of hooks.json registration: under the OMN-13244 measurement
+baseline hooks.json carries an empty ``hooks`` object, so the per-hook
+"registered in hooks.json" assertions do not apply. Re-add those assertions
+when the hooks are re-registered.
+"""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-_HOOKS_JSON = (
-    Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "hooks.json"
-)
 _CONTRACTS_DIR = (
     Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "contracts"
 )
-
-
-def _load_hooks() -> dict:  # type: ignore[type-arg]
-    return json.loads(_HOOKS_JSON.read_text())
-
-
-@pytest.mark.unit
-def test_dispatch_claim_pretool_registered_in_pretooluse() -> None:
-    data = _load_hooks()
-    pretool_entries = data["hooks"].get("PreToolUse", [])
-    scripts = [
-        e["hooks"][0]["command"]
-        for e in pretool_entries
-        if e.get("hooks") and e["hooks"][0].get("command")
-    ]
-    assert any("hook_dispatch_claim_pretool" in s for s in scripts), (
-        "hook_dispatch_claim_pretool.sh not found in PreToolUse hooks"
-    )
-
-
-@pytest.mark.unit
-def test_dispatch_claim_posttool_registered_in_posttooluse() -> None:
-    data = _load_hooks()
-    posttool_entries = data["hooks"].get("PostToolUse", [])
-    scripts = [
-        e["hooks"][0]["command"]
-        for e in posttool_entries
-        if e.get("hooks") and e["hooks"][0].get("command")
-    ]
-    assert any("hook_dispatch_claim_posttool" in s for s in scripts), (
-        "hook_dispatch_claim_posttool.sh not found in PostToolUse hooks"
-    )
-
-
-@pytest.mark.unit
-def test_idle_notification_ratelimit_registered_in_pretooluse() -> None:
-    data = _load_hooks()
-    pretool_entries = data["hooks"].get("PreToolUse", [])
-    scripts = [
-        e["hooks"][0]["command"]
-        for e in pretool_entries
-        if e.get("hooks") and e["hooks"][0].get("command")
-    ]
-    assert any("hook_idle_notification_ratelimit" in s for s in scripts), (
-        "hook_idle_notification_ratelimit.sh not found in PreToolUse hooks"
-    )
-
-
-@pytest.mark.unit
-def test_verifier_role_guard_registered_in_pretooluse() -> None:
-    data = _load_hooks()
-    pretool_entries = data["hooks"].get("PreToolUse", [])
-    scripts = [
-        e["hooks"][0]["command"]
-        for e in pretool_entries
-        if e.get("hooks") and e["hooks"][0].get("command")
-    ]
-    assert any("hook_verifier_role_guard" in s for s in scripts), (
-        "hook_verifier_role_guard.sh not found in PreToolUse hooks"
-    )
 
 
 @pytest.mark.unit
