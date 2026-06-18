@@ -1,0 +1,31 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13205"
+title: "Canonical node migration — eliminate the non-canonical omnimarket nodes (epic)"
+summary: >-
+  Epic governing the canonical node migration that eliminates the non-canonical omnimarket nodes by
+  rebuilding them into the four canonical archetypes (orchestrator/compute/effect/reducer). This omniclaude
+  contract exists to satisfy the validate-pr-contracts gate for the cross-repo repoint shipped under B1
+  (OMN-13210), which cites this epic. No omniclaude code or behavior change is governed by this epic
+  contract directly; per-phase work (A0/A1/B1/...) ships under its own child ticket contracts.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on the omniclaude PR carrying the cross-repo repoint"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-epic-tracker-only"
+    description: >-
+      This is an epic tracker contract present to satisfy the cited-ticket contract gate. The substantive
+      B1 repoint evidence lives in contracts/OMN-13210.yaml in this repo and in the omnimarket + OCC PRs.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f contracts/OMN-13210.yaml"
