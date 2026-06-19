@@ -37,7 +37,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 10
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
@@ -64,10 +64,42 @@ jobs:
             echo "pr_number=$PR_NUMBER_EVENT" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve deploy-gate OCC evidence source
+        if: github.event_name != 'merge_group'
+        id: resolve-occ-evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr-number.outputs.pr_number }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          changed_files="$(gh pr diff "$PR_NUMBER" --name-only | tr '\n' ' ')"
+          pr_body="$(gh pr view "$PR_NUMBER" --json body -q '.body')"
+
+          python .github/actions/deploy-gate/validate_pr_deploy_required.py \
+            --changed-files "$changed_files" \
+            --pr-body "$pr_body" \
+            --resolve-occ-ref \
+            --default-occ-ref dev \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Checkout onex_change_control contracts
+        if: github.event_name != 'merge_group' && steps.resolve-occ-evidence.outputs.deploy_gate_required == 'true'
+        timeout-minutes: 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OCC_REF: ${{ steps.resolve-occ-evidence.outputs.occ_ref }}
+          OCC_REPO_URL: https://github.com/OmniNode-ai/onex_change_control.git
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          bash scripts/deploy-gate/checkout-occ-contracts.sh
+
       - name: Run deploy gate
         if: github.event_name != 'merge_group'
         uses: ./.github/actions/deploy-gate
         with:
           pr-number: ${{ steps.pr-number.outputs.pr_number }}
           github-token: ${{ github.token }}
-          contracts-dir: contracts
+          contracts-dir: _occ/contracts
