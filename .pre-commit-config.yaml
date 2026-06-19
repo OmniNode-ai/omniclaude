@@ -234,6 +234,21 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13336 (retro R1): plan_to_tickets plans must assert a verified
+      # baseline. Every plan under docs/plans/ or docs/tracking/ must carry a
+      # '## Current Verified State' section with a 'verified: <date> via
+      # <command>' line dated within the freshness window. Plans predating the
+      # gate are grandfathered in
+      # .onex_ratchets/plan_verified_state_allowlist.yaml (burn-down only).
+      # CI mirror: .github/workflows/plan-verified-state-gate.yml.
+      - id: lint-plan-verified-state
+        name: require fresh Current Verified State in plan_to_tickets plans (OMN-13336)
+        entry: python3 scripts/lint_plan_verified_state.py
+        language: system
+        files: '^docs/(plans|tracking)/.*\.md$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-13098: dispatch-only shim skills must be a single receipt-mode
       # `onex skill`/`onex delegate` CLI call — no bare `onex run|node|run-node`,
       # no inline executable logic, no `cat workflow_result.json`. A ratchet
