@@ -80,6 +80,10 @@ uv run pytest tests/unit/skills/_lib/friction_autofix/test_models.py tests/unit/
 33 passed, 9 deselected in 0.43s
 ```
 
+Central OCC evidence for this classification is bound in
+`onex_change_control` PR #2820, which carries `contracts/OMN-13254.yaml` and
+the OMN-13254 DoD receipt set consumed by the omniclaude DoD evidence check.
+
 Representative local reachability checks:
 
 | Finding | Local proof | Classification |
