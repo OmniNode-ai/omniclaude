@@ -220,6 +220,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13341 (R6, epic OMN-13325): reject worker prompts / receipts /
+      # handoff & evidence docs that cite a local-clone path, ticket text, or a
+      # statusCheckRollup verdict AS proof of state. Verify against origin/dev
+      # (existence), the live projection (state), and `gh pr checks` (PR verdict).
+      # Doctrine: docs/standards/VERIFICATION_DOCTRINE.md. Blocking — not advisory
+      # (CLAUDE.md Rule #5). Suppress: # verification-evidence-ok: <reason>.
+      - id: lint-verification-evidence
+        name: reject non-authoritative evidence citations (OMN-13341)
+        entry: python3 scripts/lint_verification_evidence.py
+        language: system
+        files: '^(plugins/onex/skills/.*\.md|docs/handoffs/.*|docs/receipts/.*|docs/.*receipt.*\.(md|txt)|\.onex_state/evidence/.*\.(md|txt))$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-13098: dispatch-only shim skills must be a single receipt-mode
       # `onex skill`/`onex delegate` CLI call — no bare `onex run|node|run-node`,
       # no inline executable logic, no `cat workflow_result.json`. A ratchet
