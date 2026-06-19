@@ -32,6 +32,17 @@ repos:
     rev: 458f44ef24564956c6430ae7671570aed035c853 # pragma: allowlist secret
     hooks:
       - id: check-stub-implementations
+  # OMN-13284: canonical Plugin* lifecycle guard. omniclaude defines nodes/handlers
+  # and could reintroduce a Plugin* daemon/worker/consumer lifecycle owner; consume
+  # the canonical omnibase_core remote hook. Rev pins the core commit carrying the
+  # no-plugin-daemon-classes export; bumps to the squash-merge SHA when the core
+  # OMN-13284 PR lands.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: a509d3fb2777693242fdcd979e5d67bed2bbefeb # pragma: allowlist secret
+    hooks:
+      - id: no-plugin-daemon-classes
+        files: ^src/omniclaude/.*\.py$
+
   # URL Authority Gate (OMN-13298, child of OMN-12803).
   # Ratchet: NEW fingerprints fail; existing violations grandfathered in the
   # shared baseline at omnibase_core/src/omnibase_core/validation/baselines/url_authority_baseline.json.
