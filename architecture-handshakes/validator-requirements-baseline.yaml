@@ -2,8 +2,15 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Accepted validator-requirement gaps for omniclaude (OMN-13299).
+# Accepted validator-requirement gaps for omniclaude (OMN-13291 / OMN-13299).
 #
+# Ratchet baseline for the validate-validator-requirements fleet gate
+# (consumer: omnibase_core validator_requirements_consumer.py, spec: OMN-9115).
+# The meta-gate compares the live per-repo scan against gaps[] below: a NEW gap
+# not listed fails the gate; a listed gap the scan no longer reproduces (stale)
+# also fails. Each gap closes as its validator is wired by the W1-W10 waves of
+# the validator-standardization remediation plan; shrink this list as that work
+# lands.
 schema_version: "1.0.0"
 repo: omniclaude
 report_format: "all_gaps"
@@ -36,30 +43,30 @@ classification:
     tracking: OMN-9048
 
 gaps:
-- repo: omniclaude
-  validator: hardcoded-local-paths
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: spdx-headers
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: no-hardcoded-topics
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: stub-implementations
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: naming-conventions
-  kind: MISSING_PRE_COMMIT
-- repo: omniclaude
-  validator: naming-conventions
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: pydantic-patterns
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: single-class-per-file
-  kind: MISSING_CI_WORKFLOW
-- repo: omniclaude
-  validator: no-untracked-todos
-  kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: hardcoded-local-paths
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: spdx-headers
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: no-hardcoded-topics
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: stub-implementations
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: naming-conventions
+    kind: MISSING_PRE_COMMIT
+  - repo: omniclaude
+    validator: naming-conventions
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: pydantic-patterns
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: single-class-per-file
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: no-untracked-todos
+    kind: MISSING_CI_WORKFLOW
