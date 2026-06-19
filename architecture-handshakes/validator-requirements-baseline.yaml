@@ -1,0 +1,65 @@
+---
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Accepted validator-requirement gaps for omniclaude (OMN-13299).
+#
+schema_version: "1.0.0"
+repo: omniclaude
+report_format: "all_gaps"
+
+classification:
+  hardcoded-local-paths:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  spdx-headers:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  no-hardcoded-topics:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  stub-implementations:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  naming-conventions:
+    pre_commit: backlog
+    ci_workflow: backlog
+    tracking: OMN-9048
+  pydantic-patterns:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  single-class-per-file:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  no-untracked-todos:
+    ci_workflow: backlog
+    tracking: OMN-9048
+
+gaps:
+- repo: omniclaude
+  validator: hardcoded-local-paths
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: spdx-headers
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: no-hardcoded-topics
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: stub-implementations
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: naming-conventions
+  kind: MISSING_PRE_COMMIT
+- repo: omniclaude
+  validator: naming-conventions
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: pydantic-patterns
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: single-class-per-file
+  kind: MISSING_CI_WORKFLOW
+- repo: omniclaude
+  validator: no-untracked-todos
+  kind: MISSING_CI_WORKFLOW

@@ -17,13 +17,14 @@ set -euo pipefail
 
 SKILLS_ROOT="plugins/onex/skills"
 ALLOWLIST=".onex_ratchets/skill_receipt_mode_allowlist.yaml"
+OMNIBASE_CORE_VALIDATOR_SPEC="omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@72b2208e2dad0246a0189a87f82324faeee2a7b2"
 
-if ! uv run python -c "import omnibase_core.validators.skill_dispatch_receipt_mode" 2>/dev/null; then
+if ! uv run --with "$OMNIBASE_CORE_VALIDATOR_SPEC" python -c "import omnibase_core.validators.skill_dispatch_receipt_mode" 2>/dev/null; then
     echo "ERROR: skill-dispatch-receipt-mode: omnibase_core.validators.skill_dispatch_receipt_mode is not importable." >&2
-    echo "  Run 'uv sync' to install omnibase_core, or check that omnibase_core is in your dependencies." >&2
+    echo "  Check OMNIBASE_CORE_VALIDATOR_SPEC in scripts/check_skill_dispatch_receipt_mode_wrapper.sh." >&2
     exit 1
 fi
 
-exec uv run python -m omnibase_core.validators.skill_dispatch_receipt_mode \
+exec uv run --with "$OMNIBASE_CORE_VALIDATOR_SPEC" python -m omnibase_core.validators.skill_dispatch_receipt_mode \
     --skills-root "$SKILLS_ROOT" \
     --allowlist "$ALLOWLIST"

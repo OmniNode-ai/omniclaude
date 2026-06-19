@@ -1,0 +1,37 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13299"
+title: "Satisfy deterministic skill routing validator requirements for dispatch-only ONEX skills"
+summary: >-
+  Documents receipt-mode command-topic dispatch and direct SkillRoutingError surfacing for dispatch-only
+  ONEX skills, so the deterministic-skill-routing gate can verify that Tier 1 skills route through nodes
+  instead of prose or direct LLM calls. Also adds the omniclaude validator-requirements baseline used by
+  the fleet validator. Central OCC evidence is carried by onex_change_control PR #2775.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-deterministic-skill-routing"
+    description: >-
+      The deterministic skill routing validator passes for plugins/onex/skills after the dispatch-only
+      skills declare their command topics and direct SkillRoutingError behavior.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          bash scripts/check_skill_dispatch_receipt_mode_wrapper.sh
+  - id: "dod-occ-binding"
+    description: >-
+      The PR body binds this repo-local contract to central OCC evidence for receipt-gate verification.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1778 --repo OmniNode-ai/omniclaude --json body --jq '.body'
+          | grep -q 'Evidence-Source: OCC#2775'
