@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Accepted validator-requirement gaps for omniclaude (OMN-13291).
+# Accepted validator-requirement gaps for omniclaude (OMN-13291 / OMN-13299).
 #
 # Ratchet baseline for the validate-validator-requirements fleet gate
 # (consumer: omnibase_core validator_requirements_consumer.py, spec: OMN-9115).
@@ -10,18 +10,8 @@
 # not listed fails the gate; a listed gap the scan no longer reproduces (stale)
 # also fails. Each gap closes as its validator is wired by the W1-W10 waves of
 # the validator-standardization remediation plan; shrink this list as that work
-# lands. This PR (OMN-13291 / W0) wires only the META-gate; it records current
-# state so regressions are caught and the baseline can only shrink.
-#
-# Schema (formalized OMN-13291): schema_version + repo + report_format +
-# classification + gaps. report_format "all_gaps" => the consumer enumerates
-# EVERY missing required gate per run (never fail-on-first). classification is
-# metadata-only (it explains why each gap is accepted + the tracking ticket);
-# only gaps[] is the ratchet.
-schema_version:
-  major: 1
-  minor: 0
-  patch: 0
+# lands.
+schema_version: "1.0.0"
 repo: omniclaude
 report_format: "all_gaps"
 
@@ -29,14 +19,17 @@ classification:
   hardcoded-local-paths:
     ci_workflow: backlog
     tracking: OMN-9048
-  naming-conventions:
-    pre_commit: backlog
+  spdx-headers:
     ci_workflow: backlog
     tracking: OMN-9048
   no-hardcoded-topics:
     ci_workflow: backlog
     tracking: OMN-9048
-  no-untracked-todos:
+  stub-implementations:
+    ci_workflow: backlog
+    tracking: OMN-9048
+  naming-conventions:
+    pre_commit: backlog
     ci_workflow: backlog
     tracking: OMN-9048
   pydantic-patterns:
@@ -45,10 +38,7 @@ classification:
   single-class-per-file:
     ci_workflow: backlog
     tracking: OMN-9048
-  spdx-headers:
-    ci_workflow: backlog
-    tracking: OMN-9048
-  stub-implementations:
+  no-untracked-todos:
     ci_workflow: backlog
     tracking: OMN-9048
 
@@ -57,16 +47,19 @@ gaps:
     validator: hardcoded-local-paths
     kind: MISSING_CI_WORKFLOW
   - repo: omniclaude
-    validator: naming-conventions
+    validator: spdx-headers
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: no-hardcoded-topics
+    kind: MISSING_CI_WORKFLOW
+  - repo: omniclaude
+    validator: stub-implementations
     kind: MISSING_CI_WORKFLOW
   - repo: omniclaude
     validator: naming-conventions
     kind: MISSING_PRE_COMMIT
   - repo: omniclaude
-    validator: no-hardcoded-topics
-    kind: MISSING_CI_WORKFLOW
-  - repo: omniclaude
-    validator: no-untracked-todos
+    validator: naming-conventions
     kind: MISSING_CI_WORKFLOW
   - repo: omniclaude
     validator: pydantic-patterns
@@ -75,8 +68,5 @@ gaps:
     validator: single-class-per-file
     kind: MISSING_CI_WORKFLOW
   - repo: omniclaude
-    validator: spdx-headers
-    kind: MISSING_CI_WORKFLOW
-  - repo: omniclaude
-    validator: stub-implementations
+    validator: no-untracked-todos
     kind: MISSING_CI_WORKFLOW
