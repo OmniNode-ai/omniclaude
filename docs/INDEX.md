@@ -114,6 +114,7 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 | [SECURITY.md](SECURITY.md) | Security implementation guide |
 | [validation-contracts.md](validation-contracts.md) | Validation subcontract YAML schema |
 | [proposals/FUZZY_MATCHER_IMPROVEMENTS.md](proposals/FUZZY_MATCHER_IMPROVEMENTS.md) | Active spec for routing thresholds |
+| [evidence/2026-06-19-omn-13254-dead-code-reaudit.md](evidence/2026-06-19-omn-13254-dead-code-reaudit.md) | Dead-code re-audit evidence and classification for hook/skill findings |
 
 ---
 
@@ -136,3 +137,4 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 **Active artifacts**:
 
 - `db-split/FK_SCAN_RESULTS.md` — FK scan results for the DB-SPLIT work (OMN-2055, migration freeze active)
+- `evidence/2026-06-19-omn-13254-dead-code-reaudit.md` — OMN-13254 dead-code re-audit classification
