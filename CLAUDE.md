@@ -353,6 +353,7 @@ Required status checks outside `ci.yml`:
 | `hook-log-path-lint.yml` | Hook Log Path Lint | Hook scripts deriving state paths from `PLUGIN_ROOT`/`HOOKS_DIR`/`SCRIPT_DIR` (OMN-8429). |
 | `skill-mcp-ref-lint.yml` | Skill MCP Reference Lint | Hardcoded `mcp__linear-server__*` tool names in `plugins/onex/skills/**/*.md` (OMN-8776). Skills must route ticketing through `ProtocolProjectTracker` / `uv run onex run node_*`. |
 | `verification-evidence-lint.yml` | Verification Evidence Lint | Worker prompts / receipts / handoff & evidence docs that cite a local-clone path, ticket text, or a `statusCheckRollup` verdict **as proof of state** (OMN-13341). Verify against `origin/dev` (existence), the live materialized projection (state), and `gh pr checks` (PR verdict) — see [Verification Doctrine](docs/standards/VERIFICATION_DOCTRINE.md). |
+| `plan-verified-state-gate.yml` | Plan Verified State Gate | `plan_to_tickets` plans under `docs/plans/` or `docs/tracking/` that lack a fresh `## Current Verified State` section with a `verified: <date> via <command>` line dated within the freshness window (OMN-13336). Grandfather allowlist: `.onex_ratchets/plan_verified_state_allowlist.yaml` (burn-down only). |
 
 Both gates also run as pre-commit hooks and must exit non-zero on violation.
 
