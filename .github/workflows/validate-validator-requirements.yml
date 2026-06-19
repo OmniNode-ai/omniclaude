@@ -12,6 +12,9 @@ on:
   merge_group:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   validate-validator-requirements:
     name: Enforce validator-requirements.yaml (OMN-13291)
@@ -35,7 +38,7 @@ jobs:
           repository: OmniNode-ai/omnibase_core
           # Pinned to the commit that exports the validate-validator-requirements hook (OMN-13291).
           # Update by running: gh api repos/OmniNode-ai/omnibase_core/commits/dev --jq '.sha'
-          ref: d163312724489f10f58ffdf8115ba1fa9d5783e8
+          ref: d163312724489f10f58ffdf8115ba1fa9d5783e8 # pragma: allowlist secret
           path: omnibase_core
           token: ${{ secrets.OMNIBASE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
 
