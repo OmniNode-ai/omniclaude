@@ -33,6 +33,21 @@ repos:
     hooks:
       - id: check-stub-implementations
 
+  # Canonical Inference Gate (OMN-13249, fleet rollout of OMN-13219).
+  # Rejects NEW non-canonical model-inference surfaces: shelled model CLIs
+  # (codex/claude/gemini/opencode) and *_MODEL/*_PROVIDER env reads. Structural
+  # carve-out: a model-CLI shell-out is permitted iff the enclosing node
+  # contract.yaml declares descriptor.agent_invocation: true (a contract fact,
+  # never a free-text comment). Ratchet: existing violations grandfathered in the
+  # shared baseline at omnibase_core/src/omnibase_core/validation/baselines/canonical_inference_baseline.json;
+  # baseline is burn-down only. Suppression: # canonical-inference-ok: <reason>
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: 940d2f2ab44d2f455a607926674b90ecbc9b74ba # pragma: allowlist secret
+    hooks:
+      - id: check-canonical-inference
+        args: [--repo, omniclaude, --repo-root, .]
+        exclude: ^(tests/|archived/|archive/).*\.py$
+
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
     rev: 8d7e85bc00e7f1b1306d1cb40949be1ab6e7e91a  # pragma: allowlist secret
