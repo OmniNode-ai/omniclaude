@@ -34,6 +34,9 @@ on:
       - '.github/workflows/verification-evidence-lint.yml'
   merge_group:
 
+permissions:
+  contents: read
+
 jobs:
   verification-evidence-lint:
     name: Verification Evidence Lint
