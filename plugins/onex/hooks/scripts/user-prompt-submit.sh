@@ -577,69 +577,6 @@ if [[ -n "$AGENTIC_WORK_PRODUCT" ]]; then
 fi
 
 # -----------------------------
-# Delegation Rule Gate (OMN-10278)
-# -----------------------------
-# Load ~/.omninode/delegation/delegation-rules.yaml and determine whether
-# the delegation bridge should fire for this task class.
-# behavior=off  → skip bridge entirely
-# behavior=auto → bridge fires unconditionally (subject to existing guards)
-# behavior=suggest → bridge fires (default; same as pre-existing behavior)
-# Missing file → existing behavior preserved (bridge fires as before)
-_DELEGATION_BEHAVIOR="suggest"  # default: no config = preserve existing behavior
-_RULE_LOADER="${HOOKS_LIB}/delegation_rule_loader.py"
-if [[ -f "$_RULE_LOADER" ]]; then
-    _RULE_RESULT=$(
-        HOOKS_LIB="$HOOKS_LIB" \
-        _INTENT_CLASS="${_INTENT_CLASS:-GENERAL}" \
-        _INTENT_CONF="${_INTENT_CONF:-0}" \
-        "$PYTHON_CMD" - <<'_PYEOF' 2>/dev/null
-import sys, os
-from pathlib import Path
-_lib = str(Path(os.environ.get("HOOKS_LIB", "")).resolve())
-if _lib and _lib not in sys.path:
-    sys.path.insert(0, _lib)
-try:
-    from delegation_rule_loader import DelegationRuleLoader
-    loader = DelegationRuleLoader()
-    decision = loader.get_rule(
-        os.environ.get("_INTENT_CLASS", "GENERAL").lower(),
-        confidence=float(os.environ.get("_INTENT_CONF", "0") or "0"),
-    )
-    print(decision.behavior if decision else "suggest")
-except Exception:
-    print("suggest")
-_PYEOF
-    ) || _RULE_RESULT="suggest"
-    _DELEGATION_BEHAVIOR="${_RULE_RESULT:-suggest}"
-    log "Delegation rule gate: intent=${_INTENT_CLASS:-GENERAL} behavior=${_DELEGATION_BEHAVIOR}"
-fi
-
-# -----------------------------
-# Delegation Bridge (OMN-8746)
-# -----------------------------
-# Hand a delegate request to the market-owned delegate skill adapter for every
-# non-slash, non-automated prompt. node_delegate_skill_orchestrator owns routing,
-# runtime dispatch, terminal correlation, LLM inference, and quality gating.
-if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]] && [[ "$_DELEGATION_BEHAVIOR" != "off" ]]; then
-    _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/handler_delegate_skill.py"
-    if [[ -f "$_BRIDGE_SCRIPT" ]]; then
-        (
-            _BRIDGE_PROMPT="$(printf '%s' "$PROMPT_B64" | base64 -d 2>/dev/null || echo "")"
-            if [[ -n "$_BRIDGE_PROMPT" ]]; then
-                CLAUDE_SESSION_ID="$SESSION_ID" \
-                    "$PYTHON_CMD" "$_BRIDGE_SCRIPT" "$_BRIDGE_PROMPT" \
-                    --correlation-id "$CORRELATION_ID" \
-                    >> "$LOG_FILE" 2>&1
-            fi
-        ) &
-        disown
-        log "Delegation bridge: submitted to market adapter (corr=$CORRELATION_ID)"
-    else
-        log "WARNING: delegation bridge handler_delegate_skill.py not found at $_BRIDGE_SCRIPT — Kafka publish skipped"
-    fi
-fi
-
-# -----------------------------
 # Local Enrichment (OMN-2267)
 # -----------------------------
 # Run parallel enrichments (code analysis, similarity, summarization) if

@@ -1,20 +1,28 @@
 # Delegation Architecture
 
-**Last Updated**: 2026-04-27
-**Tickets**: OMN-8746 (remove delegation flags, unconditional bridge), OMN-8689 (bridge), OMN-10050 (topic alignment)
+**Last Updated**: 2026-06-20
+**Tickets**: OMN-8746 (remove delegation flags, unconditional bridge), OMN-8689 (bridge), OMN-10050 (topic alignment), OMN-10604 (bridge handler removed), OMN-13358 (dead bridge invocation removed from `user-prompt-submit.sh`)
+
+> **STATUS — bridge removed (OMN-13358):** The `UserPromptSubmit` hook no longer
+> auto-fires a delegation bridge. The `handler_delegate_skill.py` adapter this doc
+> describes was deleted in OMN-10604, and its sole remaining caller (a dead block in
+> `user-prompt-submit.sh` that always logged a "handler not found" warning) was removed
+> in OMN-13358. Delegation now runs only on explicit invocation of the `/onex:delegate`
+> skill, which dispatches `node_delegate_skill_orchestrator` (omnimarket). The
+> Kafka-bridge flow below is retained for historical context only and is **not wired**.
 
 ---
 
-## Overview
+## Overview (historical — bridge no longer wired)
 
-The delegation system routes user prompts to the ONEX node pipeline via Kafka. Every
-non-slash, non-automated prompt that enters `UserPromptSubmit` is classified and
+The delegation system routed user prompts to the ONEX node pipeline via Kafka. Every
+non-slash, non-automated prompt that entered `UserPromptSubmit` was classified and
 published to `onex.cmd.omniclaude.delegate-task.v1`. The runtime
-`node_delegation_orchestrator` handles routing, LLM inference, quality gating, and
+`node_delegation_orchestrator` handled routing, LLM inference, quality gating, and
 result emission.
 
-**There is no local prose fallback.** Delegation requires Kafka to be reachable.
-If the emit daemon is unavailable, the request is dropped and Claude handles the
+**There was no local prose fallback.** Delegation required Kafka to be reachable.
+If the emit daemon was unavailable, the request was dropped and Claude handled the
 prompt normally.
 
 ---
@@ -74,15 +82,16 @@ plugins/onex/skills/delegate/_lib/handler_delegate_skill.py
 | `plugins/onex/skills/delegate/_lib/handler_delegate_skill.py` | Classify + publish to Kafka |
 | `src/omniclaude/lib/task_classifier.py` | Prompt classification |
 | `src/omniclaude/hooks/topics.py` (`DELEGATE_TASK`) | Kafka topic definition |
-| `plugins/onex/hooks/scripts/user-prompt-submit.sh` | Bridge invocation (fire-and-forget) |
+
+> The `user-prompt-submit.sh` bridge invocation row was removed in OMN-13358: the hook
+> no longer calls a delegation bridge (see the status banner at the top of this doc).
 
 ---
 
-## Failure Modes
+## Failure Modes (historical — bridge no longer wired)
 
 | Failure | Behavior |
 |---------|----------|
 | Kafka / emit daemon unavailable | Request dropped; Claude handles prompt |
 | Non-delegatable intent | No publish; success=False logged |
 | TaskClassifier import error | No publish; error logged |
-| Bridge script missing | Warning logged; Claude handles prompt |
