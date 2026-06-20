@@ -88,18 +88,6 @@ Claude Code (stdin JSON)
     └────┬──────────────────────────────────────────┘
          │
          ▼
-    ┌────┴──────────────────────────────────────────┐
-    │  Delegation bridge (fire-and-forget)          │
-    │  delegate/_lib/handler_delegate_skill.py (background subprocess) │
-    │                                               │
-    │  TaskClassifier.classify(prompt)              │
-    │  → publish to delegate-task.v1 (Kafka)        │
-    │  → node_delegation_orchestrator               │
-    │                                               │
-    │  Requires Kafka. No local prose fallback.     │
-    └────┬──────────────────────────────────────────┘
-         │
-         ▼
     Output to Claude Code (stdout JSON):
     {
       "hookSpecificOutput": {
