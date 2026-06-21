@@ -138,3 +138,18 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 
 - `db-split/FK_SCAN_RESULTS.md` — FK scan results for the DB-SPLIT work (OMN-2055, migration freeze active)
 - `evidence/2026-06-19-omn-13254-dead-code-reaudit.md` — OMN-13254 dead-code re-audit classification
+
+---
+
+## 5. Current Runtime Note (verified against code on this refresh)
+
+**All onex plugin hooks are currently disabled (OMN-13244).** The `hooks` block in
+`plugins/onex/hooks/hooks.json` is empty (`{}`) for a measurement baseline, so Claude
+Code invokes no onex hooks. The hook scripts (`plugins/onex/hooks/scripts/`) and Python
+handler modules (`plugins/onex/hooks/lib/`) remain on disk — re-enabling is a pure config
+change (revert OMN-13244). The architecture docs above describe the wired behavior when
+hooks are registered.
+
+The delegation Kafka bridge is also no longer wired (OMN-13358); delegation runs only on
+explicit `/onex:delegate` invocation. See the status banner in
+[architecture/DELEGATION_ARCHITECTURE.md](architecture/DELEGATION_ARCHITECTURE.md).

@@ -683,6 +683,13 @@ omniclaude/
 
 ## Hook Data Flow
 
+> **Current state (verified against code on this refresh):** every hook registration
+> in `plugins/onex/hooks/hooks.json` is removed — the `hooks` block is `{}` — for the
+> OMN-13244 measurement baseline. Claude Code therefore invokes no onex hooks today.
+> The scripts (`plugins/onex/hooks/scripts/`) and handler modules
+> (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change
+> (revert OMN-13244). The flow below describes wired behavior when hooks are registered.
+
 ### Input Format
 
 All hooks receive JSON via stdin from Claude Code:
@@ -910,5 +917,5 @@ Canonical spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`
 
 ---
 
-**Last Updated**: 2026-06-16
+**Last Updated**: 2026-06-21
 **Version**: 0.25.1
