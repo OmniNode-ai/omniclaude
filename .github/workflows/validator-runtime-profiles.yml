@@ -25,6 +25,9 @@ on:
   merge_group:
     branches: [main, develop, dev]
 
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: "3.12"
   UV_HTTP_TIMEOUT: "180"
