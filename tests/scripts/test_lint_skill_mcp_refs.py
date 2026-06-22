@@ -93,10 +93,10 @@ def test_violation_in_prompt_md_blocks(run_in: pathlib.Path) -> None:
 def test_violation_in_skill_md_blocks(run_in: pathlib.Path) -> None:
     path = _write_skill(
         run_in,
-        "linear_triage",
+        "ticketing_triage",
         "SKILL.md",
         """
-        # Linear Triage
+        # Ticketing Triage
 
         Requires tool: mcp__linear-server__list_issues
         """,
