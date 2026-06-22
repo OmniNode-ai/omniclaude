@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# Runtime Profiles — ValidatorRuntimeProfiles gate [OMN-12957]
+#
+# Wires omnibase_core.validation.validator_runtime_profiles as a required
+# status check on omniclaude node contracts. Enforces:
+#   - runtime_profiles_missing (OMN-9886) — command-consuming contracts must
+#     declare a runtime lane so the runtime knows how to wire their subscriptions.
+#
+# Pre-existing violators are frozen in
+# scripts/validation/runtime_profiles_allowlist.yaml (drain tracked by OMN-12982); the
+# gate blocks NEW orphans without forcing mass remediation.
+#
+# Wired via OMN-13288 (Wave C: runtime-profiles gate fleet wiring into omniclaude).
+# Required status check context: "Runtime Profiles / validate".
+
+name: Runtime Profiles
+
+on:
+  push:
+    branches: [main, develop, dev, "hotfix/**"]
+  pull_request:
+    branches: [main, develop, dev]
+  merge_group:
+    branches: [main, develop, dev]
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_HTTP_TIMEOUT: "180"
+  UV_VERSION: "0.8.3"
+
+concurrency:
+  group: runtime-profiles-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate
+    # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
+    runs-on: >-
+      ${{
+        github.event_name != 'pull_request'
+        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+      }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Validate runtime_profiles on omniclaude contracts
+        run: uv run python scripts/ci/run_runtime_profiles_validator.py
