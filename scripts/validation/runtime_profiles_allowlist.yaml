@@ -1,0 +1,344 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# OMN-13288 baseline allowlist: freezes pre-existing runtime_profiles violators
+# so the gate blocks NEW orphans without forcing a mass remediation.
+# Drain tracked by OMN-12982 — fix each node's lane and delete its entry here.
+# ValidatorRuntimeProfiles receives this path explicitly from the repo-local
+# wrapper (scripts/ci/run_runtime_profiles_validator.py); no env var or
+# package-local fallback owns this repo's baseline. Mirrors OMN-13297
+# (omniintelligence/omnimemory) and OMN-12955 (omnimarket).
+allowlist:
+  - node_id: node_channel_discord_adapter
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_channel_email_adapter
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_channel_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_channel_slack_adapter
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_channel_sms_adapter
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_channel_telegram_adapter
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_delegation_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_adversarial_pipeline_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_agent_healthcheck_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_aislop_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_architectural_invariant_loop_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_authorize_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_auto_merge_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_autopilot_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_baseline_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_build_loop_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_bus_audit_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_changelog_audit_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_checkpoint_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ci_watch_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_coderabbit_triage_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_compliance_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_contract_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_coverage_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_create_followup_tickets_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_create_ticket_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dashboard_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_data_flow_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_database_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_decision_store_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_decompose_epic_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_delegate_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_demo_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_demo_readiness_team_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dep_cascade_dedup_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_design_to_plan_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dispatch_engine_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dispatch_queue_drainer_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dispatch_watchdog_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dispatch_worker_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_doc_freshness_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dod_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_dod_verify_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_duplication_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_env_parity_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_env_sync_alert_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_epic_team_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_executing_plans_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_feature_dashboard_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_friction_triage_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_gap_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_generate_node_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_golden_chain_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_hook_health_alert_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_hostile_reviewer_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_insights_to_plan_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_integration_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_linear_housekeeping_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_local_review_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_login_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_merge_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_multi_agent_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_observability_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_onboarding_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_pipeline_audit_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_pipeline_fill_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_plan_audit_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_plan_to_tickets_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_platform_readiness_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_pr_polish_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_pr_review_bot_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_pr_review_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_pr_watch_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_preflight_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_recall_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_record_friction_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_redeploy_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_refill_sprint_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_release_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_resume_session_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_rewind_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_rrh_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_runner_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_runtime_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_self_healing_dispatch_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_session_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_set_session_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_shim_audit_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ship_dirty_canonical_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_skill_functional_audit_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_start_environment_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_status_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_system_status_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_systematic_debugging_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_tech_debt_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ticket_pipeline_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ticket_plan_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ticket_work_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ticketing_epic_org_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ticketing_insights_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_ticketing_triage_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_two_strike_arbiter_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_unstick_queue_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_using_git_worktrees_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_verification_receipt_generator_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_verification_sweep_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_verified_dispatch_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_verify_plugin_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_wave_scheduler_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_worktree_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)
+  - node_id: node_skill_writing_skills_orchestrator
+    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
+      runtime-exempt)

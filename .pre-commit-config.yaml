@@ -133,6 +133,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13288: runtime_profiles contract validator (omnibase_core).
+      # Enforces runtime_profiles_missing (OMN-9886) — command-consuming contracts
+      # must declare a runtime lane. Pre-existing violators are frozen in
+      # scripts/validation/runtime_profiles_allowlist.yaml (drain tracked by OMN-12982).
+      # The wrapper script is used (instead of the bare module) so the repo-local
+      # allowlist is loaded the same way as the CI gate (OMN-13288 / mirrors OMN-13297).
+      - id: onex-validate-runtime-profiles
+        name: Validate runtime_profiles on node contracts (OMN-12957)
+        language: system
+        entry: uv run python scripts/ci/run_runtime_profiles_validator.py
+        files: ^src/omniclaude/nodes/node_.*/contract\.yaml$
+        pass_filenames: false
+        stages: [pre-commit]
+
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
       # approval receipt (# skip-token-allowed: <receipt-id>).
