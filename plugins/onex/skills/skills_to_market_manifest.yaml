@@ -23,13 +23,13 @@ skills:
 
   pr_review:
     canonical_path: onex_run_node
-    canonical_target: node_pr_review_bot
-    notes: Legacy direct workflow_runner.run_review references remain advisory until the thin shim lands.
+    canonical_target: node_pr_review_orchestrator
+    notes: Backed by node_pr_review_orchestrator (the OMN-13212 decomposition of the deleted node_pr_review_bot shell).
 
   pr_review_bot:
     canonical_path: onex_run_node
-    canonical_target: node_pr_review_bot
-    notes: Legacy direct workflow_runner.run_review references remain advisory until the skill routes only through run-node.
+    canonical_target: node_pr_review_orchestrator
+    notes: Backed by node_pr_review_orchestrator (the OMN-13212 decomposition of the deleted node_pr_review_bot shell).
 
   delegate:
     canonical_path: runtime_skill_client

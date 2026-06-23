@@ -1,7 +1,7 @@
 ---
 description: Run the ONEX PR review bot pipeline — fetches diff, dispatches multi-model adversarial review,
-  posts thread comments, verifies resolutions, and posts a summary verdict. Thin wrapper over node_pr_review_bot
-  WorkflowRunner.
+  posts thread comments, verifies resolutions, and posts a summary verdict. Thin wrapper over
+  node_pr_review_orchestrator.
 mode: full
 version: 1.0.0
 level: intermediate
@@ -62,4 +62,4 @@ See `prompt.md` for the one command and how to present the typed result.
 
 - **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
 - **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
-- **Result model**: `omnimarket.nodes.node_pr_review_bot.models.models.ReviewVerdict`
+- **Result model**: `omnimarket.review.pr_review_io.ReviewVerdict`

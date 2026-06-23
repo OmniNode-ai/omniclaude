@@ -342,7 +342,7 @@ nodes:
         schema_version: v1
         role: publish
 
-  - node: node_pr_review_bot
+  - node: node_pr_review_orchestrator
     topics:
       - name: onex.cmd.omnimarket.pr-review-bot-start.v1
         schema_version: v1
