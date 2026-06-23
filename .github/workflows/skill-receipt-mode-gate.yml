@@ -44,11 +44,11 @@ jobs:
   skill-receipt-mode-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Checkout omnibase_core (provides the skill receipt-mode validator)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
           # The validator lands on omnibase_core dev in this same ticket

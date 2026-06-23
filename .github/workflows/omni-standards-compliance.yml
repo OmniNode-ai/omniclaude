@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Validate omniclaude directory structure
         working-directory: ${{ github.workspace }}
@@ -81,7 +81,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Validate agent YAML schema_version fields
         working-directory: ${{ github.workspace }}
@@ -135,7 +135,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Validate CLAUDE.md exists
         working-directory: ${{ github.workspace }}
@@ -212,7 +212,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Check for forbidden legacy patterns
         working-directory: ${{ github.workspace }}
@@ -285,7 +285,7 @@ jobs:
     #   - ci-failures, pr-review (CI YAML snippets embedded as examples)
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Enforce pr-queue claims/ and runs/ path bans
         working-directory: ${{ github.workspace }}
@@ -496,7 +496,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Verify CI workflow naming convention
         working-directory: ${{ github.workspace }}

@@ -35,7 +35,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -82,13 +82,13 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.before }}
@@ -97,7 +97,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (full scan)
         if: github.event_name != 'push'
-        uses: trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           extra_args: --only-verified
@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -161,7 +161,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Build Docker image
         working-directory: ${{ github.workspace }}
@@ -225,7 +225,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Run Checkov (IaC scanner)
         uses: bridgecrewio/checkov-action@fa9edf8f0a491c59a924ea6accd5bdcf07752cff  # v12.1347.0 (pinned 2026-03-04)

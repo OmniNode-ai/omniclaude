@@ -30,10 +30,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout omnibase_core
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
           # Pinned to the commit that exports the validate-validator-requirements hook (OMN-13291).
