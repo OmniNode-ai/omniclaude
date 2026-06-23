@@ -45,7 +45,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Scan docs/plans + docs/tracking for fresh verified-state sections
         working-directory: ${{ github.workspace }}
