@@ -200,6 +200,21 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-13536: omnimarket dispatch-venv drift guard. Skills dispatch ONEX nodes
+      # from the *installed* omnimarket package. This gate compares the
+      # uv.lock-pinned omnimarket git SHA against the approved release-lane
+      # baseline and fails on unapproved drift. The full omnimarket@main pin
+      # upgrade is blocked by transitive omniintelligence source constraints.
+      - id: check-omnimarket-dispatch-drift
+        name: Reject omnimarket dispatch-venv pin drift (OMN-13536)
+        entry: .pre-commit-hooks/check-omnimarket-dispatch-drift.sh
+        language: script
+        pass_filenames: false
+        args:
+          - --expected-sha=597fc11af2ad49ca8c780fcd8cb99b8895765398
+        files: '^(uv\.lock|pyproject\.toml)$'
+        stages: [pre-commit]
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.

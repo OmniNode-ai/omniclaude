@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Omnimarket Dispatch Drift Gate
+
+# OMN-13536: required status check. Detects omnimarket version/commit drift
+# in the dispatch venvs used by omniclaude skills. When the installed omnimarket
+# commit differs from the approved release-lane baseline, skills may execute
+# unreviewed or stale node bytes (old stubs, renamed/deleted handlers). This gate
+# converts silent runtime drift into a caught regression.
+#
+# CI behaviour: the gate compares uv.lock against an explicit baseline SHA. The
+# broader upgrade to canonical omnimarket@main is blocked by current transitive
+# omniintelligence source constraints and should update this baseline separately.
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'uv.lock'
+      - 'pyproject.toml'
+      - 'scripts/check_omnimarket_dispatch_drift.py'
+      - '.pre-commit-hooks/check-omnimarket-dispatch-drift.sh'
+      - '.github/workflows/omnimarket-dispatch-drift-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'uv.lock'
+      - 'pyproject.toml'
+      - 'scripts/check_omnimarket_dispatch_drift.py'
+      - '.pre-commit-hooks/check-omnimarket-dispatch-drift.sh'
+      - '.github/workflows/omnimarket-dispatch-drift-gate.yml'
+  merge_group:
+
+# Least-privilege: this gate only reads the checked-out tree and runs a stdlib
+# validator.  No write scopes (Checkov CKV2_GHA_1 / write-all default).
+permissions:
+  contents: read
+
+jobs:
+  omnimarket-dispatch-drift-gate:
+    name: Omnimarket Dispatch Drift Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Resolve expected omnimarket dispatch SHA
+        id: expected
+        run: |
+          SHA="597fc11af2ad49ca8c780fcd8cb99b8895765398"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Expected omnimarket dispatch SHA: $SHA"
+
+      - name: Check omnimarket dispatch drift (lock-consistency mode)
+        working-directory: ${{ github.workspace }}
+        env:
+          OMNIMARKET_EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
+        run: |
+          # tomllib is stdlib (Python 3.11+); no install step needed.
+          # No live daemon venv on CI runners — gate runs in lock-consistency mode.
+          # Exits 1 if uv.lock pins omnimarket to a SHA != expected dispatch SHA.
+          bash .pre-commit-hooks/check-omnimarket-dispatch-drift.sh
