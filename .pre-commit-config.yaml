@@ -200,6 +200,23 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-13536: omnimarket dispatch-venv drift guard. Skills dispatch ONEX nodes
+      # from the *installed* omnimarket package — when that installed commit lags
+      # canonical omnimarket@main, skills silently run stale node bytes (old stubs,
+      # renamed/deleted handlers). This gate compares the uv.lock-pinned omnimarket
+      # git SHA against canonical @main HEAD and fails on any divergence. CI
+      # injects OMNIMARKET_CANONICAL_SHA from a shallow checkout; local dev falls
+      # back to git ls-remote or $OMNI_HOME/omnimarket. Fix: update the pin:
+      #   uv lock --upgrade-package omnimarket
+      # BLOCKING — enforcement, not advisory (CLAUDE.md Rule #5).
+      - id: check-omnimarket-dispatch-drift
+        name: Reject stale omnimarket dispatch-venv pin vs canonical @main (OMN-13536)
+        entry: .pre-commit-hooks/check-omnimarket-dispatch-drift.sh
+        language: script
+        pass_filenames: false
+        files: '^(uv\.lock|pyproject\.toml)$'
+        stages: [pre-commit]
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
