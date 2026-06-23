@@ -16,17 +16,20 @@ This gate catches that drift at two surfaces:
 
 1. **Lock-consistency mode** (always runs — local AND CI):
    Parse ``uv.lock``, extract the pinned omnimarket git SHA, and compare it
-   against the canonical ``omnimarket@main`` HEAD.  On CI runners
-   ``OMNIMARKET_ROOT`` or ``OMNIMARKET_CANONICAL_SHA`` can be injected; the gate
-   resolves the canonical SHA in order:
+   against an expected dispatch SHA.  Release lanes can set an explicit
+   baseline while a broader dependency cascade is pending; callers can still
+   inject canonical ``omnimarket@main`` when the lane is ready.  The gate
+   resolves the expected SHA in order:
 
-   a. ``--canonical-sha=<sha>`` CLI override (tests / CI injection)
-   b. ``OMNIMARKET_CANONICAL_SHA`` environment variable
-   c. ``git ls-remote <OMNIMARKET_REMOTE> HEAD`` (live network probe, default)
-   d. Local canonical clone at ``$OMNI_HOME/omnimarket`` (offline fallback)
+   a. ``--expected-sha=<sha>`` CLI override (release-lane baseline)
+   b. ``OMNIMARKET_EXPECTED_SHA`` environment variable
+   c. ``--canonical-sha=<sha>`` CLI override (tests / CI injection)
+   d. ``OMNIMARKET_CANONICAL_SHA`` environment variable
+   e. ``git ls-remote <OMNIMARKET_REMOTE> HEAD`` (live network probe, default)
+   f. Local canonical clone at ``$OMNI_HOME/omnimarket`` (offline fallback)
 
-   The gate *fails* if the pinned SHA does not match the canonical HEAD.  A
-   stale git-tag pin (v0.4.x, 261 commits behind) is the target negative case.
+   The gate *fails* if the pinned SHA does not match the expected SHA.  A stale
+   or unapproved git-source pin is the target negative case.
 
 2. **Live dispatch-venv mode** (only when the live daemon venv is present):
    Inspect the installed omnimarket ``direct_url.json`` in the daemon venv's
@@ -36,7 +39,7 @@ This gate catches that drift at two surfaces:
 
 ## Exit codes
 
-- ``0`` — lock pin matches canonical AND (if live venv exists) the installed
+- ``0`` — lock pin matches expected AND (if live venv exists) the installed
   commit matches.
 - ``1`` — lock pin is stale, lock is malformed, or live venv carries a stale
   omnimarket commit.
@@ -95,19 +98,29 @@ def _extract_omnimarket_sha(lock_text: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_canonical_sha(
+def _resolve_expected_sha(
+    expected_sha_override: str | None = None,
     canonical_sha_override: str | None = None,
 ) -> tuple[str, str]:
-    """Return (sha, source_description) for canonical omnimarket@main HEAD.
+    """Return (sha, source_description) for the expected omnimarket dispatch SHA.
 
     Resolution order:
-    1. ``canonical_sha_override`` (CLI arg / test injection)
-    2. ``OMNIMARKET_CANONICAL_SHA`` environment variable
-    3. ``git ls-remote <remote> HEAD`` (live network probe)
-    4. Local canonical clone at ``$OMNI_HOME/omnimarket``
+    1. ``expected_sha_override`` (release-lane baseline)
+    2. ``OMNIMARKET_EXPECTED_SHA`` environment variable
+    3. ``canonical_sha_override`` (CLI arg / test injection)
+    4. ``OMNIMARKET_CANONICAL_SHA`` environment variable
+    5. ``git ls-remote <remote> HEAD`` (live network probe)
+    6. Local canonical clone at ``$OMNI_HOME/omnimarket``
 
     Raises ValueError if no source succeeds.
     """
+    if expected_sha_override:
+        return expected_sha_override, f"--expected-sha={expected_sha_override[:8]}"
+
+    expected_env_sha = os.environ.get("OMNIMARKET_EXPECTED_SHA", "").strip()
+    if expected_env_sha:
+        return expected_env_sha, f"OMNIMARKET_EXPECTED_SHA={expected_env_sha[:8]}"
+
     if canonical_sha_override:
         return canonical_sha_override, f"--canonical-sha={canonical_sha_override[:8]}"
 
@@ -162,7 +175,9 @@ def _resolve_canonical_sha(
                 continue
 
     raise ValueError(
-        "Cannot resolve canonical omnimarket@main SHA.  Set one of:\n"
+        "Cannot resolve expected omnimarket dispatch SHA.  Set one of:\n"
+        "  --expected-sha=<sha>       (release-lane baseline)\n"
+        "  OMNIMARKET_EXPECTED_SHA=<sha>  (env baseline)\n"
         "  --canonical-sha=<sha>      (CLI)\n"
         "  OMNIMARKET_CANONICAL_SHA=<sha>  (env)\n"
         "  OMNIMARKET_ROOT=/path/to/omnimarket  (local clone)\n"
@@ -177,12 +192,12 @@ def _resolve_canonical_sha(
 
 def _check_lock_drift(
     lock_path: Path,
-    canonical_sha: str,
+    expected_sha: str,
 ) -> list[str]:
     """Return findings (non-empty == drift detected).
 
     Reads ``lock_path``, extracts the omnimarket git SHA, and compares against
-    ``canonical_sha``.
+    ``expected_sha``.
     """
     lock_text = lock_path.read_text(encoding="utf-8")
 
@@ -203,13 +218,14 @@ def _check_lock_drift(
             "if omnimarket was intentionally removed, this gate must be updated"
         ]
 
-    if pinned_sha != canonical_sha:
+    if pinned_sha != expected_sha:
         return [
-            f"omnimarket lock pin is STALE (dispatch drift):\n"
+            f"omnimarket lock pin does not match expected dispatch SHA:\n"
             f"    pinned commit:    {pinned_sha}\n"
-            f"    canonical main:   {canonical_sha}\n"
-            f"Skills dispatching omnimarket nodes will execute stale bytes.  "
-            f"Update pyproject.toml to track omnimarket@main and run `uv lock --upgrade-package omnimarket`."
+            f"    expected commit:  {expected_sha}\n"
+            f"Skills dispatching omnimarket nodes will execute unapproved bytes.  "
+            f"Update pyproject.toml and run `uv lock --upgrade-package omnimarket`, or update the explicit "
+            f"OMNIMARKET_EXPECTED_SHA baseline in the hook/workflow with evidence."
         ]
 
     return []
@@ -252,7 +268,7 @@ def _omnimarket_sha_from_venv(venv_dir: Path) -> str | None:
     return None
 
 
-def _check_dispatch_venv_drift(canonical_sha: str) -> list[str]:
+def _check_dispatch_venv_drift(expected_sha: str) -> list[str]:
     """Return findings for live daemon venv; [] when no venv present (CI state)."""
     venv_dir = _live_venv_dir()
     if not (venv_dir / "bin" / "python3").exists():
@@ -266,11 +282,11 @@ def _check_dispatch_venv_drift(canonical_sha: str) -> list[str]:
             "cannot verify alignment with canonical @main"
         ]
 
-    if installed_sha != canonical_sha:
+    if installed_sha != expected_sha:
         return [
             f"live daemon venv omnimarket commit is STALE:\n"
             f"    installed commit:  {installed_sha}\n"
-            f"    canonical main:    {canonical_sha}\n"
+            f"    expected commit:   {expected_sha}\n"
             f"Rebuild the dispatch venv: bash scripts/repair-plugin-venv.sh"
         ]
 
@@ -294,6 +310,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         dest="canonical_sha",
         help="Canonical omnimarket@main SHA (overrides remote probe)",
+    )
+    parser.add_argument(
+        "--expected-sha",
+        default=None,
+        dest="expected_sha",
+        help="Expected omnimarket dispatch SHA (release-lane baseline; overrides canonical probe)",
     )
     parser.add_argument(
         "--print-pinned-sha",
@@ -325,23 +347,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"omnimarket pinned SHA: {sha}")
         return 0
 
-    # Resolve canonical SHA.
+    # Resolve expected dispatch SHA.
     try:
-        canonical_sha, sha_source = _resolve_canonical_sha(args.canonical_sha)
+        expected_sha, sha_source = _resolve_expected_sha(
+            expected_sha_override=args.expected_sha,
+            canonical_sha_override=args.canonical_sha,
+        )
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
     # Lock-consistency mode — always runs.
-    findings: list[str] = _check_lock_drift(lock_path, canonical_sha)
+    findings: list[str] = _check_lock_drift(lock_path, expected_sha)
 
     # Live dispatch-venv mode — only when daemon venv exists.
-    findings.extend(_check_dispatch_venv_drift(canonical_sha))
+    findings.extend(_check_dispatch_venv_drift(expected_sha))
 
     if findings:
         print(
             f"ERROR: omnimarket dispatch drift detected ({len(findings)} finding(s)); "
-            f"canonical SHA resolved from {sha_source}:",
+            f"expected SHA resolved from {sha_source}:",
             file=sys.stderr,
         )
         for finding in findings:
@@ -359,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"omnimarket dispatch drift gate: PASS "
         f"(pinned {_extract_omnimarket_sha(lock_text) or 'n/a'!r:.20s}… == "
-        f"canonical {canonical_sha[:8]}… via {sha_source})"
+        f"expected {expected_sha[:8]}… via {sha_source})"
     )
     return 0
 

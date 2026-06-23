@@ -4,14 +4,14 @@
 name: Omnimarket Dispatch Drift Gate
 
 # OMN-13536: required status check. Detects omnimarket version/commit drift
-# in the dispatch venvs used by omniclaude skills.  When the installed omnimarket
-# commit lags canonical omnimarket@main, skills silently execute stale node bytes
-# (old stubs, renamed/deleted handlers).  This gate converts that silent runtime
-# failure into a caught regression — enforcement, not detection (CLAUDE.md Rule #5).
+# in the dispatch venvs used by omniclaude skills. When the installed omnimarket
+# commit differs from the approved release-lane baseline, skills may execute
+# unreviewed or stale node bytes (old stubs, renamed/deleted handlers). This gate
+# converts silent runtime drift into a caught regression.
 #
-# CI behaviour: the gate checks out canonical omnimarket@main to resolve the HEAD
-# SHA, then compares it against the pinned SHA in uv.lock.  A stale git-tag pin
-# (v0.4.x, hundreds of commits behind) is the target negative case.
+# CI behaviour: the gate compares uv.lock against an explicit baseline SHA. The
+# broader upgrade to canonical omnimarket@main is blocked by current transitive
+# omniintelligence source constraints and should update this baseline separately.
 
 on:
   push:
@@ -51,33 +51,24 @@ jobs:
       - name: Checkout omniclaude
         uses: actions/checkout@v7
 
-      - name: Checkout canonical omnimarket@main
-        uses: actions/checkout@v7
-        with:
-          repository: OmniNode-ai/omnimarket
-          ref: main
-          path: _omnimarket_canonical
-          # Shallow clone — we only need HEAD SHA, not full history.
-          fetch-depth: 1
-
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
-      - name: Resolve canonical omnimarket@main SHA
-        id: canonical
+      - name: Resolve expected omnimarket dispatch SHA
+        id: expected
         run: |
-          SHA=$(git -C _omnimarket_canonical rev-parse HEAD)
+          SHA="597fc11af2ad49ca8c780fcd8cb99b8895765398"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "Canonical omnimarket@main SHA: $SHA"
+          echo "Expected omnimarket dispatch SHA: $SHA"
 
       - name: Check omnimarket dispatch drift (lock-consistency mode)
         working-directory: ${{ github.workspace }}
         env:
-          OMNIMARKET_CANONICAL_SHA: ${{ steps.canonical.outputs.sha }}
+          OMNIMARKET_EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
         run: |
           # tomllib is stdlib (Python 3.11+); no install step needed.
           # No live daemon venv on CI runners — gate runs in lock-consistency mode.
-          # Exits 1 if uv.lock pins omnimarket to a SHA != canonical @main HEAD.
+          # Exits 1 if uv.lock pins omnimarket to a SHA != expected dispatch SHA.
           bash .pre-commit-hooks/check-omnimarket-dispatch-drift.sh

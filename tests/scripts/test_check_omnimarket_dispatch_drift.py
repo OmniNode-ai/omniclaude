@@ -116,7 +116,7 @@ def test_lock_parse_raises_on_missing_omnimarket(tmp_path: Path) -> None:
     )
     findings = drift._check_lock_drift(
         lock_path=lock,
-        canonical_sha="aabbccdd" * 5,
+        expected_sha="aabbccdd" * 5,
     )
     # omnimarket absent from lock = finding (can't verify)
     assert any("omnimarket" in f.lower() for f in findings)
@@ -130,9 +130,9 @@ def test_stale_lock_pin_detected(tmp_path: Path) -> None:
     canonical_sha = canonical_sha[:40]
     findings = drift._check_lock_drift(
         lock_path=lock,
-        canonical_sha=canonical_sha,
+        expected_sha=canonical_sha,
     )
-    assert any("stale" in f.lower() or "drift" in f.lower() for f in findings)
+    assert any("does not match expected" in f.lower() for f in findings)
     assert any(_STALE_SHA[:8] in f for f in findings)
 
 
@@ -142,7 +142,7 @@ def test_up_to_date_lock_passes(tmp_path: Path) -> None:
     lock.write_text(_LOCK_FRESH, encoding="utf-8")
     findings = drift._check_lock_drift(
         lock_path=lock,
-        canonical_sha=_FRESH_SHA,
+        expected_sha=_FRESH_SHA,
     )
     assert findings == []
 
@@ -152,7 +152,7 @@ def test_no_live_venv_is_not_a_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
-    findings = drift._check_dispatch_venv_drift(canonical_sha=_STALE_SHA)
+    findings = drift._check_dispatch_venv_drift(expected_sha=_STALE_SHA)
     assert findings == []
 
 
@@ -236,6 +236,28 @@ def test_main_passes_with_canonical_sha_injected(
     rc = drift.main(
         [
             f"--lock={lock}",
+            f"--canonical-sha={_FRESH_SHA}",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "PASS" in out
+
+
+@pytest.mark.unit
+def test_expected_sha_overrides_canonical_sha(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Release-lane baselines can ratchet the approved dispatch SHA."""
+    lock = tmp_path / "uv.lock"
+    lock.write_text(_LOCK_STALE, encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
+    rc = drift.main(
+        [
+            f"--lock={lock}",
+            f"--expected-sha={_STALE_SHA}",
             f"--canonical-sha={_FRESH_SHA}",
         ]
     )

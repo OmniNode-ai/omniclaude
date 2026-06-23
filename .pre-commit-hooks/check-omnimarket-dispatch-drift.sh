@@ -4,14 +4,14 @@
 #
 # OMN-13536: Detect omnimarket version/commit drift in dispatch venvs.
 #
-# Skills dispatch ONEX nodes from the *installed* omnimarket package.  When the
-# installed commit lags canonical omnimarket@main, skills silently execute stale
-# node bytes (old stubs, renamed/deleted handlers).  This gate converts that
-# silent runtime failure into a caught regression.
+# Skills dispatch ONEX nodes from the *installed* omnimarket package. When the
+# installed commit differs from the approved release-lane baseline, skills may
+# execute unreviewed or stale node bytes (old stubs, renamed/deleted handlers).
+# This gate converts silent runtime drift into a caught regression.
 #
 # Two drift surfaces checked:
-#   1. uv.lock pin — is the pinned omnimarket git SHA == omnimarket@main HEAD?
-#   2. live daemon venv — is the installed omnimarket commit_id == canonical?
+#   1. uv.lock pin — is the pinned omnimarket git SHA == expected dispatch SHA?
+#   2. live daemon venv — is the installed omnimarket commit_id == expected?
 #      (No-ops when no live venv is present — the expected CI state.)
 #
 # Hard-fail, no warn-only (CLAUDE.md Rule #5 enforcement-not-detection).
@@ -20,9 +20,9 @@
 # Or rebuild the live daemon venv:
 #   bash scripts/repair-plugin-venv.sh
 #
-# CI behaviour: OMNIMARKET_CANONICAL_SHA may be injected by the workflow.
-# Without it the script falls back to git ls-remote (requires network) or the
-# local canonical clone at $OMNI_HOME/omnimarket.
+# CI behaviour: OMNIMARKET_EXPECTED_SHA may be injected by the workflow. Without
+# it the script falls back to canonical-main resolution via git ls-remote
+# (requires network) or the local canonical clone at $OMNI_HOME/omnimarket.
 
 set -euo pipefail
 
