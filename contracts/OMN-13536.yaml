@@ -1,0 +1,78 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13536"
+title: "Omnimarket dispatch-venv drift guard — pre-commit + CI gate"
+summary: >-
+  Skills dispatch ONEX nodes from the installed omnimarket package in the plugin venv.
+  When the installed commit lags canonical omnimarket@main, skills silently execute stale
+  node bytes (old stubs, renamed/deleted handlers).  This was the root cause of
+  tech_debt_sweep dispatching the OMN-12212 NotImplementedError stub (installed 0.4.3 carried
+  the pre-implementation stub; canonical @main has the real handler), and pr_review_bot failing
+  with "Unknown node node_pr_review_orchestrator" off a stale 0.4.0 wheel (OMN-13531 fixed the
+  mapping name; this ticket adds the installed-bytes guard).  This PR adds
+  scripts/check_omnimarket_dispatch_drift.py, a pre-commit hook, and a standalone CI gate
+  (omnimarket-dispatch-drift-gate.yml) that compare the uv.lock-pinned omnimarket git SHA against
+  canonical omnimarket@main HEAD and fail on any divergence.  The gate is wired as enforcement
+  not detection (CLAUDE.md Rule #5): a stale git-tag pin (v0.4.x) is the target negative case.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-guard-script"
+    description: >-
+      scripts/check_omnimarket_dispatch_drift.py added with lock-consistency mode (always runs)
+      and live dispatch-venv mode (local only).  Parses uv.lock, extracts pinned omnimarket git SHA,
+      compares against canonical omnimarket@main HEAD resolved via ls-remote / env var / local clone.
+      Fails (exit 1) if pinned SHA != canonical; passes (exit 0) when in sync or no live venv.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          python3 scripts/check_omnimarket_dispatch_drift.py --print-pinned-sha
+  - id: "dod-pre-commit-hook"
+    description: >-
+      .pre-commit-hooks/check-omnimarket-dispatch-drift.sh wired in .pre-commit-config.yaml
+      (files: uv.lock, pyproject.toml) so the gate fires automatically when the lock or project
+      config changes.  pre-commit run --all-files exits 0.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "pre-commit run check-omnimarket-dispatch-drift --all-files"
+  - id: "dod-ci-gate"
+    description: >-
+      .github/workflows/omnimarket-dispatch-drift-gate.yml: standalone CI gate that checks out
+      canonical omnimarket@main, resolves HEAD SHA, injects OMNIMARKET_CANONICAL_SHA, and runs the
+      guard script.  Wired on push/PR to main + dev + hotfix/*.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "ls .github/workflows/omnimarket-dispatch-drift-gate.yml"
+  - id: "dod-negative-case"
+    description: >-
+      Deliberately-stale lock pin (v0.4.0, SHA 597fc11a) fails the guard.  Proven by
+      test_main_fails_with_stale_lock_pin — the test writes _LOCK_STALE with the real v0.4.0 SHA,
+      injects a non-matching canonical SHA, and asserts exit 1 + "stale"/"drift" in stderr.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/scripts/test_check_omnimarket_dispatch_drift.py::test_main_fails_with_stale_lock_pin -q
+  - id: "dod-tests"
+    description: >-
+      12 unit tests in tests/scripts/test_check_omnimarket_dispatch_drift.py covering SHA extraction,
+      lock-consistency, drift detection, negative case (stale tag), no-venv no-op, main() positive
+      + negative paths, and SPDX header.  All pass.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/scripts/test_check_omnimarket_dispatch_drift.py -q
