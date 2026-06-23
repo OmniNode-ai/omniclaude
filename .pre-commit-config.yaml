@@ -234,6 +234,21 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-9143: regression guard — the legacy `polymorphic-agent` dispatch
+      # target was retired in favour of `onex:`-prefixed subagents. Block its
+      # reintroduction anywhere in the omniclaude enforcement surface
+      # (plugins/onex/hooks/scripts, .../lib, hooks.json). Historical
+      # observability SQL and routing-fallback tests outside that surface are
+      # out of scope and intentionally not matched. Blocking — enforcement,
+      # not advisory (CLAUDE.md Rule #5).
+      - id: no-polymorphic-agent
+        name: Reject legacy polymorphic-agent dispatch target in enforcement paths (OMN-9143)
+        entry: plugins/onex/hooks/scripts/grep_guard_no_polymorphic_agent.sh --
+        language: script
+        files: '^plugins/onex/hooks/(scripts|lib)/.*|^plugins/onex/hooks/hooks\.json$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-13341 (R6, epic OMN-13325): reject worker prompts / receipts /
       # handoff & evidence docs that cite a local-clone path, ticket text, or a
       # statusCheckRollup verdict AS proof of state. Verify against origin/dev
