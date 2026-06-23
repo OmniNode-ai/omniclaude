@@ -148,6 +148,7 @@ def _resolve_expected_sha(
                     if len(sha) == 40:
                         return sha, f"git ls-remote {remote}"
     except (subprocess.TimeoutExpired, FileNotFoundError):
+        # Offline/local runs fall through to the configured local clone candidates.
         pass
 
     # Fallback: local canonical clone via OMNI_HOME or explicit OMNIMARKET_ROOT.

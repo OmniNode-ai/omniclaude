@@ -44,11 +44,11 @@ fi
 # *live daemon venv* check (LAN-grant requirement, Rule 11), but this script
 # itself only reads dist-info metadata — no network calls from the script side.
 if [[ -x "$REPO_ROOT/.venv/bin/python3" ]]; then
-    PYTHON="$REPO_ROOT/.venv/bin/python3"
+    PYTHON_CMD=("$REPO_ROOT/.venv/bin/python3")
 elif command -v uv >/dev/null 2>&1; then
-    PYTHON="uv run python"
+    PYTHON_CMD=(uv run python)
 else
-    PYTHON="python3"
+    PYTHON_CMD=(python3)
 fi
 
-exec $PYTHON "$SCRIPT" "$@"
+exec "${PYTHON_CMD[@]}" "$SCRIPT" "$@"
