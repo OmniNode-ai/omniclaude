@@ -2536,6 +2536,25 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: bash scripts/check-skill-monorepo-refs.sh
 
+  # Regression guard (OMN-9143): block reintroduction of the retired
+  # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
+  no-polymorphic-agent:
+    name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reject legacy polymorphic-agent dispatch target in enforcement paths
+        working-directory: ${{ github.workspace }}
+        run: bash plugins/onex/hooks/scripts/grep_guard_no_polymorphic_agent.sh
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -2601,6 +2620,8 @@ jobs:
       - agent-contract-validation
       # Skill monorepo-ref lint gate (OMN-8795 SD-08)
       - skill-monorepo-ref-gate
+      # Polymorphic-agent regression guard (OMN-9143)
+      - no-polymorphic-agent
     if: always()
     steps:
       - name: Check quality results
@@ -2644,7 +2665,8 @@ jobs:
             "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}" \
             "aislop-sweep=${{ needs.aislop-sweep.result }}" \
             "agent-contract-validation=${{ needs.agent-contract-validation.result }}" \
-            "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}"; do
+            "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}" \
+            "no-polymorphic-agent=${{ needs.no-polymorphic-agent.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
