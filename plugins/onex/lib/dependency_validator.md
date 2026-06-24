@@ -172,7 +172,7 @@ def validate_dependencies(
 
     Args:
         ticket_repo: Repository label for the ticket being created
-        blocked_by_ids: List of ticket identifiers (e.g., ["OMN-1234", "OMN-1235"])
+        blocked_by_ids: List of ticket identifiers (e.g., ["PROJ-1234", "PROJ-1235"])
         fetch_ticket_fn: Function to fetch ticket details: fn(id: str) -> dict
 
     Returns:
@@ -320,7 +320,7 @@ def validate_batch_dependencies(
     Note:
         For internal dependencies (P1 -> P2), both entries must be from same repo
         (which is typically true for a single plan), so no cross-repo violation.
-        External dependencies (OMN-1234) are validated against architecture rules.
+        External dependencies (e.g., PROJ-1234) are validated against architecture rules.
     """
     results = []
 
@@ -337,7 +337,7 @@ def validate_batch_dependencies(
             if dep.startswith('P') or dep.startswith('M'):
                 continue
 
-            # Validate external ticket refs (OMN-1234)
+            # Validate external ticket refs
             if dep.startswith('OMN-'):
                 entry_results = validate_dependencies(
                     ticket_repo=entry_repo,
@@ -458,7 +458,7 @@ When this flag is set:
 | omnibase_infra | omniclaude | `ERROR` | foundation cannot depend on app |
 | omniclaude | omnibase_core | (none) | Valid: app can depend on foundation |
 | omnibase_infra | omnibase_core | (none) | Valid: foundation can depend on foundation |
-| omniclaude | OMN-1234 (no label) | `WARNING` | Cannot determine repository |
+| omniclaude | PROJ-1234 (no label) | `WARNING` | Cannot determine repository |
 
 ### Example ValidationResult Objects
 
@@ -466,8 +466,8 @@ When this flag is set:
 # Architecture violation (ERROR)
 ValidationResult(
     severity=ValidationSeverity.ERROR,
-    message="omniclaude (application) cannot depend on OMN-1234 which is in omniintelligence (application). Application repos can only depend on foundation repos.",
-    blocker_id="OMN-1234",
+    message="omniclaude (application) cannot depend on PROJ-1234 which is in omniintelligence (application). Application repos can only depend on foundation repos.",
+    blocker_id="PROJ-1234",
     ticket_repo="omniclaude",
     blocker_repo="omniintelligence"
 )
@@ -475,8 +475,8 @@ ValidationResult(
 # Missing label (WARNING)
 ValidationResult(
     severity=ValidationSeverity.WARNING,
-    message="Cannot determine repository for OMN-5678. Add a repository label to validate architecture.",
-    blocker_id="OMN-5678",
+    message="Cannot determine repository for PROJ-5678. Add a repository label to validate architecture.",
+    blocker_id="PROJ-5678",
     ticket_repo="omniclaude",
     blocker_repo=None
 )

@@ -1,11 +1,10 @@
-# OMN-9353 Implementation Notes
+# Auto-Merge Workflow: Merge Method and Stacked PR Bases
 
-Linear: [OMN-9353](https://linear.app/omninode/issue/OMN-9353) — _Permanent fix:
-auto-merge workflow handles merge method and stacked PR bases._
+_Permanent fix: auto-merge workflow handles merge method and stacked PR bases._
 
-## Problem statement (verbatim from ticket)
+## Problem statement
 
-OMN-9348 (shipped 2026-04-20) changed `gh pr merge --auto --merge` ->
+An earlier pass (shipped 2026-04-20) changed `gh pr merge --auto --merge` ->
 `gh pr merge --auto --squash` in 10 repos' `.github/workflows/auto-merge.yml`.
 That fixed the immediate symptom (branches with `required_linear_history=true`
 rejected merge-commits from the queue) but not the root cause.
@@ -32,16 +31,16 @@ check.
 | omniclaude allow_merge_commit | `gh api repos/OmniNode-ai/omniclaude` | `false` |
 | omniclaude allow_squash_merge | `gh api repos/OmniNode-ai/omniclaude` | `true` |
 
-Conclusion: omniclaude is in the same regime as omnibase_infra was after
-OMN-9547 — squash-only queue, but `enablePullRequestAutoMerge` reads the repo
-default `merge_method` and may arm a PR as MERGE, which is silently dropped
-from a SQUASH-only queue. Naming `--squash` removes the ambiguity.
+Conclusion: omniclaude is in the same regime as omnibase_infra was after the
+squash-only queue fix — squash-only queue, but `enablePullRequestAutoMerge` reads
+the repo default `merge_method` and may arm a PR as MERGE, which is silently
+dropped from a SQUASH-only queue. Naming `--squash` removes the ambiguity.
 
 ## Diff summary
 
 `.github/workflows/auto-merge.yml`:
 
-1. Comment block updated to record OMN-9353.
+1. Comment block updated to record this fix.
 2. New stacked-PR detection block in the `Resolve PR and author` step:
    * Reads `baseRefName` for the PR and `defaultBranchRef.name` for the repo.
    * If the two differ, sets `skip=true` (with `pr` and `actor` populated for
@@ -51,7 +50,7 @@ from a SQUASH-only queue. Naming `--squash` removes the ambiguity.
 3. `gh pr merge` invocation changed from `--auto` to `--auto --squash`.
 
 The change matches the omnibase_infra implementation merged in PR #1402 / commit
-`75ad3db0` (OMN-9547).
+`75ad3db0`.
 
 ## Tests
 
@@ -62,7 +61,7 @@ The change matches the omnibase_infra implementation merged in PR #1402 / commit
 * `test_stacked_pr_short_circuit_for_non_jonah_actor` — stacked detection runs
   before the actor gate, so non-jonahgabriel stacked PRs also short-circuit.
 * `test_merge_command_passes_squash_flag` — guards against `--squash` being
-  removed (regression of OMN-9547 inside the omniclaude tree).
+  removed (regression of the squash-flag fix inside the omniclaude tree).
 * `test_resolve_step_compares_base_to_default_branch` — guards against the
   detection block being deleted.
 

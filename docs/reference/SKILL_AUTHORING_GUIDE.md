@@ -272,8 +272,6 @@ unbounded output patterns will fail CI.
 
 ## Receipt-Mode Pattern (Required for R-class dispatch skills)
 
-**Introduced**: OMN-13097 (migrated 24 shims) / OMN-13098 (CI ratchet gate)
-
 Skills that dispatch to omnimarket nodes must use the **onex skill receipt
 pattern** instead of inline dispatch shims. The CI ratchet gate (`skill-receipt-mode-gate`)
 enforces this pattern and will block merges on non-compliant new skills.
@@ -315,7 +313,7 @@ Thin dispatch stub. Execution logic lives in omnimarket `node_my_feature_orchest
 
 ## Notes
 
-- This skill uses receipt-mode dispatch (OMN-13097). Do not add inline execution steps.
+- This skill uses receipt-mode dispatch. Do not add inline execution steps.
 - See omnimarket `node_my_feature_orchestrator` for internals.
 ```
 

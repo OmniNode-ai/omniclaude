@@ -237,7 +237,7 @@ validation:
   validator_id: pydantic_conventions
   validator_name: Pydantic Conventions Validator
   validator_description: |
-    Enforces Pydantic model configuration standards established in OMN-1301.
+    Enforces Pydantic model configuration standards for the ONEX platform.
     Uses AST-based analysis to ensure models have explicit ConfigDict,
     proper frozen/from_attributes pairing, and follow field definition patterns.
 

@@ -1,11 +1,10 @@
-# Schema Changes - PR #63 (OMN-1605)
+# Schema Changes - PR #63
 
 ## Overview
 
 This PR introduces breaking changes to the **Handler Contract Schema** as part of the contract-driven handler registration system. This document helps migrate existing code that reads or writes handler contracts to the new schema.
 
 **PR**: #63 - Implement Contract-Driven Handler Registration Loader
-**Ticket**: OMN-1605
 **Date**: 2026-01-31
 **Impact**: Breaking changes to handler contract YAML structure
 
@@ -133,7 +132,7 @@ protocol: omniclaude.nodes.protocols.learned_pattern_storage.LearnedPatternStora
 handler_key: postgresql
 ```
 
-### After (New Schema - OMN-1605)
+### After (New Schema)
 
 ```yaml
 handler_id: effect.learned_pattern.storage.postgres
@@ -228,7 +227,7 @@ If you have many contract files to update, use this script:
 
 ```python
 #!/usr/bin/env python3
-"""Migrate handler contracts from old schema to new schema (OMN-1605)."""
+"""Migrate handler contracts from old schema to new schema."""
 
 import yaml
 from pathlib import Path

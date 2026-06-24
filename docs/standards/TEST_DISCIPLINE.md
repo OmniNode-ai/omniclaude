@@ -1,6 +1,6 @@
 # Test Discipline
 
-> Moved from `plugins/onex/skills/test_discipline/SKILL.md` in OMN-7492.
+> Moved from `plugins/onex/skills/test_discipline/SKILL.md` in an earlier refactor.
 
 ## Overview
 
