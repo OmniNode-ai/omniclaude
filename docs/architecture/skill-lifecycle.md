@@ -157,12 +157,12 @@ Reference: the April 2026 extraction plan and the skill decomposition design
 
 ## Migration Status (as of 2026-06-16)
 
-The extraction is ongoing under the OMN-8002 epic. Current state:
+The extraction is ongoing. Current state:
 
 - 142 node directories in `src/omniclaude/nodes/` are queued for migration to omnimarket
 - Skill shims (`node_skill_*`) are allowed as temporary wrappers — no custom handler code
-- The emit daemon extraction is complete (OMN-7628)
-- `TopicBase` enum extraction is complete (OMN-9335)
+- The emit daemon extraction is complete
+- `TopicBase` enum extraction is complete
 
 Do not add new handler logic to existing `src/omniclaude/nodes/` directories.
 All new node handlers go directly to omnimarket.

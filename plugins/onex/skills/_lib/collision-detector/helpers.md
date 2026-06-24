@@ -46,17 +46,17 @@ Two tickets collide if:
 
 ```python
 CollisionSet = {
-    "tickets": ["OMN-001", "OMN-002"],
+    "tickets": ["TICKET-001", "TICKET-002"],
     "reason": "Both touch src/omnibase_core/models/routing/",
     "severity": "exact_file | directory | migration | unknown"
 }
 
 DetectionResult = {
     "collision_sets": [CollisionSet, ...],    # groups that must serialize
-    "independent": ["OMN-003", "OMN-004"],    # safe to parallelize
-    "serialization_order": [                   # recommended execution order within collision sets
-        ["OMN-001", "OMN-002"],               # execute OMN-001, then OMN-002
-        ["OMN-003"]                            # independent
+    "independent": ["TICKET-003", "TICKET-004"],    # safe to parallelize
+    "serialization_order": [                         # recommended execution order within collision sets
+        ["TICKET-001", "TICKET-002"],               # execute TICKET-001, then TICKET-002
+        ["TICKET-003"]                               # independent
     ]
 }
 ```

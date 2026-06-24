@@ -5,6 +5,7 @@ version: 1.0.0
 level: basic
 debug: false
 category: debugging
+boundary_exempt: true
 tags:
   - debugging
   - root-cause-analysis
@@ -78,7 +79,7 @@ Bugs often manifest deep in the call stack (git init in wrong directory, file cr
 
 #### 1. Observe the Symptom
 ```
-Error: git init failed in /Users/jesse/project/packages/core  # local-path-ok: example error output in documentation
+Error: git init failed in <home>/project/packages/core
 ```
 
 #### 2. Find Immediate Cause

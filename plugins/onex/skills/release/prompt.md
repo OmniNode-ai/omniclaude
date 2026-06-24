@@ -973,7 +973,7 @@ else
   echo "  Waiting for CI checks to pass..."
   gh pr checks "${PR_NUMBER}" --repo "${GITHUB_REPO}" --watch --fail-fast
 
-  # Detect merge queue and enqueue via _lib/pr-safety/helpers.md (OMN-5465, OMN-5635).
+  # Detect merge queue and enqueue via _lib/pr-safety/helpers.md.
   # Repos with merge queues require enqueue_to_merge_queue() — `gh pr merge --auto`
   # does NOT enqueue into merge queues. The queue's configured merge strategy takes
   # effect automatically.
@@ -983,13 +983,13 @@ else
   # detection) live exclusively in helpers.md per CI enforcement rules.
 
   if has_merge_queue("${GITHUB_ORG}/${repo}"):
-    echo "  Merge queue detected — enqueuing via enqueue_to_merge_queue() (OMN-5635)"
+    echo "  Merge queue detected — enqueuing via enqueue_to_merge_queue()"
 
     # Call pr-safety helper for enqueue (GraphQL mutation in _lib/pr-safety/helpers.md)
     enqueue = enqueue_to_merge_queue("${GITHUB_ORG}/${repo}", ${PR_NUMBER})
 
     if enqueue["status"] == "unresolved_conversations":
-      echo "  ERROR: Unresolved review conversations block enqueue — resolve threads (OMN-5634) then retry"
+      echo "  ERROR: Unresolved review conversations block enqueue — resolve threads then retry"
       exit 1
     elif enqueue["status"] == "failed":
       echo "  ERROR: Failed to enqueue PR #${PR_NUMBER}: ${enqueue['error']}"
@@ -1030,18 +1030,18 @@ fi
 release commit that hasn't passed CI. The `--watch` flag on `gh pr checks` blocks
 until checks complete.
 
-**Merge queue support (OMN-5465, OMN-5635)**: When a repo has a merge queue enabled
+**Merge queue support**: When a repo has a merge queue enabled
 (detected via `has_merge_queue()` from `_lib/pr-safety/helpers.md`), the release
 skill enqueues the PR via `enqueue_to_merge_queue()` instead of `gh pr merge --auto`
 (which only enables auto-merge but does NOT enqueue into merge queues). It then polls
 the PR state every 30 seconds until the queue completes the merge (timeout: 30 minutes).
 If enqueue fails due to unresolved review conversations, it exits with an error
-directing the user to resolve threads (OMN-5634). Repos without merge queues use
+directing the user to resolve threads. Repos without merge queues use
 the original direct `--squash --delete-branch` path.
 
 **Cross-reference**: Both `merge-sweep` and `release` use the shared
 `has_merge_queue()` and `enqueue_to_merge_queue()` helpers from
-`_lib/pr-safety/helpers.md` (OMN-5463/OMN-5635). The GraphQL mutations live
+`_lib/pr-safety/helpers.md`. The GraphQL mutations live
 exclusively in helpers.md per CI enforcement rules.
 
 **State update**: Set phase to `MERGED`.

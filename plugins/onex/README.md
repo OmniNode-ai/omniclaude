@@ -543,10 +543,10 @@ backgrounded and do not block.
 User prompts are matched against agent activation patterns using a fuzzy
 scorer. The routing system returns a ranked candidate list; Claude selects
 from the list and loads the winning agent's YAML on demand (agent YAML
-loading is not on the synchronous hook path — see OMN-1980).
+loading is not on the synchronous hook path).
 
 Routing returns `None` on timeout (5s). With no-fallback
-mode enabled (OMN-2340), prompts that match no agent below a confidence
+mode enabled, prompts that match no agent below a confidence
 threshold are rejected rather than silently downgraded.
 
 See `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md` for architecture

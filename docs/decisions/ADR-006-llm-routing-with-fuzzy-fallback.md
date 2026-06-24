@@ -2,7 +2,7 @@
 
 **Date**: 2026-02-19
 **Status**: Accepted
-**Ticket**: OMN-2259, OMN-2265, PR #158, PR #160
+**PRs**: #158, #160
 
 ## Context
 

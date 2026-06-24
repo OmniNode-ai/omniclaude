@@ -39,11 +39,12 @@ outputs:
   - name: exhausted
     type: bool
     description: True if no eligible tech debt remains in Future
+boundary_exempt: true
 ---
 
 # refill-sprint Skill
 
-> **OMN-6870** -- Auto-pull tech debt tickets from Future when Active Sprint empties.
+Auto-pulls tech debt tickets from Future when Active Sprint empties.
 
 ## Overview
 

@@ -1,5 +1,5 @@
 ---
-description: Detect uncommitted files in canonical omni_home repo clones and auto-ship each dirty repo to a worktree + PR. Runs node_dirty_canonical_sweep in-process via its module entrypoint (omnimarket, OMN-7466).
+description: Detect uncommitted files in canonical omni_home repo clones and auto-ship each dirty repo to a worktree + PR. Runs node_dirty_canonical_sweep in-process via its module entrypoint (omnimarket).
 mode: full
 version: 1.0.0
 level: advanced
@@ -31,7 +31,7 @@ args:
     required: false
 ---
 
-<!-- in-process: runs node_dirty_canonical_sweep via its module entrypoint, not the bus. Fully implemented (OMN-7466); dead `onex run-node` dispatch removed (OMN-12637). -->
+<!-- in-process: runs node_dirty_canonical_sweep via its module entrypoint, not the bus. Dead `onex run-node` dispatch has been removed. -->
 
 # /onex:ship_dirty_canonical — Auto-ship dirty canonical repos
 
@@ -39,7 +39,6 @@ args:
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_dirty_canonical_sweep/`
-**Ticket**: OMN-7466
 
 ---
 
@@ -114,7 +113,7 @@ A non-zero exit means the handler raised; surface its error output directly and 
 
 ## Build-loop integration
 
-This skill is designed to be invoked by the 15-minute build-loop cron (OMN-7466).
+This skill is designed to be invoked by the 15-minute build-loop cron.
 Wire it as a CronCreate job to run every 15 minutes:
 
 ```

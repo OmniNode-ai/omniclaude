@@ -6,7 +6,7 @@ Every merge path (ticket-pipeline Phase 5.5, auto-merge direct invocation) MUST 
 these gates before invoking the merge mutation. There is no valid bypass that does not
 require an explicit operator Slack response.
 
-**Implements**: OMN-3189
+**Implements**: the CDQA gate protocol
 **Used by**: ticket-pipeline (Phase 5.5), auto-merge (pre-condition)
 
 ---
@@ -140,7 +140,7 @@ When any gate returns BLOCK:
      "cdqa-bypass {ticket_id} <justification> <follow_up_ticket_id>"
 
    Example:
-     "cdqa-bypass OMN-1234 Emergency hotfix for prod outage OMN-1235"
+     "cdqa-bypass <ticket_id> Emergency hotfix for prod outage <follow_up_ticket_id>"
 
    Silence = HOLD. No merge proceeds without explicit bypass or gate fix.
    ```
@@ -198,8 +198,7 @@ If no record: run all 3 gates before merge
 
 ## See Also
 
-- `contract-compliance-check` skill (OMN-2978) — Gate 1 implementation
+- `contract-compliance-check` skill — Gate 1 implementation
 - `ticket-pipeline` skill — Phase 5.5 orchestration
 - `auto-merge` skill — direct invocation pre-condition
 - `_lib/slack-gate/helpers.md` — Slack credential resolution and post_gate() used in bypass flow
-- OMN-3189 — implementation ticket

@@ -188,7 +188,7 @@ Intelligence Context:
 
 All scripts require:
 - PostgreSQL credentials in `.env` or environment variables
-- Network access to database (192.168.86.200:5436)
+- Network access to database (`<onex-host>`:5436)
 - Docker access (for checking Kafka and consumer containers)
 
 ## Environment Variables
@@ -198,11 +198,11 @@ All scripts require:
 POSTGRES_PASSWORD=your_password_here
 
 # Optional (with defaults)
-POSTGRES_HOST=192.168.86.200
+POSTGRES_HOST=<onex-host>
 POSTGRES_PORT=5436
 POSTGRES_USER=postgres
 POSTGRES_DB=omnibase_infra
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092
+KAFKA_BOOTSTRAP_SERVERS=<onex-host>:9092
 ```
 
 ## Common Workflows
@@ -275,7 +275,7 @@ echo $POSTGRES_PASSWORD
 docker ps | grep postgres
 
 # Test connection manually
-psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
+psql -h "${POSTGRES_HOST}" -p 5436 -U postgres -d omnibase_infra
 ```
 
 ### Kafka Consumer Not Processing Events

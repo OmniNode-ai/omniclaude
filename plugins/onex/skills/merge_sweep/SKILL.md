@@ -51,7 +51,7 @@ skill_kind: dispatch
 
 # /onex:merge_sweep — one command, one typed result
 
-**Skill ID**: `onex:merge_sweep` · **Command**: `uv run onex skill merge_sweep` (omnibase_infra) · **Backing node**: `node_pr_lifecycle_orchestrator` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:merge_sweep` · **Command**: `uv run onex skill merge_sweep` (omnibase_infra) · **Backing node**: `node_pr_lifecycle_orchestrator` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

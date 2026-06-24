@@ -13,7 +13,7 @@ Say: "I'm using the ticket-pipeline skill to run the autonomous per-ticket pipel
 
 Extract from `$ARGUMENTS`:
 
-- `ticket_id` (required) — Linear ticket ID (e.g., `OMN-1234`)
+- `ticket_id` (required) — Linear ticket ID (e.g., `PROJ-1234`)
 - `--skip-to <phase>` — Resume from phase (pre_flight|implement|local_review|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge|worktree_cleanup)
 - `--dry-run` — No commits, pushes, or PRs
 - `--skip-test-iterate` — Skip the test-fix loop

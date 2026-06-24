@@ -45,7 +45,7 @@ and portable workflow packages belong in [omnimarket](https://github.com/OmniNod
 | Concern | Canonical Owner |
 |---------|----------------|
 | Workflow business logic | [omnimarket](https://github.com/OmniNode-ai/omnimarket) |
-| Emit daemon runtime | omnimarket `node_emit_daemon` (OMN-7628 complete) |
+| Emit daemon runtime | omnimarket `node_emit_daemon` (migration complete) |
 | Intelligence / routing logic | [omniintelligence](https://github.com/OmniNode-ai/omniintelligence) |
 | ONEX runtime, node framework | [omnibase_core](https://github.com/OmniNode-ai/omnibase_core) |
 | Infrastructure adapters | [omnibase_infra](https://github.com/OmniNode-ai/omnibase_infra) |
@@ -158,10 +158,10 @@ belongs in an omnimarket node, not in this repo.
 
 > **Current state (verified against code on this refresh):** every hook
 > registration in `plugins/onex/hooks/hooks.json` is currently removed — the
-> `hooks` block is `{}` — for the OMN-13244 measurement baseline. The hook
+> `hooks` block is `{}` — for a hooks-off measurement baseline. The hook
 > shell scripts (`plugins/onex/hooks/scripts/`) and Python handler modules
 > (`plugins/onex/hooks/lib/`) remain on disk; re-enabling is a pure config
-> change (revert OMN-13244). The flow above describes the wired behavior when
+> change. The flow above describes the wired behavior when
 > hooks are registered.
 
 ---
@@ -194,7 +194,7 @@ uv run pytest tests/ -v
 # Unit only
 uv run pytest tests/ -m unit -v
 
-# Integration (requires Kafka on 192.168.86.201:19092)
+# Integration (requires Kafka on <onex-host>:19092)
 KAFKA_INTEGRATION_TESTS=1 uv run pytest -m integration
 
 # Coverage

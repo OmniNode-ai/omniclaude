@@ -1,6 +1,5 @@
 # Verification Doctrine
 
-> Retro enforcement R6 (OMN-13341), child of the ratchet-enforcement epic OMN-13325.
 > Source audit: `omni_home/docs/audits/2026-06-19-ratchet-enforcement-audit.md`.
 
 A claim about system state — "the node exists", "the check passed", "escalation
@@ -143,7 +142,6 @@ proof.
 ## References
 
 - Audit: `omni_home/docs/audits/2026-06-19-ratchet-enforcement-audit.md`
-- Epic: OMN-13325 (ratchet enforcement); ticket: OMN-13341 (R6)
 - CLAUDE.md Rule #3 (verify via `gh pr checks`, never agent self-reports)
 - CLAUDE.md Rule #5 (enforcement, not detection)
 - OmniNode deterministic-truth doctrine (`omni_home/docs/standards/OMNINODE_DETERMINISTIC_TRUTH_DOCTRINE.md`)

@@ -15,6 +15,7 @@ args:
   - name: --scope
     description: "Check scope: omnidash-only | all-repos (default: all-repos)"
     required: false
+boundary_exempt: true
 ---
 
 # Runtime Sweep
@@ -74,7 +75,7 @@ Classify container log health:
 - **ERROR_HEAVY**: >10% of lines are errors
 - **CRASH_LOOP**: container restarted in last 5 minutes
 
-### Phase 3c — Live Container Crash-Loop Detection [OMN-9122]
+### Phase 3c — Live Container Crash-Loop Detection
 
 For each `omninode-runtime*` container, run:
 
@@ -85,7 +86,7 @@ docker inspect --format='{{.RestartCount}}' "$CONTAINER_NAME"
 Threshold: `RestartCount > 5` → `CRASH_LOOP_CRITICAL` finding. Writes friction YAML to
 `$ONEX_STATE_DIR/friction/runtime_sweep_<timestamp>.yaml` and exits non-zero.
 
-### Phase 3d — Orchestrator Consumer Group Health [OMN-9122]
+### Phase 3d — Orchestrator Consumer Group Health
 
 Derive consumer groups from `event_bus.subscribe_topics` in contract YAMLs. For each group:
 

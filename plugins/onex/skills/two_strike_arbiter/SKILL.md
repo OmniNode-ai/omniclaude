@@ -14,7 +14,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --ticket-id
-    description: "Linear ticket identifier (e.g. OMN-1234)"
+    description: "Linear ticket identifier"
     required: true
   - name: --repo
     description: "Repository slug (optional)"
@@ -36,8 +36,6 @@ args:
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_two_strike_arbiter/`
-**Ticket**: OMN-9403
-
 ---
 
 ## Purpose
@@ -53,9 +51,9 @@ and (3) files a friction event. Implements the Two-Strike Diagnosis Protocol
 ## Usage
 
 ```
-/two-strike-arbiter --ticket-id OMN-1234
-/two-strike-arbiter --ticket-id OMN-1234 --repo OmniNode-ai/omniclaude --pr 567
-/two-strike-arbiter --ticket-id OMN-1234 --dry-run
+/two-strike-arbiter --ticket-id TICKET-ID
+/two-strike-arbiter --ticket-id TICKET-ID --repo OmniNode-ai/omniclaude --pr 567
+/two-strike-arbiter --ticket-id TICKET-ID --dry-run
 ```
 
 ---

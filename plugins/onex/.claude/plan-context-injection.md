@@ -1,4 +1,4 @@
-# Implementation Plan: OMN-1403 Context Injection for Session Enrichment
+# Implementation Plan: Context Injection for Session Enrichment
 
 ## Overview
 
@@ -29,7 +29,7 @@ UserPromptSubmit
 
 SessionEnd
     │
-    └── (Future OMN-1402: Update pattern persistence file)
+    └── (Future: Update pattern persistence file)
 ```
 
 ## Deliverables
@@ -41,13 +41,13 @@ SessionEnd
 Add new topics to `TopicBase` enum (after line 40):
 
 ```python
-# Context injection events (OMN-1403)
+# Context injection events
 CONTEXT_RETRIEVAL_REQUESTED = "omniclaude.context.retrieval.requested.v1"
 CONTEXT_RETRIEVAL_COMPLETED = "omniclaude.context.retrieval.completed.v1"
 CONTEXT_INJECTED = "omniclaude.context.injected.v1"
 ```
 
-**Rationale**: These topics enable observability of context injection and future integration with learning compute nodes (OMN-1402).
+**Rationale**: These topics enable observability of context injection and future integration with learning compute nodes.
 
 ---
 
@@ -305,7 +305,7 @@ After line 198 (after Agent YAML Loading, before "Handle no agent detected"):
 
 ```bash
 # -----------------------------
-# Learned Pattern Injection (OMN-1403)
+# Learned Pattern Injection
 # -----------------------------
 LEARNED_PATTERNS=""
 if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
@@ -497,8 +497,8 @@ class ContextInjectionConfig(BaseSettings):
 
 ## Out of Scope (Tracked Separately)
 
-- **MCP tool integration**: OMN-1559
-- **Pattern learning/writing**: OMN-1402 (Learning compute node)
+- **MCP tool integration**: tracked separately
+- **Pattern learning/writing**: Learning compute node (tracked separately)
 - **RAG-based pattern retrieval**: Future enhancement
 - **SessionStart preloading**: Future optimization
 

@@ -18,6 +18,7 @@ args:
   - name: --wait-timeout
     description: "Seconds to wait for health before giving up (default: 120)"
     required: false
+boundary_exempt: true
 ---
 
 # Start Environment
@@ -29,7 +30,7 @@ args:
 Never assume any service is running or stopped. The state of the environment is unknown at
 skill invocation time. Check it. Then act.
 
-### Health Check Strategy [OMN-7238]
+### Health Check Strategy
 
 Infrastructure may run **locally in Docker** or on a **remote host** (per `POSTGRES_HOST` in env).
 Always source `~/.omnibase/.env` first and use `POSTGRES_HOST` to determine where infra lives.

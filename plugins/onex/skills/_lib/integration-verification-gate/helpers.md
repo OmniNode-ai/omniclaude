@@ -6,7 +6,7 @@ Every integration verification path (ticket-pipeline Phase 5.75, epic-team post-
 check) MUST call these helpers to verify that Kafka nodes with changed contracts have passing
 golden-path fixtures.
 
-**Implements**: OMN-3341
+**Implements**: the integration verification gate protocol
 **Used by**: ticket-pipeline (Phase 5.75), epic-team (post-wave integration check)
 
 ---
@@ -293,7 +293,7 @@ When any node returns BLOCK:
      "integration-bypass {ticket_id} <justification> <follow_up_ticket_id>"
 
    Example:
-     "integration-bypass OMN-1234 Kafka unavailable in CI — fixture verified locally OMN-1235"
+     "integration-bypass <ticket_id> Kafka unavailable in CI — fixture verified locally <follow_up_ticket_id>"
 
    Silence = HOLD. No merge proceeds without explicit bypass or gate fix.
    ```
@@ -350,8 +350,7 @@ before declaring the wave complete.
 
 ## See Also
 
-- `golden-path-validate` skill (OMN-2976) — `run-golden-path` entrypoint
-- `ticket-pipeline` skill — Phase 5.75 orchestration (OMN-3344)
-- `epic-team` skill — post-wave gap cycle integration check (OMN-3345)
+- `golden-path-validate` skill — `run-golden-path` entrypoint
+- `ticket-pipeline` skill — Phase 5.75 orchestration
+- `epic-team` skill — post-wave gap cycle integration check
 - `_lib/cdqa-gate/helpers.md` — pattern reference for this module
-- OMN-3341 — implementation ticket

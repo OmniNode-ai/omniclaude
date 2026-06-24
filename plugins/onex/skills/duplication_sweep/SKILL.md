@@ -27,7 +27,7 @@ args:
 
 # /onex:duplication_sweep — one command, one typed result
 
-**Skill ID**: `onex:duplication_sweep` · **Command**: `uv run onex skill duplication_sweep` (omnibase_infra) · **Backing node**: `node_duplication_sweep` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:duplication_sweep` · **Command**: `uv run onex skill duplication_sweep` (omnibase_infra) · **Backing node**: `node_duplication_sweep` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

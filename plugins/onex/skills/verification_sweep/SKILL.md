@@ -17,13 +17,13 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --ticket
-    description: "Single ticket ID to verify (e.g., OMN-5400)"
+    description: "Single ticket ID to verify"
     required: false
   - name: --tickets
-    description: "Comma-separated ticket IDs to verify (e.g., OMN-5400,OMN-5401)"
+    description: "Comma-separated ticket IDs to verify"
     required: false
   - name: --epic
-    description: "Epic ID — discover and verify all child tickets (e.g., OMN-2000)"
+    description: "Epic ID — discover and verify all child tickets"
     required: false
   - name: --dry-run
     description: "Print verification results without writing receipts or creating Linear comments"
@@ -51,6 +51,7 @@ outputs:
     description: "Absolute path to the written verification receipt YAML (empty if --dry-run)"
   - name: status
     description: "pass | fail | partial | skip"
+boundary_exempt: true
 ---
 
 # Verification Sweep
@@ -58,8 +59,6 @@ outputs:
 **Skill ID**: `onex:verification_sweep`
 **Version**: 1.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-7254
-
 ---
 
 ## Purpose
@@ -86,11 +85,11 @@ to proceed.
 ## Usage
 
 ```
-/verification-sweep --ticket OMN-5400
-/verification-sweep --tickets OMN-5400,OMN-5401
-/verification-sweep --epic OMN-2000
-/verification-sweep --dry-run --epic OMN-2000
-/verification-sweep --ticket OMN-5400 --skip-dashboard
+/verification-sweep --ticket TICKET-ID
+/verification-sweep --tickets TICKET-ID,TICKET-ID-2
+/verification-sweep --epic EPIC-ID
+/verification-sweep --dry-run --epic EPIC-ID
+/verification-sweep --ticket TICKET-ID --skip-dashboard
 ```
 
 ---
@@ -193,7 +192,7 @@ Written to `.onex_state/verification-receipts/{ticket-id}.yaml`:
 
 ```yaml
 # Verification Receipt
-ticket_id: "OMN-5400"
+ticket_id: "TICKET-ID"
 sweep_timestamp: "2026-04-02T10:30:00Z"
 overall_status: pass  # pass | fail | partial
 phases:
@@ -234,7 +233,7 @@ idempotent: true  # Running again produces the same receipt if state unchanged
 Written to `.onex_state/verification-failures/{ticket-id}.yaml` when `overall_status != pass`:
 
 ```yaml
-ticket_id: "OMN-5400"
+ticket_id: "TICKET-ID"
 sweep_timestamp: "2026-04-02T10:30:00Z"
 overall_status: fail
 failure_summary: "Dashboard endpoint /api/platform/registry returned empty data"
@@ -285,7 +284,7 @@ Sweep time: {timestamp}
 - Dashboard: `/api/intelligence/patterns` — 15 records
 - Database: `pattern_learning_artifacts` — 42 rows
 
-Receipt: `.onex_state/verification-failures/{ticket-id}.yaml`
+Receipt: `.onex_state/verification-failures/TICKET-ID.yaml`
 ```
 
 ---
@@ -310,7 +309,7 @@ the most recent sweep run.
 
 ---
 
-## Pre-Merge Mode (`--pr`, OMN-7742)
+## Pre-Merge Mode (`--pr`)
 
 When invoked with `--pr owner/repo#number`, verification_sweep runs in **pre-merge mode**
 as the per-PR check driven by `merge_sweep --verify`. In this mode there is no ticket
@@ -364,7 +363,7 @@ set, a single GitHub PR comment is posted with:
 
 ## Integration Points
 
-- **merge-sweep** (`--verify`, OMN-7742): invokes verification-sweep in pre-merge mode
+- **merge-sweep** (`--verify`): invokes verification-sweep in pre-merge mode
   (`--pr ...`) after CI passes but before enabling auto-merge; consumes the 7-category
   status to decide whether the PR proceeds to auto-merge
 - **epic-team**: dispatches verification-sweep after all waves complete, before DoD gate
@@ -392,14 +391,14 @@ set, a single GitHub PR comment is posted with:
 VERIFICATION SWEEP — {ticket_ids}
 ====================================
 
-| Ticket   | Phase      | Check                      | Status     | Evidence                                |
-|----------|------------|----------------------------|------------|-----------------------------------------|
-| OMN-5400 | Dashboard  | /api/intelligence/patterns | PASS       | 15 pattern records                      |
-| OMN-5400 | Dashboard  | /api/platform/registry     | FAIL_EMPTY | Response body is '[]'                   |
-| OMN-5400 | Database   | pattern_learning_artifacts | PASS       | 42 rows, schema matches                 |
-| OMN-5400 | DoD        | rendered_output            | PASS       | Receipt exists, status=pass             |
+| Ticket    | Phase      | Check                      | Status     | Evidence                                |
+|-----------|------------|----------------------------|------------|-----------------------------------------|
+| TICKET-ID | Dashboard  | /api/intelligence/patterns | PASS       | 15 pattern records                      |
+| TICKET-ID | Dashboard  | /api/platform/registry     | FAIL_EMPTY | Response body is '[]'                   |
+| TICKET-ID | Database   | pattern_learning_artifacts | PASS       | 42 rows, schema matches                 |
+| TICKET-ID | DoD        | rendered_output            | PASS       | Receipt exists, status=pass             |
 
 Summary: 3 PASS, 1 FAIL, 0 SKIP (4 total)
 Overall: FAIL
-Receipt: .onex_state/verification-failures/OMN-5400.yaml
+Receipt: .onex_state/verification-failures/TICKET-ID.yaml
 ```

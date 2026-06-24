@@ -33,13 +33,12 @@ Each event is a frozen Pydantic model with correlation IDs, causation chains, an
    export OMNICLAUDE_PROJECT_ROOT=/Volumes/PRO-G40/Code/omniclaude3
    ```
 
-### Related Tickets (Full Cross-Repo Demo)
+### Related Components (Full Cross-Repo Demo)
 
 This demo covers the **omniclaude** slice. For the full investor demo spanning all repositories:
 
-- **OMN-1525** -- Parent ticket: Investor demo orchestration
-- **OMN-2081** -- omnibase_infra: Runtime contract routing verification
-- **OMN-2082** -- omnidash: Real-time dashboard visualization
+- omnibase_infra: Runtime contract routing verification
+- omnidash: Real-time dashboard visualization
 
 ---
 
@@ -303,7 +302,7 @@ Then start a new Claude Code session to restart the daemon.
    ```bash
    ls -la ~/.claude/plugins/cache/*/hooks/logs/hook-*.log
    ```
-3. Verify `KAFKA_ENVIRONMENT` is set (metadata label, not used for topic prefixing per OMN-1972):
+3. Verify `KAFKA_ENVIRONMENT` is set (metadata label, not used for topic prefixing):
    ```bash
    source .env && echo "$KAFKA_ENVIRONMENT"
    ```

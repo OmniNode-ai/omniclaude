@@ -1,11 +1,10 @@
 # PostToolUse `updatedToolOutput` Shape Probe — Empirical Resolution of F4
 
 **Date:** 2026-06-12
-**Ticket:** OMN-13090 (Phase 0a of epic OMN-13089 — Skill Output Suppression)
 **Plan:** `omni_home/docs/plans/2026-06-12-skill-output-suppression-plan.md` (Phase 0, items 1, 5, 6)
 **CLI version:** Claude Code `2.1.175` (`claude --version`, 2026-06-12)
 **Probe host:** macOS (darwin 24.3.0), live installed CLI, headless `claude -p` sessions
-**Probe location:** scratch project `$OMNI_HOME/omni_worktrees/OMN-13090/probe-scratch/` with throwaway `.claude/settings.json` hooks — NOT the omniclaude plugin
+**Probe location:** scratch project in a throwaway worktree with throwaway `.claude/settings.json` hooks — NOT the omniclaude plugin
 
 ## Verdicts (summary)
 
@@ -19,7 +18,7 @@
 
 **Design consequence:** Layer C (suppressor rewrite, Phase 3) uses PostToolUse
 `hookSpecificOutput.updatedToolOutput` with the **object form**. The PreToolUse
-`updatedInput` tee-rewrite fallback (F5) is NOT needed. The suppressor must remain
+`updatedInput` tee-rewrite fallback is NOT needed. The suppressor must remain
 the only `updatedToolOutput` emitter on the Bash matcher, and must be registered
 such that no later hook in the same matcher list can overwrite its replacement.
 
@@ -58,15 +57,15 @@ evidence, and prints exactly one JSON object to stdout.
 Hook stdout:
 
 ```json
-{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": "PROBE_REPLACED_STRING_FORM_OMN13090"}}
+{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": "PROBE_REPLACED_STRING_FORM_PROBE"}}
 ```
 
-Session `b00e4a65-c876-4768-baa6-1c6da9def8a9`. Command: `echo ORIGINAL_OUTPUT_OMN13090_STRINGRUN`.
+Session `b00e4a65-c876-4768-baa6-1c6da9def8a9`. Command: `echo ORIGINAL_OUTPUT_PROBE_STRINGRUN`.
 
 Transcript `tool_result` (what the model saw):
 
 ```json
-{"tool_use_id": "toolu_01MmaGb2QLMUpYwdztSSeFWc", "type": "tool_result", "content": "ORIGINAL_OUTPUT_OMN13090_STRINGRUN", "is_error": false}
+{"tool_use_id": "toolu_01MmaGb2QLMUpYwdztSSeFWc", "type": "tool_result", "content": "ORIGINAL_OUTPUT_PROBE_STRINGRUN", "is_error": false}
 ```
 
 The CLI explicitly schema-validates the field against the tool's output shape and
@@ -100,19 +99,19 @@ Two findings beyond F4 resolution:
 Hook stdout:
 
 ```json
-{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"stdout": "PROBE_REPLACED_OBJECT_FORM_OMN13090", "stderr": "", "interrupted": false, "isImage": false}}}
+{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"stdout": "PROBE_REPLACED_OBJECT_FORM_PROBE", "stderr": "", "interrupted": false, "isImage": false}}}
 ```
 
-Session `73a7636d-0d67-419c-9c03-d626aefb4c47`. Command: `echo ORIGINAL_OUTPUT_OMN13090_OBJECTRUN`.
+Session `73a7636d-0d67-419c-9c03-d626aefb4c47`. Command: `echo ORIGINAL_OUTPUT_PROBE_OBJECTRUN`.
 
 Transcript `tool_result` (what the model saw):
 
 ```json
-{"tool_use_id": "toolu_01Y5FvsLhEVgiKDNDnUxkjAn", "type": "tool_result", "content": "PROBE_REPLACED_OBJECT_FORM_OMN13090", "is_error": false}
+{"tool_use_id": "toolu_01Y5FvsLhEVgiKDNDnUxkjAn", "type": "tool_result", "content": "PROBE_REPLACED_OBJECT_FORM_PROBE", "is_error": false}
 ```
 
 Model self-report agreed: "The exact output from the Bash tool is:
-`PROBE_REPLACED_OBJECT_FORM_OMN13090`". The original string appears nowhere in the
+`PROBE_REPLACED_OBJECT_FORM_PROBE`". The original string appears nowhere in the
 model-visible result.
 
 The four-field object `{stdout, stderr, interrupted, isImage}` is sufficient.
@@ -123,13 +122,13 @@ replacement object.)
 ## Probe 3 — Hook ordering: LAST registered hook wins
 
 Two hooks on the same `Bash` matcher, both emitting object-form replacements with
-distinct markers (`PROBE_ORDER_FIRST_HOOK_OMN13090` / `PROBE_ORDER_SECOND_HOOK_OMN13090`).
+distinct markers (`PROBE_ORDER_FIRST_HOOK_PROBE` / `PROBE_ORDER_SECOND_HOOK_PROBE`).
 
 - Run A (first, second) — session `6f6ee8ca-8582-42b9-8571-484c7a6ed4d2`:
-  transcript `tool_result` content = `PROBE_ORDER_SECOND_HOOK_OMN13090`.
+  transcript `tool_result` content = `PROBE_ORDER_SECOND_HOOK_PROBE`.
 - Run B, reversed control (second, first) — session
   `9b1d3ee7-fdd1-44f5-8d20-a38e4fb1769d`: transcript `tool_result` content =
-  `PROBE_ORDER_FIRST_HOOK_OMN13090`.
+  `PROBE_ORDER_FIRST_HOOK_PROBE`.
 
 In both runs the hook listed LAST in the settings array won — the rule is
 positional (last-writer-wins), not name- or content-based. No merge behavior was
@@ -169,12 +168,12 @@ Hook input capture (full `tool_response` shape delivered to PostToolUse, from
 {
   "session_id": "b00e4a65-c876-4768-baa6-1c6da9def8a9",
   "transcript_path": ".../probe-scratch/b00e4a65-....jsonl",
-  "cwd": ".../OMN-13090/probe-scratch",
+  "cwd": ".../probe-scratch",
   "permission_mode": "default",
   "hook_event_name": "PostToolUse",
   "tool_name": "Bash",
-  "tool_input": {"command": "echo ORIGINAL_OUTPUT_OMN13090_STRINGRUN", "description": "Run the specified echo command"},
-  "tool_response": {"stdout": "ORIGINAL_OUTPUT_OMN13090_STRINGRUN", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false},
+  "tool_input": {"command": "echo ORIGINAL_OUTPUT_PROBE_STRINGRUN", "description": "Run the specified echo command"},
+  "tool_response": {"stdout": "ORIGINAL_OUTPUT_PROBE_STRINGRUN", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false},
   "tool_use_id": "toolu_01MmaGb2QLMUpYwdztSSeFWc",
   "duration_ms": 482
 }
@@ -184,15 +183,15 @@ Hook input capture (full `tool_response` shape delivered to PostToolUse, from
 
 Plan Open Question 5 ("probe alongside 0a if cheap"). Session
 `8435bbb5-df20-40e4-ac8b-6d40fc3ca6f8`. Command:
-`sh -c 'echo STDOUT_LINE_OMN13090; echo STDERR_LINE_OMN13090 >&2'`.
+`sh -c 'echo STDOUT_LINE_PROBE; echo STDERR_LINE_PROBE >&2'`.
 
 `tool_response` delivered to the hook:
 
 ```json
-{"stdout": "STDOUT_LINE_OMN13090\nSTDERR_LINE_OMN13090", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false}
+{"stdout": "STDOUT_LINE_PROBE\nSTDERR_LINE_PROBE", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false}
 ```
 
-Transcript `tool_result` content: `"STDOUT_LINE_OMN13090\nSTDERR_LINE_OMN13090"`.
+Transcript `tool_result` content: `"STDOUT_LINE_PROBE\nSTDERR_LINE_PROBE"`.
 
 The Bash tool merges stderr into the stdout stream before the PostToolUse hook
 sees it. **Consequence for Layer C threshold accounting:** size/pattern matching
@@ -227,7 +226,7 @@ failing against a newer installed CLI.
 
 | Artifact | Location |
 |----------|----------|
-| Scratch project + hook scripts + raw captures | `$OMNI_HOME/omni_worktrees/OMN-13090/probe-scratch/` (throwaway; key excerpts inlined above) |
+| Scratch project + hook scripts + raw captures | `$OMNI_HOME/omni_worktrees/probe-scratch/` (throwaway; key excerpts inlined above) |
 | String-form session transcript | `~/.claude/projects/-Users-...-probe-scratch/b00e4a65-c876-4768-baa6-1c6da9def8a9.jsonl` |
 | Object-form session transcript | `.../73a7636d-0d67-419c-9c03-d626aefb4c47.jsonl` |
 | Ordering run A / B transcripts | `.../6f6ee8ca-8582-42b9-8571-484c7a6ed4d2.jsonl` / `.../9b1d3ee7-fdd1-44f5-8d20-a38e4fb1769d.jsonl` |

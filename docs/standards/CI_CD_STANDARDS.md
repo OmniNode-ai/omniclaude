@@ -2,7 +2,7 @@
 
 ## Pipeline Overview
 
-Single consolidated workflow: `.github/workflows/ci.yml` (OMN-2228).
+Single consolidated workflow: `.github/workflows/ci.yml`.
 
 Replaces the previous `ci-cd.yml` + `enhanced-ci.yml` split. All jobs are defined in one
 file with three gate aggregators that branch protection references by name.
@@ -126,7 +126,7 @@ Branches not tied to Linear tickets: use `kebab-case-description`.
 ## Commit Format
 
 ```
-type(scope): description [OMN-XXXX]
+type(scope): description
 ```
 
 | Type | Usage |
@@ -139,9 +139,9 @@ type(scope): description [OMN-XXXX]
 
 Examples:
 ```
-feat(routing): add LLM fallback for unmatched prompts [OMN-2273]
-fix(hooks): handle malformed stdin JSON gracefully [OMN-2051]
-chore(ci): consolidate quality and enhanced CI workflows [OMN-2228]
+feat(routing): add LLM fallback for unmatched prompts
+fix(hooks): handle malformed stdin JSON gracefully
+chore(ci): consolidate quality and enhanced CI workflows
 ```
 
 Scope is optional but recommended. Use the component or subsystem being changed
@@ -187,7 +187,7 @@ uv run pytest tests/ -m "not integration" -v
 ## Migration Freeze
 
 When `.migration_freeze` exists at the repository root, `migration-freeze` job blocks any
-PR that adds new files under `migrations/`. This is active during DB-SPLIT operations (OMN-2055).
+PR that adds new files under `migrations/`. This is active during DB-SPLIT operations.
 
 To bypass for an approved migration: add the `db-split-bypass` label to the PR.
 

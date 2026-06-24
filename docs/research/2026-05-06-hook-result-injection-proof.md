@@ -1,8 +1,6 @@
-# Hook Result Injection Proof — OMN-10606
+# Hook Result Injection Proof
 
 **Date:** 2026-05-06
-**Ticket:** OMN-10606 — Task 1.2: Verify supported result-injection mechanism
-**Epic:** OMN-10604
 **Status:** Research complete — recommendation confirmed
 
 ---
@@ -16,8 +14,8 @@ to the model and how each mechanism behaves. The findings are derived from:
 2. Production hook scripts in `plugins/onex/hooks/scripts/` that demonstrate confirmed-working patterns
 3. The hook-bit inventory at `docs/hook-bit-inventory.md`
 
-The goal is to identify the correct injection surface for the delegation result-return path
-(OMN-10604): when a delegation sub-task completes, how does the result reach the calling model?
+The goal is to identify the correct injection surface for the delegation result-return path:
+when a delegation sub-task completes, how does the result reach the calling model?
 
 ---
 

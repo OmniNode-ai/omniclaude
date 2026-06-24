@@ -17,7 +17,7 @@ composable: true
 inputs:
   - name: ticket_id
     type: str
-    description: Linear ticket ID (e.g., OMN-1807)
+    description: Linear ticket ID (e.g., PROJ-1807)
     required: true
   - name: autonomous
     type: bool
@@ -34,7 +34,7 @@ outputs:
       - extra: "{pr_url, phase_reached, commits}"
 args:
   - name: ticket_id
-    description: Linear ticket ID (e.g., OMN-1807)
+    description: Linear ticket ID (e.g., PROJ-1807)
     required: true
   - name: --autonomous
     description: Skip human gates; proceed through all phases unattended
@@ -51,9 +51,9 @@ args:
 ## Usage
 
 ```
-/ticket-work OMN-1807
-/ticket-work OMN-1807 --autonomous
-/ticket-work OMN-1807 --skip-to implement
+/ticket-work PROJ-1807
+/ticket-work PROJ-1807 --autonomous
+/ticket-work PROJ-1807 --skip-to implement
 ```
 
 ## Execution
@@ -72,7 +72,7 @@ onex run-node node_ticket_work \
   --timeout 300
 ```
 
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Note: handler is a structural placeholder; full migration tracked in OMN-8004.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Note: handler is a structural placeholder; full migration is tracked separately.
 
 ### Step 3 — Execute ticket phases via tracker DI
 
@@ -132,5 +132,4 @@ SKILL.md   -> thin shell (this file)
 node       -> omnimarket/src/omnimarket/nodes/node_ticket_work/ (structural placeholder)
 contract   -> node_ticket_work/contract.yaml
 enrichment -> omnimarket/src/omnimarket/nodes/node_ticket_research_enrichment_compute/
-migration  -> OMN-8004 (full handler implementation)
 ```

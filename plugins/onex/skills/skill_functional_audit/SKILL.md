@@ -182,7 +182,7 @@ Skill(skill="onex:<skill_name>", args="--dry-run")
 
 **Timeout:** 120 seconds per skill. If skill times out or throws an unhandled error: verdict = **BROKEN**.
 
-**Note:** Skip invocation for skills known to require live infrastructure (Kafka, .201 runtime). Document these as `SKIP (infra-dep)` with the infrastructure dependency noted.
+**Note:** Skip invocation for skills known to require live infrastructure (Kafka, runtime host). Document these as `SKIP (infra-dep)` with the infrastructure dependency noted.
 
 ---
 
@@ -198,7 +198,7 @@ For each skill, produce a record:
   stub_detected: true
   stub_evidence: "handler_session_orchestrator.py:748 Phase 2 STUB, line 767 Phase 3 STUB"
   invocation_result: "SKIP (interactive)"
-  linear_ticket: "OMN-8367"
+  linear_ticket: null
   verdict: PARTIAL
   notes: "Phase 1 implemented. Phase 2 (RSD scoring) and Phase 3 (dispatch) are explicit stubs."
 ```
@@ -307,13 +307,12 @@ exists, remove the row.
 
 _None currently tracked._
 
-The three 2026-04-14 findings have all been resolved and removed from this table
-(OMN-13512):
+The three 2026-04-14 findings have all been resolved and removed from this table:
 
-- `onex:pipeline_fill` (was FACADE, OMN-8700 — **Done**; `node_pipeline_fill`
+- `onex:pipeline_fill` (was FACADE — **Done**; `node_pipeline_fill`
   now exists in omnimarket, so the facade is resolved).
-- `onex:session` (was PARTIAL, OMN-8699 — **Done**).
-- `onex:delegate` (was PARTIAL, OMN-8701 — **Done**; local-runtime fallback
+- `onex:session` (was PARTIAL — **Done**).
+- `onex:delegate` (was PARTIAL — **Done**; local-runtime fallback
   landed).
 
 Update this section when tickets are resolved or new findings are added.
@@ -343,4 +342,4 @@ The existing `skill-catalog-gap-sweep` (if it exists) should be updated to call 
 - **Audit report**: `docs/briefs/skill-functional-audit-2026-04-14.md`
 - **Process doc**: `docs/process/skill-audit-methodology.md`
 - **Prior gap**: `docs/briefs/skill-catalog-2026-04-14.md` (false-clean sweep)
-- **Tickets**: OMN-8367 (session Phase 2+3), filed 2026-04-14 (pipeline_fill, delegate)
+- **Tickets**: Filed 2026-04-14 for session Phase 2+3, pipeline_fill, and delegate (all resolved)

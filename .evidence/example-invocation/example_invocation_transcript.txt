@@ -1,4 +1,4 @@
-# Verification transcript for OMN-10539
+# Verification transcript for dod_verify invocation
 # Date: 2026-05-05
 # Ran the exact invocation documented in the corrected SKILL.md
 # against a real ticket contract on disk.
@@ -8,9 +8,9 @@ $ PAYLOAD=$(mktemp -t dod_verify_input.XXXXXX.json)
 $ cat > "$PAYLOAD" <<JSON
 {
   "correlation_id": "eb3ab1b2-8d59-4021-98ac-86897b9d0178",
-  "ticket_id": "OMN-6238",
+  "ticket_id": "PROJ-6238",
   "requested_at": "2026-05-05T18:37:39Z",
-  "contract_path": "<OMNI_HOME>/onex_change_control/contracts/OMN-6238.yaml",
+  "contract_path": "<OMNI_HOME>/onex_change_control/contracts/PROJ-6238.yaml",
   "dry_run": false
 }
 JSON
@@ -40,7 +40,7 @@ $ head -20 .onex_state/workflow_result.json
   },
   "handler_result": {
     "correlation_id": "eb3ab1b2-8d59-4021-98ac-86897b9d0178",
-    "ticket_id": "OMN-6238",
+    "ticket_id": "PROJ-6238",
     "status": "failed",
     "checks": [...]
   }

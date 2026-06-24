@@ -34,7 +34,7 @@ outputs:
 
 # /onex:delegate — single-command delegation
 
-**Skill ID**: `onex:delegate` · **Command**: `uv run onex delegate` (omnibase_infra) · **Backing node**: `node_delegate_skill_orchestrator` (omnimarket) · **Tickets**: OMN-10604, OMN-13096
+**Skill ID**: `onex:delegate` · **Command**: `uv run onex delegate` (omnibase_infra) · **Backing node**: `node_delegate_skill_orchestrator` (omnimarket)
 
 A dispatch skill IS one CLI call. The procedure lives in the `onex delegate`
 entrypoint — payload construction, node dispatch, and result extraction are all

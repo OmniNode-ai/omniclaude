@@ -279,7 +279,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
   - ✅ `agents/tests/test_provider_selection_publisher.py` - Comprehensive test suite (16 tests)
   - ✅ `docs/events/PROVIDER_SELECTION_INTEGRATION.md` - Integration guide
   - ✅ `agents/lib/partition_key_policy.py` - Added AGENT_PROVIDER event family
-  - ✅ Linear ticket OMN-32 completed
+  - ✅ Linear ticket completed
 
 ### Task 1.7: Add `omninode.agent.confidence.scored.v1` ⏳
 - **Status**: Not Started

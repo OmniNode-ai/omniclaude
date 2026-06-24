@@ -1,6 +1,5 @@
 # Hook Measurement & Tiered Reintroduction Plan
 
-> **Ticket:** OMN-13278 (successor to OMN-13244 baseline).
 > **Status:** DESIGN-FIRST — gated on user review. This document and the
 > measurement harness ship together; **no hooks are re-enabled here**.
 > **Date:** 2026-06-18.
@@ -9,13 +8,13 @@
 
 ## 1. Context: why hooks are off right now
 
-OMN-13244 removed **every** hook registration from
+An earlier cleanup pass removed **every** hook registration from
 `plugins/onex/hooks/hooks.json` (`hooks: {}`) and synced the live plugin cache,
 so Claude Code currently invokes **zero** onex hooks. That was deliberate: it
 establishes a clean, no-instrumentation measurement baseline "until we get
 processes up and running to measure whether the hooks actually help or hurt."
 
-The audit that motivated OMN-13244 found:
+The audit that motivated the removal found:
 
 - ~50 hook registrations across 11 lifecycle events backed by ~93 scripts.
 - The per-turn `UserPromptSubmit` chain injected **~250–300 tokens/message**
@@ -26,14 +25,14 @@ The audit that motivated OMN-13244 found:
 This plan is the other half of that work: **stand up the measurement, then
 re-introduce hooks deliberately, tier by tier, keyed to measured impact.**
 
-### 1.1 Why removal, not the kill-switch (OMN-9140 / OMNICLAUDE_HOOKS_DISABLE)
+### 1.1 Why removal, not the kill-switch
 
-OMN-9140 shipped a global kill-switch — `OMNICLAUDE_HOOKS_DISABLE=1` or the file
+An earlier pass shipped a global kill-switch — `OMNICLAUDE_HOOKS_DISABLE=1` or the file
 marker `~/.claude/omniclaude-hooks-disabled` — that short-circuits a hook to
-`exit 0` *before* any threshold logic. It also added `ONEX_HOOKS_MASK`
-(OMN-9612/9617) for per-hook bit-gating.
+`exit 0` *before* any threshold logic. A separate pass added `ONEX_HOOKS_MASK`
+for per-hook bit-gating.
 
-So why did OMN-13244 gut `hooks.json` instead of just setting the kill-switch?
+So why did the cleanup gut `hooks.json` instead of just setting the kill-switch?
 
 1. **Incomplete coverage.** The kill-switch was only wired into **19/87**
    scripts. A hook that does not read the switch keeps running regardless.
@@ -57,14 +56,14 @@ being the only reliable kill path.
 
 ### 2.1 What it measures
 
-The harness compares two windows — **hooks-off** (the OMN-13244 baseline) and
+The harness compares two windows — **hooks-off** (the removal baseline) and
 **hooks-on** (any window after registrations are restored) — across the three
 axes called out in the ticket:
 
 | Axis | Surface read | Metric |
 |------|--------------|--------|
-| **Tokens / turn** | `cost_records` SQLite (`$ONEX_STATE_DIR/hooks/cost_accounting.db`, OMN-10619) | `mean_tokens_per_turn` (total tokens ÷ distinct sessions), plus on/off delta and ratio |
-| **Latency / tool-call** | PRM trajectory store (`$ONEX_STATE_DIR/hooks/logs/post-tool-use-trajectory.jsonl`, OMN-10370) | `mean_latency_ms` per window, reconstructed as inter-call wall-clock gaps |
+| **Tokens / turn** | `cost_records` SQLite (`$ONEX_STATE_DIR/hooks/cost_accounting.db`) | `mean_tokens_per_turn` (total tokens ÷ distinct sessions), plus on/off delta and ratio |
+| **Latency / tool-call** | PRM trajectory store (`$ONEX_STATE_DIR/hooks/logs/post-tool-use-trajectory.jsonl`) | `mean_latency_ms` per window, reconstructed as inter-call wall-clock gaps |
 | **Outcome impact** | `cost_records.is_delegated` + trajectory escalation evidence | `delegated_call_count` / `delegated_fraction` per window (proxy for "did the gates/injectors change behavior") |
 
 It uses **existing telemetry/event surfaces only** — no bespoke REST endpoint,
@@ -113,8 +112,7 @@ calls, latency delta) or a JSON dump of `ModelHookComparison`.
 > **Measurement hygiene.** For a fair comparison, capture comparable workloads
 > in each window (same kinds of tickets / sessions). The `--boundary` split is
 > the simplest credible design given a single on-disk DB; if a richer A/B
-> design is wanted later, the prior art is OMN-2019 (A/B baseline), OMN-7845
-> (disable context-injection baseline), and OMN-7490/7484 (baselines emitter).
+> design is wanted later, prior A/B baseline work established the methodology.
 
 ---
 
@@ -133,7 +131,7 @@ so removal-from-`hooks.json` stops being the only reliable kill path:
 - Wire `OMNICLAUDE_HOOKS_DISABLE` (and the `~/.claude/omniclaude-hooks-disabled`
   marker) into **every** GATE/INFRA script, not 19/87.
 - Confirm every re-registered hook reads its `ONEX_HOOKS_MASK` bit (per the
-  OMN-9610 inventory) and exits 0 when cleared.
+  bit-governance inventory) and exits 0 when cleared.
 - Add a CI gate that fails if a registered hook script lacks the kill-switch
   short-circuit (enforcement, not detection — per platform doctrine).
 
@@ -169,7 +167,7 @@ consumes do **not** return.
 ### Tier 3 — Per-turn UserPromptSubmit injectors (return last, must justify)
 
 The agent-routing block + blanket delegation rule — the ~250–300 tokens/turn
-tax. This is the most expensive surface and the one that drove OMN-13244.
+tax. This is the most expensive surface and the one that drove the original removal.
 
 **Measurement gate (highest bar):** an injector returns only if it shows a
 **measured outcome benefit** that justifies its per-turn token cost — e.g. a
@@ -193,10 +191,10 @@ Three layers, in priority order (from `omniclaude/CLAUDE.md`):
    global emergency kill, short-circuits every hook before any logic. After
    Tier 0 this is complete coverage; today it is not (19/87), which is the gap
    Tier 0 closes.
-2. **`ONEX_HOOKS_MASK`** — per-hook bit-gate (append-only ordinals, OMN-9610
-   inventory). Used for targeted disable of a single misbehaving hook via
+2. **`ONEX_HOOKS_MASK`** — per-hook bit-gate (append-only ordinals, see the
+   bit-governance inventory). Used for targeted disable of a single misbehaving hook via
    `onex hooks disable <NAME>`.
-3. **`hooks.json` removal + cache re-sync** — the OMN-13244 mechanism. The most
+3. **`hooks.json` removal + cache re-sync** — the removal mechanism. The most
    reliable off switch while (1) is incomplete, and the rollback of last resort:
    `git revert` the tier's PR and re-sync the plugin cache. All scripts remain
    on disk, so re-registration is a pure config change.
@@ -213,5 +211,4 @@ regressing hook can also be silenced in-session via the mask without a revert.
 - Re-enabling any hook in `hooks.json` (design + harness only).
 - Touching the hook scripts themselves.
 - `repowise-augment` in `~/.claude/settings.json` (separate from this plugin;
-  intentionally left active by OMN-13244).
-```
+  intentionally left active by the baseline removal pass).

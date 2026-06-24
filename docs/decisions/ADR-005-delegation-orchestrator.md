@@ -2,7 +2,7 @@
 
 **Date**: 2026-02-19
 **Status**: Accepted
-**Ticket**: OMN-2281, PR #177
+**PR**: #177
 
 ## Context
 

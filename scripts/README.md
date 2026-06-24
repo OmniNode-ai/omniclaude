@@ -224,7 +224,7 @@ ls -la .env
 source .env
 
 # 3. Test manual connection
-psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
+psql -h "${POSTGRES_HOST}" -p 5436 -U postgres -d omnibase_infra
 ```
 
 ### "Missing tables" errors
@@ -234,7 +234,7 @@ psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
 source .env && echo $POSTGRES_DATABASE
 
 # 2. List actual tables
-psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra -c "\dt"
+psql -h "${POSTGRES_HOST}" -p 5436 -U postgres -d omnibase_infra -c "\dt"
 
 # 3. Run schema migrations if needed
 # (see database migration documentation)
@@ -321,7 +321,7 @@ All scripts require:
 - `.env` file in project root
 - `bash` version ≥4.0
 - `psql` PostgreSQL client
-- Network access to 192.168.86.200 (for database/Kafka)
+- Network access to `<onex-host>` (for database/Kafka)
 
 Optional tools:
 - `docker` CLI (for service management)

@@ -1,5 +1,5 @@
 ---
-description: Unified contract health skill — drift mode (static cross-repo drift detection) and runtime mode (live compliance verification); replaces contract_verify (OMN-8073)
+description: Unified contract health skill — drift mode (static cross-repo drift detection) and runtime mode (live compliance verification); supersedes the earlier contract_verify skill
 version: 3.0.0
 mode: full
 level: advanced
@@ -35,7 +35,7 @@ args:
     description: "Print findings only, no ticket creation"
     required: false
   - name: --severity-threshold
-    description: "Min severity for tickets: BREAKING | ADDITIVE | NON_BREAKING (default: BREAKING). Applies to drift mode only."
+    description: "Ticket severity floor: BREAKING | ADDITIVE | NON_BREAKING (default: BREAKING). Applies to drift mode only."
     required: false
   - name: --sensitivity
     description: "Drift sensitivity: STRICT | STANDARD | LAX (default: STANDARD). Applies to drift mode only."
@@ -105,13 +105,13 @@ This mode combines two detection sub-modes:
 
 - `--repos` → comma-separated repo names (default: all 8)
 - `--dry-run` → findings only, no ticket creation
-- `--severity-threshold` → minimum severity for ticket creation (default: BREAKING)
+- `--severity-threshold` → minimum ticket-creation severity (default: BREAKING)
 - `--sensitivity` → STRICT | STANDARD | LAX (default: STANDARD)
 - `--check-boundaries` → validate Kafka boundary YAML parity (default: true)
 
 ### Step 2 — Run contract drift check
 
-For each repo, run the `check_contract_drift.py` script from `onex_change_control`:
+Run the `check_contract_drift.py` script from `onex_change_control` once per repo:
 
 ```bash
 cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok: example command in documentation
@@ -160,7 +160,7 @@ When `--check-boundaries` is enabled (default), the skill also validates:
 | **Undeclared boundary** | Major | Create if threshold <= ADDITIVE |
 
 Ticket dedup: keyed by `(repo, contract_path, drift_type)`. Before creating, search Linear
-for an open ticket matching the same key. If found, update or comment. If prior ticket is
+using the same key. If found, update or comment. If prior ticket is
 closed but same drift recurs, create new ticket referencing the prior closure.
 
 ### Drift Mode Output
@@ -303,7 +303,3 @@ The skill wraps:
 - `contract-compliance-check` skill -- Pre-merge seam validation (per-ticket, per-branch)
 - `NodeContractDriftCompute` in `onex_change_control` -- The underlying ONEX node
 - `kafka_boundaries.yaml` -- Cross-repo Kafka boundary manifest
-- OMN-5162 -- Original check-drift script
-- OMN-6725 -- contract-sweep drift tracking ticket
-- OMN-7040 -- contract-verify original ticket (merged into contract-sweep via OMN-8073)
-- OMN-8073 -- Merge contract_verify into contract_sweep

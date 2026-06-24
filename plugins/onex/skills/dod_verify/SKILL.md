@@ -30,7 +30,7 @@ skill_kind: dispatch
 
 # /onex:dod_verify — one command, one typed result
 
-**Skill ID**: `onex:dod_verify` · **Command**: `uv run onex skill dod_verify` (omnibase_infra) · **Backing node**: `node_dod_verify` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:dod_verify` · **Command**: `uv run onex skill dod_verify` (omnibase_infra) · **Backing node**: `node_dod_verify` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

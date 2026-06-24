@@ -1,12 +1,9 @@
 # Small-Batch, Evidence-Backed Draft Promotion
 
 **Created:** 2026-06-01
-**Ticket:** OMN-12571 (parent OMN-12504 — merge queue recovery)
 **Source plan:** `omni_home/docs/plans/2026-06-01-infra-ci-durability-plan.md` (Task 5.1)
 **Source design:** `omni_home/docs/tracking/2026-06-01-infra-durable-issues.md` (Issue #8)
 **Runbook context:** `omni_home/docs/runbooks/codex-nightly-controller.md` (§8 Merge Queue Driver)
-**Ledger interface:** OMN-12569 — durable, reconstructable PR ledger (Task 4.1)
-**OCC evidence:** `onex_change_control` PR #2044 (contract + receipts), merged as commit `35bd864ae5c55b37c558e1eb3151d8bd6c81f29b`
 
 ---
 
@@ -38,7 +35,7 @@ and is covered by
 2. **Small batches only.** Promote at most `batch_size` eligible drafts per
    pass. The default is `DEFAULT_PROMOTION_BATCH_SIZE = 3`.
 3. **Batch size is configurable and evidence-backed.** Raising the batch size
-   above the default requires an `evidence_ref` (an OMN-12569 ledger run id or a
+   above the default requires an `evidence_ref` (a ledger run id or a
    Linear ticket) on `ModelPromotionPolicy`. A non-default batch size with no
    evidence reference is rejected by validation. The limit is *not* hardcoded in
    branching logic — future queue behavior may justify a different value.
@@ -48,7 +45,7 @@ and is covered by
    (`whole_backlog_blocked` is set). A backlog of exactly one draft is not
    treated as "the whole backlog."
 5. **Every promotion produces a ledger record.** For each promoted PR, build a
-   `ModelDraftPromotionRecord` carrying the OMN-12569 provenance fields:
+   `ModelDraftPromotionRecord` carrying provenance fields:
    - head SHA,
    - local verification evidence (command + outcome),
    - branch-check status,
@@ -56,8 +53,8 @@ and is covered by
    - worktree cleanup status,
    - the ledger run id it is attributed to.
 
-   These records are a **derived projection** fed into the durable PR ledger
-   (OMN-12569). They are not authoritative truth on their own — authoritative
+   These records are a **derived projection** fed into the durable PR ledger.
+   They are not authoritative truth on their own — authoritative
    truth remains GitHub state plus durable orchestrator receipts.
 
 ---
@@ -76,14 +73,14 @@ and is covered by
 3. **Select the batch.** Call `select_promotion_batch(candidates, policy)`.
    - Default policy: `ModelPromotionPolicy()` (batch size 3).
    - To use a different batch size, cite evidence:
-     `ModelPromotionPolicy(batch_size=N, evidence_ref="OMN-12569 ledger run-...")`.
+     `ModelPromotionPolicy(batch_size=N, evidence_ref="ledger run-...")`.
 4. **Promote the selected PRs** by marking each ready and arming auto-merge per
    the queue policy in `codex-nightly-controller.md` §8 (bare `--auto` on the
    squash-only infra queue; never `--merge` / `--rebase`).
 5. **Record provenance.** For each promoted and each deferred PR, call
-   `build_promotion_record(...)` and persist the record into the OMN-12569
-   ledger run. Do **not** duplicate the ledger here — this module supplies the
-   record shape; the orchestrator owns the durable ledger.
+   `build_promotion_record(...)` and persist the record into the ledger run. Do
+   **not** duplicate the ledger here — this module supplies the record shape;
+   the orchestrator owns the durable ledger.
 6. **Repeat** in subsequent passes for the deferred remainder, never widening to
    the whole backlog.
 

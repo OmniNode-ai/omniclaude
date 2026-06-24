@@ -19,7 +19,7 @@ tags:
 author: OmniClaude Team
 args:
   - name: ticket_id
-    description: Linear ticket ID (e.g., OMN-1804)
+    description: Linear ticket ID (e.g., PROJ-1804)
     required: true
   - name: --skip-to
     description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge|worktree_cleanup)
@@ -40,7 +40,7 @@ args:
 
 # Ticket Pipeline
 
-## Tools Required (OMN-8708)
+## Tools Required
 
 Workers running `ticket-pipeline` run in fresh sessions where dispatch tools are **deferred**.
 If a `ticket-pipeline` worker needs to spawn sub-agents (e.g. a verifier agent), it must
@@ -58,12 +58,12 @@ from headless or cron contexts must include it explicitly.
 ## Usage
 
 ```
-/ticket-pipeline OMN-1234
-/ticket-pipeline OMN-1234 --dry-run
-/ticket-pipeline OMN-1234 --skip-to ci_watch
-/ticket-pipeline OMN-1234 --skip-test-iterate
-/ticket-pipeline OMN-1234 --require-gate
-/ticket-pipeline OMN-1234 --docs-only
+/ticket-pipeline PROJ-1234
+/ticket-pipeline PROJ-1234 --dry-run
+/ticket-pipeline PROJ-1234 --skip-to ci_watch
+/ticket-pipeline PROJ-1234 --skip-test-iterate
+/ticket-pipeline PROJ-1234 --require-gate
+/ticket-pipeline PROJ-1234 --docs-only
 ```
 
 ## Execution

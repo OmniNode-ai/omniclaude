@@ -25,7 +25,8 @@ inputs:
 outputs:
   - name: epics_created
     type: list[str]
-    description: List of created epic IDs (OMN-XXXX)
+    description: List of created epic IDs
+boundary_exempt: true
 ---
 
 # Ticketing Epic Organization
@@ -132,7 +133,7 @@ individual epic creation. Never auto-create a single-ticket epic.
 ### Phase 3: Classify Auto-Create vs Human Gate vs Structural Violation
 
 Each proposed group is run through the structural guards in
-`omniclaude.epic_org.guards` (canonical implementation, OMN-10544). The guard
+`omniclaude.epic_org.guards` (canonical implementation). The guard
 returns one of three verdicts:
 
 ```
@@ -192,8 +193,8 @@ Epic Organization Proposal
 STRUCTURAL VIOLATIONS (refused — no action taken):
 
 ⛔ EPIC  (10 tickets — all members are themselves epics)
-   OMN-10482, OMN-8286, OMN-5083, OMN-9469, OMN-2223, OMN-3823,
-   OMN-3827, OMN-8771, OMN-9801, OMN-5257
+   ticket-A, ticket-B, ticket-C, ticket-D, ticket-E, ticket-F,
+   ticket-G, ticket-H, ticket-I, ticket-J
    → Reason: cannot create a parent over existing epics.
    → Action: leave as top-level epics; group manually if a meta-initiative
      is genuinely needed.
@@ -201,27 +202,27 @@ STRUCTURAL VIOLATIONS (refused — no action taken):
 AUTO-CREATE (obvious groupings):
 
 📦 [omniclaude] DB-SPLIT  (3 tickets)
-   OMN-2068 — DB-SPLIT-03: FK scan
-   OMN-2069 — DB-SPLIT-04: Migration validation
-   OMN-2070 — DB-SPLIT-05: Cross-service FK removal
+   ticket-X — DB-SPLIT-03: FK scan
+   ticket-Y — DB-SPLIT-04: Migration validation
+   ticket-Z — DB-SPLIT-05: Cross-service FK removal
    → Proposed epic: "[omniclaude] DB-SPLIT — Database Split"
 
 📦 [omnibase_core] CLI-REG  (2 tickets)
-   OMN-407  — Create YAML schemas for agent definitions
-   OMN-2536 — Define cli.contribution.v1 contract schema
+   ticket-P — Create YAML schemas for agent definitions
+   ticket-Q — Define cli.contribution.v1 contract schema
    → Proposed epic: "[omnibase_core] CLI Registry"
 
 NEEDS HUMAN INPUT (ambiguous groupings):
 
 ❓ ambiguous  (13 tickets) — secondary clustering pass surfaced 3 sub-cohorts:
-   • OmniStudio Phase (4 tickets, pattern=phase): OMN-9908, OMN-9909, OMN-9910, OMN-9911
-   • SEAM (4 tickets, pattern=prefix-nn): OMN-10170, OMN-10172, OMN-10174, OMN-10176
-   • Cross-CLI (3 tickets, pattern=multi-word-prefix): OMN-10135, OMN-10152, OMN-10179
+   • OmniStudio Phase (4 tickets, pattern=phase): ticket-A1, ticket-A2, ticket-A3, ticket-A4
+   • SEAM (4 tickets, pattern=prefix-nn): ticket-B1, ticket-B2, ticket-B3, ticket-B4
+   • Cross-CLI (3 tickets, pattern=multi-word-prefix): ticket-C1, ticket-C2, ticket-C3
    → Each sub-cohort proposed as a separate group; not auto-applied.
 
 ❓ 2 cross-repo tickets
-   OMN-2166 (omninode_infra), OMN-2167 (onex_change_control)
-   → Suggest: add to existing OMN-2009 CLAUDE.md Consolidation epic?
+   ticket-M (omninode_infra), ticket-N (onex_change_control)
+   → Suggest: add to existing CLAUDE.md Consolidation epic?
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Proceed? [y/n/edit]
@@ -234,21 +235,21 @@ The on-disk EpicOrgReport YAML must include the corresponding sections:
 structural_violations:
   - group: "EPIC"
     count: 10
-    tickets: ["OMN-10482", "OMN-8286", ...]
-    reason: "All 10 members are themselves epics. Refused per OMN-10544 guard."
+    tickets: ["ticket-A", "ticket-B", ...]
+    reason: "All 10 members are themselves epics. Refused per structural guard."
 proposed_epic_groups:
   - group: "ambiguous"
     count: 13
     sub_cohorts:
       - cohort_key: "OmniStudio Phase"
         pattern: "phase"
-        members: ["OMN-9908", "OMN-9909", "OMN-9910", "OMN-9911"]
+        members: ["ticket-A1", "ticket-A2", "ticket-A3", "ticket-A4"]
       - cohort_key: "SEAM"
         pattern: "prefix-nn"
-        members: ["OMN-10170", "OMN-10172", "OMN-10174", "OMN-10176"]
+        members: ["ticket-B1", "ticket-B2", "ticket-B3", "ticket-B4"]
       - cohort_key: "Cross-CLI"
         pattern: "multi-word-prefix"
-        members: ["OMN-10135", "OMN-10152", "OMN-10179"]
+        members: ["ticket-C1", "ticket-C2", "ticket-C3"]
 ```
 
 **If user says `y`:** proceed with auto-create only; leave ambiguous for next step.
@@ -257,9 +258,9 @@ proposed_epic_groups:
 
 For each ambiguous group, ask:
 ```
-Group: 4 omniintelligence tickets [OMN-1452, OMN-1578, OMN-1583, OMN-1584]
+Group: 4 omniintelligence tickets [ticket-E1, ticket-E2, ticket-E3, ticket-E4]
 Options:
-  a) Add to existing epic OMN-2353 (Review-Fix Pairing)
+  a) Add to existing Review-Fix Pairing epic
   b) Create new epic
   c) Leave unparented (skip)
 

@@ -27,6 +27,7 @@ args:
     description: "Preview changes without writing. Only used with --sync."
     required: false
 mode: full
+boundary_exempt: true
 ---
 
 # Ticket Plan
@@ -293,14 +294,14 @@ Ticket Plan Sync -- DRY RUN (patch mode)
 
 Would update 5 rows:
 
-  OMN-2068  "In Progress" -> "Done"
-  OMN-1452  "In Review" -> "Done"
-  OMN-2700  "Backlog" -> "In Review"
-  OMN-554   "In Progress" -> "In Review"
-  OMN-555   "In Review" -> "Done"
+  PROJ-2068  "In Progress" -> "Done"
+  PROJ-1452  "In Review" -> "Done"
+  PROJ-2700  "Backlog" -> "In Review"
+  PROJ-554   "In Progress" -> "In Review"
+  PROJ-555   "In Review" -> "Done"
 
 Would add 1 new epic:
-  + OMN-2800 "[omniclaude] DB-SPLIT" (5 children)
+  + PROJ-2800 "[omniclaude] DB-SPLIT" (5 children)
 
 No file changes written.
 ```

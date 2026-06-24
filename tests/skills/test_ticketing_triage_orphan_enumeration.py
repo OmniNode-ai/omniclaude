@@ -36,17 +36,16 @@ def test_skill_md_forbids_orphan_truncation() -> None:
     """SKILL.md must instruct the agent to emit every orphan, no sampling."""
     text = SKILL_MD.read_text()
 
-    # Required guidance (added in OMN-10543).
+    # Required orphan-enumeration guidance.
     required_phrases = [
         "Enumeration completeness",
         "MUST enumerate **every** orphan",
         "`orphaned_tickets` list length MUST equal `summary.orphaned_tickets`",
-        "OMN-10543",
     ]
     missing = [p for p in required_phrases if p not in text]
     assert not missing, (
         "ticketing_triage SKILL.md is missing required orphan-enumeration "
-        f"guidance for OMN-10543: {missing}"
+        f"guidance: {missing}"
     )
 
 

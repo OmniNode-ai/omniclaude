@@ -1,7 +1,6 @@
 # Hook Data Flow Architecture
 
 **Last Updated**: 2026-02-19
-**Ticket**: OMN-1980 (agent YAML loading removed from sync path)
 
 ---
 
@@ -67,7 +66,7 @@ Claude Code (stdin JSON)
     │  No-fallback: empty string when no match      │
     └────┬──────────────────────────────────────────┘
          │
-         │ [NOTE: Agent YAML loading removed from sync path — OMN-1980]
+         │ [NOTE: Agent YAML loading was removed from the sync path in an earlier pass.]
          │ Claude loads the selected agent's YAML on-demand after
          │ seeing the candidates list in additionalContext.
          │
@@ -123,7 +122,7 @@ The routing engine. Runs up to three tiers in sequence, returning the first succ
 2. **LLM routing** (`USE_LLM_ROUTING=true` + `ENABLE_LOCAL_INFERENCE_PIPELINE=true`): calls `HandlerRoutingLlm` with a 100ms budget (LLM_ROUTING_TIMEOUT_S). Health-checks the endpoint first. LatencyGuard enforces P95 SLO of 80ms; opens circuit for 5 minutes on breach.
 3. **Fuzzy trigger matching**: `AgentRouter.route()` using compiled regex triggers from agent YAML configs. CONFIDENCE_THRESHOLD=0.5. Returns up to 5 candidates sorted by score.
 
-When no tier succeeds or confidence is below threshold, returns `selected_agent=""` (no fallback — OMN-2228).
+When no tier succeeds or confidence is below threshold, returns `selected_agent=""` with no fallback.
 
 Emits `routing.decision` to `onex.evt.omniclaude.routing-decision.v1` after every routing attempt (non-blocking, via daemon).
 

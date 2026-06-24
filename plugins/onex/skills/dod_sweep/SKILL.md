@@ -18,7 +18,7 @@ args:
     description: "Use the last autopilot close-out cycle timestamp as the look-back boundary (overrides --since-days)"
     required: false
   - name: --per-ticket-verify
-    description: "Run dod-verify individually against each discovered ticket. Default: true (OMN-9067 — on-by-default; pass --no-per-ticket-verify to disable)"
+    description: "Run dod-verify individually against each discovered ticket. Default: true (pass --no-per-ticket-verify to disable)"
     required: false
   - name: --dry-run
     description: "Report only, no follow-up tickets"
@@ -42,7 +42,7 @@ two modes: **batch** (retroactive sweep of recently completed tickets) and
   timestamp from `$ONEX_STATE_DIR/autopilot/cycle-state.yaml` field <!-- skill-boundary-ok: state file read is performed by node_dod_sweep_orchestrator handler, not the skill -->
   `last_cycle_id`, which stores the cycle boundary timestamp. Falls back to
   `--since-days 7` if no prior cycle exists.
-- **Targeted** (`/dod-sweep OMN-1234`): If the target is an epic, expand child
+- **Targeted** (`/dod-sweep <TICKET-ID>`): If the target is an epic, expand child
   tickets. If a single ticket, sweep just that one.
 
 ## Per-Ticket Verification Mode
@@ -59,8 +59,7 @@ Flow:
    - If contract exists with `dod_evidence[]`, run evidence checks via the shared
      runner at `plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py`
    - Collect the DoD verification result for the ticket. Durable per-ticket <!-- skill-boundary-ok: result collection is performed by node_dod_sweep_orchestrator handler -->
-     receipt persistence is tracked by OMN-10408 and must not be claimed until
-     the backing node implements it.
+     receipt persistence is not yet implemented in the backing node and must not be claimed until it is.
 3. Flag any tickets with incomplete DoD evidence (failed or missing checks)
 4. Aggregate results and report summary
 
@@ -172,7 +171,7 @@ evidence item in their `dod_evidence[]` array:
 3. If missing: flag the ticket as `RENDERED_OUTPUT_MISSING` in the sweep report
 4. Create a follow-up ticket with title `fix: DoD gap -- {ticket_id} -- missing rendered_output evidence`
 
-This enforcement encodes OMN-7093 (Visual Output Verification) into the automated
+This enforcement encodes the Visual Output Verification requirement into the automated
 DoD compliance pipeline.
 
 ## Report Output

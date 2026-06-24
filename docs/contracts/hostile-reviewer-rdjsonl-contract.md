@@ -1,11 +1,10 @@
 # hostile_reviewer → rdjsonl Output Contract
 
-> **DESIGN ONLY — implement when OMN-10111 closes.**
+> **DESIGN ONLY — implement when hostile_reviewer is re-enabled.**
 >
 > This document defines the wire contract for converting `hostile_reviewer`
 > findings to reviewdog rdjsonl format. No integration code should be shipped
-> until OMN-10111 (re-enable hostile_reviewer) is closed and the gate is
-> verified live.
+> until the hostile_reviewer gate is re-enabled and verified live.
 
 ---
 
@@ -116,16 +115,16 @@ Fields:
 
 ## Integration Snippet
 
-> **Consumer removed (OMN-12674).** The reviewdog reusable workflow and its
+> **Consumer removed in an earlier pass.** The reviewdog reusable workflow and its
 > caller were deleted from this repo. The rdjsonl format defined here remains
 > valid — it is the GitHub-standard reviewdog Diagnostic Format (rdjsonl), a
-> wire format independent of the reviewdog binary. When OMN-10111 re-enables
-> hostile_reviewer, wire the converter output into whatever annotation surface
+> wire format independent of the reviewdog binary. When hostile_reviewer is
+> re-enabled, wire the converter output into whatever annotation surface
 > the repo uses at that time. The historical reviewdog pipe commands have been
 > dropped to avoid referencing deleted workflow files.
 
-When OMN-10111 closes and hostile_reviewer is re-enabled, invoke the converter
-via `findings-to-rdjsonl.py` (Task 6 of OMN-10928). The format key lives inside
+When hostile_reviewer is re-enabled, invoke the converter
+via `findings-to-rdjsonl.py`. The format key lives inside
 the JSON payload — it is **not** a CLI flag:
 
 ```bash
@@ -146,7 +145,7 @@ before piping it to the converter.
 
 `findings-to-rdjsonl.py` already handles the `hostile_reviewer` format via the
 `_hostile_reviewer()` converter registered in the `CONVERTERS` dispatch table.
-See `omniclaude/.github/scripts/findings-to-rdjsonl.py` (Task 6, OMN-10928).
+See `omniclaude/.github/scripts/findings-to-rdjsonl.py`.
 
 No new code is required to implement this contract — only the hostile_reviewer
-node wiring (OMN-10111) is needed.
+node wiring is needed.

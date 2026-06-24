@@ -43,6 +43,7 @@ outputs:
     description: "Number of tickets that failed"
   - name: tickets_blocked
     description: "Number of tickets blocked by failed dependencies"
+boundary_exempt: true
 ---
 
 # Wave Scheduler
@@ -50,8 +51,6 @@ outputs:
 **Skill ID**: `onex:wave_scheduler`
 **Version**: 1.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-6890
-**Epic**: OMN-6886
 
 ---
 
@@ -71,7 +70,7 @@ wave execution model. Given a plan file with explicit `depends_on` fields, the s
 3. **Validates** the DAG (no cycles, all dependencies exist)
 4. **Computes** execution waves using topological sort with level grouping
 5. **Dispatches** parallel agents per wave (up to max_concurrency)
-6. **Monitors** agent health during execution (via agent_healthcheck, OMN-6889)
+6. **Monitors** agent health during execution (via agent_healthcheck)
 7. **Reports** completed/failed/blocked per wave
 
 ---
@@ -82,29 +81,29 @@ The scheduler accepts plan files in YAML format with this schema:
 
 ```yaml
 # plan.yaml
-epic_id: OMN-6886
+epic_id: EPIC-001
 title: "Insights Action Plan 2026-03-28"
 
 tickets:
-  - id: OMN-6887
+  - id: TICKET-001
     title: "Implement checkpoint-based pipeline recovery"
     repo: omniclaude
     depends_on: []
 
-  - id: OMN-6888
+  - id: TICKET-002
     title: "Encode architectural invariants"
     repo: omniclaude
     depends_on: []
 
-  - id: OMN-6889
+  - id: TICKET-003
     title: "Build agent health-check"
     repo: omniclaude
-    depends_on: [OMN-6887]
+    depends_on: [TICKET-001]
 
-  - id: OMN-6890
+  - id: TICKET-004
     title: "Implement wave scheduler"
     repo: omniclaude
-    depends_on: [OMN-6889]
+    depends_on: [TICKET-003]
 ```
 
 ---
@@ -360,7 +359,7 @@ def release_repo_lock(repo: str, ticket_id: str) -> None:
 
 ---
 
-## Health-Check Integration (OMN-6889)
+## Health-Check Integration
 
 During wave execution, the scheduler monitors dispatched agents using the
 `agent_healthcheck` skill. Between polling intervals:
@@ -379,7 +378,7 @@ Wave execution state is persisted to allow resume after interruption:
 ```yaml
 # .onex_state/wave_scheduler/{epic_id}/state.yaml
 schema_version: "1.0.0"
-epic_id: OMN-6886
+epic_id: EPIC-001
 plan_file: docs/plans/2026-03-28-insights-plan.yaml
 started_at: 2026-03-28T22:00:00Z
 status: in_progress
@@ -387,20 +386,20 @@ max_concurrency: 6
 
 waves:
   - wave: 0
-    tickets: [OMN-6887, OMN-6888, OMN-6891]
+    tickets: [TICKET-001, TICKET-002, TICKET-005]
     status: completed
     completed_at: 2026-03-28T22:30:00Z
     results:
-      OMN-6887: completed
-      OMN-6888: completed
-      OMN-6891: completed
+      TICKET-001: completed
+      TICKET-002: completed
+      TICKET-005: completed
   - wave: 1
-    tickets: [OMN-6889]
+    tickets: [TICKET-003]
     status: in_progress
     started_at: 2026-03-28T22:31:00Z
     results: {}
   - wave: 2
-    tickets: [OMN-6890]
+    tickets: [TICKET-004]
     status: pending
 ```
 
@@ -428,12 +427,12 @@ With `--resume`, the scheduler:
 
 ## Example
 
-Given the OMN-6886 plan:
+Given a sample plan with four tickets:
 
 ```
-Wave 0: [OMN-6887, OMN-6888, OMN-6891]  (no dependencies, parallel)
-Wave 1: [OMN-6889]                        (depends on OMN-6887)
-Wave 2: [OMN-6890]                        (depends on OMN-6889)
+Wave 0: [TICKET-001, TICKET-002, TICKET-005]  (no dependencies, parallel)
+Wave 1: [TICKET-003]                           (depends on TICKET-001)
+Wave 2: [TICKET-004]                           (depends on TICKET-003)
 ```
 
 ```bash
@@ -586,7 +585,7 @@ failure_cascade:
 ## See Also
 
 - `epic-team` skill (current ad-hoc wave execution, to be replaced)
-- `agent_healthcheck` skill (stall detection, OMN-6889)
-- `checkpoint` skill (checkpoint protocol, OMN-6887)
+- `agent_healthcheck` skill (stall detection)
+- `checkpoint` skill (checkpoint protocol)
 - `ticket-pipeline` skill (per-ticket execution)
 - `decompose-epic` skill (plan decomposition)

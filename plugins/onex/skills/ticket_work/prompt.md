@@ -14,7 +14,7 @@ Say: "I'm using the ticket-work skill."
 
 Extract from `$ARGUMENTS`:
 
-- `ticket_id` (required) — Linear ticket ID (e.g., `OMN-1807`)
+- `ticket_id` (required) — Linear ticket ID (e.g., `PROJ-1807`)
 - `--autonomous` — Skip human gates; proceed through all phases unattended
 - `--skip-to <phase>` — Resume from named phase (intake|research|questions|spec|implementation|review|done)
 

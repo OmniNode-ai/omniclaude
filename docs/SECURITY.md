@@ -88,7 +88,7 @@ via OAuth. Do not add it to any required-env list or preflight check.
 
 **Mitigation**: The emit daemon binds to a Unix domain socket
 (`/tmp/onex-emit.sock` or `$XDG_RUNTIME_DIR/onex-emit.sock`) by default —
-no TCP port is opened. When the daemon runs in the kernel plugin on `.201`,
+no TCP port is opened. When the daemon runs in the kernel plugin on the runtime host,
 a host-mounted volume path is used. No services in omniclaude bind to
 `0.0.0.0`.
 

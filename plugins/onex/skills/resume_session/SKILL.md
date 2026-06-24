@@ -15,7 +15,7 @@ tags:
 author: omninode
 args:
   - name: task_id
-    description: "The ticket ID to resume (e.g., OMN-1234), or --list to show all active sessions"
+    description: "The ticket ID to resume (e.g., TASK-1234), or --list to show all active sessions"
     required: true
 ---
 
@@ -27,18 +27,18 @@ and Qdrant (semantic decision recall).
 
 ## Behavior
 
-1. Accept a ticket ID argument (e.g., `/onex:resume_session OMN-1234`)
+1. Accept a ticket ID argument (e.g., `/onex:resume_session TASK-1234`)
 2. Query the `session_registry` Postgres table for the task
 3. If **Found**:
    - Gather data from all available stores:
      a. Session state from Postgres (task progress, files, phase, decisions)
-     b. File conflicts from Memgraph via `should_emit_conflict_signal()` (OMN-6861)
-     c. Related decisions from Qdrant via `DecisionSearchClient.search_related()` (OMN-6864)
+     b. File conflicts from Memgraph via `should_emit_conflict_signal()`
+     c. Related decisions from Qdrant via `DecisionSearchClient.search_related()`
      d. Recent coordination signals (what happened while session was inactive)
-   - Build full resume context via `format_full_resume_context()` (OMN-6865)
+   - Build full resume context via `format_full_resume_context()`
    - Bind the session via `TaskBinding` (delegates to set-session behavior)
 4. If **Not Found**:
-   - "No session history for OMN-1234. Starting fresh."
+   - "No session history for TASK-1234. Starting fresh."
    - Still bind `task_id` for future correlation
 5. If **Unavailable** (DB down):
    - "Session registry unavailable: {reason}. Binding task_id locally only."
@@ -78,7 +78,7 @@ if isinstance(result, ModelSessionFound):
 
     # -- Gather enrichment data from all stores --
 
-    # 1. File conflicts from Memgraph (OMN-6861)
+    # 1. File conflicts from Memgraph
     conflicts = []
     active_sessions = client.list_active_sessions()
     if not isinstance(active_sessions, ModelRegistryUnavailable):
@@ -97,7 +97,7 @@ if isinstance(result, ModelSessionFound):
             for c in detected
         ]
 
-    # 2. Semantic decision recall from Qdrant (OMN-6864, Doctrine D7: enrichment only)
+    # 2. Semantic decision recall from Qdrant (Doctrine D7: enrichment only)
     related_decisions = []
     try:
         from omnibase_infra.services.session_registry.decision_search import (

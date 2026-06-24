@@ -1,7 +1,6 @@
 # Emit Daemon Architecture
 
 **Last Updated**: 2026-02-19
-**Tickets**: OMN-1631 (emit daemon integration), OMN-1632 (hook migration), OMN-1945 (EmitClient moved to omniclaude)
 
 ---
 

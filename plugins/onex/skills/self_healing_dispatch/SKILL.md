@@ -17,13 +17,13 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --tickets
-    description: "Comma-separated ticket IDs to orchestrate (e.g. OMN-1234,OMN-5678). Mutually exclusive with --epic-id."
+    description: "Comma-separated ticket IDs to orchestrate (e.g. PROJ-1234,PROJ-5678). Mutually exclusive with --epic-id."
     required: false
   - name: --epic-id
     description: "Linear epic ID. Decomposes the epic into child tickets via decompose_epic, then orchestrates. Mutually exclusive with --tickets."
     required: false
   - name: --repo-hints
-    description: "JSON object mapping ticket IDs to repo names (e.g. '{\"OMN-1234\":\"omniclaude\"}'). Optional; unassigned tickets get their repo resolved from Linear metadata."
+    description: "JSON object mapping ticket IDs to repo names (e.g. '{\"PROJ-1234\":\"omniclaude\"}'). Optional; unassigned tickets get their repo resolved from Linear metadata."
     required: false
   - name: --run-id
     description: "Correlation ID for this orchestration run. Auto-generated if omitted."
@@ -45,12 +45,13 @@ outputs:
     description: "Path to NDJSON dispatch log for this run"
   - name: escalated
     description: "Ticket IDs escalated to Blocked (exceeded max redispatches)"
+boundary_exempt: true
 ---
 
 # /onex:self_healing_dispatch — Self-Healing Orchestration Wrapper
 
-**Skill ID**: `onex:self_healing_dispatch` · **Ticket**: OMN-7259 · **Epic parent**: OMN-7253
-**Workstream**: B Phase 3 — built on OMN-7255 (stall detection) + OMN-7257 (dispatch enforcement)
+**Skill ID**: `onex:self_healing_dispatch`
+**Workstream**: B Phase 3 — built on earlier stall-detection and dispatch-enforcement foundations
 
 ## Purpose
 
@@ -63,9 +64,9 @@ Handles workloads of ≤10 tickets across ≤4 repos without human intervention.
 ## Invocation
 
 ```
-/onex:self_healing_dispatch --tickets OMN-1234,OMN-5678,OMN-9012
-/onex:self_healing_dispatch --epic-id OMN-7253
-/onex:self_healing_dispatch --epic-id OMN-7253 --dry-run
+/onex:self_healing_dispatch --tickets PROJ-1234,PROJ-5678,PROJ-9012
+/onex:self_healing_dispatch --epic-id PROJ-7253
+/onex:self_healing_dispatch --epic-id PROJ-7253 --dry-run
 ```
 
 **Announce at start:**
@@ -84,8 +85,8 @@ Handles workloads of ≤10 tickets across ≤4 repos without human intervention.
 ```
 ERROR: Provide exactly one of --tickets or --epic-id.
 Usage:
-  /onex:self_healing_dispatch --tickets OMN-1234,OMN-5678
-  /onex:self_healing_dispatch --epic-id OMN-7253
+  /onex:self_healing_dispatch --tickets PROJ-1234,PROJ-5678
+  /onex:self_healing_dispatch --epic-id PROJ-7253
 ```
 
 ### Phase 1 — Repo Grouping
@@ -95,9 +96,9 @@ Call the Python orchestrator:
 from omniclaude.hooks.self_healing_orchestrator import orchestrate, group_by_repo
 
 result = orchestrate(
-    ticket_ids=["OMN-1234", "OMN-5678"],
-    epic_id="OMN-7253",   # or None
-    repo_hints={"OMN-1234": "omniclaude"},  # or None
+    ticket_ids=["PROJ-1234", "PROJ-5678"],
+    epic_id="PROJ-7253",   # or None
+    repo_hints={"PROJ-1234": "omniclaude"},  # or None
     run_id="orch-20260405T120000Z",
 )
 ```
@@ -110,12 +111,12 @@ The orchestrator emits an `orchestration_planned` NDJSON event and returns a `Or
 - Tickets that cannot be resolved land in the `unassigned` group — surface a warning and stop.
 
 ```
-WARNING: Cannot resolve repo for OMN-9999. Provide --repo-hints or set the ticket's repo label in Linear before orchestrating.
+WARNING: Cannot resolve repo for PROJ-9999. Provide --repo-hints or set the ticket's repo label in Linear before orchestrating.
 ```
 
 ### Phase 2 — TeamCreate Dispatch (enforced)
 
-For each dispatch group, spawn a named worker via TeamCreate. **Never use a bare Agent() call** — the dispatch-mode guardrail (OMN-7257) will fire an advisory, and this skill enforces TeamCreate unconditionally.
+For each dispatch group, spawn a named worker via TeamCreate. **Never use a bare Agent() call** — the dispatch-mode guardrail will fire an advisory, and this skill enforces TeamCreate unconditionally.
 
 ```python
 # Pseudo-code — executed by the skill entrypoint, not the Python module
@@ -132,7 +133,7 @@ for group in result.groups:
 
 Log a `worker_dispatched` event per group:
 ```json
-{"timestamp_utc":"...","event":"worker_dispatched","run_id":"...","repo":"omniclaude","tickets":["OMN-1234"]}
+{"timestamp_utc":"...","event":"worker_dispatched","run_id":"...","repo":"omniclaude","tickets":["PROJ-1234"]}
 ```
 
 ### Phase 3 — Monitoring and Stall Recovery
@@ -140,7 +141,7 @@ Log a `worker_dispatched` event per group:
 After dispatching all workers, enter a polling loop. Use `onex:agent_healthcheck` as a composable sub-skill to check each active worker:
 
 ```
-Skill(skill="onex:agent_healthcheck", args="--ticket-id OMN-1234 --agent-id worker-omniclaude-orch-... --timeout-minutes 2 --max-redispatches 2")
+Skill(skill="onex:agent_healthcheck", args="--ticket-id PROJ-1234 --agent-id worker-omniclaude-orch-... --timeout-minutes 2 --max-redispatches 2")
 ```
 
 **On stall detected (status == stalled or failed):**
@@ -230,8 +231,8 @@ When `--dry-run` is set:
 ```
 [self_healing_dispatch] DRY RUN — no workers launched.
 Planned groups:
-  omniclaude: OMN-1234, OMN-5678
-  omnibase_core: OMN-9012
+  omniclaude: PROJ-1234, PROJ-5678
+  omnibase_core: PROJ-9012
 Log: $ONEX_STATE_DIR/dispatch-log/2026-04-05.ndjson
 ```
 
@@ -247,6 +248,6 @@ Do not duplicate this logic inline. Import and call the module functions.
 
 ## See Also
 
-- `onex:agent_healthcheck` — stall detection sub-skill (OMN-7255 backing node)
+- `onex:agent_healthcheck` — stall detection sub-skill
 - `onex:dispatch_watchdog` — epic-level watchdog for larger wave runs
 - `onex:epic_team` — full epic orchestration (use for >10 tickets or >4 repos)

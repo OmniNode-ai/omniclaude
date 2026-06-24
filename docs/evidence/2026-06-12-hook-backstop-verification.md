@@ -1,9 +1,8 @@
-# OMN-13095 — Hook Backstop Rewrite: Verification Evidence
+# Hook Backstop Rewrite: Verification Evidence
 
 **Date:** 2026-06-12
-**Ticket:** OMN-13095 (Phase 3 of epic OMN-13089 — Skill Output Suppression)
-**Plan:** `omni_home/docs/plans/2026-06-12-skill-output-suppression-plan.md` (Phase 3)
-**Mechanism source:** `docs/research/2026-06-12-updated-tool-output-shape-probe.md` (OMN-13090)
+**Plan:** `omni_home/docs/plans/2026-06-12-skill-output-suppression-plan.md` (Phase 3 — Skill Output Suppression)
+**Mechanism source:** `docs/research/2026-06-12-updated-tool-output-shape-probe.md`
 
 ## What was verified
 
@@ -21,7 +20,7 @@ Pinned by the suite:
 
 - Suppress emission is EXACTLY
   `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"stdout", "stderr", "interrupted", "isImage"}}}`
-  — the OBJECT form the OMN-13090 probe proved replaces the Bash tool
+  — the OBJECT form the tool-output-shape probe proved replaces the Bash tool
   result (string form is schema-rejected, fail-open + invisible).
 - Every passthrough path (non-Bash, unmatched, small, error exit,
   interrupted, receipt-mode `ModelSkillResult`) emits NOTHING on stdout.
@@ -47,7 +46,7 @@ exit=0 stdout_len=0
 [2026-06-12T22:18:23Z] Resolved python: .../omniclaude/.venv/bin/python3
 [skill_output_suppressor] correlation lookup failed: No module named 'plugins'
 [skill_output_suppressor] capture unavailable: artifact store unavailable:
-  omnibase_core.artifacts not importable (core pin predates OMN-13093):
+  omnibase_core.artifacts not importable (core pin predates the artifact store module):
   No module named 'omnibase_core.artifacts'
 exit=0 small_stdout_len=0
 ```
@@ -62,13 +61,12 @@ the store constructor never KeyErrors once the module is importable.
 
 A live Claude-session suppression (transcript shows compact summary +
 `artifact_ref`; artifact read-back hash-verifies) requires
-`omnibase_core.artifacts.ArtifactStore` (OMN-13093) to be importable from
+`omnibase_core.artifacts.ArtifactStore` to be importable from
 the hook runtime. That module is merged on omnibase_core **dev** but is
 not in any released tag; omniclaude pins `omnibase-core` at git rev
 `v0.43.0` (`<0.45.0`). Bumping the pin to a non-release dev SHA (28
 unreleased core commits) was rejected as out-of-scope risk for this
-ticket; the pin advances via the normal release propagation lane (epic
-Phase 2a forces the same bump for omnibase_infra).
+ticket; the pin advances via the normal release propagation lane.
 
 Until then the backstop is provably inert-but-correct:
 `test_replay_suppress_fixture_without_store_passes_through` pins the

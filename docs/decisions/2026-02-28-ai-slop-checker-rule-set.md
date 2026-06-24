@@ -2,7 +2,6 @@
 
 **Date**: 2026-03-02
 **Status**: Accepted
-**Ticket**: OMN-3191
 **Author**: Pipeline (omniclaude)
 **Repos affected**: omniclaude, omnibase_core, omnibase_infra, omnibase_spi, omniintelligence, omnimemory, onex_change_control
 
@@ -10,7 +9,7 @@
 
 ## Context
 
-The AI-slop checker (`scripts/validation/check_ai_slop.py`) was rolled out across 7 repos on 2026-02-28 (OMN-2971). This document records the findings from the 48-hour post-rollout audit (OMN-3191) and locks the canonical v1.0 rule set.
+The AI-slop checker (`scripts/validation/check_ai_slop.py`) was rolled out across 7 repos on 2026-02-28. This document records the findings from the 48-hour post-rollout audit and locks the canonical v1.0 rule set.
 
 ---
 

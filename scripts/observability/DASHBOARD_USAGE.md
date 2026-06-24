@@ -6,7 +6,7 @@ Dashboard queries and scripts for monitoring agent execution status in real-time
 
 **Created**: 2025-10-30
 **Updated**: 2025-11-06
-**Database**: omnibase_infra on 192.168.86.200:5436
+**Database**: omnibase_infra on `<onex-host>`:5436
 **Correlation ID**: a27b9e0c-ffc2-4357-b53a-ed080e1edf9c
 
 ---
@@ -483,10 +483,10 @@ PGPASSWORD="${POSTGRES_PASSWORD}" ./scripts/observability/dashboard_stats.sh
 **Check**:
 ```bash
 # Verify views exist
-psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra -c "\dv v_agent_*"
+psql -h "${POSTGRES_HOST}" -p 5436 -U postgres -d omnibase_infra -c "\dv v_agent_*"
 
 # Check raw data
-psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra -c "SELECT COUNT(*) FROM agent_execution_logs;"
+psql -h "${POSTGRES_HOST}" -p 5436 -U postgres -d omnibase_infra -c "SELECT COUNT(*) FROM agent_execution_logs;"
 ```
 
 ### Slow Queries
