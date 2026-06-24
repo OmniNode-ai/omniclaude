@@ -104,7 +104,7 @@ The following fields are shown for each runner:
 
 #### Label Keys
 
-The Docker image labels are defined in the runner Dockerfile (OMN-3275). The skill reads them
+The Docker image labels are defined in the runner Dockerfile. The skill reads them
 deterministically using these exact keys:
 
 ```
@@ -387,6 +387,6 @@ Invoke `runner status` to confirm all runners registered successfully:
 ## See Also
 
 - `omnibase_infra/scripts/deploy-runners.sh` -- Underlying deploy script
-- `omnibase_infra/docker/runners/Dockerfile` -- Runner image definition (OMN-3275)
+- `omnibase_infra/docker/runners/Dockerfile` -- Runner image definition
 - `omnibase_infra/docker/docker-compose.runners.yml` -- Runner compose config
 - GitHub Actions self-hosted runner docs: https://docs.github.com/en/actions/hosting-your-own-runners

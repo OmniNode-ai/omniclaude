@@ -43,7 +43,7 @@ outputs:
 
 # refill-sprint Skill
 
-> **OMN-6870** -- Auto-pull tech debt tickets from Future when Active Sprint empties.
+Auto-pulls tech debt tickets from Future when Active Sprint empties.
 
 ## Overview
 

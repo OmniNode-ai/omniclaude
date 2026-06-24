@@ -41,7 +41,7 @@ skill_kind: dispatch
 
 # /onex:pr_review_bot — one command, one typed result
 
-**Skill ID**: `onex:pr_review_bot` · **Command**: `uv run onex skill pr_review_bot` (omnibase_infra) · **Backing node**: `node_skill_pr_review_bot_orchestrator` (omniclaude) · **Ticket**: OMN-13097
+**Skill ID**: `onex:pr_review_bot` · **Command**: `uv run onex skill pr_review_bot` (omnibase_infra) · **Backing node**: `node_skill_pr_review_bot_orchestrator` (omniclaude)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

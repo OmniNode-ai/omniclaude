@@ -65,7 +65,7 @@ fsm          -> omnimarket/src/omnimarket/nodes/node_redeploy_fsm_reducer/    (R
 handlers     -> each implements ProtocolMessageHandler.handle(envelope) -> ModelHandlerOutput
 ```
 
-## Anti-Patterns (OMN-8602)
+## Anti-Patterns
 
 Two friction surfaces caused this skill to be misused — both produce
 high-severity events in `.onex_state/friction/friction.ndjson`:

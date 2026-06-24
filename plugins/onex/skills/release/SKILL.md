@@ -1,5 +1,5 @@
 ---
-description: Org-wide coordinated release pipeline (STRUCTURAL PLACEHOLDER — node_release performs no git/gh/PyPI I/O today; full handler implementation tracked in OMN-8004). Target design bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
+description: Org-wide coordinated release pipeline (STRUCTURAL PLACEHOLDER — node_release performs no git/gh/PyPI I/O today; full handler implementation is pending). Target design bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
 mode: full
 version: 2.0.0
 level: advanced
@@ -78,8 +78,7 @@ outputs:
 > intended future behavior. **None of it runs today.** Do not invoke `/release`
 > expecting it to cut a real release.
 >
-> Full handler implementation is tracked in **OMN-8004** (historical
-> placeholder-origin ticket; do not reopen). Honesty reconciliation: **OMN-13148**.
+> Full handler implementation is pending (the placeholder-origin work should not be reopened). A honesty reconciliation pass aligned this documentation with the actual implementation state.
 
 ## Usage
 
@@ -113,7 +112,7 @@ onex run-node node_release \
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it
 directly, do not produce prose. The handler is a structural placeholder; full
-migration is tracked in OMN-8004.
+migration is pending.
 
 ### Step 3 — Run the placeholder FSM
 
@@ -166,8 +165,6 @@ Contract: `omnimarket/src/omnimarket/nodes/node_release/contract.yaml`
 SKILL.md   -> thin shell (this file)
 node       -> omnimarket/src/omnimarket/nodes/node_release/ (STRUCTURAL PLACEHOLDER — pure FSM, no I/O)
 contract   -> node_release/contract.yaml
-migration  -> OMN-8004 (full handler implementation, historical origin — do not reopen)
-honesty    -> OMN-13148 (doc-vs-impl reconciliation)
 ```
 
 ---
@@ -177,7 +174,7 @@ honesty    -> OMN-13148 (doc-vs-impl reconciliation)
 > **Everything below this line describes intended future behavior and does NOT run
 > today.** The routed `node_release` handler performs none of these git / `gh` /
 > `uv` / PyPI operations. This section is preserved as the design target for the
-> OMN-8004 migration. Treat every "create PR", "push tag", "publish", "write state
+> the migration target. Treat every "create PR", "push tag", "publish", "write state
 > file", and "dedup" statement below as a specification, not a description of
 > current behavior.
 

@@ -192,7 +192,7 @@ Correlate:
 
 ---
 
-## Phase 5 — Live Container Crash-Loop Detection [OMN-9122]
+## Phase 5 — Live Container Crash-Loop Detection
 
 Check `omninode-runtime*` containers for restart counts exceeding the threshold.
 
@@ -237,7 +237,7 @@ If any container has `RestartCount > 5`:
 
 ---
 
-## Phase 6 — Orchestrator Consumer Group Health [OMN-9122]
+## Phase 6 — Orchestrator Consumer Group Health
 
 Verify all orchestrator-owned Kafka consumer groups have at least one active member. A group in `Empty` state means handlers are not attached and events are silently dropped.
 
