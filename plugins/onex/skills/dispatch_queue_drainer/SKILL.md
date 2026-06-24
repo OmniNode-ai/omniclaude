@@ -27,7 +27,6 @@ args:
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_dispatch_queue_drainer/`
-**Ticket**: OMN-9437
 
 ---
 

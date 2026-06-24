@@ -32,7 +32,6 @@ outputs:
 **Skill ID**: `onex:dispatch_engine`
 **Version**: 2.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-12236
 **Backing node**: `node_skill_dispatch_engine_orchestrator`
 
 **Announce at start:** "I'm using the dispatch_engine skill to poll the work backlog and dispatch builders for gaps."

@@ -99,8 +99,8 @@ with these rules regardless of role or spec contents:
 1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
    provenance. Fix them in the same PR or file a blocker — never push red tests.
 
-2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
-   keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
+2. **PR closing keyword.** The PR body MUST contain `Closes <TICKET-ID>.` (exact closing-
+   keyword form, where `<TICKET-ID>` is the primary ticket). Without it the receipt gate fails.
 
 3. **Worktree-only development.** All code changes happen in a ticket worktree under
    `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
@@ -116,7 +116,7 @@ with these rules regardless of role or spec contents:
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
    Fix the issue instead of bypassing the gate.
 
-6. **Verifiable-handle reporting (worker-misreport ratchet, OMN-12963).** Your final
+6. **Verifiable-handle reporting (worker-misreport ratchet).** Your final
    message MUST end with a fenced ```json-report``` block, and any claim of completion
    MUST carry its verifiable handle — claims without handles are BLOCKED at SubagentStop
    by the receipt-honesty verifier (`subagent_claim_verifier.py`), re-probed against live
@@ -133,7 +133,7 @@ with these rules regardless of role or spec contents:
    Example terminal block:
    ````
    ```json-report
-   {"kind": "pr_ship", "ticket": "OMN-XXXX",
+   {"kind": "pr_ship", "ticket": "<TICKET-ID>",
     "pr": {"number": 1234, "state": "MERGED",
            "merge_sha": "<full-or-short-merge-commit-sha>", "repo": "OmniNode-ai/<repo>"}}
    ```

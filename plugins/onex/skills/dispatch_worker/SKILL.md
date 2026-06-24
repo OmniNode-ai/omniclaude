@@ -53,7 +53,7 @@ name: pr-202-fix
 team: daylight-0411
 role: fixer
 scope: Fix omnimarket#202 halt_conditions CodeRabbit findings
-targets: [omnimarket#202, OMN-8375]
+targets: [omnimarket#202, PROJ-8375]
 "
 
 # From file
@@ -65,7 +65,7 @@ name: vggp-designer
 team: daylight-0411
 role: designer
 scope: Design VGGP inference pipeline
-targets: [OMN-8400]
+targets: [PROJ-8400]
 "
 ```
 
@@ -96,7 +96,7 @@ model: sonnet                  # optional: default sonnet
 replace: false                 # optional: kill existing in_progress worker with same name
 ```
 
-## Dispatch record persistence (OMN-9084)
+## Dispatch record persistence
 
 Immediately after the node compiles the worker prompt and before `Agent()` is
 spawned, write a `ModelDispatchRecord` to
@@ -138,8 +138,8 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
 1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
    provenance. Fix them in the same PR or file a blocker — never push red tests.
 
-2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
-   keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
+2. **PR closing keyword.** The PR body MUST contain `Closes <TICKET-ID>.` (exact closing-
+   keyword form, where `<TICKET-ID>` is the primary ticket). Without it the receipt gate fails.
 
 3. **Worktree-only development.** All code changes happen in a ticket worktree under
    `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
