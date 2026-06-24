@@ -1,0 +1,35 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13512"
+title: "docs(OMN-13512): clear stale skill_functional_audit tracked findings"
+summary: >-
+  Clears the stale Known Tracked Findings table in
+  plugins/onex/skills/skill_functional_audit/SKILL.md so the skill documentation
+  matches the OMN-13512 omnimarket heuristic rewrite and no longer reports
+  completed historical findings as active. Central OCC evidence is carried by
+  onex_change_control PR #3022, merged as
+  ba37353453ddc03ea6f1e7d5ad1f184121efd9af.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "docs"
+    description: "SKILL.md stale Known Tracked Findings table is removed."
+    command: "git diff -- plugins/onex/skills/skill_functional_audit/SKILL.md"
+  - kind: "occ"
+    description: "Central OCC evidence for OMN-13512 is merged."
+    command: "gh pr view 3022 --repo OmniNode-ai/onex_change_control --json state,mergeCommit"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-doc-cleanup"
+    description: >-
+      The stale Known Tracked Findings table is removed from the
+      skill_functional_audit SKILL.md documentation, leaving the live methodology
+      without completed-ticket clutter.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'none currently tracked' plugins/onex/skills/skill_functional_audit/SKILL.md"
