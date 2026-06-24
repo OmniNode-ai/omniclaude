@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13582"
+title: "Correct merge_sweep skill routing topic documentation"
+summary: >-
+  Correct the ONEX merge_sweep skill routing contract documentation so it names
+  the live node_pr_lifecycle_orchestrator command topic
+  onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1. This is a
+  documentation-only repo-health fix for the skill surface; it does not change
+  code, runtime routing, schemas, topics, or deployed behavior.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-routing-topic-doc"
+    description: >-
+      plugins/onex/skills/merge_sweep/SKILL.md documents the actual
+      node_pr_lifecycle_orchestrator start command topic with the required
+      -start suffix, and no longer documents the stale non-start topic in the
+      Routing Contract section.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'pr-lifecycle-orchestrator-start.v1'
+          plugins/onex/skills/merge_sweep/SKILL.md && ! grep -q
+          'pr-lifecycle-orchestrator.v1 through'
+          plugins/onex/skills/merge_sweep/SKILL.md
