@@ -64,7 +64,7 @@ See `prompt.md` for the one command and how to present the typed result.
 
 ## Routing Contract
 
-The `uv run onex skill merge_sweep` entrypoint publishes to `onex.cmd.omnimarket.pr-lifecycle-orchestrator.v1`
+The `uv run onex skill merge_sweep` entrypoint publishes to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
 through receipt-mode dispatch. If routing fails, surface `SkillRoutingError` directly; do not produce prose.
 
 ## What this skill does NOT do
