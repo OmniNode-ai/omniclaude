@@ -88,7 +88,7 @@ The hook uses the same underlying code:
 # Hook version (what agents actually see)
 AGENT_NAME="database-adapter-builder" \
   PROJECT_PATH="/Volumes/PRO-G40/Code/omniclaude" \  # local-path-ok
-  python3 /Users/jonah/.claude/hooks/lib/manifest_loader.py  # local-path-ok
+  python3 <home>/.claude/hooks/lib/manifest_loader.py
 
 # Script version (for manual viewing)
 python3 scripts/view_agent_manifest.py database-adapter-builder

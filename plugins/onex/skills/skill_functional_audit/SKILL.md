@@ -182,7 +182,7 @@ Skill(skill="onex:<skill_name>", args="--dry-run")
 
 **Timeout:** 120 seconds per skill. If skill times out or throws an unhandled error: verdict = **BROKEN**.
 
-**Note:** Skip invocation for skills known to require live infrastructure (Kafka, .201 runtime). Document these as `SKIP (infra-dep)` with the infrastructure dependency noted.
+**Note:** Skip invocation for skills known to require live infrastructure (Kafka, runtime host). Document these as `SKIP (infra-dep)` with the infrastructure dependency noted.
 
 ---
 

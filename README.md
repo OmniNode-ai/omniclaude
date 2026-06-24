@@ -194,7 +194,7 @@ uv run pytest tests/ -v
 # Unit only
 uv run pytest tests/ -m unit -v
 
-# Integration (requires Kafka on 192.168.86.201:19092)
+# Integration (requires Kafka on <onex-host>:19092)
 KAFKA_INTEGRATION_TESTS=1 uv run pytest -m integration
 
 # Coverage

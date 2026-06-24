@@ -26,7 +26,7 @@ source .env
 ```
 
 Required environment variables:
-- `POSTGRES_HOST` (default: 192.168.86.200)
+- `POSTGRES_HOST` (required — set in `.env`)
 - `POSTGRES_PORT` (default: 5436)
 - `POSTGRES_USER` (default: postgres)
 - `POSTGRES_PASSWORD` (required - no default)
@@ -350,7 +350,7 @@ The CLI directly uses ONEX nodes:
 ### With Database
 
 Connects to shared `omnibase_infra` database:
-- **Host:** 192.168.86.200 (remote server)
+- **Host:** `${POSTGRES_HOST}` (remote server)
 - **Port:** 5436 (external access)
 - **Database:** omnibase_infra
 
