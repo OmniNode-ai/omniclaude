@@ -5,6 +5,7 @@ version: 1.0.0
 level: basic
 debug: false
 category: debugging
+boundary_exempt: true
 tags:
   - debugging
   - root-cause-analysis
