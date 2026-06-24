@@ -1,8 +1,8 @@
-# OMN-8824 Migration Receipt — All Batches
+# Skill DI Migration Receipt — All Batches
 
 **Date**: 2026-04-15
-**Branch**: jonah/omn-8824-task-10b-skill-port-fan-out-port-remaining-42-skills-to
-**Ticket**: OMN-8824
+**Branch**: jonah/skill-port-fan-out-port-remaining-42-skills
+
 
 ## Summary
 

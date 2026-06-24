@@ -1,13 +1,13 @@
 # Delegation Architecture
 
 **Last Updated**: 2026-06-20
-**Tickets**: OMN-8746 (remove delegation flags, unconditional bridge), OMN-8689 (bridge), OMN-10050 (topic alignment), OMN-10604 (bridge handler removed), OMN-13358 (dead bridge invocation removed from `user-prompt-submit.sh`)
+**Key changes**: delegation flags removed (unconditional bridge), bridge wired, topic alignment, bridge handler removed, dead bridge invocation removed from `user-prompt-submit.sh`
 
-> **STATUS — bridge removed (OMN-13358):** The `UserPromptSubmit` hook no longer
+> **STATUS — bridge removed:** The `UserPromptSubmit` hook no longer
 > auto-fires a delegation bridge. The `handler_delegate_skill.py` adapter this doc
-> describes was deleted in OMN-10604, and its sole remaining caller (a dead block in
+> describes was deleted in an earlier cleanup, and its sole remaining caller (a dead block in
 > `user-prompt-submit.sh` that always logged a "handler not found" warning) was removed
-> in OMN-13358. Delegation now runs only on explicit invocation of the `/onex:delegate`
+> in a subsequent cleanup. Delegation now runs only on explicit invocation of the `/onex:delegate`
 > skill, which dispatches `node_delegate_skill_orchestrator` (omnimarket). The
 > Kafka-bridge flow below is retained for historical context only and is **not wired**.
 
@@ -83,7 +83,7 @@ plugins/onex/skills/delegate/_lib/handler_delegate_skill.py
 | `src/omniclaude/lib/task_classifier.py` | Prompt classification |
 | `src/omniclaude/hooks/topics.py` (`DELEGATE_TASK`) | Kafka topic definition |
 
-> The `user-prompt-submit.sh` bridge invocation row was removed in OMN-13358: the hook
+> The `user-prompt-submit.sh` bridge invocation row was subsequently removed: the hook
 > no longer calls a delegation bridge (see the status banner at the top of this doc).
 
 ---

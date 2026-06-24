@@ -1,4 +1,4 @@
-# Verification transcript for OMN-10539
+# Verification transcript for dod_verify invocation
 # Date: 2026-05-05
 # Ran the exact invocation documented in the corrected SKILL.md
 # against a real ticket contract on disk.

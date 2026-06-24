@@ -1,7 +1,7 @@
-# OMN-10979 Security Scanner Blocking Evidence
+# Security Scanner Blocking Evidence
 
 Date: 2026-05-15
-Worktree: `$OMNI_HOME/omni_worktrees/OMN-10979/omniclaude`
+Worktree: `$OMNI_HOME/omni_worktrees/omniclaude` (security scanner branch)
 Base: `origin/main` at `f1ed6ee50`
 
 ## Workflow checks
@@ -16,7 +16,7 @@ Base: `origin/main` at `f1ed6ee50`
 ## PR trigger scope
 
 - `security-scan.yml` now runs on `pull_request`.
-- PR runs execute the OMN-10979 blockers:
+- PR runs execute the security scanner blocking checks:
   - `Container Security Scan` builds the image and runs Dockle.
   - `IaC Security Scan` runs Checkov.
 - PR runs skip pre-existing non-ticket container/dependency work that was not previously part of PR execution:

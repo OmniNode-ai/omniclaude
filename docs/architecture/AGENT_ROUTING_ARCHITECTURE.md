@@ -1,7 +1,7 @@
 # Agent Routing Architecture
 
 **Last Updated**: 2026-02-19
-**Tickets**: OMN-1980 (agent YAML removed from sync path), OMN-1893 (routing_path signal), OMN-2273 (LLM routing observability), PR-92 (routing.decision emission)
+**Key changes**: agent YAML removed from sync path, routing_path signal added, LLM routing observability, routing.decision emission (PR-92)
 
 ---
 
@@ -114,9 +114,9 @@ See `docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md` for detailed threshold tuning
 
 ---
 
-## Candidate List Injection (OMN-1980)
+## Candidate List Injection
 
-Before OMN-1980, the routing hook loaded the selected agent's YAML and injected it synchronously. This added up to 1 second to the hook's sync path (YAML load timeout). OMN-1980 removed this: the hook now passes only the **candidates list** to Claude. Claude reads the list, makes a semantic selection, and loads the YAML on-demand.
+Previously, the routing hook loaded the selected agent's YAML and injected it synchronously. This added up to 1 second to the hook's sync path (YAML load timeout). That was removed: the hook now passes only the **candidates list** to Claude. Claude reads the list, makes a semantic selection, and loads the YAML on-demand.
 
 The candidates list in the routing result:
 ```json
