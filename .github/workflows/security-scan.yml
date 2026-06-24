@@ -163,6 +163,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Free Docker cache before image build
+        run: |
+          docker system prune -af --volumes || true
+          df -h
+
       - name: Build Docker image
         working-directory: ${{ github.workspace }}
         run: docker build -f deployment/Dockerfile -t omniclaude:scan .
@@ -170,7 +175,6 @@ jobs:
       - name: Free Docker cache before image export
         run: |
           docker builder prune -af || true
-          docker system prune -af --volumes || true
           df -h
 
       - name: Run Trivy vulnerability scanner
