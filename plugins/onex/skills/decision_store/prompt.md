@@ -23,7 +23,7 @@ Before executing any sub-operation, verify:
 
 1. The worktree is on the correct branch (not `main`).
 2. `LLM_DEEPSEEK_R1_URL` is set (see `~/.claude/CLAUDE.md` for the endpoint URL).
-3. `NodeDecisionStoreEffect` (OMN-2765) and `NodeDecisionStoreQueryCompute` (OMN-2767)
+3. `NodeDecisionStoreEffect` and `NodeDecisionStoreQueryCompute`
    are available in the current environment.
 
 ---
@@ -396,7 +396,7 @@ def process_slack_reply(reply_text: str, slack_user_id: str) -> ReplyResult:
 - In MVP, semantic results arrive after the pipeline continues; they update the conflict record
   when they arrive but do not re-gate the pipeline.
 - All event emission uses the topic constant `TopicBase.DECISION_CONFLICT_STATUS_CHANGED`
-  from `omniclaude/src/omniclaude/hooks/topics.py` (added in OMN-2766).
+  from `omniclaude/src/omniclaude/hooks/topics.py`.
 - Wire topic name: `"onex.evt.omniclaude.decision-conflict-status-changed.v1"`
 - See `examples/record_decision.md`, `examples/query_decisions.md`, and
   `examples/conflict_resolution.md` for concrete walkthroughs.

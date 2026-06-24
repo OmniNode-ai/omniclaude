@@ -155,7 +155,7 @@ For each domain with `fix_tier=FEATURE_GAP`, create a Linear ticket immediately:
 tracker.save_issue(
   title="feat: {domain_id} — upstream data producer needed for {pages}",
   teamId="{omniclaude_team_id}",
-  parentId="OMN-5057",
+  parentId="{dashboard_sweep_epic_id}",
   priority=2,
   description="
 ## Pages Affected
@@ -212,12 +212,12 @@ You MUST follow the systematic-debugging skill (5 phases):
 
 ## Worktree Setup
 Create worktrees for each affected repo:
-  TICKET=OMN-5057
-  BRANCH=jonah/omn-5057-fix-{domain_id}
+  TICKET={dashboard_sweep_epic_id}
+  BRANCH=jonah/{ticket_slug}-fix-{domain_id}
 
   For each repo in {repos_likely_affected}:
     git -C $ONEX_WORKTREES_ROOT/../{repo} worktree add \
-      $ONEX_WORKTREES_ROOT/OMN-5057/{repo}-{domain_id} \
+      $ONEX_WORKTREES_ROOT/{dashboard_sweep_epic_id}/{repo}-{domain_id} \
       -b {BRANCH}
 
 ## NEVER edit files in canonical repo roots directly. Always use worktrees.
@@ -225,7 +225,7 @@ Create worktrees for each affected repo:
 ## Fix Requirements
 - Fix the root cause (not just the symptom)
 - Run: uv run pre-commit run --all-files (must pass before commit)
-- For TypeScript repos: cd $ONEX_WORKTREES_ROOT/OMN-5057/{repo}-{domain_id} && npx tsc --noEmit
+- For TypeScript repos: cd $ONEX_WORKTREES_ROOT/{dashboard_sweep_epic_id}/{repo}-{domain_id} && npx tsc --noEmit
 
 ## Output Contract
 Write fix summary to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json
@@ -264,11 +264,11 @@ After all debug agents complete, for each domain with `status=fix_ready`:
 
 **Create PR** (title MUST contain `OMN-XXXX` — CI blocks merge without it):
 ```bash
-cd $ONEX_WORKTREES_ROOT/OMN-5057/{repo}-{domain_id}
-git push -u origin jonah/omn-5057-fix-{domain_id}
+cd $ONEX_WORKTREES_ROOT/{dashboard_sweep_epic_id}/{repo}-{domain_id}
+git push -u origin jonah/{ticket_slug}-fix-{domain_id}
 gh pr create \
   --repo OmniNode-ai/{repo} \
-  --title "fix(dashboard): {domain_id} — {root_cause} [OMN-5057]" \
+  --title "fix(dashboard): {domain_id} — {root_cause} [{dashboard_sweep_epic_id}]" \
   --body "$(cat <<'EOF'
 ## Summary
 - Domain: {domain_id}
@@ -288,7 +288,7 @@ gh pr create \
 - [ ] dashboard-sweep re-audit classifies affected pages as HEALTHY
 
 ## Sweep Context
-Sweep run: OMN-5057 / {run_id}
+Sweep run: {dashboard_sweep_epic_id} / {run_id}
 Triage: {domain_id} | {fix_tier}
 EOF
 )"
@@ -299,7 +299,7 @@ EOF
 tracker.save_issue(
   title="fix(dashboard): {domain_id} — {root_cause}",
   teamId="{omniclaude_team_id}",
-  parentId="OMN-5057",
+  parentId="{dashboard_sweep_epic_id}",
   priority=2,
   description="
 ## Root Cause
@@ -390,7 +390,7 @@ Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/report.md`:
 
 | Route | Classification | Fix Applied | PR | Ticket |
 |-------|---------------|-------------|-----|--------|
-| /agents | HEALTHY | agent-pipeline DATA_PIPELINE fix | #42 | OMN-5060 |
+| /agents | HEALTHY | agent-pipeline DATA_PIPELINE fix | #42 | (ticket) |
 | ...    | ...    | ...         | ... | ...    |
 
 ## Summary

@@ -11,7 +11,7 @@ composable: true
 inputs:
   - name: epic_id
     type: str
-    description: Linear epic ID (e.g., OMN-2000)
+    description: Linear epic ID (e.g., EPIC-ID)
     required: true
   - name: dry_run
     type: bool
@@ -27,7 +27,7 @@ outputs:
       - extra: "{epic_id, created_tickets, count}"
 args:
   - name: epic_id
-    description: Linear epic ID (e.g., OMN-2000)
+    description: Linear epic ID (e.g., EPIC-ID)
     required: true
   - name: --dry-run
     description: Print decomposition plan without creating tickets
@@ -48,7 +48,7 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
 
 **Announce at start:** "I'm using the decompose-epic skill to create sub-tickets for {epic_id}."
 
-**Implements**: OMN-2522
+**Implements**: decompose-epic skill
 
 - **Mode A** (no `--repos`): reads epic description, infers repo breakdown from `repo_manifest.yaml`, creates sub-tickets with one per identified work area matched to its owning repo
 - **Mode B** (`--repos omniclaude,omnibase_core,...`): repos are pre-determined; creates one focused sub-ticket per repo, scoped to that repo's concerns
@@ -56,8 +56,8 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
 ## Usage Examples
 
 ```
-/decompose-epic OMN-2000
-/decompose-epic OMN-2000 --dry-run
+/decompose-epic EPIC-ID
+/decompose-epic EPIC-ID --dry-run
 ```
 
 ## Decomposition Flow
@@ -179,12 +179,12 @@ Example result:
   "skill_name": "decompose_epic",
   "status": "success",
   "extra_status": "created",
-  "run_id": "pipeline-1709856000-OMN-2000",
+  "run_id": "pipeline-1709856000-EPIC-ID",
   "extra": {
-    "epic_id": "OMN-2000",
+    "epic_id": "EPIC-ID",
     "created_tickets": [
-      {"id": "OMN-2001", "title": "Implement X", "repo_hint": "omniclaude"},
-      {"id": "OMN-2002", "title": "Add node Y", "repo_hint": "omnibase_core"}
+      {"id": "TICKET-1", "title": "Implement X", "repo_hint": "omniclaude"},
+      {"id": "TICKET-2", "title": "Add node Y", "repo_hint": "omnibase_core"}
     ],
     "count": 2
   }
@@ -198,4 +198,3 @@ Example result:
 - `epic-team` skill (invokes decompose-epic when epic has 0 child tickets)
 - `ticket-pipeline` skill (planned: invokes decompose-epic on cross-repo auto-split)
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
-- OMN-2522 — implementation ticket

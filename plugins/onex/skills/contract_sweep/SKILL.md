@@ -1,5 +1,5 @@
 ---
-description: Unified contract health skill — drift mode (static cross-repo drift detection) and runtime mode (live compliance verification); replaces contract_verify (OMN-8073)
+description: Unified contract health skill — drift mode (static cross-repo drift detection) and runtime mode (live compliance verification); supersedes the earlier contract_verify skill
 version: 3.0.0
 mode: full
 level: advanced
@@ -303,7 +303,3 @@ The skill wraps:
 - `contract-compliance-check` skill -- Pre-merge seam validation (per-ticket, per-branch)
 - `NodeContractDriftCompute` in `onex_change_control` -- The underlying ONEX node
 - `kafka_boundaries.yaml` -- Cross-repo Kafka boundary manifest
-- OMN-5162 -- Original check-drift script
-- OMN-6725 -- contract-sweep drift tracking ticket
-- OMN-7040 -- contract-verify original ticket (merged into contract-sweep via OMN-8073)
-- OMN-8073 -- Merge contract_verify into contract_sweep

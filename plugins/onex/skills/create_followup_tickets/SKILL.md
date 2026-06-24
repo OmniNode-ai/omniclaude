@@ -193,7 +193,7 @@ Shows preview and asks for confirmation before creating.
 Link all created tickets to a parent issue:
 
 ```bash
-/create-followup-tickets "beta hardening" --parent OMN-1850
+/create-followup-tickets "beta hardening" --parent PROJ-1850
 ```
 
 This creates an epic relationship where all follow-up tickets are children of the parent.
