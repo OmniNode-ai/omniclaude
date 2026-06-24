@@ -10,7 +10,7 @@ This prevents individual PR ordering bugs and catches epic-level integration fai
 
 `epic/{epic_id}/integration`
 
-Example: `epic/OMN-2600/integration`
+Example: `epic/<epic_id>/integration`
 
 ## `create_integration_branch(epic_id, repo)` — Procedure
 

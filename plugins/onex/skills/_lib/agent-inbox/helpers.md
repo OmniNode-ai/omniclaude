@@ -93,8 +93,8 @@ def make_message_envelope(
         >>> env = make_message_envelope(
         ...     type="agent.task.completed",
         ...     source_agent_id="worker-omniclaude",
-        ...     target_epic_id="OMN-2821",
-        ...     payload={"ticket_id": "OMN-2827", "status": "completed"},
+        ...     target_epic_id="<epic_id>",
+        ...     payload={"ticket_id": "<ticket_id>", "status": "completed"},
         ...     run_id="run-001",
         ... )
     """
@@ -188,7 +188,7 @@ def broadcast_to_epic(epic_id: str, message_envelope: dict) -> str:
     """Write a broadcast message to the epic-wide status inbox.
 
     Args:
-        epic_id: Epic identifier (e.g., "OMN-2821").
+        epic_id: Epic identifier (e.g., "epic-2821").
         message_envelope: The message envelope dictionary.
 
     Returns:
@@ -198,10 +198,10 @@ def broadcast_to_epic(epic_id: str, message_envelope: dict) -> str:
         >>> env = make_message_envelope(
         ...     type="agent.task.completed",
         ...     source_agent_id="worker-omniclaude",
-        ...     target_epic_id="OMN-2821",
-        ...     payload={"ticket_id": "OMN-2827"},
+        ...     target_epic_id="<epic_id>",
+        ...     payload={"ticket_id": "<ticket_id>"},
         ... )
-        >>> path = broadcast_to_epic("OMN-2821", env)
+        >>> path = broadcast_to_epic("<epic_id>", env)
     """
     broadcast_dir = INBOX_ROOT / BROADCAST_DIR / epic_id
     broadcast_dir.mkdir(parents=True, exist_ok=True)
@@ -290,7 +290,7 @@ def read_epic_broadcast(
     """Read broadcast messages for an epic.
 
     Args:
-        epic_id: Epic identifier (e.g., "OMN-2821").
+        epic_id: Epic identifier (e.g., "epic-2821").
         since: ISO 8601 timestamp; only return messages after this time.
 
     Returns:
@@ -460,7 +460,7 @@ def notify_task_completed(
         >>> paths = notify_task_completed(
         ...     source_agent_id="worker-omnibase-core",
         ...     target_agent_id="worker-omniclaude",
-        ...     epic_id="OMN-2821",
+        ...     epic_id="<epic_id>",
         ...     payload={"pr_url": "https://github.com/org/repo/pull/42"},
         ...     run_id="run-001",
         ... )

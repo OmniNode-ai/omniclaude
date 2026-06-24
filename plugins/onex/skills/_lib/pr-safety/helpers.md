@@ -825,7 +825,7 @@ class BoundaryViolationError(Exception):
 
 **MANDATORY** before any `git worktree add`, `git checkout`, or `git push` to a PR branch.
 Never construct branch names from ticket IDs or PR titles -- always fetch from GitHub API.
-See OMN-6364 and memory rule `feedback_always_fetch_branch_name.md`.
+See memory rule `feedback_always_fetch_branch_name.md`.
 
 ```python
 def resolve_branch(pr_number: int | str, repo: str) -> str:
@@ -1450,7 +1450,7 @@ Detect whether a GitHub repo has a merge queue enabled on its default branch.
 Results are cached per-repo for the duration of the caller's session.
 
 ```python
-# Cache for merge queue detection per-repo (OMN-5463)
+# Cache for merge queue detection per-repo
 _merge_queue_cache: dict[str, bool] = {}
 
 
@@ -1499,7 +1499,7 @@ Enqueue a PR into the repo's merge queue via the GraphQL `enqueuePullRequest`
 mutation. This is the **only** place in the codebase that calls the enqueue
 mutation directly.
 
-`gh pr merge --auto` does NOT enqueue into merge queues (OMN-5635). Repos with
+`gh pr merge --auto` does NOT enqueue into merge queues. Repos with
 merge queues must use this function instead.
 
 ```python
@@ -1556,7 +1556,7 @@ def enqueue_to_merge_queue(repo_full: str, pr_number: int) -> dict:
     if "All comments must be resolved" in stderr or "UNRESOLVED_CONVERSATIONS" in stdout:
         return {
             "status": "unresolved_conversations",
-            "error": "Unresolved review conversations block enqueue — resolve threads (OMN-5634) then retry",
+            "error": "Unresolved review conversations block enqueue — resolve threads then retry",
         }
 
     return {

@@ -22,7 +22,7 @@ args:
 
 # Adversarial Pipeline
 
-> **[OMN-10111] DISABLED:** This skill chains into `hostile_reviewer` (Stage 2 gate), which is currently disabled pending eval framework validation. Do NOT invoke this skill. It will produce incorrect results (silent-pass gate). Re-enable when OMN-10111 closes.
+> **DISABLED:** This skill chains into `hostile_reviewer` (Stage 2 gate), which is currently disabled pending eval framework validation. Do NOT invoke this skill. It will produce incorrect results (silent-pass gate). Re-enable when the eval framework validation closes.
 
 ## Overview
 

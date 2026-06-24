@@ -1,6 +1,6 @@
 # Integration Verification Gate — Test Scenarios
 
-**Phase 5.75 of ticket-pipeline (OMN-3344)**
+**Phase 5.75 of ticket-pipeline**
 
 These scenarios verify the Stage 1 logic of the integration verification gate.
 

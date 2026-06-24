@@ -33,7 +33,7 @@ skill_kind: dispatch
 
 # /onex:aislop_sweep — one command, one typed result
 
-**Skill ID**: `onex:aislop_sweep` · **Command**: `uv run onex skill aislop_sweep` (omnibase_infra) · **Backing node**: `node_aislop_sweep` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:aislop_sweep` · **Command**: `uv run onex skill aislop_sweep` (omnibase_infra) · **Backing node**: `node_aislop_sweep` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

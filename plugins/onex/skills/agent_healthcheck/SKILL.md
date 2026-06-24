@@ -1,5 +1,5 @@
 ---
-description: "Dispatch-only shim for agent stall detection and recovery. All detection and recovery logic lives in node_worker_stall_recovery (omnimarket, OMN-9403). The skill parses args, builds the input envelope, dispatches to the node, and renders the receipt."
+description: "Dispatch-only shim for agent stall detection and recovery. All detection and recovery logic lives in node_worker_stall_recovery (omnimarket). The skill parses args, builds the input envelope, dispatches to the node, and renders the receipt."
 version: 2.0.0
 mode: full
 level: advanced
@@ -17,7 +17,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --ticket-id
-    description: "Ticket ID being monitored (e.g., OMN-1234)"
+    description: "Ticket ID being monitored (e.g., TICKET-1234)"
     required: true
   - name: --agent-id
     description: "Agent/task ID to monitor"
@@ -54,7 +54,7 @@ outputs:
 
 # /onex:agent_healthcheck — dispatch-only shim
 
-**Skill ID**: `onex:agent_healthcheck` · **Backing node**: `omnimarket/src/omnimarket/nodes/node_worker_stall_recovery/` · **Ticket**: OMN-10428 · **Epic**: OMN-10424
+**Skill ID**: `onex:agent_healthcheck` · **Backing node**: `omnimarket/src/omnimarket/nodes/node_worker_stall_recovery/`
 
 ## Routing Contract
 
@@ -66,7 +66,7 @@ outputs:
 ## Dispatch
 
 This skill is a **thin shim** — all stall detection and recovery logic lives in
-`node_worker_stall_recovery` (omnimarket, OMN-9403).
+`node_worker_stall_recovery` (omnimarket).
 
 ```bash
 INPUT_JSON='{"ticket_id":"<ticket_id>","agent_id":"<agent_id>","timeout_minutes":2,"context_threshold_pct":80,"max_redispatches":2,"dry_run":true}'
@@ -80,7 +80,7 @@ The node returns `ModelStallRecoveryResult`:
 - `redispatch_count`: number of redispatches performed
 - `error`: error message if `status == failed`
 
-Checkpoint and relaunch semantics remain governed by the OMN-6887 recovery
+Checkpoint and relaunch semantics remain governed by the stall recovery
 protocol. The backing node writes the recovery checkpoint, captures completed
 and remaining work, and relaunches or redispatches a fresh agent when recovery
 is required; this shim only forwards the invocation and returns the receipt.
