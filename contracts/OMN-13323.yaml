@@ -1,0 +1,61 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13323"
+title: "fix(OMN-13323): align dod_evidence_runner writer path with completion guard read path"
+summary: >-
+  Align the /dod-verify writer default with the DoD completion guard read path.
+  When ONEX_EVIDENCE_ROOT is set, the writer now resolves receipts under that
+  root for the ticket, matching the guard's fail-closed lookup. This PR also
+  keeps omniclaude's golden-chain metadata in parity with the canonical
+  omnimarket registry after the current closeout wave.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "CI passes on omniclaude PR #1798."
+    command: "gh pr checks 1798 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-round-trip-path-equal"
+    description: >-
+      The writer's resolved receipt path equals the completion guard's resolved
+      ONEX_EVIDENCE_ROOT receipt path, and the real writer -> real guard
+      round-trip allows Done.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/hooks/test_dod_round_trip.py -q"
+  - id: "dod-planted-missing-fail-closed"
+    description: >-
+      Removing the written receipt makes the real guard fail closed with the
+      documented missing-receipt reason.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/hooks/test_dod_round_trip.py::TestRoundTrip::test_planted_missing_receipt_fails_closed -q"
+  - id: "dod-golden-chain-metadata-parity"
+    description: >-
+      omniclaude golden-chain metadata matches the canonical omnimarket registry
+      for the closeout-wave metadata entries.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_golden_chain_integrity.py --canonical-registry ../omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml"
+  - id: "dod-deploy-assessment"
+    description: >-
+      Deploy-gate evidence for the runtime-path metadata touch: no live deploy,
+      restart, topic mutation, or .201 mutation was performed pre-merge. The
+      change is source metadata parity and will be picked up by the normal
+      omniclaude post-merge deploy path.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "deploy assessment: no live deploy or runtime restart performed pre-merge for OMN-13323"
