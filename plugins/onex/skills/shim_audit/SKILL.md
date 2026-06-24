@@ -30,7 +30,7 @@ skill_kind: dispatch
 
 # /onex:shim_audit — one command, one typed result
 
-**Skill ID**: `onex:shim_audit` · **Command**: `uv run onex skill shim_audit` (omnibase_infra) · **Backing node**: `node_shim_scanner` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:shim_audit` · **Command**: `uv run onex skill shim_audit` (omnibase_infra) · **Backing node**: `node_shim_scanner` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

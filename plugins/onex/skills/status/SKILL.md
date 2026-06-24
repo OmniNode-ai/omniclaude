@@ -12,14 +12,12 @@ tags:
   - foreground-safe
 author: OmniClaude Team
 composable: false
-ticket: OMN-9691
 ---
 
 # /onex:status — Foreground Status Routing
 
 **Skill ID**: `onex:status`
 **Version**: 1.0.0
-**Ticket**: OMN-9691
 
 **Announce at start:** "I'm using the status skill."
 

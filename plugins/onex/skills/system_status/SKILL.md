@@ -7,7 +7,6 @@ debug: true
 index: true
 node_dispatch: node_platform_diagnostics
 node_dispatch_dimensions: RUNTIME_NODES,HOOK_HEALTH
-migration_epic: OMN-8197
 ---
 
 # System Status

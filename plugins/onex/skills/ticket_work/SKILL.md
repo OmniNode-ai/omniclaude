@@ -72,7 +72,7 @@ onex run-node node_ticket_work \
   --timeout 300
 ```
 
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Note: handler is a structural placeholder; full migration tracked in OMN-8004.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Note: handler is a structural placeholder; full migration is tracked separately.
 
 ### Step 3 — Execute ticket phases via tracker DI
 
@@ -132,5 +132,4 @@ SKILL.md   -> thin shell (this file)
 node       -> omnimarket/src/omnimarket/nodes/node_ticket_work/ (structural placeholder)
 contract   -> node_ticket_work/contract.yaml
 enrichment -> omnimarket/src/omnimarket/nodes/node_ticket_research_enrichment_compute/
-migration  -> OMN-8004 (full handler implementation)
 ```

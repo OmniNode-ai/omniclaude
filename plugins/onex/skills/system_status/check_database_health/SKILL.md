@@ -1,5 +1,5 @@
 ---
-description: PostgreSQL database health via omninode-runtime HTTP health endpoint (OMN-10492)
+description: PostgreSQL database health via omninode-runtime HTTP health endpoint
 ---
 
 # Check Database Health

@@ -49,8 +49,8 @@ outputs:
 
 # /onex:self_healing_dispatch — Self-Healing Orchestration Wrapper
 
-**Skill ID**: `onex:self_healing_dispatch` · **Ticket**: OMN-7259 · **Epic parent**: OMN-7253
-**Workstream**: B Phase 3 — built on OMN-7255 (stall detection) + OMN-7257 (dispatch enforcement)
+**Skill ID**: `onex:self_healing_dispatch`
+**Workstream**: B Phase 3 — built on earlier stall-detection and dispatch-enforcement foundations
 
 ## Purpose
 
@@ -115,7 +115,7 @@ WARNING: Cannot resolve repo for OMN-9999. Provide --repo-hints or set the ticke
 
 ### Phase 2 — TeamCreate Dispatch (enforced)
 
-For each dispatch group, spawn a named worker via TeamCreate. **Never use a bare Agent() call** — the dispatch-mode guardrail (OMN-7257) will fire an advisory, and this skill enforces TeamCreate unconditionally.
+For each dispatch group, spawn a named worker via TeamCreate. **Never use a bare Agent() call** — the dispatch-mode guardrail will fire an advisory, and this skill enforces TeamCreate unconditionally.
 
 ```python
 # Pseudo-code — executed by the skill entrypoint, not the Python module
@@ -247,6 +247,6 @@ Do not duplicate this logic inline. Import and call the module functions.
 
 ## See Also
 
-- `onex:agent_healthcheck` — stall detection sub-skill (OMN-7255 backing node)
+- `onex:agent_healthcheck` — stall detection sub-skill
 - `onex:dispatch_watchdog` — epic-level watchdog for larger wave runs
 - `onex:epic_team` — full epic orchestration (use for >10 tickets or >4 repos)
