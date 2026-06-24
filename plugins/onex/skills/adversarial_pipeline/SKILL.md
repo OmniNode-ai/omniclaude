@@ -13,7 +13,7 @@ args:
     description: "Design topic or problem statement to feed into the pipeline"
     required: true
   - name: --project
-    description: "Linear project name used during ticket creation"
+    description: "Linear project name for ticket creation" # skill-boundary-ok: YAML arg description, not iteration logic
     required: false
   - name: --dry-run
     description: "Run all stages but skip final ticket creation"
