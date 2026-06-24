@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13570"
+title: "Sanitize omniclaude documentation local-environment traces"
+summary: >-
+  Documentation-only cleanup for omniclaude public-repo hygiene. The PR removes or annotates local-environment
+  traces in tracked docs, including private host shorthand, personal filesystem paths, and personal SSH/email
+  references. No runtime code, hook behavior, topic schema, or deployment surface changes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "PR checks pass after documentation sanitization."
+    command: "gh pr checks 1800 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-doc-sanitization"
+    description: "The PR is documentation-only and removes local-environment traces from tracked docs."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f contracts/OMN-13570.yaml"
+  - id: "dod-no-deploy-required"
+    description: "No live deploy is required for documentation-only sanitization."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'No runtime code' contracts/OMN-13570.yaml"
