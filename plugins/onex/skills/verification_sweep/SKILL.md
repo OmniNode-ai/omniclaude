@@ -51,6 +51,7 @@ outputs:
     description: "Absolute path to the written verification receipt YAML (empty if --dry-run)"
   - name: status
     description: "pass | fail | partial | skip"
+boundary_exempt: true
 ---
 
 # Verification Sweep

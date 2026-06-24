@@ -27,6 +27,7 @@ args:
     description: "Preview changes without writing. Only used with --sync."
     required: false
 mode: full
+boundary_exempt: true
 ---
 
 # Ticket Plan

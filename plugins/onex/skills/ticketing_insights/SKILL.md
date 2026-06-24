@@ -8,6 +8,7 @@ args:
   - name: --mode
     description: "Report mode: deep-dive (default) | close-day | project | velocity | suggest | pipeline | github | all"
     required: false
+boundary_exempt: true
 ---
 
 # Ticketing Insights

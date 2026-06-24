@@ -43,6 +43,7 @@ outputs:
     description: "Number of tickets that failed"
   - name: tickets_blocked
     description: "Number of tickets blocked by failed dependencies"
+boundary_exempt: true
 ---
 
 # Wave Scheduler

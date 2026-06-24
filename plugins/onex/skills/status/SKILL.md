@@ -12,6 +12,7 @@ tags:
   - foreground-safe
 author: OmniClaude Team
 composable: false
+boundary_exempt: true
 ---
 
 # /onex:status — Foreground Status Routing

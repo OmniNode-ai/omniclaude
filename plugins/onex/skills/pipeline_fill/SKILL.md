@@ -29,6 +29,7 @@ args:
   - name: --top-n
     description: "Maximum tickets to dispatch per cycle (default: 5)"
     required: false
+boundary_exempt: true
 ---
 
 # Pipeline Fill

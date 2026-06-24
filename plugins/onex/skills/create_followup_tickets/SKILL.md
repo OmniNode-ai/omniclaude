@@ -12,6 +12,7 @@ tags:
   - batch
   - automation
 author: OmniClaude Team
+boundary_exempt: true
 ---
 
 # Create Follow-up Tickets Skill

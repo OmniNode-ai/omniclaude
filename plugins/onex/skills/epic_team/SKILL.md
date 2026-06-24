@@ -15,6 +15,7 @@ args:
   - --force-kill: Combine with --force to destroy active run even with live workers
   - --resume: Re-enter monitoring; finalize if all tasks terminal; no-op if already done
   - --force-unmatched: Route unmatched tickets to omniplan as TRIAGE tasks
+boundary_exempt: true
 ---
 
 # Epic Team Orchestration

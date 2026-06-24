@@ -29,6 +29,7 @@ args:
   - name: --max-redispatches
     description: "Max redispatch attempts per task before escalation (default: 2)"
     required: false
+boundary_exempt: true
 ---
 
 # Agent Dispatch Watchdog

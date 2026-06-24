@@ -7,6 +7,7 @@ debug: true
 index: true
 node_dispatch: node_platform_diagnostics
 node_dispatch_dimensions: RUNTIME_NODES,HOOK_HEALTH
+boundary_exempt: true
 ---
 
 # System Status

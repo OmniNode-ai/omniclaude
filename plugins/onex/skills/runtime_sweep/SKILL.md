@@ -15,6 +15,7 @@ args:
   - name: --scope
     description: "Check scope: omnidash-only | all-repos (default: all-repos)"
     required: false
+boundary_exempt: true
 ---
 
 # Runtime Sweep

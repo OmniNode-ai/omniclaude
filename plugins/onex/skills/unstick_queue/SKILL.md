@@ -26,6 +26,7 @@ args:
   - name: --orphan-minutes
     description: "Minutes a check must sit IN_PROGRESS/null-conclusion before classified orphaned (default 20)"
     required: false
+boundary_exempt: true
 ---
 
 # unstick_queue — auto-unwedge merge-queue stalls

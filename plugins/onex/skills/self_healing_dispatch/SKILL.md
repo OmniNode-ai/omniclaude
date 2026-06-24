@@ -45,6 +45,7 @@ outputs:
     description: "Path to NDJSON dispatch log for this run"
   - name: escalated
     description: "Ticket IDs escalated to Blocked (exceeded max redispatches)"
+boundary_exempt: true
 ---
 
 # /onex:self_healing_dispatch — Self-Healing Orchestration Wrapper

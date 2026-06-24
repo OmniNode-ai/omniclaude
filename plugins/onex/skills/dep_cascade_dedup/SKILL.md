@@ -26,6 +26,7 @@ args:
   - name: --close-comment
     description: "Comment to post on closed PRs (default: auto-generated)"
     required: false
+boundary_exempt: true
 ---
 
 # Dep Cascade Dedup

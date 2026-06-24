@@ -18,6 +18,7 @@ args:
   - name: --wait-timeout
     description: "Seconds to wait for health before giving up (default: 120)"
     required: false
+boundary_exempt: true
 ---
 
 # Start Environment

@@ -22,6 +22,7 @@ args:
   - name: --skip-watchdog
     description: "Skip zombie agent detection via dispatch_watchdog"
     required: false
+boundary_exempt: true
 ---
 
 # Preflight

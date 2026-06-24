@@ -26,6 +26,7 @@ outputs:
   - name: epics_created
     type: list[str]
     description: List of created epic IDs
+boundary_exempt: true
 ---
 
 # Ticketing Epic Organization

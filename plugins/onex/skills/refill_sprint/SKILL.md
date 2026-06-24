@@ -39,6 +39,7 @@ outputs:
   - name: exhausted
     type: bool
     description: True if no eligible tech debt remains in Future
+boundary_exempt: true
 ---
 
 # refill-sprint Skill
