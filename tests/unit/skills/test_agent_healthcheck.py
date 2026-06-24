@@ -254,9 +254,9 @@ class TestAgentHealthcheckSkillStructure:
         assert "relaunch" in body.lower()
 
     def test_body_references_checkpoint_protocol(self) -> None:
-        """SKILL.md must reference the checkpoint protocol from OMN-6887."""
+        """SKILL.md must document checkpoint/relaunch semantics for recovery."""
         _, body = _parse_frontmatter(_HEALTHCHECK_SKILL_MD)
-        assert "OMN-6887" in body
+        assert "recovery protocol" in body.lower() or "checkpoint" in body.lower()
 
     def test_outputs_include_status_and_checkpoint_path(self) -> None:
         """Frontmatter outputs must include status or checkpoint_path."""
@@ -280,10 +280,10 @@ class TestEpicTeamHealthCheckReference:
         text = _EPIC_TEAM_SKILL_MD.read_text(encoding="utf-8")
         assert "agent_healthcheck" in text or "agent-healthcheck" in text
 
-    def test_epic_team_references_omn_6889(self) -> None:
-        """epic-team SKILL.md must reference OMN-6889."""
+    def test_epic_team_documents_healthcheck_integration(self) -> None:
+        """epic-team SKILL.md must document the Agent Health-Check Integration section."""
         text = _EPIC_TEAM_SKILL_MD.read_text(encoding="utf-8")
-        assert "OMN-6889" in text
+        assert "Agent Health-Check Integration" in text
 
     def test_epic_team_documents_three_heuristics(self) -> None:
         """epic-team SKILL.md must mention all three detection heuristics."""

@@ -116,10 +116,10 @@ class TestRedeployManualDeployGuard:
         return _read("redeploy/SKILL.md")
 
     def test_anti_patterns_section_present(self, skill_md: str) -> None:
-        """SKILL.md must contain an Anti-Patterns section citing OMN-8602."""
-        assert "Anti-Patterns (OMN-8602)" in skill_md, (
-            "redeploy/SKILL.md must include the Anti-Patterns (OMN-8602) "
-            "section guarding the manual-deploy-execution and "
+        """SKILL.md must contain an Anti-Patterns section."""
+        assert "## Anti-Patterns" in skill_md, (
+            "redeploy/SKILL.md must include the ## Anti-Patterns section "
+            "guarding the manual-deploy-execution and "
             "deploy-targets-local-not-201 friction surfaces."
         )
 
@@ -163,7 +163,7 @@ class TestRedeployLocalTargetGuard:
     def test_warns_against_localhost(self, skill_md: str) -> None:
         """SKILL.md must explicitly warn against targeting local Docker."""
         # Find the anti-pattern section and verify it warns about localhost.
-        idx = skill_md.find("Anti-Patterns (OMN-8602)")
+        idx = skill_md.find("## Anti-Patterns")
         assert idx >= 0
         section = skill_md[idx:]
         assert "localhost" in section or "local Docker" in section, (

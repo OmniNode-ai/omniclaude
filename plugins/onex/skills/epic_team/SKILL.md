@@ -687,7 +687,7 @@ repos:
 Keyword matching is case-insensitive. Tickets with no keyword match are UNMATCHED.
 Use `--force-unmatched` to route them to omniplan as TRIAGE tasks.
 
-## Stacked Branch Execution (OMN-6270)
+## Stacked Branch Execution
 
 When Wave N+1 tickets depend on Wave N (via cross-repo Part 2 splits or file-overlap
 chains), the downstream ticket branches from the Wave N branch tip instead of `main`.
@@ -767,7 +767,7 @@ breaker trips:
 This prevents the first autopilot close-out failure mode where a release dispatch stalled
 for 1+ hour with zero output.
 
-### Agent Health-Check Integration (OMN-6889)
+### Agent Health-Check Integration
 
 The `agent_healthcheck` skill provides more sophisticated stall detection beyond the simple
 timeout circuit breaker. During wave monitoring, epic-team checks agent health using three
