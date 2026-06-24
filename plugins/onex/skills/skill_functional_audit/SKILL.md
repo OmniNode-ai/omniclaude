@@ -300,15 +300,23 @@ Gate: PASS (all facades have Linear tickets)
 
 ## Known Tracked Findings (do not re-flag)
 
-The following skills have known PARTIAL/FACADE verdicts with Linear tickets. Do NOT re-flag these as new findings:
+Skills with a currently-open PARTIAL/FACADE verdict and a tracking Linear ticket
+are listed here so the audit does not re-flag them as new findings. A row stays
+here only while its ticket is open; once the ticket is Done and the backing node
+exists, remove the row.
 
-| Skill | Verdict | Linear Ticket | Since |
-|-------|---------|--------------|-------|
-| `onex:session` | PARTIAL | OMN-8699 (relates to OMN-8367) | 2026-04-14 |
-| `onex:pipeline_fill` | FACADE | OMN-8700 | 2026-04-14 |
-| `onex:delegate` | PARTIAL | OMN-8701 | 2026-04-14 |
+_None currently tracked._
 
-Update this table when tickets are resolved or new findings are added.
+The three 2026-04-14 findings have all been resolved and removed from this table
+(OMN-13512):
+
+- `onex:pipeline_fill` (was FACADE, OMN-8700 — **Done**; `node_pipeline_fill`
+  now exists in omnimarket, so the facade is resolved).
+- `onex:session` (was PARTIAL, OMN-8699 — **Done**).
+- `onex:delegate` (was PARTIAL, OMN-8701 — **Done**; local-runtime fallback
+  landed).
+
+Update this section when tickets are resolved or new findings are added.
 
 ---
 
