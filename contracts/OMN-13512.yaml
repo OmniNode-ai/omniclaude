@@ -16,7 +16,7 @@ evidence_requirements:
   - kind: "docs"
     description: "SKILL.md stale Known Tracked Findings table is removed."
     command: "git diff -- plugins/onex/skills/skill_functional_audit/SKILL.md"
-  - kind: "occ"
+  - kind: "manual"
     description: "Central OCC evidence for OMN-13512 is merged."
     command: "gh pr view 3022 --repo OmniNode-ai/onex_change_control --json state,mergeCommit"
 emergency_bypass:
