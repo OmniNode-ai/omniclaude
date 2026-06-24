@@ -13,7 +13,7 @@ args:
     description: "Design topic or problem statement to feed into the pipeline"
     required: true
   - name: --project
-    description: "Linear project name for ticket creation"
+    description: "Linear project name used during ticket creation"
     required: false
   - name: --dry-run
     description: "Run all stages but skip final ticket creation"
