@@ -17,7 +17,7 @@ composable: true
 inputs:
   - name: ticket_id
     type: str
-    description: Linear ticket ID (e.g., OMN-1807)
+    description: Linear ticket ID (e.g., PROJ-1807)
     required: true
   - name: autonomous
     type: bool
@@ -34,7 +34,7 @@ outputs:
       - extra: "{pr_url, phase_reached, commits}"
 args:
   - name: ticket_id
-    description: Linear ticket ID (e.g., OMN-1807)
+    description: Linear ticket ID (e.g., PROJ-1807)
     required: true
   - name: --autonomous
     description: Skip human gates; proceed through all phases unattended
@@ -51,9 +51,9 @@ args:
 ## Usage
 
 ```
-/ticket-work OMN-1807
-/ticket-work OMN-1807 --autonomous
-/ticket-work OMN-1807 --skip-to implement
+/ticket-work PROJ-1807
+/ticket-work PROJ-1807 --autonomous
+/ticket-work PROJ-1807 --skip-to implement
 ```
 
 ## Execution
