@@ -1,7 +1,7 @@
-# Quality Gate Report — OMN-3510
+# Quality Gate Report
 
 **Date**: 2026-03-04
-**Ticket**: OMN-3510 — Task 12: Quality gate (pre-commit + pytest unit + mypy)
+**Task**: Quality gate (pre-commit + pytest unit + mypy) for the feature dashboard epic
 **Branch**: jonahgabriel/omn-3510-task-12-quality-gate-pre-commit-pytest-unit-mypy
 **Run ID**: c7a2f914
 
@@ -60,7 +60,7 @@ All 17 hooks passed:
 - `src/omniclaude/services/ci_relay/publisher.py` — 4 errors (unused type: ignore + attr-defined)
 - `src/omniclaude/runtime/introspection.py` — 1 error (Class cannot subclass Any)
 
-These are deferred per the pre-existing issues policy and are not introduced by OMN-3498 epic work.
+These are deferred per the pre-existing issues policy and are not introduced by this epic's work.
 
 ---
 

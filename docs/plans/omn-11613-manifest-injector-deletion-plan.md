@@ -1,8 +1,7 @@
-# OMN-11613: manifest_injector Deletion Plan
+# manifest_injector Deletion Plan
 
 **Status:** Migration documented — deletion pending caller migration
 **Date:** 2026-05-26
-**Ticket:** OMN-11613 (Wave 4B Step 9)
 
 ---
 
@@ -13,8 +12,8 @@
 | File | Lines | Status |
 |------|-------|--------|
 | `src/omniclaude/lib/core/manifest_injector.py` | 5480 | ACTIVE — still the production code path |
-| `src/omniclaude/lib/core/models_manifest_injector.py` | ~200 | ACTIVE — models extracted in OMN-11590 (now also in `node_manifest_fetch_effect/models/`) |
-| `src/omniclaude/nodes/node_manifest_fetch_effect/` | 24 unit tests | NEW — created in OMN-11597, merged to dev |
+| `src/omniclaude/lib/core/models_manifest_injector.py` | ~200 | ACTIVE — models extracted in an earlier pass (now also in `node_manifest_fetch_effect/models/`) |
+| `src/omniclaude/nodes/node_manifest_fetch_effect/` | 24 unit tests | NEW — merged to dev |
 
 ### What `manifest_injector.py` actually does
 
@@ -25,7 +24,7 @@
 4. Falls back to a minimal manifest on timeout (2000ms budget)
 5. Exposes both async context-manager and sync-wrapper APIs
 
-### What `node_manifest_fetch_effect` does (OMN-11597)
+### What `node_manifest_fetch_effect` does
 
 A narrow HTTP-fetch node that:
 1. Calls `{runtime_url}/v1/introspection/manifest` via httpx
@@ -111,7 +110,7 @@ For the deletion to be safe, all of the following must hold:
 
 ## Migration Steps to Enable Deletion
 
-These are the follow-on tickets needed before deletion can be executed:
+These are the follow-on work items needed before deletion can be executed:
 
 ### Step A: Wire `node_manifest_fetch_effect` into a caller (new ticket)
 Update `src/omniclaude/lib/utils/manifest_loader.py` to call `node_manifest_fetch_effect`
@@ -121,7 +120,7 @@ via the ONEX container + DI, replacing the bare `manifest_injector` import.
 Either port the 61 golden tests to test the new node's behavior, or add a parallel golden
 test for the `node_manifest_fetch_effect` path and mark the old ones as deprecated.
 
-### Step C: Remove `manifest_injector.py` and `models_manifest_injector.py` (this ticket, OMN-11613)
+### Step C: Remove `manifest_injector.py` and `models_manifest_injector.py` (this work item)
 Only executable after Steps A and B are complete and green.
 
 ---

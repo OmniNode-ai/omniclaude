@@ -1,9 +1,8 @@
-# OMN-3990: Investigation — Non-node Dirs under nodes/ (routing_models/, shared/)
+# Investigation — Non-node Dirs under nodes/ (routing_models/, shared/)
 
 **Status**: Investigation complete (read-only)
 **Date**: 2026-03-08
-**Ticket**: OMN-3990
-**Follow-on execute ticket**: OMN-3991
+**Follow-on execute work**: see migration steps below (section 11)
 
 ---
 
@@ -268,9 +267,9 @@ Node counts are identical. No node directories move.
 
 ---
 
-## 11. Explicit Migration Steps for OMN-3991
+## 11. Explicit Migration Steps
 
-The execute ticket (OMN-3991) should perform the following steps in order:
+The execute pass should perform the following steps in order:
 
 **11.1 — Move routing_models/**
 

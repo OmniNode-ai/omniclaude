@@ -2,7 +2,6 @@
 
 **Date**: 2026-02-06
 **Branch**: `feat/polymorphic-agent-restoration`
-**Ticket**: OMN-1980
 **Status**: Proposal (reviewed, ready for implementation)
 
 ---

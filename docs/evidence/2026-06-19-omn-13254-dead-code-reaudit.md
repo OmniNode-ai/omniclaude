@@ -1,13 +1,12 @@
-# OMN-13254 Dead-Code Reaudit Evidence
+# Dead-Code Reaudit Evidence
 
 **Date:** 2026-06-19
-**Ticket:** OMN-13254
 **Repo:** `omniclaude`
 **Branch:** `jonah/omn-13254-omniclaude-dead-code-audit`
 
 ## Decision
 
-Do not delete hook or skill runtime code from OMN-13254. The reindexed
+Do not delete hook or skill runtime code based on this reaudit. The reindexed
 Repowise output is useful for cleanup planning, but local verification shows
 that several high-confidence findings are reachable through shell entrypoints,
 script-local command dispatch, SKILL.md prompt imports, sys.path-injected
@@ -43,13 +42,13 @@ Focused hook/skill slices:
 | `directory="plugins/onex/skills/_bin"` | 1 | Likely delete candidate, needs focused proof |
 
 Current hook baseline matters: `plugins/onex/hooks/hooks.json` intentionally has
-`"hooks": {}` under OMN-13244. The OMN-13244 contract states that hook scripts
+`"hooks": {}` as a clean measurement baseline. That contract states that hook scripts
 remain on disk and re-registration is a pure config change. Therefore absence
 from active `hooks.json` is not enough proof for deletion.
 
 ## Prior Cleanup Reconciliation
 
-OMN-12391 already removed the confirmed-dead skill helper exports
+An earlier cleanup pass already removed the confirmed-dead skill helper exports
 `get_recent_message_count`, `get_consumer_groups`, and `execute_query`, and
 annotated live dynamic surfaces such as `cmd_init`, `cmd_end`, and
 `cmd_set_active_run`. The current reindex still reports some of those live
@@ -58,16 +57,16 @@ script-local dispatch tables, or sys.path injection.
 
 Merged prior evidence found locally:
 
-| Ticket | Local evidence |
+| Work item | Local evidence |
 |---|---|
-| OMN-12389 | `d4f5df52d test(OMN-12389): characterization tests for manifest_injector format helpers (#1703)` |
-| OMN-12390 | `48470c565 test(OMN-12390): behavior tests for hook subscriber loops and event emission (#1704)` |
-| OMN-12391 | `b15633f37 fix(OMN-12391): remove confirmed-dead skill helper exports and annotate live surfaces (#1700)` plus `contracts/OMN-12391.yaml` |
-| OMN-13244 | `contracts/OMN-13244.yaml`, `hooks.json` empty-registration baseline |
+| Hook characterization tests | `d4f5df52d test: characterization tests for manifest_injector format helpers (#1703)` |
+| Hook subscriber loop tests | `48470c565 test: behavior tests for hook subscriber loops and event emission (#1704)` |
+| Dead skill helper removal | `b15633f37 fix: remove confirmed-dead skill helper exports and annotate live surfaces (#1700)` plus `contracts/` entry |
+| Empty-registration baseline | `contracts/` baseline entry, `hooks.json` empty-registration baseline |
 
 ## Local Verification
 
-Commands run from the OMN-13254 worktree:
+Commands run from the worktree:
 
 ```text
 uv run pytest tests/hooks/test_node_session_state_adapter.py tests/unit/hooks/lib/test_session_intent.py tests/unit/hooks/lib/test_hook_otel_failure_isolation.py tests/unit/hooks/lib/test_shadow_validation.py tests/hooks/test_idle_notification_ratelimit.py tests/hooks/test_hook_policy.py tests/unit/hooks/lib/test_delegation_daemon_agentic.py tests/unit/hooks/lib/test_delegation_rule_loader.py -m unit -q
@@ -89,7 +88,7 @@ Representative local reachability checks:
 | `phoenix_otel_exporter.py::reset_tracer` | Used by OTEL unit/integration tests to reset module singleton state. Runtime export can be revisited, but not deleted without adjusting tests and proof. | `defer` |
 | `idle_ratelimit.py::should_allow_idle_notification` | Imported by `hook_idle_notification_ratelimit.sh`; covered by `tests/hooks/test_idle_notification_ratelimit.py`. | `scanner_false_positive` |
 | `agent_detector.py::AgentDetector` and `delegation_rule_loader.py::DelegationRuleLoader` | Imported by `user-prompt-submit.sh`; `DelegationRuleLoader` has focused unit coverage. | `scanner_false_positive` |
-| `response_intelligence.py::log_response_completion` and `agent_summary_banner.py::display_summary_banner` | Imported by `stop.sh`; hook registration is disabled by OMN-13244 but the scripts are deliberately retained for re-registration. | `defer` |
+| `response_intelligence.py::log_response_completion` and `agent_summary_banner.py::display_summary_banner` | Imported by `stop.sh`; hook registration is disabled as part of the clean baseline but the scripts are deliberately retained for re-registration. | `defer` |
 | `pre_tool_use_permissions.py` helpers | Script-local executable helpers and docs examples; Repowise does not treat same-file script reachability as importer reachability. | `scanner_false_positive` |
 | `slack_approval_listener.py::SlackApprovalListener` | Explicit stub surface covered by `tests/hooks/test_hook_policy.py`; deletion needs product/architecture decision. | `defer` |
 | `delegation_daemon.py::AgenticJobStatus` | Used inside the daemon module and by focused tests. | `scanner_false_positive` |
@@ -133,7 +132,7 @@ Recommended follow-ups:
 
 ## Residual Risk
 
-This audit did not execute live Claude Code hooks because OMN-13244 currently
-disables all onex hook registrations. It also did not run runtime skills against
+This audit did not execute live Claude Code hooks because the hook-baseline pass
+currently disables all onex hook registrations. It also did not run runtime skills against
 Kafka/daemon services. Any deletion ticket must include live or fixture-based
 entrypoint proof for the specific cluster it removes.

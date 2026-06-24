@@ -1,14 +1,12 @@
 # Skill Rename Mapping Document
 **Date**: 2026-04-09
-**Ticket**: OMN-8092
-**Parent**: OMN-8070 (Omnimarket Skill Decomposition)
 **Purpose**: Authoritative mapping of all current omniclaude skills to their target package, name, and disposition (keep/merge/delete/rename). Reference for the full skill rationalization — no skill should be missed during decomposition.
 
 ---
 
 ## Naming Convention
 
-Target skill names follow `snake_case` matching the node they dispatch to, without redundant `_compute`/`_effect` suffixes in the skill name. Packs follow the domain grouping introduced in OMN-8077.
+Target skill names follow `snake_case` matching the node they dispatch to, without redundant `_compute`/`_effect` suffixes in the skill name. Packs follow the domain grouping established during the skill decomposition work.
 
 **Pack taxonomy:**
 - `core` — ticket lifecycle, review, CI/CD, merge
@@ -16,6 +14,8 @@ Target skill names follow `snake_case` matching the node they dispatch to, witho
 - `linear` — Linear API integration skills
 - `infra` — agent orchestration, session, worktree management
 - `meta` — skills about skills, codegen, self-referential
+
+
 
 ---
 
@@ -47,9 +47,9 @@ Target skill names follow `snake_case` matching the node they dispatch to, witho
 | 7 | `pr_polish` | `core` | `pr_polish` | `PORT` | `node_pr_polish` | Node exists; skill dispatches to polymorphic agent, not node |
 | 8 | `ci_watch` | `core` | `ci_watch` | `PORT` | `node_ci_watch_compute` (new) | No node; Wave 2 |
 | 9 | `auto_merge` | `core` | `auto_merge` | `PORT` | `node_auto_merge_effect` (new) | No node; Wave 5 |
-| 10 | `hostile_reviewer` | `core` | `hostile_reviewer` | `MERGE_TARGET` | `node_hostile_reviewer` | Absorbs `review_gate` (OMN-8074) and `code_review_sweep` (OMN-8076) |
-| 11 | `review_gate` | `core` | — | `MERGE` | — | Merges into `hostile_reviewer` (OMN-8074) |
-| 12 | `code_review_sweep` | `core` | — | `MERGE` | — | Merges into `hostile_reviewer` (OMN-8076) |
+| 10 | `hostile_reviewer` | `core` | `hostile_reviewer` | `MERGE_TARGET` | `node_hostile_reviewer` | Absorbs `review_gate` and `code_review_sweep` |
+| 11 | `review_gate` | `core` | — | `MERGE` | — | Merges into `hostile_reviewer` |
+| 12 | `code_review_sweep` | `core` | — | `MERGE` | — | Merges into `hostile_reviewer` |
 | 13 | `coderabbit_triage` | `core` | `coderabbit_triage` | `PORT` | `node_coderabbit_triage_compute` (new) | No node; Wave 2 |
 | 14 | `create_followup_tickets` | `core` | `create_followup_tickets` | `PORT` | `node_create_followup_tickets_compute` (new) | No node; Wave 4 |
 | 15 | `dod_verify` | `core` | `dod_verify` | `PORT` | `node_dod_verify` | Node exists; skill adds Linear lookup |
@@ -64,8 +64,8 @@ Target skill names follow `snake_case` matching the node they dispatch to, witho
 | 19 | `aislop_sweep` | `ops` | `aislop_sweep` | `PORT` | `node_aislop_sweep` | Node exists; skill has `gh`/script fallback paths |
 | 20 | `compliance_sweep` | `ops` | `compliance_sweep` | `PORT` | `node_compliance_sweep` | Node exists; skill adds LLM triage on top |
 | 21 | `compliance_scan` | `ops` | `compliance_scan` | `PORT` | `node_compliance_scan_compute` (new) | No node; Wave 3 |
-| 22 | `contract_sweep` | `ops` | `contract_sweep` | `MERGE_TARGET` | `node_contract_sweep_compute` (new) | Absorbs `contract_verify` (OMN-8073) |
-| 23 | `contract_verify` | `ops` | — | `MERGE` | — | Merges into `contract_sweep` (OMN-8073) |
+| 22 | `contract_sweep` | `ops` | `contract_sweep` | `MERGE_TARGET` | `node_contract_sweep_compute` (new) | Absorbs `contract_verify` |
+| 23 | `contract_verify` | `ops` | — | `MERGE` | — | Merges into `contract_sweep` |
 | 24 | `dashboard_sweep` | `ops` | `dashboard_sweep` | `PORT` | `node_dashboard_sweep` | Node exists; Playwright orchestration in skill |
 | 25 | `data_flow_sweep` | `ops` | `data_flow_sweep` | `PORT` | `node_data_flow_sweep` | Node exists; skill adds verification steps |
 | 26 | `database_sweep` | `ops` | `database_sweep` | `PORT` | `node_database_sweep_compute` (new) | No node; Wave 3 |
@@ -82,9 +82,9 @@ Target skill names follow `snake_case` matching the node they dispatch to, witho
 | 37 | `hook_health_alert` | `ops` | `hook_health_alert` | `PORT` | `node_hook_health_alert_compute` (new) | No node; Wave 3 |
 | 38 | `start_environment` | `ops` | `start_environment` | `PORT` | `node_start_environment_compute` (new) | No node; Wave 3 |
 | 39 | `system_status` | `ops` | `system_status` | `PORT` | `node_system_status_compute` (new) | No node; Wave 5 |
-| 40 | `worktree_sweep` | `ops` | `worktree_sweep` | `MERGE_TARGET` | `node_worktree_sweep_compute` (new) | Absorbs `worktree_lifecycle` and `worktree_triage` (OMN-8075) |
-| 41 | `worktree_lifecycle` | `ops` | — | `MERGE` | — | Merges into `worktree_sweep` (OMN-8075) |
-| 42 | `worktree_triage` | `ops` | — | `MERGE` | — | Merges into `worktree_sweep` (OMN-8075) |
+| 40 | `worktree_sweep` | `ops` | `worktree_sweep` | `MERGE_TARGET` | `node_worktree_sweep_compute` (new) | Absorbs `worktree_lifecycle` and `worktree_triage` |
+| 41 | `worktree_lifecycle` | `ops` | — | `MERGE` | — | Merges into `worktree_sweep` |
+| 42 | `worktree_triage` | `ops` | — | `MERGE` | — | Merges into `worktree_sweep` |
 | 43 | `verify_plugin` | `ops` | `verify_plugin` | `PORT` | `node_verify_plugin_compute` (new) | No node; Wave 5 |
 | 44 | `coverage_sweep` | `ops` | `coverage_sweep` | `KEEP` | `node_coverage_sweep` | DONE — gold standard thin shell |
 | 45 | `build_loop` | `ops` | `build_loop` | `KEEP` | `node_build_loop_orchestrator` | DONE — gold standard thin shell |
@@ -152,19 +152,19 @@ Target skill names follow `snake_case` matching the node they dispatch to, witho
 
 | # | Current Skill | Target Pack | Target Name | Status | Justification |
 |---|--------------|-------------|-------------|--------|---------------|
-| 90 | `baseline` | — | — | `DELETE` | Split into `node_baseline_capture` + `node_baseline_compare`; no unified skill needed. Superseded (OMN-8071) |
-| 91 | `dep_cascade_dedup` | — | — | `DELETE` | Dead skill — no active consumers, logic absorbed into release automation. (OMN-8071) |
+| 90 | `baseline` | — | — | `DELETE` | Split into `node_baseline_capture` + `node_baseline_compare`; no unified skill needed. Superseded. |
+| 91 | `dep_cascade_dedup` | — | — | `DELETE` | Dead skill — no active consumers, logic absorbed into release automation. |
 | 92 | `close-day` | — | — | `DELETE` | Superseded by `handoff` + `linear_housekeeping` combination. Never wired to a node. |
 
 ---
 
 ## Merge Targets Summary
 
-| Target Skill | Absorbs | Ticket |
-|-------------|---------|--------|
-| `hostile_reviewer` | `review_gate`, `code_review_sweep` | OMN-8074, OMN-8076 |
-| `contract_sweep` | `contract_verify` | OMN-8073 |
-| `worktree_sweep` | `worktree_lifecycle`, `worktree_triage` | OMN-8075 |
+| Target Skill | Absorbs |
+|-------------|---------|
+| `hostile_reviewer` | `review_gate`, `code_review_sweep` |
+| `contract_sweep` | `contract_verify` |
+| `worktree_sweep` | `worktree_lifecycle`, `worktree_triage` |
 
 ---
 
