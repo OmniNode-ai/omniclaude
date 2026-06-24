@@ -46,7 +46,7 @@ def _write_occ_evidence(
                 'schema_version: "1.0.0"',
                 f'ticket_id: "{ticket_id}"',
                 f'evidence_item_id: "{receipt_id}"',
-                f"status: {receipt_status}",
+                f'status: "{receipt_status}"',
                 "",
             ]
         )
