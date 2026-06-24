@@ -41,7 +41,7 @@ skill_kind: dispatch
 
 # /onex:hostile_reviewer — one command, one typed result
 
-**Skill ID**: `onex:hostile_reviewer` · **Command**: `uv run onex skill hostile_reviewer` (omnibase_infra) · **Backing node**: `node_hostile_reviewer_orchestrator` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:hostile_reviewer` · **Command**: `uv run onex skill hostile_reviewer` (omnibase_infra) · **Backing node**: `node_hostile_reviewer_orchestrator` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

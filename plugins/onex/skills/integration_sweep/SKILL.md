@@ -39,8 +39,6 @@ outputs:
 **Skill ID**: `onex:integration_sweep`
 **Version**: 1.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-5436
-**Epic**: OMN-5431
 
 ---
 
@@ -53,8 +51,8 @@ Contract-driven post-merge verification. For each recently completed ticket: <!-
 3. Execute the `dod_evidence[*].checks` for each surface
 4. Assemble a `ModelIntegrationRecord` with per-surface `ModelIntegrationProbeResult` entries
 5. Return the assembled integration record. Durable artifact persistence under
-   `$ONEX_CC_REPO_PATH/drift/integration/` is tracked by OMN-10409 and must not
-   be claimed until the backing node implements it.
+   `$ONEX_CC_REPO_PATH/drift/integration/` is pending backing node implementation
+   and must not be claimed until it is in place.
 
 The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 
@@ -116,20 +114,20 @@ Written to `$ONEX_CC_REPO_PATH/drift/integration/{date}.yaml`:
 ```yaml
 # ModelIntegrationRecord
 sweep_date: "2026-03-18"
-tickets_swept: ["OMN-5400", "OMN-5401"]
+tickets_swept: ["TICKET-A", "TICKET-B"]
 surfaces_probed: ["KAFKA", "DB", "CI"]
 results:
-  - ticket_id: "OMN-5400"
+  - ticket_id: "TICKET-A"
     surface: KAFKA
     status: PASS
     reason: null
     evidence: "topic constant onex.evt.omniintelligence.pattern-detected.v1 matches consumer"
-  - ticket_id: "OMN-5400"
+  - ticket_id: "TICKET-A"
     surface: DB
     status: PASS
     reason: null
     evidence: "migration 0042 applied; columns aligned"
-  - ticket_id: "OMN-5401"
+  - ticket_id: "TICKET-B"
     surface: CI
     status: UNKNOWN
     reason: PROBE_UNAVAILABLE
@@ -148,11 +146,11 @@ If `--dry-run`: `artifact_written: false` and file is never created.
 INTEGRATION SWEEP — 2026-03-18
 ================================
 
-| Ticket   | Surface   | Probe              | Status  | Evidence                                      |
-|----------|-----------|--------------------|---------|-----------------------------------------------|
-| OMN-5400 | KAFKA     | topic_match        | PASS    | topic constant matches consumer               |
-| OMN-5400 | DB        | migration_applied  | PASS    | migration 0042 applied; columns aligned       |
-| OMN-5401 | CI        | workflow_exists    | UNKNOWN | PROBE_UNAVAILABLE — gh CLI not available      |
+| Ticket    | Surface   | Probe              | Status  | Evidence                                      |
+|-----------|-----------|--------------------|---------|-----------------------------------------------|
+| TICKET-A  | KAFKA     | topic_match        | PASS    | topic constant matches consumer               |
+| TICKET-A  | DB        | migration_applied  | PASS    | migration 0042 applied; columns aligned       |
+| TICKET-B  | CI        | workflow_exists    | UNKNOWN | PROBE_UNAVAILABLE — gh CLI not available      |
 
 Summary: 2 PASS, 0 FAIL, 1 UNKNOWN (3 total)
 Artifact: $ONEX_CC_REPO_PATH/drift/integration/2026-03-18.yaml
@@ -162,7 +160,7 @@ Artifact: $ONEX_CC_REPO_PATH/drift/integration/2026-03-18.yaml
 
 ## Known Limitations
 
-- **Linear list_issues truncation (OMN-5473)**: The Linear `list_issues` API truncates
+- **Linear list_issues truncation**: The Linear `list_issues` API truncates
   descriptions to ~500 characters. Discovery (Step 2) uses `list_issues` for ticket IDs <!-- skill-boundary-ok: issue listing is performed by node_integration_sweep_orchestrator handler -->
   only. Contract extraction (Step 3) MUST use `get_issue` per ticket to retrieve full
   descriptions. This adds ~1 API call per ticket but prevents contract parsing failures

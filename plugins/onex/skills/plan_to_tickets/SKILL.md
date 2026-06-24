@@ -47,7 +47,7 @@ skill_kind: dispatch
 
 # /onex:plan_to_tickets — one command, one typed result
 
-**Skill ID**: `onex:plan_to_tickets` · **Command**: `uv run onex skill plan_to_tickets` (omnibase_infra) · **Backing node**: `node_plan_to_tickets` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:plan_to_tickets` · **Command**: `uv run onex skill plan_to_tickets` (omnibase_infra) · **Backing node**: `node_plan_to_tickets` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

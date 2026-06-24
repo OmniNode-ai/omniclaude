@@ -213,7 +213,7 @@ Generate final summary across **all general-purpose agent cycles**:
    - Manual intervention required
    - Recommendations for next steps
 
-## Phase 7b: Dashboard Verification Wave (OMN-6746) <!-- ai-slop-ok: skill-step-heading -->
+## Phase 7b: Dashboard Verification Wave <!-- ai-slop-ok: skill-step-heading -->
 
 **Mandatory final wave** -- runs after all implementation waves complete and before
 user-controlled next steps.

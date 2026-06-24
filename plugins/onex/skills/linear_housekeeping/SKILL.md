@@ -33,7 +33,7 @@ skill_kind: dispatch
 
 # /onex:linear_housekeeping — one command, one typed result
 
-**Skill ID**: `onex:linear_housekeeping` · **Command**: `uv run onex skill linear_housekeeping` (omnibase_infra) · **Backing node**: `node_linear_triage` (omnimarket) · **Ticket**: OMN-13097
+**Skill ID**: `onex:linear_housekeeping` · **Command**: `uv run onex skill linear_housekeeping` (omnibase_infra) · **Backing node**: `node_linear_triage` (omnimarket)
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative

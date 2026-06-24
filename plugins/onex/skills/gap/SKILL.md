@@ -138,9 +138,9 @@ Unified cross-repo integration health audit. Three subcommands:
 Parse the first positional argument as the subcommand:
 
 ```
-/gap detect --epic OMN-2500
+/gap detect --epic <EPIC-ID>
 /gap fix --report multi-epic-2026-02-23/run-001
-/gap cycle --epic OMN-XXXX
+/gap cycle --epic <EPIC-ID>
 ```
 
 Route to the corresponding section in `prompt.md` based on the subcommand value.
@@ -167,15 +167,15 @@ Absorbed from: gap-analysis (v1.0.0)
 ### CLI Examples
 
 ```
-/gap detect --epic OMN-2500
+/gap detect --epic <EPIC-ID>
 /gap detect --since-days 7
-/gap detect --epic OMN-2500 --dry-run
-/gap detect --epic OMN-2500 --output json
+/gap detect --epic <EPIC-ID> --dry-run
+/gap detect --epic <EPIC-ID> --output json
 /gap detect --severity-threshold CRITICAL
 /gap detect --max-best-effort 20
-/gap detect --epic OMN-2500 --skip-infra-probes
-/gap detect --epic OMN-2500 --lag-threshold 5000
-/gap detect --epic OMN-2500 --no-include-auth-probes
+/gap detect --epic <EPIC-ID> --skip-infra-probes
+/gap detect --epic <EPIC-ID> --lag-threshold 5000
+/gap detect --epic <EPIC-ID> --no-include-auth-probes
 ```
 
 | Arg | Default | Description |
@@ -344,7 +344,7 @@ Anything multi-option emits a decision gate and waits for human input.
 
 ```
 /gap fix --report <run_path>   # e.g., multi-epic-2026-02-23/run-001
-/gap fix --ticket OMN-XXXX     # single finding via marker block
+/gap fix --ticket <TICKET-ID>  # single finding via marker block
 /gap fix --latest              # follows $ONEX_STATE_DIR/gap-analysis/latest/
 /gap fix --dry-run             # classify and print plan, no side effects
 ```
@@ -352,7 +352,7 @@ Anything multi-option emits a decision gate and waits for human input.
 | Arg | Default | Description |
 |-----|---------|-------------|
 | `--report <run_path>` | none | Gap-analysis run path under `$ONEX_STATE_DIR/gap-analysis/` |
-| `--ticket <id>` | none | Single finding via Linear ticket containing a marker block |
+| `--ticket <ticket-id>` | none | Single finding via Linear ticket containing a marker block |
 | `--latest` | false | Follow `$ONEX_STATE_DIR/gap-analysis/latest/` symlink |
 | `--dry-run` | false | Zero side effects: no ledger, no Linear writes, no PR mutations |
 | `--mode <mode>` | `ticket-pipeline` | `ticket-pipeline` \| `ticket-work` \| `implement-only` |
@@ -417,7 +417,7 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
   "prs_created": [
     { "repo": "org/repo", "number": 123, "url": "...", "finding_id": "GAP-a3f9c1d2" }
   ],
-  "tickets": ["OMN-XXXX"]
+  "tickets": ["<TICKET-ID>"]
 }
 ```
 
@@ -481,22 +481,22 @@ Single entry point replacing manual sub-skill chaining.
 
 ```
 # Minimal: detect + fix (default)
-/gap cycle --epic OMN-XXXX
+/gap cycle --epic <EPIC-ID>
 
 # Detect only (no fix)
-/gap cycle --epic OMN-XXXX --no-fix
+/gap cycle --epic <EPIC-ID> --no-fix
 
 # Detect + fix + single routing verify
-/gap cycle --epic OMN-XXXX --verify
+/gap cycle --epic <EPIC-ID> --verify
 
 # Skip detect (use existing report)
-/gap cycle --report $ONEX_STATE_DIR/gap-analysis/OMN-XXXX/<run_id>.json
+/gap cycle --report $ONEX_STATE_DIR/gap-analysis/<EPIC-ID>/<run_id>.json
 
 # Resume interrupted run
-/gap cycle --resume $ONEX_STATE_DIR/gap-cycle/OMN-XXXX/<run_id>/summary.json
+/gap cycle --resume $ONEX_STATE_DIR/gap-cycle/<EPIC-ID>/<run_id>/summary.json
 
 # Dry run (no external writes, local files written)
-/gap cycle --epic OMN-XXXX --dry-run
+/gap cycle --epic <EPIC-ID> --dry-run
 ```
 
 ### Artifact Chaining
@@ -514,7 +514,7 @@ Written to `$ONEX_STATE_DIR/gap-cycle/{epic_id}/{run_id}/summary.json`:
 
 ```json
 {
-  "epic_id": "OMN-XXXX",
+  "epic_id": "<EPIC-ID>",
   "run_id": "gap-cycle-2026-03-04T12:00:00Z",
   "source_report_path": "...",
   "phases_executed": {"detect": true, "audit": false, "fix": true, "verify": false},

@@ -33,7 +33,7 @@ args:
 
 # Pipeline Fill
 
-## Tools Required (OMN-8708)
+## Tools Required
 
 This skill spawns sub-workers via `Agent()`. Workers run in fresh sessions where the `Agent`
 tool is **deferred** (schema not pre-loaded). Any worker that itself needs to dispatch
@@ -143,11 +143,11 @@ After Filtering: 8
 Wave Status: 3/5 in-flight (2 slots available)
 
 Ranked Tickets:
-  #1  OMN-7300  score=0.668  blocking=3  priority=High    → ticket-pipeline
-  #2  OMN-7305  score=0.542  blocking=1  priority=High    → ticket-pipeline
+  #1  TICKET-A  score=0.668  blocking=3  priority=High    → ticket-pipeline
+  #2  TICKET-B  score=0.542  blocking=1  priority=High    → ticket-pipeline
   ...
 
-Would dispatch: OMN-7300, OMN-7305
+Would dispatch: TICKET-A, TICKET-B
 ```
 
 ## State Files

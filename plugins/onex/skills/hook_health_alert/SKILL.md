@@ -12,7 +12,6 @@ tags:
   - slack
 node_dispatch: node_platform_diagnostics
 node_dispatch_dimensions: HOOK_HEALTH
-migration_epic: OMN-8197
 args:
   - name: --dry-run
     description: "Report findings without sending Slack alerts"

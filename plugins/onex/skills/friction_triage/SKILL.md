@@ -134,7 +134,7 @@ friction_surface_key: {agg.surface_key}
 
 ## Friction Tracking
 
-This ticket was auto-created by `/friction-triage` (OMN-5442).
+This ticket was auto-created by `/friction-triage`.
 To query current state: `/friction-triage --dry_run true`
 """,
 )

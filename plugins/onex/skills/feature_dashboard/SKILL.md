@@ -35,9 +35,8 @@ args:
     description: "true | false (default: false); verify Linear ticket existence via API (audit only)"
     default: "false"
   - name: no-batch
-    description: "true | false (default: false); disable gap batching in ticketize mode — create one ticket per skill (pre-OMN-6163 behavior)"
+    description: "true | false (default: false); disable gap batching in ticketize mode — create one ticket per skill (legacy per-skill behavior)"
     default: "false"
-ticket: OMN-3503
 ---
 
 # Feature Dashboard
@@ -129,7 +128,7 @@ Sort discovered skills by name (alphabetical, deterministic).
    - File fails to parse as `ModelFeatureDashboardResult`
 3. Compute ticket descriptors using `batch_gaps_for_ticketize()` from the classifier module:
    - Pass `skills` (filtered to `partial` or `broken` status) and `batch=True` (default)
-   - If `--no-batch` is set, pass `batch=False` to preserve pre-OMN-6163 per-skill behavior
+   - If `--no-batch` is set, pass `batch=False` to preserve legacy per-skill behavior
 4. For each `ModelBatchedGapTicket` returned (each includes `worst_severity` for sorting):
    a. Announce:
       - If `is_batched=True`: "Creating batched ticket for {gap_count} identical gaps across {len(affected_skills)} skills"
@@ -141,7 +140,7 @@ Sort discovered skills by name (alphabetical, deterministic).
    c. Log returned ticket ID.
 5. No Linear tools may be called in `audit` mode -- ticketize is always a separate invocation.
 
-### Gap batching algorithm (OMN-6163)
+### Gap batching algorithm
 
 When `batch=True` (default):
 
@@ -152,7 +151,7 @@ When `batch=True` (default):
   - If a LOW/MEDIUM gap is unique to one skill, it still gets its own per-skill ticket.
 
 This prevents ticket explosion when a single fix (e.g., "add `metadata.ticket` to contract.yaml")
-applies uniformly across many skills. For the OMN-6094 audit, this would have reduced 97 tickets to ~17.
+applies uniformly across many skills. In a large audit, this approach can reduce dozens of near-identical tickets down to a handful of batched ones.
 
 **Reference implementation**: `batch_gaps_for_ticketize()` in
 `src/omniclaude/nodes/node_skill_feature_dashboard_orchestrator/classifier.py`
