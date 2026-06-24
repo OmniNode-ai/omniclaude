@@ -38,7 +38,7 @@ outputs:
 
 ## Changelog
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-12200). Delegates to node_linear_triage.
+- **2.0.0** — Thinned to dispatch-only shim. Delegates to node_linear_triage.
 - **1.0.0** — Original inline skill with Phases 1-6 algorithm.
 
 ## What this skill does
@@ -78,7 +78,7 @@ The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epi
 
 ## Enumeration completeness
 
-OMN-10543 regression guard: the backing node MUST enumerate **every** orphan in
+Regression guard: the backing node MUST enumerate **every** orphan in
 `orphaned_tickets`; it must not cap, sample, truncate, or emit a "top N" subset.
 Before publishing the report, `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`.
 

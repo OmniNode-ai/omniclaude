@@ -1,4 +1,4 @@
-# Topic Naming Lint Baseline (OMN-3259)
+# Topic Naming Lint Baseline
 #
 # Pre-existing topic naming violations in Python source files tracked for
 # future cleanup. Topics listed here are excluded from the linter's failure

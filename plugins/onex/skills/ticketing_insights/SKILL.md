@@ -68,15 +68,15 @@ Generate a comprehensive daily work analysis. See Deep Dive Report section below
 ### `--mode close-day`
 
 Auto-generates a `ModelDayClose` YAML from today's GitHub PRs, git activity, and invariant probes.
-Absorbed from the former `close-day` skill (CDQA-04 / OMN-2981).
+Absorbed from the former `close-day` skill.
 
 **Invocation**: `/linear-insights --mode close-day [--date YYYY-MM-DD] [--dry-run]`
 
 **Execution steps**:
 1. Pull merged PRs across all OmniNode-ai repos for the target date
-2. Fetch active-sprint Linear plan (OMN-XXXX tickets)
-3. Build `actual_by_repo` grouped by repo with OMN-XXXX references
-4. Detect **scope drift**: PRs with no OMN-XXXX ref → `drift_detected` entry
+2. Fetch active-sprint Linear plan
+3. Build `actual_by_repo` grouped by repo with ticket references
+4. Detect **scope drift**: PRs with no ticket ref → `drift_detected` entry
 5. Run `scripts/check_arch_invariants.py` (shared with CDQA-07) to probe reducers/orchestrators
 6. Detect **golden-path progress** by reading `emitted_at` from `$ONEX_STATE_DIR/golden-path/TODAY/` artifact JSON files
 7. Set unknown statuses to `"unknown"` and add entries to `corrections_for_tomorrow`
@@ -115,7 +115,7 @@ Absorbed from the former `suggest-work` skill.
 Pipeline health metrics — rework ratio, cycle time, CI stability, and feature velocity.
 Absorbed from the former `pipeline-metrics` skill.
 
-**Invocation**: `/linear-insights --mode pipeline [--since YYYY-MM-DD] [--ticket OMN-XXXX] [--repo REPO] [--format table|json]`
+**Invocation**: `/linear-insights --mode pipeline [--since YYYY-MM-DD] [--ticket TICKET-ID] [--repo REPO] [--format table|json]`
 
 Metrics: Cycle Time (P50/P90), CI Clean Rate, Rework Cycles/Ticket, Feature Velocity, Skill Duration P50.
 
@@ -430,7 +430,7 @@ See script header comments for full schema.
 
 ### Reconciliation
 
-The reconciliation view computes a three-way set comparison using ticket identifiers (OMN-XXXX): archive IDs (A), Linear Done IDs (B), and GitHub PR IDs (C). The script computes set A; the agent fills B and C after executing the Layer 2/3 instructions, then computes overlap, gap ratio, and tickets shipped but not closed in Linear.
+The reconciliation view computes a three-way set comparison using ticket identifiers: archive IDs (A), Linear Done IDs (B), and GitHub PR IDs (C). The script computes set A; the agent fills B and C after executing the Layer 2/3 instructions, then computes overlap, gap ratio, and tickets shipped but not closed in Linear.
 
 ---
 
@@ -542,7 +542,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/project-status MVP --json --emit
 
 - `onex-linear-relay` must be installed and available on `PATH`
 - Install via: `pip install omnibase_infra` (or `uv add omnibase_infra` in your project)
-- Related ticket: OMN-2656 (Phase 2 — effect nodes and CLIs in omnibase_infra)
+- Related: Phase 2 — effect nodes and CLIs in omnibase_infra
 
 ### IMPORTANT: Do NOT Call REST Endpoint
 
@@ -570,4 +570,4 @@ It must never be called from production code or skills. Use `--emit` (which call
 - Linear ticket skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 - PR review skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`
 - Deep dive archive: `$ONEX_STATE_DIR/deep-dives/`
-- `onex-linear-relay` CLI — `omnibase_infra` package (OMN-2656)
+- `onex-linear-relay` CLI — `omnibase_infra` package

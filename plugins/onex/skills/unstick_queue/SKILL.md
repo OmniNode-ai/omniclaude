@@ -38,7 +38,7 @@ This skill detects that specific condition and recovers by dequeuing + re-enqueu
 
 ## Scope
 
-Per OMN-9065 DoD:
+The skill's scope is defined as follows:
 
 1. Probe `repository.mergeQueue.entries` for every repo in scope.
 2. For each entry at `position == 1` with `state == AWAITING_CHECKS` longer than `awaiting-minutes` (default 30):
@@ -69,8 +69,6 @@ Interactive: `/onex:unstick_queue --dry-run --repos omnibase_infra,omniclaude` f
 - `scripts/cron-unstick-queue.sh` — headless wrapper + lock + circuit breaker.
 - `scripts/launchd/ai.omninode.unstick-queue.plist` — launchd agent (600s interval).
 
-## Refs
+## See Also
 
-- Parent ticket: OMN-9065
-- Tick bundle: OMN-9036
 - Sibling: `_queue_heal` in `cron-merge-sweep.sh` (handles method-mismatch silent drops — this skill handles check-rollup stalls)

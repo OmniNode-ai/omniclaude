@@ -14,7 +14,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --task-id
-    description: "Task identifier (e.g. OMN-9403)"
+    description: "Task identifier"
     required: true
   - name: --claim
     description: "What the task claims to have done (quoted string)"
@@ -42,8 +42,6 @@ args:
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_verification_receipt_generator/`
-**Ticket**: OMN-9403
-
 ---
 
 ## Purpose
@@ -58,9 +56,9 @@ structured per-dimension verification evidence.
 ## Usage
 
 ```
-/verification-receipt-generator --task-id OMN-1234 --claim "merged PR #567 with all CI green"
-/verification-receipt-generator --task-id OMN-1234 --claim "..." --pr 567 --repo OmniNode-ai/omniclaude
-/verification-receipt-generator --task-id OMN-1234 --claim "..." --worktree-path /path/to/wt --run-tests
+/verification-receipt-generator --task-id TASK-ID --claim "merged PR #567 with all CI green"
+/verification-receipt-generator --task-id TASK-ID --claim "..." --pr 567 --repo OmniNode-ai/omniclaude
+/verification-receipt-generator --task-id TASK-ID --claim "..." --worktree-path /path/to/wt --run-tests
 ```
 
 ---
