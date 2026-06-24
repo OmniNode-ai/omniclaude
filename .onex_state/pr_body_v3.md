@@ -23,5 +23,3 @@ Evidence-Source: 867635d18fe6e7fc53ba7185ad1fc807377b2be8
 Evidence-Ticket: OMN-13097
 
 Paired OCC receipt PR: OmniNode-ai/onex_change_control#2597
-
-

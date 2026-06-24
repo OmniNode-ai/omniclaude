@@ -870,7 +870,7 @@ After ticket-pipeline completes, report back:
         ticket_results[ticket_id] = res
         print(f"  {ticket_id}: {res['status']}")
 
-        # Slack + Kafka notification per ticket (non-fatal) 
+        # Slack + Kafka notification per ticket (non-fatal)
         _n_completed = sum(1 for v in ticket_results.values() if v.get("status") == "merged")
         _n_failed = sum(1 for v in ticket_results.values() if v.get("status") != "merged")
         try:
@@ -955,7 +955,7 @@ state["end_time"] = datetime.datetime.utcnow().isoformat() + "Z"
 write_yaml(STATE_FILE, state)
 print("Phase 5: persisted done state.")
 
-# 0a. Emit epic.run.updated event for omnidash Pipeline Health page 
+# 0a. Emit epic.run.updated event for omnidash Pipeline Health page
 # This is fire-and-forget — failure never blocks the epic completion.
 try:
     from plugins.onex.hooks.lib.pipeline_event_emitters import emit_epic_run_updated
@@ -976,7 +976,7 @@ try:
 except Exception:
     pass  # fire-and-forget
 
-# 0. Post-wave integration check (non-blocking) 
+# 0. Post-wave integration check (non-blocking)
 # Run gap cycle --no-fix per repo touched during the wave.
 # Results are informational only — always advances to Done regardless of status.
 import re as _re
@@ -1079,7 +1079,7 @@ state["integration_check"] = _integration_check
 write_yaml(STATE_FILE, state)
 print(f"[integration-check] Post-wave check complete: {_integration_check}")
 
-# 1. Notify Slack + emit terminal Kafka event (non-fatal) 
+# 1. Notify Slack + emit terminal Kafka event (non-fatal)
 ticket_results = state.get("ticket_results", {})
 completed = [tid for tid, res in ticket_results.items() if res.get("status") == "merged"]
 failed    = [tid for tid, res in ticket_results.items() if res.get("status") != "merged"]
