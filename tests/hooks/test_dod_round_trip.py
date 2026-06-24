@@ -22,6 +22,11 @@ default through ``resolve_evidence_output_dir``, which mirrors the canonical
 These tests shell the real guard script and call the real writer. They do NOT
 require Kafka, Postgres, or any external services (writer is called with
 ``emit=False``; the guard runs with ``KAFKA_BOOTSTRAP_SERVERS`` unset).
+
+DoD evidence for OMN-13323 is carried by the OCC contract
+``onex_change_control/contracts/OMN-13323.yaml`` and its paired ``dod_report``
+receipts under ``drift/dod_receipts/OMN-13323/`` (round-trip path-equal +
+planted-missing fail-closed + self-binding).
 """
 
 from __future__ import annotations
