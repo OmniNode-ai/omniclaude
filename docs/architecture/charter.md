@@ -12,13 +12,13 @@ All business logic lives in omnimarket.
 
 ## What omniclaude does NOT own
 - Node handler implementations → omnimarket
-- Emit daemon business logic → omnimarket (completed: OMN-7628)
+- Emit daemon business logic → omnimarket (extraction completed in an earlier pass)
 - Intelligence/routing logic → omniintelligence
 
 ## Migration status
-- 141 node dirs in `src/omniclaude/nodes/` are being migrated to omnimarket (OMN-8002 epic)
+- 141 node dirs in `src/omniclaude/nodes/` are being migrated to omnimarket
 - Skill shims (node_skill_*) are thin dispatch-only wrappers — no custom handler code allowed
-- `plugin.py` (`src/omniclaude/runtime/plugin.py`) + the `onex.domain_plugins` entry points (`pyproject.toml`) are still present pending OMN-7868 removal
+- `plugin.py` (`src/omniclaude/runtime/plugin.py`) + the `onex.domain_plugins` entry points (`pyproject.toml`) are still present pending removal in a follow-up pass
 
 > **Verified against code on this refresh:** the `TopicBase` enum is **not** yet
 > owned by omnibase_core from omniclaude's perspective. omniclaude still defines a

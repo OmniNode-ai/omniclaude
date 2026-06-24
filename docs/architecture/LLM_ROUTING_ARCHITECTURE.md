@@ -1,7 +1,6 @@
 # LLM Routing Architecture
 
 **Last Updated**: 2026-02-19
-**Tickets**: OMN-2273 (LLM routing observability), OMN-2271 (delegation dispatch), OMN-2267 (enrichment pipeline)
 
 ---
 

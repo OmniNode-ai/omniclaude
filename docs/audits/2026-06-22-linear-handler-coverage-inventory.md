@@ -1,8 +1,6 @@
-# Linear Handler Coverage Inventory — OMN-12312 (Wave G, T1 of OMN-8771)
+# Linear Handler Coverage Inventory
 
 **Date:** 2026-06-22
-**Ticket:** OMN-12312
-**Parent:** OMN-8771 (Skill→node runtime-handler migration)
 **Scope:** Audit `omnimarket/src/omnimarket/nodes/` for backing handlers covering
 each Linear (`mcp__linear-server__*`) call category used by the 9 named skill
 prompt files in `omniclaude`. Produce an EXIST/MISSING mapping and file one
@@ -31,7 +29,7 @@ sub-ticket per MISSING handler category.
    the current tree the skills express Linear access through a `tracker.*`
    provider abstraction (the `ProtocolProvider` / `ProtocolLinearClient` seam),
    not raw `mcp__linear-server__*` strings — that migration is the goal of the
-   OMN-8771 epic this ticket scopes. Each `tracker.<op>` maps 1:1 to an
+   skill-to-node runtime-handler migration. Each `tracker.<op>` maps 1:1 to an
    `mcp__linear-server__<op>` call category.
 
 3. For dispatch-only shims (`ticket_pipeline`, `ticketing_triage`,
@@ -99,12 +97,12 @@ same omission — Linear project/team/user reads for `linear_insights`):
 
 | Sub-ticket | Scope | Categories | Recommended node |
 |------------|-------|------------|------------------|
-| **OMN-13482** | Linear issue **write** EFFECT — description + parentId + contract-embed | 4a | extend `node_linear_updater_effect` or new `node_linear_issue_write_effect` |
-| **OMN-13483** | Linear issue **create** EFFECT — `create_issue` (sub-ticket/epic) behind a concrete handler | 5 | `node_linear_issue_create_effect` (back `ProtocolTicketCreator`) |
-| **OMN-13484** | Linear **metadata read** EFFECT — `list_issue_labels` + `list_projects` / `get_project` / `list_teams` / `list_users` | 6, 8, 9, 10, 11 | `node_linear_metadata_read_effect` |
+| Linear issue **write** EFFECT | description + parentId + contract-embed | 4a | extend `node_linear_updater_effect` or new `node_linear_issue_write_effect` |
+| Linear issue **create** EFFECT | `create_issue` (sub-ticket/epic) behind a concrete handler | 5 | `node_linear_issue_create_effect` (back `ProtocolTicketCreator`) |
+| Linear **metadata read** EFFECT | `list_issue_labels` + `list_projects` / `get_project` / `list_teams` / `list_users` | 6, 8, 9, 10, 11 | `node_linear_metadata_read_effect` |
 
 > Categories 6, 8–11 collapse onto one shared Linear metadata/read EFFECT node,
-> giving **3** net new handler nodes to build under OMN-8771.
+> giving **3** net new handler nodes to build.
 
 ---
 
@@ -117,5 +115,5 @@ same omission — Linear project/team/user reads for `linear_insights`):
   labels read, project/team/user reads) — currently agent-executed against raw
   MCP or exposed only as injected protocol ports.
 - Net **3** new Linear EFFECT nodes needed to close the gap and let the
-  `ProtocolProvider` migration (OMN-8771) resolve every skill `tracker.*` call
+  `ProtocolProvider` migration resolve every skill `tracker.*` call
   to an omnimarket handler instead of a hardcoded `mcp__linear-server__*` string.
