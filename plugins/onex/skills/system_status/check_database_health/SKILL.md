@@ -24,7 +24,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_database_health/_lib/ex
 Override the endpoint via env var:
 
 ```bash
-OMNINODE_RUNTIME_HEALTH_URL=http://192.168.86.201:8085/health `# onex-allow-internal-ip` \
+OMNINODE_RUNTIME_HEALTH_URL=http://${ONEX_HOST}:8085/health \
   python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_database_health/_lib/execute.py
 ```
 
@@ -40,11 +40,10 @@ OMNINODE_RUNTIME_HEALTH_URL=http://192.168.86.201:8085/health `# onex-allow-inte
     "response_time_ms": 12.4,
     "status_code": 200,
     "details": {"status": "ok"},
-    "endpoint": "http://192.168.86.201:8085/health" // onex-allow-internal-ip
+    "endpoint": "http://<onex-host>:8085/health"
   }
 }
 ```
-<!-- onex-allow-internal-ip -->
 
 ## Exit Codes
 

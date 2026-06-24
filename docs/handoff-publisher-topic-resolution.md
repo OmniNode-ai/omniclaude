@@ -104,8 +104,8 @@ The `_register_defaults()` method hardcodes 12 omniclaude-specific event types. 
 
 ### All 14 event types registered
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude4
-.venv/bin/python3 -c "
+cd $OMNI_HOME/omniclaude
+uv run python -c "
 from omniclaude.hooks.event_registry import EVENT_REGISTRY
 for et in sorted(EVENT_REGISTRY.keys()):
     reg = EVENT_REGISTRY[et]
@@ -117,7 +117,7 @@ print(f'Total: {len(EVENT_REGISTRY)} event types')
 
 ### Publisher uses bare suffixes (no prefix)
 ```bash
-.venv/bin/python3 -c "
+uv run python -c "
 from omniclaude.hooks.event_registry import get_registration
 reg = get_registration('session.started')
 topic = str(reg.fan_out[0].topic_base)
@@ -134,7 +134,7 @@ print(f'Wire topic: {topic}')
 
 ### Tests pass
 ```bash
-.venv/bin/pytest tests/runtime/test_lifecycle.py tests/scripts/test_omnimarket_launcher.py tests/scripts/test_emit_daemon_cutover_static.py -v --tb=short
+uv run pytest tests/runtime/test_lifecycle.py tests/scripts/test_omnimarket_launcher.py tests/scripts/test_emit_daemon_cutover_static.py -v --tb=short
 ```
 
 ## Related Work
@@ -149,11 +149,11 @@ print(f'Wire topic: {topic}')
 Verify before any follow-up work on this handoff:
 
 ```bash
-# Kafka broker reachable
-curl -fsS http://192.168.86.201:19092 || echo "Redpanda unreachable"  # onex-allow-internal-ip
+# Kafka broker reachable (set ONEX_HOST to runtime host address)
+curl -fsS http://${ONEX_HOST}:19092 || echo "Redpanda unreachable"
 
 # omnibase-infra runtime healthy (dev lane)
-curl -fsS http://192.168.86.201:8085/health || echo "dev lane down"  # onex-allow-internal-ip
+curl -fsS http://${ONEX_HOST}:8085/health || echo "dev lane down"
 ```
 
 ## Decision Log
