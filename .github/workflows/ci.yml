@@ -2437,13 +2437,21 @@ jobs:
         id: compliance
         if: steps.check-command.outputs.available == 'true'
         working-directory: ${{ github.workspace }}
+        # OMN-13575: this gate is warn-only TODAY because `onex compliance check`
+        # currently reports 588/594 nodes failing `handler_resolution` — a large
+        # pre-existing debt (the skill-shim orchestrator nodes have no resolvable
+        # handler). Hard-failing here would wedge every PR on debt unrelated to
+        # the change at hand. De-fanging this gate is blocked on clearing that
+        # node handler_resolution debt first; tracked as an OMN-13575 follow-up.
+        # The leniency is retained EXPLICITLY (not as a silent soft gate) and the
+        # underlying debt is surfaced in the job summary.
         run: |
           mkdir -p .onex_state/compliance
           if uv run onex compliance check --repo-root . --output .onex_state/compliance/report.yaml; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
           else
             echo "result=fail" >> "$GITHUB_OUTPUT"
-            echo "::warning::ONEX compliance check reported failures (warn-only for external-service checks)"
+            echo "::warning::ONEX compliance check reported failures (OMN-13575: warn-only pending node handler_resolution debt clearance)"
           fi
 
       - name: Upload compliance report
@@ -2508,15 +2516,11 @@ jobs:
         run: uv sync --frozen
 
       - name: Validate all agent YAML contracts
-        id: validator
         working-directory: ${{ github.workspace }}
-        run: |
-          if bash plugins/onex/scripts/validate-all-agents.sh; then
-            echo "result=pass" >> "$GITHUB_OUTPUT"
-          else
-            echo "result=fail" >> "$GITHUB_OUTPUT"
-            echo "::warning::Agent YAML contract validation reported failures (warn-only during Wave B rollout)"
-          fi
+        # OMN-13575: hard-failing. Wave B rollout is complete (53/53 agents pass)
+        # so the warn-only remap was a soft gate that could never turn this job
+        # red. A real agent-contract violation now fails CI.
+        run: bash plugins/onex/scripts/validate-all-agents.sh
 
   # Skill monorepo-ref lint gate (OMN-8795 SD-08)
   # NOTE: This gate will FAIL until SD-04/SD-05/SD-07 violations are cleared.
