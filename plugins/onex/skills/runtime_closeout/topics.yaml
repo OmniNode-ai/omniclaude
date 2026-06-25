@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: runtime-closeout
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omnimarket.closeout-start.v1
+  - onex.evt.omnimarket.closeout-completed.v1
+  # Bus-native FSM phase topics dispatched by node_runtime_closeout_orchestrator.
+  - onex.cmd.omnimarket.closeout-preflight.v1
+  - onex.evt.omnimarket.closeout-preflight-completed.v1
+  - onex.cmd.omnimarket.closeout-fitness-gate.v1
+  - onex.evt.omnimarket.closeout-fitness-gated.v1
+  - onex.cmd.omnimarket.closeout-proof-matrix.v1
+  - onex.evt.omnimarket.closeout-proof-matrix-completed.v1
+  # Deploy phase reuses node_redeploy_orchestrator.
+  - onex.cmd.omnimarket.redeploy-start.v1
+  - onex.evt.omnimarket.redeploy-completed.v1
