@@ -5,6 +5,7 @@ version: 1.0.0
 level: advanced
 debug: false
 category: workflow
+skill_kind: methodology
 tags: [closeout, deploy, runtime, proof-matrix, post-release]
 author: OmniClaude Team
 composable: false
