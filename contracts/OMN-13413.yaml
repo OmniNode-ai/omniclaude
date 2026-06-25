@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13413"
+title: "/onex:runtime_closeout thin skill shim"
+summary: >-
+  Adds the omniclaude /onex:runtime_closeout skill surface as a thin dispatch
+  shim for omnimarket's canonical node_runtime_closeout_orchestrator. The skill
+  carries no inline runtime orchestration logic; it dispatches one closeout-start
+  through onex run-node and surfaces the terminal ModelCloseoutReceipt.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "omniclaude PR checks pass for the runtime closeout skill shim."
+    command: "gh pr checks 1802 --repo OmniNode-ai/omniclaude"
+  - kind: "manual"
+    description: "Central OCC evidence binds omniclaude PR #1802 to OMN-13413."
+    command: "gh pr view 3107 --repo OmniNode-ai/onex_change_control"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-runtime-closeout-skill-shim"
+    description: >-
+      The PR adds only plugins/onex/skills/runtime_closeout/SKILL.md and
+      plugins/onex/skills/runtime_closeout/topics.yaml; the runtime orchestration
+      remains in omnimarket's node_runtime_closeout_orchestrator.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f plugins/onex/skills/runtime_closeout/SKILL.md && test -f plugins/onex/skills/runtime_closeout/topics.yaml"
+  - id: "dod-central-occ-binding"
+    description: "OCC PR #3107 carries the DoD receipt binding omniclaude PR #1802 to OMN-13413."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "gh pr view 1802 --repo OmniNode-ai/omniclaude --json body -q .body | grep -q 'Evidence-Source: OCC#3107'"

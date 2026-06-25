@@ -1,0 +1,28 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13410"
+title: "Runtime closeout hardening epic reference"
+summary: >-
+  Repo-local contract for the OMN-13410 epic references introduced by the
+  /onex:runtime_closeout skill documentation. The implementation evidence for
+  the concrete skill shim is owned by OMN-13413; this contract exists so the
+  PR contract validator has an explicit local contract for the referenced epic.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "ci"
+    description: "omniclaude PR checks pass for the runtime closeout skill shim."
+    command: "gh pr checks 1802 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-epic-reference-contract"
+    description: "The OMN-13410 reference is documentation metadata for the runtime closeout hardening epic."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f contracts/OMN-13410.yaml"
