@@ -30,6 +30,25 @@ dependencies:
       Docker: /app/src/omniclaude/nodes
     required: true
 
+descriptor:
+  # Diagnostics service endpoints — OMN-13560 Wave-1 endpoint->overlay migration
+  # (epic OMN-13556). The lib/utils/diagnostics health-check tool previously read
+  # these endpoints via scattered direct os.environ.get(...) calls. They are now
+  # declared here with the ${env.VAR} overlay convention so an operator overlay /
+  # the per-lane service env supplies the real endpoint per lane — never a
+  # hardcoded localhost in source. diagnostics_endpoint_descriptor.py resolves
+  # each value via the ${env.VAR} overlay expander (the single sanctioned env
+  # boundary). The strict accessor fails closed (unset/blank raises rather than
+  # silently defaulting to localhost); the non-strict accessor resolves to empty
+  # so the fail-soft diagnostics tool reports a not-configured endpoint without
+  # crashing. The MCP endpoint preserves its legacy alias chain
+  # (MCP_SERVER_URL -> ONEX_MCP_URL -> ARCHON_MCP_URL).
+  diagnostics_intelligence_service_url: "${env.INTELLIGENCE_SERVICE_URL}"
+  diagnostics_main_server_url: "${env.MAIN_SERVER_URL}"
+  diagnostics_mcp_server_url: "${env.MCP_SERVER_URL}"
+  diagnostics_mcp_server_url_legacy_onex: "${env.ONEX_MCP_URL}"
+  diagnostics_mcp_server_url_legacy_archon: "${env.ARCHON_MCP_URL}"
+
 metadata:
   author: "OmniNode Team"
   license: "MIT"
