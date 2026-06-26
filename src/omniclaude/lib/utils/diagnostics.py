@@ -36,7 +36,7 @@ from typing import Any
 import requests
 
 from omniclaude.lib.utils.diagnostics_endpoint_descriptor import (
-    DiagnosticsEndpoint,
+    EnumDiagnosticsEndpoint,
     resolve_diagnostics_endpoint,
 )
 
@@ -53,10 +53,10 @@ from omniclaude.lib.utils.diagnostics_endpoint_descriptor import (
 # tool never crashes on import; the descriptor module is import-safe (it does
 # not import config.settings, so the original circular import stays broken).
 INTELLIGENCE_SERVICE_URL = resolve_diagnostics_endpoint(
-    DiagnosticsEndpoint.INTELLIGENCE_SERVICE
+    EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE
 )
-MAIN_SERVER_URL = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MAIN_SERVER)
-MCP_SERVER_URL = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MCP_SERVER)
+MAIN_SERVER_URL = resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MAIN_SERVER)
+MCP_SERVER_URL = resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MCP_SERVER)
 
 # Docker container name patterns for health checks
 # Note: These are container name filters for `docker ps --filter`, not connection URLs.

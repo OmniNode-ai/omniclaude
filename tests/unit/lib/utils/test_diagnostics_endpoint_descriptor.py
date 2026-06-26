@@ -20,9 +20,10 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 
 from omniclaude.lib.utils.diagnostics_endpoint_descriptor import (
-    DiagnosticsEndpoint,
+    EnumDiagnosticsEndpoint,
     resolve_diagnostics_endpoint,
     resolve_diagnostics_endpoint_strict,
 )
@@ -50,7 +51,9 @@ def test_intelligence_overlay_resolution_equals_direct_env_read(
     # The value the pre-migration code read directly.
     direct = os.environ.get("INTELLIGENCE_SERVICE_URL", "")
     # The value the migrated overlay seam resolves.
-    resolved = resolve_diagnostics_endpoint(DiagnosticsEndpoint.INTELLIGENCE_SERVICE)
+    resolved = resolve_diagnostics_endpoint(
+        EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE
+    )
 
     assert resolved == direct == endpoint
 
@@ -63,7 +66,7 @@ def test_main_server_overlay_resolution_equals_direct_env_read(
     monkeypatch.setenv("MAIN_SERVER_URL", endpoint)
 
     direct = os.environ.get("MAIN_SERVER_URL", "")
-    resolved = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MAIN_SERVER)
+    resolved = resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MAIN_SERVER)
 
     assert resolved == direct == endpoint
 
@@ -82,7 +85,7 @@ def test_mcp_overlay_resolution_equals_direct_primary_env_read(
         or os.environ.get("ONEX_MCP_URL")
         or os.environ.get("ARCHON_MCP_URL", "")
     )
-    resolved = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MCP_SERVER)
+    resolved = resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MCP_SERVER)
 
     assert resolved == direct == endpoint
 
@@ -100,7 +103,7 @@ def test_mcp_alias_chain_preserves_legacy_onex_mcp_url(
         or os.environ.get("ONEX_MCP_URL")
         or os.environ.get("ARCHON_MCP_URL", "")
     )
-    resolved = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MCP_SERVER)
+    resolved = resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MCP_SERVER)
 
     assert resolved == direct == "http://legacy-onex-mcp:8051"
 
@@ -118,7 +121,7 @@ def test_mcp_alias_chain_preserves_legacy_archon_mcp_url(
         or os.environ.get("ONEX_MCP_URL")
         or os.environ.get("ARCHON_MCP_URL", "")
     )
-    resolved = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MCP_SERVER)
+    resolved = resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MCP_SERVER)
 
     assert resolved == direct == "http://legacy-archon-mcp:8051"
 
@@ -126,13 +129,13 @@ def test_mcp_alias_chain_preserves_legacy_archon_mcp_url(
 @pytest.mark.parametrize(
     "endpoint",
     [
-        DiagnosticsEndpoint.INTELLIGENCE_SERVICE,
-        DiagnosticsEndpoint.MAIN_SERVER,
-        DiagnosticsEndpoint.MCP_SERVER,
+        EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE,
+        EnumDiagnosticsEndpoint.MAIN_SERVER,
+        EnumDiagnosticsEndpoint.MCP_SERVER,
     ],
 )
 def test_strict_accessor_fails_closed_when_env_unset(
-    endpoint: DiagnosticsEndpoint, monkeypatch: pytest.MonkeyPatch
+    endpoint: EnumDiagnosticsEndpoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The strict accessor raises rather than returning a localhost default."""
     for var in (
@@ -151,18 +154,20 @@ def test_strict_accessor_fails_closed_when_env_unset(
 @pytest.mark.parametrize(
     "endpoint",
     [
-        DiagnosticsEndpoint.INTELLIGENCE_SERVICE,
-        DiagnosticsEndpoint.MAIN_SERVER,
-        DiagnosticsEndpoint.MCP_SERVER,
+        EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE,
+        EnumDiagnosticsEndpoint.MAIN_SERVER,
+        EnumDiagnosticsEndpoint.MCP_SERVER,
     ],
 )
 def test_strict_accessor_fails_closed_when_env_blank(
-    endpoint: DiagnosticsEndpoint, monkeypatch: pytest.MonkeyPatch
+    endpoint: EnumDiagnosticsEndpoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Whitespace-only values are treated as unset and fail closed."""
     monkeypatch.setenv("INTELLIGENCE_SERVICE_URL", "   ")
     monkeypatch.setenv("MAIN_SERVER_URL", "   ")
     monkeypatch.setenv("MCP_SERVER_URL", "   ")
+    monkeypatch.delenv("ONEX_MCP_URL", raising=False)
+    monkeypatch.delenv("ARCHON_MCP_URL", raising=False)
 
     with pytest.raises(ValueError, match=r"resolved empty"):
         resolve_diagnostics_endpoint_strict(endpoint)
@@ -186,9 +191,43 @@ def test_non_strict_resolution_returns_empty_when_unset(
     ):
         monkeypatch.delenv(var, raising=False)
 
-    assert resolve_diagnostics_endpoint(DiagnosticsEndpoint.INTELLIGENCE_SERVICE) == ""
-    assert resolve_diagnostics_endpoint(DiagnosticsEndpoint.MAIN_SERVER) == ""
-    assert resolve_diagnostics_endpoint(DiagnosticsEndpoint.MCP_SERVER) == ""
+    assert (
+        resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE) == ""
+    )
+    assert resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MAIN_SERVER) == ""
+    assert resolve_diagnostics_endpoint(EnumDiagnosticsEndpoint.MCP_SERVER) == ""
+
+
+def test_non_strict_resolution_returns_empty_when_contract_missing(
+    tmp_path: Path,
+) -> None:
+    """Non-strict resolution fails soft if the contract cannot be opened."""
+    missing_contract = tmp_path / "missing.yaml"
+
+    assert (
+        resolve_diagnostics_endpoint(
+            EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE, missing_contract
+        )
+        == ""
+    )
+
+
+def test_non_strict_resolution_returns_empty_when_contract_malformed(
+    tmp_path: Path,
+) -> None:
+    """Non-strict resolution fails soft if descriptor data is malformed."""
+    contract = tmp_path / "contract.yaml"
+    contract.write_text(
+        yaml.safe_dump({"descriptor": {"diagnostics_intelligence_service_url": 7}}),
+        encoding="utf-8",
+    )
+
+    assert (
+        resolve_diagnostics_endpoint(
+            EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE, contract
+        )
+        == ""
+    )
 
 
 def test_descriptor_reads_os_environ_only_inside_overlay_expander() -> None:

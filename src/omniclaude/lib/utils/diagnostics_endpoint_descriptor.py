@@ -63,7 +63,7 @@ _CONTRACT = (
 )
 
 
-class DiagnosticsEndpoint(StrEnum):
+class EnumDiagnosticsEndpoint(StrEnum):
     """The diagnostics service endpoints declared in the runtime contract."""
 
     INTELLIGENCE_SERVICE = "intelligence_service"
@@ -75,10 +75,12 @@ class DiagnosticsEndpoint(StrEnum):
 # fields to resolve. MCP preserves the legacy alias chain
 # (MCP_SERVER_URL -> ONEX_MCP_URL -> ARCHON_MCP_URL): the first field that
 # resolves to a non-empty value wins.
-_ENDPOINT_FIELDS: dict[DiagnosticsEndpoint, tuple[str, ...]] = {
-    DiagnosticsEndpoint.INTELLIGENCE_SERVICE: ("diagnostics_intelligence_service_url",),
-    DiagnosticsEndpoint.MAIN_SERVER: ("diagnostics_main_server_url",),
-    DiagnosticsEndpoint.MCP_SERVER: (
+_ENDPOINT_FIELDS: dict[EnumDiagnosticsEndpoint, tuple[str, ...]] = {
+    EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE: (
+        "diagnostics_intelligence_service_url",
+    ),
+    EnumDiagnosticsEndpoint.MAIN_SERVER: ("diagnostics_main_server_url",),
+    EnumDiagnosticsEndpoint.MCP_SERVER: (
         "diagnostics_mcp_server_url",
         "diagnostics_mcp_server_url_legacy_onex",
         "diagnostics_mcp_server_url_legacy_archon",
@@ -86,10 +88,10 @@ _ENDPOINT_FIELDS: dict[DiagnosticsEndpoint, tuple[str, ...]] = {
 }
 
 # Map each endpoint to the env var an operator sets, for actionable error text.
-_ENDPOINT_ENV_HINT: dict[DiagnosticsEndpoint, str] = {
-    DiagnosticsEndpoint.INTELLIGENCE_SERVICE: "INTELLIGENCE_SERVICE_URL",
-    DiagnosticsEndpoint.MAIN_SERVER: "MAIN_SERVER_URL",
-    DiagnosticsEndpoint.MCP_SERVER: "MCP_SERVER_URL (or legacy ONEX_MCP_URL / ARCHON_MCP_URL)",
+_ENDPOINT_ENV_HINT: dict[EnumDiagnosticsEndpoint, str] = {
+    EnumDiagnosticsEndpoint.INTELLIGENCE_SERVICE: "INTELLIGENCE_SERVICE_URL",
+    EnumDiagnosticsEndpoint.MAIN_SERVER: "MAIN_SERVER_URL",
+    EnumDiagnosticsEndpoint.MCP_SERVER: "MCP_SERVER_URL (or legacy ONEX_MCP_URL / ARCHON_MCP_URL)",
 }
 
 
@@ -124,7 +126,7 @@ def _load_descriptor(contract_path: Path = _CONTRACT) -> dict[str, object]:
 
 
 def resolve_diagnostics_endpoint(
-    endpoint: DiagnosticsEndpoint, contract_path: Path = _CONTRACT
+    endpoint: EnumDiagnosticsEndpoint, contract_path: Path = _CONTRACT
 ) -> str:
     """Resolve a diagnostics endpoint URL (fail-soft).
 
@@ -133,15 +135,14 @@ def resolve_diagnostics_endpoint(
     resolves (unset/blank) — diagnostics is a fail-soft tool and must not raise
     on an unconfigured endpoint.
     """
-    descriptor = _load_descriptor(contract_path)
+    try:
+        descriptor = _load_descriptor(contract_path)
+    except (OSError, ValueError):
+        return ""
     for field in _ENDPOINT_FIELDS[endpoint]:
         declared = descriptor.get(field)
         if not isinstance(declared, str):
-            raise ValueError(
-                f"contract {contract_path} must declare a string "
-                f"descriptor.{field} (the ${{env.VAR}} overlay value the "
-                "diagnostics health-check uses as an endpoint)"
-            )
+            continue
         resolved = _expand_contract_env_refs(declared).strip()
         if resolved:
             return resolved
@@ -149,7 +150,7 @@ def resolve_diagnostics_endpoint(
 
 
 def resolve_diagnostics_endpoint_strict(
-    endpoint: DiagnosticsEndpoint, contract_path: Path = _CONTRACT
+    endpoint: EnumDiagnosticsEndpoint, contract_path: Path = _CONTRACT
 ) -> str:
     """Resolve a diagnostics endpoint URL (fail-closed).
 
@@ -169,7 +170,7 @@ def resolve_diagnostics_endpoint_strict(
 
 
 __all__: list[str] = [
-    "DiagnosticsEndpoint",
+    "EnumDiagnosticsEndpoint",
     "resolve_diagnostics_endpoint",
     "resolve_diagnostics_endpoint_strict",
 ]
