@@ -14,7 +14,10 @@ var is unset (no silent localhost fallback). The MCP alias chain
 
 from __future__ import annotations
 
+import ast
+import importlib
 import os
+from pathlib import Path
 
 import pytest
 
@@ -197,13 +200,12 @@ def test_descriptor_reads_os_environ_only_inside_overlay_expander() -> None:
     Counts real ``os.environ`` AST attribute accesses (not comment/docstring
     mentions).
     """
-    import ast
-
-    import omniclaude.lib.utils.diagnostics_endpoint_descriptor as mod
-
+    mod = importlib.import_module(
+        "omniclaude.lib.utils.diagnostics_endpoint_descriptor"
+    )
     source = mod.__file__
     assert source is not None
-    tree = ast.parse(open(source, encoding="utf-8").read())  # noqa: SIM115
+    tree = ast.parse(Path(source).read_text(encoding="utf-8"))
 
     def _count_os_environ(node: ast.AST) -> int:
         return sum(
