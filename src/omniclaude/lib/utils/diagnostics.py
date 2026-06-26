@@ -35,19 +35,28 @@ from typing import Any
 
 import requests
 
-# Service URL configuration from environment.
-# These were previously read from settings.intelligence_service_url / .main_server_url
-# at module level, but that triggers a circular import: config.__init__ → aggregators →
-# hooks → lib.utils → debug_utils → config.settings (still loading). Using os.environ
-# directly breaks the cycle.  Defaults match the Settings field defaults.
-INTELLIGENCE_SERVICE_URL = os.environ.get("INTELLIGENCE_SERVICE_URL", "")
-MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "")
-# Support both MCP_SERVER_URL and legacy ONEX_MCP_URL/ARCHON_MCP_URL — no localhost default [OMN-7227]
-MCP_SERVER_URL = (
-    os.environ.get("MCP_SERVER_URL")
-    or os.environ.get("ONEX_MCP_URL")
-    or os.environ.get("ARCHON_MCP_URL", "")
+from omniclaude.lib.utils.diagnostics_endpoint_descriptor import (
+    DiagnosticsEndpoint,
+    resolve_diagnostics_endpoint,
 )
+
+# Service URL configuration — OMN-13560 Wave-1 endpoint->overlay migration
+# (epic OMN-13556). These were previously read from scattered direct
+# os.environ.get(...) calls at module level (originally to break a circular
+# import: config.__init__ → aggregators → hooks → lib.utils → debug_utils →
+# config.settings). They are now contract-declared in
+# contracts/contract_omniclaude_runtime.yaml under descriptor.* and resolved
+# via the ${env.VAR} overlay seam (diagnostics_endpoint_descriptor — the single
+# sanctioned env boundary). The MCP legacy alias chain
+# (MCP_SERVER_URL -> ONEX_MCP_URL -> ARCHON_MCP_URL) is preserved by the
+# descriptor. Resolution is fail-soft (empty when unset) so this diagnostics
+# tool never crashes on import; the descriptor module is import-safe (it does
+# not import config.settings, so the original circular import stays broken).
+INTELLIGENCE_SERVICE_URL = resolve_diagnostics_endpoint(
+    DiagnosticsEndpoint.INTELLIGENCE_SERVICE
+)
+MAIN_SERVER_URL = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MAIN_SERVER)
+MCP_SERVER_URL = resolve_diagnostics_endpoint(DiagnosticsEndpoint.MCP_SERVER)
 
 # Docker container name patterns for health checks
 # Note: These are container name filters for `docker ps --filter`, not connection URLs.
@@ -159,7 +168,14 @@ def check_running_services() -> dict[str, Any]:
     try:
         # Try to check if PostgreSQL container is running
         result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
-            ["docker", "ps", "--filter", f"name={DOCKER_CONTAINER_POSTGRES}", "--format", "{{json .}}"],
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={DOCKER_CONTAINER_POSTGRES}",
+                "--format",
+                "{{json .}}",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
@@ -172,7 +188,9 @@ def check_running_services() -> dict[str, Any]:
                 if line.strip()
             ]
             postgres_containers = [
-                c for c in docker_containers if DOCKER_CONTAINER_POSTGRES in c.get("Names", "").lower()
+                c
+                for c in docker_containers
+                if DOCKER_CONTAINER_POSTGRES in c.get("Names", "").lower()
             ]
 
             if postgres_containers:
@@ -199,7 +217,14 @@ def check_running_services() -> dict[str, Any]:
     # Check Memgraph (if available)
     try:
         result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
-            ["docker", "ps", "--filter", f"name={DOCKER_CONTAINER_MEMGRAPH}", "--format", "{{json .}}"],
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={DOCKER_CONTAINER_MEMGRAPH}",
+                "--format",
+                "{{json .}}",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
@@ -212,7 +237,9 @@ def check_running_services() -> dict[str, Any]:
                 if line.strip()
             ]
             memgraph_containers = [
-                c for c in docker_containers if DOCKER_CONTAINER_MEMGRAPH in c.get("Names", "").lower()
+                c
+                for c in docker_containers
+                if DOCKER_CONTAINER_MEMGRAPH in c.get("Names", "").lower()
             ]
 
             if memgraph_containers:
@@ -239,7 +266,14 @@ def check_running_services() -> dict[str, Any]:
     # Check Qdrant (if available)
     try:
         result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
-            ["docker", "ps", "--filter", f"name={DOCKER_CONTAINER_QDRANT}", "--format", "{{json .}}"],
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={DOCKER_CONTAINER_QDRANT}",
+                "--format",
+                "{{json .}}",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
@@ -252,7 +286,9 @@ def check_running_services() -> dict[str, Any]:
                 if line.strip()
             ]
             qdrant_containers = [
-                c for c in docker_containers if DOCKER_CONTAINER_QDRANT in c.get("Names", "").lower()
+                c
+                for c in docker_containers
+                if DOCKER_CONTAINER_QDRANT in c.get("Names", "").lower()
             ]
 
             if qdrant_containers:
@@ -322,7 +358,9 @@ def check_network_connectivity() -> dict[str, Any]:
 def check_pattern_tracking_files() -> dict[str, Any]:
     """Check if pattern tracking files exist and are accessible"""
     hooks_dir = os.path.join(
-        os.environ.get("CLAUDE_PLUGIN_ROOT", os.path.expanduser("~/.claude/plugins/onex")),
+        os.environ.get(
+            "CLAUDE_PLUGIN_ROOT", os.path.expanduser("~/.claude/plugins/onex")
+        ),
         "hooks",
         "lib",
     )
