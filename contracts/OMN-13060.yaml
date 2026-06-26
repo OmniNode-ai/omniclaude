@@ -1,0 +1,32 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13060"
+title: "Receipt hardening gate catches stale contract hashes"
+summary: >
+  Local contract reference for the OMN-13050 scaffold tooling. The new authoring
+  path keeps the receipt hardening gate satisfied by computing contract_sha256
+  from the current OCC contract rather than hand-authoring receipt hashes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-scaffold-hardening-coverage"
+    description: >
+      The scaffold tests cover contract hash emission and stale/missing contract
+      failure behavior for generated receipts.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/scripts/test_scaffold_occ_receipt.py -q"
+  - id: "dod-occ-authority"
+    description: "Central OCC evidence for the product PR is linked from the PR body."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'Evidence-Source: OCC#3181' /tmp/pr_body.txt"
