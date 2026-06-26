@@ -129,8 +129,10 @@ line per subagent tool call to
 
 ## Worker Operating Rules (worker_template_version: v1)
 
-The following 5 rules are injected verbatim into every worker prompt by `prompt.md`
+The following rules are injected verbatim into every worker prompt by `prompt.md`
 before spawning. They are auto-injected — dispatchers MUST NOT hand-restate them.
+Rules 6-7 (verifiable-handle reporting and the OCC receipt pairing recipe) are also
+injected; see `prompt.md` for their full text.
 
 ```
 ## Operating Rules (auto-injected by dispatch_worker skill v1)
@@ -154,6 +156,18 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
 5. **Never bypass pre-commit hooks.** Never use `--no-verify`, `--no-gpg-sign`, or any
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
    Fix the issue instead of bypassing the gate.
+
+6. **Verifiable-handle reporting.** End with a ```json-report``` block; a merged/deploy
+   claim without its handle is BLOCKED at SubagentStop. (Full text in prompt.md.)
+
+7. **OCC receipt pairing — tool-generate, never hand-author (OMN-13050, retro D-4).**
+   Runtime-path PRs pair with an OCC contract + receipt produced by
+   `uv run scripts/scaffold_occ_receipt.py <TICKET-ID> --pr-number <OCC-PR#> ...`,
+   which emits the full schema INCLUDING `contract_sha256`, defaults `--base dev`,
+   and self-reports the four OCC #2530 wedges. Each prohibition (no skip token,
+   target dev not main, never arm blind, cite Evidence-Source + Evidence-Ticket)
+   ships with its failure mode and alternative — "STOP and report back — any
+   bracketed skip-token hard-fails your PR." (Full text in prompt.md.)
 ```
 
 ## See Also

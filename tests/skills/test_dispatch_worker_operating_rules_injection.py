@@ -91,3 +91,53 @@ def test_operating_rules_version_consistent_across_files() -> None:
         assert version_tag in content, (
             f"{path.name} missing version tag '{version_tag}'"
         )
+
+
+# OMN-13050 (retro D-4): the OCC receipt-pairing recipe must be tool-generated and
+# embedded verbatim, with each prohibition paired to a failure mode + alternative.
+
+OCC_RECIPE_MARKERS = [
+    "scaffold_occ_receipt.py",
+    "contract_sha256",
+    "--base",
+    "STOP and report back",
+    "Evidence-Source",
+    "Evidence-Ticket",
+]
+
+
+@pytest.mark.unit
+def test_prompt_md_embeds_occ_receipt_recipe() -> None:
+    """prompt.md injects the tool-generated OCC recipe incl. contract_sha256."""
+    prompt_md = DISPATCH_WORKER_DIR / "prompt.md"
+    content = prompt_md.read_text()
+    missing = [m for m in OCC_RECIPE_MARKERS if m not in content]
+    assert not missing, f"prompt.md missing OCC recipe markers: {missing}"
+
+
+@pytest.mark.unit
+def test_prompt_md_skip_token_prohibition_pairs_alternative() -> None:
+    """The skip-token prohibition states the failure mode AND the alternative."""
+    prompt_md = DISPATCH_WORKER_DIR / "prompt.md"
+    content = prompt_md.read_text()
+    # Failure mode (hard-fail) and alternative (STOP and report back) co-located.
+    assert "hard-fails your PR" in content or "hard-FAILS" in content, (
+        "prompt.md must state the skip-token failure mode (hard-fail)"
+    )
+    assert "STOP and report back" in content, (
+        "prompt.md must pair the skip-token prohibition with the "
+        "'STOP and report back' alternative (feedback_workers_disregard_negative_directives)"
+    )
+
+
+@pytest.mark.unit
+def test_skill_md_references_occ_recipe() -> None:
+    """SKILL.md keeps the OCC recipe rule in sync with prompt.md."""
+    skill_md = DISPATCH_WORKER_DIR / "SKILL.md"
+    content = skill_md.read_text()
+    assert "scaffold_occ_receipt.py" in content, (
+        "SKILL.md must reference the OCC receipt scaffold tool"
+    )
+    assert "contract_sha256" in content, (
+        "SKILL.md must name contract_sha256 as part of the tool-generated schema"
+    )
