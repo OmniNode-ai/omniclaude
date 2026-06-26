@@ -174,15 +174,18 @@ with these rules regardless of role or spec contents:
      (dev-only promotion). Alternative: branch off `origin/dev` and target `dev`
      (the tool's `--base` defaults to dev); for a genuine promotion pass
      `--promotion`.
-   - **Never arm blind.** Failure mode: arming `--auto` before a confirmed green
+   - **Never arm blind.** Failure mode: arming auto-merge before a confirmed green
      `gh pr checks` watch merges red or strands the PR unobserved (Operating Rule 3).
      Alternative: run `gh pr checks <num> --watch` to terminal green, paste that
-     output as evidence, then arm with bare `gh pr merge <num> --auto`.
+     output as evidence, then arm via the `enqueue_to_merge_queue()` /
+     `arm_auto_merge()` helpers in `@_lib/pr-safety/helpers.md` (which select the
+     correct queue method); re-run the scaffold tool with `--ci-watch-confirmed`.
    - **Cite Evidence-Source + Evidence-Ticket.** Failure mode: a code PR body
      missing the unbulleted `Evidence-Source: OCC#<n>` (or `<sha>`) OR
      `Evidence-Ticket: <TICKET-ID>` line FAILS the Receipt-Gate even with green
-     checks. Alternative: PATCH the code PR body with both lines via
-     `gh api --method PATCH .../pulls/<n> --field body=@file` (NOT `gh pr edit`).
+     checks. Alternative: patch the code PR body to include both lines via the
+     `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` (the REST PATCH path,
+     not the interactive editor — see [[reference_gh_pr_edit_projects_classic]]).
 
 ---
 ```
