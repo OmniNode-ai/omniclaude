@@ -168,6 +168,14 @@ injected; see `prompt.md` for their full text.
    target dev not main, never arm blind, cite Evidence-Source + Evidence-Ticket)
    ships with its failure mode and alternative — "STOP and report back — any
    bracketed skip-token hard-fails your PR." (Full text in prompt.md.)
+
+8. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+   touches UI behavior, the required proof is a Playwright interaction with the operator's
+   running surface: the live URL, a screenshot, and the network log of the actual request
+   the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
+   claim — it proves the backend answered, not that the operator's surface renders the data
+   or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
+   (OMN-13024) is live.
 ```
 
 ## See Also
