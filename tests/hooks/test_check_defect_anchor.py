@@ -126,6 +126,17 @@ def test_ignores_non_markdown_files() -> None:
 
 
 @pytest.mark.unit
+def test_rejects_regression_without_ticket() -> None:
+    """A REGRESSION marker in an evidence doc with no OMN-XXXX ref must be rejected."""
+    rc, stderr = run_hook(
+        FIXTURES / "invalid_regression_no_ticket.md",
+        fake_path="docs/evidence/2026-06-20-stability/notes.md",
+    )
+    assert rc != 0, "Expected hook to reject REGRESSION with no ticket reference"
+    assert "DEFECT_ANCHOR_MISSING" in stderr
+
+
+@pytest.mark.unit
 def test_hook_is_executable() -> None:
     """The hook script must carry the executable bit (pre-commit language: script)."""
     assert os.access(HOOK, os.X_OK), f"{HOOK} is not executable"
