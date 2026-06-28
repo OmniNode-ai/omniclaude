@@ -90,17 +90,17 @@ Stop. No Agent() or TaskCreate() call.
 ## Inject Operating Rules
 
 After receiving `result.validated_prompt_template`, prepend the following block verbatim
-(worker_template_version: v1). This is non-negotiable — every worker prompt MUST begin
+(worker_template_version: v2). This is non-negotiable — every worker prompt MUST begin
 with these rules regardless of role or spec contents:
 
 ```
-## Operating Rules (auto-injected by dispatch_worker skill v1)
+## Operating Rules (auto-injected by dispatch_worker skill v2)
 
 1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
    provenance. Fix them in the same PR or file a blocker — never push red tests.
 
-2. **PR closing keyword.** The PR body MUST contain `Closes <TICKET-ID>.` (exact closing-
-   keyword form, where `<TICKET-ID>` is the primary ticket). Without it the receipt gate fails.
+2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
+   keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
 
 3. **Worktree-only development.** All code changes happen in a ticket worktree under
    `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
@@ -116,7 +116,18 @@ with these rules regardless of role or spec contents:
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
    Fix the issue instead of bypassing the gate.
 
-6. **Verifiable-handle reporting (worker-misreport ratchet).** Your final
+6. **Anchor-first ordering (OMN-13049).** Phase 0 is mandatory and must complete before
+   any long implementation leg: (a) verify or file the Linear ticket; (b) push a WIP
+   branch to origin (even if the branch is empty). Write a resume manifest to
+   `$ONEX_STATE_DIR/manifests/<ticket_id>/manifest.yaml` immediately after the WIP push
+   using `resume_manifest_writer.write_resume_manifest()` with
+   `phase=EnumResumeManifestPhase.PHASE_0_ANCHOR` and `wip_pushed_at` populated.
+   Update the manifest at every subsequent phase boundary (implement, local_review,
+   create_pr, done). On any auth or usage-limit error, call
+   `resume_manifest_writer.write_survivor_note(manifest, detail="<what was diagnosed>")`
+   before terminating so the defect retains identity even without a filed PR.
+
+7. **Verifiable-handle reporting (worker-misreport ratchet).** Your final
    message MUST end with a fenced ```json-report``` block, and any claim of completion
    MUST carry its verifiable handle — claims without handles are BLOCKED at SubagentStop
    by the receipt-honesty verifier (`subagent_claim_verifier.py`), re-probed against live
@@ -139,7 +150,7 @@ with these rules regardless of role or spec contents:
    ```
    ````
 
-7. **OCC receipt pairing — TOOL-GENERATE, never hand-author (OMN-13050, retro D-4).**
+8. **OCC receipt pairing — TOOL-GENERATE, never hand-author (OMN-13050, retro D-4).**
    Hand-authored OCC receipts wedged OCC PR #2530 four ways and blocked three code
    PRs overnight. If your change touches runtime paths (src nodes/handlers/contracts),
    you MUST pair it with an `onex_change_control` (OCC) contract + DoD receipt. Do NOT
@@ -187,7 +198,7 @@ with these rules regardless of role or spec contents:
      `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` (the REST PATCH path,
      not the interactive editor — see [[reference_gh_pr_edit_projects_classic]]).
 
-8. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+9. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
    touches UI behavior, the required proof is a Playwright interaction with the operator's
    running surface: the live URL, a screenshot, and the network log of the actual request
    the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI

@@ -1,0 +1,55 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-13049
+title: "D-3: Anchor-first ordering — phase 0 files ticket + pushes WIP branch before any long leg"
+summary: >
+  Adds anchor-first ordering to the dispatch_worker skill: workers must complete
+  phase 0 (verify/file Linear ticket + push WIP branch) before any long
+  implementation leg, write a machine-readable resume manifest at every phase
+  boundary, and flush a survivor note on auth/usage errors so diagnosed defects
+  are never stranded without identity.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "ModelResumeManifest, writer, reader, and survivor_note unit tests all pass"
+    command: "env -u PYTHONPATH uv run pytest tests/hooks/test_resume_manifest.py -v"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "env -u GITHUB_TOKEN gh pr checks --repo OmniNode-ai/omniclaude <PR_NUMBER>"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "ModelResumeManifest Pydantic model exists with correct fields and frozen config"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -n 'ModelResumeManifest' src/omniclaude/hooks/model_resume_manifest.py"
+  - id: dod-002
+    description: "EnumResumeManifestPhase has phase_0_anchor as the first (mandatory) phase"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep 'PHASE_0_ANCHOR' src/omniclaude/hooks/model_resume_manifest.py"
+  - id: dod-003
+    description: "resume_manifest_writer provides write/read/survivor_note helpers"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: 'grep -n "def write_resume_manifest\|def read_resume_manifest\|def write_survivor_note" src/omniclaude/hooks/lib/resume_manifest_writer.py'
+  - id: dod-004
+    description: "dispatch_worker SKILL.md Rule 6 mandates anchor-first ordering and resume manifest"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep 'Anchor-first ordering' plugins/onex/skills/dispatch_worker/SKILL.md"
+  - id: dod-005
+    description: "All new unit tests pass (writer, reader, survivor_note, model constraints)"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "env -u PYTHONPATH uv run pytest tests/hooks/test_resume_manifest.py -v --tb=short"

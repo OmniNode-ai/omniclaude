@@ -15,11 +15,14 @@ REQUIRED_RULES = [
     "Worktree-only development",
     "Full test suite before push",
     "Never bypass pre-commit hooks",
+    "Anchor-first ordering",
+    "Verifiable-handle reporting",
+    "OCC receipt pairing",
     # OMN-13052 (D-6): UI DoD items require Playwright proof, not curl.
     "UI proof requires Playwright",
 ]
 
-WORKER_TEMPLATE_VERSION = "v1"
+WORKER_TEMPLATE_VERSION = "v2"
 
 # OMN-13052 (D-6): phrases that must appear in the UI-verification operating rule so a
 # worker cannot pass a UI claim with a curl of the canonical endpoint.
