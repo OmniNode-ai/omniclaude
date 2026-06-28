@@ -35,6 +35,7 @@
 
 set -euo pipefail
 
+# Evidence-Source: OCC#3264 (merged; receipts at drift/dod_receipts/OMN-13029)
 TICKET_REF="OMN-13029"
 DEFECT_PATTERN='(BLOCKER|UNFIXED|DEFECT|REGRESSION|BUG-CONFIRMED)'
 OMN_PATTERN='OMN-[0-9]+'
