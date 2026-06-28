@@ -10,9 +10,7 @@ summary: >
   are never stranded without identity.
 is_seam_ticket: false
 interface_change: false
-interfaces_touched:
-  - skills
-  - models
+interfaces_touched: []
 evidence_requirements:
   - kind: tests
     description: "ModelResumeManifest, writer, reader, and survivor_note unit tests all pass"
