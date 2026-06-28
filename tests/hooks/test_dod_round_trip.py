@@ -16,8 +16,17 @@ test was written. With ``ONEX_EVIDENCE_ROOT`` set to anything other than
 entirely, so the guard (which reads
 ``$ONEX_EVIDENCE_ROOT/<ticket>/dod_report.json``) never found the receipt and
 blocked Done with "No DoD evidence receipt found". The fix routes the writer's
-default through ``resolve_evidence_output_dir``, which mirrors the canonical
-``node_dod_verify`` precedence (``ONEX_EVIDENCE_ROOT`` first).
+default through ``resolve_evidence_output_dir``.
+
+OMN-13685 migration: ``resolve_evidence_output_dir`` no longer reads the
+``ONEX_EVIDENCE_ROOT`` env var. Its primary path is now the core resolver
+``resolve_evidence_root()`` (OMN-13136), which reads ``OMNI_HOME`` fail-fast and
+returns ``$OMNI_HOME/onex_change_control/evidence`` — the same location the
+legacy ``ONEX_EVIDENCE_ROOT`` env var pointed at, so the writer/guard round-trip
+is preserved. The guard shell (a separate component, out of OMN-13685 scope)
+still reads ``ONEX_EVIDENCE_ROOT``; these tests therefore pin the resolver to
+the evidence root the guard reads so the round-trip stays exact and is
+independent of the installed omnibase_core version.
 
 These tests shell the real guard script and call the real writer. They do NOT
 require Kafka, Postgres, or any external services (writer is called with
@@ -55,6 +64,7 @@ HOOK_SCRIPT = str(
 _RUNNER_DIR = REPO_ROOT / "plugins" / "onex" / "skills" / "_lib" / "dod-evidence-runner"
 sys.path.insert(0, str(_RUNNER_DIR))
 
+import dod_evidence_runner  # noqa: E402
 from dod_evidence_runner import (  # noqa: E402
     EvidenceRunResult,
     resolve_evidence_output_dir,
@@ -62,6 +72,20 @@ from dod_evidence_runner import (  # noqa: E402
 )
 
 _TICKET_ID = "OMN-13323"
+
+
+def _pin_resolver(monkeypatch: pytest.MonkeyPatch, evidence_root: Path) -> None:
+    """Pin the core ``resolve_evidence_root()`` to ``evidence_root`` (OMN-13685).
+
+    ``resolve_evidence_output_dir`` now derives its primary path from the core
+    resolver (OMN-13136), not from ``ONEX_EVIDENCE_ROOT``. Patching the module
+    attribute keeps these tests independent of the installed omnibase_core
+    version (which may predate ``util_omni_home_paths``) while exercising the
+    real resolver branch, and pins the writer to the same root the guard reads.
+    """
+    monkeypatch.setattr(
+        dod_evidence_runner, "resolve_evidence_root", lambda: Path(evidence_root)
+    )
 
 
 def _run_guard(
@@ -128,6 +152,7 @@ class TestWriterGuardPathAlignment:
         working_dir.mkdir()
 
         monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(evidence_root))
+        _pin_resolver(monkeypatch, evidence_root)
 
         writer_dir = resolve_evidence_output_dir(_TICKET_ID, str(working_dir))
         writer_receipt = (writer_dir / "dod_report.json").resolve()
@@ -150,6 +175,7 @@ class TestWriterGuardPathAlignment:
         working_dir.mkdir()
 
         monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(evidence_root))
+        _pin_resolver(monkeypatch, evidence_root)
 
         writer_dir = resolve_evidence_output_dir(_TICKET_ID, str(working_dir))
         legacy_dir = working_dir / ".evidence" / _TICKET_ID
@@ -171,6 +197,7 @@ class TestRoundTrip:
         working_dir.mkdir()
 
         monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(evidence_root))
+        _pin_resolver(monkeypatch, evidence_root)
 
         run_result = EvidenceRunResult(total=1, verified=1, failed=0, skipped=0)
         written = write_evidence_receipt(
@@ -209,6 +236,7 @@ class TestRoundTrip:
         working_dir.mkdir()
 
         monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(evidence_root))
+        _pin_resolver(monkeypatch, evidence_root)
 
         run_result = EvidenceRunResult(total=1, verified=1, failed=0, skipped=0)
         written = write_evidence_receipt(
@@ -237,25 +265,55 @@ class TestRoundTrip:
 
 
 class TestResolveEvidenceOutputDir:
-    """Unit coverage for the shared path resolver (writer side of F7)."""
+    """Unit coverage for the shared path resolver (writer side of F7).
 
-    def test_uses_evidence_root_when_set(
+    OMN-13685: the resolver's primary path is the core ``resolve_evidence_root()``
+    (OMN-13136), not the legacy ``ONEX_EVIDENCE_ROOT`` env var.
+    """
+
+    def test_uses_resolver_when_available(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(tmp_path / "root"))
+        """Primary path: ``resolve_evidence_root()/<ticket>`` (OMN-13685)."""
+        root = tmp_path / "root"
+        monkeypatch.setattr(dod_evidence_runner, "resolve_evidence_root", lambda: root)
+        # An ambient ONEX_EVIDENCE_ROOT must be ignored — the resolver wins.
+        monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(tmp_path / "legacy"))
         resolved = resolve_evidence_output_dir(_TICKET_ID, str(tmp_path / "wd"))
-        assert resolved == tmp_path / "root" / _TICKET_ID
+        assert resolved == root / _TICKET_ID
 
-    def test_falls_back_to_working_dir_evidence_when_unset(
+    def test_legacy_env_var_is_no_longer_read(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("ONEX_EVIDENCE_ROOT", raising=False)
+        """Regression lock: ``ONEX_EVIDENCE_ROOT`` no longer steers the path.
+
+        With the resolver unavailable, setting ``ONEX_EVIDENCE_ROOT`` must NOT
+        redirect the writer (the migrated function does not read it); the
+        local-run ``.evidence`` default is used instead.
+        """
+        monkeypatch.setattr(dod_evidence_runner, "resolve_evidence_root", None)
+        monkeypatch.setenv("ONEX_EVIDENCE_ROOT", str(tmp_path / "legacy"))
         resolved = resolve_evidence_output_dir(_TICKET_ID, str(tmp_path / "wd"))
         assert resolved == tmp_path / "wd" / ".evidence" / _TICKET_ID
 
-    def test_blank_evidence_root_treated_as_unset(
+    def test_falls_back_to_working_dir_evidence_when_omni_home_unset(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ONEX_EVIDENCE_ROOT", "   ")
+        """OMNI_HOME unset → resolver raises KeyError → local-run ``.evidence``."""
+
+        def _raise_keyerror() -> Path:
+            raise KeyError("OMNI_HOME")
+
+        monkeypatch.setattr(
+            dod_evidence_runner, "resolve_evidence_root", _raise_keyerror
+        )
+        resolved = resolve_evidence_output_dir(_TICKET_ID, str(tmp_path / "wd"))
+        assert resolved == tmp_path / "wd" / ".evidence" / _TICKET_ID
+
+    def test_falls_back_when_resolver_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Older omnibase_core without the resolver → local-run ``.evidence``."""
+        monkeypatch.setattr(dod_evidence_runner, "resolve_evidence_root", None)
         resolved = resolve_evidence_output_dir(_TICKET_ID, str(tmp_path / "wd"))
         assert resolved == tmp_path / "wd" / ".evidence" / _TICKET_ID

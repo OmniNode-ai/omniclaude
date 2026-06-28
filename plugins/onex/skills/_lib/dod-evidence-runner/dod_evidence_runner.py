@@ -31,6 +31,19 @@ try:
 except ImportError:
     _CORE_AVAILABLE = False
 
+# Canonical OMNI_HOME-derived evidence-root resolver (OMN-13136). This replaces
+# the legacy ONEX_EVIDENCE_ROOT env-var read: the resolver reads ``OMNI_HOME``
+# fail-fast and returns ``$OMNI_HOME/onex_change_control/evidence`` — the same
+# path the legacy ONEX_EVIDENCE_ROOT env var pointed at. The
+# import is guarded because omnibase_core < 0.46 predates ``util_omni_home_paths``;
+# when the resolver is unavailable, ``resolve_evidence_output_dir`` uses the
+# local-run ``.evidence/<ticket_id>`` default. Once core is bumped the resolver
+# is the primary path with no further change here.
+try:
+    from omnibase_core.utils.util_omni_home_paths import resolve_evidence_root
+except ImportError:
+    resolve_evidence_root = None  # type: ignore[assignment]
+
 _DEFAULT_TIMEOUT_SECONDS = 30
 
 logger = logging.getLogger(__name__)
@@ -350,26 +363,29 @@ def resolve_evidence_output_dir(ticket_id: str, working_dir: str) -> Path:
 
     Precedence mirrors the canonical ``node_dod_verify`` resolver:
 
-    1. ``ONEX_EVIDENCE_ROOT`` set → ``$ONEX_EVIDENCE_ROOT/<ticket_id>``. This is
+    1. ``resolve_evidence_root()`` (OMN-13136) → ``$OMNI_HOME/onex_change_control/
+       evidence/<ticket_id>``. This is the primary path: the core resolver reads
+       ``OMNI_HOME`` fail-fast and returns the same location the legacy
+       ``ONEX_EVIDENCE_ROOT`` env var pointed at, so the receipt still lands
        exactly where the completion guard reads
-       (``$ONEX_EVIDENCE_ROOT/<ticket>/dod_report.json``), so a passing
-       ``/dod-verify`` is found by the guard at the same resolved path.
-    2. ``ONEX_EVIDENCE_ROOT`` unset → ``<working_dir>/.evidence/<ticket_id>``
-       (legacy default for environments that have not configured the env var;
-       the guard is fail-open / INACTIVE in that case).
-
-    A blank or whitespace-only ``ONEX_EVIDENCE_ROOT`` is treated as unset.
+       (``$ONEX_EVIDENCE_ROOT/<ticket>/dod_report.json``).
+    2. ``OMNI_HOME`` unset (resolver raises ``KeyError``) — or the resolver is
+       unavailable on an older core — → ``<working_dir>/.evidence/<ticket_id>``
+       (local-run default; the guard is fail-open / INACTIVE in that case).
 
     Args:
         ticket_id: The ticket identifier (e.g., "OMN-5168").
-        working_dir: Working directory used for the legacy ``.evidence`` default.
+        working_dir: Working directory used for the local-run ``.evidence`` default.
 
     Returns:
         The directory (not the file) the ``dod_report.json`` receipt is written to.
     """
-    evidence_root = os.environ.get("ONEX_EVIDENCE_ROOT", "").strip()
-    if evidence_root:
-        return Path(evidence_root) / ticket_id
+    if resolve_evidence_root is not None:
+        try:
+            return resolve_evidence_root() / ticket_id
+        except KeyError:
+            # OMNI_HOME unset → local-run fallback under the working directory.
+            pass
     return Path(working_dir) / ".evidence" / ticket_id
 
 
@@ -394,8 +410,9 @@ def write_evidence_receipt(
             default is resolved by ``resolve_evidence_output_dir`` so the
             receipt lands where ``pre_tool_use_dod_completion_guard.sh`` reads
             it (round-trip alignment, OMN-13323 / Enforcement Map F7):
-            ``$ONEX_EVIDENCE_ROOT/<ticket_id>`` when ``ONEX_EVIDENCE_ROOT`` is
-            set, else ``<working_dir>/.evidence/<ticket_id>``.
+            ``$OMNI_HOME/onex_change_control/evidence/<ticket_id>`` via the
+            ``resolve_evidence_root`` core resolver (OMN-13136), else
+            ``<working_dir>/.evidence/<ticket_id>`` when ``OMNI_HOME`` is unset.
         policy_mode: DoD enforcement policy (advisory/soft/hard). Forwarded
             to the emitted event. Defaults to "advisory".
         emit: Whether to emit a dod.verify.completed Kafka event after writing
