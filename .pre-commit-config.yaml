@@ -73,6 +73,20 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-13025 (A-3): Reject docs/evidence/** with UI/e2e claims but no Playwright artifact.
+      # Root cause: 2026-06-11 19:27Z evidence doc claimed "UI POST → full chain live" when
+      # only curl was run (PROCESS_FAILURE_RETRO.md §3.A — top-10 failure #1).
+      # Rejected claim patterns: "UI POST", "click", "full chain live", "end-to-end".
+      # A claim is allowed only when the doc also references a Playwright artifact.
+      # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10).
+      - id: reject-evidence-ui-claims
+        name: Reject evidence docs with UI/e2e claims lacking Playwright artifact (OMN-13025)
+        entry: .pre-commit-hooks/reject-evidence-ui-claims.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-11271: Reject handoff docs missing mandatory ## Infra Health section.
       # Matches docs/handoffs/*.md, docs/*handoff*.md, docs/tracking/*handoff*.md.
       # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10). Spec: OMN-8867.
