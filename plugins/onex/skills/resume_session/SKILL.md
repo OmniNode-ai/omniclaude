@@ -1,7 +1,7 @@
 ---
 description: Load projected session state for a task and bind the current session to it
 mode: full
-version: "1.1.0"
+version: "1.2.0"
 level: basic
 debug: false
 category: session
@@ -12,6 +12,8 @@ tags:
   - registry
   - qdrant
   - decisions
+  - live-state
+  - verify
 author: omninode
 args:
   - name: task_id
@@ -27,6 +29,10 @@ and Qdrant (semantic decision recall).
 
 ## Behavior
 
+0. **Re-verify live state from the latest handoff before trusting any prior-session
+   state claim** — see [Live-State Re-Verification on Resume](#live-state-re-verification-on-resume).
+   A resumed session never acts on prose state copied from a previous session
+   without re-running that section's probe.
 1. Accept a ticket ID argument (e.g., `/onex:resume_session TASK-1234`)
 2. Query the `session_registry` Postgres table for the task
 3. If **Found**:
@@ -43,6 +49,70 @@ and Qdrant (semantic decision recall).
 5. If **Unavailable** (DB down):
    - "Session registry unavailable: {reason}. Binding task_id locally only."
    - Still bind `task_id` locally (degraded mode per Doctrine D4)
+
+## Live-State Re-Verification on Resume
+
+A resumed session MUST NOT trust prose state copied from a prior session. A handoff
+is a snapshot written at the moment the previous session ended; the live system may
+have moved on. Before acting on any claim about *current* state (bus health, lane
+health, PR verdict, container state, queue depth), re-verify it against the live
+surface.
+
+### 1. Read the latest handoff (`LATEST.md`, fallback newest-mtime)
+
+On resume, locate the candidate current-state document in this order:
+
+1. **`LATEST.md`** — the canonical pointer to the most recent handoff. Read it
+   first (in the repo's `docs/handoffs/` directory when present, otherwise the
+   working-directory root).
+2. **Fallback**: if `LATEST.md` is absent, select the handoff file with the
+   **newest modification time (mtime)** under `docs/handoffs/`.
+
+Only `LATEST.md` (or, on fallback, the newest-mtime handoff) is treated as the
+candidate current-state document. Every older handoff under `docs/handoffs/` is
+history, not current state.
+
+### 2. Re-run `verify:` blocks in live-state sections
+
+Within the chosen handoff, a **live-state section** is one that carries a `verify:`
+block — a line of the form `verify: <date> via <command>`, or a fenced block of
+probe commands. The `verify:` block *is* the probe; the result written next to it is
+stale the instant the previous session ended. For every live-state section:
+
+- Re-execute each `verify:` probe command exactly as written.
+- Act only on the **freshly re-observed** result, never on the value recorded in
+  the handoff.
+- If the probe output differs from the recorded value, the recorded value is wrong —
+  the live probe wins.
+
+Example live-state section in a handoff:
+
+```
+### Bus health
+status: BUS-IS-DOWN
+verify: 2026-06-28 via rpk cluster health
+```
+
+On resume, re-run `rpk cluster health` and use *that* output; do not propagate the
+recorded `BUS-IS-DOWN`.
+
+### 3. Sections without a `verify:` block are historical
+
+Any section that does **not** carry a `verify:` block is **historical** — narrative,
+rationale, decisions made, links, design notes. It is useful context, but it is
+**not authoritative for current state** and must not be used to gate an action.
+Historical sections are read for understanding, never re-probed, and never trusted
+as live truth.
+
+### 4. Stale live-state alarms do not gate action
+
+A live-state alarm carried in a handoff — for example `BUS-IS-DOWN`,
+`LANE-UNHEALTHY`, or `QUEUE-WEDGED` — that has **no re-runnable `verify:` block**, or
+whose `verify:` probe cannot be re-executed on resume, is treated as **stale /
+historical**. A stale alarm is recorded for context only and **does not block or
+gate any action**: re-probe the live surface and act on what the probe returns. The
+alarm is current **only if** a freshly re-run `verify:` probe reproduces the alarm
+condition; otherwise it is discarded as a snapshot artifact.
 
 ## Implementation
 
