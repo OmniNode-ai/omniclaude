@@ -1,0 +1,54 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-13046
+title: "C-5: Docs-branch leg on dirty-canonical sweep"
+summary: >
+  Alert when untracked docs/{handoffs,evidence,plans,deep-dives} files in
+  omni_home exceed a count threshold (>=50) or any file is older than 4 hours.
+  CronCreate-scheduled at 30-minute intervals. Addresses the C-5 process
+  failure retro item where 518 dirty docs entries went undetected for days.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "docs_dirty_alert unit tests pass."
+    command: "uv run pytest tests/skills/test_docs_dirty_alert.py -v"
+  - kind: "manual"
+    description: "Skill check module exists at src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/check.py"
+    command: "test -f src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/check.py"
+  - kind: "manual"
+    description: "Orchestrator node contract exists."
+    command: "test -f src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/contract.yaml"
+  - kind: "manual"
+    description: "docs-dirty-alert cron defined in setup-session-crons.sh"
+    command: "grep -q 'docs-dirty-alert' scripts/setup-session-crons.sh"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-tests-pass"
+    description: "docs_dirty_alert unit tests pass — count threshold, age threshold, clean state, friction YAML schema."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/skills/test_docs_dirty_alert.py -v"
+  - id: "dod-skill-exists"
+    description: "Skill check module, SKILL.md, and orchestrator node are all present."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "test -f src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/check.py && test -f plugins/onex/skills/docs_dirty_alert/SKILL.md && test -f src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/contract.yaml"
+  - id: "dod-cron-wired"
+    description: "docs-dirty-alert cron added to setup-session-crons.sh (every 30 min, OMNI_HOME-scoped)."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'docs-dirty-alert' scripts/setup-session-crons.sh && grep -q '\\*/30' scripts/setup-session-crons.sh"
+  - id: "dod-pre-commit-clean"
+    description: "ruff + mypy pass on changed files."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run ruff check plugins/onex/skills/docs_dirty_alert/ src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/ tests/skills/test_docs_dirty_alert.py && uv run mypy src/omniclaude/nodes/node_skill_docs_dirty_alert_orchestrator/ --strict"
