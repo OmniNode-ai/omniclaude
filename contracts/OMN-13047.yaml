@@ -1,0 +1,67 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13047"
+title: "D-1: Concurrency-primitive clause — blocking/consuming/polling primitives require starvation + ordering answers pre-mutation"
+summary: >
+  Retro D-1 enforcement gate. Adds a CI grep check
+  (concurrency-primitive-guard) that fails any PR diff which introduces
+  seek_to_end / poll / KafkaConsumer in non-test Python files without a
+  concurrent change under tests/. Paired with a pre-commit hook and a
+  unit test suite that proves RED/GREEN behaviour.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched:
+  - ci
+  - pre-commit
+evidence_requirements:
+  - kind: tests
+    description: >
+      Unit tests in tests/validation/test_validate_no_blocking_primitive_without_tests.py
+      cover all RED (violation) and GREEN (compliant) paths including suppression,
+      CI mode, and staged mode.
+    command: >
+      uv run pytest tests/validation/test_validate_no_blocking_primitive_without_tests.py -v
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "gh pr checks --repo OmniNode-ai/omniclaude <PR_NUMBER>"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-validator-script"
+    description: >
+      scripts/validation/validate_no_blocking_primitive_without_tests.py added:
+      parses staged or CI diff, detects blocking primitives (seek_to_end /
+      KafkaConsumer / .poll(), fails when none of tests/ changed.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "test -f scripts/validation/validate_no_blocking_primitive_without_tests.py"
+  - id: "dod-gha-workflow"
+    description: >
+      .github/workflows/concurrency-primitive-guard.yml added: runs the
+      validator in --ci mode on pull_request, push main, and merge_group.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "test -f .github/workflows/concurrency-primitive-guard.yml"
+  - id: "dod-precommit-hook"
+    description: >
+      .pre-commit-config.yaml updated: concurrency-primitive-guard hook
+      registered, fires on staged Python changes at pre-commit stage.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'concurrency-primitive-guard' .pre-commit-config.yaml"
+  - id: "dod-unit-tests"
+    description: >
+      tests/validation/test_validate_no_blocking_primitive_without_tests.py
+      added: covers seek_to_end / KafkaConsumer / .poll() RED paths,
+      GREEN paths (with tests, suppressed), CI and staged modes, empty diff.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: >
+          uv run pytest tests/validation/test_validate_no_blocking_primitive_without_tests.py
+          -v --tb=short 2>&1 | tail -5
