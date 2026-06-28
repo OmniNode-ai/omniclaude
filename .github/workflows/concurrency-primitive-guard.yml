@@ -1,0 +1,78 @@
+---
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# concurrency-primitive-guard.yml
+#
+# CI gate: Concurrency-primitive clause (OMN-13047 / Retro D-1).
+#
+# Any PR diff that introduces seek_to_end / poll / KafkaConsumer in
+# non-test Python files MUST also include a change under tests/.
+#
+# Rationale (PROCESS_FAILURE_RETRO.md §3.D, failure #8):
+#   Ladder layers 3-4 (starvation analysis + publish/subscribe ordering)
+#   were routinely deducible at layer 2 but never asked in writing.
+#   This gate enforces that blocking/consuming/polling primitives are
+#   paired with a concurrent test answering:
+#     1. What starves while this blocks?
+#     2. What orders publish vs subscribe/seek?
+#
+# Suppression: add ``# concurrency-ok`` to a flagged line to acknowledge
+#   the primitive is already covered by existing tests or is in a
+#   documented migration path (requires reviewer sign-off).
+#
+# Runs on:
+#   - pull_request (required status check)
+#   - merge_group (prevents bypass via direct queue entry)
+#   - push to main (post-merge verification)
+#
+# Implements OMN-13047.
+
+name: Concurrency Primitive Guard
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  concurrency-primitive-guard:
+    name: concurrency-primitive-guard
+    # OMNI_RUNNER_SELECTOR_V1 — trusted events use self-hosted runner;
+    # public fork PRs use ubuntu-latest.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history needed to diff against the base branch.
+          fetch-depth: 0
+
+      - name: Fetch base branch for diff
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin "${{ github.base_ref }}" --quiet
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Run concurrency-primitive guard
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          python scripts/validation/validate_no_blocking_primitive_without_tests.py --ci
