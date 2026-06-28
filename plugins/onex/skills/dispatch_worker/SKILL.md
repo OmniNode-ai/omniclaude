@@ -129,7 +129,7 @@ line per subagent tool call to
 
 ## Worker Operating Rules (worker_template_version: v2)
 
-The following 6 rules are injected verbatim into every worker prompt by `prompt.md`
+The following 9 rules are injected verbatim into every worker prompt by `prompt.md`
 before spawning. They are auto-injected — dispatchers MUST NOT hand-restate them.
 
 ```
@@ -165,6 +165,26 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
    create_pr, done). On any auth or usage-limit error, call
    `resume_manifest_writer.write_survivor_note(manifest, detail="<what was diagnosed>")`
    before terminating so the defect retains identity even without a filed PR.
+
+7. **Verifiable-handle reporting.** End with a ```json-report``` block; a merged/deploy
+   claim without its handle is BLOCKED at SubagentStop. (Full text in prompt.md.)
+
+8. **OCC receipt pairing — tool-generate, never hand-author (OMN-13050, retro D-4).**
+   Runtime-path PRs pair with an OCC contract + receipt produced by
+   `uv run scripts/scaffold_occ_receipt.py <TICKET-ID> --pr-number <OCC-PR#> ...`,
+   which emits the full schema INCLUDING `contract_sha256`, defaults `--base dev`,
+   and self-reports the four OCC #2530 wedges. Each prohibition (no skip token,
+   target dev not main, never arm blind, cite Evidence-Source + Evidence-Ticket)
+   ships with its failure mode and alternative — "STOP and report back — any
+   bracketed skip-token hard-fails your PR." (Full text in prompt.md.)
+
+9. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+   touches UI behavior, the required proof is a Playwright interaction with the operator's
+   running surface: the live URL, a screenshot, and the network log of the actual request
+   the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
+   claim — it proves the backend answered, not that the operator's surface renders the data
+   or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
+   (OMN-13024) is live.
 ```
 
 ## See Also

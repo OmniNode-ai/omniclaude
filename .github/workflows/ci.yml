@@ -2046,7 +2046,7 @@ jobs:
         id: dod-evidence
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
           SOURCE="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-source" {print $2; exit}' | tr -d '\r' | xargs || true)"
@@ -2081,6 +2081,7 @@ jobs:
           repository: OmniNode-ai/onex_change_control
           ref: ${{ steps.dod-evidence.outputs.source }}
           path: .onex_change_control_evidence
+          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
 
       - name: Materialize central DoD evidence receipt
         if: steps.dod-evidence.outputs.source != ''

@@ -127,6 +127,85 @@ with these rules regardless of role or spec contents:
    `resume_manifest_writer.write_survivor_note(manifest, detail="<what was diagnosed>")`
    before terminating so the defect retains identity even without a filed PR.
 
+7. **Verifiable-handle reporting (worker-misreport ratchet).** Your final
+   message MUST end with a fenced ```json-report``` block, and any claim of completion
+   MUST carry its verifiable handle — claims without handles are BLOCKED at SubagentStop
+   by the receipt-honesty verifier (`subagent_claim_verifier.py`), re-probed against live
+   GitHub BEFORE the orchestrator accepts your receipt:
+   - A **merged** claim requires `kind: pr_ship` with `pr: {number, state: MERGED, merge_sha, repo}`.
+     The verifier re-probes `gh pr view --json mergeCommit`; a missing or mismatched
+     `merge_sha` is a block. Never assert "merged" in prose without this block.
+   - A **deploy** claim requires `kind: deploy` with `deploy: {target, container_digest}`
+     (digest must contain `sha256:`). Never assert "deployed/redeployed" in prose without it.
+   - Asserting merged/deployed in free-form prose while the structured report lacks the
+     matching handle is itself a block (prose-claim guard). Report only what you can prove;
+     if a PR is still open or a deploy is pending, say so honestly.
+
+   Example terminal block:
+   ````
+   ```json-report
+   {"kind": "pr_ship", "ticket": "<TICKET-ID>",
+    "pr": {"number": 1234, "state": "MERGED",
+           "merge_sha": "<full-or-short-merge-commit-sha>", "repo": "OmniNode-ai/<repo>"}}
+   ```
+   ````
+
+8. **OCC receipt pairing — TOOL-GENERATE, never hand-author (OMN-13050, retro D-4).**
+   Hand-authored OCC receipts wedged OCC PR #2530 four ways and blocked three code
+   PRs overnight. If your change touches runtime paths (src nodes/handlers/contracts),
+   you MUST pair it with an `onex_change_control` (OCC) contract + DoD receipt. Do NOT
+   hand-write the receipt YAML. Generate it with the tool so the full schema —
+   INCLUDING `contract_sha256` (mandatory since OMN-10421; its omission is exactly
+   what wedged #2530) — is emitted and validated against `ModelDodReceipt`:
+
+   ```bash
+   # From the omniclaude repo root; --base defaults to dev mechanically.
+   uv run scripts/scaffold_occ_receipt.py <TICKET-ID> \
+     --pr-number <OCC-PR#> --commit-sha <code-PR-head-SHA> \
+     --occ-root <path-to-onex_change_control-checkout> \
+     --pr-body-file <code-PR-body.md> --ci-watch-confirmed \
+     --out drift/dod_receipts/<TICKET-ID>/dod-occ-pr-self/command.yaml
+   ```
+
+   The tool self-reports the four OCC #2530 wedges and refuses to emit a receipt
+   while any are present. Each prohibition below is paired with its failure mode
+   and the alternative action — do the alternative, do not work around the gate:
+
+   - **No bracketed skip token.** Failure mode: a bracketed `skip-receipt-gate`
+     or `skip-deploy-gate` bypass token of the form `[ skip-<gate>: ... ]`
+     (written without the inner spaces) — even with a self-written justification —
+     hard-FAILS the PR at the reject-deploy-gate-skip pre-commit hook AND the GHA
+     required check — self-judgement is not evidence (OMN-9731). Alternative:
+     **STOP and report back — any bracketed skip-token hard-fails your PR.** Remove
+     the token and fix the real gate input (missing dod_evidence / Evidence-Source
+     line / contract). The only escape hatch is a real user-issued
+     `# skip-token-allowed: <receipt-id>` handle.
+   - **Target `dev`, not `main`.** Failure mode: an OCC/code PR with base=main whose
+     head is not the dev→main promotion branch is hard-FAILED by main-target-guard
+     (dev-only promotion). Alternative: branch off `origin/dev` and target `dev`
+     (the tool's `--base` defaults to dev); for a genuine promotion pass
+     `--promotion`.
+   - **Never arm blind.** Failure mode: arming auto-merge before a confirmed green
+     `gh pr checks` watch merges red or strands the PR unobserved (Operating Rule 3).
+     Alternative: run `gh pr checks <num> --watch` to terminal green, paste that
+     output as evidence, then arm via the `enqueue_to_merge_queue()` /
+     `arm_auto_merge()` helpers in `@_lib/pr-safety/helpers.md` (which select the
+     correct queue method); re-run the scaffold tool with `--ci-watch-confirmed`.
+   - **Cite Evidence-Source + Evidence-Ticket.** Failure mode: a code PR body
+     missing the unbulleted `Evidence-Source: OCC#<n>` (or `<sha>`) OR
+     `Evidence-Ticket: <TICKET-ID>` line FAILS the Receipt-Gate even with green
+     checks. Alternative: patch the code PR body to include both lines via the
+     `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` (the REST PATCH path,
+     not the interactive editor — see [[reference_gh_pr_edit_projects_classic]]).
+
+9. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+   touches UI behavior, the required proof is a Playwright interaction with the operator's
+   running surface: the live URL, a screenshot, and the network log of the actual request
+   the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
+   claim — it proves the backend answered, not that the operator's surface renders the data
+   or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
+   (OMN-13024) is live.
+
 ---
 ```
 
