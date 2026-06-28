@@ -102,7 +102,7 @@ emitting the handoff summary to the operator:
 3. `git add <every docs/** path cited in the handoff body>` — stale-doc fixes,
    tombstoned prior handoffs, plan updates referenced by name.
 4. `git commit -m "docs: night-final handoff <date> [OMN-session]"`
-5. `git push origin HEAD`
+5. Publish the current HEAD to `origin` using the repository-approved push helper.
 6. Report remaining untracked/dirty docs that were NOT in scope (do not silently
    add them; list them explicitly so the operator can decide).
 

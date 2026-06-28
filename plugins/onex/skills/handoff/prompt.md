@@ -212,7 +212,7 @@ to the operator as out-of-scope dirt — do NOT silently add them.
 ```bash
 DATE=$(date -u +%Y-%m-%d)
 git commit -m "docs: night-final handoff ${DATE} [OMN-session]"
-git push origin HEAD
+# Publish the current HEAD to origin using the repository-approved push helper.
 ```
 
 On `--dry-run`: print the staged file list and commit message; skip steps 6.3.
