@@ -1,0 +1,71 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13686"
+title: "prune-worktrees.sh — batch gh pr list per repo instead of 2 calls per worktree (timeouts at volume)"
+summary: >-
+  prune-worktrees.sh issued two `gh pr list` calls per worktree (one to read
+  MERGED state, one to read the PR number). At 50+ worktrees that is 100+
+  sequential gh API calls and frequent overnight timeouts. The fix groups
+  discovered worktrees by repo slug and issues ONE
+  `gh pr list --state merged --json number,headRefName --limit 200` per unique
+  repo slug, storing results in an associative array keyed by branch name;
+  per-worktree live gh calls are replaced with local map lookups. Staleness
+  classification (MERGED / remote-branch-gone / ACTIVE) is unchanged. The
+  hardcoded macOS-volume defaults for WORKTREES_ROOT and ONEX_REGISTRY_ROOT are
+  replaced with OMNI_HOME-derived values plus existence guards, so no
+  machine-specific path is baked in.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-batch-one-call-per-repo"
+    description: >-
+      A run against >=30 worktrees across >=3 repos issues exactly N_repos
+      `gh pr list --state merged` calls (one per unique repo slug), proven by a
+      stubbed-gh subprocess test that counts recorded gh invocations.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest
+          tests/scripts/test_prune_worktrees_batch.py::test_merged_state_batch_is_one_gh_call_per_repo
+          -q
+  - id: "dod-classification-unchanged"
+    description: >-
+      Staleness classification is unchanged: a merged-PR branch is STALE
+      (PR merged), a remote-branch-gone branch is STALE (remote branch gone),
+      and everything else is ACTIVE.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest
+          tests/scripts/test_prune_worktrees_batch.py::test_classification_unchanged_merged_gone_active
+          -q
+  - id: "dod-shellcheck-clean"
+    description: >-
+      shellcheck scripts/prune-worktrees.sh exits 0 with no warnings (the four
+      pre-existing SC2001/SC2034/SC1083 warnings are resolved by this change).
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "shellcheck scripts/prune-worktrees.sh"
+  - id: "dod-no-volumes-default-paths"
+    description: >-
+      Neither WORKTREES_ROOT nor ONEX_REGISTRY_ROOT default to a hardcoded
+      `/Volumes/` path; the script carries no `/Volumes/` literal at all.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest
+          tests/scripts/test_prune_worktrees_batch.py::test_no_hardcoded_volumes_paths
+          -q
