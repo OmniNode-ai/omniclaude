@@ -8,12 +8,13 @@
 # Use this script when starting sessions before that PR merges, or after a session reset.
 #
 # Crons managed:
-#   merge-sweep      every 5 min   — PR babysitter + org-wide merge sweep
-#   dispatch-engine  every 10 min  — Linear backlog dispatcher
-#   contract-verify  every 15 min  — ModelTicketContract backfill + enforcement
-#   overseer-verify  every 15 min  — Completion verifier + anti-passivity audit
-#   data-flow-sweep  every 60 min  — Kafka→DB→dashboard end-to-end flow verification (at :23)
-#   runtime-sweep    every 60 min  — Node wiring + handler registration + container health (at :47)
+#   merge-sweep        every 5 min   — PR babysitter + org-wide merge sweep
+#   dispatch-engine    every 10 min  — Linear backlog dispatcher
+#   contract-verify    every 15 min  — ModelTicketContract backfill + enforcement
+#   overseer-verify    every 15 min  — Completion verifier + anti-passivity audit
+#   data-flow-sweep    every 60 min  — Kafka→DB→dashboard end-to-end flow verification (at :23)
+#   runtime-sweep      every 60 min  — Node wiring + handler registration + container health (at :47)
+#   docs-dirty-alert   every 30 min  — Alert on untracked omni_home docs/{handoffs,evidence,plans,deep-dives} (OMN-13046)
 #
 # Because CronCreate/CronList are Claude Code session tools (not CLI commands), this
 # script cannot call them directly. Instead it writes a bootstrap file that you paste
@@ -203,6 +204,29 @@ Rules:
 - If node_runtime_sweep is unreachable, report to team-lead and skip ticket creation
 - Do not attempt to fix wiring inline — create tickets and escalate'
 
+DOCS_DIRTY_ALERT_PROMPT='DOCS DIRTY ALERT — check for forgotten untracked docs in omni_home (OMN-13046).
+
+Run the docs-dirty alert check:
+  uv run --project "${OMNI_HOME:?}/omniclaude" \
+    python -m omniclaude.nodes.node_skill_docs_dirty_alert_orchestrator.check
+
+This scans docs/{handoffs,evidence,plans,deep-dives} in OMNI_HOME for untracked files.
+Exits 1 (alert) when:
+  - Total untracked docs files >= 50 (count threshold), OR
+  - Any untracked file is older than 4 hours (age threshold)
+
+**If exit 1 (alert fired):**
+- Friction YAML already written to $ONEX_STATE_DIR/friction/ by the check
+- SendMessage to team-lead: "[docs-dirty-alert] ALERT: <reason from check output>"
+- Do NOT attempt to commit docs files — alert only; human decision required
+
+**If exit 0 (clean):** no report needed, but emit friction via Skill(skill="onex:record_friction", args='"'"'{"surface":"tick_idle","reason":"docs-dirty-alert clean","tick":"docs-dirty-alert"}'"'"') so node_friction_observer_compute records the tick ran. Raw .onex_state/friction/ writes are forbidden.
+
+Rules:
+- OMNI_HOME and ONEX_STATE_DIR must both be set (sourced from ~/.omnibase/.env if not already in env)
+- Never commit docs files from this tick — alert only
+- This tick closes the C-5 retro gap: 518-dirty-entry states surfaced within hours, not days'
+
 # ---------------------------------------------------------------------------
 # Build JSON
 # ---------------------------------------------------------------------------
@@ -241,6 +265,11 @@ crons = [
         "name": "runtime-sweep",
         "schedule": "47 * * * *",
         "prompt": """${RUNTIME_SWEEP_PROMPT}"""
+    },
+    {
+        "name": "docs-dirty-alert",
+        "schedule": "*/30 * * * *",
+        "prompt": """${DOCS_DIRTY_ALERT_PROMPT}"""
     },
 ]
 
