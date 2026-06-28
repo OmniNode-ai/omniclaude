@@ -30,7 +30,7 @@ Exits 0 when clean.
 
 ```bash
 # Run check directly (requires OMNI_HOME and ONEX_STATE_DIR)
-uv run python -m omniclaude.nodes.node_skill_docs_dirty_alert_orchestrator.check
+onex skill docs_dirty_alert
 
 # Non-zero exit = alert fired
 ```
