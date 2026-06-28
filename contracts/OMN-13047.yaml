@@ -10,9 +10,7 @@ summary: >
   unit test suite that proves RED/GREEN behaviour.
 is_seam_ticket: false
 interface_change: false
-interfaces_touched:
-  - ci
-  - pre-commit
+interfaces_touched: []
 evidence_requirements:
   - kind: tests
     description: >
