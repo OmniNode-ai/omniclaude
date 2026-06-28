@@ -42,7 +42,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "grep -n 'def write_resume_manifest\|def read_resume_manifest\|def write_survivor_note' src/omniclaude/hooks/lib/resume_manifest_writer.py"
+        check_value: 'grep -n "def write_resume_manifest\|def read_resume_manifest\|def write_survivor_note" src/omniclaude/hooks/lib/resume_manifest_writer.py'
   - id: dod-004
     description: "dispatch_worker SKILL.md Rule 6 mandates anchor-first ordering and resume manifest"
     source: manual
