@@ -112,6 +112,7 @@ def _resolve_bash() -> str:
         if major.isdigit() and int(major) >= 4:
             return cand
     pytest.skip("no bash >= 4 available (script requires associative arrays)")
+    raise AssertionError("pytest.skip did not terminate execution")
 
 
 def _write_stub(path: Path, body: str) -> None:
