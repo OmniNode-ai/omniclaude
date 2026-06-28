@@ -20,13 +20,20 @@
 # The script scans for git worktrees (files/dirs named .git that are worktree
 # pointers) under WORKTREES_ROOT, extracts branch + remote info, then queries
 # GitHub PR state to classify each as stale or active.
+#
+# Merged-PR lookups are batched: ONE `gh pr list --state merged` call per unique
+# repo slug (not two calls per worktree), so a 50+ worktree run stays well under
+# the GitHub API rate/timeout budget that previously killed overnight sweeps.
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-WORKTREES_ROOT="/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok: script constant default
+# WORKTREES_ROOT defaults to "$OMNI_HOME/omni_worktrees" when OMNI_HOME is set;
+# override explicitly with --worktrees-root. No machine-specific path is baked in.
+DEFAULT_WORKTREES_ROOT="${OMNI_HOME:+${OMNI_HOME%/}/omni_worktrees}"
+WORKTREES_ROOT="$DEFAULT_WORKTREES_ROOT"
 EXECUTE=false
 VERBOSE=false
 
@@ -70,22 +77,23 @@ remote_to_slug() {
   local url="$1"
   # Strip trailing .git
   url="${url%.git}"
-  # Handle SSH: git@github.com:OmniNode-ai/foo  →  OmniNode-ai/foo
-  if echo "$url" | grep -qE '^git@github\.com:'; then
-    echo "$url" | sed 's|^git@github\.com:||'
-    return
-  fi
-  # Handle HTTPS: https://github.com/OmniNode-ai/foo  →  OmniNode-ai/foo
-  if echo "$url" | grep -qE '^https://github\.com/'; then
-    echo "$url" | sed 's|^https://github\.com/||'
-    return
-  fi
-  echo ""
+  case "$url" in
+    # SSH: git@github.com:OmniNode-ai/foo  →  OmniNode-ai/foo
+    git@github.com:*) echo "${url#git@github.com:}" ;;
+    # HTTPS: https://github.com/OmniNode-ai/foo  →  OmniNode-ai/foo
+    https://github.com/*) echo "${url#https://github.com/}" ;;
+    *) echo "" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
+if [[ -z "$WORKTREES_ROOT" ]]; then
+  echo "ERROR: WORKTREES_ROOT is empty. Set OMNI_HOME or pass --worktrees-root <path>." >&2
+  exit 1
+fi
+
 if [[ ! -d "$WORKTREES_ROOT" ]]; then
   echo "ERROR: WORKTREES_ROOT does not exist: $WORKTREES_ROOT" >&2
   exit 1
@@ -130,11 +138,20 @@ fi
 log "Found ${#GIT_FILES[@]} worktree(s) to check."
 log ""
 
+# ---------------------------------------------------------------------------
+# Pass 1: extract (branch, repo_slug) for every worktree exactly once.
+# Worktrees that cannot be resolved (detached HEAD, no remote, unparseable
+# remote) are skipped here with the same reasons as before.
+# ---------------------------------------------------------------------------
+WT_DIRS=()
+declare -A WT_BRANCH=()
+declare -A WT_SLUG=()
+declare -A REPO_SLUGS=()
+
 for git_file in "${GIT_FILES[@]}"; do
   worktree_dir="$(dirname "$git_file")"
-  repo_name="$(basename "$worktree_dir")"
 
-  verbose "Checking: $worktree_dir"
+  verbose "Discovering: $worktree_dir"
 
   # Get branch name
   branch="$(git -C "$worktree_dir" branch --show-current 2>/dev/null || true)"
@@ -159,6 +176,50 @@ for git_file in "${GIT_FILES[@]}"; do
     continue
   fi
 
+  WT_DIRS+=("$worktree_dir")
+  WT_BRANCH["$worktree_dir"]="$branch"
+  WT_SLUG["$worktree_dir"]="$repo_slug"
+  REPO_SLUGS["$repo_slug"]=1
+done
+
+# ---------------------------------------------------------------------------
+# Pass 2: batch the merged-PR lookup — ONE `gh pr list` per unique repo slug.
+# Previously this was two `gh pr list` calls per worktree; at 50+ worktrees that
+# meant 100+ sequential gh API calls and frequent overnight timeouts. The batch
+# collapses that to one-call-per-repo. Map key: "<slug>::<branch>" -> PR number.
+# ---------------------------------------------------------------------------
+declare -A MERGED_PR_BY_KEY=()
+
+if [[ ${#REPO_SLUGS[@]} -gt 0 ]]; then
+  for slug in "${!REPO_SLUGS[@]}"; do
+    verbose "Fetching merged PRs for $slug"
+    while IFS=$'\t' read -r pr_number head_ref; do
+      [[ -z "$head_ref" ]] && continue
+      key="${slug}::${head_ref}"
+      # gh returns most-recent-first; keep the first (newest) merged PR seen for
+      # a branch to match the previous `.[0]` selection.
+      [[ -n "${MERGED_PR_BY_KEY[$key]:-}" ]] || MERGED_PR_BY_KEY["$key"]="$pr_number"
+    done < <(gh pr list \
+      --repo "$slug" \
+      --state merged \
+      --json number,headRefName \
+      --limit 200 \
+      --jq '.[] | "\(.number)\t\(.headRefName)"' \
+      2>/dev/null || true)
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# Pass 3: classify each worktree using local map lookups (no live gh calls).
+# Classification order is unchanged from prior behaviour: the remote-branch-gone
+# check runs before the merged-PR check.
+# ---------------------------------------------------------------------------
+for worktree_dir in "${WT_DIRS[@]}"; do
+  branch="${WT_BRANCH[$worktree_dir]}"
+  repo_slug="${WT_SLUG[$worktree_dir]}"
+
+  verbose "Checking: $worktree_dir"
+
   # ---------------------------------------------------------------------------
   # Staleness check 1: Is the remote branch gone?
   # ---------------------------------------------------------------------------
@@ -182,24 +243,10 @@ for git_file in "${GIT_FILES[@]}"; do
   fi
 
   # ---------------------------------------------------------------------------
-  # Staleness check 2: Is there a merged PR for this branch?
+  # Staleness check 2: Is there a merged PR for this branch? (local map lookup)
   # ---------------------------------------------------------------------------
-  pr_state="$(gh pr list \
-    --repo "$repo_slug" \
-    --head "$branch" \
-    --state merged \
-    --json number,state \
-    --jq '.[0].state' \
-    2>/dev/null || echo "")"
-
-  if [[ "$pr_state" == "MERGED" ]]; then
-    pr_number="$(gh pr list \
-      --repo "$repo_slug" \
-      --head "$branch" \
-      --state merged \
-      --json number \
-      --jq '.[0].number' \
-      2>/dev/null || echo "?")"
+  pr_number="${MERGED_PR_BY_KEY[${repo_slug}::${branch}]:-}"
+  if [[ -n "$pr_number" ]]; then
     log "  STALE (PR merged): $worktree_dir"
     log "         branch: $branch"
     log "         repo:   $repo_slug  PR #${pr_number}"
@@ -239,7 +286,7 @@ if [[ "$EXECUTE" == false ]]; then
   done
   log ""
   log "Command to prune all stale worktrees:"
-  log "  $0 --execute $( [[ "$WORKTREES_ROOT" != "/Volumes/PRO-G40/Code/omni_worktrees" ]] && echo "--worktrees-root $WORKTREES_ROOT" || true )"  # local-path-ok
+  log "  $0 --execute $( [[ "$WORKTREES_ROOT" != "$DEFAULT_WORKTREES_ROOT" ]] && echo "--worktrees-root $WORKTREES_ROOT" || true )"
   exit 0
 fi
 
@@ -259,7 +306,7 @@ for wt in "${STALE[@]}"; do
   # Missing upstream defaults to SKIP (not DELETE). Detached HEAD already
   # skipped earlier in the discovery loop.
   # ---------------------------------------------------------------------------
-  UNPUSHED=$(git -C "$wt" log @{u}..HEAD --oneline 2>/dev/null || echo "NO_UPSTREAM")
+  UNPUSHED=$(git -C "$wt" log "@{u}..HEAD" --oneline 2>/dev/null || echo "NO_UPSTREAM")
   if [[ "$UNPUSHED" == "NO_UPSTREAM" ]]; then
     log "  SKIP: $wt has no upstream configured — cannot verify push state"
     SKIPPED+=("$wt (no upstream)")
@@ -321,15 +368,21 @@ if [[ ${#FAILED_REMOVE[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Run git worktree prune on all canonical repos to clean up dangling refs
+# Run git worktree prune on all canonical repos to clean up dangling refs.
+# The canonical registry root is OMNI_HOME; skip cleanly when it is unset or
+# missing so no machine-specific path is baked in.
 log ""
 log "Pruning dangling worktree references from canonical clones..."
-ONEX_REGISTRY_ROOT="/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
-for repo_dir in "$ONEX_REGISTRY_ROOT"/*/; do
-  [[ -d "$repo_dir/.git" ]] || continue
-  if git -C "$repo_dir" worktree prune 2>/dev/null; then
-    verbose "Pruned: $repo_dir"
-  fi
-done
+ONEX_REGISTRY_ROOT="${OMNI_HOME:-}"
+if [[ -z "$ONEX_REGISTRY_ROOT" ]] || [[ ! -d "$ONEX_REGISTRY_ROOT" ]]; then
+  verbose "Skipping canonical-clone prune (OMNI_HOME unset or not a directory: '${ONEX_REGISTRY_ROOT}')"
+else
+  for repo_dir in "$ONEX_REGISTRY_ROOT"/*/; do
+    [[ -d "$repo_dir/.git" ]] || continue
+    if git -C "$repo_dir" worktree prune 2>/dev/null; then
+      verbose "Pruned: $repo_dir"
+    fi
+  done
+fi
 
 log "Done."
