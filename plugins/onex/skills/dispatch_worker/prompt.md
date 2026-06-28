@@ -187,6 +187,14 @@ with these rules regardless of role or spec contents:
      `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` (the REST PATCH path,
      not the interactive editor — see [[reference_gh_pr_edit_projects_classic]]).
 
+8. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+   touches UI behavior, the required proof is a Playwright interaction with the operator's
+   running surface: the live URL, a screenshot, and the network log of the actual request
+   the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
+   claim — it proves the backend answered, not that the operator's surface renders the data
+   or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
+   (OMN-13024) is live.
+
 ---
 ```
 
