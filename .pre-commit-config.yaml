@@ -158,6 +158,19 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep
+      # keywords need a precondition-probe: annotation; deliverable sections
+      # with file paths need an ## Artifact Manifest section; each manifest
+      # item must carry [x], DONE, SKIPPED:, DEFERRED:, or BLOCKED-ON:.
+      # CI mirror: .github/workflows/plan-hard-fields-gate.yml
+      - id: lint-plan-hard-fields
+        name: enforce plan hard fields (D-5 precondition probes + artifact manifest)
+        entry: python3 scripts/lint_plan_hard_fields.py
+        language: system
+        files: '^docs/(plans|tracking)/.*\.md$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-9072: regression guard — every hookSpecificOutput emission must
       # include hookEventName, else Claude Code silently drops the payload.
       - id: check-hook-event-names
