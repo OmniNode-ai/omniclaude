@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Plan Hard Fields Gate
+
+# OMN-13051 (retro D-5): enforce three plan-template hard fields on all
+# docs/plans/ and docs/tracking/ markdown files:
+#
+#   Rule 1 — P0/P1 items with runtime-dep keywords must cite a verified
+#             precondition probe (timestamp + lane/surface).
+#   Rule 2 — Plans that name deliverable artifact paths must end with a
+#             machine-checkable ## Artifact Manifest section.
+#   Rule 3 — Every item in ## Artifact Manifest must carry an explicit
+#             status: [x], DONE, SKIPPED:, DEFERRED:, or BLOCKED-ON:.
+#
+# Parent epic: OMN-13013 (process enforcement ratchets — June 12 retro).
+# Retro source: PROCESS_FAILURE_RETRO.md §3.D
+# Pre-commit mirror: lint-plan-hard-fields hook in .pre-commit-config.yaml
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'docs/plans/**/*.md'
+      - 'docs/tracking/**/*.md'
+      - 'scripts/lint_plan_hard_fields.py'
+      - '.github/workflows/plan-hard-fields-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'docs/plans/**/*.md'
+      - 'docs/tracking/**/*.md'
+      - 'scripts/lint_plan_hard_fields.py'
+      - '.github/workflows/plan-hard-fields-gate.yml'
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  plan-hard-fields-gate:
+    name: Plan Hard Fields Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan docs/plans + docs/tracking for D-5 hard fields (OMN-13051)
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_plan_hard_fields.py
