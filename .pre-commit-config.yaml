@@ -98,6 +98,21 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13029 (retro A-11): Defect-anchor gate — evidence docs with BLOCKER,
+      # UNFIXED, DEFECT, REGRESSION, or BUG-CONFIRMED markers and no OMN-XXXX
+      # reference fail pre-commit. Unanchored defects strand diagnosis without a
+      # queue entry, owner, or close signal (PROCESS_FAILURE_RETRO.md §3.A).
+      # Hard fail — no warn-only (CLAUDE.md Rule #5).
+      # Escape (file-level): '<!-- defect-anchor-ok: <reason> -->'.
+      - id: check-defect-anchor
+        name: Reject evidence docs with unanchored defect markers (OMN-13029)
+        entry: .pre-commit-hooks/check-defect-anchor.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
+
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
       # approval receipt (# skip-token-allowed: <receipt-id>).

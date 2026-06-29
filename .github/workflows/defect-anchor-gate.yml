@@ -1,0 +1,130 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-13029 (retro A-11): Defect-anchor gate — reject evidence documents
+# containing BLOCKER/UNFIXED/DEFECT/REGRESSION/BUG-CONFIRMED markers with no
+# OMN-XXXX ticket reference. Root cause: PROCESS_FAILURE_RETRO.md §3.A.
+# Workflows ordered ticket/PR-filing last; diagnosis stranded defects as
+# unanchored prose with no queue presence, owner, or close signal.
+#
+# Gate name (required status check): gate / Defect Anchor
+# Hard fail — no warn-only mode (CLAUDE.md Rule #5, Rule #10).
+# Escape (file-level): <!-- defect-anchor-ok: <reason> -->
+
+name: Defect Anchor Gate
+
+on:
+  push:
+    branches: [main, 'hotfix/**']
+    paths:
+      - 'docs/evidence/**/*.md'
+      - 'docs/evidence/*.md'
+      - '.pre-commit-hooks/check-defect-anchor.sh'
+      - '.github/workflows/defect-anchor-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'docs/evidence/**/*.md'
+      - 'docs/evidence/*.md'
+      - '.pre-commit-hooks/check-defect-anchor.sh'
+      - '.github/workflows/defect-anchor-gate.yml'
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  defect-anchor:
+    name: gate / Defect Anchor
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check evidence docs for anchored defect markers
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          BASE_SHA="${GITHUB_BASE_SHA:-}"
+          HEAD_SHA="${GITHUB_HEAD_SHA:-HEAD}"
+          TICKET_REF="OMN-13029"
+          DEFECT_PATTERN='(BLOCKER|UNFIXED|DEFECT|REGRESSION|BUG-CONFIRMED)'
+          OMN_PATTERN='OMN-[0-9]+'
+          ESCAPE='defect-anchor-ok:'
+          VIOLATIONS=()
+
+          git fetch --no-tags --prune --depth=200 origin "${BASE_REF}" >/dev/null 2>&1 || true
+
+          if [[ -n "$BASE_SHA" ]] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            DIFF_BASE="$BASE_SHA"
+          elif git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            DIFF_BASE="$(git merge-base "origin/${BASE_REF}" "$HEAD_SHA")"
+          else
+            echo "::notice::Unable to resolve base ref '${BASE_REF}'; skipping evidence diff check."
+            DIFF_BASE=""
+          fi
+
+          if [[ -n "$DIFF_BASE" ]]; then
+            CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}...${HEAD_SHA}")
+          else
+            CHANGED_FILES=""
+          fi
+
+          for file in $CHANGED_FILES; do
+            # Only markdown files
+            [[ "$file" == *.md ]] || continue
+
+            # Only evidence documents
+            case "$file" in
+              docs/evidence/*.md|docs/evidence/*/*.md|docs/evidence/*/*/*.md) ;;
+              *) continue ;;
+            esac
+
+            # File must exist in the working tree
+            [[ -f "$file" ]] || continue
+
+            content="$(cat "$file")"
+
+            # Skip if file-level escape hatch is present
+            if echo "$content" | grep -qE "$ESCAPE"; then
+              continue
+            fi
+
+            # Skip if no defect markers
+            if ! echo "$content" | grep -qiE "$DEFECT_PATTERN"; then
+              continue
+            fi
+
+            # Defect marker found — require OMN-XXXX reference
+            if ! echo "$content" | grep -qE "$OMN_PATTERN"; then
+              VIOLATIONS+=("$file")
+              echo "::error file=$file::DEFECT_ANCHOR_MISSING: $file — defect markers present but no OMN-XXXX reference found (${TICKET_REF})"
+            fi
+          done
+
+          if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
+            echo ""
+            echo "::error::${#VIOLATIONS[@]} evidence document(s) contain unanchored defect markers."
+            echo "::error::Add an OMN-XXXX reference for each defect, or file a ticket first."
+            echo "::error::Escape hatch (file-level): <!-- defect-anchor-ok: <reason> -->"
+            echo "::error::Ticket: ${TICKET_REF} | Retro: PROCESS_FAILURE_RETRO.md §3.A"
+            exit 1
+          fi
+
+          echo "::notice::All changed evidence documents with defect markers carry OMN-XXXX references. OK."
