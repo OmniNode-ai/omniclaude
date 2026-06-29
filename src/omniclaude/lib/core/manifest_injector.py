@@ -2659,7 +2659,7 @@ class ManifestInjector:
         Query available AI models and ONEX data models.
 
         Queries for:
-        - AI model providers (Anthropic, Google, Z.ai)
+        - AI model providers (Google, Z.ai)
         - ONEX node types and contracts
         - Model quorum configuration
 
@@ -2683,11 +2683,12 @@ class ManifestInjector:
             intelligence_models = []
 
             # 1. Read environment variables for API keys
+            # OAuth-only org: no ANTHROPIC_API_KEY exists, so it is not read here
+            # (memory feedback_no_anthropic_or_openai_api_keys, OMN-13560 Wave 3).
             env_keys = {
                 "gemini": os.environ.get("GEMINI_API_KEY", ""),
                 "google": os.environ.get("GOOGLE_API_KEY", ""),
                 "zai": os.environ.get("ZAI_API_KEY", ""),
-                "anthropic": os.environ.get("ANTHROPIC_API_KEY", ""),
             }
 
             # 2. Try to load claude-providers.json for provider configuration
@@ -2705,19 +2706,6 @@ class ManifestInjector:
                     )
 
             # 3. Build AI models section
-            # Check Anthropic provider
-            if env_keys.get("anthropic"):
-                ai_models["anthropic"] = {
-                    "provider": "anthropic",
-                    "models": {
-                        "haiku": "claude-3-5-haiku-20241022",
-                        "sonnet": "claude-3-5-sonnet-20241022",
-                        "opus": "claude-3-opus-20240229",
-                    },
-                    "available": True,
-                    "api_key_set": True,
-                }
-
             # Check Gemini provider
             if env_keys.get("gemini") or env_keys.get("google"):
                 gemini_config = provider_config.get("gemini-2.5-flash", {})
