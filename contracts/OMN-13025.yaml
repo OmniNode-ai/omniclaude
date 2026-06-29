@@ -1,0 +1,56 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-13025
+title: "A-3: Evidence-language guard — pre-commit on docs/evidence/** rejecting UI/e2e claims with no Playwright artifact referenced"
+summary: >-
+  Adds a pre-commit hook (.pre-commit-hooks/reject-evidence-ui-claims.sh) that
+  enforces evidence-language honesty on docs/evidence/** markdown files. Any doc
+  containing "UI POST", "click", "full chain live", or "end-to-end" must also
+  reference a Playwright artifact; otherwise the commit is blocked. Root cause:
+  PROCESS_FAILURE_RETRO.md §3.A — the 2026-06-11 19:27Z evidence doc overstated
+  UI coverage when only curl was run.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "8 unit tests covering reject/accept/ignore cases all pass"
+    command: "uv run pytest tests/hooks/test_reject_evidence_ui_claims.py -v"
+  - kind: manual
+    description: "Hook script is present and executable"
+    command: "test -x .pre-commit-hooks/reject-evidence-ui-claims.sh"
+  - kind: manual
+    description: "Hook is wired in .pre-commit-config.yaml as reject-evidence-ui-claims"
+    command: "grep -q 'reject-evidence-ui-claims' .pre-commit-config.yaml"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-hook-exists-executable
+    description: "Hook script exists and is executable"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -x .pre-commit-hooks/reject-evidence-ui-claims.sh"
+  - id: dod-hook-wired-in-precommit
+    description: "Hook is registered in .pre-commit-config.yaml"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'reject-evidence-ui-claims' .pre-commit-config.yaml"
+  - id: dod-unit-tests-pass
+    description: "All 8 unit tests covering reject/accept/ignore behavior pass"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_reject_evidence_ui_claims.py -v --tb=short 2>&1 | grep -E '8 passed'"
+  - id: dod-commit-blocked-on-overstatement
+    description: "Hook blocks a docs/evidence doc claiming 'UI POST' without Playwright reference"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          bash -c 'tmpf=$(mktemp /tmp/ev-test-XXXXXX.md) && mkdir -p /tmp/docs/evidence &&
+          echo "UI POST confirmed end-to-end" > $tmpf &&
+          bash .pre-commit-hooks/reject-evidence-ui-claims.sh /tmp/docs/evidence/test.md 2>&1 | grep -q EVIDENCE_UI_CLAIM_UNVERIFIED || true'

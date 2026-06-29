@@ -15,9 +15,23 @@ REQUIRED_RULES = [
     "Worktree-only development",
     "Full test suite before push",
     "Never bypass pre-commit hooks",
+    "Anchor-first ordering",
+    "Verifiable-handle reporting",
+    "OCC receipt pairing",
+    # OMN-13052 (D-6): UI DoD items require Playwright proof, not curl.
+    "UI proof requires Playwright",
 ]
 
-WORKER_TEMPLATE_VERSION = "v1"
+WORKER_TEMPLATE_VERSION = "v2"
+
+# OMN-13052 (D-6): phrases that must appear in the UI-verification operating rule so a
+# worker cannot pass a UI claim with a curl of the canonical endpoint.
+UI_VERIFICATION_REQUIRED_PHRASES = [
+    "Playwright",
+    "operator's running surface",
+    "screenshot",
+    "network log",
+]
 
 
 @pytest.mark.unit
@@ -140,4 +154,35 @@ def test_skill_md_references_occ_recipe() -> None:
     )
     assert "contract_sha256" in content, (
         "SKILL.md must name contract_sha256 as part of the tool-generated schema"
+    )
+
+
+# OMN-13052 (D-6): every worker prompt must require Playwright proof for UI DoD items
+# and explicitly reject a curl of the canonical endpoint as UI evidence. Bridges the
+# gap until the A-2 Receipt-Gate evidence-class check (OMN-13024) is live.
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("filename", ["SKILL.md", "prompt.md"])
+def test_dispatch_template_has_ui_verification_line(filename: str) -> None:
+    """The UI-verification rule names Playwright + operator surface + screenshot + network log."""
+    # Normalize whitespace: markdown wraps prose across lines, so a required
+    # phrase may straddle a line break in the source.
+    content = " ".join((DISPATCH_WORKER_DIR / filename).read_text().split())
+    missing = [p for p in UI_VERIFICATION_REQUIRED_PHRASES if p not in content]
+    assert not missing, (
+        f"{filename} missing UI-verification phrases for the Playwright rule: {missing}"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("filename", ["SKILL.md", "prompt.md"])
+def test_dispatch_template_rejects_curl_for_ui_claims(filename: str) -> None:
+    """A curl of the canonical endpoint is explicitly NOT acceptable UI proof."""
+    content = (DISPATCH_WORKER_DIR / filename).read_text().lower()
+    assert "curl" in content, (
+        f"{filename} must name curl so it can be rejected as UI evidence"
+    )
+    assert "not acceptable" in content, (
+        f"{filename} must state curl is NOT acceptable evidence for a UI claim"
     )

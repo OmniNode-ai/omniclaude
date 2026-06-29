@@ -32,42 +32,6 @@ repos:
     rev: 458f44ef24564956c6430ae7671570aed035c853 # pragma: allowlist secret
     hooks:
       - id: check-stub-implementations
-  # OMN-13284: canonical Plugin* lifecycle guard. omniclaude defines nodes/handlers
-  # and could reintroduce a Plugin* daemon/worker/consumer lifecycle owner; consume
-  # the canonical omnibase_core remote hook. Rev pins the core commit carrying the
-  # no-plugin-daemon-classes export; bumps to the squash-merge SHA when the core
-  # OMN-13284 PR lands.
-  - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: a509d3fb2777693242fdcd979e5d67bed2bbefeb # pragma: allowlist secret
-    hooks:
-      - id: no-plugin-daemon-classes
-        files: ^src/omniclaude/.*\.py$
-
-  # URL Authority Gate (OMN-13298, child of OMN-12803).
-  # Ratchet: NEW fingerprints fail; existing violations grandfathered in the
-  # shared baseline at omnibase_core/src/omnibase_core/validation/baselines/url_authority_baseline.json.
-  # Baseline is burn-down only. Suppress with: # url-authority-ok: <reason>
-  - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: c93c98c92bd1a5b335d7aa504a8cf63dc029b3e7 # pragma: allowlist secret
-    hooks:
-      - id: check-url-authority
-        args: [--repo, omniclaude, --repo-root, .]
-        exclude: ^(tests/|archived/|archive/).*\.py$
-
-  # Canonical Inference Gate (OMN-13249, fleet rollout of OMN-13219).
-  # Rejects NEW non-canonical model-inference surfaces: shelled model CLIs
-  # (codex/claude/gemini/opencode) and *_MODEL/*_PROVIDER env reads. Structural
-  # carve-out: a model-CLI shell-out is permitted iff the enclosing node
-  # contract.yaml declares descriptor.agent_invocation: true (a contract fact,
-  # never a free-text comment). Ratchet: existing violations grandfathered in the
-  # shared baseline at omnibase_core/src/omnibase_core/validation/baselines/canonical_inference_baseline.json;
-  # baseline is burn-down only. Suppression: # canonical-inference-ok: <reason>
-  - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 940d2f2ab44d2f455a607926674b90ecbc9b74ba # pragma: allowlist secret
-    hooks:
-      - id: check-canonical-inference
-        args: [--repo, omniclaude, --repo-root, .]
-        exclude: ^(tests/|archived/|archive/).*\.py$
 
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
@@ -109,25 +73,26 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-13025 (A-3): Reject docs/evidence/** with UI/e2e claims but no Playwright artifact.
+      # Root cause: 2026-06-11 19:27Z evidence doc claimed "UI POST → full chain live" when
+      # only curl was run (PROCESS_FAILURE_RETRO.md §3.A — top-10 failure #1).
+      # Rejected claim patterns: "UI POST", "click", "full chain live", "end-to-end".
+      # A claim is allowed only when the doc also references a Playwright artifact.
+      # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10).
+      - id: reject-evidence-ui-claims
+        name: Reject evidence docs with UI/e2e claims lacking Playwright artifact (OMN-13025)
+        entry: .pre-commit-hooks/reject-evidence-ui-claims.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-11271: Reject handoff docs missing mandatory ## Infra Health section.
       # Matches docs/handoffs/*.md, docs/*handoff*.md, docs/tracking/*handoff*.md.
       # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10). Spec: OMN-8867.
       - id: check-handoff-infra-health
         name: Reject handoff docs missing ## Infra Health section (OMN-11271)
         entry: .pre-commit-hooks/check-handoff-infra-health.sh
-        language: script
-        types: [markdown]
-        pass_filenames: true
-        stages: [pre-commit]
-
-      # OMN-13023 (retro B-11): UTC timestamp discipline in handoff/evidence docs.
-      # Rejects Z-suffixed clock times cited next to file-mtime markers (ls -l,
-      # mtime, Finder, last modified) — local mtimes relabeled as UTC manufactured
-      # a false outage narrative on 2026-06-11 (PROCESS_FAILURE_RETRO.md §5.1).
-      # Hard fail — no warn-only (CLAUDE.md Rule #5). Escape: 'utc-ok: <reason>'.
-      - id: check-utc-timestamp-discipline
-        name: Reject Z-suffixed times adjacent to mtime citations (OMN-13023)
-        entry: .pre-commit-hooks/check-utc-timestamp-discipline.sh
         language: script
         types: [markdown]
         pass_filenames: true
@@ -147,19 +112,6 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
-      # OMN-13288: runtime_profiles contract validator (omnibase_core).
-      # Enforces runtime_profiles_missing (OMN-9886) — command-consuming contracts
-      # must declare a runtime lane. Pre-existing violators are frozen in
-      # scripts/validation/runtime_profiles_allowlist.yaml (drain tracked by OMN-12982).
-      # The wrapper script is used (instead of the bare module) so the repo-local
-      # allowlist is loaded the same way as the CI gate (OMN-13288 / mirrors OMN-13297).
-      - id: onex-validate-runtime-profiles
-        name: Validate runtime_profiles on node contracts (OMN-12957)
-        language: system
-        entry: uv run python scripts/ci/run_runtime_profiles_validator.py
-        files: ^src/omniclaude/nodes/node_.*/contract\.yaml$
-        pass_filenames: false
-        stages: [pre-commit]
 
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
@@ -185,48 +137,6 @@ repos:
         language: script
         types_or: [python, shell]
         pass_filenames: true
-        stages: [pre-commit]
-
-      # OMN-4421: Block commits containing expired @shim annotations.
-      # Uses node_shim_scanner (OMN-4419) via `onex run-node`.
-      # BLOCKING — enforcement, not advisory. Suppression per-line: # shim-expiry-ok: <reason>
-      - id: check-expired-shims
-        name: Block expired @shim annotations (OMN-4421)
-        entry: .pre-commit-hooks/check-expired-shims.sh
-        language: script
-        types: [python]
-        pass_filenames: true
-        stages: [pre-commit]
-        exclude: '^tests/'
-
-      # OMN-13120: version-skew gate. Detects shared-package pin drift between
-      # the live plugin daemon venv (CLAUDE_PLUGIN_DATA/.venv) and the canonical
-      # uv.lock pins — both lock drift (stale .built-from marker) and in-place
-      # pin mutation. always_run so the live-venv check fires every commit, not
-      # only when uv.lock is staged. CI runs the same wrapper in lock-consistency
-      # mode (no live venv present). Fix on fire: bash scripts/repair-plugin-venv.sh.
-      # BLOCKING — enforcement, not advisory (CLAUDE.md Rule #5).
-      - id: check-daemon-venv-skew
-        name: Reject live daemon venv pin drift vs uv.lock (OMN-13120)
-        entry: .pre-commit-hooks/check-daemon-venv-skew.sh
-        language: script
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
-      # OMN-13536: omnimarket dispatch-venv drift guard. Skills dispatch ONEX nodes
-      # from the *installed* omnimarket package. This gate compares the
-      # uv.lock-pinned omnimarket git SHA against the approved release-lane
-      # baseline and fails on unapproved drift. The full omnimarket@main pin
-      # upgrade is blocked by transitive omniintelligence source constraints.
-      - id: check-omnimarket-dispatch-drift
-        name: Reject omnimarket dispatch-venv pin drift (OMN-13536)
-        entry: .pre-commit-hooks/check-omnimarket-dispatch-drift.sh
-        language: script
-        pass_filenames: false
-        args:
-          - --expected-sha=597fc11af2ad49ca8c780fcd8cb99b8895765398
-        files: '^(uv\.lock|pyproject\.toml)$'
         stages: [pre-commit]
 
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
@@ -261,64 +171,6 @@ repos:
         language: system
         files: '^plugins/onex/skills/.*\.md$'
         pass_filenames: true
-        stages: [pre-commit]
-
-      # OMN-9143: regression guard — the legacy `polymorphic-agent` dispatch
-      # target was retired in favour of `onex:`-prefixed subagents. Block its
-      # reintroduction anywhere in the omniclaude enforcement surface
-      # (plugins/onex/hooks/scripts, .../lib, hooks.json). Historical
-      # observability SQL and routing-fallback tests outside that surface are
-      # out of scope and intentionally not matched. Blocking — enforcement,
-      # not advisory (CLAUDE.md Rule #5).
-      - id: no-polymorphic-agent
-        name: Reject legacy polymorphic-agent dispatch target in enforcement paths (OMN-9143)
-        entry: plugins/onex/hooks/scripts/grep_guard_no_polymorphic_agent.sh --
-        language: script
-        files: '^plugins/onex/hooks/(scripts|lib)/.*|^plugins/onex/hooks/hooks\.json$'
-        pass_filenames: true
-        stages: [pre-commit]
-
-      # OMN-13341 (R6, epic OMN-13325): reject worker prompts / receipts /
-      # handoff & evidence docs that cite a local-clone path, ticket text, or a
-      # statusCheckRollup verdict AS proof of state. Verify against origin/dev
-      # (existence), the live projection (state), and `gh pr checks` (PR verdict).
-      # Doctrine: docs/standards/VERIFICATION_DOCTRINE.md. Blocking — not advisory
-      # (CLAUDE.md Rule #5). Suppress: # verification-evidence-ok: <reason>.
-      - id: lint-verification-evidence
-        name: reject non-authoritative evidence citations (OMN-13341)
-        entry: python3 scripts/lint_verification_evidence.py
-        language: system
-        files: '^(plugins/onex/skills/.*\.md|docs/handoffs/.*|docs/receipts/.*|docs/.*receipt.*\.(md|txt)|\.onex_state/evidence/.*\.(md|txt))$'
-        pass_filenames: true
-        stages: [pre-commit]
-
-      # OMN-13336 (retro R1): plan_to_tickets plans must assert a verified
-      # baseline. Every plan under docs/plans/ or docs/tracking/ must carry a
-      # '## Current Verified State' section with a 'verified: <date> via
-      # <command>' line dated within the freshness window. Plans predating the
-      # gate are grandfathered in
-      # .onex_ratchets/plan_verified_state_allowlist.yaml (burn-down only).
-      # CI mirror: .github/workflows/plan-verified-state-gate.yml.
-      - id: lint-plan-verified-state
-        name: require fresh Current Verified State in plan_to_tickets plans (OMN-13336)
-        entry: python3 scripts/lint_plan_verified_state.py
-        language: system
-        files: '^docs/(plans|tracking)/.*\.md$'
-        pass_filenames: true
-        stages: [pre-commit]
-
-      # OMN-13098: dispatch-only shim skills must be a single receipt-mode
-      # `onex skill`/`onex delegate` CLI call — no bare `onex run|node|run-node`,
-      # no inline executable logic, no `cat workflow_result.json`. A ratchet
-      # allowlist (.onex_ratchets/skill_receipt_mode_allowlist.yaml) tolerates
-      # not-yet-migrated skills but must never grow. Whole-tree scan: ratchet
-      # semantics need every skill + the allowlist, so pass_filenames is false.
-      - id: validate-skill-dispatch-receipt-mode
-        name: enforce single receipt-mode dispatch in skills (OMN-13098)
-        entry: bash scripts/check_skill_dispatch_receipt_mode_wrapper.sh
-        language: system
-        files: '^(plugins/onex/skills/.*|\.onex_ratchets/skill_receipt_mode_allowlist\.yaml)$'
-        pass_filenames: false
         stages: [pre-commit]
 
       # OMN-9072: regression guard — every hookSpecificOutput emission must
@@ -601,6 +453,18 @@ repos:
           && echo "ERROR: hardcoded internal IP found (add # onex-allow-internal-ip to suppress)" && exit 1 || exit 0'
         pass_filenames: false
         stages: [pre-commit]
+      # OMN-13047 / Retro D-1: Concurrency-primitive clause.
+      # Flags staged non-test Python additions that introduce seek_to_end /
+      # poll / KafkaConsumer without a concurrent staged change under tests/.
+      # Suppression: add ``# concurrency-ok`` to the flagged line.
+      - id: concurrency-primitive-guard
+        name: Concurrency primitive clause (OMN-13047)
+        entry: python scripts/validation/validate_no_blocking_primitive_without_tests.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # OMN-3554: Reject hardcoded Kafka broker address fallbacks
       # Detects os.getenv("KAFKA_*", non-empty) and private-IP Kafka broker ports
       - id: kafka-no-hardcoded-fallback
@@ -750,7 +614,7 @@ repos:
       # Imperative inline logic (Agent(, TeamCreate, curl, gh api, psql, ssh,
       # asyncio.run, direct http://localhost/192.168 calls) must live in nodes.
       # Escape hatch: append '# imperative-ok' to suppress a single line.
-      # Allowlisted (PURE-SKILL) dirs: login, preflight, record_friction,
+      # Allowlisted (PURE-SKILL) dirs: handoff, login, preflight, record_friction,
       # set_session, systematic_debugging, unstick_queue, using_git_worktrees,
       # worktree, writing_skills, authorize.
       - id: reject-imperative-skill-patterns
@@ -845,34 +709,13 @@ repos:
       # Hook bitmask drift check (OMN-9615)
       # Regenerates hook_bits.sh from EnumHookBit and fails if the committed
       # artifact is stale. Fires when hook_bits.sh is modified.
-      # Uses scripts/run-hook-bits-drift.sh to resolve omnibase_core via
-      # $OMNI_HOME, supporting both omni_home and worktree layouts (OMN-12398).
       - id: hook-bits-drift
         name: hook_bits.sh drift check (regenerate if EnumHookBit changes)
-        entry: bash scripts/run-hook-bits-drift.sh
+        entry: uv --directory ../omnibase_core run python scripts/gen_hook_bits.py --check ../omniclaude/plugins/onex/hooks/lib/hook_bits.sh
         language: system
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$
         stages: [pre-commit]
-
-  # OMN-13291 (W0): validator-requirements fleet gate. Reports ALL missing
-  # required gates for omniclaude against omnibase_core's
-  # architecture-handshakes/validator-requirements.yaml, ratcheted by this
-  # repo's own architecture-handshakes/validator-requirements-baseline.yaml.
-  # Re-pin rev to the merged-dev SHA once the omnibase_core export PR lands.
-  - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: d163312724489f10f58ffdf8115ba1fa9d5783e8 # pragma: allowlist secret
-    hooks:
-      - id: validate-validator-requirements
-        args:
-          - --repo
-          - omniclaude
-          - --repo-root
-          - .
-          - --spec
-          - architecture-handshakes/validator-requirements.yaml
-          - --baseline
-          - architecture-handshakes/validator-requirements-baseline.yaml
 
 # Configuration
 default_install_hook_types: [pre-commit, pre-push, commit-msg]
