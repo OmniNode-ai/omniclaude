@@ -95,6 +95,48 @@ class TestConfigSessionAggregator:
         assert config.finalized_session_warning_threshold == 10000
         assert config.finalized_session_warning_interval_seconds == 3600
 
+    def test_from_contract_defaults_match_inline_defaults(self) -> None:
+        """Overlay resolution with no env override == in-source defaults.
+
+        OMN-13560 Wave-2: the contract declares ``${env.VAR:default}`` for every
+        tunable, so an unset environment must resolve to the same values the
+        plain ``ConfigSessionAggregator()`` constructor produces.
+        """
+        from omniclaude.aggregators.config import ConfigSessionAggregator
+
+        assert ConfigSessionAggregator.from_contract() == ConfigSessionAggregator()
+
+    def test_from_contract_env_override_resolves(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A per-lane env override flows through the contract overlay seam."""
+        from omniclaude.aggregators.config import ConfigSessionAggregator
+
+        monkeypatch.setenv(
+            "OMNICLAUDE_AGGREGATOR_SESSION_INACTIVITY_TIMEOUT_SECONDS", "120"
+        )
+        monkeypatch.setenv("OMNICLAUDE_AGGREGATOR_MAX_ORPHAN_SESSIONS", "500")
+
+        resolved = ConfigSessionAggregator.from_contract()
+
+        assert resolved.session_inactivity_timeout_seconds == 120
+        assert resolved.max_orphan_sessions == 500
+        # Untouched fields keep their inline contract defaults.
+        assert resolved.timeout_sweep_interval_seconds == 60
+
+    def test_from_contract_out_of_bounds_override_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An overlay value outside the field bounds fails at validation."""
+        from omniclaude.aggregators.config import ConfigSessionAggregator
+
+        monkeypatch.setenv(
+            "OMNICLAUDE_AGGREGATOR_SESSION_INACTIVITY_TIMEOUT_SECONDS", "5"
+        )
+
+        with pytest.raises(Exception):
+            ConfigSessionAggregator.from_contract()
+
 
 # ---------------------------------------------------------------------------
 # ProtocolSessionAggregator

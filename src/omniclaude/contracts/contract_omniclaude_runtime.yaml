@@ -49,6 +49,29 @@ descriptor:
   diagnostics_mcp_server_url_legacy_onex: "${env.ONEX_MCP_URL}"
   diagnostics_mcp_server_url_legacy_archon: "${env.ARCHON_MCP_URL}"
 
+aggregator:
+  # Session-aggregation tunables — OMN-13560 Wave-2 config->overlay migration
+  # (epic OMN-13556). ConfigSessionAggregator previously bound these via
+  # pydantic-settings env_file/.env with the OMNICLAUDE_AGGREGATOR_ prefix.
+  # They are now declared here with the ${env.VAR:default} overlay convention so
+  # a per-lane operator overlay supplies the value, and the in-source default
+  # rides along inline. ConfigSessionAggregator.from_contract() resolves each
+  # value via the shared ${env.VAR} overlay expander (the single sanctioned env
+  # boundary) and applies the field-level pydantic bounds. An unset var with no
+  # inline default fails closed at the pydantic validation boundary.
+  session_inactivity_timeout_seconds: "${env.OMNICLAUDE_AGGREGATOR_SESSION_INACTIVITY_TIMEOUT_SECONDS:3600}"
+  session_max_duration_seconds: "${env.OMNICLAUDE_AGGREGATOR_SESSION_MAX_DURATION_SECONDS:2592000}"
+  orphan_buffer_duration_seconds: "${env.OMNICLAUDE_AGGREGATOR_ORPHAN_BUFFER_DURATION_SECONDS:300}"
+  out_of_order_buffer_seconds: "${env.OMNICLAUDE_AGGREGATOR_OUT_OF_ORDER_BUFFER_SECONDS:60}"
+  clock_skew_tolerance_seconds: "${env.OMNICLAUDE_AGGREGATOR_CLOCK_SKEW_TOLERANCE_SECONDS:30}"
+  seal_delay_seconds: "${env.OMNICLAUDE_AGGREGATOR_SEAL_DELAY_SECONDS:60}"
+  tool_count_streaming_threshold: "${env.OMNICLAUDE_AGGREGATOR_TOOL_COUNT_STREAMING_THRESHOLD:1000}"
+  max_orphan_sessions: "${env.OMNICLAUDE_AGGREGATOR_MAX_ORPHAN_SESSIONS:10000}"
+  duplicate_detection_window_seconds: "${env.OMNICLAUDE_AGGREGATOR_DUPLICATE_DETECTION_WINDOW_SECONDS:86400}"
+  timeout_sweep_interval_seconds: "${env.OMNICLAUDE_AGGREGATOR_TIMEOUT_SWEEP_INTERVAL_SECONDS:60}"
+  finalized_session_warning_threshold: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_THRESHOLD:10000}"
+  finalized_session_warning_interval_seconds: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_INTERVAL_SECONDS:3600}"
+
 metadata:
   author: "OmniNode Team"
   license: "MIT"
