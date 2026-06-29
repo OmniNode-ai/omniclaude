@@ -8,6 +8,7 @@ category: maintenance
 tags: [worktree, cleanup, audit, triage, lifecycle, cron, automation]
 author: OmniClaude Team
 composable: true
+boundary_exempt: true
 args:
   - name: --audit
     description: "Audit all worktrees for health status (categorize SAFE_TO_DELETE, LOST_WORK, STALE, ACTIVE, DIRTY_ACTIVE)"
