@@ -83,6 +83,7 @@ EXCLUDED_FILENAMES: Final[frozenset[str]] = frozenset(
         "__main__.py",
         "app.py",
         "classifier.py",
+        "cli.py",
     }
 )
 
