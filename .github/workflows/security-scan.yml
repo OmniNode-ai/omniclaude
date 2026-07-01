@@ -163,6 +163,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Move Docker data root to large disk
+        run: |
+          sudo mkdir -p /mnt/docker-data
+          printf '{"data-root":"/mnt/docker-data"}\n' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          docker info --format 'Docker Root Dir: {{.DockerRootDir}}'
+          df -h
+
       - name: Free Docker cache before image build
         run: |
           docker system prune -af --volumes || true
