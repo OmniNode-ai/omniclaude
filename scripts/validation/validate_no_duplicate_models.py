@@ -83,6 +83,11 @@ EXCLUDED_FILENAMES: Final[frozenset[str]] = frozenset(
         "__main__.py",
         "app.py",
         "classifier.py",
+        # Pre-existing duplicate since 2026-06-18 (hook_measurement/cli.py vs.
+        # quirks/cli.py): each subsystem has its own CLI entry point, same
+        # rationale as __main__.py/app.py above. Renaming would break existing
+        # entry-point references.
+        "cli.py",
     }
 )
 
