@@ -295,7 +295,7 @@ def write_cursor(state_dir: Path, value: int) -> None:
 # ---------------------------------------------------------------------------
 def _default_http_opener(url: str, timeout: float) -> str:
     req = urllib.request.Request(url, method="GET")  # noqa: S310 — http(s) URL from operator config
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  # nosec B310
         charset = resp.headers.get_content_charset() or "utf-8"
         body: bytes = resp.read()
     return body.decode(charset)
@@ -336,7 +336,7 @@ def parse_projection_page(body: str, since: int) -> ModelProjectionPage:
             continue
         try:
             rows.append(ModelPrMergedRow.model_validate(entry))
-        except Exception:  # noqa: BLE001 — a bad row is skipped, not fatal
+        except Exception:  # noqa: BLE001 — a bad row is skipped, not fatal  # nosec B112
             continue
 
     next_cursor_raw: Any = payload.get("next_cursor", payload.get("cursor", since))

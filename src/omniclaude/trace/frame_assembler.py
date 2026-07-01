@@ -31,7 +31,7 @@ from uuid import UUID, uuid4
 logger = logging.getLogger(__name__)
 
 #: Type alias for JSON-serializable tool input/output dicts.
-type ToolInputDict = dict[str, object]
+ToolInputDict = dict[str, object]
 
 from omniclaude.trace.change_frame import (
     ChangeFrame,
