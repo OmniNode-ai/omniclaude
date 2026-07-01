@@ -34,6 +34,14 @@ boundary_exempt: true
 
 # Agent Dispatch Watchdog
 
+## Backing Status (OMN-13780) — NON-RUNNABLE via canonical event-bus dispatch
+
+**This skill has no deterministic node backing and is de-listed from event-bus / node-routed dispatch.** Its omniclaude "node" (`node_skill_dispatch_watchdog_orchestrator`) is a generated Polly-passthrough shell (`maturity: stub` in its contract.yaml) — invoking it does nothing but forward this file's prose back to an LLM agent, which is functionally identical to (and strictly worse than) just running this skill directly via the Skill tool. There is no CLI, omnimarket, or omnibase_infra implementation.
+
+**Prefer `onex:agent_healthcheck` instead** — it is real node-backed: detection and recovery logic lives in `node_worker_stall_recovery` (omnimarket, OMN-9403). This skill's stall-detection semantics substantially overlap with `agent_healthcheck`'s; consolidation is tracked in OMN-13800.
+
+This skill remains usable as a direct Skill-tool invocation (session-native, TaskGet/TaskList-based) — it is only excluded from event-bus/node dispatch.
+
 ## Purpose
 
 Detect when dispatched Task() subagents stall (stop producing tool calls) and trigger

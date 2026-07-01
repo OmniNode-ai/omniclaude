@@ -305,7 +305,26 @@ are listed here so the audit does not re-flag them as new findings. A row stays
 here only while its ticket is open; once the ticket is Done and the backing node
 exists, remove the row.
 
-_None currently tracked._
+**2026-07-01 (OMN-13780, M2c disposition of the 5 no-node facades from OMN-13674):**
+
+- `onex:checkpoint` — verdict corrected from FACADE to **WORKS (misclassified)**.
+  Real backing exists (`omnibase_infra/node_checkpoint_effect`,
+  `omnibase_infra/node_checkpoint_validate_compute`, `checkpoint_manager.py` CLI) —
+  the audit's naive `node_<skill_name>` path match doesn't resolve the real node
+  names. SKILL.md now declares the real backing explicitly. Tracked cleanup to
+  repoint the registry / retire the dead omniclaude Polly-shell: **OMN-13799**.
+- `onex:dispatch_watchdog` — **FACADE**, de-listed from event-bus dispatch (no
+  deterministic backing anywhere; the omniclaude node is a `maturity: stub`
+  Polly-shell). Prefer `onex:agent_healthcheck` (real node-backed via
+  `node_worker_stall_recovery`). Tracked: **OMN-13800**.
+- `onex:epic_team` — **FACADE**, de-listed from event-bus dispatch by design
+  (spawns live session subagents; `run.sh` shells out to `claude -p`, still an
+  LLM session, not a node). Tracked: **OMN-13801**.
+- `onex:executing_plans` — **FACADE**, de-listed from event-bus dispatch by
+  design (session-native plan review + routing decision). Tracked: **OMN-13802**.
+- `onex:wave_scheduler` — **FACADE**, de-listed from event-bus dispatch by
+  design (session-native parallel dispatch; DAG-computation core is a future
+  COMPUTE-node candidate). Tracked: **OMN-13803**.
 
 The three 2026-04-14 findings have all been resolved and removed from this table:
 
