@@ -206,6 +206,23 @@ with these rules regardless of role or spec contents:
    or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
    (OMN-13024) is live.
 
+10. **Docker builds run on .201 stability, never in-sandbox (OMN-13775).** Worker
+    sandboxes have no docker daemon — `docker build`, `docker compose build`, `docker
+    compose up --build`, or any local image rebuild dead-ends inside a dispatched
+    worker. If your task requires building, rebuilding, or runtime-verifying a
+    container image: author the Dockerfile/compose/source change and open the PR,
+    then hand off build + runtime verification to the gated `node_redeploy_orchestrator`
+    path (the `/redeploy` skill) targeting the `.201` **stability-test** lane —
+    never attempt the build locally inside your sandbox, and never SSH + raw
+    `docker build`/`docker compose up` yourself (that recreates the same
+    no-raw-prod-bypass anti-pattern OMN-13434 blocks for prod, just aimed at a
+    different lane). Verify the built image via the stability-test lane's live
+    EFFECT (`rpk`/`psql` against `INFRA_HOST`), never a local container. This gated
+    path depends on the deploy-agent revival (OMN-13772/OMN-13760); if the
+    deploy-agent is unavailable, report the PR as authored-only and flag the
+    build/runtime-verify step as blocked — do not fall back to in-sandbox docker.
+    Full procedure: `docs/runbooks/docker-build-worker-routing.md`.
+
 ---
 ```
 
