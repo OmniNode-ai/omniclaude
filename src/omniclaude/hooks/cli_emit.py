@@ -38,6 +38,7 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import TypeVar
 from uuid import UUID, uuid4
 
 import click
@@ -77,6 +78,7 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 # =============================================================================
 # Constants
@@ -180,7 +182,7 @@ def _string_to_uuid(value: str) -> UUID:
 # =============================================================================
 
 
-def run_with_timeout[T](
+def run_with_timeout(  # noqa: UP047 - repo validators still parse with pre-PEP 695 syntax.
     coro: Awaitable[T], timeout: float = EMIT_TIMEOUT_SECONDS
 ) -> T | None:
     """Run an async coroutine with a cooperative timeout.
