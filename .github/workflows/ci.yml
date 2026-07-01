@@ -2091,12 +2091,15 @@ jobs:
         if: steps.dod-evidence.outputs.source != ''
         working-directory: ${{ github.workspace }}
         run: bash scripts/materialize-dod-evidence-from-occ.sh "${{ steps.dod-evidence.outputs.ticket }}" .onex_change_control_evidence
+        env:
+          ONEX_STATE_DIR: .onex_state
 
       - name: Run DoD evidence check
         working-directory: ${{ github.workspace }}
         run: bash scripts/dod-pre-push-check.sh
         env:
           DOD_ENFORCEMENT: hard
+          ONEX_STATE_DIR: .onex_state
 
   # ============================================================================
   # COVERAGE (runs after test matrix)
