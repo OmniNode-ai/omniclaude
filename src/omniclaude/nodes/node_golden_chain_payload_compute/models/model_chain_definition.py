@@ -68,7 +68,9 @@ class ModelChainMetadata(BaseModel):
     expected_fields: tuple[str, ...] = Field(default=())
     proof_classification: str = Field(default="diagnostic")
     replay_status: str = Field(default="replay-not-applicable")
-    stages: tuple[dict[str, Any], ...] = Field(default=())
+    stages: tuple[dict[str, Any], ...] = Field(  # ONEX_EXCLUDE: dict_str_any
+        default=()
+    )
 
 
 __all__ = ["ModelChainAssertion", "ModelChainDefinition", "ModelChainMetadata"]
