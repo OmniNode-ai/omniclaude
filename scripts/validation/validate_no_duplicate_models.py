@@ -83,7 +83,14 @@ EXCLUDED_FILENAMES: Final[frozenset[str]] = frozenset(
         "__main__.py",
         "app.py",
         "classifier.py",
-        "cli.py",
+    }
+)
+
+# Specific pre-existing CLI entry points with intentional duplicate filenames.
+EXCLUDED_RELATIVE_PATHS: Final[frozenset[str]] = frozenset(
+    {
+        "hook_measurement/cli.py",
+        "quirks/cli.py",
     }
 )
 
@@ -126,14 +133,20 @@ def collect_python_files(root_dir: Path) -> dict[str, list[Path]]:
         return files_by_name
 
     for py_file in root_dir.rglob("*.py"):
+        relative_path = py_file.relative_to(root_dir)
+
         # Skip excluded directories
-        if is_excluded_directory(py_file.relative_to(root_dir)):
+        if is_excluded_directory(relative_path):
             continue
 
         filename = py_file.name
 
         # Skip excluded filenames
         if filename in EXCLUDED_FILENAMES:
+            continue
+
+        # Skip specific intentional duplicate paths.
+        if relative_path.as_posix() in EXCLUDED_RELATIVE_PATHS:
             continue
 
         # Skip test files
