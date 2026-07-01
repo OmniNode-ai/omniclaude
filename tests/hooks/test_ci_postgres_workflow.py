@@ -248,4 +248,4 @@ def test_cache_restore_steps_are_opt_in_for_ci_timeout_resilience(
     assert cache_steps
     for step in cache_steps:
         assert step.get("if") == VENV_CACHE_RESTORE_IF
-        assert step.get("uses") == "actions/cache/restore@v5"
+        assert step.get("uses") == "actions/cache/restore@v6"
