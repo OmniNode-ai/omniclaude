@@ -163,6 +163,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Move Docker data root to large disk
+        run: |
+          sudo mkdir -p /mnt/docker-data
+          printf '{"data-root":"/mnt/docker-data"}\n' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          docker info --format 'Docker Root Dir: {{.DockerRootDir}}'
+          df -h
+
       - name: Free Docker cache before image build
         run: |
           docker system prune -af --volumes || true
@@ -208,13 +216,17 @@ jobs:
           VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
           curl -L -o dockle.tar.gz "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
           tar zxf dockle.tar.gz
+          sudo mkdir -p /mnt/dockle
+          sudo chown "$USER:$USER" /mnt/dockle
+          docker save omniclaude:scan > /mnt/dockle/omniclaude-scan.tar
+          export TMPDIR=/mnt/dockle
           ./dockle \
             --timeout 600s \
             --exit-code 1 \
             --exit-level fatal \
             --accept-file settings.py \
             --ignore DKL-DI-0005 \
-            omniclaude:scan
+            --input /mnt/dockle/omniclaude-scan.tar
 
   # ============================================================================
   # Infrastructure as Code Security Scan

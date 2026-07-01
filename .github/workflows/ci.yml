@@ -353,20 +353,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
-
       - name: Kafka import guard
         working-directory: ${{ github.workspace }}
-        run: uv run python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
+        run: |
+          uv run --no-project \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@v0.43.0' \
+            python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
 
   migration-freeze:
     name: Migration Freeze
@@ -2091,12 +2083,15 @@ jobs:
         if: steps.dod-evidence.outputs.source != ''
         working-directory: ${{ github.workspace }}
         run: bash scripts/materialize-dod-evidence-from-occ.sh "${{ steps.dod-evidence.outputs.ticket }}" .onex_change_control_evidence
+        env:
+          ONEX_STATE_DIR: .onex_state
 
       - name: Run DoD evidence check
         working-directory: ${{ github.workspace }}
         run: bash scripts/dod-pre-push-check.sh
         env:
           DOD_ENFORCEMENT: hard
+          ONEX_STATE_DIR: .onex_state
 
   # ============================================================================
   # COVERAGE (runs after test matrix)
