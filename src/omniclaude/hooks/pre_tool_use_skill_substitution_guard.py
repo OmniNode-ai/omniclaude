@@ -230,7 +230,7 @@ def _clear_marker(marker: Path) -> None:
 
 
 def _record_override_friction(
-    rule: SubstitutionRule, command_text: str, session_id: str
+    rule: SubstitutionRule, command_text: str, session_id: str, ts: float
 ) -> None:
     """File a friction event for a skill-substitution override (proceed-anyway).
 
@@ -267,7 +267,7 @@ def _record_override_friction(
                 description=description,
                 context_ticket_id=None,
                 session_id=session_id,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.fromtimestamp(ts, tz=UTC),
             )
         )
     except Exception as exc:  # noqa: BLE001 - friction must never block a hook
@@ -287,6 +287,24 @@ def _suggestion(rule: SubstitutionRule) -> str:
     )
 
 
+def _is_skill_originated_dispatch(
+    tool_name: str, tool_input: dict[str, object]
+) -> bool:
+    if tool_name not in ("Agent", "Task"):
+        return False
+    fields = (
+        "origin_skill",
+        "source_skill",
+        "skill",
+        "onex_skill",
+        "prompt",
+        "description",
+        "task",
+    )
+    text = " ".join(str(tool_input.get(field, "")) for field in fields)
+    return "onex:self_healing_dispatch" in text or "onex:dispatch_worker" in text
+
+
 # ---------------------------------------------------------------------------
 # Core guard logic
 # ---------------------------------------------------------------------------
@@ -298,7 +316,7 @@ def run_guard(
     rules: list[SubstitutionRule] | None = None,
     state_dir: Path | None = None,
     now: float | None = None,
-    record_fn: Callable[[SubstitutionRule, str, str], None] | None = None,
+    record_fn: Callable[[SubstitutionRule, str, str, float], None] | None = None,
 ) -> tuple[int, str]:
     """Run the skill-substitution guard against hook JSON from stdin.
 
@@ -328,6 +346,8 @@ def run_guard(
     command_text = _extract_command_text(tool_name, tool_input)
     if not command_text:
         return 0, stdin_json
+    if _is_skill_originated_dispatch(tool_name, tool_input):
+        return 0, stdin_json
 
     active_rules = _get_rules(rules)
     matched: SubstitutionRule | None = None
@@ -352,7 +372,7 @@ def run_guard(
     if marker_ts is not None and (ts - marker_ts) <= OVERRIDE_WINDOW_SEC:
         # Operator is proceeding anyway (fallback) — record friction and allow.
         recorder = record_fn or _record_override_friction
-        recorder(matched, command_text, session_id)
+        recorder(matched, command_text, session_id, ts)
         _clear_marker(marker)
         return 0, stdin_json
 

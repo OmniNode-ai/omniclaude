@@ -55,6 +55,11 @@ mkdir -p "$(dirname "$LOG_FILE")"
 # Read stdin
 TOOL_INFO=$(cat)
 
+if [[ "${OMNICLAUDE_HOOKS_DISABLE:-0}" == "1" ]] || [[ -f "${HOME}/.claude/omniclaude-hooks-disabled" ]]; then
+    echo "$TOOL_INFO"
+    exit 0
+fi
+
 # Parse tool name — fail open on bad JSON
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ERROR: invalid hook JSON; failing open" >> "$LOG_FILE"

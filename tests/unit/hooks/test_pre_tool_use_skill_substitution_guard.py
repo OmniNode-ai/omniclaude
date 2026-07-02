@@ -56,12 +56,12 @@ class _Recorder:
     """Capture friction recorder invocations."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, str]] = []
+        self.calls: list[tuple[str, str, str, float]] = []
 
     def __call__(
-        self, rule: SubstitutionRule, command_text: str, session_id: str
+        self, rule: SubstitutionRule, command_text: str, session_id: str, ts: float
     ) -> None:
-        self.calls.append((rule.rule_id, command_text, session_id))
+        self.calls.append((rule.rule_id, command_text, session_id, ts))
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +125,11 @@ def test_proceed_anyway_allows_and_files_friction(tmp_path: Path) -> None:
     assert code2 == 0
     assert json.loads(out2)["tool_name"] == "Bash"  # original passed through
     assert len(rec.calls) == 1
-    rule_id, command_text, session_id = rec.calls[0]
+    rule_id, command_text, session_id, ts = rec.calls[0]
     assert rule_id == "raw-gh-pr-merge"
     assert command_text == cmd
     assert session_id == "s1"
+    assert ts == 1030.0
     # Marker cleared so the override is one-shot.
     assert list((tmp_path / "skill_substitution_guard").glob("*.override")) == []
 
@@ -205,6 +206,24 @@ def test_bare_task_warns_dispatch_skill(tmp_path: Path) -> None:
     )
     assert code == 1
     assert "self_healing_dispatch" in json.loads(output)["reason"]
+
+
+@pytest.mark.unit
+def test_skill_originated_agent_dispatch_passes(tmp_path: Path) -> None:
+    payload = json.dumps(
+        {
+            "tool_name": "Agent",
+            "tool_input": {
+                "prompt": "onex:self_healing_dispatch spawning a worker",
+                "subagent_type": "general-purpose",
+                "origin_skill": "onex:self_healing_dispatch",
+            },
+            "session_id": "s1",
+        }
+    )
+    code, output = run_guard(payload, state_dir=tmp_path)
+    assert code == 0
+    assert json.loads(output)["tool_name"] == "Agent"
 
 
 # ---------------------------------------------------------------------------
