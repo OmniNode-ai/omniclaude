@@ -2,22 +2,24 @@
 # SPDX-License-Identifier: MIT
 """Unit + regression tests for the Done-flip durable-evidence guard [OMN-13856].
 
-The two non-negotiable regression proofs (design §2 acceptance):
+The non-negotiable regression proofs (design §2 acceptance):
 
 * the ``wf_1628d9a5`` incident shape — a Backlog→Done flip via ``save_issue``
   with no merged PR and no durable receipt — is BLOCKED;
-* a legitimate Done-flip backed by durable evidence (a merged PR **or** a fresh
-  PASS receipt) is ALLOWED.
+* a legitimate Done-flip backed by durable evidence (a merged PR **or** a PASS
+  OCC receipt on ``origin/dev``) is ALLOWED;
+* freshness: a receipt that exists on ``origin/dev`` but NOT in the local clone's
+  working tree is still ALLOWED (the guard reads the ref, not the stale tree).
 
-All I/O boundaries (dod_verify runner, GitHub PR fetch, live Linear read) are
-injected as deterministic stubs so the suite is hermetic — no ``uv``, no Kafka,
-no network.
+Decision-level I/O boundaries (OCC probe, GitHub PR fetch, live Linear read) are
+injected as deterministic stubs so those tests are hermetic. The git-backed OCC
+probe itself is exercised against a real local temp git repo (no network).
 """
 
 from __future__ import annotations
 
 import importlib.util
-from datetime import UTC, datetime, timedelta
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -73,53 +75,18 @@ def _open_fetcher(_ref: Any):
     return _pr_status("OPEN")
 
 
-def _no_receipt_runner(_ticket_id: str) -> dict[str, Any] | None:
-    """dod_verify produced nothing (no OCC contract / node could not run)."""
-    return None
+def _no_receipt_probe(_ticket_id: str) -> bool:
+    """No PASS OCC receipt on origin/dev (incident / unresolved)."""
+    return False
 
 
-def _tally(verified: int, failed: int, skipped: int) -> str:
-    """Build a probe_stdout tally blob matching node_dod_verify's output."""
-    import json as _json
-
-    return _json.dumps(
-        {
-            "total": verified + failed + skipped,
-            "verified": verified,
-            "failed": failed,
-            "skipped": skipped,
-            "details": [],
-        }
-    )
+def _receipt_probe(_ticket_id: str) -> bool:
+    """A PASS OCC receipt on origin/dev exists for the ticket."""
+    return True
 
 
-def _fresh_pass_receipt(_ticket_id: str) -> dict[str, Any]:
-    return {
-        "status": "PASS",
-        "run_timestamp": datetime.now(tz=UTC).isoformat(),
-        "probe_stdout": _tally(verified=5, failed=0, skipped=0),
-    }
-
-
-def _vacuous_pass_receipt(_ticket_id: str) -> dict[str, Any]:
-    """The no-contract incident shape: status PASS but ZERO checks verified."""
-    return {
-        "status": "PASS",
-        "run_timestamp": datetime.now(tz=UTC).isoformat(),
-        "probe_stdout": _tally(verified=0, failed=0, skipped=1),
-    }
-
-
-def _fail_receipt(_ticket_id: str) -> dict[str, Any]:
-    return {
-        "status": "FAIL",
-        "run_timestamp": datetime.now(tz=UTC).isoformat(),
-        "probe_stdout": _tally(verified=0, failed=1, skipped=0),
-    }
-
-
-def _never_called_runner(_ticket_id: str) -> dict[str, Any] | None:
-    raise AssertionError("dod_verify runner must not be invoked on this path")
+def _never_called_probe(_ticket_id: str) -> bool:
+    raise AssertionError("OCC probe must not be invoked on this path")
 
 
 def _no_linear(_ticket_id: str) -> dict[str, Any] | None:
@@ -141,7 +108,7 @@ def test_non_done_state_allows() -> None:
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {"id": "OMN-1", "state": "In Progress"},
     }
-    d = guard.decide(call, dod_verify_runner=_never_called_runner)
+    d = guard.decide(call, occ_probe=_never_called_probe)
     assert d.allowed
     assert d.reason == "not_done_state"
 
@@ -151,7 +118,7 @@ def test_cancel_state_allows() -> None:
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {"id": "OMN-1", "state": "Canceled"},
     }
-    d = guard.decide(call, dod_verify_runner=_never_called_runner)
+    d = guard.decide(call, occ_probe=_never_called_probe)
     assert d.allowed
     assert d.reason == "carve_out:cancel_state"
 
@@ -166,7 +133,7 @@ def test_exempt_label_allows() -> None:
             "labels": ["close-if-done"],
         },
     }
-    d = guard.decide(call, dod_verify_runner=_never_called_runner)
+    d = guard.decide(call, occ_probe=_never_called_probe)
     assert d.allowed
     assert d.reason == "carve_out:exempt_label"
 
@@ -180,8 +147,8 @@ def test_incident_backlog_to_done_no_evidence_is_blocked() -> None:
     """wf_1628d9a5: Done flip, no PR cited, no durable receipt → BLOCK.
 
     This is the exact escape both legacy guards missed: linear_done_verify
-    ALLOWS 'no_pr_references' and dod_completion fails OPEN when
-    ONEX_EVIDENCE_ROOT is unset. The merged guard blocks.
+    ALLOWS 'no_pr_references' and dod_completion fails OPEN when its evidence
+    root is unset. The merged guard blocks.
     """
     call = {
         "tool_name": "mcp__linear-server__save_issue",
@@ -193,29 +160,12 @@ def test_incident_backlog_to_done_no_evidence_is_blocked() -> None:
     }
     d = guard.decide(
         call,
-        dod_verify_runner=_no_receipt_runner,
+        occ_probe=_no_receipt_probe,
         pr_fetcher=_open_fetcher,  # must not matter — no PR is cited
         linear_fetcher=_no_linear,
     )
     assert not d.allowed
     assert "no_durable_evidence" in d.reason
-
-
-def test_incident_vacuous_dod_pass_is_blocked() -> None:
-    """No-contract ticket: dod_verify returns PASS but verified 0 checks → BLOCK.
-
-    Guards against the node's own fail-open (a contract-less ticket is reported
-    PASS because every check is SKIPPED). This is the live wf_1628d9a5 shape.
-    """
-    call = {
-        "tool_name": "mcp__linear-server__save_issue",
-        "tool_input": {"id": "OMN-13798", "state": "Done", "description": ""},
-    }
-    d = guard.decide(
-        call, dod_verify_runner=_vacuous_pass_receipt, linear_fetcher=_no_linear
-    )
-    assert not d.allowed
-    assert "no_verified_checks" in d.reason or "ZERO" in d.reason
 
 
 def test_incident_status_only_update_no_evidence_is_blocked() -> None:
@@ -227,20 +177,10 @@ def test_incident_status_only_update_no_evidence_is_blocked() -> None:
     # Live Linear read returns an issue with no PR reference and no exempt label.
     d = guard.decide(
         call,
-        dod_verify_runner=_no_receipt_runner,
+        occ_probe=_no_receipt_probe,
         linear_fetcher=lambda _t: {"description": "just closing this", "labels": []},
     )
     assert not d.allowed
-
-
-def test_done_with_fail_receipt_is_blocked() -> None:
-    call = {
-        "tool_name": "mcp__linear-server__save_issue",
-        "tool_input": {"id": "OMN-2", "state": "Done", "description": ""},
-    }
-    d = guard.decide(call, dod_verify_runner=_fail_receipt, linear_fetcher=_no_linear)
-    assert not d.allowed
-    assert "status_not_pass" in d.reason or "PASS receipt" in d.reason
 
 
 def test_cited_pr_open_is_blocked() -> None:
@@ -252,27 +192,9 @@ def test_cited_pr_open_is_blocked() -> None:
             "description": "Fixes https://github.com/OmniNode-ai/omniclaude/pull/1",
         },
     }
-    d = guard.decide(
-        call, dod_verify_runner=_never_called_runner, pr_fetcher=_open_fetcher
-    )
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_open_fetcher)
     assert not d.allowed
     assert "pr_not_merged" in d.reason
-
-
-def test_stale_receipt_is_blocked() -> None:
-    stale = {
-        "status": "PASS",
-        "run_timestamp": (datetime.now(tz=UTC) - timedelta(hours=2)).isoformat(),
-    }
-    call = {
-        "tool_name": "mcp__linear-server__save_issue",
-        "tool_input": {"id": "OMN-4", "state": "Done", "description": ""},
-    }
-    d = guard.decide(
-        call, dod_verify_runner=lambda _t: stale, linear_fetcher=_no_linear
-    )
-    assert not d.allowed
-    assert "stale" in d.reason or "30 minutes" in d.reason
 
 
 def test_no_ticket_id_done_flip_is_blocked() -> None:
@@ -280,7 +202,7 @@ def test_no_ticket_id_done_flip_is_blocked() -> None:
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {"state": "Done", "description": ""},
     }
-    d = guard.decide(call, dod_verify_runner=_never_called_runner)
+    d = guard.decide(call, occ_probe=_never_called_probe)
     assert not d.allowed
     assert "no_ticket_id" in d.reason
 
@@ -288,9 +210,9 @@ def test_no_ticket_id_done_flip_is_blocked() -> None:
 def test_omni_home_unset_no_pr_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     """OMNI_HOME unresolvable + no merged-PR citation → BLOCK (fail-closed).
 
-    dod_verify cannot run without OMNI_HOME; the guard must NOT fail-open on a
-    fake-Done (design requirement 4). No runner is injected, so the production
-    default-runner path is exercised.
+    The OCC clone cannot be resolved without OMNI_HOME; the guard must NOT
+    fail-open on a fake-Done (design requirement 4). No probe is injected, so the
+    production default-probe path is exercised.
     """
     monkeypatch.delenv("OMNI_HOME", raising=False)
     call = {
@@ -318,79 +240,164 @@ def test_legit_merged_pr_citation_is_allowed() -> None:
             ),
         },
     }
-    d = guard.decide(
-        call, dod_verify_runner=_never_called_runner, pr_fetcher=_merged_fetcher
-    )
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_merged_fetcher)
     assert d.allowed
     assert d.reason == "durable_evidence:all_prs_merged"
 
 
-def test_legit_fresh_pass_receipt_is_allowed() -> None:
+def test_legit_occ_receipt_is_allowed() -> None:
     call = {
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {"id": "OMN-7", "state": "Done", "description": ""},
     }
+    d = guard.decide(call, occ_probe=_receipt_probe, linear_fetcher=_no_linear)
+    assert d.allowed
+    assert d.reason == "durable_evidence:occ_receipt_on_dev"
+
+
+# --------------------------------------------------------------------------- #
+# Receipt parsing / binding coverage
+# --------------------------------------------------------------------------- #
+
+_PASS_RECEIPT = """---
+schema_version: "1.0.0"
+ticket_id: OMN-9999
+evidence_item_id: dod-001
+check_type: command
+status: PASS
+run_timestamp: "2026-07-02T22:00:00Z"
+probe_stdout: |
+  status: PASS should not be parsed from this block scalar
+commit_sha: "abc1234"
+"""
+
+_FAIL_RECEIPT = _PASS_RECEIPT.replace("status: PASS", "status: FAIL")
+
+_VACUOUS_RECEIPT = """---
+schema_version: "1.0.0"
+ticket_id: OMN-9999
+status: PASS
+run_timestamp: "2026-07-02T22:00:00Z"
+"""
+
+
+def test_parse_receipt_fields_flat_scalars() -> None:
+    fields = guard.parse_receipt_fields(_PASS_RECEIPT)
+    assert fields["status"] == "PASS"
+    assert fields["ticket_id"] == "OMN-9999"
+    assert fields["evidence_item_id"] == "dod-001"
+    assert fields["check_type"] == "command"
+    # Block-scalar body must NOT leak a bogus top-level key.
+    assert "should not be parsed" not in " ".join(fields.values())
+
+
+def test_receipt_is_pass_bound() -> None:
+    assert guard._receipt_is_pass_bound(
+        guard.parse_receipt_fields(_PASS_RECEIPT), "OMN-9999"
+    )
+    # Wrong ticket
+    assert not guard._receipt_is_pass_bound(
+        guard.parse_receipt_fields(_PASS_RECEIPT), "OMN-0000"
+    )
+    # FAIL status
+    assert not guard._receipt_is_pass_bound(
+        guard.parse_receipt_fields(_FAIL_RECEIPT), "OMN-9999"
+    )
+    # PASS but no check binding (vacuous)
+    assert not guard._receipt_is_pass_bound(
+        guard.parse_receipt_fields(_VACUOUS_RECEIPT), "OMN-9999"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Git-backed OCC probe — freshness against origin/dev (real local temp repo)
+# --------------------------------------------------------------------------- #
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+    )
+
+
+def _make_occ_clone_with_dev_receipt(
+    tmp_path: Path, ticket_id: str, receipt_text: str
+) -> Path:
+    """Build a clone whose origin/dev carries a receipt absent from its worktree."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "--bare", str(origin)], check=True, capture_output=True
+    )
+    clone = tmp_path / "onex_change_control"
+    subprocess.run(
+        ["git", "clone", str(origin), str(clone)], check=True, capture_output=True
+    )
+    _git(clone, "config", "user.email", "t@example.com")
+    _git(clone, "config", "user.name", "t")
+    _git(clone, "checkout", "-b", "dev")
+    rp = clone / "drift" / "dod_receipts" / ticket_id / "dod-001"
+    rp.mkdir(parents=True)
+    (rp / "command.yaml").write_text(receipt_text, encoding="utf-8")
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "-m", "add receipt on dev")
+    _git(clone, "push", "origin", "dev")
+    # Move the WORKING TREE off dev so the receipt is not present locally on-tree.
+    _git(clone, "checkout", "-b", "other")
+    _git(clone, "rm", "-r", "drift")
+    _git(clone, "commit", "-m", "remove receipt from working tree")
+    return clone
+
+
+def test_occ_probe_reads_origin_dev_not_working_tree(tmp_path: Path) -> None:
+    """FRESHNESS: receipt on origin/dev but absent from the working tree → True.
+
+    This is the whole reason the guard reads the ref instead of the tree — a
+    just-merged OCC receipt must be visible even when the local clone is behind.
+    """
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
+    # Sanity: the receipt is NOT in the checked-out working tree.
+    assert not (clone / "drift" / "dod_receipts" / "OMN-9999").exists()
+    # But it IS resolvable on origin/dev.
+    assert guard.occ_receipt_pass_on_dev(clone, "OMN-9999", fetch=True) is True
+
+
+def test_occ_probe_missing_ticket_is_false(tmp_path: Path) -> None:
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
+    assert guard.occ_receipt_pass_on_dev(clone, "OMN-0000", fetch=True) is False
+
+
+def test_occ_probe_fail_receipt_is_false(tmp_path: Path) -> None:
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _FAIL_RECEIPT)
+    assert guard.occ_receipt_pass_on_dev(clone, "OMN-9999", fetch=True) is False
+
+
+def test_occ_probe_vacuous_receipt_is_false(tmp_path: Path) -> None:
+    """A PASS receipt with no check binding is not durable evidence."""
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _VACUOUS_RECEIPT)
+    assert guard.occ_receipt_pass_on_dev(clone, "OMN-9999", fetch=True) is False
+
+
+def test_occ_probe_missing_clone_is_false(tmp_path: Path) -> None:
+    assert (
+        guard.occ_receipt_pass_on_dev(tmp_path / "nope", "OMN-9999", fetch=False)
+        is False
+    )
+
+
+def test_occ_probe_end_to_end_allows_via_decide(tmp_path: Path) -> None:
+    """decide() ALLOWS when the injected probe resolves a real origin/dev receipt."""
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {"id": "OMN-9999", "state": "Done", "description": ""},
+    }
     d = guard.decide(
-        call, dod_verify_runner=_fresh_pass_receipt, linear_fetcher=_no_linear
+        call,
+        occ_probe=lambda tid: guard.occ_receipt_pass_on_dev(clone, tid, fetch=True),
+        linear_fetcher=_no_linear,
     )
     assert d.allowed
-    assert d.reason == "durable_evidence:dod_receipt_pass"
-
-
-# --------------------------------------------------------------------------- #
-# classify_receipt unit coverage
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize(
-    ("receipt", "expected"),
-    [
-        (None, "missing"),
-        ({"status": "PASS"}, "missing_run_timestamp"),
-        ({"run_timestamp": "not-a-date", "status": "PASS"}, "parse_error:"),
-        (
-            {"run_timestamp": "2020-01-01T00:00:00", "status": "PASS"},
-            "parse_error:",
-        ),  # naive timestamp rejected
-    ],
-)
-def test_classify_receipt_failure_tokens(receipt: Any, expected: str) -> None:
-    verdict = guard.classify_receipt(receipt)
-    assert verdict.startswith(expected) or verdict == expected
-
-
-def test_classify_receipt_pass() -> None:
-    receipt = {
-        "status": "PASS",
-        "run_timestamp": datetime.now(tz=UTC).isoformat(),
-        "probe_stdout": _tally(verified=5, failed=0, skipped=0),
-    }
-    assert guard.classify_receipt(receipt) == "pass"
-
-
-def test_classify_receipt_vacuous_pass_rejected() -> None:
-    """A PASS with zero verified checks (no contract) is NOT durable evidence."""
-    receipt = {
-        "status": "PASS",
-        "run_timestamp": datetime.now(tz=UTC).isoformat(),
-        "probe_stdout": _tally(verified=0, failed=0, skipped=1),
-    }
-    assert guard.classify_receipt(receipt) == "no_verified_checks"
-
-
-def test_classify_receipt_pass_missing_tally_rejected() -> None:
-    """PASS with no parseable per-check tally fails closed."""
-    receipt = {
-        "status": "PASS",
-        "run_timestamp": datetime.now(tz=UTC).isoformat(),
-    }
-    assert guard.classify_receipt(receipt) == "no_verified_checks"
-
-
-def test_contract_repo_dir_is_deterministic_from_omni_home() -> None:
-    """The guard resolves the contract root from OMNI_HOME — not an ambient var."""
-    root = guard.contract_repo_dir(Path("/some/omni_home"))
-    assert root == Path("/some/omni_home/onex_change_control")
+    assert d.reason == "durable_evidence:occ_receipt_on_dev"
 
 
 # --------------------------------------------------------------------------- #
@@ -401,7 +408,7 @@ def test_contract_repo_dir_is_deterministic_from_omni_home() -> None:
 def test_main_blocks_incident(monkeypatch: pytest.MonkeyPatch) -> None:
     import io
 
-    # Hermetic: no OMNI_HOME (dod_verify can't run) and no LINEAR_API_KEY (the
+    # Hermetic: no OMNI_HOME (OCC clone can't resolve) and no LINEAR_API_KEY (the
     # real fetcher returns {} instead of a live network call) => fail-closed.
     monkeypatch.delenv("OMNI_HOME", raising=False)
     monkeypatch.delenv("LINEAR_API_KEY", raising=False)

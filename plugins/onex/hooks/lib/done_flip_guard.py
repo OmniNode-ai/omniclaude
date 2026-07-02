@@ -13,15 +13,15 @@ durable evidence). No merged node-side gate covers that path.
 
 It MERGES the two previously-separate guards into ONE fail-closed decision:
 
-* ``pre_tool_use_dod_completion_guard.sh`` receipt semantics (a fresh
-  ``ModelDodReceipt`` with ``status == PASS``), and
+* ``pre_tool_use_dod_completion_guard.sh`` receipt semantics (a ``status == PASS``
+  ``node_dod_verify`` receipt bound to the ticket), and
 * ``linear_done_verify.py`` merged-PR semantics (every PR cited in the ticket
   description is ``MERGED``).
 
-Neither guard ALONE closes the incident: the DoD guard fails OPEN when
-``ONEX_EVIDENCE_ROOT`` is unset, and the PR guard ALLOWS when the ticket cites
-no PR at all (``no_pr_references``) — exactly the incident shape. A single guard
-is required because the pass condition is a *disjunction* ("a merged-PR citation
+Neither guard ALONE closes the incident: the DoD guard fails OPEN when its
+evidence root is unset, and the PR guard ALLOWS when the ticket cites no PR at
+all (``no_pr_references``) — exactly the incident shape. A single guard is
+required because the pass condition is a *disjunction* ("a merged-PR citation
 OR a receipt-PASS"), and a hook can only block or pass through — two independent
 hooks each pass on their own criterion and the fabricated Done slips through.
 
@@ -38,23 +38,31 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
    every cited PR is ``MERGED`` → ALLOW. If any cited PR is open / unmerged →
    BLOCK. (A "superseded-by-merged-sibling" close is a merged-PR citation and is
    accepted here.)
-4. Durable evidence path B — mechanized ``dod_verify``: run the DETERMINISTIC
-   LOCAL ``node_dod_verify`` path (``python -m omnimarket.nodes.node_dod_verify``
-   — NO Kafka; the documented ``onex run-node`` dispatch hard-requires an
-   unreachable broker, OMN-13857) and require a fresh ``status == PASS``
-   ``ModelDodReceipt`` → ALLOW.
+4. Durable evidence path B — OCC receipt on ``origin/dev``: a schema-valid
+   ``status == PASS`` ``node_dod_verify`` receipt bound to the ticket under
+   ``drift/dod_receipts/<TICKET>/`` on ``origin/dev`` of the local
+   onex_change_control clone → ALLOW.
 5. Otherwise → BLOCK. A Done-flip with no merged-PR citation and no PASS receipt
-   is refused; if ``dod_verify`` cannot be made to run at all, the guard STILL
-   BLOCKS (never fail-open on a fake-Done — design requirement 4).
+   is refused; if the evidence cannot be resolved at all, the guard STILL BLOCKS
+   (never fail-open on a fake-Done — design requirement 4).
 
-Deterministic contract-root resolution (OMN-13857):
-    ``node_dod_verify``'s evidence-check templates embed a ``$CONTRACT_REPO_DIR``
-    token that, when unexported, false-negatives every check (real evidence →
-    reported "failed"). This guard does NOT rely on an ambient ``CONTRACT_REPO_DIR``
-    — it resolves the contract root deterministically from ``OMNI_HOME``
-    (``$OMNI_HOME/onex_change_control``) and exports it for the child process.
-    The node-side fix (deriving the root inside the node for all callers) is
-    tracked in OMN-13857; this guard is self-sufficient regardless.
+Why ``origin/dev`` git-backed (freshness + determinism) — OMN-13857 findings:
+    Two paths that LOOK authoritative are broken for a Done-flip gate:
+    (a) the remote ``node_dod_verify`` Kafka consumer answers from a STALE
+        onex_change_control mirror (it returned "no contract" for a same-day
+        ticket that genuinely had one) — gating on it would FALSE-BLOCK
+        legitimate recent Done-flips;
+    (b) running ``node_dod_verify`` locally reads the clone's WORKING TREE — if
+        that tree is behind ``origin/dev`` a just-merged receipt is invisible,
+        the same false-block failure mode, just local; it also depends on an
+        ambient ``$CONTRACT_REPO_DIR`` that false-negatives when unset.
+    This guard sidesteps BOTH: it resolves the OCC clone deterministically from
+    ``OMNI_HOME`` (``$OMNI_HOME/onex_change_control``), does a targeted
+    ``git fetch origin dev`` to refresh, and reads the receipt directly off the
+    ``origin/dev`` ref (``git ls-tree`` / ``git show``) — fresh, git-backed, no
+    remote-consumer dependency and no ambient-env dependency. This mirrors the
+    OMN-13853 ``OccReceiptSubprocessProbe`` approach. The remote-consumer and
+    ``$CONTRACT_REPO_DIR`` node-side defects are tracked in OMN-13857.
 
 Exit codes (via :func:`main`):
     0 — allow the tool call
@@ -65,12 +73,11 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess  # noqa: S404 - deterministic local node invocation, fixed argv
+import re
+import subprocess  # noqa: S404 - fixed-argv git invocations, no shell
 import sys
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -84,17 +91,24 @@ from linear_done_verify import (
     verify,
 )
 
-# A receipt older than this is not trusted as proof of a *current* Done. Matches
-# the freshness window enforced by pre_tool_use_dod_completion_guard.sh.
-_RECEIPT_MAX_AGE_SECONDS = 30 * 60
-
 _LINEAR_TOOLS = frozenset(
     {"mcp__linear-server__save_issue", "mcp__linear-server__update_issue"}
 )
 
-# How long the mechanized dod_verify child process is allowed to run before the
-# guard treats it as "could not verify" and fails closed.
-_DOD_VERIFY_TIMEOUT_SECONDS = 120
+# The OCC governance ref to read durable receipts from. OCC governance is
+# dev-targeted — receipts land on ``dev`` first (OMN-12593), so ``origin/dev``
+# is the authoritative fresh surface for a Done-flip gate.
+_OCC_REF = "origin/dev"
+
+# Receipt directory prefix under the OCC repo root (matches the platform layout
+# node_pr_lifecycle_fix_effect writes: drift/dod_receipts/<TICKET>/<ITEM>/command.yaml).
+_RECEIPT_DIR_PREFIX = "drift/dod_receipts"
+
+# Git subprocess budgets. A PreToolUse hook must stay responsive; a Done-flip is
+# infrequent so a short fetch is acceptable, but everything is bounded and any
+# failure/timeout falls through to the fail-closed BLOCK.
+_GIT_FETCH_TIMEOUT_SECONDS = 20
+_GIT_READ_TIMEOUT_SECONDS = 15
 
 
 @dataclass(frozen=True)
@@ -114,8 +128,8 @@ def resolve_omni_home() -> Path | None:
     """Return ``$OMNI_HOME`` as a Path, or ``None`` when unset/nonexistent.
 
     Fail-fast philosophy (CLAUDE.md rule 8): the guard never silently invents a
-    default OMNI_HOME. When it is unresolvable, path B (dod_verify) cannot run,
-    and the caller falls through to the fail-closed BLOCK.
+    default OMNI_HOME. When it is unresolvable, path B (the OCC receipt read)
+    cannot run and the caller falls through to the fail-closed BLOCK.
     """
     raw = os.environ.get("OMNI_HOME", "").strip()
     if not raw:
@@ -124,177 +138,138 @@ def resolve_omni_home() -> Path | None:
     return path if path.is_dir() else None
 
 
-def contract_repo_dir(omni_home: Path) -> Path:
-    """Return the deterministic onex_change_control repo root under OMNI_HOME.
+def occ_repo_path(omni_home: Path) -> Path:
+    """Return the deterministic onex_change_control clone root under OMNI_HOME.
 
-    This is the value the guard exports as ``CONTRACT_REPO_DIR`` for the
-    dod_verify child — resolved from a known repo-relative anchor, never read
-    from the ambient environment (OMN-13857). Pure function.
+    Resolved from a known repo-relative anchor, never read from the ambient
+    environment (OMN-13857 — the ``$CONTRACT_REPO_DIR`` dependency is exactly
+    what false-negatives when unset). Pure function.
     """
     return omni_home / "onex_change_control"
 
 
 # ---------------------------------------------------------------------------
-# Receipt classification (ModelDodReceipt — status=PASS, fresh, well-shaped)
+# Git-backed OCC receipt probe (reads origin/dev — fresh, deterministic)
 # ---------------------------------------------------------------------------
 
 
-def verified_check_counts(receipt: dict[str, Any]) -> tuple[int, int, int] | None:
-    """Return ``(verified, failed, skipped)`` from a receipt, or ``None``.
+def _run_git(
+    args: list[str], *, cwd: Path, timeout: int
+) -> subprocess.CompletedProcess[str] | None:
+    """Run ``git -C <cwd> <args>``; return the completed process or ``None``.
 
-    node_dod_verify records the per-check tally as a JSON blob in the receipt's
-    ``probe_stdout`` field: ``{"total", "verified", "failed", "skipped", ...}``.
-    This is the ONLY field that distinguishes a real durable PASS (>=1 check
-    actually verified) from a vacuous PASS where the node found no contract and
-    SKIPPED everything (``verified == 0``) — the latter is reported ``PASS`` by
-    the node but is NOT evidence. Returns ``None`` when the tally cannot be
-    parsed, which the caller treats as fail-closed. Pure function.
+    ``None`` on timeout / OSError so every caller can fail closed. Fixed argv,
+    no shell.
     """
-    blob = receipt.get("probe_stdout")
-    if not isinstance(blob, str) or not blob.strip():
-        return None
     try:
-        parsed = json.loads(blob)
-    except json.JSONDecodeError:
+        return subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "-C", str(cwd), *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
         return None
-    if not isinstance(parsed, dict):
-        return None
-    verified = parsed.get("verified")
-    failed = parsed.get("failed")
-    skipped = parsed.get("skipped")
-    if (
-        not isinstance(verified, int)
-        or not isinstance(failed, int)
-        or not isinstance(skipped, int)
-    ):
-        return None
-    return verified, failed, skipped
 
 
-def classify_receipt(
-    receipt: dict[str, Any] | None,
-    *,
-    now: datetime | None = None,
-) -> str:
-    """Classify a dod_verify receipt dict. Returns ``"pass"`` or a failure token.
+def parse_receipt_fields(text: str) -> dict[str, str]:
+    """Extract top-level scalar ``key: value`` fields from a receipt YAML.
 
-    Fail-closed: ``"pass"`` requires ALL of — a fresh, well-shaped
-    ``ModelDodReceipt``; ``status == PASS``; and a per-check tally proving at
-    least one check was actually VERIFIED with zero failures. The last clause is
-    decisive: node_dod_verify reports ``status == PASS`` for a ticket with NO
-    contract (every check SKIPPED, ``verified == 0``) — a vacuous PASS that is
-    NOT durable evidence and is exactly the ``wf_1628d9a5`` incident shape. Any
-    other outcome (missing receipt, missing/blank/non-ISO ``run_timestamp``,
-    stale, non-PASS status, unparseable or zero-verified tally) returns a
-    descriptive non-``"pass"`` token. Mirrors and hardens the validation in
-    pre_tool_use_dod_completion_guard.sh.
+    Dependency-free (no PyYAML at hook time). node_dod_verify's committed
+    receipts are flat ``ModelDodReceipt`` YAML with a couple of block scalars
+    (``probe_stdout: |``); block-scalar bodies are indented and therefore never
+    match the top-level ``key:`` pattern, so they are safely ignored. Only the
+    first occurrence of each key is kept. Pure function.
     """
-    if receipt is None:
-        return "missing"
-
-    run_ts = receipt.get("run_timestamp")
-    if not isinstance(run_ts, str) or not run_ts.strip():
-        return "missing_run_timestamp"
-    try:
-        receipt_time = datetime.fromisoformat(run_ts)
-    except ValueError:
-        return "parse_error:run_timestamp is not ISO-8601"
-    if receipt_time.tzinfo is None:
-        return "parse_error:run_timestamp must be timezone-aware"
-
-    reference = now or datetime.now(tz=UTC)
-    age = (reference - receipt_time).total_seconds()
-    if age > _RECEIPT_MAX_AGE_SECONDS:
-        return "stale"
-
-    status = receipt.get("status")
-    if not isinstance(status, str) or not status.strip():
-        return "missing_status"
-    status_norm = status.strip().upper()
-    if status_norm != "PASS":
-        return f"status_not_pass:{status_norm}"
-
-    # Decisive check: a PASS is durable evidence only if it verified >=1 real
-    # check with zero failures. A no-contract PASS (verified == 0) is refused.
-    counts = verified_check_counts(receipt)
-    if counts is None:
-        return "no_verified_checks"
-    verified, failed, _skipped = counts
-    if failed > 0:
-        return f"status_not_pass:PASS_WITH_{failed}_FAILURES"
-    if verified < 1:
-        return "no_verified_checks"
-    return "pass"
+    fields: dict[str, str] = {}
+    key_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
+    for line in text.splitlines():
+        match = key_re.match(line)
+        if match is None:
+            continue
+        key, raw_val = match.group(1), match.group(2).strip()
+        if key in fields:
+            continue
+        # Skip block-scalar indicators — the value is on following indented lines.
+        if raw_val in ("|", ">", "|-", ">-", "|+", ">+", ""):
+            fields[key] = ""
+            continue
+        fields[key] = raw_val.strip().strip('"').strip("'")
+    return fields
 
 
-# ---------------------------------------------------------------------------
-# Mechanized dod_verify runner (deterministic local path — NO Kafka)
-# ---------------------------------------------------------------------------
+def _receipt_is_pass_bound(fields: dict[str, str], ticket_id: str) -> bool:
+    """Return True if a parsed receipt is a real PASS bound to ``ticket_id``.
+
+    Requires ``status == PASS``, a matching ``ticket_id``, and a real check
+    binding (``evidence_item_id`` + ``check_type`` present). The check-binding
+    requirement is the git-backed equivalent of the "at least one real verified
+    check" rule — it refuses a vacuous/empty receipt as durable evidence.
+    """
+    return (
+        fields.get("status", "").strip().upper() == "PASS"
+        and fields.get("ticket_id", "").strip() == ticket_id
+        and bool(fields.get("evidence_item_id", "").strip())
+        and bool(fields.get("check_type", "").strip())
+    )
 
 
-def run_dod_verify_local(
+def occ_receipt_pass_on_dev(
+    occ_repo: Path,
     ticket_id: str,
     *,
-    omni_home: Path,
-    timeout: int = _DOD_VERIFY_TIMEOUT_SECONDS,
-) -> dict[str, Any] | None:
-    """Run node_dod_verify via the deterministic local module path.
+    ref: str = _OCC_REF,
+    fetch: bool = True,
+) -> bool:
+    """Return True iff a PASS receipt bound to ``ticket_id`` exists on ``ref``.
 
-    Invokes ``uv run --project <OMNI_HOME>/omnimarket python -m
-    omnimarket.nodes.node_dod_verify --ticket-id <id> --output-path <tmp>`` with
-    ``CONTRACT_REPO_DIR`` exported deterministically. This is the NON-Kafka path
-    (OMN-13857 finding 1: the documented ``onex run-node`` dispatch hard-requires
-    an unreachable broker; ``onex`` CLI extensions also currently fail to load in
-    this env — the ``python -m`` module entry bypasses both).
+    Reads the durable receipt directly off the ``origin/dev`` ref of the local
+    onex_change_control clone (``git ls-tree`` + ``git show``), after a targeted
+    ``git fetch origin dev`` so a just-merged receipt is visible even when the
+    clone's working tree is stale. Fail-closed: returns ``False`` on missing
+    clone, unreadable ref, no receipt, malformed receipt, non-PASS, or a receipt
+    not bound to the ticket + a real check.
 
-    Returns the parsed receipt dict, or ``None`` on any failure (missing repo,
-    non-zero exit with no receipt, timeout, unparseable output). ``None`` maps to
-    a fail-closed BLOCK in the caller.
+    The fetch is best-effort — if it fails (offline / transient), the last-known
+    ``origin/dev`` ref is still read rather than hard-failing; the guard never
+    fails OPEN, only reads a possibly-older ref.
     """
-    market_repo = omni_home / "omnimarket"
-    if not market_repo.is_dir():
-        return None
+    if not occ_repo.is_dir():
+        return False
 
-    child_env = dict(os.environ)
-    # Deterministic contract-root resolution — the crux of OMN-13857. Do NOT
-    # inherit an ambient (possibly-unset) CONTRACT_REPO_DIR.
-    child_env["CONTRACT_REPO_DIR"] = str(contract_repo_dir(omni_home))
+    if fetch:
+        # Best-effort refresh of the dev ref. Ignore the result — a failed fetch
+        # falls through to reading the existing origin/dev ref.
+        _run_git(
+            ["fetch", "--quiet", "origin", "dev"],
+            cwd=occ_repo,
+            timeout=_GIT_FETCH_TIMEOUT_SECONDS,
+        )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        receipt_path = Path(tmpdir) / "dod_report.json"
-        cmd = [
-            "uv",
-            "run",
-            "--project",
-            str(market_repo),
-            "python",
-            "-m",
-            "omnimarket.nodes.node_dod_verify",
-            "--ticket-id",
-            ticket_id,
-            "--output-path",
-            str(receipt_path),
-        ]
-        try:
-            subprocess.run(  # noqa: S603 - fixed argv, no shell, deterministic
-                cmd,
-                cwd=str(market_repo),
-                env=child_env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return None
+    receipt_dir = f"{_RECEIPT_DIR_PREFIX}/{ticket_id}"
+    listing = _run_git(
+        ["ls-tree", "-r", "--name-only", ref, "--", receipt_dir],
+        cwd=occ_repo,
+        timeout=_GIT_READ_TIMEOUT_SECONDS,
+    )
+    if listing is None or listing.returncode != 0 or not listing.stdout.strip():
+        return False
 
-        if not receipt_path.exists():
-            return None
-        try:
-            parsed = json.loads(receipt_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return None
-    return parsed if isinstance(parsed, dict) else None
+    for rel_path in listing.stdout.splitlines():
+        rel_path = rel_path.strip()
+        if not rel_path.endswith(".yaml"):
+            continue
+        shown = _run_git(
+            ["show", f"{ref}:{rel_path}"],
+            cwd=occ_repo,
+            timeout=_GIT_READ_TIMEOUT_SECONDS,
+        )
+        if shown is None or shown.returncode != 0:
+            continue
+        if _receipt_is_pass_bound(parse_receipt_fields(shown.stdout), ticket_id):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -323,16 +298,15 @@ def _default_linear_fetcher(ticket_id: str) -> dict[str, Any] | None:
 def decide(
     call: dict[str, Any],
     *,
-    dod_verify_runner: Callable[[str], dict[str, Any] | None] | None = None,
+    occ_probe: Callable[[str], bool] | None = None,
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
-    now: datetime | None = None,
 ) -> Decision:
     """Return the guard decision for a PreToolUse tool call.
 
     All I/O boundaries are injectable so unit tests stay hermetic:
-      * ``dod_verify_runner(ticket_id) -> receipt|None`` — mechanized dod_verify;
-        defaults to the local module runner bound to the resolved OMNI_HOME.
+      * ``occ_probe(ticket_id) -> bool`` — is a PASS OCC receipt on ``origin/dev``?
+        defaults to :func:`occ_receipt_pass_on_dev` bound to the resolved OCC clone.
       * ``pr_fetcher(PRRef) -> PRStatus`` — GitHub PR state (default: ``gh``).
       * ``linear_fetcher(ticket_id) -> issue|{}|None`` — live Linear read.
     """
@@ -360,8 +334,8 @@ def decide(
 
     # Status-only updates commonly omit the description; read it live so PR
     # citations and exemption labels can be evaluated. None => Linear
-    # unreachable: do NOT allow on that basis — fall through to dod_verify,
-    # which reads OCC governance, not Linear.
+    # unreachable: do NOT allow on that basis — fall through to the OCC receipt
+    # path, which reads git-backed governance, not Linear.
     if not description and ticket_id:
         issue = linear_fetcher(ticket_id)
         if isinstance(issue, dict) and issue:
@@ -389,7 +363,7 @@ def decide(
 
     # pr_result.allowed with reason "no_pr_references" is NOT durable evidence on
     # its own — this is the incident shape (Done, no PR cited). Fall through to
-    # the mechanized dod_verify receipt path; do NOT allow here.
+    # the git-backed OCC receipt path; do NOT allow here.
 
     if not ticket_id:
         return Decision(
@@ -398,60 +372,34 @@ def decide(
             "an issue id. Pass 'id' in the save_issue call.",
         )
 
-    # (4) durable evidence path B — mechanized, deterministic-local dod_verify.
-    runner = dod_verify_runner
-    if runner is None:
+    # (4) durable evidence path B — PASS OCC receipt on origin/dev (git-backed).
+    probe = occ_probe
+    if probe is None:
         omni_home = resolve_omni_home()
         if omni_home is None:
             return Decision(
                 False,
                 "no_durable_evidence: OMNI_HOME is unset/invalid, so the local "
-                "dod_verify path cannot run and no merged-PR citation was found. "
-                "Failing closed (design requirement 4 — never fail-open on a "
-                "fake-Done). Set OMNI_HOME, or cite the merged implementing PR in "
-                "the ticket description.",
+                "onex_change_control clone cannot be resolved and no merged-PR "
+                "citation was found. Failing closed (design requirement 4 — never "
+                "fail-open on a fake-Done). Set OMNI_HOME, or cite the merged "
+                "implementing PR in the ticket description.",
             )
-        runner = lambda tid: run_dod_verify_local(tid, omni_home=omni_home)  # noqa: E731
+        repo = occ_repo_path(omni_home)
+        probe = lambda tid: occ_receipt_pass_on_dev(repo, tid)  # noqa: E731
 
-    receipt = runner(ticket_id)
-    verdict = classify_receipt(receipt, now=now)
-    if verdict == "pass":
-        return Decision(True, "durable_evidence:dod_receipt_pass")
+    if probe(ticket_id):
+        return Decision(True, "durable_evidence:occ_receipt_on_dev")
 
-    return Decision(False, _block_reason_for_verdict(verdict, ticket_id))
-
-
-def _block_reason_for_verdict(verdict: str, ticket_id: str) -> str:
-    """Render a fail-closed block reason for a non-pass receipt verdict."""
-    base = (
+    return Decision(
+        False,
         f"no_durable_evidence for {ticket_id}: no merged-PR citation in the "
-        "description, and the mechanized dod_verify path did not return a fresh "
-        "PASS receipt "
-    )
-    if verdict == "missing":
-        detail = (
-            "(dod_verify produced no receipt — no OCC contract for this ticket, or "
-            "the local node invocation failed). "
-        )
-    elif verdict == "no_verified_checks":
-        detail = (
-            "(dod_verify returned PASS but verified ZERO real checks — no contract "
-            "found, so there is nothing proving this ticket is Done). "
-        )
-    elif verdict == "stale":
-        detail = "(the receipt is older than 30 minutes — re-run dod_verify). "
-    elif verdict.startswith("status_not_pass:"):
-        detail = f"(receipt status is {verdict.split(':', 1)[1]!r}, not PASS). "
-    elif verdict.startswith("parse_error:"):
-        detail = f"(receipt malformed: {verdict.split(':', 1)[1]}). "
-    else:
-        detail = f"({verdict}). "
-    return (
-        base
-        + detail
-        + "Fail-closed (no fake Done). Cite the merged implementing PR in the "
-        "ticket description, add durable OCC evidence, or apply an explicit "
-        "close-if-done exemption for a legitimate no-PR close."
+        f"description, and no PASS node_dod_verify receipt bound to the ticket is "
+        f"tracked under {_RECEIPT_DIR_PREFIX}/{ticket_id}/ on {_OCC_REF} of the "
+        "local onex_change_control clone. Fail-closed (no fake Done). Cite the "
+        "merged implementing PR in the ticket description, land a durable OCC "
+        "receipt, or apply an explicit close-if-done exemption for a legitimate "
+        "no-PR close.",
     )
 
 
