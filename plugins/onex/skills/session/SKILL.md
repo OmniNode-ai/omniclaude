@@ -47,9 +47,24 @@ outputs:
 - **No inline orchestration**: phases 1/2/3 live in the handler, not this skill
 - **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
 
+**Canonical dispatch (Kafka required):**
+
 ```bash
-cd "$ONEX_WORKTREES_ROOT/omnimarket"
-uv run onex node node_session_orchestrator --input <envelope>
+cd "$OMNI_HOME/omnimarket"
+uv run onex run-node node_session_orchestrator --input '<envelope-json>'
 ```
 
-See `prompt.md` for envelope construction.
+**Local fallback (no Kafka — use whenever the broker is unreachable, the common
+case on a dev Mac):**
+
+```bash
+cd "$OMNI_HOME/omnimarket"
+uv run onex node node_session_orchestrator --input <envelope-file>.json --output receipt
+```
+
+`onex run-node` publishes to Kafka and polls for the terminal event; `onex node`
+(alias `onex run`) executes the same node on the local runtime with no broker.
+Both accept the same envelope shape — see `prompt.md` for its field names and
+an example file. `$OMNI_HOME/omnimarket` is the canonical registry clone
+(`omni_home` root), not a ticket-scoped worktree — worktrees never have a bare
+`omnimarket` directory.

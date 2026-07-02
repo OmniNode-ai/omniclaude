@@ -152,7 +152,9 @@ Would dispatch: OMN-7300, OMN-7305
 
 ## State Files
 
-All state written to `.onex_state/pipeline-fill/`:
+All state written to `$ONEX_STATE_DIR/pipeline-fill/` (not a cwd-relative
+`.onex_state/pipeline-fill/` — verified live 2026-07-02: the node resolves
+`state_dir` through `$ONEX_STATE_DIR`, not the request model's literal default):
 
 | File | Purpose |
 |------|---------|
@@ -180,7 +182,15 @@ All state written to `.onex_state/pipeline-fill/`:
 
 - **Classification**: Deterministic
 - **Backing node**: `node_pipeline_fill`
-- **Dispatch**: `onex run-node node_pipeline_fill`
+- **Dispatch (Kafka required)**: `onex run-node node_pipeline_fill --input '<envelope-json>'`
+- **Local fallback (no Kafka — use whenever the broker is unreachable, the
+  common case on a dev Mac)**: `onex node node_pipeline_fill --input <envelope-file>.json --output receipt`
+
+Both forms run from `$OMNI_HOME/omnimarket` (canonical registry clone) and
+accept the same `ModelPipelineFillCommand` fields (`correlation_id`, `top_n`,
+`wave_cap`, `min_score`, `dry_run`, `state_dir`) — `run-node`'s `--input` takes
+the JSON payload inline as text, `node`/`run`'s `--input` takes a path to a
+JSON file.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 

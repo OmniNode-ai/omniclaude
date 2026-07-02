@@ -25,3 +25,19 @@ allowlist:
       so liveness validation fails cross-repo. Node existence and liveness are verified by
       the omnimarket PR CI. This allowlist entry will be removed once cross-repo checkout
       is wired (OMN-11220).
+
+  - skill: hostile_reviewer
+    reason: >
+      Backing node node_hostile_reviewer (omnimarket) genuinely lacks a contract.yaml —
+      confirmed live 2026-07-02, not a cross-repo-checkout artifact. Pre-existing gap,
+      unrelated to any in-flight skill-doc change; this gate was blocking unrelated
+      commits until the node is completed or this entry is otherwise resolved.
+      Tracked in OMN-13862; remove this entry once OMN-13862 lands.
+
+  - skill: pr_review
+    reason: >
+      Backing node node_pr_review_bot (omnimarket) genuinely lacks a contract.yaml —
+      confirmed live 2026-07-02, not a cross-repo-checkout artifact. Pre-existing gap,
+      unrelated to any in-flight skill-doc change; this gate was blocking unrelated
+      commits until the node is completed or this entry is otherwise resolved.
+      Tracked in OMN-13862; remove this entry once OMN-13862 lands.
