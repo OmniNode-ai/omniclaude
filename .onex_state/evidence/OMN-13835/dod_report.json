@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-13835",
+  "status": "PASS",
+  "generated_at": "2026-07-02T06:58:00Z",
+  "summary": "Skill-substitution guard and restored onex hook registrations verified for omniclaude PR #1831.",
+  "checks": [
+    {
+      "name": "focused_guard_tests",
+      "status": "PASS",
+      "evidence": "tests/unit/hooks/test_pre_tool_use_skill_substitution_guard.py -> 17 passed"
+    },
+    {
+      "name": "static_quality",
+      "status": "PASS",
+      "evidence": "ruff format/check clean; mypy src/omniclaude/ successful; pre-commit/pre-push hooks passed on changed files"
+    },
+    {
+      "name": "occ_receipts",
+      "status": "PASS",
+      "evidence": "Central OCC evidence merged in onex_change_control PR #3460 for OMN-13835"
+    }
+  ]
+}
