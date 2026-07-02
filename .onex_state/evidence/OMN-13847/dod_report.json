@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-13847",
+  "status": "PASS",
+  "run_timestamp": "2026-07-02T18:40:00Z",
+  "summary": "PASS: omniclaude PR #1834 adds per-hook wall-clock latency instrumentation and focused unit coverage; central OCC evidence is merged in onex_change_control PR #3487.",
+  "checks": [
+    {
+      "name": "focused unit tests",
+      "status": "PASS",
+      "command": "uv run pytest tests/unit/hooks/lib/test_hook_latency_instrumentation.py -q"
+    },
+    {
+      "name": "OCC evidence",
+      "status": "PASS",
+      "command": "Evidence-Ticket: OMN-13847; Evidence-Source: OCC#3487"
+    }
+  ]
+}
