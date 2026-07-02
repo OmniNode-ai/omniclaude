@@ -8,10 +8,14 @@ onex hook surface, destroying the deliberate OMN-13244 measurement baseline
 latency/usefulness is being measured -- they must stay disabled until an
 explicit operator decision re-registers them.
 
-These tests lock in the baseline so an accidental re-enable is caught by CI:
+OMN-13856 (operator-approved, 2026-07-02) carves ONE exception into that
+baseline: the Done-flip durable-evidence guard is re-registered as the minimal
+"Option A" carve-out (no fake Done). Everything else stays disabled. These tests
+therefore lock in a *narrowed* baseline:
 
-1. ``plugins/onex/hooks/hooks.json`` carries an EMPTY ``hooks`` object while
-   retaining the ``$schema`` / ``description`` / ``version`` metadata keys.
+1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard and
+   nothing else, while retaining the ``$schema`` / ``description`` / ``version``
+   metadata keys.
 2. The skill-substitution guard machinery (module, config YAML, wrapper
    script, tests) REMAINS on disk -- unregistered, so activating it later is
    a one-line config add and an explicit operator decision, not a code
@@ -39,19 +43,50 @@ _GUARD_FILES = (
 )
 
 
-def test_hooks_json_is_empty_measurement_baseline() -> None:
-    """hooks.json must carry an empty ``hooks`` object (OMN-13244 baseline).
+# The ONLY hook re-registered by the OMN-13856 Option A carve-out.
+_DONE_FLIP_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
+)
 
-    Every hook registration is intentionally removed so Claude Code invokes no
-    onex hooks. Re-enabling is an explicit operator decision, not an accidental
-    revert.
+
+def test_hooks_json_is_narrowed_option_a_baseline() -> None:
+    """hooks.json registers EXACTLY the Done-flip guard (OMN-13856 carve-out).
+
+    The OMN-13244 measurement baseline stays intact for every context-injection
+    hook; the operator-approved OMN-13856 carve-out re-registers ONE guard — the
+    Done-flip durable-evidence gate — and nothing else. Any additional
+    registration means the disabled measurement hooks were re-enabled without an
+    explicit operator decision (see OMN-13846); a removal of this entry means the
+    fake-Done gate regressed.
     """
     data = json.loads(_HOOKS_JSON.read_text())
-    assert data.get("hooks") == {}, (
-        "plugins/onex/hooks/hooks.json must carry an EMPTY 'hooks' object for the "
-        "OMN-13244 measurement baseline. A non-empty 'hooks' object means the "
-        "disabled context-injection hooks were re-registered without an explicit "
-        f"operator decision (see OMN-13846). Found: {data.get('hooks')!r}"
+    hooks = data.get("hooks", {})
+
+    # Exactly one event class, PreToolUse, is registered.
+    assert set(hooks.keys()) == {"PreToolUse"}, (
+        "hooks.json must register ONLY PreToolUse for the OMN-13856 Option A "
+        f"carve-out (measurement baseline otherwise intact). Found event classes: "
+        f"{sorted(hooks.keys())!r}"
+    )
+
+    # Exactly one command is wired, and it is the Done-flip guard.
+    commands = [
+        hook.get("command", "")
+        for group in hooks["PreToolUse"]
+        for hook in group.get("hooks", [])
+    ]
+    assert commands == [_DONE_FLIP_GUARD_COMMAND], (
+        "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
+        "guard and nothing else (OMN-13856 Option A carve-out). A different or "
+        "additional command means either the measurement baseline was re-enabled "
+        "without an operator decision (OMN-13846) or the fake-Done gate regressed. "
+        f"Found: {commands!r}"
+    )
+
+    # The matcher must target the Linear write tools that flip Done.
+    matchers = [group.get("matcher", "") for group in hooks["PreToolUse"]]
+    assert matchers == ["^mcp__linear-server__(save_issue|update_issue)$"], (
+        f"Done-flip guard must match Linear save_issue/update_issue. Found: {matchers!r}"
     )
 
 
