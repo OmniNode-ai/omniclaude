@@ -251,6 +251,15 @@ class TestHooksJsonRegistration:
                 for hook in entry.get("hooks", [])
             )
         ]
+        if not sweep_entries:
+            # The OMN-13856 Option A carve-out re-registers ONLY the Done-flip
+            # guard into the otherwise-empty OMN-13244 baseline; the sweep
+            # preflight hook stays disabled. Skip rather than fail — re-enable
+            # this assertion when the sweep preflight hook is re-registered.
+            pytest.skip(
+                "Sweep preflight not registered (OMN-13856 Option A carve-out "
+                "registers only the Done-flip guard)."
+            )
         assert len(sweep_entries) == 1, (
             "Sweep preflight should be registered exactly once"
         )
