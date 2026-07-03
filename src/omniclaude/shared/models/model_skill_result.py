@@ -4,8 +4,8 @@
 
 ``ModelSkillResult`` is the lightweight result envelope every omniclaude skill
 dispatch node (``handle_skill_requested``, the claude-code-session backends, the
-local-llm-inference backends) returns: a skill name, a canonical status, and a
-free-form ``extra`` string map carrying the skill ``output`` and/or ``error``.
+local-llm-inference backends) returns: a skill name, a canonical status, optional
+``output``/``error`` strings, and the request ``correlation_id``.
 
 Why this is a LOCAL model (OMN-13894)
 -------------------------------------
@@ -24,14 +24,16 @@ fabricate meaningless receipt fields (``exit_code=0``, ``run_id=uuid4()``,
 
 The correct migration decouples omniclaude's internal result type from core's
 receipt envelope. Only the shared status *vocabulary*
-(``EnumSkillResultStatus``) stays sourced from core — that enum is stable and
-still exported in 0.46.x. This keeps the exact ``{skill_name, status, extra}``
-shape every existing call site and consumer already uses, so the omnibase_core
-bump to 0.46.4 (needed for ``omnibase_core.validation.no_faked_boundary``) lands
-without churning dispatch code. See OMN-13894 / OMN-13501 / OMN-13502.
+(``EnumSkillResultStatus``) stays sourced from core; that enum is stable and
+still exported in 0.46.x. This preserves omniclaude's runtime result shape while
+allowing the omnibase_core bump to 0.46.4 (needed for
+``omnibase_core.validation.no_faked_boundary``) to land without importing a
+removed core path. See OMN-13894 / OMN-13501 / OMN-13502.
 """
 
 from __future__ import annotations
+
+from uuid import UUID
 
 from omnibase_core.enums.enum_skill_result_status import (
     EnumSkillResultStatus as SkillResultStatus,
@@ -47,9 +49,9 @@ class ModelSkillResult(BaseModel):
     Attributes:
         skill_name: Human-readable skill identifier matching the request.
         status: Final status of the skill invocation.
-        extra: Free-form string map. Conventionally carries ``"output"``
-            (raw skill output) and/or ``"error"`` (error detail). Consumers
-            read ``result.extra.get("output")`` / ``result.extra.get("error")``.
+        output: Raw output text from the skill, when available.
+        error: Error detail when status is FAILED or PARTIAL.
+        correlation_id: Correlation ID carried through from the request.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
@@ -63,12 +65,17 @@ class ModelSkillResult(BaseModel):
         ...,
         description="Final status of the skill invocation",
     )
-    extra: dict[str, str] = Field(
-        default_factory=dict,
-        description=(
-            "Free-form string map carrying the skill output and/or error "
-            "detail (conventional keys: 'output', 'error')"
-        ),
+    output: str | None = Field(
+        default=None,
+        description="Raw output text from the skill",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error detail when status is FAILED or PARTIAL",
+    )
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID carried through from the request",
     )
 
 

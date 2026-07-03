@@ -25,6 +25,7 @@ import logging
 import os
 import subprocess
 from asyncio.subprocess import PIPE
+from uuid import uuid4
 
 from omniclaude.nodes.node_claude_code_session_effect.models import (
     ModelClaudeCodeSessionRequest,
@@ -161,7 +162,8 @@ class SubprocessClaudeCodeSessionBackend:
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.SUCCESS,
-            extra={"output": "session_start is a no-op in subprocess backend"},
+            output="session_start is a no-op in subprocess backend",
+            correlation_id=request.correlation_id or uuid4(),
         )
 
     async def session_query(
@@ -192,7 +194,8 @@ class SubprocessClaudeCodeSessionBackend:
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    extra={"error": f"SUBPROCESS_LAUNCH_ERROR: {exc}"},
+                    error=f"SUBPROCESS_LAUNCH_ERROR: {exc}",
+                    correlation_id=request.correlation_id or uuid4(),
                 )
             try:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
@@ -209,9 +212,8 @@ class SubprocessClaudeCodeSessionBackend:
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    extra={
-                        "error": f"TIMEOUT: claude process exceeded {self._TIMEOUT_S}s"
-                    },
+                    error=f"TIMEOUT: claude process exceeded {self._TIMEOUT_S}s",
+                    correlation_id=request.correlation_id or uuid4(),
                 )
 
             stdout_text = self._truncate_output(stdout_bytes)
@@ -221,19 +223,19 @@ class SubprocessClaudeCodeSessionBackend:
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    extra={
-                        "error": (
-                            f"SUBPROCESS_ERROR: claude exited with code "
-                            f"{proc.returncode}"
-                            f"{f' -- stderr: {stderr_tail}' if stderr_tail else ''}"
-                        )
-                    },
+                    error=(
+                        f"SUBPROCESS_ERROR: claude exited with code "
+                        f"{proc.returncode}"
+                        f"{f' -- stderr: {stderr_tail}' if stderr_tail else ''}"
+                    ),
+                    correlation_id=request.correlation_id or uuid4(),
                 )
 
             return ModelSkillResult(
                 skill_name=request.skill_name,
                 status=SkillResultStatus.SUCCESS,
-                extra={"output": stdout_text},
+                output=stdout_text,
+                correlation_id=request.correlation_id or uuid4(),
             )
 
     async def session_end(
@@ -250,7 +252,8 @@ class SubprocessClaudeCodeSessionBackend:
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.SUCCESS,
-            extra={"output": "session_end is a no-op in subprocess backend"},
+            output="session_end is a no-op in subprocess backend",
+            correlation_id=request.correlation_id or uuid4(),
         )
 
     # ------------------------------------------------------------------
@@ -281,5 +284,6 @@ class SubprocessClaudeCodeSessionBackend:
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.FAILED,
-            extra={"error": "BACKEND_UNAVAILABLE: claude CLI is not available"},
+            error="BACKEND_UNAVAILABLE: claude CLI is not available",
+            correlation_id=request.correlation_id or uuid4(),
         )

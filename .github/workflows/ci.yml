@@ -1108,12 +1108,20 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # On a dev->main promotion PR the entire dev delta shows as "changed"
+            # vs main, which re-litigates pre-existing baseline violations that
+            # were already gated when each piece merged to dev. Scope the diff
+            # base to dev so the gate validates only the true incremental change.
+            if [[ "$PR_BASE_REF" == "main" && "$PR_HEAD_REF" == promotion/*-dev-to-main ]]; then
+              PR_BASE_REF="dev"
+            fi
             git fetch --no-tags --depth=1 origin "$PR_BASE_REF"
             DIFF_BASE="origin/${PR_BASE_REF}"
           elif [[ "$EVENT_NAME" == "push" && -n "$PUSH_BEFORE_SHA" && "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then

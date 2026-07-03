@@ -142,9 +142,8 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.FAILED
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is not None
-        assert "exception" in error_val.lower()
+        assert result.error is not None
+        assert "exception" in result.error.lower()
         assert result.skill_name == request.skill_name
 
     @pytest.mark.asyncio
@@ -159,11 +158,9 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.SUCCESS
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is None
-        output_val = result.extra.get("output") if result.extra else None
-        assert output_val is not None
-        assert "RESULT:" in output_val
+        assert result.error is None
+        assert result.output is not None
+        assert "RESULT:" in result.output
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_partial_when_no_result_block(
@@ -176,9 +173,8 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.PARTIAL
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is not None
-        assert error_val == "No RESULT: block in output"
+        assert result.error is not None
+        assert result.error == "No RESULT: block in output"
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_failed_status_from_result_block(
@@ -197,8 +193,7 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.FAILED
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val == "skill script exited with code 1"
+        assert result.error == "skill script exited with code 1"
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_includes_args_in_prompt(self) -> None:
@@ -256,8 +251,7 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.SUCCESS
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is None
+        assert result.error is None
 
 
 # ---------------------------------------------------------------------------

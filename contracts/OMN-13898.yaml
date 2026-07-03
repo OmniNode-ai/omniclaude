@@ -1,0 +1,35 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13898"
+title: "Bump omnibase-core to 0.46.4"
+summary: >-
+  Consume omnibase-core 0.46.4 in omniclaude and align ModelSkillResult construction with the current
+  contract shape.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-local-contract-alignment-tests"
+    description: "Focused tests cover vLLM, skill request handling, and dispatch wiring after the contract update."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/unit/nodes/node_local_llm_inference_effect/test_backend_vllm.py
+          tests/unit/nodes/shared/test_handler_skill_requested.py tests/unit/runtime/test_wiring_dispatchers.py -q
+  - id: "dod-local-deploy-assessment"
+    description: >-
+      Deploy assessment for runtime Python changes. No live deploy is performed by this PR; runtime rollout
+      remains gated on normal post-merge deploy validation.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          deploy assessment: no live deploy performed; post-merge runtime deploy validation required before
+          rollout

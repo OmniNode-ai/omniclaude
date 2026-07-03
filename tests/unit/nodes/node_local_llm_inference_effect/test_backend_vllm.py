@@ -102,8 +102,8 @@ async def test_success_path() -> None:
     result = await backend.infer(request)
 
     assert result.status == SkillResultStatus.SUCCESS
-    assert result.extra["output"] == "Hello from LLM"
-    assert "error" not in result.extra
+    assert result.output == "Hello from LLM"
+    assert result.error is None
 
     # Verify the correct URL was called
     backend._client.post.assert_called_once()
@@ -127,7 +127,7 @@ async def test_timeout_returns_timeout_error() -> None:
     result = await backend.infer(request)
 
     assert result.status == SkillResultStatus.FAILED
-    assert result.extra.get("error") == "TIMEOUT"
+    assert result.error == "TIMEOUT"
 
 
 @pytest.mark.unit
@@ -146,7 +146,7 @@ async def test_network_error_returns_backend_unavailable() -> None:
     result = await backend.infer(request)
 
     assert result.status == SkillResultStatus.FAILED
-    assert result.extra.get("error") == "BACKEND_UNAVAILABLE"
+    assert result.error == "BACKEND_UNAVAILABLE"
 
 
 @pytest.mark.unit
@@ -164,7 +164,7 @@ async def test_non_200_response_returns_http_error() -> None:
     result = await backend.infer(request)
 
     assert result.status == SkillResultStatus.FAILED
-    assert "503" in (result.extra.get("error") or "")
+    assert "503" in (result.error or "")
 
 
 @pytest.mark.unit
@@ -183,7 +183,7 @@ async def test_missing_choices_returns_backend_unavailable() -> None:
     result = await backend.infer(request)
 
     assert result.status == SkillResultStatus.FAILED
-    assert "BACKEND_UNAVAILABLE" in (result.extra.get("error") or "")
+    assert "BACKEND_UNAVAILABLE" in (result.error or "")
 
 
 @pytest.mark.unit
@@ -239,7 +239,7 @@ async def test_no_endpoint_returns_backend_unavailable() -> None:
     result = await backend.infer(request)
 
     assert result.status == SkillResultStatus.FAILED
-    assert "BACKEND_UNAVAILABLE" in (result.extra.get("error") or "")
+    assert "BACKEND_UNAVAILABLE" in (result.error or "")
 
 
 @pytest.mark.unit

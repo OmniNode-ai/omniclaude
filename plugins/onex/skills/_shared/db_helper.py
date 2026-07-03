@@ -102,9 +102,8 @@ def _get_db_config() -> dict[str, Any]:
                         DB_CONFIG[_key] = int(DB_CONFIG[_key])
                     except ValueError:
                         logger.warning(
-                            "Non-numeric value %r for parameter %r; "
+                            "Non-numeric value for parameter %r; "
                             "keeping as string (psycopg2 will validate)",
-                            DB_CONFIG[_key],
                             _key,
                         )
         else:
