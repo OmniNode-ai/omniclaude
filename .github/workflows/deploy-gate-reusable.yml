@@ -87,7 +87,7 @@ jobs:
             echo "::notice::gh pr diff failed; falling back to local git diff against origin/${base_ref}"
             cat /tmp/deploy-gate-gh-diff.err || true
             git fetch origin "$base_ref" --no-tags
-            changed_files="$(git diff --name-only "origin/${base_ref}"...HEAD | tr '\n' ' ')"
+            changed_files="$(git diff --name-only "origin/${base_ref}" HEAD | tr '\n' ' ')"
           fi
           pr_body="$(gh pr view "$PR_NUMBER" --json body -q '.body')"
 

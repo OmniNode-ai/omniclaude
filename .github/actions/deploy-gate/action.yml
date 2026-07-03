@@ -55,7 +55,7 @@ runs:
           echo "::notice::gh pr diff failed; falling back to local git diff against origin/${base_ref}"
           cat /tmp/deploy-gate-gh-diff.err || true
           git fetch origin "$base_ref" --no-tags
-          changed_files="$(git diff --name-only "origin/${base_ref}"...HEAD | tr '\n' ' ')"
+          changed_files="$(git diff --name-only "origin/${base_ref}" HEAD | tr '\n' ' ')"
         fi
 
         python "$ACTION_PATH/validate_pr_deploy_required.py" \
