@@ -162,6 +162,19 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13873: forbid unreleased first-party git overrides (rev=/branch=
+      # for omnibase-core/-spi/-compat) in [tool.uv.sources]. Local mirror of
+      # the canonical dep-provenance-gate-reusable.yml. Root cause: infra PR
+      # #2184 merged rev= overrides that CI resolved directly, bypassing the
+      # released-wheel contract.
+      - id: check-dep-provenance
+        name: forbid unreleased first-party git overrides in pyproject
+        entry: python3 scripts/check_dep_provenance.py --pyproject
+        language: system
+        files: '^pyproject\.toml$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-8776: regression guard — skill prompts must not hardcode
       # `mcp__linear-server__*` tool names. Ticketing operations route
       # through ProtocolProjectTracker (`uv run onex run node_*`).

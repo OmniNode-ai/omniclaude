@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Reusable workflow: dependency-provenance gate (OMN-13873).
+# Canonical source — every repo calls this via `uses:` instead of shipping its
+# own copy of check_dep_provenance.py. Mirrors deploy-gate-reusable.yml's
+# runner-selector + checkout-caller pattern.
+#
+# Root cause: omnibase_infra PR #2184 merged un-released omnibase-core/-spi
+# `rev=` git overrides to dev; ~60 CI checks passed *because* CI resolved
+# core/spi from those exact commits, silently bypassing the released-wheel
+# contract. This gate hard-fails such overrides on the caller's pyproject.
+#
+# Usage in caller repos (other than omniclaude):
+#   jobs:
+#     dep-provenance-gate:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/dep-provenance-gate-reusable.yml@main
+#       secrets: inherit
+#
+# omniclaude's own caller references this file via a LOCAL `./` path so the
+# introducing PR self-tests its own reusable + checker (no @main chicken-egg;
+# see .github/workflows/dep-provenance-gate.yml).
+
+name: Dep Provenance Gate (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      pyproject:
+        description: Path to the caller's pyproject.toml to validate.
+        type: string
+        required: false
+        default: pyproject.toml
+
+jobs:
+  dep-provenance-gate:
+    name: dep-provenance-gate
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v6
+
+      # The checker script is canonical in omniclaude. When the caller IS
+      # omniclaude the script is already in the checked-out tree (self-test of
+      # PR code); every other caller has no copy, so fetch it from
+      # omniclaude@main into a side path. The run step prefers the caller's own
+      # copy and falls back to the fetched one.
+      - name: Fetch checker script (omniclaude@main)
+        if: github.event_name != 'merge_group'
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: main
+          path: .omniclaude-dep-provenance
+          sparse-checkout: scripts/check_dep_provenance.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        if: github.event_name != 'merge_group'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Skip on merge_group
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "::notice::dep-provenance-gate: merge_group event — skipped (validated on PR branch)."
+
+      - name: Run dep-provenance gate
+        if: github.event_name != 'merge_group'
+        shell: bash
+        env:
+          PYPROJECT_PATH: ${{ inputs.pyproject }}
+        run: |
+          set -euo pipefail
+          if [ -f scripts/check_dep_provenance.py ]; then
+            CHECKER="scripts/check_dep_provenance.py"
+          elif [ -f .omniclaude-dep-provenance/scripts/check_dep_provenance.py ]; then
+            CHECKER=".omniclaude-dep-provenance/scripts/check_dep_provenance.py"
+          else
+            echo "::error::dep-provenance-gate: check_dep_provenance.py not found in caller tree or omniclaude@main."
+            exit 1
+          fi
+          echo "::notice::dep-provenance-gate: running ${CHECKER} against ${PYPROJECT_PATH}"
+          python "${CHECKER}" --pyproject "${PYPROJECT_PATH}"

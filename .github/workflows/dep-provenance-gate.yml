@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# omniclaude's own thin caller for the canonical dep-provenance gate (OMN-13873).
+#
+# This references the reusable via a LOCAL `./` path (not the @main cross-repo
+# form other repos use) on purpose: a brand-new reusable does not yet exist on
+# omniclaude@main, so an `@main` self-reference would (a) fail to resolve on the
+# introducing PR and (b) trip check_self_gating_workflows.py. The local ref
+# self-tests the PR's own reusable + checker, exactly as deploy-gate.yml uses
+# the local `./.github/actions/deploy-gate` composite action.
+#
+# merge_group is included so that, once `dep-provenance-gate` is promoted to a
+# required status check, a required-but-missing context cannot wedge the queue
+# (the reusable short-circuits on merge_group).
+
+name: Dep Provenance Gate
+
+on:
+  pull_request:
+    branches: [dev, main]
+  merge_group:
+
+concurrency:
+  group: dep-provenance-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dep-provenance-gate:
+    uses: ./.github/workflows/dep-provenance-gate-reusable.yml
+    secrets: inherit

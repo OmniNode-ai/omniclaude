@@ -241,7 +241,7 @@ override-dependencies = [
 
 [tool.uv.sources]
 # Release v0.25.1: pin to paired release PR heads until tags are published.
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "v0.43.0" }  # pragma: allowlist secret
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.43.0" }  # pragma: allowlist secret  # OMN-13873: released tag (dep-provenance gate forbids rev= for first-party runtime pkgs)
 omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.0" }  # pragma: allowlist secret
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.24.0" }
