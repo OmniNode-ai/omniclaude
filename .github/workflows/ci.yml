@@ -2883,9 +2883,16 @@ jobs:
           compliance="${{ needs.compliance.result }}"
           contract_compliance="${{ needs.contract-compliance.result }}"
 
+          # OMN-13911: quality-gate/tests-gate/security-gate all carry
+          # if: always() (never structurally skipped), and contract-compliance
+          # only skips on workflow_dispatch (non-gating). None of the four has
+          # a legitimate skip path on pull_request/merge_group/push, so require
+          # strict success — a skipped/neutral/cancelled/failure result must
+          # not slip through silently (same class fixed for the sibling
+          # OMN-13875 gates: omnibase_infra #2188, omnibase_spi #254).
           FAILED=false
           for result in "$quality" "$tests" "$security" "$contract_compliance"; do
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+            if [[ "$result" != "success" ]]; then
               FAILED=true
             fi
           done
