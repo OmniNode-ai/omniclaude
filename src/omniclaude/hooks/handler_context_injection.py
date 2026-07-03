@@ -53,6 +53,7 @@ from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
 from omniclaude.hooks.injection_limits import (
     INJECTION_HEADER,
+    InjectionLimitsConfig,
     count_tokens,
     select_patterns_for_injection,
 )
@@ -551,11 +552,12 @@ class HandlerContextInjection:
         # - Domain caps (max_per_domain)
         # - Token budget (max_tokens_injected)
         # - Deterministic ordering
-        patterns = select_patterns_for_injection(patterns, cfg.limits)
+        limits = cast("InjectionLimitsConfig", cfg.limits)
+        patterns = select_patterns_for_injection(patterns, limits)
 
         # Step 6: Format as markdown
         context_markdown = self._format_patterns_markdown(
-            patterns, cfg.limits.max_patterns_per_injection
+            patterns, limits.max_patterns_per_injection
         )
 
         # Step 6b: Cross-agent memory fabric (additive source, OMN-7249)
@@ -774,7 +776,8 @@ class HandlerContextInjection:
         # The 10x multiplier accounts for all chained filter stages (domain +
         # confidence + provisional + evidence) each of which can eliminate the
         # majority of candidates.  Minimum of 50 preserves pre-refactor headroom.
-        fetch_limit = max(cfg.limits.max_patterns_per_injection * 10, 50)
+        limits = cast("InjectionLimitsConfig", cfg.limits)
+        fetch_limit = max(limits.max_patterns_per_injection * 10, 50)
         params: dict[str, str] = {
             "limit": str(fetch_limit),
             "min_confidence": str(cfg.min_confidence),

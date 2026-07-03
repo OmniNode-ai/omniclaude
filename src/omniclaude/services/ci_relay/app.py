@@ -20,7 +20,6 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.lib.utils.sanitize import sanitize_log_input
 from omniclaude.services.ci_relay.models import CICallbackPayload, PRStatusEvent
 from omniclaude.services.ci_relay.rate_limiter import RateLimiter
 
@@ -106,7 +105,9 @@ def _resolve_pr_from_sha(repo: str, sha: str) -> int | None:
         if result.returncode == 0 and result.stdout.strip():
             return int(result.stdout.strip())
     except (subprocess.TimeoutExpired, ValueError, OSError) as exc:
-        logger.warning("PR resolution failed for %s/%s: %s", repo, sha, exc)
+        logger.warning(
+            "PR resolution failed for callback commit: %s", type(exc).__name__
+        )
     return None
 
 
@@ -200,27 +201,20 @@ def create_app() -> FastAPI:
         """
         dedupe_key = f"{payload.repo}:{payload.sha}:{payload.run_id}"
 
-        # Sanitize user-controlled fields before logging to prevent log injection
-        safe_repo = sanitize_log_input(payload.repo)
-        safe_sha = sanitize_log_input(payload.sha)
-        safe_conclusion = sanitize_log_input(payload.conclusion)
-        safe_dedupe_key = sanitize_log_input(dedupe_key)
-
         # Check repo rate limit
         if not _rate_limiter.check_repo_rate(payload.repo):
             logger.warning(
-                "Rate limited: repo=%s dedupe_key=%s",
-                safe_repo,
-                safe_dedupe_key,
+                "Rate limited callback: run_id=%d",
+                payload.run_id,
             )
             raise HTTPException(
                 status_code=429,
-                detail=f"Rate limit exceeded for repo {safe_repo}",
+                detail="Rate limit exceeded for callback repo",
             )
 
         # Check idempotency (dedupe within 1 hour)
         if not _rate_limiter.check_dedupe(dedupe_key):
-            logger.info("Duplicate dropped: %s", safe_dedupe_key)
+            logger.info("Duplicate callback dropped: run_id=%d", payload.run_id)
             return {
                 "status": "duplicate",
                 "dedupe_key": dedupe_key,
@@ -232,10 +226,9 @@ def create_app() -> FastAPI:
             payload.repo, payload.sha, payload.conclusion
         ):
             logger.info(
-                "SHA notification suppressed: repo=%s sha=%s conclusion=%s",
-                safe_repo,
-                safe_sha,
-                safe_conclusion,
+                "SHA notification suppressed: run_id=%d pr=%d",
+                payload.run_id,
+                payload.pr,
             )
             return {
                 "status": "suppressed",
@@ -252,9 +245,8 @@ def create_app() -> FastAPI:
             resolved_pr = _resolve_pr_cached(payload.repo, payload.sha)
             if resolved_pr is not None:
                 logger.info(
-                    "Resolved PR for push-triggered workflow: repo=%s sha=%s -> PR #%d",
-                    safe_repo,
-                    safe_sha,
+                    "Resolved PR for push-triggered workflow: run_id=%d -> PR #%d",
+                    payload.run_id,
                     resolved_pr,
                 )
 
@@ -272,11 +264,9 @@ def create_app() -> FastAPI:
         await _publish_to_kafka(event)
 
         logger.info(
-            "Published PR status event: repo=%s pr=%d conclusion=%s dedupe_key=%s",
-            sanitize_log_input(event.repo),
+            "Published PR status event: pr=%d run_id=%d",
             event.resolved_pr or event.pr,
-            sanitize_log_input(event.conclusion),
-            sanitize_log_input(event.dedupe_key),
+            event.run_id,
         )
 
         return {

@@ -51,13 +51,18 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
-from omniclaude.hooks.injection_limits import InjectionLimitsConfig
 
 # Sentinel used to distinguish "user never set api_url" from "user explicitly set it to the
 # same value as the built-in default". Must not be a valid URL.
 _API_URL_UNSET = "__unset__"
 # Built-in fallback when neither OMNICLAUDE_CONTEXT_API_URL nor INTELLIGENCE_SERVICE_URL is set.
 _API_URL_DEFAULT = None  # No localhost default [OMN-7227]
+
+
+def _default_injection_limits_config() -> object:
+    from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+    return InjectionLimitsConfig()
 
 
 class SessionStartInjectionConfig(BaseModel):
@@ -421,8 +426,8 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     # Injection limits configuration (OMN-1671)
-    limits: InjectionLimitsConfig = Field(
-        default_factory=InjectionLimitsConfig,
+    limits: object = Field(
+        default_factory=_default_injection_limits_config,
         description="Injection limits to prevent context explosion",
     )
 
