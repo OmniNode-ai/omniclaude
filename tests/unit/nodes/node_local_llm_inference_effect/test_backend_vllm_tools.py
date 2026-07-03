@@ -17,11 +17,18 @@ Coverage:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from omnibase_core.runtime.golden_chain import (
+    EnumGoldenChainFailureClass,
+    GoldenChainReplayError,
+    RecordedReplayInferenceTransport,
+    load_fixture,
+)
 
 from omniclaude.config.model_local_llm_config import (
     LocalLlmEndpointRegistry,
@@ -38,11 +45,44 @@ from omniclaude.nodes.node_local_llm_inference_effect.backends.backend_vllm impo
 
 _ENDPOINT_URL = "http://localhost:8000/"
 
+# Concrete model + prompts the golden-chain fixtures below were recorded against
+# (real vLLM inference on the local-coder backend; see fixture provenance). The
+# test payloads MUST match these exactly or the canonical replay transport fails
+# closed (REQUEST_HASH_MISMATCH) — that is the "replay is evidence, not authority"
+# guarantee, not a fixture that rubber-stamps whatever the caller sends.
+_RECORDED_MODEL = "Qwen3.6-35B-A3B"
+_TEXT_PROMPT = "In one short sentence, greet the world."
+_TOOL_PROMPT = "Read the file /tmp/test.py using the read_file tool."
+_READ_FILE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "read_file",
+        "description": "Read a file from disk",
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    },
+}
 
-def _make_backend() -> VllmInferenceBackend:
-    """Create a VllmInferenceBackend with a mock registry."""
+_FIXTURE_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "golden_chain"
+_TEXT_FIXTURE = _FIXTURE_DIR / "vllm_chat_text.json"
+_TOOL_FIXTURE = _FIXTURE_DIR / "vllm_chat_tool_call.json"
+
+
+def _make_backend(
+    *, sync_transport: httpx.BaseTransport | None = None
+) -> VllmInferenceBackend:
+    """Create a VllmInferenceBackend.
+
+    The registry is a ``spec``-bound double: ``chat_completion_sync`` takes the
+    endpoint URL directly and never touches the registry (which only resolves
+    URLs for the async ``infer`` path), so the registry is genuinely out of this
+    method's boundary — it is not the inference egress under test.
+    """
     registry = MagicMock(spec=LocalLlmEndpointRegistry)
-    return VllmInferenceBackend(registry=registry)
+    return VllmInferenceBackend(registry=registry, sync_transport=sync_transport)
 
 
 def _chat_response(
@@ -185,143 +225,165 @@ class TestParseChatCompletionResponse:
 
 @pytest.mark.unit
 class TestChatCompletionSync:
+    """End-to-end ``chat_completion_sync`` tests.
+
+    Two boundary strategies, chosen by what each test proves:
+
+    * **Inference CONTENT** (text + tool-call happy paths) replays REAL recorded
+      model bytes through the canonical ``RecordedReplayInferenceTransport``
+      (OMN-13499). The backend still constructs the OpenAI-compatible request
+      LIVE; the transport returns the recorded bytes only because the live
+      request matches the fixture's endpoint + ``request_hash`` + concrete model
+      (a drifted request fails closed — proven in
+      ``test_wrong_model_fails_replay``). No hand-written model output.
+    * **Transport MECHANICS** (timeout / network / non-200 / request shaping) use
+      a REAL ``httpx.Client`` driven by an ``httpx.MockTransport`` injected via
+      the backend's ``sync_transport`` seam. Real request serialization runs; the
+      transport programs the failure/status the mapping code must handle. These
+      prove HTTP error handling, not inference content, so recorded replay (which
+      can only return recorded 2xx bytes) does not fit them.
+    """
+
+    # --- Inference content: canonical recorded-from-real replay -------------
+
     def test_text_response(self) -> None:
+        fixture = load_fixture(_TEXT_FIXTURE)
+        transport = RecordedReplayInferenceTransport([fixture])
         backend = _make_backend()
-        response_data = _chat_response(content="Hello world")
-        mock_response = httpx.Response(status_code=200, json=response_data)
 
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.return_value = mock_response
-            mock_client_cls.return_value = mock_client
-
+        with patch("httpx.Client", return_value=transport):
             result = backend.chat_completion_sync(
-                messages=[{"role": "user", "content": "hi"}],
+                messages=[{"role": "user", "content": _TEXT_PROMPT}],
                 endpoint_url=_ENDPOINT_URL,
+                model=_RECORDED_MODEL,
+                max_tokens=512,
+                temperature=0.0,
             )
 
-        assert result.content == "Hello world"
-        assert result.tool_calls == []
         assert result.error is None
+        assert result.tool_calls == []
+        # Real recorded completion bytes parsed through the sync path (no error,
+        # non-empty content). The exact byte-for-byte parse of the recorded fields
+        # is covered by TestParseChatCompletionResponse on the same shape.
+        assert isinstance(result.content, str) and result.content.strip()
+        # The live path resolved the CONCRETE recorded model, not a tier name.
+        assert transport.calls[0]["model"] == _RECORDED_MODEL
 
     def test_tool_call_response(self) -> None:
+        fixture = load_fixture(_TOOL_FIXTURE)
+        transport = RecordedReplayInferenceTransport([fixture])
         backend = _make_backend()
-        response_data = _chat_response(
-            tool_calls=[
-                _tool_call(
-                    "read_file", json.dumps({"path": "/tmp/test.py"}), "call_abc"
-                )
-            ]
-        )
-        mock_response = httpx.Response(status_code=200, json=response_data)
 
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.return_value = mock_response
-            mock_client_cls.return_value = mock_client
-
+        with patch("httpx.Client", return_value=transport):
             result = backend.chat_completion_sync(
-                messages=[{"role": "user", "content": "read the file"}],
+                messages=[{"role": "user", "content": _TOOL_PROMPT}],
                 endpoint_url=_ENDPOINT_URL,
-                tools=[{"type": "function", "function": {"name": "read_file"}}],
+                model=_RECORDED_MODEL,
+                tools=[_READ_FILE_TOOL],
+                tool_choice="auto",
+                max_tokens=512,
+                temperature=0.0,
             )
 
-        assert len(result.tool_calls) == 1
-        assert result.tool_calls[0]["function"]["name"] == "read_file"
+        assert result.error is None
+        assert result.tool_calls, "recorded response carried a real tool call"
+        names = [tc["function"]["name"] for tc in result.tool_calls]
+        assert "read_file" in names
+        # Arguments were parsed into a JSON string, not dropped.
+        first = next(
+            tc for tc in result.tool_calls if tc["function"]["name"] == "read_file"
+        )
+        assert json.loads(first["function"]["arguments"])  # valid JSON object
+
+    def test_wrong_model_fails_replay(self) -> None:
+        """Replay is EVIDENCE, not AUTHORITY: a drifted request fails closed.
+
+        A boundary fake that hand-set canned bytes would return them regardless of
+        the request. The canonical transport recomputes the request hash from the
+        LIVE payload; a different model changes the hash and the replay raises
+        REQUEST_HASH_MISMATCH instead of "passing anyway".
+        """
+        fixture = load_fixture(_TEXT_FIXTURE)
+        transport = RecordedReplayInferenceTransport([fixture])
+        backend = _make_backend()
+
+        with (
+            pytest.raises(GoldenChainReplayError) as exc,
+            patch("httpx.Client", return_value=transport),
+        ):
+            backend.chat_completion_sync(
+                messages=[{"role": "user", "content": _TEXT_PROMPT}],
+                endpoint_url=_ENDPOINT_URL,
+                model="some-other-model",
+                max_tokens=512,
+                temperature=0.0,
+            )
+        assert (
+            exc.value.failure_class is EnumGoldenChainFailureClass.REQUEST_HASH_MISMATCH
+        )
+
+    # --- Transport mechanics: real httpx.Client + MockTransport -------------
 
     def test_timeout_returns_error(self) -> None:
-        backend = _make_backend()
+        def _handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("timed out", request=request)
 
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.side_effect = httpx.TimeoutException("timed out")
-            mock_client_cls.return_value = mock_client
-
-            result = backend.chat_completion_sync(
-                messages=[{"role": "user", "content": "hi"}],
-                endpoint_url=_ENDPOINT_URL,
-            )
+        backend = _make_backend(sync_transport=httpx.MockTransport(_handler))
+        result = backend.chat_completion_sync(
+            messages=[{"role": "user", "content": "hi"}],
+            endpoint_url=_ENDPOINT_URL,
+        )
 
         assert result.error == "TIMEOUT"
 
     def test_network_error_returns_backend_unavailable(self) -> None:
-        backend = _make_backend()
+        def _handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("refused", request=request)
 
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.side_effect = httpx.NetworkError("refused")
-            mock_client_cls.return_value = mock_client
-
-            result = backend.chat_completion_sync(
-                messages=[{"role": "user", "content": "hi"}],
-                endpoint_url=_ENDPOINT_URL,
-            )
+        backend = _make_backend(sync_transport=httpx.MockTransport(_handler))
+        result = backend.chat_completion_sync(
+            messages=[{"role": "user", "content": "hi"}],
+            endpoint_url=_ENDPOINT_URL,
+        )
 
         assert result.error == "BACKEND_UNAVAILABLE"
 
     def test_non_200_returns_http_error(self) -> None:
-        backend = _make_backend()
-        mock_response = httpx.Response(status_code=503, json={"error": "overloaded"})
+        def _handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(503, json={"error": "overloaded"})
 
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.return_value = mock_response
-            mock_client_cls.return_value = mock_client
-
-            result = backend.chat_completion_sync(
-                messages=[{"role": "user", "content": "hi"}],
-                endpoint_url=_ENDPOINT_URL,
-            )
+        backend = _make_backend(sync_transport=httpx.MockTransport(_handler))
+        result = backend.chat_completion_sync(
+            messages=[{"role": "user", "content": "hi"}],
+            endpoint_url=_ENDPOINT_URL,
+        )
 
         assert result.error is not None
         assert "503" in result.error
 
     def test_tools_and_tool_choice_passed_in_payload(self) -> None:
-        backend = _make_backend()
-        response_data = _chat_response(content="done")
-        mock_response = httpx.Response(status_code=200, json=response_data)
+        captured: dict[str, Any] = {}
 
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.return_value = mock_response
-            mock_client_cls.return_value = mock_client
+        def _handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            captured["url"] = str(request.url)
+            return httpx.Response(200, json=_chat_response(content="done"))
 
-            tools = [{"type": "function", "function": {"name": "test_tool"}}]
-            backend.chat_completion_sync(
-                messages=[{"role": "user", "content": "hi"}],
-                endpoint_url=_ENDPOINT_URL,
-                tools=tools,
-                tool_choice="auto",
-                max_tokens=100,
-                temperature=0.5,
-            )
+        backend = _make_backend(sync_transport=httpx.MockTransport(_handler))
+        tools = [{"type": "function", "function": {"name": "test_tool"}}]
+        backend.chat_completion_sync(
+            messages=[{"role": "user", "content": "hi"}],
+            endpoint_url=_ENDPOINT_URL,
+            tools=tools,
+            tool_choice="auto",
+            max_tokens=100,
+            temperature=0.5,
+        )
 
-            call_args = mock_client.post.call_args
-            payload = (
-                call_args[1]["json"] if "json" in call_args[1] else call_args[0][1]
-            )
-            if isinstance(payload, str):
-                import json as _json
-
-                payload = _json.loads(payload)
-            # Verify via the kwargs
-            sent_payload = call_args.kwargs.get(
-                "json", call_args.args[1] if len(call_args.args) > 1 else None
-            )
-            assert sent_payload is not None
-            assert sent_payload["tools"] == tools
-            assert sent_payload["tool_choice"] == "auto"
-            assert sent_payload["max_tokens"] == 100
-            assert sent_payload["temperature"] == 0.5
+        # Real httpx.Client serialized the request the backend constructed.
+        assert captured["url"] == "http://localhost:8000/v1/chat/completions"
+        sent_payload = captured["payload"]
+        assert sent_payload["tools"] == tools
+        assert sent_payload["tool_choice"] == "auto"
+        assert sent_payload["max_tokens"] == 100
+        assert sent_payload["temperature"] == 0.5

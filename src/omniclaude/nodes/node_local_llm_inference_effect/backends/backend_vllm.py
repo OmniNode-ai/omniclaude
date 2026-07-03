@@ -207,7 +207,9 @@ class VllmInferenceBackend:
             payload["temperature"] = temperature
 
         try:
-            with httpx.Client(timeout=self._TIMEOUT) as client:
+            with httpx.Client(
+                timeout=self._TIMEOUT, transport=self._sync_transport
+            ) as client:
                 response = client.post(url, json=payload)
         except httpx.TimeoutException:
             logger.warning("chat_completion timed out for %s", url)
@@ -228,15 +230,28 @@ class VllmInferenceBackend:
         connect=5.0, read=120.0, write=10.0, pool=5.0
     )
 
-    def __init__(self, registry: LocalLlmEndpointRegistry) -> None:
+    def __init__(
+        self,
+        registry: LocalLlmEndpointRegistry,
+        *,
+        sync_transport: httpx.BaseTransport | None = None,
+    ) -> None:
         """Initialize the vLLM inference backend.
 
         Args:
             registry: Endpoint registry used to resolve model URLs by purpose.
+            sync_transport: Optional httpx transport for the synchronous
+                ``chat_completion_sync`` client. Defaults to ``None`` (httpx's
+                real network transport). Supplying a custom transport is the
+                idiomatic httpx injection seam — production may pass a pooled or
+                proxied transport, and tests pass an ``httpx.MockTransport`` to
+                exercise the REAL request-serialization + error-handling paths
+                without a live endpoint.
         """
         self._registry = registry
         self._client = httpx.AsyncClient(timeout=self._TIMEOUT)
         self._semaphore = asyncio.Semaphore(self._MAX_CONCURRENT)
+        self._sync_transport = sync_transport
 
     async def infer(self, request: ModelLocalLlmInferenceRequest) -> ModelSkillResult:
         """Submit a prompt to the vLLM endpoint and return a ModelSkillResult.
