@@ -191,11 +191,15 @@ def analyze(pyproject_path: Path) -> ProvenanceReport:
     except tomllib.TOMLDecodeError as exc:
         raise ProvenanceError(f"could not parse {pyproject_path}: {exc}") from exc
 
-    sources = (
-        data.get("tool", {}).get("uv", {}).get("sources", {})
-        if isinstance(data, dict)
-        else {}
-    )
+    tool = data.get("tool", {})
+    if not isinstance(tool, dict):
+        raise ProvenanceError(f"[tool] in {pyproject_path} is not a table")
+    uv = tool.get("uv", {})
+    if not isinstance(uv, dict):
+        raise ProvenanceError(f"[tool.uv] in {pyproject_path} is not a table")
+    sources = uv.get("sources", {})
+    if not isinstance(sources, dict):
+        raise ProvenanceError(f"[tool.uv.sources] in {pyproject_path} is not a table")
     overrides = _scan_override_annotations(text)
     report = ProvenanceReport(pyproject=str(pyproject_path))
 

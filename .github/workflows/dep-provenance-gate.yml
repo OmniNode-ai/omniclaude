@@ -33,4 +33,3 @@ permissions:
 jobs:
   dep-provenance-gate:
     uses: ./.github/workflows/dep-provenance-gate-reusable.yml
-    secrets: inherit # pragma: allowlist secret

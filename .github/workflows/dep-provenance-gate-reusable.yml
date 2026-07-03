@@ -15,7 +15,6 @@
 #   jobs:
 #     dep-provenance-gate:
 #       uses: OmniNode-ai/omniclaude/.github/workflows/dep-provenance-gate-reusable.yml@main
-#       secrets: inherit
 #
 # omniclaude's own caller references this file via a LOCAL `./` path so the
 # introducing PR self-tests its own reusable + checker (no @main chicken-egg;

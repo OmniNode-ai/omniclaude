@@ -247,6 +247,13 @@ def test_unparseable_toml_fails_closed(tmp_path: Path) -> None:
     assert dep.main(["--pyproject", str(path)]) == 1
 
 
+@pytest.mark.unit
+def test_non_table_uv_sources_fails_closed(tmp_path: Path) -> None:
+    path = tmp_path / "pyproject.toml"
+    path.write_text("[tool]\n[tool.uv]\nsources = []\n")
+    assert dep.main(["--pyproject", str(path)]) == 1
+
+
 # ---------------------------------------------------------------------------
 # --report-only and --json
 # ---------------------------------------------------------------------------
