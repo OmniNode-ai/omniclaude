@@ -162,6 +162,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13873: dep-provenance gate — forbid first-party git-source overrides.
+      # omnibase-core / omnibase-spi / omnibase-compat must resolve from PyPI, not
+      # git commits/branches/tags, on dev/main (recurrence guard for PR #2184's
+      # UNRELEASED-commit overrides that passed all CI green). Pure static +
+      # offline; onex-change-control / omnibase-infra are intentionally exempt.
+      # Mirrors the required CI job in .github/workflows/dep-provenance-gate.yml.
+      - id: check-dep-provenance
+        name: Forbid first-party git-source overrides (OMN-13873)
+        entry: python3 scripts/check_dep_provenance.py
+        language: system
+        files: ^pyproject\.toml$
+        pass_filenames: false
+        stages: [pre-commit]
+
       # OMN-8776: regression guard — skill prompts must not hardcode
       # `mcp__linear-server__*` tool names. Ticketing operations route
       # through ProtocolProjectTracker (`uv run onex run node_*`).
