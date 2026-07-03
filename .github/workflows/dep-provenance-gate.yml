@@ -28,4 +28,4 @@ concurrency:
 jobs:
   dep-provenance-gate:
     uses: ./.github/workflows/dep-provenance-gate-reusable.yml
-    secrets: inherit
+    secrets: inherit # pragma: allowlist secret
