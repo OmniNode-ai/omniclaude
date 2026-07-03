@@ -552,7 +552,7 @@ class HandlerContextInjection:
         # - Domain caps (max_per_domain)
         # - Token budget (max_tokens_injected)
         # - Deterministic ordering
-        limits = cast("InjectionLimitsConfig", cfg.limits)
+        limits = cast(InjectionLimitsConfig, cfg.limits)  # noqa: TC006
         patterns = select_patterns_for_injection(patterns, limits)
 
         # Step 6: Format as markdown
@@ -776,7 +776,7 @@ class HandlerContextInjection:
         # The 10x multiplier accounts for all chained filter stages (domain +
         # confidence + provisional + evidence) each of which can eliminate the
         # majority of candidates.  Minimum of 50 preserves pre-refactor headroom.
-        limits = cast("InjectionLimitsConfig", cfg.limits)
+        limits = cast(InjectionLimitsConfig, cfg.limits)  # noqa: TC006
         fetch_limit = max(limits.max_patterns_per_injection * 10, 50)
         params: dict[str, str] = {
             "limit": str(fetch_limit),

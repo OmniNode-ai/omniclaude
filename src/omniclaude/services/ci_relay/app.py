@@ -203,10 +203,7 @@ def create_app() -> FastAPI:
 
         # Check repo rate limit
         if not _rate_limiter.check_repo_rate(payload.repo):
-            logger.warning(
-                "Rate limited callback: run_id=%d",
-                payload.run_id,
-            )
+            logger.warning("Rate limited callback")
             raise HTTPException(
                 status_code=429,
                 detail="Rate limit exceeded for callback repo",
@@ -214,7 +211,7 @@ def create_app() -> FastAPI:
 
         # Check idempotency (dedupe within 1 hour)
         if not _rate_limiter.check_dedupe(dedupe_key):
-            logger.info("Duplicate callback dropped: run_id=%d", payload.run_id)
+            logger.info("Duplicate callback dropped")
             return {
                 "status": "duplicate",
                 "dedupe_key": dedupe_key,
@@ -225,11 +222,7 @@ def create_app() -> FastAPI:
         if not _rate_limiter.check_sha_notification(
             payload.repo, payload.sha, payload.conclusion
         ):
-            logger.info(
-                "SHA notification suppressed: run_id=%d pr=%d",
-                payload.run_id,
-                payload.pr,
-            )
+            logger.info("SHA notification suppressed")
             return {
                 "status": "suppressed",
                 "dedupe_key": dedupe_key,
@@ -244,11 +237,7 @@ def create_app() -> FastAPI:
         if payload.pr == 0:
             resolved_pr = _resolve_pr_cached(payload.repo, payload.sha)
             if resolved_pr is not None:
-                logger.info(
-                    "Resolved PR for push-triggered workflow: run_id=%d -> PR #%d",
-                    payload.run_id,
-                    resolved_pr,
-                )
+                logger.info("Resolved PR for push-triggered workflow")
 
         # Build event
         event = PRStatusEvent.from_callback(
