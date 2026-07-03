@@ -73,10 +73,14 @@ FORBIDDEN_PATTERNS = [
 # Files to scan within each skill directory (SKILL.md and any prompt.md)
 SCAN_GLOBS = ["SKILL.md", "prompt.md", "*.md"]
 
+# Shims that still dispatch via the `onex run-node ... --input` envelope form.
+# duplication_sweep migrated to the single-command `onex skill` receipt pattern
+# in OMN-13097 Phase 4a — its contract is now enforced by
+# tests/unit/skills/test_dispatch_skill_receipt_contract.py, so it is no longer
+# a run-node envelope shim and is intentionally excluded here.
 RUN_NODE_ENVELOPE_FILES = [
     SKILLS_ROOT / "agent_healthcheck" / "SKILL.md",
     SKILLS_ROOT / "dispatch_queue_drainer" / "SKILL.md",
-    SKILLS_ROOT / "duplication_sweep" / "SKILL.md",
     SKILLS_ROOT / "two_strike_arbiter" / "SKILL.md",
     SKILLS_ROOT / "verification_receipt_generator" / "SKILL.md",
     SKILLS_ROOT / "_shared" / "skill_orchestrator_template.md",

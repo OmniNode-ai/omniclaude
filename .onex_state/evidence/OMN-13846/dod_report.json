@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-13846",
+  "status": "PASS",
+  "generated_at": "2026-07-02T16:35:00Z",
+  "summary": "Reverted the OMN-13835 (#1831) hook re-enable and restored the OMN-13244 empty hooks measurement baseline for omniclaude PR #1832.",
+  "checks": [
+    {
+      "name": "baseline_regression_test",
+      "status": "PASS",
+      "evidence": "tests/hooks/test_hooks_baseline_omn_13244.py -> 6 passed (empty-hooks object + metadata keys retained + 4 guard-file-present assertions)"
+    },
+    {
+      "name": "existing_hooks_tests",
+      "status": "PASS",
+      "evidence": "tests/hooks/test_hooks_json_script_paths.py + test_hooks_registration.py -> 18 passed, 1 skipped"
+    },
+    {
+      "name": "static_quality",
+      "status": "PASS",
+      "evidence": "ruff format/check --fix clean; pre-commit passed on changed files"
+    },
+    {
+      "name": "occ_receipts",
+      "status": "PASS",
+      "evidence": "Central OCC evidence in onex_change_control PR #3480 for OMN-13846 (contract + 3 PASS receipts, eligibility validated)"
+    }
+  ]
+}

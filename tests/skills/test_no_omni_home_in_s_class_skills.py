@@ -28,7 +28,6 @@ S_CLASS_SKILLS = [
     "duplication_sweep",
     "executing_plans",
     "friction_triage",
-    "handoff",
     "hostile_reviewer",
     "insights_to_plan",
     "linear_housekeeping",

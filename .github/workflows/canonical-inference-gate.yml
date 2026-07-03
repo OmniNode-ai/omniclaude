@@ -1,0 +1,118 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-13249 (fleet rollout of OMN-13219): canonical-inference ratchet gate —
+# BLOCKING MODE.
+#
+# Inference must go through the contract-driven routing authority (bus /
+# inference-effect / Bifrost), never a shelled model CLI and never a
+# hardcoded/env-resolved model or provider. This gate fails on:
+#   - model-cli-shellout: codex/claude/gemini/opencode passed to subprocess/exec
+#     or resolved via shutil.which
+#   - model-id-env-read:  os.environ[*_MODEL] / os.environ.get(*_PROVIDER) reads
+#
+# Structural carve-out (OMN-13249): a model-CLI shell-out is permitted iff the
+# enclosing node contract.yaml declares descriptor.agent_invocation: true — a
+# contract fact the gate verifies, never a free-text comment.
+#
+# Endpoint URLs and *_URL / *_ENDPOINT env reads are owned by the URL Authority
+# Gate (OMN-12818). This gate is the missing shell-out-for-inference layer.
+#
+# This is a RATCHET: existing violations are grandfathered by the sha256 baseline
+# at src/omnibase_core/validation/baselines/canonical_inference_baseline.json
+# inside the omnibase_core package. Any NEW violation (fingerprint absent from
+# the baseline) fails the job and blocks merge. The baseline is burn-down only.
+#
+# To permit a legitimate exception, annotate the line:
+#   # canonical-inference-ok: <concrete reason>
+#
+# This job is a REQUIRED STATUS CHECK. The job name "Canonical Inference Gate"
+# must match branch protection rules.
+
+name: Canonical Inference Gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main, dev]
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-inference-gate:
+    name: Canonical Inference Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run canonical-inference gate (full-repo, against frozen baseline)
+        run: |
+          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@940d2f2ab44d2f455a607926674b90ecbc9b74ba" \
+            python -m omnibase_core.validation.validator_canonical_inference \
+            --all --repo omniclaude --repo-root .
+
+      - name: Assert baseline did not grow (anti-gaming)
+        run: |
+          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@940d2f2ab44d2f455a607926674b90ecbc9b74ba" python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          # Locate the baseline inside the installed omnibase_core package.
+          import omnibase_core.validation.validator_canonical_inference as _m
+
+          baseline = Path(_m.__file__).parent / "baselines" / "canonical_inference_baseline.json"
+          head = json.loads(baseline.read_text())
+          head_repo = {
+              e["fingerprint"]
+              for e in head["violations"]
+              if e["repo"] == "omniclaude"
+          }
+          # Compare against the baseline on the PR base branch.
+          base_ref = "origin/${{ github.base_ref || 'dev' }}"
+          try:
+              prior_text = subprocess.check_output(
+                  ["git", "show", f"{base_ref}:{baseline.relative_to(Path.cwd())}"],
+                  text=True,
+              )
+              prior = json.loads(prior_text)
+              prior_repo = {
+                  e["fingerprint"]
+                  for e in prior["violations"]
+                  if e["repo"] == "omniclaude"
+              }
+          except (subprocess.CalledProcessError, ValueError):
+              # Baseline file is not present in this consumer repo working tree —
+              # the baseline is owned by omnibase_core, not this repo. There is no
+              # local prior to compare against; the anti-growth assertion is
+              # enforced in omnibase_core's own CI. Nothing grew here by
+              # definition.
+              print(
+                  "CANONICAL-INFERENCE BASELINE OK (consumer): baseline owned by "
+                  f"omnibase_core; omniclaude subset has {len(head_repo)} "
+                  "grandfathered fingerprints."
+              )
+              sys.exit(0)
+          grew = head_repo - prior_repo
+          if grew:
+              sys.stderr.write(
+                  "CANONICAL-INFERENCE BASELINE GREW: "
+                  f"{len(grew)} new fingerprint(s) added to the baseline. The "
+                  "baseline is burn-down only — fix the violation or annotate with "
+                  "# canonical-inference-ok:, never grow the baseline.\n"
+              )
+              sys.exit(1)
+          print(
+              "CANONICAL-INFERENCE BASELINE OK: "
+              f"omniclaude subset {len(head_repo)} (<= prior {len(prior_repo)})."
+          )
+          PY

@@ -36,7 +36,7 @@ jobs:
       }}
     steps:
       - name: Checkout omniclaude scripts
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
           ref: main

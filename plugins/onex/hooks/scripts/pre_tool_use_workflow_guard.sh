@@ -79,6 +79,25 @@ fi
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Checking $TOOL_NAME for workflow preconditions" >> "$LOG_FILE"
 
+# Bind PROJECT_ROOT before sourcing common.sh (OMN-13848).
+# common.sh dereferences ${PROJECT_ROOT} for .env loading. Left unbound under
+# `set -u` this raises "PROJECT_ROOT: unbound variable", the script exits
+# non-zero, and the error-guard EXIT trap swallows it to exit 0 -- which fails
+# the canonical-clone write guard OPEN (it never reaches the Python block that
+# actually blocks). Resolve the repo root deterministically so the guard runs
+# and fails CLOSED. Prefer CLAUDE_PROJECT_DIR, then the caller git toplevel,
+# then the original working directory.
+if [[ -z "${PROJECT_ROOT:-}" || ! -d "${PROJECT_ROOT:-}" ]]; then
+    PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-}"
+    if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+        PROJECT_ROOT="$(git -C "$_ORIGINAL_PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+    fi
+    if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+        PROJECT_ROOT="$_ORIGINAL_PWD"
+    fi
+fi
+export PROJECT_ROOT
+
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
 onex_hook_gate WORKFLOW_GUARD || exit 0

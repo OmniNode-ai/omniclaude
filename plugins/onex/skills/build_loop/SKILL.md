@@ -1,118 +1,58 @@
 ---
-description: Autonomous build loop — runs the ONEX build loop workflow locally via `onex run`
+description: Single-command dispatch shim. Runs `uv run onex skill build_loop` which resolves the declarative
+  skill->node mapping, dispatches node_build_loop in receipt mode, and prints one typed ModelSkillResult.
+  No inline logic; markdown only.
 mode: full
 version: 2.0.0
 level: advanced
 debug: false
 category: workflow
-tags: [build-loop, autonomous, automation, orchestrator]
+tags:
+  - build-loop
+  - autonomous
+  - automation
+  - orchestrator
 author: OmniClaude Team
 composable: true
 args:
   - name: --max-cycles
-    description: "Maximum cycles (default: 1)"
+    description: integer arg
     required: false
   - name: --skip-closeout
-    description: "Skip close-out phase"
+    description: boolean flag
     required: false
   - name: --dry-run
-    description: "No side effects — simulate the full loop"
+    description: boolean flag
     required: false
-  - name: --max-tickets
-    description: "Max tickets to dispatch per fill cycle (default: 5)"
-    required: false
-  - name: --mode
-    description: "Execution mode: build, close_out, full, observe (default: build)"
-    required: false
+skill_kind: dispatch
 ---
 
-# Build Loop
+# /onex:build_loop — one command, one typed result
 
-## Tools Required (OMN-8708)
+**Skill ID**: `onex:build_loop` · **Command**: `uv run onex skill build_loop` (omnibase_infra) · **Backing node**: `node_build_loop` (omnimarket)
 
-`build-loop` dispatches workers via `Agent()`. Workers run in fresh sessions where dispatch
-tools are **deferred** (schema not pre-loaded). Any worker that needs to further dispatch
-sub-agents must fetch the schema at session start:
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelLoopState]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-```
-ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
-```
+See `prompt.md` for the one command and how to present the typed result.
 
-Include this as the first instruction in every `Agent()` dispatch prompt emitted by the loop.
+## Routing Contract
 
-**Announce at start:** "I'm using the build-loop skill to start the autonomous build loop."
+The `uv run onex skill build_loop` entrypoint publishes to `onex.cmd.omnimarket.build-loop.v1`
+through receipt-mode dispatch. If routing fails, surface `SkillRoutingError` directly; do not produce prose.
 
-## Usage
+## What this skill does NOT do
 
-```
-/build-loop                         # Single cycle (default)
-/build-loop --max-cycles 3          # Run 3 cycles
-/build-loop --skip-closeout         # Skip CLOSING_OUT phase
-/build-loop --dry-run               # Simulate without side effects
-/build-loop --max-tickets 10        # Dispatch up to 10 tickets per fill
-/build-loop --mode close_out        # Close-out only (no fill/build)
-```
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-## Execution
+## Related
 
-### Step 1 — Parse arguments
-
-- `--max-cycles` → max loop iterations (default: 1)
-- `--skip-closeout` → skip CLOSING_OUT phase (default: false)
-- `--dry-run` → simulate all phases without side effects (default: false)
-- `--max-tickets` → tickets dispatched per fill cycle (default: 5)
-- `--mode` → build | close_out | full | observe (default: build)
-
-### Step 2 — Run node
-
-Primary path (bus-driven):
-
-```bash
-onex run-node node_build_loop_orchestrator \
-  --input '{"max_cycles": 1, "skip_closeout": false, "dry_run": false, "max_tickets": 5, "mode": "build"}' \
-  --timeout 300
-```
-
-Fallback path (local/offline):
-
-```bash
-onex node node_build_loop_orchestrator \
-  --input <json_file>
-```
-
-Where `<json_file>` contains `ModelLoopStartCommand` JSON matching the payload fields above.
-
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = all cycles completed, exit 1 = any cycle failed.
-
-### Step 3 — Render report
-
-From the JSON output display:
-- Summary: cycles completed, cycles failed, total tickets dispatched
-- Per-cycle summary: phase outcomes, tickets dispatched, errors
-- Circuit breaker status (trips after 3 consecutive failures)
-
-## Phases
-
-| Phase | Node | What It Does |
-|-------|------|-------------|
-| CLOSING_OUT | `node_closeout_effect` | Merge-sweep, quality gates, release readiness |
-| VERIFYING | `node_verify_effect` | Dashboard health, runtime health, data flow |
-| FILLING | `node_rsd_fill_compute` | Select top-N tickets by RSD score |
-| CLASSIFYING | `node_ticket_classify_compute` | Classify tickets by buildability |
-| BUILDING | `node_build_dispatch_effect` | Dispatch ticket-pipeline per ticket |
-| COMPLETE | reducer | Cycle finished |
-
-## Safety
-
-- Circuit breaker halts after 3 consecutive phase failures
-- `--dry-run` simulates all phases without creating PRs, tickets, or merges
-- Max cycles default is 1 — increase only for overnight/cron runs
-
-## Architecture
-
-```
-SKILL.md   -> thin shell (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_build_loop_orchestrator/ (orchestrator)
-fsm        -> omnimarket/src/omnimarket/nodes/node_build_loop/ (FSM reducer)
-contract   -> node_build_loop_orchestrator/contract.yaml
-```
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_build_loop.models.model_loop_state.ModelLoopState`

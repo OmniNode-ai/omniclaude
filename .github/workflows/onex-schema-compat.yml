@@ -47,10 +47,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout onex_change_control
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           path: onex_change_control
@@ -67,7 +67,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-schema-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}

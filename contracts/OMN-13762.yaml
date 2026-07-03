@@ -1,0 +1,39 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13762"
+title: "Bump omnibase-core to 0.46.1"
+summary: >-
+  Update omniclaude's omnibase-core pin to 0.46.1 and keep local validation
+  compatible with the dependency update. Canonical OCC evidence for this
+  merge-sweep replacement PR lives in onex_change_control PR #3396.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-core-bump-replacement"
+    description: >-
+      omniclaude PR #1826 updates the omnibase-core dependency pin to 0.46.1
+      and carries the parser/type/validation compatibility fixes needed for
+      the dependency bump.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1826 --repo OmniNode-ai/omniclaude --json headRefOid
+          --jq '.headRefOid == "113bfded8edf44ce3edd0747803562d8d241b4cc"'
+  - id: "dod-occ-evidence-source"
+    description: >-
+      Central contract and PASS receipt bindings for this replacement PR were
+      merged through onex_change_control PR #3396.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 3396 --repo OmniNode-ai/onex_change_control
+          --json state,mergeCommit --jq '.state == "MERGED"'

@@ -39,13 +39,13 @@ jobs:
 
       - name: Checkout
         if: github.event_name != 'merge_group'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Checkout omnibase_infra (for validation script)
         if: github.event_name != 'merge_group'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_infra
           path: _omnibase_infra

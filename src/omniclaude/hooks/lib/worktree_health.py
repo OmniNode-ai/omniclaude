@@ -10,6 +10,8 @@ All classification functions are pure (no I/O) for unit testability.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -146,11 +148,168 @@ def build_worktree_entry(
     )
 
 
+# ---------------------------------------------------------------------------
+# Durability sweep (OMN-13044)
+#
+# Layered on top of the health classification above, the durability sweep flags
+# worktrees that are at risk of stranding or losing work:
+#   1. NO-TICKET   : directory name carries no OMN-NNNN identifier
+#   2. DIRTY-PLAN  : unstaged changes to files referenced by a docs/plans/ or
+#                    docs/handoffs/ document
+#   3. RESCUE-REF  : on handoff-block, a rescue/<ticket>/<timestamp> tag is
+#                    created over `git stash create` BEFORE the block is enforced
+#   4. OFF-VOLUME  : a demo-critical .onex_state backup only counts toward DoD
+#                    when it also has an off-volume copy (ticket attachment or
+#                    docs-branch commit)
+#
+# All functions below are pure (no I/O) for unit testability; the worktree
+# skill drives the git/gh side effects.
+# ---------------------------------------------------------------------------
+
+RESCUE_REF_PREFIX: str = "rescue"
+"""Namespace prefix for rescue tags created on handoff-block."""
+
+_TICKET_ID_RE = re.compile(r"OMN-\d+")
+
+
+def extract_ticket_id(dirname: str) -> str | None:
+    """Extract the first OMN-NNNN identifier from a worktree path or dir name.
+
+    Detection is case-insensitive because Linear branch names lowercase the
+    ticket id (``omn-1234``) while the canonical worktree layout uppercases it.
+
+    Args:
+        dirname: A worktree path or directory name.
+
+    Returns:
+        The uppercased ticket id (e.g. ``"OMN-13044"``) or ``None`` when the
+        path carries no ticket identifier (a NO-TICKET worktree).
+    """
+    match = _TICKET_ID_RE.search(dirname.upper())
+    return match.group(0) if match else None
+
+
+def is_no_ticket_worktree(path: str) -> bool:
+    """Return ``True`` when the worktree path has no OMN-NNNN identifier."""
+    return extract_ticket_id(path) is None
+
+
+def plan_referenced_dirty_files(
+    changed_files: Iterable[str],
+    plan_referenced_files: Iterable[str],
+) -> tuple[str, ...]:
+    """Return the sorted, de-duplicated intersection of dirty and plan files.
+
+    A non-empty result flags a dirty worktree whose loss would strand work
+    referenced by a ``docs/plans/`` or ``docs/handoffs/`` document.
+
+    Args:
+        changed_files: Files with unstaged/uncommitted changes (git status).
+        plan_referenced_files: Files referenced by any plan/handoff document.
+
+    Returns:
+        The sorted tuple of files that are both dirty and plan-referenced.
+    """
+    referenced = set(plan_referenced_files)
+    return tuple(sorted({f for f in changed_files if f in referenced}))
+
+
+def build_rescue_ref(ticket: str, timestamp: str) -> str:
+    """Build the rescue git tag name ``rescue/<ticket>/<timestamp>``.
+
+    The worktree skill creates this tag over ``git stash create`` before
+    blocking a handoff, so dirty work is recoverable even if the worktree is
+    later pruned.
+
+    Args:
+        ticket: The ticket id (or ``NO-TICKET`` sentinel) owning the worktree.
+        timestamp: A filesystem-safe timestamp (e.g. ``20260628T120000Z``).
+
+    Returns:
+        The fully-qualified rescue tag name.
+
+    Raises:
+        ValueError: If ``ticket`` or ``timestamp`` is empty.
+    """
+    if not ticket:
+        raise ValueError("ticket is required to build a rescue ref")
+    if not timestamp:
+        raise ValueError("timestamp is required to build a rescue ref")
+    return f"{RESCUE_REF_PREFIX}/{ticket}/{timestamp}"
+
+
+def offvolume_backup_satisfied(
+    *,
+    has_ticket_attachment: bool,
+    has_docs_branch_commit: bool,
+) -> bool:
+    """Return ``True`` when a demo-critical backup has an off-volume copy.
+
+    A bare ``.onex_state`` backup that lives only on the work volume does NOT
+    count toward DoD — the fix must also be durable off-volume, either as a
+    Linear ticket attachment or a committed docs-branch artifact.
+
+    Args:
+        has_ticket_attachment: Whether the fix is attached to its Linear ticket.
+        has_docs_branch_commit: Whether the fix is committed on a docs branch.
+
+    Returns:
+        ``True`` when at least one off-volume copy exists.
+    """
+    return has_ticket_attachment or has_docs_branch_commit
+
+
+class ModelWorktreeDurabilityFlags(BaseModel):
+    """Durability-sweep flags for a single worktree (OMN-13044).
+
+    Surfaces the four at-risk conditions the durability sweep detects on top of
+    the health classification: NO-TICKET worktrees, dirty worktrees touching
+    plan/handoff-referenced files, the rescue ref auto-created on handoff-block,
+    and whether the off-volume backup requirement is satisfied.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(..., min_length=1, description="Absolute path to the worktree")
+    ticket_id: str | None = Field(
+        default=None,
+        description="OMN-NNNN id parsed from the path; None means NO-TICKET",
+    )
+    is_no_ticket: bool = Field(
+        default=False,
+        description="True when the directory name carries no OMN-NNNN identifier",
+    )
+    dirty_plan_files: tuple[str, ...] = Field(
+        default=(),
+        description="Unstaged files also referenced by a plan/handoff document",
+    )
+    rescue_ref: str | None = Field(
+        default=None,
+        description="rescue/<ticket>/<timestamp> tag created before a handoff-block",
+    )
+    offvolume_backup_ok: bool = Field(
+        default=False,
+        description="Demo-critical backup has a ticket/docs-branch off-volume copy",
+    )
+
+    @property
+    def is_dirty_plan_worktree(self) -> bool:
+        """Return ``True`` when unstaged changes touch plan-referenced files."""
+        return bool(self.dirty_plan_files)
+
+
 __all__ = [
     "EnumWorktreeStatus",
+    "ModelWorktreeDurabilityFlags",
     "ModelWorktreeEntry",
     "ModelWorktreeHealthResult",
+    "RESCUE_REF_PREFIX",
     "STALE_WORKTREE_DAYS",
+    "build_rescue_ref",
     "build_worktree_entry",
     "classify_worktree",
+    "extract_ticket_id",
+    "is_no_ticket_worktree",
+    "offvolume_backup_satisfied",
+    "plan_referenced_dirty_files",
 ]

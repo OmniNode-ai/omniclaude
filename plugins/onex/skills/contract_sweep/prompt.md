@@ -283,7 +283,7 @@ Before creating a ticket:
 #### Drift ticket format
 
 ```
-Title: [contract-drift] BREAKING drift in <repo>/<path> [OMN-6725]
+Title: [contract-drift] BREAKING drift in <repo>/<path>
 
 ## Drift Report
 
@@ -309,7 +309,7 @@ Detected by contract-sweep skill run <run-id>.
 #### Boundary ticket format
 
 ```
-Title: [boundary-stale] <topic_name> boundary broken [OMN-6725]
+Title: [boundary-stale] <topic_name> boundary broken
 
 ## Stale Boundary
 

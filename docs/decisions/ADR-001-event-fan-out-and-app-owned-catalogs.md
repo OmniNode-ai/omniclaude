@@ -10,7 +10,7 @@
 | **Created** | 2026-02-09 |
 | **Last Updated** | 2026-02-09 |
 | **Author** | Jonah |
-| **Related Issues** | [OMN-1944](https://linear.app/omninode/issue/OMN-1944), [OMN-1972](https://linear.app/omninode/issue/OMN-1972), [OMN-1735](https://linear.app/omninode/issue/OMN-1735), [OMN-1892](https://linear.app/omninode/issue/OMN-1892) |
+| **Related Issues** | emit daemon port, realm-agnostic topics, session outcome feedback loop, routing feedback events with guardrails |
 | **Implementation PRs** | omnibase_infra #275 (remove defaults), omniclaude4 branch `jonah/omn-1892-add-feedback-loop-with-guardrails` |
 | **Related ADR** | omnibase_core [ADR-005](https://github.com/OmniNode-ai/omnibase_core/blob/main/docs/decisions/ADR-005-core-infra-dependency-boundary.md) - Core-Infra Dependency Boundary |
 
@@ -130,7 +130,7 @@ onex.{kind}.{producer}.{event-name}.v{n}
 | `cmd` | "Do something with this" — intended for a specific downstream system | Restricted |
 | `evt` | "This happened" — facts about what happened, safe to observe broadly | Broad |
 
-Topics are **realm-agnostic** (OMN-1972). No environment prefix (`dev.`, `prod.`). The `TopicBase` StrEnum value IS the wire topic.
+Topics are **realm-agnostic**. No environment prefix (`dev.`, `prod.`). The `TopicBase` StrEnum value IS the wire topic.
 
 ### Fan-Out Architecture
 
@@ -177,7 +177,7 @@ The application repository is the **sole source of truth** for its event schemas
 
 **omnibase_infra provides** (generic primitives only):
 - `EventBusKafka.publish(topic, key, value, headers)` — publishes exactly what it receives
-- `TopicResolver` — pass-through validation (OMN-1972)
+- `TopicResolver` — pass-through validation
 - No application-specific event catalogs
 - No `_register_defaults()`
 
@@ -335,10 +335,10 @@ Extend infra with `FanOutRule` support. **Rejected** because:
 
 ### Related Issues
 
-- **OMN-1944**: Port emit daemon from omnibase_infra to omniclaude
-- **OMN-1972**: TopicResolver — realm-agnostic topics
-- **OMN-1735**: Session outcome feedback loop
-- **OMN-1892**: Routing feedback events with guardrails
+- Emit daemon ported from omnibase_infra to omniclaude
+- TopicResolver realm-agnostic topic design
+- Session outcome feedback loop
+- Routing feedback events with guardrails
 
 ---
 

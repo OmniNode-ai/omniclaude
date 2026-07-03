@@ -81,6 +81,10 @@ def cmd_init(stdin_data: dict) -> dict:
 
     Returns:
         {"run_id": "...", "state": "run_active"} on success, {} on failure.
+
+    KEEP: live caller — invoked on every Claude Code session start via
+      plugins/onex/hooks/scripts/session-start.sh:707
+      (cmd arg "init" dispatched through COMMANDS registry)
     """
     # Import here to allow the adapter to be imported without side effects
     from node_session_lifecycle_reducer import Event, State, reduce
@@ -167,6 +171,10 @@ def cmd_end(stdin_data: dict) -> dict:
 
     Returns:
         {"run_id": "...", "state": "run_ended"} on success, {} on failure.
+
+    KEEP: live caller — invoked on every Claude Code session end via
+      plugins/onex/hooks/scripts/session-end.sh:564
+      (cmd arg "end" dispatched through COMMANDS registry)
     """
     from node_session_lifecycle_reducer import (
         Event,
@@ -239,6 +247,10 @@ def cmd_set_active_run(stdin_data: dict) -> dict:
 
     Returns:
         {"active_run_id": "..."} on success, {} on failure.
+
+    UNCERTAIN: no shell call site found in session-start.sh or session-end.sh during
+      verification on 2026-05-28. Leaving in place; needs a follow-up decision —
+      either wire it or delete it in a future ticket.
     """
     from node_session_state_effect import (
         LockResult,

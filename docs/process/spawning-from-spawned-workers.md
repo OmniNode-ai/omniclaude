@@ -1,4 +1,4 @@
-# Spawning Sub-Workers from Orchestrator Workers (OMN-8708)
+# Spawning Sub-Workers from Orchestrator Workers
 
 ## The Problem
 
@@ -47,7 +47,7 @@ remainder of the worker session.
 
 ## Where It's Documented
 
-Each affected orchestrator skill's `SKILL.md` now contains a **"Tools Required (OMN-8708)"**
+Each affected orchestrator skill's `SKILL.md` now contains a **"Tools Required"**
 section at the top of its body that explains this requirement and shows the exact call to
 include in dispatch prompts.
 

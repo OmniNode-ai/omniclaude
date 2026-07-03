@@ -61,7 +61,7 @@ COMPLIANCE_EVALUATED_TOPIC = (
 def _get_kafka_consumer_class() -> type | None:
     """Import KafkaConsumer lazily; return None if kafka-python not installed."""
     try:
-        from kafka import KafkaConsumer  # noqa: PLC0415
+        from kafka import KafkaConsumer
 
         result: type = KafkaConsumer
         return result
@@ -233,7 +233,7 @@ def _save_advisory(session_id: str, advisories: list[dict[str, Any]]) -> bool:
         sys.path.insert(0, lib_dir)
 
     try:
-        from pattern_advisory_formatter import (  # noqa: PLC0415
+        from pattern_advisory_formatter import (
             save_advisories,
         )
 
@@ -474,7 +474,7 @@ def main() -> None:
 
             stop_event = threading.Event()
 
-            import signal  # noqa: PLC0415
+            import signal
 
             def _handle_signal(sig: int, frame: FrameType | None) -> None:
                 stop_event.set()

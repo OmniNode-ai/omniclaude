@@ -1,0 +1,30 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13050"
+title: "Tool-generate OCC receipts"
+summary: >
+  Add scripts/scaffold_occ_receipt.py and dispatch-worker instructions so OCC
+  receipt creation is tool-generated, defaults to dev, computes contract_sha256,
+  rejects bypass tokens, and requires confirmed CI-watch evidence before arming.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-scaffold-tests"
+    description: "Focused scaffold and dispatch-worker injection tests pass."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/scripts/test_scaffold_occ_receipt.py tests/skills/test_dispatch_worker_operating_rules_injection.py -q"
+  - id: "dod-occ-authority"
+    description: "Central OCC contract and DoD receipts for OMN-13050 are linked from the PR body."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'Evidence-Source: OCC#3181' /tmp/pr_body.txt"

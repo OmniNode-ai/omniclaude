@@ -73,6 +73,20 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-13025 (A-3): Reject docs/evidence/** with UI/e2e claims but no Playwright artifact.
+      # Root cause: 2026-06-11 19:27Z evidence doc claimed "UI POST → full chain live" when
+      # only curl was run (PROCESS_FAILURE_RETRO.md §3.A — top-10 failure #1).
+      # Rejected claim patterns: "UI POST", "click", "full chain live", "end-to-end".
+      # A claim is allowed only when the doc also references a Playwright artifact.
+      # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10).
+      - id: reject-evidence-ui-claims
+        name: Reject evidence docs with UI/e2e claims lacking Playwright artifact (OMN-13025)
+        entry: .pre-commit-hooks/reject-evidence-ui-claims.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-11271: Reject handoff docs missing mandatory ## Infra Health section.
       # Matches docs/handoffs/*.md, docs/*handoff*.md, docs/tracking/*handoff*.md.
       # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10). Spec: OMN-8867.
@@ -83,6 +97,21 @@ repos:
         types: [markdown]
         pass_filenames: true
         stages: [pre-commit]
+
+      # OMN-13029 (retro A-11): Defect-anchor gate — evidence docs with BLOCKER,
+      # UNFIXED, DEFECT, REGRESSION, or BUG-CONFIRMED markers and no OMN-XXXX
+      # reference fail pre-commit. Unanchored defects strand diagnosis without a
+      # queue entry, owner, or close signal (PROCESS_FAILURE_RETRO.md §3.A).
+      # Hard fail — no warn-only (CLAUDE.md Rule #5).
+      # Escape (file-level): '<!-- defect-anchor-ok: <reason> -->'.
+      - id: check-defect-anchor
+        name: Reject evidence docs with unanchored defect markers (OMN-13029)
+        entry: .pre-commit-hooks/check-defect-anchor.sh
+        language: script
+        types: [markdown]
+        pass_filenames: true
+        stages: [pre-commit]
+
 
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
@@ -133,6 +162,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-13873: dep-provenance gate — forbid first-party git-source overrides.
+      # omnibase-core / omnibase-spi / omnibase-compat must resolve from PyPI, not
+      # git commits/branches/tags, on dev/main (recurrence guard for PR #2184's
+      # UNRELEASED-commit overrides that passed all CI green). Pure static +
+      # offline; onex-change-control / omnibase-infra are intentionally exempt.
+      # Mirrors the required CI job in .github/workflows/dep-provenance-gate.yml.
+      - id: check-dep-provenance
+        name: Forbid first-party git-source overrides (OMN-13873)
+        entry: python3 scripts/check_dep_provenance.py
+        language: system
+        files: ^pyproject\.toml$
+        pass_filenames: false
+        stages: [pre-commit]
+
       # OMN-8776: regression guard — skill prompts must not hardcode
       # `mcp__linear-server__*` tool names. Ticketing operations route
       # through ProtocolProjectTracker (`uv run onex run node_*`).
@@ -141,6 +184,19 @@ repos:
         entry: python3 scripts/lint_skill_mcp_refs.py
         language: system
         files: '^plugins/onex/skills/.*\.md$'
+        pass_filenames: true
+        stages: [pre-commit]
+
+      # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep
+      # keywords need a precondition-probe: annotation; deliverable sections
+      # with file paths need an ## Artifact Manifest section; each manifest
+      # item must carry [x], DONE, SKIPPED:, DEFERRED:, or BLOCKED-ON:.
+      # CI mirror: .github/workflows/plan-hard-fields-gate.yml
+      - id: lint-plan-hard-fields
+        name: enforce plan hard fields (D-5 precondition probes + artifact manifest)
+        entry: python3 scripts/lint_plan_hard_fields.py
+        language: system
+        files: '^docs/(plans|tracking)/.*\.md$'
         pass_filenames: true
         stages: [pre-commit]
 
@@ -424,6 +480,18 @@ repos:
           && echo "ERROR: hardcoded internal IP found (add # onex-allow-internal-ip to suppress)" && exit 1 || exit 0'
         pass_filenames: false
         stages: [pre-commit]
+      # OMN-13047 / Retro D-1: Concurrency-primitive clause.
+      # Flags staged non-test Python additions that introduce seek_to_end /
+      # poll / KafkaConsumer without a concurrent staged change under tests/.
+      # Suppression: add ``# concurrency-ok`` to the flagged line.
+      - id: concurrency-primitive-guard
+        name: Concurrency primitive clause (OMN-13047)
+        entry: python scripts/validation/validate_no_blocking_primitive_without_tests.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # OMN-3554: Reject hardcoded Kafka broker address fallbacks
       # Detects os.getenv("KAFKA_*", non-empty) and private-IP Kafka broker ports
       - id: kafka-no-hardcoded-fallback

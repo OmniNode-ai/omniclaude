@@ -1,11 +1,10 @@
 # hostile_reviewer → rdjsonl Output Contract
 
-> **DESIGN ONLY — implement when OMN-10111 closes.**
+> **DESIGN ONLY — implement when hostile_reviewer is re-enabled.**
 >
 > This document defines the wire contract for converting `hostile_reviewer`
 > findings to reviewdog rdjsonl format. No integration code should be shipped
-> until OMN-10111 (re-enable hostile_reviewer) is closed and the gate is
-> verified live.
+> until the hostile_reviewer gate is re-enabled and verified live.
 
 ---
 
@@ -116,41 +115,29 @@ Fields:
 
 ## Integration Snippet
 
-When OMN-10111 closes and hostile_reviewer is re-enabled, invoke the converter
-via `findings-to-rdjsonl.py` (Task 6 of OMN-10928). The format key lives inside
+> **Consumer removed in an earlier pass.** The reviewdog reusable workflow and its
+> caller were deleted from this repo. The rdjsonl format defined here remains
+> valid — it is the GitHub-standard reviewdog Diagnostic Format (rdjsonl), a
+> wire format independent of the reviewdog binary. When hostile_reviewer is
+> re-enabled, wire the converter output into whatever annotation surface
+> the repo uses at that time. The historical reviewdog pipe commands have been
+> dropped to avoid referencing deleted workflow files.
+
+When hostile_reviewer is re-enabled, invoke the converter
+via `findings-to-rdjsonl.py`. The format key lives inside
 the JSON payload — it is **not** a CLI flag:
 
 ```bash
-# Pipe hostile_reviewer output JSON to the converter, then to reviewdog
 echo '{
   "format": "hostile_reviewer",
   "findings": [...]
-}' | python3 .github/scripts/findings-to-rdjsonl.py \
-  | reviewdog -f=rdjsonl -name=hostile-reviewer \
-    -reporter=github-pr-check \
-    -filter-mode=added \
-    -fail-level=error
+}' | python3 .github/scripts/findings-to-rdjsonl.py
 ```
 
-Minimal GitHub Actions step (add under reviewdog job in
-`.github/workflows/reviewdog-review.yml`):
-
-```yaml
-- name: hostile-reviewer findings
-  if: inputs.hostile-reviewer-enabled
-  env:
-    REVIEWDOG_GITHUB_API_TOKEN: ${{ steps.reporter.outputs.token }}
-  run: |
-    python3 .github/scripts/findings-to-rdjsonl.py < hostile-reviewer-findings.json \
-      | reviewdog -f=rdjsonl -name=hostile-reviewer \
-        -reporter=github-pr-check \
-        -filter-mode=added \
-        -fail-level=${{ inputs.fail-level }}
-```
-
-The upstream hostile_reviewer node must write its output to
-`hostile-reviewer-findings.json` (or pipe directly) in the payload format
-defined in the **Input Schema** section above.
+The converter emits one rdjsonl Diagnostic line per finding (see **Output
+Schema** above) to stdout. The upstream hostile_reviewer node must write its
+output in the payload format defined in the **Input Schema** section above
+before piping it to the converter.
 
 ---
 
@@ -158,7 +145,7 @@ defined in the **Input Schema** section above.
 
 `findings-to-rdjsonl.py` already handles the `hostile_reviewer` format via the
 `_hostile_reviewer()` converter registered in the `CONVERTERS` dispatch table.
-See `omniclaude/.github/scripts/findings-to-rdjsonl.py` (Task 6, OMN-10928).
+See `omniclaude/.github/scripts/findings-to-rdjsonl.py`.
 
 No new code is required to implement this contract — only the hostile_reviewer
-node wiring (OMN-10111) is needed.
+node wiring is needed.

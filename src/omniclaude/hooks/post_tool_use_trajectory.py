@@ -202,7 +202,7 @@ def main() -> int:
     try:
         envelope = json.loads(raw)
     except json.JSONDecodeError:
-        print(raw, end="")  # noqa: T201
+        print(raw, end="")
         return 0
 
     store = _get_store(
@@ -225,9 +225,9 @@ def main() -> int:
                 result.additional_context
             )
         output["hookSpecificOutput"]["hookEventName"] = "PostToolUse"
-        print(json.dumps(output))  # noqa: T201
+        print(json.dumps(output))
     else:
-        print(raw, end="")  # noqa: T201
+        print(raw, end="")
 
     return result.exit_code
 

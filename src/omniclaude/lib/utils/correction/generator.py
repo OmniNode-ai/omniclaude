@@ -382,7 +382,7 @@ class CorrectionGenerator:
 
     async def close(
         self,
-    ) -> None:
+    ) -> None:  # stub-ok: close() is intentional no-op for stateless generator
         """
         Cleanup resources.
 

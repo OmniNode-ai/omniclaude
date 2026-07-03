@@ -10,7 +10,7 @@ unless listed under **Public Entrypoints**.
 | `emit_client_wrapper.py` | Primary event emission via Unix socket daemon — client-side interface for all hooks; single emission with daemon fan-out to multiple topics |
 | `emit_daemon.py` | The daemon process that fans out events to Kafka; started by SessionStart, persists across hook invocations |
 | `emit_ticket_status.py` | CLI wrapper for emitting agent status events from the ticket-work skill |
-| `extraction_event_emitter.py` | Extraction pipeline event emitter (OMN-2344) |
+| `extraction_event_emitter.py` | Extraction pipeline event emitter |
 | `enrichment_observability_emitter.py` | Per-channel enrichment observability events; builds and emits `onex.evt.omniclaude.context-enrichment.v1` |
 | `metrics_emitter.py` | Adapter layer for phase metrics emission |
 | `agent_status_emitter.py` | Adapter layer for agent lifecycle status emission |
@@ -32,7 +32,7 @@ unless listed under **Public Entrypoints**.
 | Module | Purpose |
 |--------|---------|
 | `context_injection_wrapper.py` | CLI wrapper for learned-pattern context injection; reads JSON from stdin, writes JSON to stdout |
-| `context_enrichment_runner.py` | CLI wrapper for local enrichment pipeline (OMN-2267) |
+| `context_enrichment_runner.py` | CLI wrapper for local enrichment pipeline |
 | `static_context_snapshot.py` | Tracks changes to static context files between Claude Code sessions; emits edit-detected events |
 | `ticket_context_injector.py` | Injects active Linear ticket context into Claude sessions |
 | `architecture_handshake_injector.py` | Injects repo-specific architecture constraints from handshake files |
@@ -45,7 +45,7 @@ unless listed under **Public Entrypoints**.
 
 | Module | Purpose |
 |--------|---------|
-| `compliance_result_subscriber.py` | Subscribes to `compliance-evaluated.v1`, transforms violations to `PatternAdvisory`, persists (OMN-2340) |
+| `compliance_result_subscriber.py` | Subscribes to `compliance-evaluated.v1`, transforms violations to `PatternAdvisory`, persists |
 | `pattern_advisory_formatter.py` | Formats pattern violations as advisory markdown |
 | `pattern_enforcement.py` | PostToolUse pattern enforcement — advisory compliance checking |
 | `pattern_types.py` | Shared types for pattern injection; used by both CLI and handler |
@@ -54,7 +54,7 @@ unless listed under **Public Entrypoints**.
 
 | Module | Purpose |
 |--------|---------|
-| `delegation_orchestrator.py` | Task-type routing with 2-clean-run quality gate (OMN-2281); emits compliance evaluate async |
+| `delegation_orchestrator.py` | Task-type routing with 2-clean-run quality gate; emits compliance evaluate async |
 | `local_delegation_handler.py` | Dispatches to local LLM endpoints after classifying prompt via TaskClassifier |
 | `task_classifier.py` | Classifies whether a prompt is delegatable to a local model |
 | `reconcile_agent_outputs.py` | Reconciles parallel agent outputs using geometric conflict classification |
@@ -92,7 +92,7 @@ unless listed under **Public Entrypoints**.
 | `auth_gate_adapter.py` | PreToolUse authorization gate adapter |
 | `blocked_notifier.py` | Sends Slack message when an agent reports blocked state |
 | `cross_repo_detector.py` | Detects changes spanning multiple repository roots |
-| `file_evidence_resolver.py` | File-based evidence resolver (OMN-2092) |
+| `file_evidence_resolver.py` | File-based evidence resolver |
 | `hook_event_adapter.py` | Hook event adapter layer |
 | `linear_contract_patcher.py` | Safe, marker-based patching of Linear ticket descriptions |
 | `pipeline_slack_notifier.py` | Threaded Slack notifications for ticket-pipeline |

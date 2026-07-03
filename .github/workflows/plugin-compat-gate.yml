@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Assert plugin-compat.yaml exists
         working-directory: ${{ github.workspace }}
@@ -71,7 +71,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-plugin-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}

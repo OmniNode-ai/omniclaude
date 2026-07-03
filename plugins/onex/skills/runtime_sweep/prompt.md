@@ -192,7 +192,7 @@ Correlate:
 
 ---
 
-## Phase 5 — Live Container Crash-Loop Detection [OMN-9122]
+## Phase 5 — Live Container Crash-Loop Detection
 
 Check `omninode-runtime*` containers for restart counts exceeding the threshold.
 
@@ -200,7 +200,7 @@ Check `omninode-runtime*` containers for restart counts exceeding the threshold.
 
 ```bash
 ONEX_INFRA_HOST="${ONEX_INFRA_HOST:-$(grep ONEX_INFRA_HOST ~/.omnibase/.env 2>/dev/null | cut -d= -f2)}"
-ssh "jonah@${ONEX_INFRA_HOST}" "docker ps -a --format '{{.Names}}'" 2>/dev/null | grep '^omninode-runtime'
+ssh "<user>@${ONEX_INFRA_HOST}" "docker ps -a --format '{{.Names}}'" 2>/dev/null | grep '^omninode-runtime'
 ```
 
 If SSH is unavailable, fall back to local Docker socket:
@@ -215,7 +215,7 @@ For each `omninode-runtime*` container:
 
 ```bash
 ONEX_INFRA_HOST="${ONEX_INFRA_HOST:-$(grep ONEX_INFRA_HOST ~/.omnibase/.env 2>/dev/null | cut -d= -f2)}"
-ssh "jonah@${ONEX_INFRA_HOST}" "docker inspect --format='{{.RestartCount}}' $CONTAINER_NAME" 2>/dev/null
+ssh "<user>@${ONEX_INFRA_HOST}" "docker inspect --format='{{.RestartCount}}' $CONTAINER_NAME" 2>/dev/null
 ```
 
 **Threshold:** `RestartCount > 5` → CRASH_LOOP_CRITICAL finding.
@@ -237,7 +237,7 @@ If any container has `RestartCount > 5`:
 
 ---
 
-## Phase 6 — Orchestrator Consumer Group Health [OMN-9122]
+## Phase 6 — Orchestrator Consumer Group Health
 
 Verify all orchestrator-owned Kafka consumer groups have at least one active member. A group in `Empty` state means handlers are not attached and events are silently dropped.
 
@@ -258,7 +258,7 @@ For each consumer group derived in Step 6a:
 
 ```bash
 ONEX_INFRA_HOST="${ONEX_INFRA_HOST:-$(grep ONEX_INFRA_HOST ~/.omnibase/.env 2>/dev/null | cut -d= -f2)}"
-ssh "jonah@${ONEX_INFRA_HOST}" \
+ssh "<user>@${ONEX_INFRA_HOST}" \
   "docker exec omnibase-infra-redpanda rpk group describe $GROUP_NAME --brokers localhost:9092" \
   2>/dev/null
 ```

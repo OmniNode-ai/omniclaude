@@ -442,7 +442,7 @@ Proposed (Service-Level Persistent):
           "explanation": "High confidence match on 'optimize' and 'database' triggers"
         },
         "reason": "Strong trigger match with 'optimize' keyword and database context",
-        "definition_path": "/Users/jonah/.claude/agent-definitions/agent-performance.yaml"
+        "definition_path": "<home>/.claude/agent-definitions/agent-performance.yaml"
       }
     ],
     "routing_metadata": {
@@ -737,7 +737,7 @@ async with RoutingEventClient() as client:
          - "8055:8055"  # Health check endpoint
        environment:
          - KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092
-         - REGISTRY_PATH=/Users/jonah/.claude/agent-definitions/agent-registry.yaml
+         - REGISTRY_PATH=<home>/.claude/agent-definitions/agent-registry.yaml
        volumes:
          - ~/.claude/agent-definitions:/agent-definitions:ro
    ```

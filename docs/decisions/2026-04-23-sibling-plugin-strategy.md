@@ -2,9 +2,8 @@
 
 **Date**: 2026-04-23
 **Status**: Recorded (traceable artifact; formal entry in `decision_store` is a follow-up — see "Pending formalization" below)
-**Context ticket**: OMN-8799 (SD-12: Marketplace package — `onex` CLI version pin)
 **Plan reference**: `docs/plans/2026-04-14-standalone-plugin-distribution.md` § 10 (Open Question: Sibling Plugin Strategy)
-**Gate**: The SD-12 implementation of marketplace packaging depends on this decision being recorded in writing before a standalone marketplace install is promoted to users.
+**Gate**: The standalone marketplace packaging work depends on this decision being recorded in writing before a standalone marketplace install is promoted to users.
 
 ---
 
@@ -52,11 +51,11 @@ This is the plan's recommended posture and is adopted verbatim. Rationale:
   the `onex` plugin. It does not bundle omnigemini or omnimemory.
 - Skills that depend on sibling plugins (`hostile_reviewer`, `recall`) must already
   or soon degrade gracefully when the sibling plugin is absent and log a
-  `SkillRoutingError` with a clear remediation message (per OMN-8737 / plan § 8.3).
+  `SkillRoutingError` with a clear remediation message (per plan § 8.3).
 - New capabilities that were candidates for sibling plugins (e.g. model-family
   selection policy, memory projection) are routed through omnimarket nodes
   instead of into new Claude plugins.
-- SD-13 (version skew alerting) covers sibling-plugin/plugin-compat skew too —
+- Version skew alerting covers sibling-plugin/plugin-compat skew too —
   the alerting surface is topic-based, so it fires whenever a consumer subscribes
   with an incompatible schema regardless of which plugin owns it.
 

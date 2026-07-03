@@ -3,7 +3,9 @@
 """Handler that dispatches tasks to claude, opencode, or codex CLI subprocesses.
 
 Only valid when recipient is an explicit CLI (not 'auto'). The 'auto' path
-continues to use handle_delegation_dispatch() in handler_delegation_dispatch.py.
+now uses omnimarket's node_delegate_skill_orchestrator with bifrost config
+routing. The legacy handle_delegation_dispatch() in handler_delegation_dispatch.py
+is deprecated.
 """
 
 from __future__ import annotations

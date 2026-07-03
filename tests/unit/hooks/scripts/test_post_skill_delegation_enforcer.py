@@ -217,3 +217,72 @@ def test_real_autopilot_skill_no_longer_bypasses_enforcer() -> None:
     rc, stdout, _ = run_enforcer("autopilot", plugin_root=str(plugin_root))
     assert rc == 0
     assert "DELEGATION ENFORCER" in stdout
+
+
+@pytest.mark.unit
+def test_skill_kind_dispatch_skips_enforcer(tmp_path: Path) -> None:
+    """A skill_kind: dispatch skill is one CLI call — handled inline, no subagent (OMN-13096)."""
+    skills_dir = tmp_path / "skills"
+    _write_skill_md(
+        skills_dir / "my_dispatch_skill",
+        """\
+        ---
+        description: A single-command dispatch skill
+        skill_kind: dispatch
+        ---
+        # My Dispatch Skill
+        """,
+    )
+    rc, stdout, _ = run_enforcer("my_dispatch_skill", plugin_root=str(tmp_path))
+    assert rc == 0
+    assert "DELEGATION ENFORCER" not in stdout
+
+
+@pytest.mark.unit
+def test_skill_kind_dispatch_emits_empty_hook_output(tmp_path: Path) -> None:
+    """When bypassing via skill_kind: dispatch, the hook emits valid hookSpecificOutput JSON."""
+    skills_dir = tmp_path / "skills"
+    _write_skill_md(
+        skills_dir / "my_dispatch_skill",
+        """\
+        ---
+        description: dispatch
+        skill_kind: dispatch
+        ---
+        """,
+    )
+    rc, stdout, _ = run_enforcer("my_dispatch_skill", plugin_root=str(tmp_path))
+    assert rc == 0
+    data = json.loads(stdout)
+    assert "hookSpecificOutput" in data
+
+
+@pytest.mark.unit
+def test_skill_kind_methodology_emits_enforcer(tmp_path: Path) -> None:
+    """A non-dispatch skill_kind must NOT bypass the enforcer."""
+    skills_dir = tmp_path / "skills"
+    _write_skill_md(
+        skills_dir / "methodology_skill",
+        """\
+        ---
+        description: A methodology skill that does real work
+        skill_kind: methodology
+        ---
+        # Methodology Skill
+        """,
+    )
+    rc, stdout, _ = run_enforcer("methodology_skill", plugin_root=str(tmp_path))
+    assert rc == 0
+    assert "DELEGATION ENFORCER" in stdout
+
+
+@pytest.mark.unit
+def test_real_delegate_skill_bypasses_enforcer() -> None:
+    """The real delegate skill must carry skill_kind: dispatch and bypass the enforcer (OMN-13096)."""
+    plugin_root = _REPO_ROOT / "plugins" / "onex"
+    rc, stdout, _ = run_enforcer("delegate", plugin_root=str(plugin_root))
+    assert rc == 0
+    assert "DELEGATION ENFORCER" not in stdout, (
+        "delegate is now a single `onex delegate` command (skill_kind: dispatch) "
+        "and must be handled inline, not via a ~95k-token subagent spawn"
+    )

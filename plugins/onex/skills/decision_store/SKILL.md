@@ -11,21 +11,19 @@ debug: false
 **Skill ID**: `onex:decision_store`
 **Version**: 1.1.0
 **Owner**: omniclaude
-**Tickets**: OMN-2768 (base), OMN-2769 (Slack gate + status events)
-
 ---
 
 ## Purpose
 
 Record, query, and conflict-check architectural and design decisions across the OmniNode
-platform. Decisions are persisted by `NodeDecisionStoreEffect` (OMN-2765) and queried
-via `NodeDecisionStoreQueryCompute` (OMN-2767).
+platform. Decisions are persisted by `NodeDecisionStoreEffect` and queried
+via `NodeDecisionStoreQueryCompute`.
 
 Conflicts are detected in two stages:
 1. **Structural check** (sync, pure function) — always runs
 2. **Semantic check** (async, LLM via DeepSeek-R1) — only if structural confidence >= 0.6
 
-HIGH-severity conflicts trigger the Slack conflict resolution gate (OMN-2769), which blocks
+HIGH-severity conflicts trigger the Slack conflict resolution gate, which blocks
 the pipeline until an operator resolves each conflict via Slack reply.
 
 ---
@@ -216,7 +214,7 @@ Actions:
 
 **Topic constant**: `TopicBase.DECISION_CONFLICT_STATUS_CHANGED`
 **Wire topic**: `onex.evt.omniclaude.decision-conflict-status-changed.v1`
-**Source**: `omniclaude/src/omniclaude/hooks/topics.py` (added in OMN-2766)
+**Source**: `omniclaude/src/omniclaude/hooks/topics.py`
 
 **Transitions that emit:**
 - `None -> OPEN` (conflict first detected during `record`)
@@ -256,13 +254,13 @@ Note: `old_status` is `null` for the initial OPEN event (no previous status).
 
 ## Dependencies
 
-| Ticket | Component | Role |
-|---|---|---|
-| OMN-2763 | `ModelDecisionStoreEntry`, `ModelDecisionConflict` | Data models |
-| OMN-2765 | `NodeDecisionStoreEffect` | Write node |
-| OMN-2767 | `NodeDecisionStoreQueryCompute` | Query node |
-| OMN-2766 | `TopicBase.DECISION_CONFLICT_STATUS_CHANGED` in `topics.py` | Event emission |
-| OMN-2769 | Slack command grammar + status change events | This ticket |
+| Component | Role |
+|---|---|
+| `ModelDecisionStoreEntry`, `ModelDecisionConflict` | Data models |
+| `NodeDecisionStoreEffect` | Write node |
+| `NodeDecisionStoreQueryCompute` | Query node |
+| `TopicBase.DECISION_CONFLICT_STATUS_CHANGED` in `topics.py` | Event emission |
+| Slack command grammar + status change events | Conflict gate |
 
 ---
 
@@ -281,7 +279,7 @@ Note: `old_status` is `null` for the initial OPEN event (no previous status).
 }
 ```
 
-**Note**: The event schema was simplified in OMN-2769. Fields `decision_a_id`,
+**Note**: The event schema was simplified in an earlier pass. Fields `decision_a_id`,
 `decision_b_id`, and `approver` were consolidated: `approver` is now `resolved_by`,
 and decision pair IDs are carried by the conflict record (not the status event).
 The status event is intentionally minimal — consumers query the conflict record for

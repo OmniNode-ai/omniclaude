@@ -408,21 +408,26 @@ if [[ -f "${_CLAUDE_GLOBAL_ENV}" ]]; then
 fi
 unset _CLAUDE_GLOBAL_ENV
 
-if [[ -f "${PROJECT_ROOT}/.env" ]]; then
+# PROJECT_ROOT may be unbound in hook wrappers that source common.sh without
+# setting it. Under `set -u` a bare ${PROJECT_ROOT} dereference raises
+# "unbound variable", crashing the wrapper -- which fails GATE hooks OPEN via
+# the error-guard EXIT trap (OMN-13848). Default to empty so an unset
+# PROJECT_ROOT simply skips .env loading instead of crashing the hook.
+if [[ -f "${PROJECT_ROOT:-}/.env" ]]; then
     # Source .env - note this WILL override already-set variables
     # Using set -a to export all variables, then set +a to stop
     set -a
     # shellcheck disable=SC1091
     # Note: We use 2>/dev/null because .env files may contain comments or blank
     # lines that produce benign warnings. Syntax errors are rare in .env files.
-    if ! source "${PROJECT_ROOT}/.env" 2>/dev/null; then
+    if ! source "${PROJECT_ROOT:-}/.env" 2>/dev/null; then
         # Only log if LOG_FILE is set (caller script responsibility)
         if [[ -n "${LOG_FILE:-}" ]]; then
             # Use printf instead of log() — log() function is defined later in this file
             # and may not be available at this point in the source order.
             printf "[%s] WARN: Failed to source %s - check file syntax\n" \
                 "$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo 'unknown')" \
-                "${PROJECT_ROOT}/.env" >> "${LOG_FILE}" 2>/dev/null || true
+                "${PROJECT_ROOT:-}/.env" >> "${LOG_FILE}" 2>/dev/null || true
         fi
     fi
     set +a

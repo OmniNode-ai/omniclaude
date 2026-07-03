@@ -1,7 +1,7 @@
 # Compliance Enforcement Architecture
 
 **Last Updated**: 2026-02-19
-**Tickets**: OMN-2256 (compliance pipeline design), OMN-2263 (PostToolUse compliance emit), OMN-2269 (advisory injection), OMN-2340 (compliance result subscriber)
+**Key changes**: compliance pipeline design, PostToolUse compliance emit, advisory injection, compliance result subscriber
 
 ---
 

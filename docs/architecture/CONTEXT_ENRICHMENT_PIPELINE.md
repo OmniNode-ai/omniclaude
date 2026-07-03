@@ -1,7 +1,7 @@
 # Context Enrichment Pipeline Architecture
 
 **Last Updated**: 2026-02-19
-**Tickets**: OMN-2267 (enrichment pipeline), OMN-2274 (enrichment observability), OMN-2344 (emit timeout fix)
+**Key changes**: enrichment pipeline, enrichment observability, emit timeout fix
 
 ---
 

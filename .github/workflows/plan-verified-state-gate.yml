@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Plan Verified State Gate
+
+# OMN-13336 (retro R1): block plan_to_tickets plans that assert state without a
+# verified baseline. Every plan under docs/plans/ or docs/tracking/ must carry a
+# '## Current Verified State' section with a 'verified: <date> via <command>'
+# line dated within the freshness window. Plans that predate the gate are
+# grandfathered via .onex_ratchets/plan_verified_state_allowlist.yaml
+# (burn-down only). Parent: OMN-13325. Audit:
+# docs/audits/2026-06-19-ratchet-enforcement-audit.md.
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'docs/plans/**/*.md'
+      - 'docs/tracking/**/*.md'
+      - '.onex_ratchets/plan_verified_state_allowlist.yaml'
+      - 'scripts/lint_plan_verified_state.py'
+      - '.github/workflows/plan-verified-state-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'docs/plans/**/*.md'
+      - 'docs/tracking/**/*.md'
+      - '.onex_ratchets/plan_verified_state_allowlist.yaml'
+      - 'scripts/lint_plan_verified_state.py'
+      - '.github/workflows/plan-verified-state-gate.yml'
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  plan-verified-state-gate:
+    name: Plan Verified State Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan docs/plans + docs/tracking for fresh verified-state sections
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_plan_verified_state.py

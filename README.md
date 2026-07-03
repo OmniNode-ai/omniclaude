@@ -45,11 +45,16 @@ and portable workflow packages belong in [omnimarket](https://github.com/OmniNod
 | Concern | Canonical Owner |
 |---------|----------------|
 | Workflow business logic | [omnimarket](https://github.com/OmniNode-ai/omnimarket) |
-| Emit daemon runtime | omnimarket `node_emit_daemon` (OMN-7628 complete) |
+| Emit daemon runtime | omnimarket `node_emit_daemon` (migration complete) |
 | Intelligence / routing logic | [omniintelligence](https://github.com/OmniNode-ai/omniintelligence) |
-| `TopicBase` enum | omnibase_core (OMN-9335 complete) |
 | ONEX runtime, node framework | [omnibase_core](https://github.com/OmniNode-ai/omnibase_core) |
 | Infrastructure adapters | [omnibase_infra](https://github.com/OmniNode-ai/omnibase_infra) |
+
+> **Note (verified against code on this refresh):** omniclaude still defines and
+> uses a **local** `TopicBase` enum in `src/omniclaude/hooks/topics.py` (a `StrEnum`,
+> imported by 31 modules under `src/`). omnibase_core has its own `TopicBase`
+> (`omnibase_core/src/omnibase_core/topics.py`), but the omniclaude-side migration to
+> consume it is not complete — do not treat the local enum as removed.
 
 Skills that contain more than invocation routing belong in omnimarket.
 See [Skill Lifecycle](docs/architecture/skill-lifecycle.md) for the decision rule.
@@ -151,6 +156,14 @@ Claude Code session
 Anything that blocks, stores state, or runs for more than a few seconds
 belongs in an omnimarket node, not in this repo.
 
+> **Current state (verified against code on this refresh):** every hook
+> registration in `plugins/onex/hooks/hooks.json` is currently removed — the
+> `hooks` block is `{}` — for a hooks-off measurement baseline. The hook
+> shell scripts (`plugins/onex/hooks/scripts/`) and Python handler modules
+> (`plugins/onex/hooks/lib/`) remain on disk; re-enabling is a pure config
+> change. The flow above describes the wired behavior when
+> hooks are registered.
+
 ---
 
 ## Documentation Map
@@ -181,7 +194,7 @@ uv run pytest tests/ -v
 # Unit only
 uv run pytest tests/ -m unit -v
 
-# Integration (requires Kafka on 192.168.86.201:19092)
+# Integration (requires Kafka on <onex-host>:19092)
 KAFKA_INTEGRATION_TESTS=1 uv run pytest -m integration
 
 # Coverage

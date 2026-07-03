@@ -53,7 +53,7 @@ async def _get_producer() -> (
     Raises:
         ImportError: If aiokafka is not installed.
     """
-    global _producer  # noqa: PLW0603
+    global _producer
     if _producer is None:
         try:
             from aiokafka import AIOKafkaProducer
@@ -103,7 +103,7 @@ async def publish_event(topic: str, event: PRStatusEvent) -> None:
 
 async def close_producer() -> None:
     """Close the Kafka producer. Call on application shutdown."""
-    global _producer  # noqa: PLW0603
+    global _producer
     if _producer is not None:
         await _producer.stop()
         _producer = None

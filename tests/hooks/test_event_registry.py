@@ -852,6 +852,9 @@ class TestEventRegistryIntegration:
             "llm.cost.completed",
             # Per-tool agent action (wire-missing-producers)
             "agent.action",
+            # Durable capture events (OMN-13092)
+            "artifact.captured",
+            "tool.output.captured",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
@@ -921,6 +924,13 @@ class TestEventRegistryIntegration:
             assert rule.transform is None, (
                 f"Expected passthrough for {rule.topic_base}, got transform"
             )
+
+    def test_session_outcome_cmd_topic_wire_value(self) -> None:
+        """CMD topic constant resolves to the canonical wire topic name."""
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        wire_topic = build_topic(TopicBase.SESSION_OUTCOME_CMD)
+        assert wire_topic == "onex.cmd.omniintelligence.session-outcome.v1"
 
     def test_routing_decision_uses_onex_topic(self) -> None:
         """routing.decision should use ONEX-canonical topic, not legacy."""

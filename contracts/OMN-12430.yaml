@@ -1,0 +1,46 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-12430"
+title: "Remove dead CircuitBreaker and safe_execute_operation from omniclaude error_handling"
+summary: >
+  Prior verification confirmed two dead symbols in omniclaude's error_handling utility
+  (CircuitBreaker class and safe_execute_operation function) and two matching lazy-import
+  entries in __init__.py. This ticket removes the confirmed-dead code; the seven live
+  symbols (PatternTrackingLogger, PatternTrackingErrorPolicy, get_default_logger,
+  get_default_error_handler, log_success, log_error, handle_error) are untouched.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-pr-1706"
+    description: >
+      omniclaude PR #1706 removes CircuitBreaker (~lines 227–264) and
+      safe_execute_operation (~lines 266–340) from error_handling.py and removes their
+      two entries from the _LAZY_IMPORTS dict in __init__.py. Reachability grep returned
+      zero remaining references. Unit test suite: 10796 passed, 25 skipped (2
+      pre-existing failures on dev baseline, confirmed pre-existing). All pre-commit
+      hooks pass.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q '^status: PASS$' \"$CONTRACT_REPO_DIR/drift/dod_receipts/OMN-12430/dod-omniclaude-pr-1706/command.yaml\" && grep -q '^pr_number: 1706$' \"$CONTRACT_REPO_DIR/drift/dod_receipts/OMN-12430/dod-omniclaude-pr-1706/command.yaml\""
+  - id: "dod-reachability-grep"
+    description: >
+      Reachability grep confirms zero remaining Python references to safe_execute_operation
+      or CircuitBreaker in the omniclaude PR head (grep exit 1 = no matches).
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q '^status: PASS$' \"$CONTRACT_REPO_DIR/drift/dod_receipts/OMN-12430/dod-reachability-grep/command.yaml\" && grep -q '^pr_number: 1706$' \"$CONTRACT_REPO_DIR/drift/dod_receipts/OMN-12430/dod-reachability-grep/command.yaml\""
+  - id: "dod-occ-pr-1875"
+    description: >
+      onex_change_control PR #1875 carries the central OMN-12430 contract and receipts
+      for omniclaude PR #1706.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q '^status: PASS$' drift/dod_receipts/OMN-12430/dod-occ-pr-1875/command.yaml && grep -q '^pr_number: 1875$' drift/dod_receipts/OMN-12430/dod-occ-pr-1875/command.yaml"

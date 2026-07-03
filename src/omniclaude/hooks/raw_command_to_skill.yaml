@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# raw_command_to_skill.yaml (OMN-13835)
+#
+# Declarative map from raw, manual commands to their skill-first equivalents.
+# Consumed by pre_tool_use_skill_substitution_guard.py to warn/block raw
+# commands that have a node-backed skill replacement, and to suggest the skill.
+#
+# Mirrors the shape of skill_mapping.yaml: a versioned document with a `rules`
+# list. Each rule is matched in declaration order; the first matching rule wins.
+#
+# Rule fields:
+#   id          Stable identifier for the rule (used in friction dedup keys).
+#   tools       List of tool names the rule applies to (e.g. Bash, Agent, Task).
+#   pattern     Python `re` pattern matched (re.IGNORECASE) against the command
+#               text extracted from the tool input.
+#   skill       The skill that should be used instead (e.g. onex:auto_merge).
+#   severity    "block" (exit 2 on first hit; allow-with-friction on operator
+#               proceed-anyway) or "warn" (exit 1 advisory, pass-through).
+#   reason      Human-readable explanation surfaced to the operator.
+#
+# Adding a rule is a pure data change — no Python edit required.
+
+version: "1.0.0"
+
+rules:
+  - id: raw-gh-pr-merge
+    tools: ["Bash"]
+    pattern: '\bgh\s+pr\s+merge\b'
+    skill: "onex:auto_merge"
+    severity: "block"
+    reason: >-
+      Raw `gh pr merge` bypasses the auto_merge skill, which verifies gates
+      (gh pr checks), respects the merge-queue method, and records durable
+      evidence. Use /onex:auto_merge <pr> instead.
+
+  - id: org-wide-pr-sweep
+    tools: ["Bash"]
+    pattern: '\bgh\s+search\s+prs\b|\bgh\s+pr\s+list\b.*(--search|--owner|OmniNode-ai|--repo\s+OmniNode-ai)'
+    skill: "onex:merge_sweep"
+    severity: "warn"
+    reason: >-
+      An org-wide `gh pr list` / `gh search prs` sweep re-implements
+      merge_sweep, which dispatches node_pr_lifecycle_orchestrator and emits a
+      typed ModelSkillResult. Use /onex:merge_sweep instead of a manual sweep.
+
+  - id: bare-agent-dispatch
+    tools: ["Agent", "Task"]
+    pattern: '.*'
+    skill: "onex:self_healing_dispatch (or onex:dispatch_worker)"
+    severity: "warn"
+    reason: >-
+      A bare Agent()/Task() dispatch skips the self_healing_dispatch /
+      dispatch_worker skills, which enforce TeamCreate, collision fences, stall
+      recovery, and role templating. Prefer /onex:self_healing_dispatch for
+      ticket/epic work or /onex:dispatch_worker for a single role-templated
+      worker.

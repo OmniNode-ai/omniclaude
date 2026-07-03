@@ -64,7 +64,7 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_pr_watch_orchestrator (stub). functionally-complete requires real node implementation. -->
+<!-- routing-enforced: dispatches to node_pr_watch_orchestrator. -->
 
 # PR Watch
 
@@ -74,9 +74,9 @@ Poll GitHub PR review status. Auto-fix review comments (Critical/Major/Minor by 
 `pr-review-dev`. Exit when PR reaches a terminal state: `approved`, `changes_requested_fixed`
 (all blocking issues resolved), `timeout`, or `capped` (max fix cycles reached).
 
-**Announce at start:** "I'm using the pr-watch skill to monitor review status on PR #{pr_number}."
+**Announce at start:** "I'm using the pr-watch skill to monitor review state on PR #{pr_number}."
 
-**Implements**: OMN-2524
+**Implements**: the pr-watch polling contract
 
 ## Quick Start
 
@@ -143,5 +143,3 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/pr-watch
 - `auto-merge` skill (planned: runs after pr-watch passes)
 - `pr-review-dev` skill (invoked to fix review comments)
 - `node_github_pr_watcher_effect` — ONEX node for EVENT_BUS+ mode routing
-- OMN-2524 — pr-watch implementation ticket
-- OMN-2826 — push-based notifications (unshipped; inbox_wait stub removed)

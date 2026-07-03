@@ -1,0 +1,63 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-12690"
+title: "Workstream I-B / Gate 1: require live golden-chain CI gate"
+summary: >-
+  Adds the live golden-chain CI gate for omniclaude PR #1731. The PR wires
+  node_golden_chain_sweep_orchestrator.run_sweep through a module CLI caller,
+  Redpanda/Postgres service containers, and a bounded CI projection bridge so
+  CI publishes registered golden-chain events, materializes projection rows,
+  and fails on any non-PASS sweep summary.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused golden-chain runner, CLI, and workflow tests pass."
+    command: >-
+      uv run pytest tests/ci/test_golden_chain_live_runner.py tests/nodes/test_golden_chain_sweep_orchestrator_cli.py
+      tests/hooks/test_ci_postgres_workflow.py -q
+  - kind: "manual"
+    description: "Golden-chain runtime modules type-check cleanly."
+    command: >-
+      uv run pyright src/omniclaude/nodes/node_golden_chain_sweep_orchestrator
+      src/omniclaude/nodes/node_golden_chain_payload_compute
+      src/omniclaude/nodes/node_golden_chain_publish_effect
+      src/omniclaude/nodes/node_golden_chain_status_reducer
+  - kind: "manual"
+    description: "Deploy-gate evidence is central OCC #2174 plus local CI-only runtime-path verification."
+    command: "gh pr view 2174 --repo OmniNode-ai/onex_change_control --json state,mergedAt"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-live-golden-chain-ci"
+    description: "Focused tests prove the live golden-chain runner, CLI entrypoint, and CI Postgres workflow wiring."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/ci/test_golden_chain_live_runner.py tests/nodes/test_golden_chain_sweep_orchestrator_cli.py
+          tests/hooks/test_ci_postgres_workflow.py -q
+  - id: "dod-omniclaude-golden-chain-regression-slice"
+    description: "Existing golden-chain payload, reducer, decimal serialization, and integrity tests remain green."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/nodes/test_golden_chain_payload_compute.py tests/nodes/test_golden_chain_status_reducer.py
+          tests/nodes/test_golden_chain_decimal_serialization.py tests/unit/scripts/test_validate_golden_chain_integrity.py
+          tests/ci/test_golden_chain_live_runner.py tests/nodes/test_golden_chain_sweep_orchestrator_cli.py -q
+  - id: "dod-deploy-gate-runtime-path"
+    description: "Deploy-gate review for CI-only runtime-path touch; no live .201 deploy, restart, or mutation performed."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 2174 --repo OmniNode-ai/onex_change_control --json state,mergedAt
+          && echo 'deploy evidence: OMN-12690 central OCC #2174 merged; omniclaude PR #1731 changes CI runner and
+          module CLI only, with live Redpanda/Postgres execution delegated to CI'

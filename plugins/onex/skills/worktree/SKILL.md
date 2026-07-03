@@ -8,6 +8,7 @@ category: maintenance
 tags: [worktree, cleanup, audit, triage, lifecycle, cron, automation]
 author: OmniClaude Team
 composable: true
+boundary_exempt: true
 args:
   - name: --audit
     description: "Audit all worktrees for health status (categorize SAFE_TO_DELETE, LOST_WORK, STALE, ACTIVE, DIRTY_ACTIVE)"
@@ -77,6 +78,12 @@ Git, and GitHub CLI tool calls, holding intermediate state in its working contex
 
 The typed models live in `src/omniclaude/hooks/worktree_sweep.py` and define the
 report schema: `EnumWorktreeStatus`, `ModelWorktreeEntry`, `ModelWorktreeSweepReport`.
+
+The durability-sweep helpers (OMN-13044) are pure, no-I/O functions in
+`src/omniclaude/hooks/lib/worktree_health.py`: `extract_ticket_id`,
+`is_no_ticket_worktree`, `plan_referenced_dirty_files`, `build_rescue_ref`,
+`offvolume_backup_satisfied`, and the `ModelWorktreeDurabilityFlags` model. The
+LLM drives the git/`gh` side effects; these helpers compute the flags.
 
 ---
 
@@ -215,6 +222,106 @@ Total audited: N
 | STALE          | N     | Flagged         |
 | ACTIVE         | N     | None            |
 | DIRTY_ACTIVE   | N     | Flagged         |
+```
+
+### Step 6: Durability sweep (OMN-13044) <!-- ai-slop-ok: skill-step-heading -->
+
+Layered on top of the health classification above, the durability sweep flags
+worktrees at risk of stranding or losing work. Backed by the pure helpers in
+`src/omniclaude/hooks/lib/worktree_health.py` (`extract_ticket_id`,
+`is_no_ticket_worktree`, `plan_referenced_dirty_files`, `build_rescue_ref`,
+`offvolume_backup_satisfied`) and `ModelWorktreeDurabilityFlags`. Run these
+checks for every worktree discovered in Step 1.
+
+#### 6a. NO-TICKET detection
+
+A worktree whose **directory name contains no `OMN-XXXX` identifier** is flagged
+`NO-TICKET`. These are off-ledger and cannot be reconciled against Linear, so
+their work is invisible to triage. Per Operating Rule 9, every piece of code work
+must live under `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`.
+
+```python
+# Pseudocode — LLM resolves from the discovered worktree path
+ticket_id = extract_ticket_id(worktree_path)   # regex OMN-\d+, case-insensitive
+is_no_ticket = ticket_id is None               # → flag NO-TICKET
+```
+
+Action: flag for review. If the worktree is also dirty, treat it as LOST_WORK-class
+risk and create a recovery ticket so the work is reattached to the ledger.
+
+#### 6b. Dirty plan/handoff-referenced file detection
+
+A **dirty** worktree (unstaged/uncommitted changes) is escalated when any of those
+changed files is **referenced by a `docs/plans/` or `docs/handoffs/` document**.
+Losing such a worktree would strand work that an active plan or handoff depends on.
+
+```bash
+# Files with unstaged/uncommitted changes in the worktree:
+git -C "${worktree_path}" status --porcelain | awk '{print $2}'
+
+# Files referenced by any plan/handoff doc (path-like tokens):
+grep -rhoE '[A-Za-z0-9_./-]+\.(py|ts|tsx|md|yaml|yml|json|sh)' \
+  docs/plans/ docs/handoffs/ | sort -u
+```
+
+```python
+# Pseudocode — intersect the two sets
+dirty_plan_files = plan_referenced_dirty_files(changed_files, plan_referenced_files)
+is_dirty_plan_worktree = bool(dirty_plan_files)   # → escalate, do not silently prune
+```
+
+Action: flag with the offending file list. A `DIRTY_ACTIVE` worktree that also
+touches plan/handoff-referenced files must NOT be auto-pruned.
+
+#### 6c. Rescue-ref auto-creation on handoff-block
+
+Before the skill **blocks** a worktree removal/handoff because of dirty
+plan/handoff-referenced state (6b), it MUST first mint a recoverable rescue ref so
+the work survives even if the worktree is later pruned. Run `git stash create`
+(produces a dangling commit without touching the working tree) and tag it
+`rescue/<ticket>/<timestamp>` **before** raising the block:
+
+```bash
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+stash_commit="$(git -C "${worktree_path}" stash create "durability-rescue ${ticket}")"
+if [ -n "${stash_commit}" ]; then
+  # rescue_ref == build_rescue_ref(ticket, ts) == rescue/<ticket>/<timestamp>
+  git -C "${worktree_path}" tag -f "rescue/${ticket}/${ts}" "${stash_commit}"
+fi
+# Only AFTER the rescue ref exists, block the handoff and report rescue_ref.
+```
+
+For a NO-TICKET worktree, substitute the `NO-TICKET` sentinel for `<ticket>` in the
+rescue ref. Record `rescue_ref` on the `ModelWorktreeDurabilityFlags` entry.
+
+#### 6d. Off-volume backup requirement (DoD)
+
+A demo-critical fix saved only as a local `.onex_state` backup does **not** count
+toward Definition of Done — the work volume is a single point of failure. The fix
+must also have an **off-volume copy**: either a Linear ticket attachment or a
+committed docs-branch artifact.
+
+```python
+# Pseudocode — only off-volume copies satisfy DoD
+offvolume_backup_ok = offvolume_backup_satisfied(
+    has_ticket_attachment=...,    # fix attached to its Linear ticket
+    has_docs_branch_commit=...,   # fix committed on a docs branch
+)
+# A bare .onex_state backup with neither → offvolume_backup_ok is False → NOT done.
+```
+
+Action: when `offvolume_backup_ok` is `False`, the backup is reported as incomplete
+and the worktree is not eligible for cleanup until an off-volume copy exists.
+
+#### Durability summary
+
+```
+Durability Sweep Summary
+| Flag              | Count | Action                         |
+| NO-TICKET         | N     | Flagged (recovery if dirty)    |
+| DIRTY-PLAN-FILE   | N     | Escalated, prune blocked       |
+| RESCUE-REF minted | N     | rescue/<ticket>/<timestamp>    |
+| OFF-VOLUME missing| N     | Backup incomplete, not Done    |
 ```
 
 ---

@@ -129,8 +129,8 @@ def _resolve_project_root() -> Path:
 def _get_current_branch(cwd: Path) -> str | None:
     """Return the current git branch name, or None if not in a git repo."""
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
             cwd=cwd,
@@ -338,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint for the workflow guard."""
     stdin_data = sys.stdin.read()
     exit_code, output = run_guard(stdin_data)
-    print(output)  # noqa: T201
+    print(output)
     return exit_code
 
 

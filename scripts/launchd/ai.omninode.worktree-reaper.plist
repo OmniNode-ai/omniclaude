@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.worktree-reaper.plist — launchd KeepAlive DAEMON for the Mac
+  event-sourced worktree reaper (OMN-13228, T4 of OMN-13008).
+
+  This is a CONTINUOUSLY-RUNNING daemon (KeepAlive=true), NOT a periodic launchd
+  job. launchd periodic jobs do not fire reliably on this Mac
+  (memory feedback_local_durability); a resident KeepAlive process sidesteps that
+  failure mode. The reaper's own --loop runs BOTH GC layers (OMN-13230, T6):
+    - Layer 1 (event-first): polls the pr-merged projection every
+      ONEX_REAPER_INTERVAL seconds and drives prune-worktrees.sh on each
+      newly-merged PR.
+    - Layer 2 (timer-backstop): a cursor-independent catch-up reconciliation
+      sweep runs once on start and every ONEX_REAPER_CATCH_UP_INTERVAL seconds
+      (default 3600 = hourly), reaping ALL already-merged worktrees still present
+      to catch events missed during downtime. This is the Mac equivalent of the
+      .201 onex-disk-gc.timer backstop.
+  If the process exits, launchd restarts it (KeepAlive).
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by
+  install-worktree-reaper-daemon.sh.
+
+  Install:
+    bash omniclaude/scripts/install-worktree-reaper-daemon.sh
+
+  Uninstall:
+    bash omniclaude/scripts/install-worktree-reaper-daemon.sh --uninstall
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.worktree-reaper</string>
+
+  <!-- Shipped disabled; the install script flips this and loads it. The worker
+       that ships this PR does NOT load it live (orchestrator's deploy step). -->
+  <key>Disabled</key>
+  <true/>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/worktree-reaper-daemon.sh</string>
+  </array>
+
+  <!-- KeepAlive resident daemon: launchd restarts it if it exits. This is the
+       durable replacement for the non-firing periodic launchd path. -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Throttle restarts so a crash-loop (e.g. bad config) does not spin hot. -->
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/.local/log/onex/worktree-reaper-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.local/log/onex/worktree-reaper-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+    <!-- ONEX_PROJECTION_URL and ONEX_REAPER_INTERVAL are sourced by the daemon
+         launcher from ~/.omnibase/.env at runtime; they are NOT hardcoded here
+         (no LAN IP in source). The reaper fail-fasts if ONEX_PROJECTION_URL is
+         unset. -->
+  </dict>
+</dict>
+</plist>

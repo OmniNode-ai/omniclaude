@@ -213,7 +213,7 @@ def _run_gh(args: list[str], *, timeout: int = 30) -> str:
     Raises:
         subprocess.CalledProcessError: If the command fails.
     """
-    result = subprocess.run(  # noqa: S603 — gh CLI is trusted
+    result = subprocess.run(
         ["gh", *args],
         capture_output=True,
         text=True,

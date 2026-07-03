@@ -1,0 +1,42 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13858"
+title: "docs(OMN-13858): fix pipeline_fill's broken run-node dispatch docs"
+summary: >-
+  pipeline_fill/SKILL.md's Routing Contract only documented the Kafka-backed
+  `onex run-node` dispatch, which hard-requires a reachable broker; on this
+  Mac that path times out. Adds the verified `onex node`/`onex run` local
+  fallback and corrects the State Files section, which claimed a
+  cwd-relative `.onex_state/pipeline-fill/` path contradicting its own
+  Verification section on where state actually lives.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-pipeline-fill-local-fallback-doc"
+    description: >-
+      pipeline_fill/SKILL.md documents the onex node/onex run local dispatch
+      fallback, verified live: real Linear query, 149 candidates, correct
+      RSD scoring, dry_run correctly did not mutate dispatched.yaml.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q "onex node node_pipeline_fill" plugins/onex/skills/pipeline_fill/SKILL.md
+  - id: "dod-pipeline-fill-state-dir-corrected"
+    description: >-
+      pipeline_fill/SKILL.md's State Files section correctly references
+      $ONEX_STATE_DIR/pipeline-fill/ instead of the stale cwd-relative
+      .onex_state/pipeline-fill/ claim, matching its own Verification
+      section and the live-verified node behavior.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'ONEX_STATE_DIR/pipeline-fill' plugins/onex/skills/pipeline_fill/SKILL.md

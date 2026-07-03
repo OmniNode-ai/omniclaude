@@ -28,6 +28,17 @@ node_version:
 
 node_type: ORCHESTRATOR_GENERIC
 
+# Canonical-inference gate structural carve-out (OMN-13249). This orchestrator
+# invokes coding-agent CLIs (Codex / Gemini) as external I/O — a distinct
+# surface from the banned *inference* tier (model+endpoint+provider resolved
+# from the routing contract, registered in routing_tiers/bifrost_delegation).
+# The carve-out permits a model-CLI shell-out in this node iff this contract
+# declares agent_invocation: true — a contract-declared, reviewable fact the
+# gate verifies, never a free-text # canonical-inference-ok: comment. It does
+# NOT license a *_MODEL / *_PROVIDER env read.
+descriptor:
+  agent_invocation: true
+
 description: >
   Delegation orchestrator. Classifies incoming prompts, routes to the
   appropriate LLM backend (OpenRouter, local vLLM, GLM/Z.AI, Gemini CLI, Codex CLI),

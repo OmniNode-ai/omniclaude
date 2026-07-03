@@ -1,5 +1,7 @@
 ---
-description: Multi-model adversarial code review with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
+description: Multi-model adversarial code review with weighted-union finding aggregation and iterative
+  convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error
+  handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
 mode: full
 version: 6.0.0
 level: intermediate
@@ -19,123 +21,45 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: pr
-    description: PR number to review (mutually exclusive with --file).
+  - name: --pr-number
+    description: integer arg
     required: false
-  - name: repo
-    description: Target GitHub repo (e.g., OmniNode-ai/omniclaude). Required with --pr.
+  - name: --repo
+    description: string arg
     required: false
-  - name: file
-    description: "Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path."
+  - name: --file-path
+    description: string arg
     required: false
-  - name: plan-path
-    description: "Alias for --file: path to a plan or design document to review adversarially"
+  - name: --models
+    description: string list arg
     required: false
-  - name: ticket_id
-    description: Linear ticket ID for loading TCB constraints
+  - name: --dry-run
+    description: boolean flag
     required: false
-  - name: models
-    description: "Comma-separated model list. Defaults to the node contract's configured models when omitted."
-    required: false
-  - name: passes
-    description: "Fixed number of passes to run. Default: iterates until 2 consecutive clean passes."
-    required: false
-  - name: gate
-    description: "Gate mode: structured pass/fail/block verdict suitable for merge gating."
-    required: false
-  - name: gate-only
-    description: "Review-only gate mode (no fix-apply). Safe to invoke from sub-agent context."
-    required: false
-  - name: strict
-    description: "In --gate mode: block on MINOR+ findings (default blocks on MAJOR+)"
-    required: false
-  - name: static
-    description: "Static-analysis-only mode: 7 code quality checks without adversarial review."
-    required: false
-  - name: repos
-    description: "Comma-separated repo names to scan in --static mode"
-    required: false
-  - name: categories
-    description: "Comma-separated finding categories for --static mode"
-    required: false
-  - name: dry-run
-    description: "In --static mode: scan and report only, no tickets created."
-    required: false
-  - name: ticket
-    description: "In --static mode: create Linear tickets for findings"
-    required: false
-  - name: max-tickets
-    description: "In --static mode: hard cap on tickets created per run (default: 10)"
-    required: false
+skill_kind: dispatch
 ---
 
-# /onex:hostile_reviewer — Multi-Model Adversarial Review
+# /onex:hostile_reviewer — one command, one typed result
 
-**Skill ID**: `onex:hostile_reviewer`
-**Version**: 6.0.0
-**Backing node**: `node_hostile_reviewer`
+**Skill ID**: `onex:hostile_reviewer` · **Command**: `uv run onex skill hostile_reviewer` (omnibase_infra) · **Backing node**: `node_hostile_reviewer_orchestrator` (omnimarket)
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelHostileReviewerCompletedEvent]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **6.0.0** — Re-enabled (OMN-7981). Contract-driven model routing: endpoints declared in contract.yaml model_routing, resolved from env vars at runtime. N-1 graceful degradation when endpoints are down.
-- **5.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_hostile_reviewer`.
-- **4.0.0** — Added DISABLED notice (OMN-10111).
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_hostile_reviewer`. The node owns multi-model
-review dispatch, finding aggregation, convergence
-loop, and artifact persistence. This shim contains no inline review logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the hostile-reviewer skill."
+## Related
 
-## Dispatch
-
-**PR mode:**
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "pr": <pr_number>,
-  "repo": "<owner/repo>",
-  "models": null,
-  "passes": null,
-  "gate": false,
-  "gate_only": false,
-  "strict": false
-}' 2>/dev/null
-```
-
-**File mode:**
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "file": "<path>",
-  "models": null,
-  "passes": null
-}' 2>/dev/null
-```
-
-**Static mode:**
-```bash
-uv run onex run-node node_hostile_reviewer --input '{
-  "static": true,
-  "repos": null,
-  "categories": null,
-  "dry_run": false,
-  "ticket": false,
-  "max_tickets": 10
-}' 2>/dev/null
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-**`2>/dev/null` is MANDATORY** on all invocations — models emit thousands of tokens of
-chain-of-thought to stderr; silencing it keeps context windows viable.
-
-## Wire Schema
-
-Contract target: `node_hostile_reviewer`
-
-Command topic: `onex.cmd.omnimarket.hostile-reviewer-start.v1`
-
-Terminal events:
-- `onex.evt.omnimarket.hostile-reviewer-phase-transition.v1`
-- `onex.evt.omnimarket.hostile-reviewer-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_hostile_reviewer_orchestrator.models.model_hostile_reviewer_completed_event.ModelHostileReviewerCompletedEvent`

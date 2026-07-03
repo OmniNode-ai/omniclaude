@@ -1,5 +1,5 @@
 ---
-description: Dispatch-only wrapper around the Linear ticket-triage node
+description: Dispatch-only wrapper around the Linear ticket triage node
 mode: full
 version: 2.0.0
 level: intermediate
@@ -38,7 +38,7 @@ outputs:
 
 ## Changelog
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-12200). Delegates to node_linear_triage.
+- **2.0.0** — Thinned to dispatch-only shim. Delegates to node_linear_triage.
 - **1.0.0** — Original inline skill with Phases 1-6 algorithm.
 
 ## What this skill does
@@ -76,11 +76,11 @@ by the backing node and the path is returned as output.
 
 The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epic-org`.
 
-## Enumeration completeness (OMN-10543)
+## Enumeration completeness
 
-The backing node MUST enumerate **every** orphan before writing the TriageReport.
-The `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`; do not
-cap, sample, or truncate this list before handing it to `ticketing-epic-org`.
+Regression guard: the backing node MUST enumerate **every** orphan in
+`orphaned_tickets`; it must not cap, sample, truncate, or emit a "top N" subset.
+Before publishing the report, `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`.
 
 ## See Also
 

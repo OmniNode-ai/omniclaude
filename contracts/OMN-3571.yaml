@@ -1,0 +1,22 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-3571"
+title: "Bus-local broker assertion context"
+summary: >
+  Repo-local context contract for existing integration-test guard references touched by this branch's validation
+  scan. This PR does not change the OMN-3571 guard behavior.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-existing-guard-reference"
+    description: "Existing integration conftest references OMN-3571 for the bus-local broker assertion guard."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'OMN-3571' tests/integration/conftest.py"

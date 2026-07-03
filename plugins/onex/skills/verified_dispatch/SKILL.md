@@ -16,7 +16,7 @@ author: OmniClaude Team
 version: 1.0.0
 args:
   - name: ticket_id
-    description: Linear ticket ID (e.g., OMN-1234)
+    description: Linear ticket ID
     required: true
   - name: worker_prompt
     description: Prompt or task description passed to the worker subagent
@@ -40,7 +40,7 @@ args:
 
 ## Changelog
 
-- **1.0.0** — Initial skill (OMN-11220). Thin dispatch-only shim. All logic in `node_verified_dispatch_orchestrator` (omnimarket PR #695).
+- **1.0.0** — Initial skill. Thin dispatch-only shim. All logic in `node_verified_dispatch_orchestrator` (omnimarket PR #695).
 
 ## What this skill does
 

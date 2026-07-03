@@ -1,5 +1,6 @@
 ---
-description: Measure test coverage across all Python repos under omni_home, flag modules below threshold, and auto-create Linear tickets for coverage gaps
+description: Measure test coverage across all Python repos under omni_home, flag modules below threshold,
+  and auto-create Linear tickets for coverage gaps
 version: 4.0.0
 mode: full
 level: intermediate
@@ -17,60 +18,38 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated repo names to scan (default: all Python repos)"
+    description: string list arg
     required: false
-  - name: --target
-    description: "Coverage target percentage (default: 50)"
+  - name: --target-pct
+    description: integer arg
     required: false
   - name: --dry-run
-    description: Scan and report only -- no ticket creation
+    description: boolean flag
     required: false
-  - name: --max-tickets
-    description: "Maximum tickets to create per run (default: 20)"
-    required: false
-  - name: --force-rescan
-    description: Ignore cache and re-run coverage scans
-    required: false
+skill_kind: dispatch
 ---
 
-# /onex:coverage_sweep — Test Coverage Sweep
+# /onex:coverage_sweep — one command, one typed result
 
-**Skill ID**: `onex:coverage_sweep`
-**Version**: 4.0.0
-**Backing node**: `node_coverage_sweep`
+**Skill ID**: `onex:coverage_sweep` · **Command**: `uv run onex skill coverage_sweep` (omnibase_infra) · **Backing node**: `node_coverage_sweep` (omnimarket)
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[CoverageSweepResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **4.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_coverage_sweep`.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_coverage_sweep`. The node owns repo discovery,
-coverage measurement, gap detection, and ticket creation. This shim contains no
-inline coverage logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the coverage-sweep skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_coverage_sweep --input '{
-  "repos": null,
-  "target": 50,
-  "dry_run": false,
-  "max_tickets": 20,
-  "force_rescan": false
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_coverage_sweep`
-
-Command topic: `onex.cmd.omnimarket.coverage-sweep-start.v1`
-
-Terminal events:
-- `onex.evt.omnimarket.coverage-sweep-gap.v1`
-- `onex.evt.omnimarket.coverage-sweep-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_coverage_sweep.handlers.handler_coverage_sweep.CoverageSweepResult`

@@ -6,6 +6,7 @@
 FROM python:3.12-slim
 
 ENV UV_NO_CACHE=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
@@ -21,6 +22,11 @@ COPY src/ ./src/
 
 # Install dependencies
 RUN uv sync --no-dev --frozen
+
+# Run the service as an unprivileged user.
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 # Verify package imports correctly
 RUN uv run python -c "from omniclaude.hooks import schemas; print('Package validated')"

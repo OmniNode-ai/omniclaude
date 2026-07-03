@@ -93,31 +93,18 @@ class TestPrPolishPrecommitGuard:
 
 @pytest.mark.unit
 class TestAutopilotForegroundDispatchGuard:
-    """Autopilot is retired; the compatibility shim must keep dispatch disabled."""
+    """Autopilot must not re-open foreground dispatch."""
 
-    @pytest.fixture
-    def skill_md(self) -> str:
-        return _read("autopilot/SKILL.md")
+    def test_autopilot_skill_routes_through_backing_node(self) -> None:
+        """OMN-12394 restores autopilot only as a node-backed dispatch surface."""
+        autopilot_skill = _read("autopilot/SKILL.md")
+        assert "node_skill_autopilot_orchestrator" in autopilot_skill
+        assert "foreground_orchestrator: true" not in autopilot_skill
 
-    def test_retired_compatibility_shim(self, skill_md: str) -> None:
-        """The restored deterministic-routing shim must remain retired."""
-        assert "user_invocable: false" in skill_md
-        assert "retired: true" in skill_md
-        assert "replacement_skill: session" in skill_md
-
-    def test_callout_cites_omn_8602(self, skill_md: str) -> None:
-        """The retired shim must preserve the foreground-dispatch guard citation."""
-        assert "OMN-8602" in skill_md
-
-    def test_callout_names_friction_surface(self, skill_md: str) -> None:
-        """The retired shim must preserve the historical friction surface."""
-        assert "close_out:tooling/foreground-agent-dispatch" in skill_md
-
-    def test_forbids_foreground_agent_dispatch(self, skill_md: str) -> None:
-        """The compatibility shim must still forbid operator-session dispatch."""
-        assert "No foreground `Agent()` dispatch (OMN-8602)" in skill_md
-        assert "must NEVER be dispatched" in skill_md
-        assert "not from the operator session" in skill_md
+    def test_session_orchestrator_replaces_autopilot(self) -> None:
+        """Session orchestrator is the supported close-out control surface."""
+        session_skill = _read("session/SKILL.md")
+        assert "node_session_orchestrator" in session_skill
 
 
 @pytest.mark.unit
@@ -129,10 +116,10 @@ class TestRedeployManualDeployGuard:
         return _read("redeploy/SKILL.md")
 
     def test_anti_patterns_section_present(self, skill_md: str) -> None:
-        """SKILL.md must contain an Anti-Patterns section citing OMN-8602."""
-        assert "Anti-Patterns (OMN-8602)" in skill_md, (
-            "redeploy/SKILL.md must include the Anti-Patterns (OMN-8602) "
-            "section guarding the manual-deploy-execution and "
+        """SKILL.md must contain an Anti-Patterns section."""
+        assert "## Anti-Patterns" in skill_md, (
+            "redeploy/SKILL.md must include the ## Anti-Patterns section "
+            "guarding the manual-deploy-execution and "
             "deploy-targets-local-not-201 friction surfaces."
         )
 
@@ -176,7 +163,7 @@ class TestRedeployLocalTargetGuard:
     def test_warns_against_localhost(self, skill_md: str) -> None:
         """SKILL.md must explicitly warn against targeting local Docker."""
         # Find the anti-pattern section and verify it warns about localhost.
-        idx = skill_md.find("Anti-Patterns (OMN-8602)")
+        idx = skill_md.find("## Anti-Patterns")
         assert idx >= 0
         section = skill_md[idx:]
         assert "localhost" in section or "local Docker" in section, (

@@ -90,15 +90,15 @@ def _stop_daemon(socket_path: str, pid_path: str) -> int:
 
     pid_file = Path(pid_path)
     if not pid_file.exists():
-        print(f"PID file not found: {pid_path}", file=sys.stderr)  # noqa: T201
+        print(f"PID file not found: {pid_path}", file=sys.stderr)
         return 1
     try:
         pid = int(pid_file.read_text(encoding="utf-8").strip())
         os.kill(pid, _signal.SIGTERM)
-        print(f"Sent SIGTERM to PID {pid}")  # noqa: T201
+        print(f"Sent SIGTERM to PID {pid}")
         return 0
     except (ProcessLookupError, ValueError) as e:
-        print(f"Failed to stop daemon: {e}", file=sys.stderr)  # noqa: T201
+        print(f"Failed to stop daemon: {e}", file=sys.stderr)
         return 1
 
 
@@ -127,10 +127,10 @@ def main() -> None:
 
     elif args.command == "status":
         if _ping_daemon(args.socket_path):
-            print(f"Hook runtime daemon is running at {args.socket_path}")  # noqa: T201
+            print(f"Hook runtime daemon is running at {args.socket_path}")
             sys.exit(0)
         else:
-            print(f"Hook runtime daemon is NOT running (socket: {args.socket_path})")  # noqa: T201
+            print(f"Hook runtime daemon is NOT running (socket: {args.socket_path})")
             sys.exit(1)
 
     else:

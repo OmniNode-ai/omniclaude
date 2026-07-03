@@ -2,7 +2,7 @@
 
 **Date**: 2026-02-19
 **Status**: Accepted
-**Ticket**: OMN-1980, PR #138
+**PR**: #138
 
 ## Context
 

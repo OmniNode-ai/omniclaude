@@ -55,7 +55,7 @@ async def run_chain(
     Returns:
         ModelChainResult with publish/projection status and assertion results.
     """
-    import psycopg2  # noqa: PLC0415
+    import psycopg2
 
     assertion_engine = AssertionEngine()
 
@@ -96,7 +96,7 @@ async def run_chain(
     projected_row: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any
 
     # Validate tail_table against allowed identifier pattern
-    import re  # noqa: PLC0415
+    import re
 
     if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_.]*$", payload.tail_table):
         return ModelChainResult(

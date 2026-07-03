@@ -37,7 +37,7 @@ args:
 
 ## Changelog
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-12224). All logic in `node_baseline_capture` and `node_baseline_compare`. Replaced direct Python handler imports with `onex run-node` dispatch.
+- **2.0.0** — Thinned to dispatch-only shim. All logic in `node_baseline_capture` and `node_baseline_compare`. Replaced direct Python handler imports with `onex run-node` dispatch.
 - **1.0.0** — Original skill with direct Python handler imports.
 
 ## Usage

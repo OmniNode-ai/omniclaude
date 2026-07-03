@@ -14,7 +14,7 @@ Successfully deployed agent_actions_consumer with shell script wrapper that prop
 
 ### Configuration
 ```bash
-Kafka Bootstrap: 192.168.86.200:29092
+Kafka Bootstrap: <onex-host>:29092
 PostgreSQL: postgres@omninode-bridge-postgres:5436/omniclaude
 Consumer Group: agent-observability-postgres
 Batch Size: 100
@@ -23,8 +23,8 @@ Log Level: INFO
 ```
 
 ### Environment Variables Loaded
-- ✅ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
-- ✅ POSTGRES_HOST=omninode-bridge-postgres (resolves to 192.168.86.200)
+- ✅ KAFKA_BOOTSTRAP_SERVERS=<onex-host>:29092
+- ✅ POSTGRES_HOST=omninode-bridge-postgres (resolves to `<onex-host>`)
 - ✅ POSTGRES_PORT=5436
 - ✅ POSTGRES_DATABASE=omniclaude
 - ✅ POSTGRES_USER=postgres
@@ -42,7 +42,7 @@ Health: ✅ Healthy
 
 ### Kafka Connection
 ```
-✅ Connected to 192.168.86.200:29092
+✅ Connected to <onex-host>:29092
 ✅ Joined consumer group: agent-observability-postgres
 ✅ Assigned 6 partitions:
    - onex.evt.omniclaude.agent-actions.v1
@@ -140,8 +140,8 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 1. Check .env file exists: `ls -la /Volumes/PRO-G40/Code/omniclaude/.env`  <!-- local-path-ok -->
 2. Verify environment variables: `source .env && echo $KAFKA_BOOTSTRAP_SERVERS`
 3. Check log file: `cat /tmp/agent_actions_consumer.log`
-4. Verify Kafka is accessible: `telnet 192.168.86.200 29092`
-5. Verify PostgreSQL is accessible: `psql -h 192.168.86.200 -p 5436 -U postgres`
+4. Verify Kafka is accessible: `telnet <onex-host> 29092`
+5. Verify PostgreSQL is accessible: `psql -h <onex-host> -p 5436 -U postgres`
 
 ### If No Messages Are Consumed
 1. Check if messages exist in topic:

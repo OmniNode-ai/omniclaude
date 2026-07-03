@@ -29,11 +29,12 @@ args:
   - name: --top-n
     description: "Maximum tickets to dispatch per cycle (default: 5)"
     required: false
+boundary_exempt: true
 ---
 
 # Pipeline Fill
 
-## Tools Required (OMN-8708)
+## Tools Required
 
 This skill spawns sub-workers via `Agent()`. Workers run in fresh sessions where the `Agent`
 tool is **deferred** (schema not pre-loaded). Any worker that itself needs to dispatch
@@ -143,16 +144,18 @@ After Filtering: 8
 Wave Status: 3/5 in-flight (2 slots available)
 
 Ranked Tickets:
-  #1  OMN-7300  score=0.668  blocking=3  priority=High    → ticket-pipeline
-  #2  OMN-7305  score=0.542  blocking=1  priority=High    → ticket-pipeline
+  #1  TICKET-A  score=0.668  blocking=3  priority=High    → ticket-pipeline
+  #2  TICKET-B  score=0.542  blocking=1  priority=High    → ticket-pipeline
   ...
 
-Would dispatch: OMN-7300, OMN-7305
+Would dispatch: TICKET-A, TICKET-B
 ```
 
 ## State Files
 
-All state written to `.onex_state/pipeline-fill/`:
+All state written to `$ONEX_STATE_DIR/pipeline-fill/` (not a cwd-relative
+`.onex_state/pipeline-fill/` — verified live 2026-07-02: the node resolves
+`state_dir` through `$ONEX_STATE_DIR`, not the request model's literal default):
 
 | File | Purpose |
 |------|---------|
@@ -180,7 +183,22 @@ All state written to `.onex_state/pipeline-fill/`:
 
 - **Classification**: Deterministic
 - **Backing node**: `node_pipeline_fill`
-- **Dispatch**: `onex run-node node_pipeline_fill`
+- **Dispatch (Kafka required)**: `onex run-node node_pipeline_fill --input '<envelope-json>'`
+- **Local fallback (no Kafka — use whenever the broker is unreachable, the
+  common case on a dev Mac)**: `onex node node_pipeline_fill --input <envelope-file>.json --output receipt`
+
+Both forms run from `$OMNI_HOME/omnimarket` (canonical registry clone — never a bare `$ONEX_WORKTREES_ROOT/omnimarket`, which does not exist; worktrees are always ticket-scoped). # local-path-ok: OMNI_HOME is the correct canonical registry clone path for a source checkout per CLAUDE.md — ONEX_STATE_DIR/ONEX_WORKTREES_ROOT do not apply to a source checkout.
+
+They accept the same `ModelPipelineFillCommand` fields (`correlation_id`, `top_n`,
+`wave_cap`, `min_score`, `dry_run`, `state_dir`) — `run-node`'s `--input` takes
+the JSON payload inline as text, `node`/`run`'s `--input` takes a path to a
+JSON file. `pipeline_fill` is registered for the newer single-command `onex
+skill <name>` dispatch (OMN-13688, mirroring `onex:session`'s migration) in
+`omnibase_infra`'s `skill_mapping.yaml`, but that registration has not yet
+reached the omnibase-infra release pinned by omnimarket — `onex skill
+pipeline_fill` currently fails with `Unknown skill 'pipeline_fill'` (verified
+live 2026-07-02). Until that release lands, the node-level commands above are
+the only working dispatch path.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 

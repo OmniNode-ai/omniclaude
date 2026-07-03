@@ -11,13 +11,13 @@ You are executing the epic-team skill as the **team-lead agent**. This document 
 ```python
 args = "$ARGUMENTS".split()
 if len(args) == 0:
-    print("Error: epic_id is required. Usage: /epic-team OMN-1234")
+    print("Error: epic_id is required. Usage: /epic-team <EPIC-ID>")
     exit(1)
 epic_id = args[0]
 
 import re
 if not re.match(r'^[A-Z]+-\d+$', epic_id):
-    print(f"Error: Invalid epic_id format '{epic_id}'. Expected pattern like 'OMN-1234'.")
+    print(f"Error: Invalid epic_id format '{epic_id}'. Expected pattern like 'PROJ-1234'.")
     exit(1)
 
 resume       = "--resume"           in args
@@ -76,7 +76,7 @@ def build_waves(assignments, cross_repo_splits):
     return waves
 ```
 
-### Sequential PR Chaining (Within and Across Waves) — F15/OMN-6476
+### Sequential PR Chaining (Within and Across Waves)
 
 After wave construction, detect file overlap between tickets to chain PRs that
 modify the same files. This prevents duplicate fixes when sequential tickets
@@ -139,7 +139,7 @@ def detect_file_overlap_chains(waves, ticket_metadata):
 
     return chain_targets
 
-# Stacked branch execution (OMN-6270): chain_targets maps downstream
+# Stacked branch execution : chain_targets maps downstream
 # ticket_id -> upstream ticket_id. When dispatching, resolve the upstream
 # ticket's branch name from ticket_results and pass --base-branch to
 # ticket-pipeline. Falls back to main if upstream failed or has no branch.
@@ -177,7 +177,7 @@ def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_i
 
     Args:
         base_branch: If set, ticket-pipeline branches from this branch instead
-                     of main (stacked branch execution, OMN-6270).
+                     of main (stacked branch execution).
     """
     base_branch_instruction = ""
     if base_branch:
@@ -223,7 +223,7 @@ After ticket-pipeline completes, report back:
 
 
 def emit_circuit_breaker_event(ticket_id, epic_id, run_id, repo, elapsed_minutes):
-    """Emit Kafka event when circuit breaker trips for observability (OMN-5860)."""
+    """Emit Kafka event when circuit breaker trips for observability ."""
     # Uses the standardized emitter from pipeline_event_emitters.py
     # This is best-effort — failure to emit does not block the wave.
     try:
@@ -258,7 +258,7 @@ chain_targets = detect_file_overlap_chains(waves, ticket_metadata)
 ticket_results = {}  # ticket_id -> {status, pr_url, branch}
 
 def resolve_base_branch(ticket_id):
-    """Resolve the base branch for a ticket using stacked branch execution (OMN-6270).
+    """Resolve the base branch for a ticket using stacked branch execution .
 
     If the ticket has a chain dependency on an upstream ticket that completed
     successfully with a branch, return that branch name. Otherwise return None
@@ -281,7 +281,7 @@ for wave_idx, wave in enumerate(waves):
 
     # Dispatch all tickets in this wave in parallel (single message = simultaneous Task calls)
     # The team-lead awaits all results before proceeding to the next wave.
-    # Stacked branch execution (OMN-6270): resolve base_branch from prior wave results.
+    # Stacked branch execution : resolve base_branch from prior wave results.
     wave_results = [
         dispatch_ticket(repo, ticket_id, ..., base_branch=resolve_base_branch(ticket_id))
         for repo, ticket_id in wave
@@ -870,7 +870,7 @@ After ticket-pipeline completes, report back:
         ticket_results[ticket_id] = res
         print(f"  {ticket_id}: {res['status']}")
 
-        # Slack + Kafka notification per ticket (non-fatal) [OMN-5619]
+        # Slack + Kafka notification per ticket (non-fatal)
         _n_completed = sum(1 for v in ticket_results.values() if v.get("status") == "merged")
         _n_failed = sum(1 for v in ticket_results.values() if v.get("status") != "merged")
         try:
@@ -955,7 +955,7 @@ state["end_time"] = datetime.datetime.utcnow().isoformat() + "Z"
 write_yaml(STATE_FILE, state)
 print("Phase 5: persisted done state.")
 
-# 0a. Emit epic.run.updated event for omnidash Pipeline Health page [OMN-5184]
+# 0a. Emit epic.run.updated event for omnidash Pipeline Health page
 # This is fire-and-forget — failure never blocks the epic completion.
 try:
     from plugins.onex.hooks.lib.pipeline_event_emitters import emit_epic_run_updated
@@ -976,7 +976,7 @@ try:
 except Exception:
     pass  # fire-and-forget
 
-# 0. Post-wave integration check (non-blocking) [OMN-3345]
+# 0. Post-wave integration check (non-blocking)
 # Run gap cycle --no-fix per repo touched during the wave.
 # Results are informational only — always advances to Done regardless of status.
 import re as _re
@@ -1079,7 +1079,7 @@ state["integration_check"] = _integration_check
 write_yaml(STATE_FILE, state)
 print(f"[integration-check] Post-wave check complete: {_integration_check}")
 
-# 1. Notify Slack + emit terminal Kafka event (non-fatal) [OMN-5619]
+# 1. Notify Slack + emit terminal Kafka event (non-fatal)
 ticket_results = state.get("ticket_results", {})
 completed = [tid for tid, res in ticket_results.items() if res.get("status") == "merged"]
 failed    = [tid for tid, res in ticket_results.items() if res.get("status") != "merged"]
@@ -1511,9 +1511,9 @@ SendMessage(
 
 ```yaml
 # --- Identity ---
-epic_id: "OMN-XXXX"               # Epic ticket ID from Linear
+epic_id: "PROJ-1000"              # Epic ticket ID from Linear
 run_id: "uuid-v4-string"          # Unique run identifier (uuid4)
-team_name: "epic-OMN-XXXX-abc12345"  # Claude team name (null until Phase 3)
+team_name: "epic-PROJ-1000-abc12345"  # Claude team name (null until Phase 3)
 
 # --- Phase ---
 phase: "intake"                    # intake | decomposed | dispatching | monitoring | done
@@ -1529,34 +1529,34 @@ end_time: null                       # ISO 8601 UTC (null until phase=done)
 
 # --- Intake ---
 tickets:                           # Raw ticket data from Phase 1 (persisted for Phase 2 on resume)
-  - id: "OMN-1001"
+  - id: "PROJ-1001"
     title: "Ticket title"
     url: "https://linear.app/..."
 
 # --- Decomposition ---
 assignments:                       # Map of repo -> [ticket_id, ...]
-  omniclaude: ["OMN-1001", "OMN-1002"]
-  omnibase_core: ["OMN-1003"]
-  omniplan: ["OMN-1004"]           # Unmatched tickets (when --force-unmatched)
+  omniclaude: ["PROJ-1001", "PROJ-1002"]
+  omnibase_core: ["PROJ-1003"]
+  omniplan: ["PROJ-1004"]          # Unmatched tickets (when --force-unmatched)
 
 cross_repo_splits:                 # List of cross-repo split descriptors
-  - ticket_id: "OMN-1005"
+  - ticket_id: "PROJ-1005"
     origin_repo: "omniclaude"
     part: 1
     part1_task_id: "task-abc"      # Populated after TaskCreate
     rationale: "Touches both omniclaude hooks and omnibase_core contracts"
-  - ticket_id: "OMN-1005"
+  - ticket_id: "PROJ-1005"
     origin_repo: "omniclaude"
     part: 2
-    rationale: "omnibase_core side of OMN-1005 split"
+    rationale: "omnibase_core side of PROJ-1005 split"
 
 ticket_scores:                     # Per-ticket decomposition metadata
-  OMN-1001:
+  PROJ-1001:
     matched_repo: "omniclaude"
     score: 0.92
     reason: "Touches plugins/onex hooks"
     triage: false
-  OMN-1004:
+  PROJ-1004:
     matched_repo: null
     score: 0.0
     reason: "No repo match found"
@@ -1564,18 +1564,18 @@ ticket_scores:                     # Per-ticket decomposition metadata
 
 # --- Runtime ---
 ticket_results:                    # ticket_id -> {status, pr_url, branch} (from Task() results)
-  OMN-1001:
+  PROJ-1001:
     status: "merged"
     pr_url: "https://github.com/org/omniclaude/pull/42"
-    branch: "jonah/omn-1001-feature"
-  OMN-1002:
+    branch: "jonah/proj-1001-feature"
+  PROJ-1002:
     status: "failed"
     pr_url: null
     branch: null
-  OMN-1003:
+  PROJ-1003:
     status: "merged"
     pr_url: "https://github.com/org/omnibase_core/pull/15"
-    branch: "jonah/omn-1003-feature"
+    branch: "jonah/proj-1003-feature"
 
 # DEPRECATED: ticket_status_map was populated by TaskList polling in the old worker model.
 # It is no longer written. Use ticket_results instead.
@@ -1600,7 +1600,7 @@ revoked:
 
 | Condition | Message | Exit |
 |-----------|---------|------|
-| No epic_id argument | `Error: epic_id is required. Usage: /epic-team OMN-1234` | 1 |
+| No epic_id argument | `Error: epic_id is required. Usage: /epic-team <EPIC-ID>` | 1 |
 | Invalid epic_id format | `Error: Invalid epic_id format '...'` | 1 |
 | Active run without --force | `ERROR: Active run {run_id} exists (phase={phase}). Use --force...` | 1 |
 | Active workers without --force-kill | `ERROR: {n} workers still active. Use --force-kill...` | 1 |

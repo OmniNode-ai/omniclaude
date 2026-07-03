@@ -343,18 +343,18 @@ def parse_fix_transition_event(payload: str) -> FixTransitionEvent | None:
 # ---------------------------------------------------------------------------
 
 #: Stores a ContextItem in OmniIntelligence. Returns True on success.
-type StoreContextItemFn = Callable[[ContextItem], bool]
+StoreContextItemFn = Callable[[ContextItem], bool]
 
 #: Looks up how many prior FixTransitions involved a file for a given sig.
 #: Callable(failure_signature_id, candidate_file) -> count
-type LookupFileTouchCountFn = Callable[[str, str], int]
+LookupFileTouchCountFn = Callable[[str, str], int]
 
 #: Looks up the occurrence count of a specific delta_hash for a signature.
 #: Callable(failure_signature_id, delta_hash) -> count
-type LookupOccurrenceCountFn = Callable[[str, str], int]
+LookupOccurrenceCountFn = Callable[[str, str], int]
 
 #: Handles a PatternPromotionCandidate (e.g. alerts, stores record).
-type HandlePromotionFn = Callable[[PatternPromotionCandidate], None]
+HandlePromotionFn = Callable[[PatternPromotionCandidate], None]
 
 
 # ---------------------------------------------------------------------------

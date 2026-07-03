@@ -104,7 +104,7 @@ result = adapter.run(
         repo_path=Path("/path/to/repo"),
         profile_name="ticket-pipeline",
         governance=RRHGovernance(
-            ticket_id="OMN-2138",
+            ticket_id="TASK-2138",
             evidence_requirements=("tests",),
             interfaces_touched=("ProtocolFoo", "ProtocolBar"),
             deployment_targets=("local",),
@@ -164,13 +164,12 @@ rarely need to call it directly, but the headless setup requirements are the sam
 |----------|---------|-------|
 | `ONEX_RUN_ID` | Unique run identifier for correlation | **Mandatory** — written to every RRH artifact for audit trail |
 | `ONEX_UNSAFE_ALLOW_EDITS` | Permit file writes for artifact output | Set to `1` when RRH must write JSON artifacts |
-| `ANTHROPIC_API_KEY` | Claude API key | Required for `claude -p` |
 
 ```bash
-export ONEX_RUN_ID="rrh-$(date +%s)-OMN-1234"
+export ONEX_RUN_ID="rrh-$(date +%s)-TASK-1234"
 export ONEX_UNSAFE_ALLOW_EDITS=1
 
-claude -p "Invoke the rrh skill for OMN-1234" \
+claude -p "Invoke the rrh skill for TASK-1234" \
   --allowedTools "Bash,Read,Write,tracker.get_issue"
 ```
 

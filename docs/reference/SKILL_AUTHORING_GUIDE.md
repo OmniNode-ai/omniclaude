@@ -267,3 +267,75 @@ findings regardless of how verbose the underlying models are.
 The suppression contract is regression-tested in
 `tests/unit/skills/test_output_suppression.py`. Any new skill that introduces
 unbounded output patterns will fail CI.
+
+---
+
+## Receipt-Mode Pattern (Required for R-class dispatch skills)
+
+Skills that dispatch to omnimarket nodes must use the **onex skill receipt
+pattern** instead of inline dispatch shims. The CI ratchet gate (`skill-receipt-mode-gate`)
+enforces this pattern and will block merges on non-compliant new skills.
+
+### What the receipt-mode flag is
+
+A receipt-mode skill declares `receipt_mode: true` in its `SKILL.md` front
+matter and dispatches via the single-command pattern:
+
+```yaml
+---
+name: my-skill-name
+description: Dispatches to the my_feature domain node in omnimarket.
+receipt_mode: true
+---
+```
+
+The `receipt_mode: true` flag signals that the skill's dispatch result is
+validated against a structured receipt returned by the omnimarket node, rather
+than relying on inline output parsing.
+
+### Correct skill stub shape (post-migration)
+
+```markdown
+# my_skill
+
+## Overview
+
+Thin dispatch stub. Execution logic lives in omnimarket `node_my_feature_orchestrator`.
+
+## Quick Start
+
+/my_skill
+
+## Methodology
+
+1. Run: `uv run onex run node_my_feature_orchestrator --args '{"context": "..."}'`
+2. Display the structured receipt returned by the node.
+
+## Notes
+
+- This skill uses receipt-mode dispatch. Do not add inline execution steps.
+- See omnimarket `node_my_feature_orchestrator` for internals.
+```
+
+### Which skill categories are subject to this requirement
+
+R-class skills are those that:
+- Dispatch to an omnimarket node via `uv run onex run node_*`
+- Previously used inline `claude -p`, `Agent()`, or `Task()` dispatch shims
+
+Skills that are pure UX triggers with no omnimarket dispatch (e.g. `/login`,
+`/recall`, `/set_session`) are exempt.
+
+### Diagnosing CI ratchet failures
+
+If the `skill-receipt-mode-gate` check fails in CI:
+
+1. Identify which skill file triggered the gate (check CI output for the
+   skill name).
+2. Verify the skill's `SKILL.md` front matter includes `receipt_mode: true`.
+3. Verify the skill calls `uv run onex run node_*` rather than inline shim
+   patterns (`claude -p`, bare `Agent()`, hand-rolled dispatch loops).
+4. If this is a new skill that legitimately does not dispatch to omnimarket
+   (pure UX trigger), add it to the gate's allowlist in
+   `tests/unit/skills/test_receipt_mode_gate.py` with a comment explaining
+   why it is exempt.

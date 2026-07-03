@@ -35,6 +35,7 @@ _KNOWN_PRODUCERS = (
     "omniclaw",
     "omninode",
     "omniintelligence",
+    "omnimarket",
     "omnimemory",
     "omnibase",
     "omnibase-infra",

@@ -1,8 +1,8 @@
 ---
 description: Dispatch a background worker with role-templated prompt and auto-populated collision fences
 mode: full
-version: 1.0.0
-worker_template_version: v1
+version: 1.1.0
+worker_template_version: v2
 level: intermediate
 debug: false
 category: orchestration
@@ -127,13 +127,13 @@ line per subagent tool call to
 `$ONEX_STATE_DIR/dispatches/<agent-id>/tool-calls.jsonl` when
 `ONEX_AGENT_ID` is set in the subagent environment.
 
-## Worker Operating Rules (worker_template_version: v1)
+## Worker Operating Rules (worker_template_version: v2)
 
-The following 5 rules are injected verbatim into every worker prompt by `prompt.md`
+The following 9 rules are injected verbatim into every worker prompt by `prompt.md`
 before spawning. They are auto-injected — dispatchers MUST NOT hand-restate them.
 
 ```
-## Operating Rules (auto-injected by dispatch_worker skill v1)
+## Operating Rules (auto-injected by dispatch_worker skill v2)
 
 1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
    provenance. Fix them in the same PR or file a blocker — never push red tests.
@@ -154,6 +154,37 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
 5. **Never bypass pre-commit hooks.** Never use `--no-verify`, `--no-gpg-sign`, or any
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
    Fix the issue instead of bypassing the gate.
+
+6. **Anchor-first ordering (OMN-13049).** Phase 0 is mandatory and must complete before
+   any long implementation leg: (a) verify or file the Linear ticket; (b) push a WIP
+   branch to origin (even if the branch is empty). Write a resume manifest to
+   `$ONEX_STATE_DIR/manifests/<ticket_id>/manifest.yaml` immediately after the WIP push
+   using `resume_manifest_writer.write_resume_manifest()` with
+   `phase=EnumResumeManifestPhase.PHASE_0_ANCHOR` and `wip_pushed_at` populated.
+   Update the manifest at every subsequent phase boundary (implement, local_review,
+   create_pr, done). On any auth or usage-limit error, call
+   `resume_manifest_writer.write_survivor_note(manifest, detail="<what was diagnosed>")`
+   before terminating so the defect retains identity even without a filed PR.
+
+7. **Verifiable-handle reporting.** End with a ```json-report``` block; a merged/deploy
+   claim without its handle is BLOCKED at SubagentStop. (Full text in prompt.md.)
+
+8. **OCC receipt pairing — tool-generate, never hand-author (OMN-13050, retro D-4).**
+   Runtime-path PRs pair with an OCC contract + receipt produced by
+   `uv run scripts/scaffold_occ_receipt.py <TICKET-ID> --pr-number <OCC-PR#> ...`,
+   which emits the full schema INCLUDING `contract_sha256`, defaults `--base dev`,
+   and self-reports the four OCC #2530 wedges. Each prohibition (no skip token,
+   target dev not main, never arm blind, cite Evidence-Source + Evidence-Ticket)
+   ships with its failure mode and alternative — "STOP and report back — any
+   bracketed skip-token hard-fails your PR." (Full text in prompt.md.)
+
+9. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+   touches UI behavior, the required proof is a Playwright interaction with the operator's
+   running surface: the live URL, a screenshot, and the network log of the actual request
+   the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
+   claim — it proves the backend answered, not that the operator's surface renders the data
+   or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
+   (OMN-13024) is live.
 ```
 
 ## See Also
@@ -162,3 +193,5 @@ before spawning. They are auto-injected — dispatchers MUST NOT hand-restate th
 - Design: `docs/design/dispatch-worker-skill-design.md`
 - `src/omniclaude/hooks/model_dispatch_record.py` — dispatch record schema
 - `src/omniclaude/hooks/lib/dispatch_record_writer.py` — writer/reader
+- `src/omniclaude/hooks/model_resume_manifest.py` — resume manifest schema (OMN-13049)
+- `src/omniclaude/hooks/lib/resume_manifest_writer.py` — phase-boundary manifest writer (OMN-13049)

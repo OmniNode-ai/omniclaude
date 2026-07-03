@@ -1,128 +1,212 @@
 ---
-description: Opt-in session continuity — save context before /clear for injection on next session start
+description: Final session handoff with six mechanical enforcement behaviors — claim-certification lint, supersession tombstones, terminal commit+push, typed stale-doc findings (FIXED/DEFERRED schema), live-gh scorecard (hard-fail on missing/red PRs), and deep-dive reconcile (SUPERSEDED banner on stale state_as_of). Replaces free-form prose handoffs that silently emit phantom topology, folklore SHAs, or missing PRs.
 mode: full
-version: 1.0.0
-level: basic
+version: 2.0.0
+level: advanced
 debug: false
 category: workflow
 tags:
-  - session
-  - continuity
   - handoff
-  - context
-  - clear
+  - session
+  - enforcement
+  - scorecard
+  - stale-doc
+  - supersession
+  - claim-certification
 author: OmniClaude Team
 args:
-  - name: --message
-    description: "Optional message for the next session (free text context)"
+  - name: --lane
+    description: "Target runtime lane context for topology claims: dev | stability | prod"
     required: false
+  - name: --session-window
+    description: "ISO 8601 UTC start time of the current session window (default: 8h ago)"
+    required: false
+  - name: --dry-run
+    description: "Print all probe outputs and the handoff draft without committing or pushing"
+    required: false
+skill_kind: methodology
 ---
 
-> **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
-> Session state persistence is now handled automatically by `node_session_orchestrator` —
-> it writes `last_health.yaml` and `in_flight.yaml` on every phase transition.
-> `standing_orders.json` is read by Phase 2 RSD scoring but is **not** written by the
-> orchestrator — it is written by the operator or an authorized agent outside the session loop.
-> The manual context-capture workflow is replaced by structured execution state.
-> This skill will be removed in a follow-up cleanup ticket. Do not add new functionality here.
+# /onex:handoff — Final Session Handoff
 
-# /handoff — Opt-in Session Continuity
+**Skill ID**: `onex:handoff`
+**Version**: 2.0.0
+**Retro source**: PROCESS_FAILURE_RETRO.md §3.C, item C-1
 
-## Overview
+**Announce at start:** "I'm using the handoff skill."
 
-Save session context and clear. The next session starts with continuity.
-`/clear` alone stays clean — no surprise injection.
+A night-final handoff with phantom topology, folklore SHA, a missing red PR,
+or an uncommitted self CANNOT be emitted. This skill enforces six mechanical
+behaviors — every gate is a hard-fail, not advisory.
 
-## Usage
+---
+
+## Invocation
 
 ```
-/handoff
-/handoff --message "Continue implementing the auth middleware"
+/onex:handoff
+/onex:handoff --lane dev
+/onex:handoff --dry-run
 ```
 
-## How It Works
+Full execution instructions live in `prompt.md` (six ordered phases). This
+document defines the behavioral contracts for each phase.
 
-1. `/handoff` captures current session context (active ticket, branch, recent commits, working files)
-2. Writes a manifest to `$ONEX_STATE_DIR/handoff/{cwd_hash}-{session_id}.json`
-   - `cwd_hash`: first 8 chars of SHA-256 of the CWD path
-   - `session_id`: from `CLAUDE_SESSION_ID` env var (falls back to `uuidgen | head -c 8`)
-   - This ensures concurrent sessions in the same CWD do NOT overwrite each other
-3. Clears the session (equivalent to `/clear`)
-4. On next session start (if `OMNICLAUDE_SESSION_HANDOFF=1`), session-start.sh:
-   - Reads ALL manifests matching `$ONEX_STATE_DIR/handoff/{cwd_hash}-*.json`
-   - Sorts by `created_at` descending, injects the most recent as `additionalContext`
-   - Deletes ALL consumed manifests for this CWD after successful injection (one-shot cleanup)
+---
 
-## Atomicity Rules
+## Enforcement Behaviors
 
-- **Scoping**: Manifest path includes CWD hash AND session ID (NOT repo slug — repo is always the same for a given CWD)
-- **Concurrency safe**: Each session writes its own file. 6 concurrent sessions = 6 separate manifests. No overwrites.
-- **Atomic write**: Write to `.tmp` suffix first, then `mv` (atomic on POSIX)
-- **Staleness**: Manifests older than 24h are ignored and cleaned up by session-start.sh
-- **Injection failure**: If manifest read fails, log warning and continue without injection. Do not delete on failure — allow retry on next session start
-- **One-shot**: All consumed manifests for the CWD are deleted after successful injection
-- **Multiple manifests**: When multiple manifests exist for the same CWD, session-start.sh reads the most recent by `created_at` timestamp. All others are cleaned up.
+### (a) Claim-Certification Lint
 
-## Toggle
+Every probeable claim in the handoff body — lane existence, topology container
+counts, deployed SHAs, group counts — must carry exactly ONE of:
 
-Requires `OMNICLAUDE_SESSION_HANDOFF=1` in `~/.omnibase/.env` or shell environment.
-Default is OFF (`0`). Without the toggle, session-start.sh skips handoff injection entirely.
+- **Inline probe+output**: the bash command that was run and its stdout/stderr on
+  the same or adjacent line.
+- **`[reported: <source>]`**: the authoritative surface that provided the value
+  (e.g. `[reported: PR inventory projection]`, `[reported: projection endpoint]`).
 
-## Manifest Format
+**One claim → one label → one probe.** Run-on paragraphs that fuse multiple
+claims (e.g. "407 Stable / 50 Empty groups was a false read, corrected by the
+recent batch") violate this rule — split into per-claim lines.
 
-**Filename**: `{cwd_hash}-{session_id}.json` (e.g., `94b129c9-AFA23AA3.json`)
+The handoff MUST NOT emit any lane, container-count, SHA, or group-count value
+that lacks a same-session probe. "From earlier this session" is not a probe; it
+is folklore. If a claim cannot be re-probed, prefix it with `[unverified]` and
+exclude it from the Verified State block.
 
-```json
-{
-  "version": 1,
-  "created_at": "2026-03-15T12:00:00Z",
-  "cwd": "/path/to/project",
-  "cwd_hash": "a1b2c3d4",
-  "session_id": "AFA23AA3",
-  "message": "Continue implementing the auth middleware",
-  "context": {
-    "active_ticket": "OMN-1234",
-    "branch": "jonahgabriel/omn-1234-auth-middleware",
-    "recent_commits": ["abc1234 fix: auth header parsing", "def5678 feat: add middleware skeleton"],
-    "working_files": ["src/auth/middleware.py", "tests/test_middleware.py"]
-  }
-}
+### (b) Supersession
+
+When a prior handoff or standing-orders directive is superseded:
+
+1. **Retract-or-reaffirm every standing directive** from the superseded doc: each
+   directive gets one of `[RETRACTED]`, `[REAFFIRMED]`, or `[UPDATED: <new text>]`
+   inline.
+2. **Tombstone edit**: write a one-line tombstone to the superseded handoff file:
+   ```
+   > SUPERSEDED by <path-to-this-handoff> at <UTC timestamp>
+   ```
+   This edit is part of the terminal commit (behavior c).
+3. **LATEST.md pointer**: write or overwrite `docs/handoffs/LATEST.md` with a
+   one-line pointer to the new handoff path. Include in the terminal commit.
+
+Failing to tombstone means the next session operator may resume from stale context.
+
+### (c) Terminal Commit+Push
+
+The handoff session MUST NOT end with uncommitted handoff artifacts. Before
+emitting the handoff summary to the operator:
+
+1. `git add <handoff_file>` — the primary handoff document.
+2. `git add docs/handoffs/LATEST.md` — the LATEST pointer (behavior b).
+3. `git add <every docs/** path cited in the handoff body>` — stale-doc fixes,
+   tombstoned prior handoffs, plan updates referenced by name.
+4. `git commit -m "docs: night-final handoff <date> [OMN-session]"`
+5. Publish the current HEAD to `origin` using the repository-approved push helper.
+6. Report remaining untracked/dirty docs that were NOT in scope (do not silently
+   add them; list them explicitly so the operator can decide).
+
+On `--dry-run`, print the would-be `git add` file list and commit message without
+executing steps 4–5.
+
+### (d) Typed Stale-Doc Findings
+
+Stale-doc findings must use the schema-validated format. Free text is not
+representable. Each finding entry must be one of:
+
+```
+- docs/path/to/file.md: FIXED:<sha>
+- docs/path/to/file.md: DEFERRED:<OMN-XXXX>
 ```
 
-## Auto-Checkpoint Fallback
+Where:
+- `FIXED:<sha>` — the fix was committed in the specified commit SHA (7+ hex chars).
+- `DEFERRED:<OMN-XXXX>` — the fix is tracked in a Linear ticket.
 
-When invoked, `/handoff` checks for auto-checkpoint files at `~/.claude/handoffs/checkpoint-*.md`
-(produced by the auto-checkpoint hook, OMN-6528). These are used as **fallback enrichment only**
-when the user did not provide explicit handoff context.
+The backing Pydantic model is `ModelStaleDocFinding` in
+`src/omniclaude/skills/handoff/stale_doc_finding.py`. The prompt validates
+each finding against this model before the handoff body is finalized. A finding
+that cannot be expressed as FIXED or DEFERRED is an open debt item — create a
+ticket for it (behavior e lists it in the scorecard gap, not as a stale-doc entry).
 
-### Precedence Rules
+### (e) Live-gh Scorecard
 
-1. **Explicit handoff** (user-provided `--message` or active session context) is always authoritative
-2. **Auto-checkpoints** fill gaps only — they never override explicit handoff content
-3. If a manual handoff is newer than the latest checkpoint, checkpoints are ignored entirely
-4. If no explicit context exists but checkpoints are present, merge the latest checkpoint into the manifest
+The scorecard is generated from a live `gh` query scoped to the current session
+window. It is NEVER hand-authored.
 
-### Integration Behavior
+**Hard-fail conditions** (emit `SCORECARD_BLOCKED` and stop):
+- Any session-window PR is OPEN and missing from the scorecard.
+- Any session-window PR has a failing CI check and no `owner:` row explaining the
+  failure and next step.
 
-When building the handoff manifest:
+**Scorecard format** (one row per session-window PR):
 
-```python
-# After gathering explicit session context...
-if not context.get("recent_commits") and not context.get("message"):
-    # No explicit context — check for auto-checkpoints
-    checkpoint_dir = Path.home() / ".claude" / "handoffs"
-    checkpoints = sorted(checkpoint_dir.glob("checkpoint-*.md"), reverse=True)
-    if checkpoints:
-        latest = checkpoints[0]
-        # Parse frontmatter for commit_hash, branch
-        # Merge into context as fallback
-        context["_source"] = "auto-checkpoint"
-        context["_checkpoint_file"] = str(latest)
+```
+| PR | Title | State | CI | Owner/Note |
+|----|-------|-------|----|------------|
+| #N | desc  | MERGED | green | — |
+| #M | desc  | OPEN   | red   | owner: <person> — <next step> |
 ```
 
-### Recovery Path
+The session window defaults to PRs opened or updated within the last 8 hours.
+Override with `--session-window <ISO UTC>`.
 
-After a session crash or `/clear` without explicit `/handoff`:
-1. Next session's `/onex:session` reads the latest auto-checkpoint (crash_recovery deleted in OMN-12234)
-2. Provides: last commit, branch, files changed, PR status
-3. This makes session resumption seamless even without explicit handoff
+### (f) Deep-Dive Reconcile
+
+For every same-day deep-dive document cited in the handoff:
+
+1. Read `state_as_of` from the deep-dive frontmatter.
+2. Compare it against the handoff's `probe_time` (the UTC time when this handoff's
+   topology probes were run).
+3. If `state_as_of < probe_time`: auto-append the following banner to the deep-dive
+   file (included in the terminal commit, behavior c):
+
+```markdown
+> **SUPERSEDED** — runtime state as of this document (<state_as_of>) is older than
+> the final handoff probe time (<probe_time>). Do not use this document's runtime
+> claims for planning. See: <handoff_path>
+```
+
+4. If the deep-dive has no `state_as_of` field: treat it as `state_as_of: epoch`
+   (oldest possible → always appends the banner).
+
+---
+
+## Hard-Fail Summary
+
+| Condition | Failure mode |
+|-----------|-------------|
+| Claim with no probe and no `[reported: ...]` label | `CLAIM_UNCERTIFIED` |
+| Stale-doc finding with free-text resolution | `STALE_DOC_SCHEMA_VIOLATION` |
+| Session-window PR absent from scorecard | `SCORECARD_BLOCKED` |
+| Session-window PR red with no owner row | `SCORECARD_BLOCKED` |
+| Handoff file not committed before emit | `TERMINAL_COMMIT_MISSING` |
+
+---
+
+## Anti-Patterns
+
+| Anti-pattern | Rejection |
+|---|---|
+| Prose lane state without a probe (`dev lane UNTOUCHED`) | `CLAIM_UNCERTIFIED` |
+| `fix opportunistically` as a stale-doc resolution | `STALE_DOC_SCHEMA_VIOLATION` |
+| Hand-authored scorecard row | `SCORECARD_BLOCKED` (regenerate from live `gh`) |
+| Emitting handoff without `git commit` | `TERMINAL_COMMIT_MISSING` |
+| Citing a prior handoff body as a source for current state | Not a live truth surface; probe directly |
+
+---
+
+## Architecture
+
+```
+SKILL.md     → behavioral contracts for the 6 enforcement behaviors (this file)
+prompt.md    → exact execution steps (six ordered phases)
+src/omniclaude/skills/handoff/stale_doc_finding.py → ModelStaleDocFinding — typed schema for behavior (d)
+topics.yaml  → no Kafka topics (local enforcement only)
+```
+
+## See Also
+
+- `docs/evidence/2026-06-11-architecture-investigation/PROCESS_FAILURE_RETRO.md` in the omni_home registry §3.C item C-1
+- `/onex:session` — runtime session orchestrator (session state, health gates, dispatch)
+- `/onex:runtime_closeout` — deploy + proof-matrix closeout (runtime artifacts)

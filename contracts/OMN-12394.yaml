@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-12394
+title: "Preserve omniclaude autopilot skill orchestrator"
+summary: >
+  Preserve the remaining OMN-12394 omniclaude dirty-clone audit work that is not
+  already present on dev: the autopilot skill orchestrator node shell and
+  contract.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: manual
+    description: "Autopilot orchestrator files are present."
+    command: "test -f src/omniclaude/nodes/node_skill_autopilot_orchestrator/contract.yaml"
+  - kind: manual
+    description: "Focused local verification passes."
+    command: "uv run pre-commit run --files src/omniclaude/nodes/node_skill_autopilot_orchestrator/__init__.py src/omniclaude/nodes/node_skill_autopilot_orchestrator/contract.yaml src/omniclaude/nodes/node_skill_autopilot_orchestrator/node.py contracts/OMN-12394.yaml"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-autopilot-orchestrator-files
+    description: "The autopilot skill orchestrator shell files are present."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f src/omniclaude/nodes/node_skill_autopilot_orchestrator/__init__.py && test -f src/omniclaude/nodes/node_skill_autopilot_orchestrator/contract.yaml && test -f src/omniclaude/nodes/node_skill_autopilot_orchestrator/node.py"
+  - id: dod-focused-validation
+    description: "Focused validation passes for the autopilot orchestrator files and repo-local contract."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run ruff check src/omniclaude/nodes/node_skill_autopilot_orchestrator && uv run ruff format --check src/omniclaude/nodes/node_skill_autopilot_orchestrator && python3 -m py_compile src/omniclaude/nodes/node_skill_autopilot_orchestrator/node.py"
+  - id: dod-deploy-assessment
+    description: "No production deploy required: this PR adds only the stateless autopilot skill shell and matching skill surface."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'No production deploy required' contracts/OMN-12394.yaml"

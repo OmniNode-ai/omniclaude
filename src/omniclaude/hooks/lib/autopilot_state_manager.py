@@ -36,7 +36,7 @@ def save_cycle_state(state: ModelAutopilotCycleState) -> Path:
 
     Returns the path written to.
     """
-    from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import ensure_state_path
 
     path = ensure_state_path(_CYCLE_STATE_FILE)
     data = state.model_dump(mode="json")
@@ -46,7 +46,7 @@ def save_cycle_state(state: ModelAutopilotCycleState) -> Path:
 
 def load_cycle_state() -> ModelAutopilotCycleState | None:
     """Load cycle state from disk, or None if not present / corrupt."""
-    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import state_path
 
     path = state_path(_CYCLE_STATE_FILE)
     if not path.exists():
@@ -89,7 +89,7 @@ class AutopilotMutex:
         self._lock_path: Path | None = None
 
     def _resolve_lock_path(self) -> Path:
-        from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+        from omniclaude.hooks.lib.onex_state import ensure_state_path
 
         return ensure_state_path(_LOCK_FILE)
 

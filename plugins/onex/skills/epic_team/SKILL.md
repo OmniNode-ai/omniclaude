@@ -8,18 +8,25 @@ category: workflow
 tags: [epic, team, multi-repo, autonomous, linear, slack]
 foreground_orchestrator: true
 args:
-  - epic_id (required): Linear epic ID (e.g., OMN-2000)
+  - epic_id (required): Linear epic ID (e.g., PROJ-1000)
   - --mode (required): Workflow mode — must be "build". Epic-team is exclusively a BUILD-mode skill. Omitting --mode emits a usage error.
   - --dry-run: Print decomposition plan (includes unmatched reason), no spawning
   - --force: Pause if active tasks remain; archive state and restart
   - --force-kill: Combine with --force to destroy active run even with live workers
   - --resume: Re-enter monitoring; finalize if all tasks terminal; no-op if already done
   - --force-unmatched: Route unmatched tickets to omniplan as TRIAGE tasks
+boundary_exempt: true
 ---
 
 # Epic Team Orchestration
 
-## Tools Required (OMN-8708)
+## Backing Status (OMN-13780) — NON-RUNNABLE via canonical event-bus dispatch
+
+**This skill has no deterministic node backing and is de-listed from event-bus / node-routed dispatch — deliberately, by design.** Its omniclaude "node" (`node_skill_epic_team_orchestrator`) is a generated Polly-passthrough shell (`maturity: stub` in its contract.yaml). Its real execution mechanism, `plugins/onex/skills/epic_team/run.sh`, itself shells out to `claude -p` (headless Claude Code) — still an LLM session, not a canonical COMPUTE/EFFECT/ORCHESTRATOR/REDUCER node. Spawning live `Task()`/`TeamCreate()` subagents is inherently a Claude-session capability; there is no I/O boundary a backend node can call to create a new agent session.
+
+This is intentional, not a gap to silently paper over: epic_team is, and should remain, session-native (Skill-tool / headless-launcher driven only). Future evaluation of a gated-EFFECT wrapper around the `run.sh` launch step is tracked in OMN-13801.
+
+## Tools Required
 
 This skill spawns workers via `Agent(team_name=...)`. Workers run in fresh sessions where
 the `Agent` tool is **deferred** (schema not pre-loaded). Any worker that needs to dispatch
@@ -68,13 +75,13 @@ Use `plugins/onex/skills/epic_team/run.sh` for overnight/unattended runs:
 
 ```bash
 # Full headless run
-plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build
+plugins/onex/skills/epic_team/run.sh PROJ-1000 --mode build
 
 # Dry run (no spawning)
-plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build --dry-run
+plugins/onex/skills/epic_team/run.sh PROJ-1000 --mode build --dry-run
 
 # Resume after context limit or crash
-plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build --resume
+plugins/onex/skills/epic_team/run.sh PROJ-1000 --mode build --resume
 ```
 
 **Minimum tool allowlist for headless epic-team:**
@@ -106,7 +113,7 @@ epic-team uses Claude Code Agent Teams for all worker dispatch. The team lead (t
 creates a named team, generates task contracts, dispatches workers, monitors for stalls, and
 shuts down the team on completion.
 
-### Non-Blocking Foreground Contract [OMN-7258]
+### Non-Blocking Foreground Contract
 
 `Agent(...)` dispatches return immediately — workers run as independent background sessions.
 The team lead must never `await` or block the foreground on any single worker. The wave
@@ -117,9 +124,9 @@ has been handled. This is the canonical dispatch pattern referenced by Workstrea
 one `Agent(team_name=...)` per ticket → poll status non-blocking. No separate
 `/dispatch-epic` skill is needed; that workflow is exactly this skill's dispatch phase.
 
-Stall detection integrates `OMN-7255` (`agent_healthcheck` + `dispatch_watchdog`): two
-minutes of zero tool calls from a worker is a stall signal, and stalled workers are killed
-and redispatched with narrower scope per the watchdog's escalation policy.
+Stall detection integrates `agent_healthcheck` and `dispatch_watchdog`: two minutes of zero
+tool calls from a worker is a stall signal, and stalled workers are killed and redispatched
+with narrower scope per the watchdog's escalation policy.
 
 ### Lifecycle
 
@@ -131,7 +138,7 @@ and redispatched with narrower scope per the watchdog's escalation policy.
    c. Agent(name="worker-{ticket_id}", team_name="epic-{epic_id}",
             prompt="Execute ticket-pipeline for {ticket_id}. Task contract: {contract_json}")
 3. Workers execute in background, report progress via SendMessage(to="team-lead")
-4. Team lead monitors progress, handles stalls (OMN-6937 pattern: 5-min inactivity timeout)
+4. Team lead monitors progress, handles stalls (5-min inactivity timeout)
 5. On each worker completion: verification chain runs (see below)
 6. TeamDelete(team_name="epic-{epic_id}") after all tasks complete or are terminal
 ```
@@ -158,7 +165,7 @@ Each worker task must produce evidence through the full Part 2 verification chai
 A worker is not considered complete until all five artifacts are present. Missing evidence
 triggers a re-verification pass before the task is marked done.
 
-### Stall Detection (OMN-6937 Pattern)
+### Stall Detection
 
 After dispatching workers in a wave, the team lead monitors for stalls:
 
@@ -210,7 +217,7 @@ Never dispatch more than 5 tickets in a single wave, even if more are independen
 
 ---
 
-## Sequential PR Chaining (OMN-6458)
+## Sequential PR Chaining
 
 When creating PRs for sequential tasks that modify the same files:
 1. PR N+1 should target PR N's branch (not main) if they share modified files
@@ -223,7 +230,7 @@ When creating PRs for sequential tasks that modify the same files:
 CHANGED_FILES=$(git diff --name-only main...)
 
 # Check open PRs from same epic for overlapping files
-for PR_NUM in $(gh pr list --label "epic:OMN-XXXX" --json number -q '.[].number'); do
+for PR_NUM in $(gh pr list --label "epic:<EPIC-ID>" --json number -q '.[].number'); do
   PR_FILES=$(gh pr view $PR_NUM --json files -q '.files[].path')
   OVERLAP=$(comm -12 <(echo "$CHANGED_FILES" | sort) <(echo "$PR_FILES" | sort))
   if [[ -n "$OVERLAP" ]]; then
@@ -239,22 +246,22 @@ done
 
 epic-team orchestrates these independently-invocable primitives:
 
-| Sub-Skill | Purpose | Ticket |
-|-----------|---------|--------|
-| `decompose-epic` | Analyze epic → create Linear child tickets | OMN-2522 |
-| `slack-gate` | LOW_RISK notification gate (one-way, silence=proceed) | OMN-2521 |
-| `ticket-pipeline` | Per-ticket pipeline (implement → review → PR → CI → merge) | — |
-| `verification-sweep` | Post-orchestration endpoint/DB/DoD verification | OMN-7254 |
+| Sub-Skill | Purpose |
+|-----------|---------|
+| `decompose-epic` | Analyze epic → create Linear child tickets |
+| `slack-gate` | LOW_RISK notification gate (one-way, silence=proceed) |
+| `ticket-pipeline` | Per-ticket pipeline (implement → review → PR → CI → merge) |
+| `verification-sweep` | Post-orchestration endpoint/DB/DoD verification |
 
 `ticket-pipeline` in turn composes:
 
-| Sub-Skill | Purpose | Ticket |
-|-----------|---------|--------|
-| `ticket-work` | Implement ticket (autonomous mode) | OMN-2526 |
-| `local-review` | Review + fix loop | — |
-| `ci-watch` | Poll CI, auto-fix failures | OMN-2523 |
-| `pr-watch` | Poll PR reviews, auto-fix comments | OMN-2524 |
-| `auto-merge` | Merge PR automatically after CI is clean | OMN-2525 |
+| Sub-Skill | Purpose |
+|-----------|---------|
+| `ticket-work` | Implement ticket (autonomous mode) |
+| `local-review` | Review + fix loop |
+| `ci-watch` | Poll CI, auto-fix failures |
+| `pr-watch` | Poll PR reviews, auto-fix comments |
+| `auto-merge` | Merge PR automatically after CI is clean |
 
 Each layer is independently invocable:
 - `ticket-pipeline` runs standalone without `epic-team`
@@ -267,28 +274,28 @@ Each layer is independently invocable:
 
 ```bash
 # Dry run — see decomposition without spawning agents
-/epic-team OMN-2000 --dry-run
+/epic-team PROJ-1000 --dry-run
 
 # Full run
-/epic-team OMN-2000
+/epic-team PROJ-1000
 
 # Resume after session disconnect
-/epic-team OMN-2000 --resume
+/epic-team PROJ-1000 --resume
 
 # Force restart (archive existing state; pauses if workers active)
-/epic-team OMN-2000 --force
+/epic-team PROJ-1000 --force
 
 # Force restart even with active workers (dangerous)
-/epic-team OMN-2000 --force --force-kill
+/epic-team PROJ-1000 --force --force-kill
 
 # Route unmatched tickets to omniplan triage
-/epic-team OMN-2000 --force-unmatched
+/epic-team PROJ-1000 --force-unmatched
 ```
 
 ## Orchestration Flow
 
 ```
-epic-team OMN-XXXX
+epic-team <EPIC-ID>
   → Fetch child tickets from Linear
   → If 0 child tickets:
       → Dispatch decompose-epic (composable, returns skill_result)
@@ -302,19 +309,19 @@ epic-team OMN-XXXX
       Wave 0: independent tickets + cross-repo Part 1 splits (run in parallel)
       Wave 1: cross-repo Part 2 splits (run after Wave 0 completes)
   → For each wave: dispatch ticket-pipeline per ticket as Agent() workers in parallel
-  → Start stall-detection watchdog for the wave [OMN-6987]
+  → Start stall-detection watchdog for the wave
   → Await all Agent() workers in wave to report via SendMessage before starting next wave
   → If watchdog detects stall: cancel stalled worker, log to state, retry in next wave
   → Collect results (status, pr_url, branch) from SendMessage reports
-  → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
+  → Post-wave integration check: run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
       → Write integration_check section to state.yaml (non-blocking — always advances)
-  → Post-orchestration verification sweep (OMN-7254): invoke /verification-sweep --epic {epic_id}
+  → Post-orchestration verification sweep: invoke /verification-sweep --epic {epic_id}
       → Verify dashboard endpoints return HTTP 200 with real data
       → Verify database tables contain expected rows
       → Verify dod_evidence rendered_output items have passing receipts
       → Write receipts to .onex_state/verification-receipts/ (non-blocking — always advances)
-  → DoD compliance gate (OMN-5833): invoke /dod-sweep {epic_id} (targeted mode)
+  → DoD compliance gate: invoke /dod-sweep {epic_id} (targeted mode)
       → If FAIL: do NOT mark epic Done; follow-ups auto-created; post Slack block
       → If PASS: proceed to mark epic Done; post Slack clean notification
       → If UNKNOWN (all exempt): proceed (rollout accommodation); post review warning
@@ -339,7 +346,7 @@ Agent(
 )
 ```
 
-## Pre-Dispatch Verification Preamble [OMN-6990]
+## Pre-Dispatch Verification Preamble
 
 **Before dispatching any ticket in a wave**, the team lead performs a lightweight verification
 pass to catch misaligned tickets early -- before they consume a full pipeline run.
@@ -362,7 +369,7 @@ of tickets; Sonnet is sufficient for implementation tasks.
 
 ### ONEX Pattern Gate (pre-dispatch static review)
 
-> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Skip this gate entirely. Do NOT invoke. Proceed to Verification Steps directly. Re-enable when OMN-10111 closes.
+> **DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Skip this gate entirely. Do NOT invoke. Proceed to Verification Steps directly.
 
 **Before dispatching any ticket in a wave**, run `hostile_reviewer --static` on each task
 description to catch ONEX anti-patterns before they consume a full pipeline run.
@@ -390,7 +397,7 @@ Escalate to user if more than 2 tickets in a wave are blocked by the pattern gat
 
 ### Verification Steps (per ticket, before Agent() dispatch)
 
-1. **ONEX pattern gate**: ~~Run `hostile_reviewer --static` on task description~~ **DISABLED per OMN-10111** — skip this step, proceed to step 2.
+1. **ONEX pattern gate**: ~~Run `hostile_reviewer --static` on task description~~ **DISABLED** — skip this step, proceed to step 2.
 
 2. **Ticket readiness check**: Fetch ticket via `tracker.get_issue` and verify:
    - Description is non-empty and contains actionable content
@@ -429,7 +436,7 @@ TaskCreate(subject="{ticket_id}: {title}", description=ticket_requirements)
 Agent(
   name="worker-{ticket_id}",
   team_name="epic-{epic_id}",
-  prompt="FIRST ACTION — fetch deferred dispatch tool schemas (OMN-8708):
+  prompt="FIRST ACTION — fetch deferred dispatch tool schemas:
     ToolSearch(query=\"select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet\", max_results=5)
 
     You are executing ticket {ticket_id} for epic {epic_id}.
@@ -472,7 +479,7 @@ within a wave.
 **Wave serialization**: Wave N+1 starts only after all workers from Wave N have reported back
 via SendMessage or been timed out by stall detection.
 
-## Stall Detection in Wave Dispatch [OMN-6987]
+## Stall Detection in Wave Dispatch
 
 After dispatching all Agent() calls in a wave, the team lead monitors for stalled agents
 using the `dispatch_watchdog` skill. This prevents a single stalled agent from blocking
@@ -520,10 +527,10 @@ waves:
     dispatched_at: "2026-03-29T10:00:00Z"
     completed_at: "2026-03-29T10:15:00Z"
     tasks:
-      - ticket_id: OMN-2001
+      - ticket_id: PROJ-1001
         status: merged
         pr_url: "https://github.com/..."
-      - ticket_id: OMN-2002
+      - ticket_id: PROJ-1002
         status: stalled
         stall_detected_at: "2026-03-29T10:08:00Z"
         idle_seconds: 480
@@ -614,7 +621,7 @@ iterations_run = result.extra.get("iterations_run", 0)      # local-review resul
 Runtime state is persisted to `$ONEX_STATE_DIR/epics/{epic_id}/state.yaml`:
 
 ```yaml
-epic_id: OMN-XXXX
+epic_id: PROJ-XXXX
 run_id: f084b6c3
 status: monitoring  # queued | monitoring | done | failed
 checkpoint:
@@ -622,24 +629,24 @@ checkpoint:
   last_completed_wave: 0
   waves:
     - wave_id: 0
-      tickets: [OMN-2001, OMN-2002]
+      tickets: [PROJ-1001, PROJ-1002]
       status: completed  # pending | in_progress | completed | failed
       completed_at: "2026-03-06T..."
     - wave_id: 1
-      tickets: [OMN-2003]
+      tickets: [PROJ-1003]
       status: pending
   open_prs:
-    OMN-2001: {pr_number: 45, repo: "omniclaude", branch: "jonah/omn-2001-..."}
+    PROJ-1001: {pr_number: 45, repo: "omniclaude", branch: "jonah/omn-2001-..."}
   failures:
-    OMN-2003: {class: "ci_failure_ruff", attempts: 1, last_error: "..."}
+    PROJ-1003: {class: "ci_failure_ruff", attempts: 1, last_error: "..."}
   last_update_utc: "2026-03-06T..."
 workers:
   - repo: omniclaude
-    tickets: [OMN-2001, OMN-2002]
+    tickets: [PROJ-1001, PROJ-1002]
     status: running  # running | done | failed
 ticket_status:
-  OMN-2001: merged
-  OMN-2002: running
+  PROJ-1001: merged
+  PROJ-1002: running
 ```
 
 Use `--resume` to re-enter monitoring from persisted state after session disconnect.
@@ -649,11 +656,11 @@ Use `--resume` to re-enter monitoring from persisted state after session disconn
 When epic has 0 child tickets:
 
 ```
-[LOW_RISK] epic-team: Auto-decomposed OMN-XXXX
+[LOW_RISK] epic-team: Auto-decomposed PROJ-XXXX
 
 Epic had no child tickets. Created N sub-tickets:
-  - OMN-YYYY: [title]
-  - OMN-ZZZZ: [title]
+  - PROJ-YYYY: [title]
+  - PROJ-ZZZZ: [title]
   ...
 
 Reply "reject" within 30 minutes to cancel. Silence = proceed with orchestration.
@@ -686,7 +693,7 @@ repos:
 Keyword matching is case-insensitive. Tickets with no keyword match are UNMATCHED.
 Use `--force-unmatched` to route them to omniplan as TRIAGE tasks.
 
-## Stacked Branch Execution (OMN-6270)
+## Stacked Branch Execution
 
 When Wave N+1 tickets depend on Wave N (via cross-repo Part 2 splits or file-overlap
 chains), the downstream ticket branches from the Wave N branch tip instead of `main`.
@@ -766,7 +773,7 @@ breaker trips:
 This prevents the first autopilot close-out failure mode where a release dispatch stalled
 for 1+ hour with zero output.
 
-### Agent Health-Check Integration (OMN-6889)
+### Agent Health-Check Integration
 
 The `agent_healthcheck` skill provides more sophisticated stall detection beyond the simple
 timeout circuit breaker. During wave monitoring, epic-team checks agent health using three
@@ -777,7 +784,7 @@ heuristics:
 3. **Rate limits**: Agent encounters rate-limit errors
 
 On stall detection, the health-check module:
-- Snapshots progress to a checkpoint file (using the checkpoint protocol from OMN-6887)
+- Snapshots progress to a checkpoint file (using the checkpoint protocol from an earlier pass)
 - Summarizes completed vs remaining work
 - Relaunches a fresh agent with the summary and remaining tasks only
 
@@ -838,12 +845,12 @@ never imply all tickets passed when exemptions are present.
 - `ticket-pipeline` skill — per-ticket pipeline invoked by workers
 - `ticket-work` skill — implementation phase (autonomous mode)
 - `local-review` skill — review + fix loop
-- `ci-watch` skill (OMN-2523) — CI polling and auto-fix
-- `pr-watch` skill (OMN-2524) — PR review polling and auto-fix
-- `auto-merge` skill (OMN-2525) — merge gate
-- `decompose-epic` skill (OMN-2522) — empty epic auto-decompose
-- `slack-gate` skill (OMN-2521) — LOW_RISK notification gate
-- `verification-sweep` skill (OMN-7254) — post-orchestration endpoint/DB/DoD verification
+- `ci-watch` skill — CI polling and auto-fix
+- `pr-watch` skill — PR review polling and auto-fix
+- `auto-merge` skill — merge gate
+- `decompose-epic` skill — empty epic auto-decompose
+- `slack-gate` skill — LOW_RISK notification gate
+- `verification-sweep` skill — post-orchestration endpoint/DB/DoD verification
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
 - Linear MCP tools (`tracker.*`) — epic and ticket access
 

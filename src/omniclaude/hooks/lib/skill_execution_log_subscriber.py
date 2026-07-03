@@ -65,7 +65,7 @@ DEFAULT_GROUP_ID = "omniclaude-skill-execution-log-subscriber.v1"
 def _get_kafka_consumer_class() -> type | None:
     """Import KafkaConsumer lazily; return None if kafka-python not installed."""
     try:
-        from kafka import KafkaConsumer  # noqa: PLC0415
+        from kafka import KafkaConsumer
 
         result: type = KafkaConsumer
         return result
@@ -79,9 +79,9 @@ def _get_db_connection() -> Any | None:  # Why: psycopg2 connection type not in 
     Returns None on any failure (fail-open).
     """
     try:
-        import psycopg2  # noqa: PLC0415
+        import psycopg2
 
-        from omniclaude.config import settings  # noqa: PLC0415
+        from omniclaude.config import settings
 
         dsn = settings.omniclaude_db_url.get_secret_value().strip()
         if dsn:
@@ -462,7 +462,7 @@ def main() -> None:
 
             stop_event = threading.Event()
 
-            import signal  # noqa: PLC0415
+            import signal
 
             def _handle_signal(sig: int, frame: FrameType | None) -> None:
                 stop_event.set()

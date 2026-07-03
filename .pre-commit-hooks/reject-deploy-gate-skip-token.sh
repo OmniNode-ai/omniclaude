@@ -5,6 +5,7 @@
 # OMN-10414 (extends OMN-10347 / OMN-9730 DGM-Phase4): Mechanical block on ALL
 # [skip-*] bypass tokens, including [skip-receipt-gate:] and [skip-deploy-gate:].
 # Rejects any staged file or commit message containing [skip-<anything>:].
+# OMN-12696 extends staged scans to committed .onex_state/evidence text files.
 #
 # BLOCKING — this hook rejects all [skip-*] tokens. This is the LOCAL enforcement
 # layer. The GHA workflow (reject-deploy-gate-skip.yml) is the REMOTE enforcement
@@ -184,8 +185,8 @@ fi
 # Normal mode: scan staged files passed as arguments.
 # Read staged blobs from the index (git show :$file) rather than the working
 # tree to prevent bypass via working-tree edits after git add.
-# Only scan file types that could plausibly be PR bodies or ticket contracts:
-# markdown, yaml, yml, txt, md. Python/shell source that discusses skip tokens
+# Only scan file types that could plausibly be PR bodies, ticket contracts, or
+# committed session evidence. Python/shell source that discusses skip tokens
 # (docs, tests, validators) should not be blocked by this hook.
 # ──────────────────────────────────────────────────────────────────────────────
 FOUND_VIOLATION=0
@@ -194,6 +195,12 @@ for file in "$@"; do
     # Restrict to PR-body-like file types to avoid false positives on source/test files
     case "$file" in
         *.md|*.yaml|*.yml|*.txt) ;;
+        .onex_state/evidence/*|*/.onex_state/evidence/*)
+            case "$file" in
+                *.err|*.json|*.jsonl|*.log|*.out) ;;
+                *) continue ;;
+            esac
+            ;;
         *) continue ;;
     esac
 

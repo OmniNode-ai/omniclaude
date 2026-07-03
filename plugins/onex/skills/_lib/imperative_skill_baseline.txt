@@ -1,7 +1,7 @@
-# Imperative Skill Pattern Baseline (OMN-12237)
+# Imperative Skill Pattern Baseline
 #
 # Pre-existing imperative patterns in SKILL.md files being migrated as
-# part of Wave 7 (38-skill imperative-to-dispatch migration).
+# part of the imperative-to-dispatch migration.
 #
 # DO NOT add new entries. New violations must be fixed before merging.
 # Remove entries as each skill completes its Wave 7 migration.

@@ -433,6 +433,9 @@ def test_build_env_config_stable_rule_id_across_calls(monkeypatch, tmp_path) -> 
         {"local-deepseek-r1-14b": "configured-deepseek"},
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    # Isolate from any host overlay (e.g. ~/.omninode/delegation/bifrost_overrides.yaml)
+    # which may contain fields (api_key_env, extra_headers) unknown to the packaged model.
+    monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(tmp_path / "no-overlay.yaml"))
 
     cfg1 = _build_env_config()
     cfg2 = _build_env_config()
@@ -457,6 +460,9 @@ def test_build_env_config_multiple_backends(monkeypatch, tmp_path) -> None:
         },
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
+    # Isolate from any host overlay (e.g. ~/.omninode/delegation/bifrost_overrides.yaml)
+    # which may contain fields (api_key_env, extra_headers) unknown to the packaged model.
+    monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(tmp_path / "no-overlay.yaml"))
 
     cfg = _build_env_config()
 

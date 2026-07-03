@@ -19,7 +19,7 @@ cat /tmp/database_verification_latest.txt
 ### 1. Connectivity (1 check)
 - PostgreSQL connection to `omnibase_infra` database
 - Validates credentials from `.env` file
-- Uses external IP (192.168.86.200:5436) for host access
+- Uses external host (`<onex-host>:5436`) for host access
 
 ### 2. Schema Validation - Tables (29 checks)
 
@@ -194,7 +194,7 @@ echo "Host: ${POSTGRES_HOST}"
 echo "Port: ${POSTGRES_PORT}"
 
 # Test manual connection
-psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
+psql -h "${POSTGRES_HOST}" -p 5436 -U postgres -d omnibase_infra
 ```
 
 ### Low Health Score
@@ -252,7 +252,7 @@ fi
   COMPREHENSIVE DATABASE SYSTEM VERIFICATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Database: omnibase_infra @ 192.168.86.200:5436
+Database: omnibase_infra @ <onex-host>:5436
 User: postgres
 Timestamp: 2025-11-09 19:02:43
 

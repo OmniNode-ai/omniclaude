@@ -75,7 +75,6 @@ Polymorphic agent framework with ONEX compliance:
 
 Reusable capabilities and domain expertise:
 
-- Pattern discovery from 15,689+ vectors
 - Intelligence infrastructure integration
 - Linear ticket management
 - PR review and CI/CD workflows
@@ -544,15 +543,15 @@ backgrounded and do not block.
 User prompts are matched against agent activation patterns using a fuzzy
 scorer. The routing system returns a ranked candidate list; Claude selects
 from the list and loads the winning agent's YAML on demand (agent YAML
-loading is not on the synchronous hook path — see OMN-1980).
+loading is not on the synchronous hook path).
 
 Routing returns `None` on timeout (5s). With no-fallback
-mode enabled (OMN-2340), prompts that match no agent below a confidence
+mode enabled, prompts that match no agent below a confidence
 threshold are rejected rather than silently downgraded.
 
-See `docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md` and
-`docs/architecture/ROUTING_ARCHITECTURE_COMPARISON.md` for architecture
-details.
+See `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md` for architecture
+details. (`EVENT_DRIVEN_ROUTING_PROPOSAL.md` and
+`ROUTING_ARCHITECTURE_COMPARISON.md` are deprecated — see `docs/INDEX.md`.)
 
 ### Context Enrichment
 
@@ -604,7 +603,7 @@ record.
 - **Shared Infrastructure**: `~/.claude/CLAUDE.md`
 - **Repository Documentation**: `${PROJECT_ROOT}/CLAUDE.md`
 - **Hook Data Flow**: `docs/architecture/HOOK_DATA_FLOW.md`
-- **Routing Architecture**: `docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md`
+- **Routing Architecture**: `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md`
 - **Service Boundaries**: `docs/architecture/SERVICE-BOUNDARIES.md`
 - **Guides**: `docs/guides/` (hook handlers, agents, skills, testing)
 - **ADRs**: `docs/decisions/`
@@ -615,6 +614,6 @@ Part of the OmniClaude project. See repository root for license information.
 
 ---
 
-**Version**: 1.1.0
-**Last Updated**: 2026-02-19
+**Version**: 0.25.1
+**Last Updated**: 2026-06-16
 **Status**: Active Development

@@ -1,5 +1,6 @@
 ---
-description: Auto-triage CodeRabbit review threads — classify severity and auto-reply to Minor/Nitpick findings with acknowledgment, resolving the thread so it no longer blocks merge.
+description: Auto-triage CodeRabbit review threads — classify severity and auto-reply to Minor/Nitpick
+  findings with acknowledgment, resolving the thread so it no longer blocks merge.
 mode: full
 version: 2.0.0
 level: intermediate
@@ -15,51 +16,39 @@ tags:
 author: OmniClaude Team
 composable: true
 args:
-  - name: repo
-    description: "GitHub repo in owner/name format (e.g., OmniNode-ai/omniclaude)"
+  - name: --repo
+    description: string arg (required)
     required: true
-  - name: pr
-    description: "PR number to triage"
+  - name: --pr-number
+    description: integer arg (required)
     required: true
   - name: --dry-run
-    description: "Classify threads but do not post replies or resolve"
+    description: boolean flag
     required: false
+skill_kind: dispatch
 ---
 
-# /onex:coderabbit_triage — CodeRabbit Thread Auto-Triage
+# /onex:coderabbit_triage — one command, one typed result
 
-**Skill ID**: `onex:coderabbit_triage`
-**Version**: 2.0.0
-**Backing node**: `node_coderabbit_triage`
+**Skill ID**: `onex:coderabbit_triage` · **Command**: `uv run onex skill coderabbit_triage` (omnibase_infra) · **Backing node**: `node_coderabbit_triage` (omnimarket)
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelCoderabbitTriageResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_coderabbit_triage`.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_coderabbit_triage`. The node owns thread
-fetching, severity classification, reply generation, and thread resolution.
-This shim contains no inline triage logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the coderabbit-triage skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_coderabbit_triage --input '{
-  "repo": "<owner/name>",
-  "pr": <pr_number>,
-  "dry_run": false
-}'
-```
-
-On non-zero exit, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_coderabbit_triage`
-
-Command topic: `onex.cmd.omnimarket.coderabbit-triage-start.v1`
-
-Terminal event: `onex.evt.omnimarket.coderabbit-triage-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_coderabbit_triage.handlers.handler_coderabbit_triage.ModelCoderabbitTriageResult`

@@ -94,7 +94,7 @@ if missing_ids:
 
 failed_paths: list[str] = []
 for path in receipt_paths:
-    if not re.search(r"(?m)^status:\s*PASS\s*$", path.read_text()):
+    if not re.search(r"(?m)^status:\s*[\"']?PASS[\"']?\s*$", path.read_text()):
         failed_paths.append(str(path))
 
 if failed_paths:

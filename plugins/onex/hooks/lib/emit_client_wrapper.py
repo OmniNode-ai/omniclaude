@@ -161,6 +161,8 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "diagnostic.daemon.health",  # OMN-10126 - Portable daemon health diagnostic event
         "llm.cost.completed",  # OMN-7570 - LLM cost telemetry for omnidash llm_cost_aggregates
         "agent.action",  # wire-missing-producers - Per-tool agent action (hook → agent_actions table)
+        "artifact.captured",  # OMN-13092 - Content-addressed artifact captured (duty_critical)
+        "tool.output.captured",  # OMN-13092 - Tool output captured with artifact refs (duty_critical)
     ]
 )
 

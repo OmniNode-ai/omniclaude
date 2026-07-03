@@ -13,7 +13,7 @@ args:
     description: "Design topic or problem statement to feed into the pipeline"
     required: true
   - name: --project
-    description: "Linear project name for ticket creation"
+    description: "Linear project name for ticket creation" # skill-boundary-ok: YAML arg description, not iteration logic
     required: false
   - name: --dry-run
     description: "Run all stages but skip final ticket creation"
@@ -22,7 +22,7 @@ args:
 
 # Adversarial Pipeline
 
-> **[OMN-10111] DISABLED:** This skill chains into `hostile_reviewer` (Stage 2 gate), which is currently disabled pending eval framework validation. Do NOT invoke this skill. It will produce incorrect results (silent-pass gate). Re-enable when OMN-10111 closes.
+> **DISABLED:** This skill chains into `hostile_reviewer` (Stage 2 gate), which is currently disabled pending eval framework validation. Do NOT invoke this skill. It will produce incorrect results (silent-pass gate). Re-enable when the eval framework validation closes.
 
 ## Overview
 

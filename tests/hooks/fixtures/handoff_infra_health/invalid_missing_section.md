@@ -6,4 +6,4 @@ Short summary of session work.
 
 ## Next Steps
 
-- Continue OMN-11271 implementation
+- Continue API gateway implementation

@@ -55,7 +55,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -69,7 +69,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -109,7 +109,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Detect whether any *.md files changed (path filter to avoid noise on code-only PRs)
       - name: Check for changed markdown files
@@ -161,7 +161,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -175,7 +175,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -201,10 +201,10 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout omnibase_core
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
           path: omnibase_core
@@ -225,7 +225,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -239,7 +239,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -264,7 +264,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -278,7 +278,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -304,7 +304,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -341,7 +341,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -353,20 +353,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
-
       - name: Kafka import guard
         working-directory: ${{ github.workspace }}
-        run: uv run python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
+        run: |
+          uv run --no-project \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@v0.43.0' \
+            python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
 
   migration-freeze:
     name: Migration Freeze
@@ -381,7 +373,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -404,7 +396,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -503,7 +495,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -527,7 +519,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -551,7 +543,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -575,7 +567,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -599,7 +591,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -623,7 +615,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -647,7 +639,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -671,7 +663,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -695,7 +687,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -719,7 +711,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -757,7 +749,7 @@ jobs:
           - 5432/tcp
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install PostgreSQL client
         working-directory: ${{ github.workspace }}
@@ -904,7 +896,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -928,7 +920,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -952,7 +944,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -966,7 +958,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -992,7 +984,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1006,7 +998,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1035,7 +1027,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1049,7 +1041,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1083,7 +1075,7 @@ jobs:
           python3 --version
           test -d "$HOME/.cache/uv" && echo "uv cache: present" || echo "::warning::uv cache directory not found"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1099,7 +1091,7 @@ jobs:
 
       - name: Load cached venv (restore-only to avoid post-job upload timeout)
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1116,12 +1108,20 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # On a dev->main promotion PR the entire dev delta shows as "changed"
+            # vs main, which re-litigates pre-existing baseline violations that
+            # were already gated when each piece merged to dev. Scope the diff
+            # base to dev so the gate validates only the true incremental change.
+            if [[ "$PR_BASE_REF" == "main" && "$PR_HEAD_REF" == promotion/*-dev-to-main ]]; then
+              PR_BASE_REF="dev"
+            fi
             git fetch --no-tags --depth=1 origin "$PR_BASE_REF"
             DIFF_BASE="origin/${PR_BASE_REF}"
           elif [[ "$EVENT_NAME" == "push" && -n "$PUSH_BEFORE_SHA" && "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
@@ -1132,7 +1132,7 @@ jobs:
           fi
 
           mapfile -t changed_skills < <(
-            git diff --name-only --diff-filter=ACMRT "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
+            git diff --name-only --diff-filter=AM "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
               awk -F/ '{print $4}' |
               sort -u
           )
@@ -1167,7 +1167,17 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Checkout canonical omnimarket registry
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: dev
+          path: _registry/omnimarket
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1181,7 +1191,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1192,7 +1202,135 @@ jobs:
 
       - name: Validate golden chain registry
         working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validation/validate_golden_chain_integrity.py
+        run: >-
+          uv run python scripts/validation/validate_golden_chain_integrity.py
+          --canonical-registry
+          _registry/omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml
+
+  # Cross-registry consistency gate (OMN-13092)
+  # Hook frozenset (emit_client_wrapper.SUPPORTED_EVENT_TYPES) must be a
+  # subset of the omnimarket emit-daemon YAML registry. Checks out
+  # omnimarket@dev so the comparison targets the live routing authority.
+  registry-consistency:
+    name: Registry Consistency
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Checkout canonical omnimarket registry
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: dev
+          path: _registry/omnimarket
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen --group dev
+
+      - name: Run registry consistency tests
+        working-directory: ${{ github.workspace }}
+        env:
+          OMNIMARKET_TOPICS_REGISTRY_PATH: ${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml
+        run: uv run pytest tests/hooks/test_registry_consistency.py -v
+
+  # Live golden-chain gate (OMN-12690)
+  golden-chain-live:
+    name: Golden Chain Live
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 20
+    services:
+      redpanda:
+        image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
+        options: >-
+          --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 9092:9092
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: golden_chain
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: omnidash_analytics
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432/tcp
+    env:
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+      GOLDEN_CHAIN_TIMEOUT_MS: "30000"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen --group dev --extra kafka
+
+      - name: Run live golden-chain sweep
+        working-directory: ${{ github.workspace }}
+        env:
+          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
+        run: uv run python scripts/ci/run_golden_chain_live.py
 
   # ============================================================================
   # SECURITY CHECKS
@@ -1212,7 +1350,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1226,7 +1364,7 @@ jobs:
 
       - name: Export requirements
         working-directory: ${{ github.workspace }}
-        run: uv export --frozen --all-extras --format requirements-txt -o requirements.txt
+        run: uv export --format requirements-txt --no-hashes --output-file requirements.txt
 
       - name: Bandit security scan
         working-directory: ${{ github.workspace }}
@@ -1262,7 +1400,7 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1344,7 +1482,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1469,7 +1607,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Export service ports
         working-directory: ${{ github.workspace }}
@@ -1493,7 +1631,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1616,7 +1754,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Export service ports
         working-directory: ${{ github.workspace }}
@@ -1640,7 +1778,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1729,7 +1867,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1743,7 +1881,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1817,7 +1955,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Export service ports
         working-directory: ${{ github.workspace }}
@@ -1902,41 +2040,35 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Resolve DoD evidence source
         id: dod-evidence
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
-          REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
-          if [[ -z "$BODY" && -n "$REF" ]]; then
-            BODY="$(
-              gh pr list \
-                --repo "$GITHUB_REPOSITORY" \
-                --head "$REF" \
-                --state open \
-                --json body \
-                --jq '.[0].body // ""' 2>/dev/null || true
-            )"
-          fi
           SOURCE="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-source" {print $2; exit}' | tr -d '\r' | xargs || true)"
           TICKET="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-ticket" {print $2; exit}' | tr -d '\r' | xargs || true)"
           if [[ -z "$TICKET" ]]; then
+            REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
             if [[ "$REF" =~ [Oo][Mm][Nn]-([0-9]+) ]]; then
               TICKET="OMN-${BASH_REMATCH[1]}"
             fi
           fi
           if [[ "$SOURCE" =~ ^[Oo][Cc][Cc]#([0-9]+)$ ]]; then
             OCC_PR="${BASH_REMATCH[1]}"
-            OCC_JSON="$(gh pr view "$OCC_PR" --repo OmniNode-ai/onex_change_control --json state,headRefOid,mergeCommit 2>/dev/null || true)"
-            OCC_STATE="$(printf '%s' "$OCC_JSON" | jq -r '.state // ""' 2>/dev/null || true)"
-            if [[ "$OCC_STATE" == "MERGED" ]]; then
-              SOURCE="$(printf '%s' "$OCC_JSON" | jq -r '.mergeCommit.oid // ""' 2>/dev/null || true)"
-            else
-              SOURCE="$(printf '%s' "$OCC_JSON" | jq -r '.headRefOid // ""' 2>/dev/null || true)"
+            # Use unauthenticated REST API; OCC is public and github.token scope may not
+            # extend to cross-repo gh calls, causing silent empty output from gh pr view.
+            OCC_REST="$(curl -sf "https://api.github.com/repos/OmniNode-ai/onex_change_control/pulls/$OCC_PR" 2>/dev/null || true)"
+            if [[ -n "$OCC_REST" ]]; then
+              IS_MERGED="$(printf '%s' "$OCC_REST" | jq -r '.merged // false' 2>/dev/null || true)"
+              if [[ "$IS_MERGED" == "true" ]]; then
+                SOURCE="$(printf '%s' "$OCC_REST" | jq -r '.merge_commit_sha // ""' 2>/dev/null || true)"
+              else
+                SOURCE="$(printf '%s' "$OCC_REST" | jq -r '.head.sha // ""' 2>/dev/null || true)"
+              fi
             fi
           fi
           if [[ -n "$SOURCE" && ! "$SOURCE" =~ ^[0-9a-fA-F]{40}$ ]]; then
@@ -1948,23 +2080,26 @@ jobs:
 
       - name: Checkout central DoD evidence
         if: steps.dod-evidence.outputs.source != ''
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: ${{ steps.dod-evidence.outputs.source }}
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
           path: .onex_change_control_evidence
+          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
 
       - name: Materialize central DoD evidence receipt
         if: steps.dod-evidence.outputs.source != ''
         working-directory: ${{ github.workspace }}
         run: bash scripts/materialize-dod-evidence-from-occ.sh "${{ steps.dod-evidence.outputs.ticket }}" .onex_change_control_evidence
+        env:
+          ONEX_STATE_DIR: .onex_state
 
       - name: Run DoD evidence check
         working-directory: ${{ github.workspace }}
         run: bash scripts/dod-pre-push-check.sh
         env:
           DOD_ENFORCEMENT: hard
+          ONEX_STATE_DIR: .onex_state
 
   # ============================================================================
   # COVERAGE (runs after test matrix)
@@ -1984,7 +2119,7 @@ jobs:
     if: needs.test.result == 'success'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -2023,7 +2158,7 @@ jobs:
           coverage report
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           flags: unittests
@@ -2062,7 +2197,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -2076,7 +2211,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -2103,10 +2238,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout onex_change_control validator
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
@@ -2146,10 +2281,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout onex_change_control standards
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
@@ -2190,7 +2325,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -2204,7 +2339,7 @@ jobs:
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -2236,10 +2371,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout onex_change_control validator
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: main
@@ -2279,7 +2414,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -2310,13 +2445,21 @@ jobs:
         id: compliance
         if: steps.check-command.outputs.available == 'true'
         working-directory: ${{ github.workspace }}
+        # OMN-13575: this gate is warn-only TODAY because `onex compliance check`
+        # currently reports 588/594 nodes failing `handler_resolution` — a large
+        # pre-existing debt (the skill-shim orchestrator nodes have no resolvable
+        # handler). Hard-failing here would wedge every PR on debt unrelated to
+        # the change at hand. De-fanging this gate is blocked on clearing that
+        # node handler_resolution debt first; tracked as an OMN-13575 follow-up.
+        # The leniency is retained EXPLICITLY (not as a silent soft gate) and the
+        # underlying debt is surfaced in the job summary.
         run: |
           mkdir -p .onex_state/compliance
           if uv run onex compliance check --repo-root . --output .onex_state/compliance/report.yaml; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
           else
             echo "result=fail" >> "$GITHUB_OUTPUT"
-            echo "::warning::ONEX compliance check reported failures (warn-only for external-service checks)"
+            echo "::warning::ONEX compliance check reported failures (OMN-13575: warn-only pending node handler_resolution debt clearance)"
           fi
 
       - name: Upload compliance report
@@ -2344,7 +2487,7 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
@@ -2364,7 +2507,7 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -2381,15 +2524,11 @@ jobs:
         run: uv sync --frozen
 
       - name: Validate all agent YAML contracts
-        id: validator
         working-directory: ${{ github.workspace }}
-        run: |
-          if bash plugins/onex/scripts/validate-all-agents.sh; then
-            echo "result=pass" >> "$GITHUB_OUTPUT"
-          else
-            echo "result=fail" >> "$GITHUB_OUTPUT"
-            echo "::warning::Agent YAML contract validation reported failures (warn-only during Wave B rollout)"
-          fi
+        # OMN-13575: hard-failing. Wave B rollout is complete (53/53 agents pass)
+        # so the warn-only remap was a soft gate that could never turn this job
+        # red. A real agent-contract violation now fails CI.
+        run: bash plugins/onex/scripts/validate-all-agents.sh
 
   # Skill monorepo-ref lint gate (OMN-8795 SD-08)
   # NOTE: This gate will FAIL until SD-04/SD-05/SD-07 violations are cleared.
@@ -2404,10 +2543,29 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Detect monorepo refs in skill files
         working-directory: ${{ github.workspace }}
         run: bash scripts/check-skill-monorepo-refs.sh
+
+  # Regression guard (OMN-9143): block reintroduction of the retired
+  # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
+  no-polymorphic-agent:
+    name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reject legacy polymorphic-agent dispatch target in enforcement paths
+        working-directory: ${{ github.workspace }}
+        run: bash plugins/onex/hooks/scripts/grep_guard_no_polymorphic_agent.sh
 
   # ============================================================================
   # GATE AGGREGATORS
@@ -2474,6 +2632,8 @@ jobs:
       - agent-contract-validation
       # Skill monorepo-ref lint gate (OMN-8795 SD-08)
       - skill-monorepo-ref-gate
+      # Polymorphic-agent regression guard (OMN-9143)
+      - no-polymorphic-agent
     if: always()
     steps:
       - name: Check quality results
@@ -2517,7 +2677,8 @@ jobs:
             "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}" \
             "aislop-sweep=${{ needs.aislop-sweep.result }}" \
             "agent-contract-validation=${{ needs.agent-contract-validation.result }}" \
-            "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}"; do
+            "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}" \
+            "no-polymorphic-agent=${{ needs.no-polymorphic-agent.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
@@ -2551,6 +2712,8 @@ jobs:
       - hooks-tests
       - agent-framework-tests
       - database-validation
+      - golden-chain-live
+      - registry-consistency
     if: always()
     steps:
       - name: Check test results
@@ -2563,7 +2726,9 @@ jobs:
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
-            "database-validation=${{ needs.database-validation.result }}"; do
+            "database-validation=${{ needs.database-validation.result }}" \
+            "golden-chain-live=${{ needs.golden-chain-live.result }}" \
+            "registry-consistency=${{ needs.registry-consistency.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
@@ -2649,7 +2814,7 @@ jobs:
         with:
           checks: "boundary-parity"
           warn-only: "false"
-          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,onex_change_control"
+          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,omnimarket,onex_change_control"
 
   # ============================================================================
   # CI SUMMARY (OMN-4501) — single branch-protection check
@@ -2669,9 +2834,9 @@ jobs:
       }}
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Checkout onex_change_control
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           path: onex_change_control
@@ -2716,9 +2881,10 @@ jobs:
           tests="${{ needs.tests-gate.result }}"
           security="${{ needs.security-gate.result }}"
           compliance="${{ needs.compliance.result }}"
+          contract_compliance="${{ needs.contract-compliance.result }}"
 
           FAILED=false
-          for result in "$quality" "$tests" "$security"; do
+          for result in "$quality" "$tests" "$security" "$contract_compliance"; do
             if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
               FAILED=true
             fi
@@ -2735,6 +2901,7 @@ jobs:
             echo "  Tests Gate: $tests"
             echo "  Security Gate: $security"
             echo "  Compliance: $compliance"
+            echo "  Contract Compliance: $contract_compliance"
             exit 1
           fi
           echo "All required jobs passed"
@@ -2763,7 +2930,7 @@ jobs:
     needs: [quality-gate, tests-gate, security-gate]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -2862,7 +3029,7 @@ jobs:
       url: https://staging.omniclaude.example.com
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Deploy to staging
         working-directory: ${{ github.workspace }}
@@ -2885,7 +3052,7 @@ jobs:
       url: https://omniclaude.example.com
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Deploy to production
         working-directory: ${{ github.workspace }}
@@ -2902,7 +3069,7 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up Python

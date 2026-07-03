@@ -111,7 +111,7 @@ class TopicBase(StrEnum):
     # Internal control plane — not an observability topic. No contract topic_base
     # (schema supports one topic_base per contract); governed via topic_allowlist.yaml.
     # Lifecycle: internal_control (OMN-3294)
-    ROUTING_DECISION_CMD = "onex.cmd.omniintelligence.routing-decision.v1"  # noqa: arch-topic-naming
+    ROUTING_DECISION_CMD = "onex.cmd.omniintelligence.routing-decision.v1"
 
     # ==========================================================================
     # GitHub PR status topics (OMN-3294)
@@ -202,7 +202,7 @@ class TopicBase(StrEnum):
     # Multi-producer: producer segment intentionally omitted (consumed by
     # omniintelligence node_pattern_storage_effect as a domain-level event).
     # ==========================================================================
-    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"  # noqa: arch-topic-naming
+    PATTERN_DISCOVERED = "onex.evt.pattern.discovered.v1"  # arch-topic-naming: ignore
     """Published by omniclaude when a pattern is discovered during a session."""
 
     # ==========================================================================
@@ -290,6 +290,18 @@ class TopicBase(StrEnum):
 
     SKILL_INVOKED = "onex.evt.omniclaude.skill-invoked.v1"
     """Derived from skill.completed; consumed by omnidash skill_invocations projection (OMN-6800)."""
+
+    # ==========================================================================
+    # Durable capture topics (OMN-13092)
+    # Duty-critical: suppression of tool output from the LLM context is only
+    # allowed when the full bytes are content-addressed in the artifact store
+    # and an event records the capture (no-hidden-loss invariant).
+    # ==========================================================================
+    ARTIFACT_CAPTURED = "onex.evt.omnimarket.artifact-captured.v1"
+    """Content-addressed artifact captured in the artifact store; partition key is correlation_id."""
+
+    TOOL_OUTPUT_CAPTURED = "onex.evt.omnimarket.tool-output-captured.v1"
+    """Tool output captured with artifact refs and suppression decision; partition key is correlation_id."""
 
     # ==========================================================================
     # Friction observation topics (OMN-5747)
@@ -482,6 +494,20 @@ class TopicBase(StrEnum):
 
     DELEGATION_REQUEST = "onex.cmd.omnibase-infra.delegation-request.v1"
     """Canonical delegation command topic owned by omnibase_infra orchestrator (OMN-10834)."""
+
+    DELEGATION_ROUTING_DECISION = "onex.evt.omnibase-infra.routing-decision.v1"
+    """Canonical delegation routing event owned by omnibase_infra."""
+
+    DELEGATION_INFERENCE_REQUEST = (
+        "onex.cmd.omnibase-infra.delegation-inference-request.v1"
+    )
+    """Canonical delegation inference command owned by omnibase_infra."""
+
+    DELEGATION_INFERENCE_RESPONSE = "onex.evt.omnibase-infra.inference-response.v1"
+    """Canonical delegation inference response event owned by omnibase_infra."""
+
+    DELEGATION_INFRA_COMPLETED = "onex.evt.omnibase-infra.delegation-completed.v1"
+    """Canonical delegation completion event owned by omnibase_infra."""
 
     DELEGATION_COMPLETED = "onex.evt.omniclaude.delegation-completed.v1"
     """Emitted when a delegation pipeline run completes successfully."""
@@ -693,7 +719,9 @@ def build_topic(base: str) -> str:
 # Base prefix for per-agent directed inbox topics (OMN-8634).
 # Not a TopicBase member — not a full canonical topic name.
 # Full topic: AGENT_INBOX_DIRECTED_BASE + "." + agent_id + ".v1"
-AGENT_INBOX_DIRECTED_BASE: str = "onex.evt.omniclaude.agent-inbox"  # noqa: arch-topic-naming
+AGENT_INBOX_DIRECTED_BASE: str = (
+    "onex.evt.omniclaude.agent-inbox"  # arch-topic-naming: ignore
+)
 
 
 def build_agent_inbox_directed_topic(agent_id: str) -> str:

@@ -11,13 +11,13 @@ You are executing the decompose-epic skill. This prompt is the authoritative ope
 ```python
 args = "$ARGUMENTS".split()
 if len(args) == 0:
-    print("Error: epic_id is required. Usage: /decompose-epic OMN-1234")
+    print("Error: epic_id is required. Usage: /decompose-epic PROJ-1234")
     exit(1)
 epic_id = args[0]
 
 import re
 if not re.match(r'^[A-Z]+-\d+$', epic_id):
-    print(f"Error: Invalid epic_id format '{epic_id}'. Expected pattern like 'OMN-1234'.")
+    print(f"Error: Invalid epic_id format '{epic_id}'. Expected pattern like 'PROJ-1234'.")
     exit(1)
 
 dry_run = "--dry-run" in args
@@ -240,7 +240,7 @@ emergency_bypass:
 > Contract Compliance Check CI on every contract that contains it. All other ticket-specific
 > acceptance criteria extracted by dod_parser are retained normally.
 >
-> **Fail-open check_value prohibition (OMN-9350):** Never emit a `check_value` containing
+> **Fail-open check_value prohibition:** Never emit a `check_value` containing
 > fail-open shell patterns. The `lint-contract-check-values` pre-commit hook in
 > `onex_change_control` will block the commit. Forbidden patterns:
 >
@@ -448,7 +448,7 @@ emergency_bypass:
 > **Plan-file check prohibition:** Same rule as Mode A — never emit `dod_evidence` checks
 > containing `test -f docs/plans/`. See Mode A note above for rationale.
 >
-> **Fail-open check_value prohibition (OMN-9350):** Same rule as Mode A — never emit
+> **Fail-open check_value prohibition:** Same rule as Mode A — never emit
 > fail-open patterns (`[ -z "$<var>" ] ||`, `|| true`, `|| exit 0`, trailing `2>/dev/null`).
 > See Mode A note above for the correct fail-closed form.
 
@@ -462,7 +462,7 @@ Same as Mode A Step 6.
 
 **Exact path**: `$ONEX_STATE_DIR/skill-results/{epic_id}/decompose-epic.json`
 
-Where `{epic_id}` is the positional argument passed to the skill (e.g., `OMN-2522`).
+Where `{epic_id}` is the positional argument passed to the skill (e.g., `PROJ-2522`).
 
 The `context_id` used as the directory name equals `epic_id` exactly. Create the directory if it does not exist (`mkdir -p`).
 
@@ -474,8 +474,8 @@ The `context_id` used as the directory name equals `epic_id` exactly. Create the
 
 | Condition | Exit code | Message |
 |-----------|-----------|---------|
-| epic_id missing | 1 | `Error: epic_id is required. Usage: /decompose-epic OMN-1234` |
-| epic_id invalid format | 1 | `Error: Invalid epic_id format '...'. Expected pattern like 'OMN-1234'.` |
+| epic_id missing | 1 | `Error: epic_id is required. Usage: /decompose-epic PROJ-1234` |
+| epic_id invalid format | 1 | `Error: Invalid epic_id format '...'. Expected pattern like 'PROJ-1234'.` |
 | --repos value empty | 1 | `Error: --repos value is empty.` |
 | Epic not found in Linear | 1 | `decompose-epic: epic {epic_id} not found in Linear` |
 | Epic description empty (Mode A) | 1 | `decompose-epic: epic {epic_id} has no description — add context before decomposing` |

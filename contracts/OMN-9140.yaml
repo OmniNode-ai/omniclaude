@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-9140"
+title: "Hooks disable kill-switch context"
+summary: >-
+  Repo-local context contract for the OMNICLAUDE_HOOKS_DISABLE kill-switch cited
+  by OMN-13278. The design documents the current kill-switch coverage gap and
+  keeps hooks.json untouched.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-reference-only"
+    description: >-
+      OMN-9140 is cited as kill-switch context; the active code change is owned
+      by OMN-13278.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1774 --repo OmniNode-ai/omniclaude --json body --jq '.body'
+          | grep -q 'OMN-9140'

@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-10421"
+title: "Require contract_sha256 on OCC DoD receipts"
+summary: >
+  Local contract reference for the OMN-13050 receipt-scaffold tooling change.
+  The scaffold computes and emits the required contract_sha256 field before a
+  receipt can be produced, making sha-less OCC receipts structurally
+  unrepresentable in the authoring path.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-scaffold-computes-contract-hash"
+    description: >
+      scripts/scaffold_occ_receipt.py computes contract_sha256 from the OCC
+      ticket contract and validates the generated receipt model before emit.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/scripts/test_scaffold_occ_receipt.py -q"
+  - id: "dod-occ-authority"
+    description: "Central OCC evidence for the product PR is linked from the PR body."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'Evidence-Source: OCC#3181' /tmp/pr_body.txt"

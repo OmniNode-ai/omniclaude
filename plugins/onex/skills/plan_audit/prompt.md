@@ -3,7 +3,6 @@
 **Skill ID**: `onex:plan-audit`
 **Version**: 1.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-8420
 
 ## Purpose
 

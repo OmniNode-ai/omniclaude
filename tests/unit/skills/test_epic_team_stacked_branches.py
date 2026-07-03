@@ -27,9 +27,11 @@ class TestStackedBranchDocumentation:
             "SKILL.md must document stacked branch execution"
         )
 
-    def test_skill_md_references_ticket(self) -> None:
+    def test_skill_md_has_stacked_branch_heading(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()
-        assert "OMN-6270" in content, "SKILL.md must reference OMN-6270"
+        assert "## Stacked Branch Execution" in content, (
+            "SKILL.md must have a ## Stacked Branch Execution section"
+        )
 
     def test_skill_md_documents_chain_depth_limit(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()

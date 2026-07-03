@@ -148,7 +148,7 @@ Display results grouped by source with clear attribution:
 ## Recall Results — scope: all
 
 ### [Learnings] Match 1 (92% similarity, error_signature, 2 days old)
-**Source:** agent_learnings | **Repo:** omnibase_infra | **Ticket:** OMN-7100 | **Type:** ci_fix
+**Source:** agent_learnings | **Repo:** omnibase_infra | **Ticket:** TASK-7100 | **Type:** ci_fix
 **Resolution:** Fixed by adding --extend-exclude to pyproject.toml for generated files in docker/catalog/.
 **Files:** pyproject.toml, .github/workflows/ci.yml
 

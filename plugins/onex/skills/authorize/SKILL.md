@@ -34,7 +34,7 @@ logic lives in the node handler, this skill is a thin UX wrapper.
 
 Invokes `node_authorize`, which writes a `ModelAgentAuthorizationGrant` to
 `$ONEX_STATE_DIR/session/authorization.json` via a tempfile + `os.replace`
-atomic swap. The PermissionRequest authorization gate hook (OMN-9087) reads
+atomic swap. The PermissionRequest authorization gate hook reads
 this file to auto-approve in-scope Edit/Write requests.
 
 **Grant schema (on-disk contract):**
@@ -94,14 +94,11 @@ decision.
 
 The prior `/tmp/omniclaude-auth/{session_id}.json` scheme read by
 `plugins/onex/hooks/lib/auth_gate_adapter.py` remains in place for the
-PreToolUse gate until the Task 3 PermissionRequest hook (OMN-9087) ships.
-This skill writes the OMN-9087-shaped file; the PreToolUse adapter migration
-is tracked under the OMN-9083 unused-hooks epic.
+PreToolUse gate until the Task 3 PermissionRequest hook ships.
+This skill writes the authorization grant file; the PreToolUse adapter migration
+is tracked under the unused-hooks epic.
 
 ## Related
 
-- Ticket: [OMN-9104](https://linear.app/omninode/issue/OMN-9104)
-- Reader ticket: [OMN-9087](https://linear.app/omninode/issue/OMN-9087) (PermissionRequest authorization gate)
-- Epic: [OMN-9083](https://linear.app/omninode/issue/OMN-9083) (unused-hooks)
 - Node: `omnimarket/src/omnimarket/nodes/node_authorize/`
 - Reference: `feedback_skills_are_wrappers.md`, `feedback_no_informational_gates.md`

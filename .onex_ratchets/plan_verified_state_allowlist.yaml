@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Grandfather allowlist for the plan-verified-state CI gate (OMN-13336).
+#
+# Plans listed here predate the gate and are exempt from the
+# "## Current Verified State" / "verified: <date> via <command>" requirement.
+#
+# BURN-DOWN ONLY. This list must never grow. New or modified plans under
+# docs/plans/ or docs/tracking/ must carry a fresh verified-state section.
+# To clear an entry: add the section to the plan, then delete its line here.
+#
+# Enforced by: scripts/lint_plan_verified_state.py
+#              .github/workflows/plan-verified-state-gate.yml (CI)
+#              .pre-commit-hooks lint-plan-verified-state (pre-commit)
+allowed:
+  - docs/plans/manifest-injector-deletion-plan.md
+  - docs/plans/2026-04-09-skill-rename-mapping.md
+  - docs/tracking/auto-merge-implementation.md

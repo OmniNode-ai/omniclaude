@@ -1,99 +1,31 @@
-# /onex:delegate — dispatch-only shim
+# /onex:delegate — one command, one typed result
 
-Dispatch to `node_delegate_skill_orchestrator` in omnimarket. Do not reimplement delegation inline.
-
-No inline LLM calls, no Kafka publish, no bus bootstrap, no PYTHONPATH manipulation — the node owns the full pipeline.
-
-## Announce
-
-Say: "I'm using the delegate skill to dispatch to node_delegate_skill_orchestrator."
-
-## Pre-flight (first invocation only)
-
-Before first dispatch, verify the pipeline is ready:
-
-1. Check `$ONEX_REGISTRY_ROOT/omnimarket` exists and has a `.venv`  `# local-path-ok: canonical omnimarket repo root`
-2. Check bifrost overlay exists: `~/.omninode/delegation/bifrost_overrides.yaml`
-3. If the overlay is missing, ask the user:
-   - "The delegation pipeline needs endpoint configuration. What are your vLLM endpoint URLs?"
-   - Create `~/.omninode/delegation/bifrost_overrides.yaml` with the provided endpoints
-4. Check vLLM health: `curl -fsS --max-time 5 <endpoint>/health`
-5. If unhealthy, inform the user which endpoint is down
-
-Skip pre-flight on subsequent invocations in the same session.
-
-## Parse `$ARGUMENTS`
-
-| Flag | Default |
-|------|---------|
-| `prompt` (everything after flags) | required |
-| `--task-type <type>` | auto-classify (see below) |
-| `--max-tokens <n>` | 2048 |
-
-### Auto-classify task type
-
-If `--task-type` is not provided, classify from the prompt:
-
-| Keywords in prompt | task_type |
-|-------------------|-----------|
-| test, pytest, unit test, assert | `test` |
-| document, docstring, README, explain how | `document` |
-| write, create, implement, build, generate | `code_generation` |
-| refactor, cleanup, simplify | `refactor` |
-| review, audit, check | `review` |
-| reason, think through, decide, compare | `reasoning` |
-| (default) | `research` |
-
-## Dispatch
-
-1. Write the input payload to a temp file:
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelDelegateSkillResponse]`
+JSON to stdout — the full LLM response and metrics, never truncated. RuntimeLocal
+logs and intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-PAYLOAD_FILE=$(mktemp /tmp/delegate-input-XXXXXX.json)
-cat > "$PAYLOAD_FILE" <<PAYLOAD
-{
-  "prompt": "<user prompt>",
-  "task_type": "<classified or explicit task_type>",
-  "source": "claude-code",
-  "max_tokens": <max_tokens>
-}
-PAYLOAD
+uv run onex delegate "<prompt>" [--task-type <type>] [--max-tokens <n>]
 ```
 
-2. Run the node:
+- `<prompt>` — the task to delegate (required).
+- `--task-type` — `test | document | research | code_generation | refactor | reasoning | review`. Omit to auto-classify from the prompt.
+- `--max-tokens` — response budget (default 2048).
 
-```bash
-cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket repo root
-uv run onex node node_delegate_skill_orchestrator \
-  --backend event_bus=inmemory \
-  --timeout 300 \
-  --input "$PAYLOAD_FILE"
-```
+The command builds the payload, dispatches the node, and extracts the result
+internally. Do NOT construct a payload file, `cd` anywhere, or read any
+intermediate result file — there is no procedure to learn.
 
-3. Read the result:
+## Present the result
 
-```bash
-cat "$ONEX_REGISTRY_ROOT/omnimarket/.onex_state/workflow_result.json"  # local-path-ok: canonical omnimarket repo root
-```
+Parse the single JSON object on stdout and present `result` (a `ModelDelegateSkillResponse`):
 
-4. Clean up:
+- **Response**: `result.response` — the LLM output. Show it.
+- **Status**: `result.status`
+- **Model / provider**: `result.model_name` / `result.provider`
+- **Cost savings**: `result.metrics.cost_savings_usd`
+- **Latency**: `result.metrics.latency_ms`
 
-```bash
-rm -f "$PAYLOAD_FILE"
-```
-
-## Present results
-
-From `workflow_result.json`, extract `handler_result` and present:
-
-- **Status**: `handler_result.status`
-- **Model**: `handler_result.model_name`
-- **Response**: `handler_result.response` (the LLM output — show it to the user)
-- **Cost savings**: `handler_result.metrics.cost_savings_usd`
-- **Latency**: `handler_result.metrics.latency_ms`
-
-If `status` is `failed`, show `handler_result.error_message`.
-
-## Error handling
-
-On non-zero exit from `onex node`, surface the error from `workflow_result.json`. Do not fall back to inline LLM calls or prose workarounds.
+If `status` is `failed` or `timeout`, show `result.error_message`. On non-zero
+exit the receipt's `result` carries the full error inline — surface it; do not
+fall back to an inline LLM call.

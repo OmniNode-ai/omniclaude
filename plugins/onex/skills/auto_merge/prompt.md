@@ -1,39 +1,33 @@
-# auto_merge prompt
+# /onex:auto_merge — one command, one typed result
 
-You are executing the **auto_merge** skill.
-
-## Announce
-
-Say: "I'm using the auto-merge skill to merge PR #{pr_number}."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `pr_number` (required) — PR number to merge
-- `repo` (required) — GitHub repo slug (org/repo)
-- `--strategy <squash|merge|rebase>` — default: squash
-- `--gate-timeout-hours <n>` — default: 24
-- `--no-delete-branch` — default: delete branch after merge
-- `--ticket-id <OMN-XXXX>` — optional Linear ticket to mark Done
-
-## Dispatch
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelAutoMergeResult]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex run-node node_auto_merge_effect --input '{
-  "pr_number": <pr_number>,
-  "repo": "<repo>",
-  "strategy": "<strategy>",
-  "gate_timeout_hours": <n>,
-  "delete_branch": <bool>,
-  "ticket_id": "<id or null>"
-}'
+uv run onex skill auto_merge [--pr-number <n>] [--repo <v>] [--strategy <v>] [--delete-branch] [--ticket-id <v>] [--gate-timeout-hours <n>]
 ```
 
-If the command exits non-zero, stop and surface the error directly. Do not produce prose.
+| Argument | Type |
+|----------|------|
+| `--pr-number` | integer, required |
+| `--repo` | string, required |
+| `--strategy` | string |
+| `--delete-branch` | boolean, flag |
+| `--ticket-id` | string |
+| `--gate-timeout-hours` | integer |
 
-## Error handling
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-- Never run `gh pr merge` inline.
-- Never poll CI readiness inline.
-- On routing failure, raise `SkillRoutingError`; do not fall back.
+## Present the result
+
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
+
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelAutoMergeResult`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
+
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

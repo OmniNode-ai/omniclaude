@@ -1,4 +1,4 @@
-# Handoff: Publisher Topic Resolution (OMN-1944 follow-up)
+# Handoff: Publisher Topic Resolution
 
 ## Status
 - Publisher rewired: DONE
@@ -16,8 +16,8 @@
 
 ### 2. Topics Are Bare ONEX Suffixes
 - Wire topic = TopicBase enum value directly (e.g., `onex.evt.omniclaude.session-started.v1`)
-- NO environment prefix (`dev.`, `prod.`, etc.) -- realm-agnostic per OMN-1972 TopicResolver
-- `build_topic(base)` in `topics.py` validates and returns canonical topic names (prefix parameter removed in OMN-5212)
+- NO environment prefix (`dev.`, `prod.`, etc.) -- realm-agnostic per the TopicResolver design
+- `build_topic(base)` in `topics.py` validates and returns canonical topic names (prefix parameter removed in an earlier cleanup pass)
 - `build_full_topic(env, namespace, suffix)` in omnibase_infra is dead code with zero production callers
 
 ### 3. Six Missing Event Registrations Added
@@ -50,7 +50,7 @@ Three new TopicBase entries added to `src/omniclaude/hooks/topics.py`:
 
 omnibase_infra should provide ONLY generic primitives:
 - `EventBusKafka.publish(topic, key, value, headers)` -- publishes exactly what it's given
-- `TopicResolver` -- pass-through validation (OMN-1972)
+- `TopicResolver` -- pass-through validation
 - Generic envelope/partitioning helpers
 - Zero application-specific event catalogs
 
@@ -104,8 +104,8 @@ The `_register_defaults()` method hardcodes 12 omniclaude-specific event types. 
 
 ### All 14 event types registered
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude4
-.venv/bin/python3 -c "
+cd $OMNI_HOME/omniclaude
+uv run python -c "
 from omniclaude.hooks.event_registry import EVENT_REGISTRY
 for et in sorted(EVENT_REGISTRY.keys()):
     reg = EVENT_REGISTRY[et]
@@ -117,7 +117,7 @@ print(f'Total: {len(EVENT_REGISTRY)} event types')
 
 ### Publisher uses bare suffixes (no prefix)
 ```bash
-.venv/bin/python3 -c "
+uv run python -c "
 from omniclaude.hooks.event_registry import get_registration
 reg = get_registration('session.started')
 topic = str(reg.fan_out[0].topic_base)
@@ -134,32 +134,32 @@ print(f'Wire topic: {topic}')
 
 ### Tests pass
 ```bash
-.venv/bin/pytest tests/runtime/test_lifecycle.py tests/scripts/test_omnimarket_launcher.py tests/scripts/test_emit_daemon_cutover_static.py -v --tb=short
+uv run pytest tests/runtime/test_lifecycle.py tests/scripts/test_omnimarket_launcher.py tests/scripts/test_emit_daemon_cutover_static.py -v --tb=short
 ```
 
-## Related Tickets
-- OMN-1944: Port emit daemon from omnibase_infra to omniclaude (DONE)
-- OMN-1972: TopicResolver -- realm-agnostic topics (DONE in infra)
-- OMN-1892: Routing feedback events (DONE -- routing.feedback, routing.skipped added)
-- OMN-1889: Injection metrics events (DONE -- context.utilization, agent.match, latency.breakdown)
-- OMN-1831: Notification events (DONE -- notification.blocked, notification.completed)
+## Related Work
+- Port emit daemon from omnibase_infra to omniclaude: DONE
+- TopicResolver realm-agnostic topics: DONE in infra
+- Routing feedback events: DONE (routing.feedback, routing.skipped added)
+- Injection metrics events: DONE (context.utilization, agent.match, latency.breakdown)
+- Notification events: DONE (notification.blocked, notification.completed)
 
 ## Infra Health
 
 Verify before any follow-up work on this handoff:
 
 ```bash
-# Kafka broker reachable
-curl -fsS http://192.168.86.201:19092 || echo "Redpanda unreachable"  # onex-allow-internal-ip
+# Kafka broker reachable (set ONEX_HOST to runtime host address)
+curl -fsS http://${ONEX_HOST}:19092 || echo "Redpanda unreachable"
 
 # omnibase-infra runtime healthy (dev lane)
-curl -fsS http://192.168.86.201:8085/health || echo "dev lane down"  # onex-allow-internal-ip
+curl -fsS http://${ONEX_HOST}:8085/health || echo "dev lane down"
 ```
 
 ## Decision Log
 | Decision | Rationale |
 |----------|-----------|
-| Bare ONEX suffixes (no env prefix) | OMN-1972 established realm-agnostic topics; `build_full_topic` is dead code |
+| Bare ONEX suffixes (no env prefix) | TopicResolver established realm-agnostic topics; `build_full_topic` is dead code |
 | Local event_registry owns fan-out | Infra doesn't support fan-out; prompt.submitted needs 2 targets |
 | Local `_inject_metadata` helper | Same fields as infra's version; avoids importing infra's EventRegistry |
 | App repo = source of truth for event schemas | Infra should be generic; app-specific catalogs cause version drift |

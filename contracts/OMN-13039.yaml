@@ -1,0 +1,52 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13039"
+title: "OMN-13039 — B-10: Epic auto-start ratchet + handoff epic-state gate"
+summary: >
+  Retro B-10 (PROCESS_FAILURE_RETRO.md §3.B): an epic sat unstarted all day under 22 merged PRs;
+  detected twice, fixed zero times; manually marked In Progress 2026-06-12. This PR adds the
+  epic.autostart_ratchet capability to node_skill_ticketing_triage_orchestrator (epic_reconcile.py pure
+  compute + frozen models + canonical EnumLinearStatusType; node.py exposes reconcile_epic_states();
+  contract.yaml declares the capability + io_operation) so an unstarted epic (Backlog/Todo) with >=1
+  started/completed child ratchets to In Progress on a single triage tick (monotone; never auto-Done).
+  It also adds the required epic_states_reconciled gate to the /onex:handoff skill — the gate verifies every
+  cited epic is In Progress or later before writing the manifest; unstarted epics without an exception line
+  block the write.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-ratchet-tests"
+    description: >
+      Failing-test-first unit suite for the ratchet exists and passes: the headline OMN-13039 case
+      (Backlog epic + started child -> In Progress on one tick) plus monotone-never-Done,
+      conservative-no-children, canceled-child, mixed-batch, and idempotency guards.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f tests/skills/test_ticketing_triage_epic_autostart.py"
+  - id: "dod-node-capability"
+    description: >
+      The orchestrator node owns the ratchet: epic_reconcile.py provides the pure reconcile_epic_states()
+      compute and node.py exposes it; contract.yaml declares the epic.autostart_ratchet capability.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f src/omniclaude/nodes/node_skill_ticketing_triage_orchestrator/epic_reconcile.py"
+  - id: "dod-plugin-deploy"
+    description: >
+      Deploy DoD (OMN-8912). The ratchet ships in the omniclaude plugin runtime and reaches sessions via
+      the plugin marketplace deploy path (deploy_local_plugin --execute / marketplace update + uninstall +
+      reinstall), not a .201 container image. The node module imports the reconcile_epic_states capability
+      after deploy.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'plugin marketplace deploy path' contracts/OMN-13039.yaml"

@@ -257,7 +257,7 @@ def test_no_raw_topic_literals_in_python_source() -> None:
 
     Exclusions:
       - The topics.py file itself (StrEnum member definitions)
-      - Lines with ``# noqa: arch-topic-naming`` comment
+      - Lines with an explicit arch-topic-naming suppression marker
       - Python contract model files in hooks/contracts/ (type stubs, not producers)
     """
     topics_file = _SRC_DIR / "hooks" / "topics.py"
@@ -278,8 +278,8 @@ def test_no_raw_topic_literals_in_python_source() -> None:
             continue
 
         for lineno, line in enumerate(source.splitlines(), start=1):
-            # Skip noqa-annotated lines
-            if "noqa: arch-topic-naming" in line:
+            # Skip explicitly annotated topic governance exceptions.
+            if "noqa: arch-topic-naming" in line or "arch-topic-naming: ignore" in line:
                 continue
             # Skip TopicBase definition lines (defensive)
             if _TOPICBASE_DEFINITION_PATTERN.match(line):
@@ -296,5 +296,5 @@ def test_no_raw_topic_literals_in_python_source() -> None:
             f"(showing up to 50):\n{violations_str}\n\n"
             f"Fix: Replace each raw string with the corresponding TopicBase.<MEMBER> reference.\n"
             f"If a literal is intentionally raw (e.g., in a comment or type stub), "
-            f"add ``# noqa: arch-topic-naming`` to suppress."
+            f"add ``# arch-topic-naming: ignore`` to suppress."
         )

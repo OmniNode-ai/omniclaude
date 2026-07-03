@@ -14,94 +14,49 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 composable: true
-inputs:
-  - name: pr_number
-    type: int
-    description: GitHub PR number to merge
-    required: true
-  - name: repo
-    type: str
-    description: "GitHub repo slug (org/repo)"
-    required: true
-  - name: strategy
-    type: str
-    description: "Merge strategy: squash | merge | rebase (default: squash)"
-    required: false
-  - name: gate_timeout_hours
-    type: float
-    description: "Wall-clock budget in hours for the CI readiness poll. Default: 24."
-    required: false
-  - name: delete_branch
-    type: bool
-    description: Delete branch after merge (default true)
-    required: false
-  - name: ticket_id
-    type: str
-    description: "Linear ticket identifier (e.g. OMN-1234) to mark Done after merge"
-    required: false
-outputs:
-  - name: skill_result
-    type: ModelSkillResult
-    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json"
 args:
-  - name: pr_number
-    description: GitHub PR number to merge
+  - name: --pr-number
+    description: integer arg (required)
     required: true
-  - name: repo
-    description: "GitHub repo slug (org/repo)"
+  - name: --repo
+    description: string arg (required)
     required: true
   - name: --strategy
-    description: "Merge strategy: squash|merge|rebase (default squash)"
+    description: string arg
     required: false
-  - name: --gate-timeout-hours
-    description: Hours to wait for CI readiness (default 24)
-    required: false
-  - name: --no-delete-branch
-    description: Don't delete branch after merge
+  - name: --delete-branch
+    description: boolean flag
     required: false
   - name: --ticket-id
-    description: Linear ticket ID to mark Done after merge (e.g. OMN-1234)
+    description: string arg
     required: false
+  - name: --gate-timeout-hours
+    description: integer arg
+    required: false
+skill_kind: dispatch
 ---
 
-# /onex:auto_merge — Auto Merge Effect
+# /onex:auto_merge — one command, one typed result
 
-**Skill ID**: `onex:auto_merge`
-**Version**: 2.0.0
-**Backing node**: `node_auto_merge_effect`
+**Skill ID**: `onex:auto_merge` · **Command**: `uv run onex skill auto_merge` (omnibase_infra) · **Backing node**: `node_auto_merge_effect` (omnimarket)
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelAutoMergeResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **2.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_auto_merge_effect`.
-- **1.0.0** — Original (OMN-2525).
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_auto_merge_effect`. The node owns CDQA gate
-verification, CI readiness polling, merge execution, and Linear ticket closure.
-This shim contains no inline polling or merge mutation logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the auto-merge skill to merge PR #{pr_number}."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_auto_merge_effect --input '{
-  "pr_number": <pr_number>,
-  "repo": "<org/repo>",
-  "strategy": "squash",
-  "gate_timeout_hours": 24,
-  "delete_branch": true,
-  "ticket_id": null
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_auto_merge_effect`
-
-Command topic: `onex.cmd.omnimarket.auto-merge-requested.v1`
-
-Terminal event: `onex.evt.omnimarket.pr-merged.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_auto_merge_effect.models.model_auto_merge_result.ModelAutoMergeResult`

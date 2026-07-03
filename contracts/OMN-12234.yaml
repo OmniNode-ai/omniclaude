@@ -1,0 +1,29 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-12234"
+title: "Wave 7 retired skill deletion reference"
+summary: >-
+  Repo-local context contract for the Wave 7 removal pattern referenced by the
+  OMN-8340 handoff-skill cleanup PR. OMN-8340 follows the same deprecated skill
+  deletion pattern by removing a superseded onex skill, its orphaned node
+  registration, and validator allowlist references without changing active
+  runtime dispatch behavior.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-reference-only"
+    description: >-
+      OMN-12234 is cited as prior art in the PR body; the active code change is
+      owned by OMN-8340.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1773 --repo OmniNode-ai/omniclaude --json body --jq '.body'
+          | grep -q 'OMN-12234'

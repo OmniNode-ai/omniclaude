@@ -25,3 +25,27 @@ allowlist:
       so liveness validation fails cross-repo. Node existence and liveness are verified by
       the omnimarket PR CI. This allowlist entry will be removed once cross-repo checkout
       is wired (OMN-11220).
+  - skill: shim_audit
+    reason: >
+      Backing node node_shim_scanner lives in omnimarket repo (OMN-4419, PR #945).
+      CI does not check out omnimarket when validating omniclaude skills, so liveness
+      validation fails cross-repo. Node existence and liveness are verified by the
+      omnimarket PR CI. This allowlist entry will be removed once cross-repo checkout
+      is wired (OMN-11220).
+  - skill: pr_review
+    reason: >
+      The skill now dispatches through the live omniclaude shell node
+      node_skill_pr_review_orchestrator, but the current validator still resolves
+      backing nodes only under omnimarket node roots. The omniclaude node contract
+      and implementation live under src/omniclaude/nodes/node_skill_pr_review_orchestrator;
+      keep this allowlist until the validator learns omniclaude-local skill
+      orchestrator roots.
+  - skill: pr_review_bot
+    reason: >
+      The skill now dispatches through the live omniclaude shell node
+      node_skill_pr_review_bot_orchestrator, but the current validator still
+      resolves backing nodes only under omnimarket node roots. The omniclaude node
+      contract and implementation live under
+      src/omniclaude/nodes/node_skill_pr_review_bot_orchestrator; keep this
+      allowlist until the validator learns omniclaude-local skill orchestrator
+      roots.

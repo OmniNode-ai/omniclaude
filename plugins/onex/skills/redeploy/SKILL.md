@@ -1,7 +1,7 @@
 ---
-description: Full post-release runtime redeploy — dispatches to node_redeploy WorkflowPackage (FSM: SYNC_CLONES → UPDATE_PINS → REBUILD → SEED_INFISICAL → VERIFY_HEALTH → DONE)
+description: Full post-release runtime redeploy — dispatches to node_redeploy_orchestrator (canonical ORCHESTRATOR; prod-gate COMPUTE + deploy publish-monitor EFFECT + FSM REDUCER over the bus)
 mode: full
-version: 3.0.0
+version: 4.0.0
 level: advanced
 debug: false
 category: workflow
@@ -44,26 +44,28 @@ args:
 
 ## Execution
 
-Dispatch to `node_redeploy` — a deterministic WorkflowPackage that owns the full FSM pipeline, deploy-agent Kafka publish-monitor, Infisical seeding, and health verification. The shim performs a single dispatch and surfaces the node's `ModelRedeployWorkflowResult` receipt.
+Dispatch to `node_redeploy_orchestrator` — the canonical ORCHESTRATOR that owns phase sequencing and dispatches the prod-promotion gate (COMPUTE), the deploy-agent publish-monitor + rollback (EFFECT), and the FSM (REDUCER) over the bus. The shim performs a single dispatch and surfaces the node's terminal `ModelRedeployCompletedEvent` receipt.
 
 ```bash
-onex run-node node_redeploy \
-  --input '{"scope": "full", "git_ref": "origin/main", "versions": null, "skip_sync": false, "verify_only": false, "dry_run": false}' \
+onex run-node node_redeploy_orchestrator \
+  --input '{"correlation_id": null, "scope": "full", "git_ref": "origin/main", "skip_sync": false, "verify_only": false, "dry_run": false}' \
   --timeout 660
 ```
 
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly; do not produce prose. All phase orchestration, retry logic, and circuit-breaker behavior live in the node handlers, not in this shim.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly; do not produce prose. All phase orchestration, retry logic, and circuit-breaker behavior live in the canonical node handlers, not in this shim.
 
 ## Architecture
 
 ```
-SKILL.md   -> thin dispatch shim (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_redeploy/
-contract   -> node_redeploy/contract.yaml (FSM, event_bus, inputs/outputs)
-handlers   -> HandlerRedeployWorkflowRunner (runner), HandlerRedeploy (FSM), HandlerRedeployKafka (deploy-agent publish-monitor)
+SKILL.md     -> thin dispatch shim (this file)
+orchestrator -> omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator/   (ORCHESTRATOR; dispatches over the bus)
+prod-gate    -> omnimarket/src/omnimarket/nodes/node_prod_promotion_gate_compute/  (COMPUTE; pure gate decision)
+deploy       -> omnimarket/src/omnimarket/nodes/node_redeploy_deploy_effect/  (EFFECT; deploy-agent publish-monitor + rollback)
+fsm          -> omnimarket/src/omnimarket/nodes/node_redeploy_fsm_reducer/    (REDUCER; phase transitions + circuit breaker)
+handlers     -> each implements ProtocolMessageHandler.handle(envelope) -> ModelHandlerOutput
 ```
 
-## Anti-Patterns (OMN-8602)
+## Anti-Patterns
 
 Two friction surfaces caused this skill to be misused — both produce
 high-severity events in `.onex_state/friction/friction.ndjson`:

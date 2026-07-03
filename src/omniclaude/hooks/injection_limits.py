@@ -28,7 +28,7 @@ import math
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import Generic, Protocol, TypeVar
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,13 +39,41 @@ from omniclaude.lib.utils.token_counter import (
 )
 from omniclaude.lib.utils.token_counter import count_tokens as _count_tokens_impl
 
-if TYPE_CHECKING:
-    # PatternRecord is defined in handler_context_injection which imports
-    # InjectionLimitsConfig from this module — creating a potential cycle.
-    # The TYPE_CHECKING guard breaks the runtime cycle; `from __future__ import
-    # annotations` ensures all annotations referencing PatternRecord remain
-    # string literals and are never evaluated at import time (OMN-5419).
-    from omniclaude.hooks.handler_context_injection import PatternRecord
+
+class PatternRecord(Protocol):
+    @property
+    def pattern_id(self) -> str: ...
+
+    @property
+    def domain(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def description(self) -> str: ...
+
+    @property
+    def confidence(self) -> float: ...
+
+    @property
+    def usage_count(self) -> int: ...
+
+    @property
+    def success_rate(self) -> float: ...
+
+    @property
+    def example_reference(self) -> str | None: ...
+
+    @property
+    def lifecycle_state(self) -> str | None: ...
+
+    @property
+    def evidence_tier(self) -> str | None: ...
+
+
+PatternRecordT = TypeVar("PatternRecordT", bound=PatternRecord)
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +95,7 @@ def _emit_budget_cap_hit(
     Fire-and-forget; never raises.
     """
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
     except ImportError:
         return
     try:
@@ -554,7 +582,7 @@ class InjectionLimitsConfig(BaseSettings):
 
 
 @dataclass(frozen=True)
-class ScoredPattern:
+class ScoredPattern(Generic[PatternRecordT]):  # noqa: UP046
     """Pattern with computed scores for selection.
 
     Internal data structure used during selection. Immutable.
@@ -567,7 +595,7 @@ class ScoredPattern:
         gate_result: Promotion gate outcome for evidence-driven injection (OMN-2092).
     """
 
-    pattern: PatternRecord
+    pattern: PatternRecordT
     effective_score: float
     normalized_domain: str
     rendered_tokens: int
@@ -640,8 +668,8 @@ def render_single_pattern(
     return "\n".join(lines)
 
 
-def select_patterns_for_injection(
-    candidates: list[PatternRecord],
+def select_patterns_for_injection(  # noqa: UP047
+    candidates: list[PatternRecordT],
     limits: InjectionLimitsConfig,
     *,
     header_tokens: int | None = None,
@@ -649,7 +677,7 @@ def select_patterns_for_injection(
     run_id: str | None = None,
     correlation_id: str | None = None,
     session_id: str | None = None,
-) -> list[PatternRecord]:
+) -> list[PatternRecordT]:
     """Select patterns for injection applying all limits.
 
     Algorithm (deterministic, constraint-first):
@@ -766,7 +794,7 @@ def select_patterns_for_injection(
     )
 
     # Step 1: Score and normalize all candidates
-    scored: list[ScoredPattern] = []
+    scored: list[ScoredPattern[PatternRecordT]] = []
     for pattern in candidates:
         # Pass lifecycle_state and provisional_dampening for graduated injection (OMN-2042)
         pattern_lifecycle = getattr(pattern, "lifecycle_state", None)
@@ -835,7 +863,7 @@ def select_patterns_for_injection(
     )
 
     # Step 3: Apply limits with greedy selection
-    selected: list[PatternRecord] = []
+    selected: list[PatternRecordT] = []
     domain_counts: dict[str, int] = {}
     provisional_count = (
         0  # Track provisional patterns for max_provisional cap (OMN-2042)

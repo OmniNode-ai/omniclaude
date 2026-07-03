@@ -149,7 +149,7 @@ class Phase4HealthChecker:
         self.cache_duration = 30.0  # Cache results for 30 seconds
 
         # Setup logging
-        from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+        from omniclaude.hooks.lib.onex_state import ensure_state_path
 
         self.log_file = ensure_state_path("hooks", "logs", "health-checks.log")
 

@@ -10,11 +10,11 @@ To restore session crons (merge-sweep, dispatch-engine, overseer-verify):
 ```bash
 bash omniclaude/scripts/setup-session-crons.sh
 ```
-Then paste the printed one-liner into the Claude Code session. The automated path is OMN-8568.
+Then paste the printed one-liner into the Claude Code session. The automated path is tracked separately.
 
 ---
 
-## Emergency: disable omniclaude hooks (kill-switch) [OMN-9140]
+## Emergency: disable omniclaude hooks (kill-switch)
 
 If the DELEGATION ENFORCER (or any omniclaude hook) recursively blocks a
 session, disable it immediately — no plugin uninstall, no restart required:
@@ -41,19 +41,13 @@ independently — they never hit thresholds.
 
 ---
 
-## Per-hook gating: ONEX_HOOKS_MASK [OMN-9612]
+## Per-hook gating: ONEX_HOOKS_MASK
 
-> **Rollout status:** The bitmask gate is being wired into hook wrappers by
-> OMN-9617 (Task 5 of the hook-bitmask plan). Until that ticket lands,
-> `ONEX_HOOKS_MASK` has no effect on hooks that have not yet been retrofitted.
-> The infrastructure (enum, CLI, shell library) is being built out in the
-> OMN-9609 epic wave.
-
-Once fully rolled out (post OMN-9617), every omniclaude hook wrapper will
-read `ONEX_HOOKS_MASK` and exit silently (exit 0, no side effect) when its
-bit is cleared. Default is `(1 << N) - 1` where `N = len(EnumHookBit)` —
-i.e. all bits on, width-matched to the enum, current behavior preserved.
-The bit positions are defined by `EnumHookBit` in
+Every omniclaude hook wrapper reads `ONEX_HOOKS_MASK` and exits silently
+(exit 0, no side effect) when its bit is cleared. This behavioral cutover
+merged in an earlier pass (commit f0325f0be). Default is `(1 << N) - 1` where
+`N = len(EnumHookBit)` — i.e. all bits on, width-matched to the enum,
+current behavior preserved. The bit positions are defined by `EnumHookBit` in
 `omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`.
 
 **Important:** when `ONEX_HOOKS_MASK` is absent or unset, the default is
@@ -87,7 +81,7 @@ The CLI reads `~/.omnibase/.env` (or the env var `OMNIBASE_ENV_FILE` if set)
 and writes `ONEX_HOOKS_MASK=0x<value>` in-place. New shells pick up the
 updated value on session start via the standard `.env` source.
 
-Note: the `onex hooks` CLI is implemented by OMN-9614 and may not be
+Note: the `onex hooks` CLI may not be
 available until that ticket lands. If absent, set `ONEX_HOOKS_MASK`
 manually using the hex literal reported by
 `python3 -c 'from omnibase_core.enums.enum_hook_bit import EnumHookBit; print(hex((1 << len(EnumHookBit)) - 1))'`.
@@ -113,7 +107,7 @@ Bit positions are **append-only forever**. The authoritative mapping of hook
 name → bit ordinal lives in:
 
 ```text
-omniclaude/docs/hook-bit-inventory.md     ← OMN-9610 output; canonical source
+omniclaude/docs/hook-bit-inventory.md     ← canonical source
 omnibase_core/src/omnibase_core/enums/enum_hook_bit.py
 ```
 
@@ -125,19 +119,11 @@ full policy.
 
 ### Migration note
 
-**Current state (pre-OMN-9617):** The legacy `OMNICLAUDE_HOOK_<NAME>=0/1`
-per-hook env vars are still active and work as before. Hook scripts such as
-`plugins/onex/hooks/post-tool-use-ruff.sh` and
-`plugins/onex/hooks/scripts/post-tool-use-test-reminder.sh` still branch on
-these variables. If you have scripts or `.env` entries that use them, they
-continue to work.
-
-**After OMN-9617 lands (Task 5 behavioral cutover):** The legacy per-hook
-env vars will be physically removed from every GATE hook wrapper and
-superseded by `ONEX_HOOKS_MASK`. At that point, any reference to
-`OMNICLAUDE_HOOK_<NAME>` in shells or scripts becomes a **no-op**. Migrate
-to `onex hooks disable <NAME>` before or immediately after OMN-9617 merges.
-Do not add new per-hook env vars of the legacy form.
+**Bitmask migration (commit f0325f0be):** The legacy `OMNICLAUDE_HOOK_<NAME>=0/1`
+per-hook env vars have been removed from every GATE hook wrapper and
+superseded by `ONEX_HOOKS_MASK`. Any reference to `OMNICLAUDE_HOOK_<NAME>`
+in shells or scripts is now a **no-op**. Use `onex hooks disable <NAME>`
+to disable individual hooks. Do not add new per-hook env vars of the legacy form.
 
 ---
 
@@ -223,7 +209,7 @@ These rules are non-negotiable. Violations will cause production issues.
 
 ---
 
-## Agent Behavioral Rules (OMN-6888)
+## Agent Behavioral Rules
 
 Rules extracted from 186 wrong-approach friction events. Applicable to all agents
 operating in this repo.
@@ -267,7 +253,7 @@ What happens when infrastructure is unavailable:
 
 **Design principle**: Hooks never block Claude Code. Data loss is acceptable; UI freeze is not.
 
-**Exception**: `find_python()` hard-fails (exit 1) if no valid Python interpreter is found. This is intentional — running hooks against the wrong Python produces non-reproducible bugs. The error message tells the user exactly how to fix it (deploy the plugin or set `PLUGIN_PYTHON_BIN`). See OMN-2051.
+**Exception**: `find_python()` hard-fails (exit 1) if no valid Python interpreter is found. This is intentional — running hooks against the wrong Python produces non-reproducible bugs. The error message tells the user exactly how to fix it (deploy the plugin or set `PLUGIN_PYTHON_BIN`).
 
 **Logging**: Failures are logged to `~/.claude/hooks.log` when `LOG_FILE` is set.
 
@@ -286,7 +272,7 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 
 > **Note**: UserPromptSubmit's 500ms target is for typical runs. Worst-case with all timeout
 > paths (routing 5s + injection 1s + advisory 1s + delegation 8s) is ~15s. Without delegation
-> enabled, worst-case is ~7s. Agent YAML loading was removed from the sync path in OMN-1980 —
+> enabled, worst-case is ~7s. Agent YAML loading was removed from the sync path in an earlier refactor —
 > Claude loads the selected agent's YAML on-demand. These timeouts are safety nets; normal
 > execution stays well under 500ms.
 >
@@ -311,14 +297,14 @@ Linear generates branch names: `jonahgabriel/omn-XXXX-description`
 ### Commit Format
 
 ```
-type(scope): description [OMN-XXXX]
+type(scope): description
 ```
 
 Types: `feat`, `fix`, `chore`, `refactor`, `docs`
 
 ### CI Pipeline
 
-Single consolidated workflow in `.github/workflows/ci.yml` (OMN-2228):
+Single consolidated workflow in `.github/workflows/ci.yml`:
 
 | Job | What it does | Gate |
 |-----|-------------|------|
@@ -364,10 +350,16 @@ Required status checks outside `ci.yml`:
 
 | Workflow | Gate | What it rejects |
 |----------|------|-----------------|
-| `hook-log-path-lint.yml` | Hook Log Path Lint | Hook scripts deriving state paths from `PLUGIN_ROOT`/`HOOKS_DIR`/`SCRIPT_DIR` (OMN-8429). |
-| `skill-mcp-ref-lint.yml` | Skill MCP Reference Lint | Hardcoded `mcp__linear-server__*` tool names in `plugins/onex/skills/**/*.md` (OMN-8776). Skills must route ticketing through `ProtocolProjectTracker` / `uv run onex run node_*`. |
+| `hook-log-path-lint.yml` | Hook Log Path Lint | Hook scripts deriving state paths from `PLUGIN_ROOT`/`HOOKS_DIR`/`SCRIPT_DIR` . |
+| `skill-mcp-ref-lint.yml` | Skill MCP Reference Lint | Hardcoded `mcp__linear-server__*` tool names in `plugins/onex/skills/**/*.md` . Skills must route ticketing through `ProtocolProjectTracker` / `uv run onex run node_*`. |
+| `verification-evidence-lint.yml` | Verification Evidence Lint | Worker prompts / receipts / handoff & evidence docs that cite a local-clone path, ticket text, or a `statusCheckRollup` verdict **as proof of state**  Verify against `origin/dev` (existence), the live materialized projection (state), and `gh pr checks` (PR verdict) — see [Verification Doctrine](docs/standards/VERIFICATION_DOCTRINE.md). |
+| `plan-verified-state-gate.yml` | Plan Verified State Gate | `plan_to_tickets` plans under `docs/plans/` or `docs/tracking/` that lack a fresh `## Current Verified State` section with a `verified: <date> via <command>` line dated within the freshness window . Grandfather allowlist: `.onex_ratchets/plan_verified_state_allowlist.yaml` (burn-down only). |
 
 Both gates also run as pre-commit hooks and must exit non-zero on violation.
+
+### Verification Doctrine
+
+When proving a claim about system state, verify against a **live truth surface**, never a convenient-but-stale one: `origin/dev` for existence (not a local clone), the live materialized projection for runtime/data state (not ticket prose), and `gh pr checks` for PR verdicts (not `statusCheckRollup`). Full rules, commands, and rationale: [`docs/standards/VERIFICATION_DOCTRINE.md`](docs/standards/VERIFICATION_DOCTRINE.md)  The `verification-evidence-lint` gate above enforces it mechanically.
 
 ---
 
@@ -417,7 +409,7 @@ The plugin is designed to run without an interactive Claude Code session using `
 #### Basic invocation
 
 ```bash
-claude -p "Run ticket-pipeline for OMN-1234" \
+claude -p "Run ticket-pipeline for <TICKET-ID>" \
   --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
 ```
 
@@ -434,13 +426,13 @@ claude -p "Run ticket-pipeline for OMN-1234" \
 > **Note**: `ANTHROPIC_API_KEY` is **NOT required**. Claude Code sessions (including `claude -p`) authenticate via OAuth, not API keys. Do not add ANTHROPIC_API_KEY as a required env var.
 
 ```bash
-export ONEX_RUN_ID="pipeline-$(date +%s)-OMN-1234"
+export ONEX_RUN_ID="pipeline-$(date +%s)-<TICKET-ID>"
 export ONEX_UNSAFE_ALLOW_EDITS=1
 export GITHUB_TOKEN="..."
 export SLACK_BOT_TOKEN="..."
 export LINEAR_API_KEY="..."
 
-claude -p "Run ticket-pipeline for OMN-1234" \
+claude -p "Run ticket-pipeline for <TICKET-ID>" \
   --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
 ```
 
@@ -470,18 +462,18 @@ kill), resume from the last completed phase:
 
 ```bash
 # Resume from where the pipeline stopped
-claude -p "Run ticket-pipeline for OMN-1234 --skip-to ci_watch" \
+claude -p "Run ticket-pipeline for <TICKET-ID> --skip-to ci_watch" \
   --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
 ```
 
-Auto-detection (OMN-2614) will also pick up the correct phase automatically when no
+Auto-detection will also pick up the correct phase automatically when no
 `--skip-to` flag is provided and a state file already exists.
 
 #### Trigger surfaces
 
 | Surface | How |
 |---------|-----|
-| **CLI (direct)** | `claude -p "Run ticket-pipeline for OMN-1234" --allowedTools "..."` |
+| **CLI (direct)** | `claude -p "Run ticket-pipeline for <TICKET-ID>" --allowedTools "..."` |
 | **Slack bot** | Webhook handler constructs the `claude -p` call and spawns it as a subprocess |
 | **Webhook** | HTTP handler receives ticket ID, sets env vars, invokes `claude -p` |
 | **Cron / CI** | Shell script iterates tickets and calls `claude -p` per ticket |
@@ -538,9 +530,9 @@ Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is no
 
 ### prune-worktrees.sh
 
-Detects and removes stale git worktrees under `/Volumes/PRO-G40/Code/omni_worktrees/`. <!-- local-path-ok -->
-A worktree is considered stale when its branch's PR has been merged (queried via `gh pr list --state merged`)
-or its remote branch no longer exists.
+Detects and removes stale git worktrees under `$OMNI_HOME/omni_worktrees/` (override with `--worktrees-root`).
+A worktree is considered stale when its branch's PR has been merged (queried via `gh pr list --state merged`,
+batched to one call per repo) or its remote branch no longer exists.
 
 ```bash
 # Dry-run (default): report stale worktrees without removing them
@@ -631,7 +623,7 @@ These modules are intended for external use:
 | `OMNICLAUDE_CONTEXT_API_URL` | Overrides the omniintelligence HTTP API base URL used for context injection (default: `INTELLIGENCE_SERVICE_URL` or http://localhost:8053) | No |
 | `OMNICLAUDE_CONTEXT_API_ENABLED` | Enable (`true`) or disable (`false`) the omniintelligence HTTP API as a context injection pattern source (default: true) | No |
 | `OMNICLAUDE_CONTEXT_API_TIMEOUT_MS` | Timeout in milliseconds for omniintelligence API calls during context injection (default: 900, range: 100–10000) | No |
-| `OMNICLAUDE_INTENT_API_URL` | **REMOVED in OMN-2875** -- the HTTP classify endpoint never existed. Intent classification flows through the Kafka event bus. | No |
+| `OMNICLAUDE_INTENT_API_URL` | **REMOVED** -- the HTTP classify endpoint never existed. Intent classification flows through the Kafka event bus. | No |
 | `OMNICLAUDE_STATE_DIR` | Override the correlation state directory used by intent_classifier CLI (default: `$ONEX_STATE_DIR/hooks/.state`) | No (dev/test only) |
 | `OMNICLAUDE_INTENT_<CLASS>_MODEL` | Override recommended model for a given intent class (e.g. `OMNICLAUDE_INTENT_SECURITY_MODEL=claude-opus-4-6`) | No |
 | `OMNICLAUDE_INTENT_<CLASS>_TEMPERATURE` | Override temperature hint for a given intent class | No |
@@ -691,6 +683,13 @@ omniclaude/
 
 ## Hook Data Flow
 
+> **Current state (verified against code on this refresh):** every hook registration
+> in `plugins/onex/hooks/hooks.json` is removed — the `hooks` block is `{}` — for the
+> a measurement baseline. Claude Code therefore invokes no onex hooks today.
+> The scripts (`plugins/onex/hooks/scripts/`) and handler modules
+> (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change
+> Re-enabling is a pure config change. The flow below describes wired behavior when hooks are registered.
+
 ### Input Format
 
 All hooks receive JSON via stdin from Claude Code:
@@ -721,7 +720,7 @@ agent_detector.py → detect automated workflow
     ▼
 route_via_events_wrapper.py → get agent candidates + fuzzy best
     │
-    ▼ (OMN-1980: agent YAML loading removed from sync path)
+    ▼ (agent YAML loading removed from sync path in an earlier refactor)
     │  Claude loads the selected agent's YAML on-demand after seeing candidates
     │
     ▼
@@ -918,5 +917,5 @@ Canonical spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`
 
 ---
 
-**Last Updated**: 2026-05-22
-**Version**: 0.3.1
+**Last Updated**: 2026-06-21
+**Version**: 0.25.1

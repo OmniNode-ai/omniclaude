@@ -29,8 +29,8 @@ args:
 
 Records a friction event to `$ONEX_STATE_DIR/state/friction/friction.ndjson`.
 
-Friction events are the deterministic backbone of the friction tracking system
-(OMN-5442). Use this skill when a skill run is blocked by an unresolved external
+Friction events are the deterministic backbone of the friction tracking system.
+Use this skill when a skill run is blocked by an unresolved external
 issue (missing Kafka topic, CI misconfiguration, permission denied, etc.).
 
 ## Usage
@@ -38,7 +38,7 @@ issue (missing Kafka topic, CI misconfiguration, permission denied, etc.).
 ```
 /record-friction --skill integration_sweep --surface kafka/missing-topic --severity medium
 /record-friction --skill gap --surface ci/missing-workflow --severity low --description "Workflow file not found in repo"
-/record-friction --skill pr_polish --surface linear/api-timeout --severity high --ticket_id OMN-5132
+/record-friction --skill pr_polish --surface linear/api-timeout --severity high --ticket_id TASK-5132
 ```
 
 ## Surface Taxonomy
@@ -149,7 +149,7 @@ Each line in `$ONEX_STATE_DIR/state/friction/friction.ndjson` is a JSON object:
   "surface": "kafka/missing-topic",
   "severity": "medium",
   "description": "Topic onex.evt.foo.v1 not found",
-  "context_ticket_id": "OMN-5132",
+  "context_ticket_id": "TASK-5132",
   "session_id": "abc123",
   "timestamp": "2026-03-19T12:00:00+00:00"
 }

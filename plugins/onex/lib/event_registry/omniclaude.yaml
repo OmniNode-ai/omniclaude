@@ -501,3 +501,35 @@ events:
         description: "Structured hook error event"
     partition_key_field: session_id
     required_fields: [hook_name, error_tier, error_category, session_id]
+
+  # =========================================================================
+  # Durable Capture Events (OMN-13092)
+  # Duty-critical: suppression of tool output from the LLM context is only
+  # allowed when the full bytes are content-addressed in the artifact store
+  # and an event records the capture (no-hidden-loss invariant). Entries
+  # mirror node_emit_daemon/registries/topics.yaml; the `tier` key is read by
+  # registry loaders that support durability tiers and ignored by older ones.
+  # =========================================================================
+  artifact.captured:
+    fan_out:
+      - topic: "onex.evt.omnimarket.artifact-captured.v1"
+        tier: duty_critical
+        description: "Content-addressed artifact captured in the artifact store"
+    partition_key_field: correlation_id
+    required_fields:
+      [
+        artifact_ref,
+        artifact_hash,
+        artifact_size_bytes,
+        artifact_kind,
+        source_system,
+        correlation_id,
+      ]
+
+  tool.output.captured:
+    fan_out:
+      - topic: "onex.evt.omnimarket.tool-output-captured.v1"
+        tier: duty_critical
+        description: "Tool output captured with artifact refs and suppression decision"
+    partition_key_field: correlation_id
+    required_fields: [tool_name, suppression_decision, correlation_id]

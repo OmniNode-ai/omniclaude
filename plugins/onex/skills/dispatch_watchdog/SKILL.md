@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --epic-id
-    description: Epic ID to monitor (reads state from $ONEX_STATE_DIR/epics/<id>/state.yaml)
+    description: "Epic ID to monitor (e.g., PROJ-1234) — reads state from $ONEX_STATE_DIR/epics/<id>/state.yaml"
     required: false
   - name: --timeout
     description: "Stall timeout in seconds (default: 120 = 2 minutes)"
@@ -29,9 +29,18 @@ args:
   - name: --max-redispatches
     description: "Max redispatch attempts per task before escalation (default: 2)"
     required: false
+boundary_exempt: true
 ---
 
 # Agent Dispatch Watchdog
+
+## Backing Status (OMN-13780) — NON-RUNNABLE via canonical event-bus dispatch
+
+**This skill has no deterministic node backing and is de-listed from event-bus / node-routed dispatch.** Its omniclaude "node" (`node_skill_dispatch_watchdog_orchestrator`) is a generated Polly-passthrough shell (`maturity: stub` in its contract.yaml) — invoking it does nothing but forward this file's prose back to an LLM agent, which is functionally identical to (and strictly worse than) just running this skill directly via the Skill tool. There is no CLI, omnimarket, or omnibase_infra implementation.
+
+**Prefer `onex:agent_healthcheck` instead** — it is real node-backed: detection and recovery logic lives in `node_worker_stall_recovery` (omnimarket, OMN-9403). This skill's stall-detection semantics substantially overlap with `agent_healthcheck`'s; consolidation is tracked in OMN-13800.
+
+This skill remains usable as a direct Skill-tool invocation (session-native, TaskGet/TaskList-based) — it is only excluded from event-bus/node dispatch.
 
 ## Purpose
 
@@ -67,14 +76,14 @@ sidecar. It does NOT replace the dispatch mechanism -- it observes and reports.
 
 ```
 # epic-team invokes watchdog after dispatching a wave
-Skill(skill="onex:dispatch_watchdog", args="--epic-id OMN-2000 --timeout 300 --action report")
+Skill(skill="onex:dispatch_watchdog", args="--epic-id PROJ-1000 --timeout 300 --action report")
 ```
 
 ### Standalone Health Check
 
 ```
 # Check if any agents in an epic run are stalled
-/dispatch-watchdog --epic-id OMN-2000
+/dispatch-watchdog --epic-id PROJ-1000
 ```
 
 ## Detection Algorithm
@@ -136,12 +145,12 @@ The watchdog reads from and writes to the epic state directory:
 ```json
 {
   "schema_version": "1.1",
-  "epic_id": "OMN-2000",
+  "epic_id": "PROJ-1000",
   "check_timestamp": "2026-04-02T10:00:00Z",
   "stalls_detected": [
     {
       "task_id": "task-abc123",
-      "ticket_id": "OMN-2001",
+      "ticket_id": "PROJ-1001",
       "last_activity": "2026-04-02T09:58:00Z",
       "elapsed_seconds": 145,
       "bash_timeout_exemption": false,
@@ -151,7 +160,7 @@ The watchdog reads from and writes to the epic state directory:
     }
   ],
   "healthy_tasks": ["task-def456", "task-ghi789"],
-  "blocked_tasks": ["OMN-2003"],
+  "blocked_tasks": ["PROJ-1003"],
   "summary": {
     "total_tasks": 5,
     "healthy": 3,
@@ -264,7 +273,7 @@ One JSON object per line, never pretty-printed.
 {
   "timestamp_utc": "2026-04-02T14:30:00Z",
   "event": "stall_detected",
-  "ticket_id": "OMN-1234",
+  "ticket_id": "PROJ-1234",
   "agent_id": "task-abc123",
   "stall_reason": "inactivity",
   "idle_seconds": 145,
@@ -285,7 +294,7 @@ Friction events written on escalation follow the standard friction format:
 # Agent Stall Escalation: {TICKET_ID}
 
 ## Summary
-Agent stalled {N} times, exceeding max redispatch limit of 2.
+Agent stalled {N} times, exceeding the maximum redispatch limit of 2.
 
 ## Evidence
 - Dispatch log: .onex_state/dispatch-log/{date}.ndjson

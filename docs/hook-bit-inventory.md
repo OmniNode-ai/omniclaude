@@ -1,6 +1,6 @@
 # Hook Bitmask Bit-Governance Freeze Inventory
 
-> **OMN-9610 — Append-only governance freeze. 2026-04-24.**
+> **Append-only governance freeze. 2026-04-24.**
 >
 > This document is the source of truth for the initial ordinal assignment of every
 > `EnumHookBit` member. Once published, the rules below are permanent policy.
@@ -162,7 +162,7 @@ only observability loss. They do not receive bits.
 |-------------|------------|--------------------------------|
 | `scripts/permission_denied_logger.sh` | PermissionDenied | Explicitly "non-blocking" in header comment; writes friction YAML only |
 | `scripts/post_tool_use_subagent_tool_log.sh` | PostToolUse | Appends JSONL record only; always exits 0; pure telemetry |
-| `scripts/stop_failure_logger.sh` | StopFailure | Writes P1 friction YAML only; non-blocking by design (OMN-8873) |
+| `scripts/stop_failure_logger.sh` | StopFailure | Writes P1 friction YAML only; non-blocking by design |
 | `scripts/stop.sh` | Stop | Session teardown telemetry; no blocking behavior |
 | `scripts/session-end.sh` | SessionEnd | Explicitly "audit-only — NO context injection, NO contract mutation" |
 | `scripts/session_start_onex_cli_pin_check.sh` | SessionStart | "Warns only — never blocks" per header comment |

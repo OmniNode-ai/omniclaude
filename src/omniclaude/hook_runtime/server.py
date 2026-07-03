@@ -330,7 +330,7 @@ class HookRuntimeServer:
             # task-delegated event dict; extra fields are ignored by the handler.
             if self._event_bus is not None:
                 from omniclaude.delegation.emitter import (
-                    emit_task_delegated,  # noqa: PLC0415
+                    emit_task_delegated,
                 )
 
                 payload = req.payload

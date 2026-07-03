@@ -217,7 +217,7 @@ def serialize_fix_transition_event(
 
 
 #: Type alias for the Kafka emit callable: (topic, payload) → success bool
-type EmitCallable = Callable[[str, str], bool]
+EmitCallable = Callable[[str, str], bool]
 
 
 def emit_fix_transition_event(

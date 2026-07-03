@@ -12,7 +12,6 @@ tags:
   - infisical
   - friction
 author: OmniNode Team
-ticket: OMN-8868
 ---
 
 # env_sync_alert

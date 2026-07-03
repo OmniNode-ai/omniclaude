@@ -145,7 +145,7 @@ class PatternTrackerConfig:
 
     def __init__(self, config_path: Path | None = None):
         if config_path is None:
-            from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+            from omniclaude.hooks.lib.onex_state import state_path
 
             config_path = state_path("hooks", "config.yaml")
         self.config_path = config_path
@@ -517,7 +517,7 @@ class PatternTracker:
             log_file = self.config.log_file
             log_file.parent.mkdir(parents=True, exist_ok=True)
         else:
-            from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+            from omniclaude.hooks.lib.onex_state import ensure_state_path
 
             log_file = ensure_state_path("hooks", "logs", "enhanced-pattern-tracker.log")
         self.log_file = log_file

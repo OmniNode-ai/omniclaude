@@ -1,0 +1,56 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13531"
+title: "Repoint pr_review_bot/pr_review skill surface off the deleted node_pr_review_bot shell"
+summary: >-
+  OMN-13212 (omnimarket commit 0f116553, "delete shell") removed node_pr_review_bot from omnimarket and
+  replaced it with node_pr_review_orchestrator (+ FSM REDUCER / github EFFECT / judge+parse COMPUTE). The
+  omniclaude skill surface still cited the deleted node, so /onex:pr_review_bot docs and the skills->market
+  manifest pointed at a phantom node and a deleted result-model module. The onex dispatch table
+  (omnibase_infra skill_mapping.yaml) already targets the canonical node_pr_review_orchestrator; this change
+  aligns the omniclaude references with it. Edits are documentation/manifest YAML+MD only -- skills_to_market_manifest.yaml
+  canonical_target, the pr_review_bot/pr_review SKILL.md result_model + wrapper descriptions, plugin-compat.yaml
+  node name, and the node_skill_pr_review_bot_orchestrator contract description. No code, schema, or topic change
+  (the canonical contract keeps the pr-review-bot-start/-completed topics). The enforcement fixture that catches
+  this drift class at CI time lives in the paired omnibase_infra PR that owns skill_mapping.yaml.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-references-repointed"
+    description: >-
+      Every omniclaude reference to the deleted node_pr_review_bot now resolves to the canonical
+      node_pr_review_orchestrator (manifest canonical_target, SKILL.md result_model
+      omnimarket.review.pr_review_io.ReviewVerdict, plugin-compat node, shell contract description). No stale
+      node_pr_review_bot node reference remains outside the historical provenance notes.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          bash -c "! grep -rn 'canonical_target: node_pr_review_bot\|node_pr_review_bot.models.models.ReviewVerdict\|node: node_pr_review_bot' plugins/ src/"
+  - id: "dod-validation-suite"
+    description: >-
+      The omniclaude validation suite (deterministic-skill-routing + runtime-backed-skill-path) passes after the
+      manifest and SKILL.md edits, and the pre-commit Skill backing-node liveness (OMN-10052) hook passes.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/validation/test_validate_runtime_backed_skill_paths.py tests/validation/test_validate_deterministic_skill_routing.py -p no:randomly -q
+  - id: "dod-headless-load-proof"
+    description: >-
+      Headless proof (omnibase_infra venv, omnimarket dev source installed): `onex skill pr_review_bot --dry-run`
+      resolves node_pr_review_orchestrator's contract (terminal_event onex.evt.omnimarket.pr-review-bot-completed.v1)
+      with no Unknown-node error. The original stale-catalog failure was reproduced first.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          printf 'headless: onex skill pr_review_bot --dry-run loads node_pr_review_orchestrator contract; no Unknown node'

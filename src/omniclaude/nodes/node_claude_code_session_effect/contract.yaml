@@ -31,6 +31,16 @@ node_version:
 # Node type
 node_type: EFFECT_GENERIC
 
+# Canonical-inference gate structural carve-out (OMN-13249). This effect node
+# invokes the Claude Code / coding-agent CLI as external I/O — a distinct
+# surface from the banned *inference* tier (model+endpoint+provider resolved
+# from the routing contract). The carve-out permits a model-CLI shell-out in
+# this node iff this contract declares agent_invocation: true — a
+# contract-declared, reviewable fact the gate verifies, never a free-text
+# # canonical-inference-ok: comment. It does NOT license a *_MODEL env read.
+descriptor:
+  agent_invocation: true
+
 # Description
 description: >
   Capability-oriented effect node for Claude Code session management.

@@ -1,5 +1,6 @@
 ---
-description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures, then iterate local-review until N consecutive clean passes
+description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures,
+  then iterate local-review until N consecutive clean passes
 mode: full
 version: 3.0.0
 level: intermediate
@@ -15,83 +16,66 @@ tags:
   - routing-enforced
 author: OmniClaude Team
 args:
-  - name: pr_number
-    description: PR number or URL (auto-detects from current branch if omitted)
+  - name: --repo
+    description: string arg (required)
+    required: true
+  - name: --pr-number
+    description: integer arg (required)
+    required: true
+  - name: --ticket-id
+    description: string arg
     required: false
   - name: --required-clean-runs
-    description: "Consecutive clean local-review passes required before done (default: 4)"
+    description: integer arg
     required: false
   - name: --max-iterations
-    description: "Maximum local-review cycles (default: 10)"
+    description: integer arg
     required: false
   - name: --skip-conflicts
-    description: Skip merge conflict resolution phase
+    description: boolean flag
     required: false
   - name: --skip-pr-review
-    description: Skip PR review comments and CI failures phase
+    description: boolean flag
     required: false
   - name: --skip-local-review
-    description: Skip local-review clean-pass loop phase
+    description: boolean flag
     required: false
   - name: --no-ci
-    description: Skip CI failure fetch in PR review phase
+    description: boolean flag
     required: false
   - name: --no-push
-    description: Apply all fixes locally without pushing to remote
-    required: false
-  - name: --dry-run
-    description: Log phase decisions without making changes
+    description: boolean flag
     required: false
   - name: --no-automerge
-    description: Skip enabling GitHub automerge after all phases complete
+    description: boolean flag
     required: false
+  - name: --dry-run
+    description: boolean flag
+    required: false
+skill_kind: dispatch
 ---
 
-# /onex:pr_polish — PR Polish Orchestrator
+# /onex:pr_polish — one command, one typed result
 
-**Skill ID**: `onex:pr_polish`
-**Version**: 3.0.0
-**Backing node**: `node_pr_polish`
+**Skill ID**: `onex:pr_polish` · **Command**: `uv run onex skill pr_polish` (omnibase_infra) · **Backing node**: `node_pr_polish` (omnimarket)
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[ModelPrPolishCompletedEvent]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **3.0.0** — Thinned to dispatch-only shim (OMN-8768). All phase logic in `node_pr_polish`.
-- **2.0.0** — Added node_pr_polish dispatch path.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_pr_polish`. The node owns worktree resolution,
-branch verification, conflict resolution, review comment addressing, local-review loop,
-CodeRabbit triage, pre-commit gate, push, and auto-merge arming. This shim contains
-no inline phase logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the pr-polish skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_pr_polish --input '{
-  "pr_number": <pr_number or null>,
-  "required_clean_runs": 4,
-  "max_iterations": 10,
-  "skip_conflicts": false,
-  "skip_pr_review": false,
-  "skip_local_review": false,
-  "no_ci": false,
-  "no_push": false,
-  "dry_run": false,
-  "no_automerge": false
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_pr_polish`
-
-Command topic: `onex.cmd.omnimarket.pr-polish-start.v1`
-
-Terminal events:
-- `onex.evt.omnimarket.pr-polish-phase-transition.v1`
-- `onex.evt.omnimarket.pr-polish-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_pr_polish.models.model_pr_polish_completed_event.ModelPrPolishCompletedEvent`

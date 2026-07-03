@@ -1,84 +1,30 @@
-# build_loop prompt
+# /onex:build_loop — one command, one typed result
 
-You are executing the **build-loop** skill. This skill dispatches to the
-`node_build_loop_orchestrator` node in omnimarket for autonomous build loop
-execution (CLOSING_OUT → VERIFYING → FILLING → CLASSIFYING → BUILDING → COMPLETE).
-
-No inline orchestration, no LLM reasoning, no multi-phase Python loop —
-the node owns the full FSM pipeline.
-
-## Announce
-
-Say: "I'm using the build-loop skill to start the autonomous build loop."
-
-## Parse arguments
-
-Extract from `$ARGUMENTS`:
-
-- `--max-cycles <N>` — Maximum build loop cycles (default: 1)
-- `--skip-closeout` — Skip the CLOSING_OUT phase
-- `--dry-run` — Simulate all phases without side effects (no PRs, tickets, or merges)
-- `--max-tickets <N>` — Max tickets to dispatch per fill cycle (default: 5)
-- `--mode <build|close_out|full|observe>` — Execution mode (default: build)
-
-## Execution: Dispatch to node_build_loop_orchestrator
-
-Build the `onex run` command from parsed arguments and dispatch to the omnimarket
-node. The node handles every FSM phase internally and emits the
-build-loop-orchestrator-completed envelope.
+Run ONE command. It prints exactly one typed `ModelSkillResult[ModelLoopState]`
+JSON to stdout — the full handler result, never truncated. RuntimeLocal logs and
+intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket worktree
-
-ARGS=""
-if [ -n "$MAX_CYCLES" ]; then
-  ARGS="$ARGS --max-cycles $MAX_CYCLES"
-fi
-if [ "$SKIP_CLOSEOUT" = "true" ]; then
-  ARGS="$ARGS --skip-closeout"
-fi
-if [ "$DRY_RUN" = "true" ]; then
-  ARGS="$ARGS --dry-run"
-fi
-if [ -n "$MAX_TICKETS" ]; then
-  ARGS="$ARGS --max-tickets $MAX_TICKETS"
-fi
-if [ -n "$MODE" ]; then
-  ARGS="$ARGS --mode $MODE"
-fi
-
-uv run onex run node_build_loop_orchestrator -- $ARGS
+uv run onex skill build_loop [--max-cycles <n>] [--skip-closeout] [--dry-run]
 ```
 
-Capture the JSON output from stdout. The node produces a
-`ModelOrchestratorResult` with `cycles_completed`, `cycles_failed`,
-`total_tickets_dispatched`, and `cycle_summaries`.
+| Argument | Type |
+|----------|------|
+| `--max-cycles` | integer |
+| `--skip-closeout` | boolean, flag |
+| `--dry-run` | boolean, flag |
 
-## Post-dispatch: Render results
+The command resolves the skill→node mapping, builds the payload, dispatches the
+node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, `cd` anywhere, or read any intermediate result file.
 
-Parse the node output and render the human-readable summary:
+## Present the result
 
-```
-Build Loop Session
-==================
-Cycles completed: <N>
-Cycles failed:    <N>
-Tickets dispatched: <N>
-Circuit breaker:  <tripped | ok>
-```
+Parse the single JSON object on stdout and present the typed `ModelSkillResult`:
 
-For each cycle in `cycle_summaries`, render per-cycle phase outcomes.
+- **Status**: `status` — `completed` | `failed` | `timeout`
+- **Result**: `result` — the full `ModelLoopState`; surface its fields directly.
+- **Artifacts**: `artifact_refs` — retrieval handles for the captured runtime log + full result.
 
-On non-zero exit from `onex run`, a `SkillRoutingError` JSON envelope
-is returned — surface it directly, do not produce prose.
-
-## Error handling
-
-- If `onex run` fails to start (binary missing, contract not found):
-  report the error and exit.
-- If the node returns `cycles_failed > 0`: surface `cycle_summaries`
-  with per-cycle phase errors and exit with the node's exit code.
-- If the circuit breaker tripped (3 consecutive phase failures): surface
-  the circuit breaker status and halt.
-- Never re-implement the build loop pipeline inline. If the node is
-  unavailable, stop — do not fall back to prose orchestration.
+On non-zero exit the receipt's `result` carries the full error inline — surface
+it directly. Do not fall back to an inline scan, probe, or orchestration.

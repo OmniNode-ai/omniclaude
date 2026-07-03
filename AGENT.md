@@ -5,8 +5,8 @@
 ## Context
 
 - **Plugin architecture**: `docs/architecture/`
-- **Skills catalog**: `skills/`
-- **Hook system**: `src/omniclaude/hooks/`
+- **Skills catalog**: `plugins/onex/skills/`
+- **Hook system**: `plugins/onex/hooks/` (scripts in `scripts/`, Python lib in `lib/`, Pydantic schemas in `src/omniclaude/hooks/`)
 - **Conventions**: `CLAUDE.md`
 
 ## Commands
@@ -23,6 +23,6 @@
 
 ## Rules
 
-- Uses `skills/` directory, never `commands/`
-- Plugin hook files go in `src/omniclaude/hooks/`
-- Agent configs in `onex/agents/configs/`
+- Uses `plugins/onex/skills/` directory, never a top-level `skills/` or `commands/`
+- Hook shell scripts go in `plugins/onex/hooks/scripts/`; Python hook modules in `plugins/onex/hooks/lib/`; Pydantic hook schemas in `src/omniclaude/hooks/`
+- Agent configs in `plugins/onex/agents/configs/`

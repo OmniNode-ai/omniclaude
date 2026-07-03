@@ -107,7 +107,7 @@ close-day, runner
 Skills requiring interactive session context or that modify session state:
 
 ```
-session, onboarding, handoff, executing_plans,
+session, onboarding, executing_plans,
 resume_session, set_session, login, using_git_worktrees, demo,
 systematic_debugging, writing_skills, insights_to_plan, authorize,
 worktree, decompose_epic, ticket_plan, rrh
@@ -182,7 +182,7 @@ Skill(skill="onex:<skill_name>", args="--dry-run")
 
 **Timeout:** 120 seconds per skill. If skill times out or throws an unhandled error: verdict = **BROKEN**.
 
-**Note:** Skip invocation for skills known to require live infrastructure (Kafka, .201 runtime). Document these as `SKIP (infra-dep)` with the infrastructure dependency noted.
+**Note:** Skip invocation for skills known to require live infrastructure (Kafka, runtime host). Document these as `SKIP (infra-dep)` with the infrastructure dependency noted.
 
 ---
 
@@ -198,7 +198,7 @@ For each skill, produce a record:
   stub_detected: true
   stub_evidence: "handler_session_orchestrator.py:748 Phase 2 STUB, line 767 Phase 3 STUB"
   invocation_result: "SKIP (interactive)"
-  linear_ticket: "OMN-8367"
+  linear_ticket: null
   verdict: PARTIAL
   notes: "Phase 1 implemented. Phase 2 (RSD scoring) and Phase 3 (dispatch) are explicit stubs."
 ```
@@ -259,7 +259,7 @@ Also write a human-readable summary to `${ONEX_STATE_DIR}/skill-audits/latest-su
 If `--fail-on-facade` is true (default):
 
 1. Collect all skills with verdict `FACADE`, `STUB`, or `PARTIAL`
-2. Verify the node-reported Linear ticket coverage from each skill record's `linear_ticket` field
+2. Confirm the skill records include Linear ticket coverage in each `linear_ticket` field
 3. If ANY facade/stub/partial has no `linear_ticket`: **FAIL** (exit nonzero)
 4. If all facade/stub/partial skills have tracked Linear tickets: **PASS** (exit 0, log warning)
 
@@ -300,15 +300,41 @@ Gate: PASS (all facades have Linear tickets)
 
 ## Known Tracked Findings (do not re-flag)
 
-The following skills have known PARTIAL/FACADE verdicts with Linear tickets. Do NOT re-flag these as new findings:
+Skills with a currently-open PARTIAL/FACADE verdict and a tracking Linear ticket
+are listed here so the audit does not re-flag them as new findings. A row stays
+here only while its ticket is open; once the ticket is Done and the backing node
+exists, remove the row.
 
-| Skill | Verdict | Linear Ticket | Since |
-|-------|---------|--------------|-------|
-| `onex:session` | PARTIAL | OMN-8699 (relates to OMN-8367) | 2026-04-14 |
-| `onex:pipeline_fill` | FACADE | OMN-8700 | 2026-04-14 |
-| `onex:delegate` | PARTIAL | OMN-8701 | 2026-04-14 |
+**2026-07-01 (OMN-13780, M2c disposition of the 5 no-node facades from OMN-13674):**
 
-Update this table when tickets are resolved or new findings are added.
+- `onex:checkpoint` — verdict corrected from FACADE to **WORKS (misclassified)**.
+  Real backing exists (`omnibase_infra/node_checkpoint_effect`,
+  `omnibase_infra/node_checkpoint_validate_compute`, `checkpoint_manager.py` CLI) —
+  the audit's naive `node_<skill_name>` path match doesn't resolve the real node
+  names. SKILL.md now declares the real backing explicitly. Tracked cleanup to
+  repoint the registry / retire the dead omniclaude Polly-shell: **OMN-13799**.
+- `onex:dispatch_watchdog` — **FACADE**, de-listed from event-bus dispatch (no
+  deterministic backing anywhere; the omniclaude node is a `maturity: stub`
+  Polly-shell). Prefer `onex:agent_healthcheck` (real node-backed via
+  `node_worker_stall_recovery`). Tracked: **OMN-13800**.
+- `onex:epic_team` — **FACADE**, de-listed from event-bus dispatch by design
+  (spawns live session subagents; `run.sh` shells out to `claude -p`, still an
+  LLM session, not a node). Tracked: **OMN-13801**.
+- `onex:executing_plans` — **FACADE**, de-listed from event-bus dispatch by
+  design (session-native plan review + routing decision). Tracked: **OMN-13802**.
+- `onex:wave_scheduler` — **FACADE**, de-listed from event-bus dispatch by
+  design (session-native parallel dispatch; DAG-computation core is a future
+  COMPUTE-node candidate). Tracked: **OMN-13803**.
+
+The three 2026-04-14 findings have all been resolved and removed from this table:
+
+- `onex:pipeline_fill` (was FACADE — **Done**; `node_pipeline_fill`
+  now exists in omnimarket, so the facade is resolved).
+- `onex:session` (was PARTIAL — **Done**).
+- `onex:delegate` (was PARTIAL — **Done**; local-runtime fallback
+  landed).
+
+Update this section when tickets are resolved or new findings are added.
 
 ---
 
@@ -335,4 +361,4 @@ The existing `skill-catalog-gap-sweep` (if it exists) should be updated to call 
 - **Audit report**: `docs/briefs/skill-functional-audit-2026-04-14.md`
 - **Process doc**: `docs/process/skill-audit-methodology.md`
 - **Prior gap**: `docs/briefs/skill-catalog-2026-04-14.md` (false-clean sweep)
-- **Tickets**: OMN-8367 (session Phase 2+3), filed 2026-04-14 (pipeline_fill, delegate)
+- **Tickets**: Filed 2026-04-14 for session Phase 2+3, pipeline_fill, and delegate (all resolved)

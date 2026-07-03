@@ -130,7 +130,7 @@ Claude will brainstorm approaches, ask clarifying questions, and produce a struc
 ### Run the autonomous pipeline
 
 ```
-/ticket-pipeline OMN-1234
+/ticket-pipeline PROJ-1234
 ```
 
 | Phase | What happens |
@@ -147,7 +147,7 @@ Claude will brainstorm approaches, ask clarifying questions, and produce a struc
 Resume from any phase if interrupted:
 
 ```
-/ticket-pipeline OMN-1234 --skip-to ci_watch
+/ticket-pipeline PROJ-1234 --skip-to ci_watch
 ```
 
 ---

@@ -1,6 +1,5 @@
 # FK Scan Results — omniclaude
 
-**Ticket**: OMN-2068 (slice of OMN-2054)
 **Date**: 2026-02-26
 **Repo**: omniclaude
 **Verdict**: All REFERENCES are intra-service. Zero cross-service FK violations.
@@ -77,7 +76,7 @@ No FK constraints. `quirk_type` is referenced as a plain TEXT column; no enforce
 
 ---
 
-## Pending DDL — Blocked by Migration Freeze (OMN-2055)
+## Pending DDL — Blocked by Migration Freeze
 
 These files contain FK constraints that will become active once the migration freeze lifts.
 They are in reference paths (`docs/db/` and `src/`) — not yet applied to the database.
@@ -92,7 +91,7 @@ They are in reference paths (`docs/db/` and `src/`) — not yet applied to the d
 | Source column | `signal_id` |
 | Target table | `quirk_signals` |
 | Target column | `id` |
-| Defined in | `docs/db/002_create_quirk_tables.sql:80–81` |
+| Defined in | `docs/db/002_create_quirk_tables.sql:80-81` |
 | Cascade behavior | `ON DELETE CASCADE` |
 | Cross-service? | **No** — both tables defined in the same file |
 
@@ -262,18 +261,18 @@ No resolution plans needed — all FK constraints are intra-service.
 | `quirk_stage_config` | `sql/schema/quirk_stage_tables.sql` |
 | `quirk_stage_audit` | `sql/schema/quirk_stage_tables.sql` |
 
-### Pending (blocked by migration freeze OMN-2055)
+### Pending (blocked by migration freeze)
 
 | Table | Defined In | Unblocked By |
 |-------|-----------|--------------|
-| `quirk_signals` | `docs/db/002_create_quirk_tables.sql` | OMN-2055 freeze lift |
-| `quirk_findings` | `docs/db/002_create_quirk_tables.sql` | OMN-2055 freeze lift |
-| `skill_execution_logs` | `docs/db/003_create_skill_execution_logs.sql` | OMN-2055 freeze lift |
-| `failure_signatures` | `src/omniclaude/trace/db_schema.py` | OMN-2055 freeze lift |
-| `change_frames` | `src/omniclaude/trace/db_schema.py` | OMN-2055 freeze lift |
-| `pr_envelopes` | `src/omniclaude/trace/db_schema.py` | OMN-2055 freeze lift |
-| `frame_pr_association` | `src/omniclaude/trace/db_schema.py` | OMN-2055 freeze lift |
-| `fix_transitions` | `src/omniclaude/trace/db_schema.py` | OMN-2055 freeze lift |
+| `quirk_signals` | `docs/db/002_create_quirk_tables.sql` | migration freeze lift |
+| `quirk_findings` | `docs/db/002_create_quirk_tables.sql` | migration freeze lift |
+| `skill_execution_logs` | `docs/db/003_create_skill_execution_logs.sql` | migration freeze lift |
+| `failure_signatures` | `src/omniclaude/trace/db_schema.py` | migration freeze lift |
+| `change_frames` | `src/omniclaude/trace/db_schema.py` | migration freeze lift |
+| `pr_envelopes` | `src/omniclaude/trace/db_schema.py` | migration freeze lift |
+| `frame_pr_association` | `src/omniclaude/trace/db_schema.py` | migration freeze lift |
+| `fix_transitions` | `src/omniclaude/trace/db_schema.py` | migration freeze lift |
 
 ---
 

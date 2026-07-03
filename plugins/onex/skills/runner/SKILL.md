@@ -29,6 +29,7 @@ args:
   - name: --dry-run
     description: "Show compose diff + which containers will be recreated, without deploying"
     required: false
+boundary_exempt: true
 ---
 
 # Runner
@@ -52,7 +53,7 @@ top of the output when triggered.
 ```
 
 No arguments required. The skill queries the GitHub API and SSH-inspects the CI host
-(`192.168.86.201`) automatically. <!-- onex-allow-internal-ip -->
+(`<onex-host>`, configured via `ONEX_HOST`) automatically.
 
 ### Output Format
 
@@ -71,7 +72,7 @@ Runner Status — 2026-03-23
 | omninode-runner-10 | idle   | omnibase-ci  | 2.323.0     | 2.67.0   | v1.32.1    | 0.6.2   | 5m      |
 +--------------------+--------+--------------+-------------+----------+------------+---------+---------+
 
-Host metrics (192.168.86.201): <!-- onex-allow-internal-ip -->
+Host metrics (<onex-host>):
   / disk: 38% used (650 GB / 1.8 TB)
   Docker build cache: 0 B
 ```
@@ -104,7 +105,7 @@ The following fields are shown for each runner:
 
 #### Label Keys
 
-The Docker image labels are defined in the runner Dockerfile (OMN-3275). The skill reads them
+The Docker image labels are defined in the runner Dockerfile. The skill reads them
 deterministically using these exact keys:
 
 ```
@@ -117,9 +118,9 @@ org.omninode.uv.version
 Read via:
 
 ```bash
-# SSH to CI host, inspect the runner container # onex-allow-internal-ip
+# SSH to CI host, inspect the runner container (set ONEX_HOST to runtime host address)
 # Runner names are discovered from the GitHub API (Step 1), not hardcoded
-ssh 192.168.86.201 "docker inspect omninode-runner-9 --format '{{json .Config.Labels}}'" # onex-allow-internal-ip
+ssh <user>@<onex-host> "docker inspect omninode-runner-9 --format '{{json .Config.Labels}}'"
 ```
 
 ### Host-Level Metrics
@@ -129,7 +130,7 @@ In addition to per-runner data, the skill collects host-level metrics from the C
 #### Disk Usage (`/var/lib/docker`)
 
 ```bash
-ssh 192.168.86.201 "df -h /var/lib/docker" # onex-allow-internal-ip
+ssh <user>@<onex-host> "df -h /var/lib/docker"
 ```
 
 Reports: total size, used, available, and usage percentage. Alerts if usage >= 70%.
@@ -137,7 +138,7 @@ Reports: total size, used, available, and usage percentage. Alerts if usage >= 7
 #### Docker Build Cache Size
 
 ```bash
-ssh 192.168.86.201 "docker builder du --verbose 2>/dev/null | tail -1" # onex-allow-internal-ip
+ssh <user>@<onex-host> "docker builder du --verbose 2>/dev/null | tail -1"
 ```
 
 Reports total build cache size. No alert threshold -- informational only.
@@ -186,7 +187,7 @@ This returns per-runner: `id`, `name`, `status` (`online`/`offline`), `busy`,
 
 ```bash
 # For each runner discovered from the GitHub API in Step 1:
-ssh 192.168.86.201 "docker inspect omninode-runner-9 --format '{{json .Config.Labels}}' && docker ps --filter name=omninode-runner-9 --format '{{.Status}}'" # onex-allow-internal-ip
+ssh <user>@<onex-host> "docker inspect omninode-runner-9 --format '{{json .Config.Labels}}' && docker ps --filter name=omninode-runner-9 --format '{{.Status}}'"
 ```
 
 Parse `org.omninode.runner.version`, `org.omninode.gh.version`, `org.omninode.kubectl.version`,
@@ -195,7 +196,7 @@ Parse `org.omninode.runner.version`, `org.omninode.gh.version`, `org.omninode.ku
 #### Step 3: Collect host metrics <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
-ssh 192.168.86.201 "df -h /var/lib/docker && docker builder du 2>/dev/null | tail -1" # onex-allow-internal-ip
+ssh <user>@<onex-host> "df -h /var/lib/docker && docker builder du 2>/dev/null | tail -1"
 ```
 
 #### Step 4: Check latest runner version <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
@@ -220,7 +221,7 @@ Print the output in the format shown in the Output Format section:
 
 ## deploy
 
-Deploy or update self-hosted GitHub Actions runners on the OmniNode CI host (`192.168.86.201`) <!-- onex-allow-internal-ip -->
+Deploy or update self-hosted GitHub Actions runners on the OmniNode CI host (`<onex-host>`, configured via `ONEX_HOST`)
 with a single command from Claude Code.
 
 ### Quick Start
@@ -246,7 +247,7 @@ Before deploying, verify:
    # Must show: Token scopes: ...admin:org (or manage_runners:org)
    ```
 
-2. **SSH key for the CI host in agent** (`192.168.86.201`) -- check with: <!-- onex-allow-internal-ip -->
+2. **SSH key for the CI host in agent** (`<onex-host>`) -- check with:
    ```bash
    ssh-add -l
    # Must show a key fingerprint; if empty run: ssh-add ~/.ssh/id_ed25519 (or your key)
@@ -261,7 +262,7 @@ If either check fails, resolve before running `/runner deploy`.
 
 When `--dry-run` is specified, no changes are made. The skill will:
 
-1. SSH to the CI host (`192.168.86.201`) and run `docker compose config` to display the current runner <!-- onex-allow-internal-ip -->
+1. SSH to the CI host (`<onex-host>`) and run `docker compose config` to display the current runner
    compose configuration
 2. Compare the Dockerfile `ARG` versions (Node, GitHub Actions runner) against the running
    container image labels to detect whether a rebuild would be triggered
@@ -270,7 +271,7 @@ When `--dry-run` is specified, no changes are made. The skill will:
 Example dry-run output:
 
 ```
-[DRY RUN] Runner deploy — 192.168.86.201 <!-- onex-allow-internal-ip -->
+[DRY RUN] Runner deploy — <onex-host>
 
 Current compose config:
   Services: omninode-runner-9
@@ -293,7 +294,7 @@ When invoked without `--dry-run`:
 
 1. **Prerequisite check** -- verifies `gh auth status` shows org-level token scope and
    SSH key is available in agent
-2. **Deploy** -- SSH to the CI host (`192.168.86.201`) and invoke `deploy-runners.sh` <!-- onex-allow-internal-ip -->
+2. **Deploy** -- SSH to the CI host (`<onex-host>`) and invoke `deploy-runners.sh`
    (with `--rebuild` flag forwarded if specified)
 3. **Status check** -- surfaces the final runner status table via `runner status`
    so you can confirm all runners registered successfully
@@ -340,12 +341,12 @@ If prerequisites fail, report clearly which check failed and how to fix it. Do n
 #### Step 2 (dry-run only): Show compose diff <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
-# SSH to host and show compose config (CI_HOST=192.168.86.201) # onex-allow-internal-ip
-ssh 192.168.86.201 "cd ~/.omnibase/runners/docker && docker compose -f docker-compose.runners.yml config" # onex-allow-internal-ip
+# SSH to host and show compose config (set ONEX_HOST to runtime host address)
+ssh <user>@<onex-host> "cd ~/.omnibase/runners/docker && docker compose -f docker-compose.runners.yml config"
 
 # Compare Dockerfile ARG versions to running image labels (use runner name from GitHub API)
-ssh 192.168.86.201 "docker inspect omninode-runner-9 --format '{{.Config.Labels}}' 2>/dev/null || echo 'container not running'" # onex-allow-internal-ip
-ssh 192.168.86.201 "grep -E '^ARG (RUNNER|NODE)_VERSION' ~/.omnibase/runners/docker/runners/Dockerfile" # onex-allow-internal-ip
+ssh <user>@<onex-host> "docker inspect omninode-runner-9 --format '{{.Config.Labels}}' 2>/dev/null || echo 'container not running'"
+ssh <user>@<onex-host> "grep -E '^ARG (RUNNER|NODE)_VERSION' ~/.omnibase/runners/docker/runners/Dockerfile"
 ```
 
 Print a clear summary of: current state, what would change, and which containers would be
@@ -358,7 +359,7 @@ REBUILD_FLAG=""
 # If --rebuild was specified:
 REBUILD_FLAG="--rebuild"
 
-ssh 192.168.86.201 "cd ~/omnibase_infra && bash scripts/deploy-runners.sh ${REBUILD_FLAG}" # onex-allow-internal-ip
+ssh <user>@<onex-host> "cd ~/omnibase_infra && bash scripts/deploy-runners.sh ${REBUILD_FLAG}"
 ```
 
 Capture and display the full output. If the script exits non-zero, report the error and stop.
@@ -387,6 +388,6 @@ Invoke `runner status` to confirm all runners registered successfully:
 ## See Also
 
 - `omnibase_infra/scripts/deploy-runners.sh` -- Underlying deploy script
-- `omnibase_infra/docker/runners/Dockerfile` -- Runner image definition (OMN-3275)
+- `omnibase_infra/docker/runners/Dockerfile` -- Runner image definition
 - `omnibase_infra/docker/docker-compose.runners.yml` -- Runner compose config
 - GitHub Actions self-hosted runner docs: https://docs.github.com/en/actions/hosting-your-own-runners

@@ -4,19 +4,87 @@
 """Configuration for session aggregation.
 
 Defines timeouts and thresholds per the aggregation contract.
-Loads from environment variables with OMNICLAUDE_AGGREGATOR_ prefix.
+
+OMN-13560 Wave-2 config->overlay migration (epic OMN-13556). The tunables were
+previously bound via pydantic-settings ``env_file``/``.env`` with the
+``OMNICLAUDE_AGGREGATOR_`` prefix. They are now declared in
+``contracts/contract_omniclaude_runtime.yaml`` under the ``aggregator:`` section
+with the ``${env.VAR:default}`` overlay convention. :meth:`from_contract`
+resolves each value via :func:`_expand_contract_env_refs` — the single
+sanctioned ``os.environ`` boundary in this module, mirroring the canonical
+``omnibase_infra.runtime.overlay.contract_env_ref.expand_contract_env_refs``
+semantics (a local copy is kept consistent with the Wave-1 diagnostics
+descriptor because the pinned ``omnibase_infra`` release does not yet vendor the
+helper) — and applies the field-level pydantic bounds. The class itself is a
+plain ``BaseModel`` so direct construction with defaults / explicit kwargs keeps
+working; the overlay seam is reached through :meth:`from_contract`.
 """
 
 from __future__ import annotations
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
+import re
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
+
+# ``${env.VAR}`` / ``${env.VAR:default}`` — the same env-overlay convention the
+# canonical overlay resolver (``contract_env_ref.expand_contract_env_refs``)
+# uses, matching the Wave-1 diagnostics descriptor seam.
+_ENV_REF = re.compile(
+    r"\$\{env\.(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?::(?P<default>[^}]*))?\}"
+)
+
+# The omniclaude runtime contract that declares the aggregator tunables.
+# Resolved relative to this module so it is portable across machines / install
+# layouts (no hardcoded absolute path).
+_CONTRACT = (
+    Path(__file__).resolve().parents[1]
+    / "contracts"
+    / "contract_omniclaude_runtime.yaml"
+)
 
 
-class ConfigSessionAggregator(BaseSettings):
+def _expand_contract_env_refs(value: str) -> str:
+    """Expand ``${env.VAR}`` / ``${env.VAR:default}`` references in ``value``.
+
+    The single sanctioned ``os.environ`` boundary in this module. An unset var
+    with no inline default expands to the empty string so the caller fails
+    closed at the pydantic validation boundary rather than passing a literal
+    ``${env.…}`` placeholder downstream.
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        name = match.group("name")
+        default = match.group("default")
+        return os.environ.get(name, default if default is not None else "")
+
+    return _ENV_REF.sub(_sub, value)
+
+
+def _load_aggregator_section(contract_path: Path = _CONTRACT) -> dict[str, object]:
+    with contract_path.open(encoding="utf-8") as contract_file:
+        raw = yaml.safe_load(contract_file)
+    if not isinstance(raw, dict):
+        raise ValueError(f"contract {contract_path} must contain a mapping")
+    section = raw.get("aggregator")
+    if not isinstance(section, dict):
+        raise ValueError(
+            f"contract {contract_path} must declare an 'aggregator' mapping with "
+            "the session-aggregation tunable fields"
+        )
+    return section
+
+
+class ConfigSessionAggregator(BaseModel):
     """Configuration for session event aggregation.
 
-    Environment variables use the OMNICLAUDE_AGGREGATOR_ prefix.
+    Construct via :meth:`from_contract` for the canonical contract+overlay
+    resolution path; direct construction uses the in-source defaults (or
+    explicit field overrides). The per-lane overlay supplies values through the
+    ``OMNICLAUDE_AGGREGATOR_`` ``${env.VAR}`` references declared in the runtime
+    contract's ``aggregator:`` section.
     Example: OMNICLAUDE_AGGREGATOR_SESSION_INACTIVITY_TIMEOUT_SECONDS=3600
 
     Currently Implemented Fields:
@@ -37,13 +105,28 @@ class ConfigSessionAggregator(BaseSettings):
           (current dedup uses natural key only)
     """
 
-    model_config = SettingsConfigDict(
-        env_prefix="OMNICLAUDE_AGGREGATOR_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    model_config = ConfigDict(extra="ignore")
+
+    @classmethod
+    def from_contract(cls, contract_path: Path = _CONTRACT) -> ConfigSessionAggregator:
+        """Build the config from the runtime contract's ``aggregator:`` section.
+
+        Each declared ``${env.VAR:default}`` value is overlay-resolved through
+        :func:`_expand_contract_env_refs` (the single sanctioned env boundary),
+        then handed to pydantic which coerces and validates against the
+        field-level bounds. A value that resolves empty (unset env, no inline
+        default) fails closed at the pydantic validation boundary rather than
+        silently substituting a placeholder.
+        """
+        section = _load_aggregator_section(contract_path)
+        resolved: dict[str, object] = {}
+        for field_name in cls.model_fields:
+            declared = section.get(field_name)
+            if isinstance(declared, str):
+                resolved[field_name] = _expand_contract_env_refs(declared).strip()
+            elif declared is not None:
+                resolved[field_name] = declared
+        return cls.model_validate(resolved)
 
     # Session timeouts (from aggregation contract)
     session_inactivity_timeout_seconds: int = Field(

@@ -38,6 +38,7 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import TypeVar
 from uuid import UUID, uuid4
 
 import click
@@ -77,6 +78,7 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 # =============================================================================
 # Constants
@@ -180,7 +182,7 @@ def _string_to_uuid(value: str) -> UUID:
 # =============================================================================
 
 
-def run_with_timeout[T](
+def run_with_timeout(  # noqa: UP047 - repo validators still parse with pre-PEP 695 syntax.
     coro: Awaitable[T], timeout: float = EMIT_TIMEOUT_SECONDS
 ) -> T | None:
     """Run an async coroutine with a cooperative timeout.
@@ -637,8 +639,8 @@ def _emit_tool_content(content: ModelToolExecutionContent) -> ModelEventPublishR
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    import os  # noqa: PLC0415
-    import sys  # noqa: PLC0415
+    import os
+    import sys
 
     # Resolve emit_client_wrapper from the plugin lib directory.
     # The module path is constructed relative to CLAUDE_PLUGIN_ROOT so the
@@ -651,7 +653,7 @@ def _emit_tool_content(content: ModelToolExecutionContent) -> ModelEventPublishR
     topic = build_topic(TopicBase.TOOL_CONTENT)
 
     try:
-        from emit_client_wrapper import emit_event  # noqa: PLC0415
+        from emit_client_wrapper import emit_event
 
         payload = json.loads(content.model_dump_json())
         success = emit_event("tool.content", payload)

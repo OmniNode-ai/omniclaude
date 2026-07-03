@@ -1,5 +1,7 @@
 ---
-description: Projection table health and migration tracking — checks row count, staleness for every table in omnidash_analytics, plus migration state across all ONEX databases (pending migrations, failed state, schema fingerprint). Auto-creates Linear tickets for stale/empty tables and migration drift.
+description: Projection table health and migration tracking — checks row count, staleness for every table
+  in omnidash_analytics, plus migration state across all ONEX databases (pending migrations, failed state,
+  schema fingerprint). Auto-creates Linear tickets for stale/empty tables and migration drift.
 mode: full
 version: 3.0.0
 level: advanced
@@ -16,54 +18,42 @@ tags:
 author: omninode
 composable: true
 args:
-  - name: --dry-run
-    description: "Report findings without creating Linear tickets (default: false)"
+  - name: --omni-home
+    description: string arg
     required: false
   - name: --table
-    description: "Check a single table only (e.g., agent_routing_decisions)"
+    description: string arg
     required: false
-  - name: --staleness-threshold
-    description: "Hours before data is considered stale (default: 24)"
+  - name: --staleness-threshold-hours
+    description: integer arg
     required: false
+  - name: --dry-run
+    description: boolean flag
+    required: false
+skill_kind: dispatch
 ---
 
-# /onex:database_sweep — Database Health Sweep
+# /onex:database_sweep — one command, one typed result
 
-**Skill ID**: `onex:database-sweep`
-**Version**: 3.0.0
-**Backing node**: `node_database_sweep`
+**Skill ID**: `onex:database_sweep` · **Command**: `uv run onex skill database_sweep` (omnibase_infra) · **Backing node**: `node_database_sweep` (omnimarket)
 
-## Changelog
+A dispatch skill IS one CLI call. Payload construction, node dispatch, and
+result extraction all live in the `onex skill` entrypoint (declarative
+`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+command prints exactly one typed `ModelSkillResult[DatabaseSweepResult]` JSON to
+stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
+context go to a capture file + the artifact store, never to you.
 
-- **3.0.0** — Thinned to dispatch-only shim (OMN-8768). All logic in `node_database_sweep`.
-- **2.0.0** — Added node_platform_diagnostics dispatch path.
+See `prompt.md` for the one command and how to present the typed result.
 
-## What this skill does
+## What this skill does NOT do
 
-Dispatches through `onex run-node node_database_sweep`. The node owns table health
-checks, migration state validation, and ticket creation. This shim contains no
-inline database probe logic.
+- Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
+- Run any inline scan, probe, or orchestration — the backing node owns all logic
+- Contain executable logic in this directory — markdown only
 
-**Announce at start:** "I'm using the database-sweep skill."
+## Related
 
-## Dispatch
-
-```bash
-uv run onex run-node node_database_sweep --input '{
-  "dry_run": false,
-  "table": null,
-  "staleness_threshold_hours": 24
-}'
-```
-
-On non-zero exits, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
-
-## Wire Schema
-
-Contract target: `node_database_sweep`
-
-Command topic: `onex.cmd.omnimarket.database-sweep-start.v1`
-
-Terminal events:
-- `onex.evt.omnimarket.database-sweep-table-checked.v1`
-- `onex.evt.omnimarket.database-sweep-completed.v1`
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_skill.py`
+- **Skill→node mapping**: `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml`
+- **Result model**: `omnimarket.nodes.node_database_sweep.handlers.handler_database_sweep.DatabaseSweepResult`

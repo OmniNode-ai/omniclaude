@@ -31,6 +31,19 @@ try:
 except ImportError:
     _CORE_AVAILABLE = False
 
+# Canonical OMNI_HOME-derived evidence-root resolver (OMN-13136). This replaces
+# the legacy ONEX_EVIDENCE_ROOT env-var read: the resolver reads ``OMNI_HOME``
+# fail-fast and returns ``$OMNI_HOME/onex_change_control/evidence`` — the same
+# path the legacy ONEX_EVIDENCE_ROOT env var pointed at. The
+# import is guarded because omnibase_core < 0.46 predates ``util_omni_home_paths``;
+# when the resolver is unavailable, ``resolve_evidence_output_dir`` uses the
+# local-run ``.evidence/<ticket_id>`` default. Once core is bumped the resolver
+# is the primary path with no further change here.
+try:
+    from omnibase_core.utils.util_omni_home_paths import resolve_evidence_root
+except ImportError:
+    resolve_evidence_root = None  # type: ignore[assignment]
+
 _DEFAULT_TIMEOUT_SECONDS = 30
 
 logger = logging.getLogger(__name__)
@@ -340,6 +353,42 @@ def _get_git_info(working_dir: str) -> tuple[str, str]:
     return sha, branch
 
 
+def resolve_evidence_output_dir(ticket_id: str, working_dir: str) -> Path:
+    """Resolve the directory the DoD receipt is written to.
+
+    This is the single source of truth for the receipt's default location so
+    the writer (``write_evidence_receipt``) and the reader
+    (``pre_tool_use_dod_completion_guard.sh``) agree on one absolute path
+    (Enforcement Map F7 round-trip, OMN-13323).
+
+    Precedence mirrors the canonical ``node_dod_verify`` resolver:
+
+    1. ``resolve_evidence_root()`` (OMN-13136) → ``$OMNI_HOME/onex_change_control/
+       evidence/<ticket_id>``. This is the primary path: the core resolver reads
+       ``OMNI_HOME`` fail-fast and returns the same location the legacy
+       ``ONEX_EVIDENCE_ROOT`` env var pointed at, so the receipt still lands
+       exactly where the completion guard reads
+       (``$ONEX_EVIDENCE_ROOT/<ticket>/dod_report.json``).
+    2. ``OMNI_HOME`` unset (resolver raises ``KeyError``) — or the resolver is
+       unavailable on an older core — → ``<working_dir>/.evidence/<ticket_id>``
+       (local-run default; the guard is fail-open / INACTIVE in that case).
+
+    Args:
+        ticket_id: The ticket identifier (e.g., "OMN-5168").
+        working_dir: Working directory used for the local-run ``.evidence`` default.
+
+    Returns:
+        The directory (not the file) the ``dod_report.json`` receipt is written to.
+    """
+    if resolve_evidence_root is not None:
+        try:
+            return resolve_evidence_root() / ticket_id
+        except KeyError:
+            # OMNI_HOME unset → local-run fallback under the working directory.
+            pass
+    return Path(working_dir) / ".evidence" / ticket_id
+
+
 def write_evidence_receipt(
     ticket_id: str,
     contract_path: str,
@@ -357,8 +406,13 @@ def write_evidence_receipt(
         contract_path: Path to the contract YAML that was checked.
         run_result: The results from run_dod_evidence().
         working_dir: Working directory for git info (defaults to cwd).
-        output_dir: Base directory for evidence output (defaults to
-            .evidence/<ticket_id>/).
+        output_dir: Base directory for evidence output. When omitted, the
+            default is resolved by ``resolve_evidence_output_dir`` so the
+            receipt lands where ``pre_tool_use_dod_completion_guard.sh`` reads
+            it (round-trip alignment, OMN-13323 / Enforcement Map F7):
+            ``$OMNI_HOME/onex_change_control/evidence/<ticket_id>`` via the
+            ``resolve_evidence_root`` core resolver (OMN-13136), else
+            ``<working_dir>/.evidence/<ticket_id>`` when ``OMNI_HOME`` is unset.
         policy_mode: DoD enforcement policy (advisory/soft/hard). Forwarded
             to the emitted event. Defaults to "advisory".
         emit: Whether to emit a dod.verify.completed Kafka event after writing
@@ -373,7 +427,7 @@ def write_evidence_receipt(
         working_dir = str(Path.cwd())
 
     if output_dir is None:
-        output_dir = str(Path(working_dir) / ".evidence" / ticket_id)
+        output_dir = str(resolve_evidence_output_dir(ticket_id, working_dir))
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 

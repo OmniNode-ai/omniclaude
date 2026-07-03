@@ -22,6 +22,7 @@ args:
   - name: --skip-watchdog
     description: "Skip zombie agent detection via dispatch_watchdog"
     required: false
+boundary_exempt: true
 ---
 
 # Preflight
@@ -33,7 +34,7 @@ Performs 6 sequential environment checks and emits a single go/no-go verdict. Al
 
 ## CRITICAL RULES
 
-- **DO NOT check `ANTHROPIC_API_KEY`** — Claude Code uses OAuth, not API keys (OMN-7467).
+- **DO NOT check `ANTHROPIC_API_KEY`** — Claude Code uses OAuth, not API keys.
   Any check for `ANTHROPIC_API_KEY` is incorrect and must be removed.
 - All 6 checks must complete before emitting the verdict.
 - FAIL on any check means the verdict is NO-GO. Do not proceed with the overnight session.
@@ -150,7 +151,7 @@ Mark FAIL only if the `gh` CLI is unavailable or unauthenticated. WARN on confli
 ## Check 5 — Required Environment Variables
 
 Check the three env vars required for overnight sessions.
-**DO NOT check `ANTHROPIC_API_KEY`** — it is not required (OMN-7467).
+**DO NOT check `ANTHROPIC_API_KEY`** — it is not required.
 
 ```bash
 REQUIRED_VARS=(

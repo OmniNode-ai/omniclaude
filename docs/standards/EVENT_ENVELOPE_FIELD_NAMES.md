@@ -1,6 +1,5 @@
 # Event Envelope Canonical Field Names
 
-**Decision**: OMN-2932
 **Status**: Active
 **Date**: 2026-02-27
 

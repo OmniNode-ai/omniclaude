@@ -17,7 +17,7 @@ args:
     description: "Operation: write | read | validate | list"
     required: true
   - name: --ticket-id
-    description: "Ticket identifier (e.g., OMN-2144)"
+    description: "Ticket identifier (e.g., PROJ-1234)"
     required: true
   - name: --run-id
     description: "Pipeline run UUID (required for write, read, and validate; optional for list)"
@@ -50,9 +50,15 @@ Checkpoints record the successful completion of each pipeline phase. They are wr
 - **Replay**: Audit trail of pipeline execution across attempts
 - **Idempotency**: Append-only writes with monotonically increasing attempt numbers
 
-Checkpoints are backed by the `omnibase_infra` checkpoint node infrastructure (OMN-2143) and managed through the `checkpoint_manager.py` CLI wrapper.
+Checkpoints are backed by the `omnibase_infra` checkpoint node infrastructure and managed through the `checkpoint_manager.py` CLI wrapper.
 
 **Announce at start:** "I'm using the checkpoint skill to manage pipeline state."
+
+## Backing Status (OMN-13780)
+
+Backed by (real, non-stub): `omnibase_infra/src/omnibase_infra/nodes/node_checkpoint_effect/` (EFFECT — read/write/list handlers) and `omnibase_infra/src/omnibase_infra/nodes/node_checkpoint_validate_compute/` (COMPUTE — validate handler), invoked in practice via `plugins/onex/hooks/lib/checkpoint_manager.py` (functional CLI wrapper, no stub markers).
+
+The generated omniclaude shell `node_skill_checkpoint_orchestrator` (`maturity: stub` in its contract.yaml) is a Polly-passthrough that is NOT the real dispatch path for this skill — it exists only from the bulk `generate_skill_node.py` pass and is never actually invoked. `skill_functional_audit`'s naive `node_<skill_name>` path match doesn't resolve to the real omnibase_infra node names above, which is why it (mis)flags this skill as a facade. Tracked cleanup: OMN-13799 (repoint the registry / retire the dead shell).
 
 ## Storage Layout
 
@@ -63,7 +69,7 @@ $ONEX_STATE_DIR/checkpoints/{ticket_id}/{run_id}/phase_{N}_{name}_a{attempt}.yam
 ```
 
 Where:
-- `{ticket_id}` -- Linear ticket identifier (e.g., `OMN-2144`)
+- `{ticket_id}` -- Linear ticket identifier (e.g., `PROJ-1234`)
 - `{run_id}` -- Pipeline run UUID
 - `{N}` -- Phase ordinal (1-4)
 - `{name}` -- Phase value string
@@ -71,10 +77,10 @@ Where:
 
 Example:
 ```
-$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_1_implement_a1.yaml
-$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a1.yaml
-$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a2.yaml  # retry
-$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_3_create_pr_a1.yaml
+$ONEX_STATE_DIR/checkpoints/{ticket_id}/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_1_implement_a1.yaml
+$ONEX_STATE_DIR/checkpoints/{ticket_id}/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a1.yaml
+$ONEX_STATE_DIR/checkpoints/{ticket_id}/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a2.yaml  # retry
+$ONEX_STATE_DIR/checkpoints/{ticket_id}/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_3_create_pr_a1.yaml
 ```
 
 > **Note**: Short run IDs (e.g., `a1b2c3d4`) are normalized to deterministic UUID v5 values
@@ -151,20 +157,20 @@ All operations use `checkpoint_manager.py` located at `${CLAUDE_PLUGIN_ROOT}/hoo
 
 ```bash
 python ${CLAUDE_PLUGIN_ROOT}/hooks/lib/checkpoint_manager.py write \
-  --ticket-id OMN-2144 \
+  --ticket-id {ticket_id} \
   --run-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
   --phase implement \
   --attempt 1 \
   --repo-commit-map '{"omniclaude": "a1b2c3d"}' \
   --artifact-paths '["src/foo.py", "tests/test_foo.py"]' \
-  --payload '{"branch_name": "feat/OMN-2144", "commit_sha": "a1b2c3d", "files_changed": ["src/foo.py"]}'
+  --payload '{"branch_name": "feat/{ticket_id}", "commit_sha": "a1b2c3d", "files_changed": ["src/foo.py"]}'
 ```
 
 Output:
 ```json
 {
   "success": true,
-  "checkpoint_path": "OMN-2144/a1b2c3d4.../phase_1_implement_a1.yaml",
+  "checkpoint_path": "{ticket_id}/a1b2c3d4.../phase_1_implement_a1.yaml",
   "correlation_id": "..."
 }
 ```
@@ -173,7 +179,7 @@ Output:
 
 ```bash
 python ${CLAUDE_PLUGIN_ROOT}/hooks/lib/checkpoint_manager.py read \
-  --ticket-id OMN-2144 \
+  --ticket-id {ticket_id} \
   --run-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
   --phase implement
 ```
@@ -193,7 +199,7 @@ Reads the checkpoint and then performs structural validation (schema version, pa
 
 ```bash
 python ${CLAUDE_PLUGIN_ROOT}/hooks/lib/checkpoint_manager.py validate \
-  --ticket-id OMN-2144 \
+  --ticket-id {ticket_id} \
   --run-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
   --phase implement
 ```
@@ -215,11 +221,11 @@ Output:
 ```bash
 # All checkpoints for a ticket
 python ${CLAUDE_PLUGIN_ROOT}/hooks/lib/checkpoint_manager.py list \
-  --ticket-id OMN-2144
+  --ticket-id {ticket_id}
 
 # Scoped to a specific run
 python ${CLAUDE_PLUGIN_ROOT}/hooks/lib/checkpoint_manager.py list \
-  --ticket-id OMN-2144 \
+  --ticket-id {ticket_id} \
   --run-id a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
@@ -248,7 +254,7 @@ The `ticket-pipeline` skill writes checkpoints after each phase completes and va
 
 All checkpoint operations in the pipeline context are non-blocking -- write failures log a warning but do not stop the pipeline.
 
-## Cron-Closeout Checkpoint Protocol (OMN-6887)
+## Cron-Closeout Checkpoint Protocol
 
 The headless cron-closeout pattern (`scripts/cron-closeout.sh`) uses a separate, simpler
 checkpoint file for cross-invocation state persistence. This is distinct from the per-ticket
@@ -304,5 +310,5 @@ checkpoint file entirely.
 
 - `ticket-pipeline` skill (writes checkpoints after each phase)
 - `local-review` skill (writes checkpoints after each iteration when `--checkpoint` is provided)
-- `omnibase_infra` checkpoint nodes (OMN-2143: infrastructure implementation)
-- `scripts/cron-closeout.sh` (headless cron pattern, OMN-6887)
+- `omnibase_infra` checkpoint nodes (infrastructure implementation)
+- `scripts/cron-closeout.sh` (headless cron pattern)

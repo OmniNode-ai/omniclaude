@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _inbox_dir() -> Path:
     """Get the inbox directory."""
-    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+    from omniclaude.hooks.lib.onex_state import state_path
 
     return state_path("pr-inbox")
 
