@@ -30,6 +30,7 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 from omniclaude.nodes.node_routing_emission_effect.models import (
     ModelEmissionResult,
 )
+from tests.support.fake_agent_router import FakeAgentRouter
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -140,8 +141,8 @@ class TestOnexRoutingAvailability:
         )
         mock_history = MagicMock()
 
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "domain_context": "testing",
@@ -159,7 +160,7 @@ class TestOnexRoutingAvailability:
                 "route_via_events_wrapper._get_onex_handlers",
                 return_value=(mock_compute, mock_emitter, mock_history),
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
         ):
             result = route_via_events("test prompt", str(uuid4()))
 
@@ -199,8 +200,8 @@ class TestOnexRoutingPath:
         )
         mock_history = MagicMock()
 
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "domain_context": "testing",
@@ -225,7 +226,7 @@ class TestOnexRoutingPath:
             "compute": mock_compute,
             "emitter": mock_emitter,
             "history": mock_history,
-            "router": mock_router,
+            "router": fake_router,
         }
 
     def test_high_confidence_routes_to_matched_agent(self, onex_env):
@@ -437,8 +438,8 @@ class TestOnexGracefulFallback:
         mock_emitter = MagicMock()
         mock_history = MagicMock()
 
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "activation_triggers": ["test"],
@@ -455,7 +456,7 @@ class TestOnexGracefulFallback:
                 "route_via_events_wrapper._get_onex_handlers",
                 return_value=(mock_compute, mock_emitter, mock_history),
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
         ):
             result = route_via_events("test prompt", "corr-123")
 
@@ -552,8 +553,8 @@ class TestStatsPrefetching:
         )
         mock_history = MagicMock()
 
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "activation_triggers": ["test"],
@@ -570,7 +571,7 @@ class TestStatsPrefetching:
                 "route_via_events_wrapper._get_onex_handlers",
                 return_value=(mock_compute, mock_emitter, mock_history),
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
             patch(
                 "route_via_events_wrapper._get_cached_stats", return_value=mock_stats
             ),

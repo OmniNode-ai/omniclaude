@@ -31,6 +31,7 @@ from omniclaude.lib.core.routing_event_client import (
     route_via_events,
 )
 from omniclaude.lib.errors import OnexError
+from tests.support.fake_agent_router import FakeAgentRouter
 
 # ==============================================================================
 # Fixtures
@@ -458,7 +459,7 @@ class TestRouteViaEvents:
         """Test route_via_events uses local AgentRouter when USE_EVENT_ROUTING=false."""
         mock_settings.use_event_routing = False
 
-        mock_router = MagicMock()
+        fake_router = FakeAgentRouter()
         mock_recommendation = MagicMock()
         mock_recommendation.agent_name = "agent-local"
         mock_recommendation.agent_title = "Local Agent"
@@ -471,13 +472,13 @@ class TestRouteViaEvents:
         mock_recommendation.reason = "Local reason"
         mock_recommendation.definition_path = "/path/to/local.yaml"
 
-        mock_router.route.return_value = [mock_recommendation]
+        fake_router.recommendations = [mock_recommendation]
 
         # AgentRouter is imported locally in the function, so patch at source module
         with (
             patch.object(routing_module, "settings", mock_settings),
             patch(
-                "omniclaude.lib.core.agent_router.AgentRouter", return_value=mock_router
+                "omniclaude.lib.core.agent_router.AgentRouter", return_value=fake_router
             ),
         ):
             result = await route_via_events(
@@ -485,7 +486,7 @@ class TestRouteViaEvents:
                 fallback_to_local=True,
             )
 
-            mock_router.route.assert_called_once()
+            assert fake_router.route_call_count == 1
             assert result[0]["agent_name"] == "agent-local"
 
     @pytest.mark.asyncio
@@ -543,7 +544,7 @@ class TestRouteViaEvents:
         mock_context.__aexit__ = AsyncMock(return_value=False)
 
         # Setup mock local router
-        mock_router = MagicMock()
+        fake_router = FakeAgentRouter()
         mock_recommendation = MagicMock()
         mock_recommendation.agent_name = "agent-fallback"
         mock_recommendation.agent_title = "Fallback Agent"
@@ -556,7 +557,7 @@ class TestRouteViaEvents:
         mock_recommendation.reason = "Fallback reason"
         mock_recommendation.definition_path = "/path/to/fallback.yaml"
 
-        mock_router.route.return_value = [mock_recommendation]
+        fake_router.recommendations = [mock_recommendation]
 
         # AgentRouter is imported locally in the function, so patch at source module
         with (
@@ -565,7 +566,7 @@ class TestRouteViaEvents:
                 routing_module, "RoutingEventClientContext", return_value=mock_context
             ),
             patch(
-                "omniclaude.lib.core.agent_router.AgentRouter", return_value=mock_router
+                "omniclaude.lib.core.agent_router.AgentRouter", return_value=fake_router
             ),
         ):
             result = await route_via_events(
@@ -573,7 +574,7 @@ class TestRouteViaEvents:
                 fallback_to_local=True,
             )
 
-            mock_router.route.assert_called_once()
+            assert fake_router.route_call_count == 1
             assert result[0]["agent_name"] == "agent-fallback"
 
     @pytest.mark.asyncio
@@ -621,8 +622,8 @@ class TestRouteViaEvents:
         mock_context.__aexit__ = AsyncMock(return_value=False)
 
         # Local routing also fails
-        mock_router = MagicMock()
-        mock_router.route.side_effect = Exception("Local router error")
+        fake_router = FakeAgentRouter()
+        fake_router.route_exc = Exception("Local router error")
 
         # AgentRouter is imported locally in the function, so patch at source module
         with (
@@ -631,7 +632,7 @@ class TestRouteViaEvents:
                 routing_module, "RoutingEventClientContext", return_value=mock_context
             ),
             patch(
-                "omniclaude.lib.core.agent_router.AgentRouter", return_value=mock_router
+                "omniclaude.lib.core.agent_router.AgentRouter", return_value=fake_router
             ),
         ):
             with pytest.raises(OnexError) as exc_info:
