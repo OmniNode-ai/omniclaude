@@ -176,6 +176,30 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # OMN-13501 / OMN-13502 (WS-F): no-faked-boundary detector, REPORT-ONLY.
+      # A hand-written stand-in for omniclaude's OWN inference/routing/dispatch
+      # boundary (agent router, skill dispatcher, local-LLM egress), or a
+      # patch("httpx.Client")/MagicMock substituting that egress in a real-dispatch
+      # test, is a FAKE of our architecture. Detector ships in omnibase_core 0.46.4
+      # (OMN-13898/13894 pin). Advisory (--report-only, always exit 0) until the 61
+      # pre-existing findings are burned down with REAL fixes (recorded-replay
+      # transports for egress/agent — OMN-13499 — and real EventBusInmemory wiring
+      # for routing), then --report-only drops and the CI job flips required
+      # (OMN-13501/13502 Phase 3). CI mirror: .github/workflows/no-faked-boundary.yml.
+      # Suppress an approved fixture line with: # onex-allow-faked-boundary
+      - id: check-no-faked-boundary
+        name: No faked inference/routing/dispatch boundary — COMPUTE/bus, REPORT-ONLY (OMN-13501)
+        entry: uv run python -m omnibase_core.validation.no_faked_boundary.runtime_no_faked_boundary --report-only
+        language: system
+        types: [python]
+        exclude: >-
+          (?x)^(
+            archived/|
+            archive/
+          )
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-8776: regression guard — skill prompts must not hardcode
       # `mcp__linear-server__*` tool names. Ticketing operations route
       # through ProtocolProjectTracker (`uv run onex run node_*`).
