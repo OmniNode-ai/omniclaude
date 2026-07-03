@@ -187,8 +187,9 @@ All state written to `$ONEX_STATE_DIR/pipeline-fill/` (not a cwd-relative
 - **Local fallback (no Kafka — use whenever the broker is unreachable, the
   common case on a dev Mac)**: `onex node node_pipeline_fill --input <envelope-file>.json --output receipt`
 
-Both forms run from `$OMNI_HOME/omnimarket` (canonical registry clone) and
-accept the same `ModelPipelineFillCommand` fields (`correlation_id`, `top_n`,
+Both forms run from `$OMNI_HOME/omnimarket` (canonical registry clone — never a bare `$ONEX_WORKTREES_ROOT/omnimarket`, which does not exist; worktrees are always ticket-scoped). # local-path-ok: OMNI_HOME is the correct canonical registry clone path for a source checkout per CLAUDE.md — ONEX_STATE_DIR/ONEX_WORKTREES_ROOT do not apply to a source checkout.
+
+They accept the same `ModelPipelineFillCommand` fields (`correlation_id`, `top_n`,
 `wave_cap`, `min_score`, `dry_run`, `state_dir`) — `run-node`'s `--input` takes
 the JSON payload inline as text, `node`/`run`'s `--input` takes a path to a
 JSON file. `pipeline_fill` is registered for the newer single-command `onex
