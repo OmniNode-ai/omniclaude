@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = ">=0.44.0,<0.45.0" },
+    { name = "omnibase-core", specifier = ">=0.46.4,<0.47.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.0" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
 ]
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.44.0"
+version = "0.46.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1944,9 +1944,9 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/f0/8acb947e26c48a3eeb94e7029881e3b89082967e0463f6b9b7f1ffee0158/omnibase_core-0.44.0.tar.gz", hash = "sha256:48bdbf876cf3409c1b69101451051ac796735547b7f58433b87f1d01606629fd", size = 8535342, upload-time = "2026-06-06T18:26:45.592Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/84/e33ed34d13cedcf9928209509913a855e968196c5446a969afe8f5ba4516/omnibase_core-0.46.4.tar.gz", hash = "sha256:522378c7fe66fe44643e3280950093ab6ecfec1948149a08777bf6d6c69826b3", size = 9019428, upload-time = "2026-07-03T12:29:44.137Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/2b/b2a3caee091f9a8587560dd2ae6a8f7470b5dd3dfdd963f8c9f3ba882789/omnibase_core-0.44.0-py3-none-any.whl", hash = "sha256:35cc41116af6d3ecff4806af29156b749e46ee395e67d2dc67cb22c46733f397", size = 5906584, upload-time = "2026-06-06T18:26:48.804Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/c1/70450f4ea9a13a709b2e96a38401ebb6831c8db9455f19fc3d9f61e4461f/omnibase_core-0.46.4-py3-none-any.whl", hash = "sha256:a625e497841c7e609d6d7d8c665b533d4ee06c3a65b73c0dbb29796bde57aefb", size = 6365581, upload-time = "2026-07-03T12:29:41.956Z" },
 ]
 
 [[package]]
@@ -2137,7 +2137,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = ">=0.44.0,<0.45.0" },
+    { name = "omnibase-core", specifier = ">=0.46.4,<0.47.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.0" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=v0.4.0" },

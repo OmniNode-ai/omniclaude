@@ -10,12 +10,13 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    # OMN-13873: pin from PyPI (not a git tag) for the dep-provenance gate. The
-    # PyPI 0.43.0 wheel omits omnibase_core.models.skill.model_skill_result (the
-    # git v0.43.0 tag shipped it); 0.45.0+ renamed it to model_skill_result_file.
-    # omniclaude's shared/models/model_skill_result.py imports the 0.44.0 module,
-    # so the resolvable-from-PyPI compatible range is 0.44.x.
-    "omnibase-core>=0.44.0,<0.45.0",
+    # OMN-13873: pin from PyPI (not a git tag) for the dep-provenance gate.
+    # OMN-13894: bumped to 0.46.4 — omniclaude now owns a LOCAL ModelSkillResult
+    # (shared/models/model_skill_result.py) instead of re-exporting the removed
+    # omnibase_core.models.skill.model_skill_result, so the 0.46.x rename is a
+    # no-op for dispatch code. 0.46.4 is required for the
+    # omnibase_core.validation.no_faked_boundary gate module (OMN-13501/13502).
+    "omnibase-core>=0.46.4,<0.47.0",
     "omnibase-spi>=0.22.0,<0.23.0",
     "omnibase-infra>=0.38.0,<0.39.0",
     "omnimarket>=0.4.0",
@@ -239,7 +240,7 @@ build-backend = "hatchling.build"
 [tool.uv]
 # Override transitive pins so our direct pins win.
 override-dependencies = [
-    "omnibase-core>=0.44.0,<0.45.0",
+    "omnibase-core>=0.46.4,<0.47.0",
     "omnibase-spi>=0.22.0,<0.23.0",
     "omnibase-infra>=0.38.0,<0.39.0",
 ]
@@ -247,7 +248,7 @@ override-dependencies = [
 [tool.uv.sources]
 # Release v0.25.1: pin to paired release PR heads until tags are published.
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
-# gate passes — the version constraint above (>=0.43.0,<0.46.0) governs resolution.
+# gate passes — the version constraint above (>=0.46.4,<0.47.0, OMN-13894) governs resolution.
 omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.0" }  # pragma: allowlist secret
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.24.0" }
