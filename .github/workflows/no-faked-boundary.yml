@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-13501 / OMN-13502 (WS-F): no-faked-boundary gate — REPORT-ONLY MODE for omniclaude.
+#
+# A hand-written class/object standing in for the platform's OWN inference /
+# routing / dispatch boundary (agent router, skill dispatcher, local-LLM
+# inference egress, dispatch bridge) that returns canned / prompt-echoed output,
+# or a patch("httpx.Client") / MagicMock substituting that egress inside a
+# real-dispatch test, is a FAKE of our architecture. This gate turns the
+# "handler-isolation tests pass while live fails" failure mode into a mechanical
+# detector.
+#
+# The detector is the pure COMPUTE HandlerNoFakedBoundaryCompute (OMN-13497)
+# executed over the in-memory event bus by runtime_no_faked_boundary, shipped in
+# omnibase_core 0.46.4 (PR #1377 detector-FP fix + PR #1379 gate; released
+# 2026-07-03). omniclaude takes 0.46.4 via OMN-13898/OMN-13894. The canonical
+# recorded-replay seam (patch("httpx.Client",
+# return_value=<RecordedReplayInferenceTransport>), OMN-13499) is exempt.
+#
+# WHY REPORT-ONLY: omniclaude's detector self-scan reports 61 findings = 55
+# mock_assigned_to_boundary + 6 patch_httpx_egress, all PRE-EXISTING (routing +
+# skill-dispatch + vLLM-egress tests). The gate runs advisory (--report-only,
+# always exit 0) so the population is visible in every PR and cannot grow
+# silently. The blocking-flip PR (OMN-13501/13502 Phase 3) lands the REAL
+# burn-down (recorded-replay transports for the egress/agent sites — blocked on
+# the OMN-13499 harness — and real EventBusInmemory wiring for the routing sites),
+# then drops --report-only and adds the job name to the dev branch-protection
+# required contexts (wedge-safe: merge_group trigger, no paths filter,
+# fail-propagating). Mirrors omnibase_core's blocking gate and omnimarket's
+# report-only gate.
+#
+# Suppress an approved fixture line with:  # onex-allow-faked-boundary
+
+name: No Faked Boundary Gate (report-only)
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main, dev]
+  merge_group:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  no-faked-boundary-gate:
+    name: No Faked Boundary Gate (report-only)
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen --group dev
+
+      - name: Run no-faked-boundary gate (full src + tests, REPORT-ONLY)
+        run: |
+          uv run python -m omnibase_core.validation.no_faked_boundary.runtime_no_faked_boundary \
+            --report-only \
+            src tests
