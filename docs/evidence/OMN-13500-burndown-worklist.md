@@ -107,3 +107,15 @@ closing this ticket.
 2. **Agent B — C2 (16 findings, 1 file):** recorded-replay migration for the skill-dispatch boundary; requires OMN-13499 harness import + fixture recording session.
 3. **Agent C — C3 (4 findings, 1 file):** smallest cluster; typed-fake/config-narrowing, no recorded-replay needed.
 4. **Agent D — C4 (7 findings, 2 files):** recorded-replay migration for the vLLM httpx boundary; requires live-endpoint recording session (same harness as Agent B, different fixture set).
+
+## OCC deploy evidence
+
+The only runtime source change in this burn-down is a backward-compatible `sync_transport`
+dependency-injection seam in `src/omniclaude/nodes/node_local_llm_inference_effect/backends/backend_vllm.py`
+(default `None` preserves production behavior). Because it touches a runtime path, `deploy-gate` requires
+deploy DoD evidence in an OCC contract. Companion OCC PR **onex_change_control#3552** carries net-new
+`contracts/OMN-13500.yaml` plus `dod-omniclaude-pr-1849`, `dod-deploy-assessment` (deploy disposition:
+runtime path touched, no live mutation, operator-gated), and `dod-occ-self` receipts, all
+`contract_sha256`-bound (`sha256:93d5bbf3…`). This PR pins `Evidence-Source: OCC#3552` +
+`Evidence-Ticket: OMN-13500` so `deploy-gate`, `occ-preflight`, and the Receipt Gate resolve the contract
+from that OCC PR head.
