@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "ticket_id": "OMN-13501",
+  "ticket_id": "OMN-13899",
   "status": "PASS",
   "run_timestamp": "2026-07-03T14:55:00Z",
   "summary": "PASS: wires the no-faked-boundary detector into omniclaude in REPORT-ONLY mode (CI workflow + pre-commit hook), mirroring omnimarket #1590. The detector ships in omnibase_core 0.46.4, which reached omniclaude dev via #1843 (OMN-13898/OMN-13894). Advisory only; the blocking flip + 61-site burn-down are deferred to OMN-13501/13502 Phase 3 (22 of 61 sites need the OMN-13499 recorded-replay harness, not yet in core 0.46.4).",
