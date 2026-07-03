@@ -32,6 +32,12 @@ on:
         required: false
         default: pyproject.toml
 
+# Least privilege: the gate only reads the caller tree and fetches the checker
+# from omniclaude@main via the default GITHUB_TOKEN. Explicit read-only
+# top-level permissions satisfy the Checkov write-all check on this workflow.
+permissions:
+  contents: read
+
 jobs:
   dep-provenance-gate:
     name: dep-provenance-gate

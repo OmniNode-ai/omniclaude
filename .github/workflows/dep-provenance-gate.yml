@@ -25,6 +25,11 @@ concurrency:
   group: dep-provenance-gate-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: the gate only reads the checked-out tree. Explicit read-only
+# top-level permissions satisfy the Checkov write-all check on this workflow.
+permissions:
+  contents: read
+
 jobs:
   dep-provenance-gate:
     uses: ./.github/workflows/dep-provenance-gate-reusable.yml
