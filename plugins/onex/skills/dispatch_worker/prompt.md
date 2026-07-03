@@ -195,8 +195,9 @@ with these rules regardless of role or spec contents:
      missing the unbulleted `Evidence-Source: OCC#<n>` (or `<sha>`) OR
      `Evidence-Ticket: <TICKET-ID>` line FAILS the Receipt-Gate even with green
      checks. Alternative: patch the code PR body to include both lines via the
-     `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` (the REST PATCH path,
-     not the interactive editor — see [[reference_gh_pr_edit_projects_classic]]).
+     `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` — the REST PATCH +
+     read-back path, never the interactive PR-edit command (Projects-classic
+     silent-no-op trap, OMN-13904).
 
 9. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
    touches UI behavior, the required proof is a Playwright interaction with the operator's
