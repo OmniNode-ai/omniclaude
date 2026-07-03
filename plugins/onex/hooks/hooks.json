@@ -1,6 +1,18 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
-  "description": "OmniClaude Core Hooks - ALL HOOKS DISABLED for the measurement baseline (OMN-13244). Every registration was removed so Claude Code invokes no onex hooks; the scripts remain on disk and re-registration is a pure config change. Restore from git history / revert OMN-13244 to re-enable.",
+  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856 Option A carve-out. Every context-injection/measurement hook stays DISABLED; the ONLY re-registered hook is the Done-flip durable-evidence guard (operator-approved, no fake Done). All other scripts remain on disk and re-registration stays a pure config change.",
   "version": "1.3.0",
-  "hooks": {}
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__linear-server__(save_issue|update_issue)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

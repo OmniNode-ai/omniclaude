@@ -123,9 +123,14 @@ def test_tracker_save_issue_covered_by_workflow_guard_matcher() -> None:
                 "entry-gate forwards tracker.* epic creation calls to the guard."
             )
             return
-    pytest.fail(
-        f"No PreToolUse hook entry found for {guard_script!r} in hooks.json. "
-        "The workflow guard must be registered."
+    # Under the OMN-13856 Option A carve-out, the measurement baseline registers
+    # ONLY the Done-flip guard — the workflow guard is intentionally not
+    # re-registered. The matcher-correctness assertion above only applies once
+    # the workflow guard is re-registered, so skip rather than fail here.
+    pytest.skip(
+        f"{guard_script!r} is not registered (OMN-13856 Option A carve-out registers "
+        "only the Done-flip guard). Re-enable this assertion when the workflow guard "
+        "is re-registered."
     )
 
 
