@@ -1,0 +1,47 @@
+{
+  "fixture_version": "golden_chain_fixture.v1",
+  "provenance": {
+    "endpoint": "http://localhost:8000/v1/chat/completions",
+    "endpoint_ref": "local-coder",
+    "fixture_version": "golden_chain_fixture.v1",
+    "model_id": "Qwen3.6-35B-A3B",
+    "prompt_hash": "sha256:bec0b3b8fffcc7cebf3e69d7ee30c0c0cad69b7e6e57a1e956160fc20bd5c427",
+    "provider": "vllm",
+    "recorded_at": "2026-07-03T17:30:15.216058+00:00",
+    "request_hash": "sha256:44fd95a0285aa0479a700c9ee19e4e7bf544138cd904cb3c68be0c1eb3dee1c8",
+    "routing_contract_hash": "none",
+    "routing_overlay_hash": "none"
+  },
+  "raw_response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "logprobs": null,
+        "message": {
+          "annotations": null,
+          "audio": null,
+          "content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Task:** Greet the world\n   - **Constraint:** In one short sentence\n   - **Tone:** Open, but generally positive/welcoming\n\n2.  **Identify Key Requirements:**\n   - Must be exactly one sentence\n   - Must be short\n   - Must be a greeting directed at \"the world\"\n\n3.  **Brainstorming Options:**\n   - Hello, world!\n   - Greetings to all of you out there.\n   - Welcome to a beautiful day, world.\n   - Hello, beautiful world!\n   - Greetings, world!\n   - Hello, world, and welcome!\n\n4.  **Evaluate Against Constraints:**\n   - \"Hello, world!\" - Classic, one sentence, very short. Fits perfectly.\n   - \"Greetings, world!\" - Also good.\n   - \"Hello, beautiful world!\" - Slightly longer but still short.\n   - The constraint says \"one short sentence\", so simplicity is key.\n\n5.  **Select Best Option:**\n   \"Hello, world!\" is the most direct, universally recognized, and perfectly fits the constraint.\n\n6.  **Final Check:**\n   - One sentence? Yes.\n   - Short? Yes.\n   - Greets the world? Yes.\n   - Ready. Output matches exactly.\u2705\n</think>\n\nHello, world!",
+          "function_call": null,
+          "reasoning": null,
+          "refusal": null,
+          "role": "assistant",
+          "tool_calls": []
+        },
+        "routed_experts": null,
+        "stop_reason": null,
+        "token_ids": null
+      }
+    ],
+    "created": 1783099802,
+    "id": "chatcmpl-a7cca1ddc786d66d",
+    "model": "Qwen3.6-35B-A3B",
+    "object": "chat.completion",
+    "usage": {
+      "completion_tokens": 309,
+      "prompt_tokens": 19,
+      "prompt_tokens_details": null,
+      "total_tokens": 328
+    }
+  }
+}

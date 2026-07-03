@@ -18,15 +18,25 @@ Covers:
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import yaml
 from omnibase_core.enums import EnumMessageCategory
+from omnibase_infra.runtime import MessageDispatchEngine
 
+from omniclaude.nodes.node_omnimemory_promotion.models.model_promoted_pattern import (
+    ModelPromotedPattern,
+)
+from omniclaude.nodes.node_omnimemory_promotion.store_pattern_in_memory import (
+    StorePatternInMemory,
+)
+from omniclaude.quirks.memory_bridge import NodeQuirkMemoryBridgeEffect
+from omniclaude.quirks.models import QuirkFinding, QuirkType
 from omniclaude.runtime.wiring_dispatchers import (
     ContractLoadError,
     QuirkFindingDispatcher,
@@ -43,6 +53,76 @@ from omniclaude.shared.models.model_skill_node_contract import (
     ModelSkillNodeExecution,
 )
 from omniclaude.shared.models.model_skill_result import SkillResultStatus
+
+# ---------------------------------------------------------------------------
+# Typed test doubles (OMN-13500 cluster C3 — replace boundary MagicMocks)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _StubContainer:
+    """Typed stand-in for the ONEX container carrying only the attributes the
+    wiring / dispatcher code reads (``service_registry``, ``quirk_memory_bridge``).
+
+    Replaces ``MagicMock()`` containers so the resolution path exercises real
+    ``hasattr`` / attribute reads instead of auto-spawned mock attributes.
+    """
+
+    service_registry: object | None = None
+    quirk_memory_bridge: object | None = None
+
+
+@dataclass
+class _StubWireDispatchersConfig:
+    """Typed stand-in for ``ModelDomainPluginConfig`` carrying only the fields
+    ``PluginClaude.wire_dispatchers`` reads.
+
+    Avoids a full ``MagicMock`` masquerading as config: the dispatch engine is a
+    real ``MessageDispatchEngine`` (the quirk-finding wiring genuinely registers
+    a dispatcher + route on it), the container is a typed stub, and the
+    correlation id is a real ``UUID``.
+    """
+
+    dispatch_engine: MessageDispatchEngine
+    container: _StubContainer
+    correlation_id: UUID
+
+
+class _RaisingPatternStore:
+    """``ProtocolPatternStore``-conformant double whose every operation raises.
+
+    Used to exercise ``QuirkFindingDispatcher.handle`` fail-open behaviour against
+    a *genuine* bridge exception: a valid finding parses, ``promote_finding`` calls
+    ``get_by_key`` on this store, the error propagates out of ``process_payload``,
+    and the dispatcher must swallow it and return ``None``.
+    """
+
+    def __init__(self, error: BaseException) -> None:
+        self._error = error
+
+    def save(self, pattern: ModelPromotedPattern) -> None:
+        raise self._error
+
+    def get_by_key(self, pattern_key: str) -> ModelPromotedPattern | None:
+        raise self._error
+
+    def get_by_id(self, pattern_id: str) -> ModelPromotedPattern:
+        raise self._error
+
+
+def _valid_finding_payload() -> dict[str, Any]:
+    """Serialize a valid ``QuirkFinding`` to the JSON payload shape delivered on
+    ``onex.evt.omniclaude.quirk-finding-produced.v1``."""
+    finding = QuirkFinding(
+        finding_id=uuid4(),
+        quirk_type=QuirkType.STUB_CODE,
+        signal_id=uuid4(),
+        policy_recommendation="observe",
+        fix_guidance="Replace stub with real implementation.",
+        confidence=0.8,
+    )
+    return finding.model_dump(mode="json")
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -720,11 +800,14 @@ class TestPluginWireDispatchers:
         from omniclaude.runtime.plugin import PluginClaude
 
         plugin = PluginClaude()
-        config = MagicMock()
-        config.dispatch_engine = MagicMock()
-        config.container = MagicMock()
-        config.container.service_registry = None
-        config.correlation_id = uuid4()
+        # Real dispatch engine: the skip path still runs wire_quirk_finding_subscription,
+        # which registers a dispatcher + route on the engine. A typed config stub carries
+        # only the fields wire_dispatchers reads — not a MagicMock masquerading as config.
+        config = _StubWireDispatchersConfig(
+            dispatch_engine=MessageDispatchEngine(),
+            container=_StubContainer(service_registry=None),
+            correlation_id=uuid4(),
+        )
 
         with pytest.MonkeyPatch.context() as mp:
             mp.delenv("OMNICLAUDE_CONTRACTS_ROOT", raising=False)
@@ -818,19 +901,15 @@ class TestQuirkFindingDispatcher:
 
     @pytest.mark.asyncio
     async def test_handle_calls_process_payload_on_bridge(self) -> None:
-        """Dispatcher calls bridge.process_payload() with the envelope payload."""
-        from unittest.mock import MagicMock
+        """Dispatcher promotes the envelope payload through a real memory bridge."""
+        # Real in-memory bridge — no MagicMock at the process_payload boundary.
+        store = StorePatternInMemory()
+        bridge = NodeQuirkMemoryBridgeEffect(store=store)
+        container = _StubContainer(quirk_memory_bridge=bridge)
 
-        mock_bridge = MagicMock()
-        mock_bridge.process_payload.return_value = MagicMock()  # ModelPromotedPattern
+        dispatcher = QuirkFindingDispatcher(container=container)
 
-        mock_container = MagicMock()
-        mock_container.service_registry = None
-        mock_container.quirk_memory_bridge = mock_bridge
-
-        dispatcher = QuirkFindingDispatcher(container=mock_container)
-
-        payload = {"finding_id": "test-123", "quirk_type": "STUB_CODE"}
+        payload = _valid_finding_payload()
         envelope = {
             "payload": payload,
             "__bindings": {},
@@ -840,7 +919,12 @@ class TestQuirkFindingDispatcher:
         result = await dispatcher.handle(envelope)
 
         assert result == "promoted"
-        mock_bridge.process_payload.assert_called_once_with(payload)
+        # Real promotion side effect: the finding is now persisted in the store.
+        stored = store.get_by_key(
+            f"QUIRK:{payload['quirk_type']}:{payload['policy_recommendation'].upper()}"
+        )
+        assert stored is not None
+        assert payload["finding_id"] in stored.evidence_bundle_ids
 
     @pytest.mark.asyncio
     async def test_handle_returns_none_when_bridge_unavailable(self) -> None:
@@ -863,14 +947,13 @@ class TestQuirkFindingDispatcher:
     @pytest.mark.asyncio
     async def test_handle_returns_none_when_process_payload_returns_none(self) -> None:
         """Dispatcher returns None when bridge.process_payload() returns None (parse error)."""
-        mock_bridge = MagicMock()
-        mock_bridge.process_payload.return_value = None  # Malformed payload
+        # Real bridge: a malformed payload fails QuirkFinding.model_validate inside
+        # process_payload, which returns None — no MagicMock at the boundary.
+        store = StorePatternInMemory()
+        bridge = NodeQuirkMemoryBridgeEffect(store=store)
+        container = _StubContainer(quirk_memory_bridge=bridge)
 
-        mock_container = MagicMock()
-        mock_container.service_registry = None
-        mock_container.quirk_memory_bridge = mock_bridge
-
-        dispatcher = QuirkFindingDispatcher(container=mock_container)
+        dispatcher = QuirkFindingDispatcher(container=container)
 
         envelope = {
             "payload": {"bad": "data"},
@@ -881,21 +964,23 @@ class TestQuirkFindingDispatcher:
         result = await dispatcher.handle(envelope)
 
         assert result is None
+        # Malformed payload was rejected — nothing was persisted.
+        assert store.get_by_key("QUIRK:STUB_CODE:OBSERVE") is None
 
     @pytest.mark.asyncio
     async def test_handle_is_fail_open_on_exception(self) -> None:
         """Dispatcher returns None and does not raise on unexpected exceptions."""
-        mock_bridge = MagicMock()
-        mock_bridge.process_payload.side_effect = RuntimeError("unexpected failure")
+        # Real bridge over a store that raises: a valid finding parses, then
+        # promote_finding -> store.get_by_key raises, the error escapes
+        # process_payload, and the dispatcher must swallow it (genuine fail-open).
+        store = _RaisingPatternStore(RuntimeError("unexpected failure"))
+        bridge = NodeQuirkMemoryBridgeEffect(store=store)
+        container = _StubContainer(quirk_memory_bridge=bridge)
 
-        mock_container = MagicMock()
-        mock_container.service_registry = None
-        mock_container.quirk_memory_bridge = mock_bridge
-
-        dispatcher = QuirkFindingDispatcher(container=mock_container)
+        dispatcher = QuirkFindingDispatcher(container=container)
 
         envelope = {
-            "payload": {"finding_id": "test-456"},
+            "payload": _valid_finding_payload(),
             "__bindings": {},
             "__debug_trace": {"topic": "onex.evt.omniclaude.quirk-finding-produced.v1"},
         }
