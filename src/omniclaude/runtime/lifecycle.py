@@ -222,7 +222,7 @@ class _OmnimarketEmitDaemon:
                 fd = os.open(
                     self._pid_path,
                     os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                    0o644,
+                    0o600,
                 )
             except FileExistsError:
                 try:
