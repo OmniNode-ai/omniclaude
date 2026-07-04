@@ -1,0 +1,39 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13939"
+title: "Add rolling_plan_governor skill"
+summary: >-
+  Add the rolling_plan_governor methodology skill and thin orchestrator node so
+  the canonical seven-day plan can be reconciled from ledger and live evidence
+  with minimal churn.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-skill-manifest"
+    description: >-
+      The rolling_plan_governor skill manifest and prompt define the evidence
+      reconciliation workflow, minimal-churn constraints, and dated revision-log
+      behavior.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          test -f plugins/onex/skills/rolling_plan_governor/SKILL.md &&
+          test -f plugins/onex/skills/rolling_plan_governor/prompt.md
+  - id: "dod-orchestrator-node"
+    description: >-
+      The skill has a generated orchestrator shell contract and node module
+      wired to the shared skill-request handler.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          test -f src/omniclaude/nodes/node_skill_rolling_plan_governor_orchestrator/contract.yaml &&
+          test -f src/omniclaude/nodes/node_skill_rolling_plan_governor_orchestrator/node.py
