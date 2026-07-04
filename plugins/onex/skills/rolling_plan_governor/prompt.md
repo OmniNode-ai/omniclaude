@@ -8,9 +8,9 @@ sections. Behavioral contracts and hard-fails are in `SKILL.md`.
 
 Resolve paths from the environment — never hardcode absolute paths:
 ```
-PLAN="${PLAN:-$OMNI_HOME/docs/plans/ROLLING_SEVEN_DAY_PLAN.md}"   # or --plan
+PLAN="${PLAN:-$OMNI_HOME/docs/plans/ROLLING_SEVEN_DAY_PLAN.md}"   # local-path-ok: OMNI_HOME = canonical omni_home repo root (root CLAUDE.md rule #6); --plan overrides
 # --ledger, or default to the newest handoff:
-LEDGER="$(ls -t "$OMNI_HOME"/docs/handoff/*handoff*.md 2>/dev/null | head -1)"
+LEDGER="$(ls -t "$OMNI_HOME"/docs/handoff/*handoff*.md 2>/dev/null | head -1)"   # local-path-ok: OMNI_HOME = canonical omni_home repo root
 ```
 
 ---
@@ -98,8 +98,8 @@ Edit `$PLAN` in place with targeted edits — **never** a full rewrite:
    Recommended Next Actions → Assumptions).
 2. Unless `--dry-run` or `--no-commit`: stage and commit.
    ```
-   git -C "$OMNI_HOME" add docs/plans/ROLLING_SEVEN_DAY_PLAN.md
-   git -C "$OMNI_HOME" commit -m "docs(OMN-XXXX): rolling-plan governor re-cut <date> — <one-line>"
+   git -C "$OMNI_HOME" add docs/plans/ROLLING_SEVEN_DAY_PLAN.md   # local-path-ok: OMNI_HOME = canonical omni_home repo root
+   git -C "$OMNI_HOME" commit -m "docs(OMN-XXXX): rolling-plan governor re-cut <date> — <one-line>"   # local-path-ok: OMNI_HOME repo root
    ```
    Use the OMN-XXXX from the ledger's driving work (or a plan-maintenance
    ticket). Report the commit sha. `--no-commit` writes but leaves it dirty;

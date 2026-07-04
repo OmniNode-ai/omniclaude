@@ -16,7 +16,7 @@ tags:
 author: OmniClaude Team
 args:
   - name: --plan
-    description: "Path to the canonical rolling plan (default: docs/plans/ROLLING_SEVEN_DAY_PLAN.md in $OMNI_HOME)"
+    description: "Path to the canonical rolling plan (default: docs/plans/ROLLING_SEVEN_DAY_PLAN.md under the omni_home repo root)"
     required: false
   - name: --ledger
     description: "Path(s) to the primary ledger input for this cycle — usually the latest session handoff (default: newest docs/handoff/*handoff*.md). Comma-separated for multiple."
