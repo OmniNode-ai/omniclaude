@@ -277,6 +277,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Provide Checkov soft-fail problem matcher
+        run: |
+          cat > checkov-problem-matcher-softfail.json <<'JSON'
+          {
+            "problemMatcher": [
+              {
+                "owner": "checkov-softfail",
+                "pattern": [
+                  {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                  }
+                ]
+              }
+            ]
+          }
+          JSON
+
       - name: Run Checkov (IaC scanner)
         uses: bridgecrewio/checkov-action@4a1afa9897f7afe297a3762c926e1e800361464f  # v12.1347.0 (pinned 2026-03-04)
         with:
