@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-13914",
+  "status": "PASS",
+  "run_timestamp": "2026-07-04T05:05:00Z",
+  "summary": "PASS: omniclaude's PR Title Check caller workflow (.github/workflows/pr-title-check.yml) now fires on synchronize and reopened in addition to opened+edited, so a push or reopen re-evaluates the title instead of leaving a stale check that wedges the merge queue. This is omniclaude's slice of the OMN-13909 org-wide pr-title trigger fan-out. Shipped in omniclaude PR #1850 (ci(OMN-13914)), merged to dev at 2026-07-03T20:57:48Z as merge commit 73cbe85dded12c9b3522205242125ea64b2a6edf. Workflow-only change; no runtime code, no deploy.",
+  "checks": [
+    {
+      "name": "pr-title-check trigger includes synchronize+reopened",
+      "status": "PASS",
+      "command": "grep -qE 'types: \\[opened, edited, synchronize, reopened\\]' .github/workflows/pr-title-check.yml  # line 9 matches"
+    },
+    {
+      "name": "OMN-13914 merge commit is on dev",
+      "status": "PASS",
+      "command": "git merge-base --is-ancestor 73cbe85dded12c9b3522205242125ea64b2a6edf origin/dev  # exit 0 (73cbe85 ancestor of dev)"
+    },
+    {
+      "name": "omniclaude PR #1850 is merged",
+      "status": "PASS",
+      "command": "gh pr view 1850 --repo OmniNode-ai/omniclaude --json state,mergeCommit  # state=MERGED mergeCommit=73cbe85dded12c9b3522205242125ea64b2a6edf"
+    }
+  ]
+}
