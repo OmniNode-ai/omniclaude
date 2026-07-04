@@ -76,6 +76,15 @@ Python blocks in this document are pseudocode specifying logic and data shape, n
 callable runtime helpers. The LLM executes the equivalent logic through Bash, Grep,
 Git, and GitHub CLI tool calls, holding intermediate state in its working context.
 
+**Honest node-backing state**: none of `--audit`, `--triage`, or `--prune` is backed by an
+executable ONEX node today. There is no `worktree*` entry in
+`omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml` — this skill is prompt-driven
+end-to-end, not node-dispatched. A candidate backing node for the `--prune` op,
+`node_pr_lifecycle_worktree_prune_effect` (omnimarket), had its contract routing fixed in
+OMN-13882, but it is **not wired to this skill**. Wiring it is tracked as follow-up work,
+out of scope here — do not treat `--prune` as node-backed until that wiring lands and this
+section is updated.
+
 The typed models live in `src/omniclaude/hooks/worktree_sweep.py` and define the
 report schema: `EnumWorktreeStatus`, `ModelWorktreeEntry`, `ModelWorktreeSweepReport`.
 
@@ -161,13 +170,24 @@ done
 
 ```bash
 git -C "${worktree_path}" branch --show-current
-git -C "${worktree_path}" fetch origin main --quiet 2>/dev/null
-git -C "${worktree_path}" log --oneline origin/main..HEAD 2>/dev/null | wc -l
+
+# Resolve the repo's actual integration branch — do NOT hardcode main or dev.
+# Prefer the remote's default branch; fall back to origin/dev (every OmniNode
+# repo's integration branch is dev, not main).
+integration_branch=$(git -C "${worktree_path}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+integration_branch="${integration_branch:-dev}"
+
+git -C "${worktree_path}" fetch origin "${integration_branch}" --quiet 2>/dev/null
+git -C "${worktree_path}" log --oneline "origin/${integration_branch}..HEAD" 2>/dev/null | wc -l
 git -C "${worktree_path}" status --porcelain
 git -C "${worktree_path}" log -1 --format=%aI 2>/dev/null
 ```
 
-**Important**: Use `origin/main` not `main` for the merge check.
+**Important**: Diff against the repo's actual integration branch (`origin/${integration_branch}`,
+resolved dynamically above — falls back to `origin/dev`), never a hardcoded `origin/main` or
+bare `main`. Every OmniNode repo's integration branch is `dev`; diffing against `origin/main`
+produces meaningless ahead-counts in the hundreds/thousands and misclassifies merged worktrees
+as STALE or DIRTY_ACTIVE instead of SAFE_TO_DELETE.
 
 ### Step 3: Categorize <!-- ai-slop-ok: skill-step-heading -->
 
@@ -353,9 +373,14 @@ min_diff_lines = int(args.min_diff_lines) if args.min_diff_lines else 50
 
 **prune:** Verify clean state, then `git -C "$CANONICAL_ROOT" worktree remove --force "$wt"`
 
-**ship_it:** Check for existing PR, then stage uncommitted changes, push, and create PR:
+**ship_it:** Check for existing PR, then stage uncommitted changes, push, and create PR
+against the repo's actual integration branch (resolve dynamically as in Step 2 of
+`--audit` mode; do not hardcode `main` — every OmniNode repo integrates via `dev`):
 ```bash
-gh pr create --repo "$REPO_SLUG" --head "$BRANCH" --base main \
+integration_branch=$(git -C "$REPO_SLUG" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+integration_branch="${integration_branch:-dev}"
+
+gh pr create --repo "$REPO_SLUG" --head "$BRANCH" --base "$integration_branch" \
   --title "chore: ship stale worktree $BRANCH" \
   --body "Auto-created by worktree skill (--triage)."
 ```
