@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-13902: sibling version-alignment automation.
+#
+# Problem: cross-repo sibling pins (omnibase-core / spi / compat / infra) go
+# stale in this repo's uv.lock whenever a sibling releases a new in-range
+# version on PyPI. Detection existed (sibling-pin guard, orphan-pin gate) but
+# alignment was manual, so drift recurred and blocked work (OMN-13156,
+# OMN-13402, OMN-13814 were all one-off repin tickets; the 2026-07-03 R3
+# stability refresh was blocked by a stale core pin).
+#
+# This workflow is the Dependabot-shaped, sibling-release-triggered fix the
+# ticket asks for, implemented as the ticket-sanctioned "scheduled workflow per
+# repo". On a schedule (and on demand) it runs `uv lock --upgrade-package` for
+# each omninode sibling and, if uv.lock changed, opens a bot PR with the
+# refreshed lock. Repos whose siblings are pinned to an immutable git rev/tag in
+# `[tool.uv.sources]` (e.g. omnibase-infra here, per OMN-13878) are left
+# untouched — `uv lock --upgrade-package` cannot move a pinned rev, so the
+# Dep-Provenance state is preserved automatically with no per-repo tuning.
+#
+# Canary rollout (OMN-13902): landed on omnimemory first per canary-before-
+# fan-out. Once proven green, the same workflow file is copied to the other
+# PyPI-range-pinned consumers (omniclaude, omniintelligence, omnibase_infra).
+
+name: Sibling lock refresh
+
+on:
+  schedule:
+    # Daily at 06:17 UTC — after the overnight release window, before the day's work.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Space-separated sibling packages to refresh (default: all omninode siblings)."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sibling-lock-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh sibling locks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (CROSS_REPO_PAT so the bot PR triggers CI)
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.CROSS_REPO_PAT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Refresh sibling package locks
+        id: refresh
+        run: |
+          set -euo pipefail
+          # Default sibling set. Git/tag-pinned siblings are safe to include:
+          # `uv lock --upgrade-package` cannot move an immutable rev/tag, so
+          # those entries stay put and only PyPI-range-pinned siblings move.
+          DEFAULT="omnibase-core omnibase-spi omnibase-compat omnibase-infra omnimarket omniintelligence"
+          PACKAGES="${{ github.event.inputs.packages }}"
+          PACKAGES="${PACKAGES:-$DEFAULT}"
+          ARGS=()
+          for pkg in $PACKAGES; do
+            ARGS+=("--upgrade-package" "$pkg")
+          done
+          echo "Refreshing: ${ARGS[*]}"
+          uv lock "${ARGS[@]}"
+          if git diff --quiet -- uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "uv.lock unchanged — all sibling pins already fresh."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Sibling lock delta:"
+            git --no-pager diff --stat -- uv.lock
+          fi
+
+      - name: Open refresh PR
+        if: steps.refresh.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          BRANCH="bot/sibling-lock-refresh-$(date -u +%Y%m%d%H%M%S)"
+          git config user.name "omninode-bot"
+          git config user.email "bot@omninode.ai"
+          git checkout -b "$BRANCH"
+          git add uv.lock
+          git commit -m "chore(deps): refresh omninode sibling locks [bot]"
+          git push origin "$BRANCH"
+          # Build the PR body in a file to avoid heredoc-in-YAML indentation pitfalls.
+          {
+            printf '%s\n' "Automated sibling version-alignment (OMN-13902)."
+            printf '\n'
+            printf '%s\n' "\`uv lock --upgrade-package\` refreshed the omninode sibling pins in"
+            printf '%s\n' "\`uv.lock\` to the latest in-range PyPI releases. Git/tag-pinned siblings"
+            printf '%s\n' "(see \`[tool.uv.sources]\`) were left untouched."
+            printf '\n'
+            printf '%s\n' "Opened automatically so stale-sibling-lock drift no longer requires a"
+            printf '%s\n' "manual repin ticket. Review the lock delta and merge on green CI."
+          } > /tmp/sibling_refresh_body.md
+          # `chore(deps):` prefix is exempt from the pr-title ticket gate, matching
+          # the existing publish-downstream-pin-bump bot convention.
+          gh pr create \
+            --base "${GITHUB_REF_NAME}" \
+            --head "$BRANCH" \
+            --title "chore(deps): refresh omninode sibling locks [bot]" \
+            --body-file /tmp/sibling_refresh_body.md
