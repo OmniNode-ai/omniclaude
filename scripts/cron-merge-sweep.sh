@@ -105,13 +105,6 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   MERGE_SWEEP_SOURCED=true
 fi
 
-if [[ "${MERGE_SWEEP_SOURCED}" != "true" ]]; then
-  cat >&2 <<'JSON'
-{"status":"quarantined","reason":"OMN-10181: merge-sweep launchd source remains disabled until OMN-10182 proves both the omnimarket CLI round-trip and the omniclaude run.sh shim path","ticket":"OMN-10181","blocked_by":["OMN-10182"]}
-JSON
-  exit 64
-fi
-
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
