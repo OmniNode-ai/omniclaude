@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# OMN-13501 / OMN-13502 (WS-F): no-faked-boundary gate — REPORT-ONLY MODE for omniclaude.
+# OMN-13501 / OMN-13502 (WS-F): no-faked-boundary gate — ENFORCING for omniclaude.
 #
 # A hand-written class/object standing in for the platform's OWN inference /
 # routing / dispatch boundary (agent router, skill dispatcher, local-LLM
@@ -18,21 +18,18 @@
 # recorded-replay seam (patch("httpx.Client",
 # return_value=<RecordedReplayInferenceTransport>), OMN-13499) is exempt.
 #
-# WHY REPORT-ONLY: omniclaude's detector self-scan reports 61 findings = 55
-# mock_assigned_to_boundary + 6 patch_httpx_egress, all PRE-EXISTING (routing +
-# skill-dispatch + vLLM-egress tests). The gate runs advisory (--report-only,
-# always exit 0) so the population is visible in every PR and cannot grow
-# silently. The blocking-flip PR (OMN-13501/13502 Phase 3) lands the REAL
-# burn-down (recorded-replay transports for the egress/agent sites — blocked on
-# the OMN-13499 harness — and real EventBusInmemory wiring for the routing sites),
-# then drops --report-only and adds the job name to the dev branch-protection
-# required contexts (wedge-safe: merge_group trigger, no paths filter,
-# fail-propagating). Mirrors omnibase_core's blocking gate and omnimarket's
-# report-only gate.
+# ENFORCING: the REAL burn-down (recorded-replay transports for the
+# egress/agent sites and real EventBusInmemory wiring for the routing sites)
+# landed in OMN-13500 (#1849), taking omniclaude's detector self-scan from 61
+# findings (55 mock_assigned_to_boundary + 6 patch_httpx_egress) to zero. This
+# PR (OMN-13501/13502 Phase 3) drops --report-only so the gate fails the build
+# on any new faked-boundary finding, and the job name becomes a dev
+# branch-protection required context (wedge-safe: merge_group trigger, no
+# paths filter, fail-propagating). Mirrors omnibase_core's blocking gate.
 #
 # Suppress an approved fixture line with:  # onex-allow-faked-boundary
 
-name: No Faked Boundary Gate (report-only)
+name: No Faked Boundary Gate
 
 on:
   pull_request:
@@ -59,7 +56,7 @@ jobs:
 
   no-faked-boundary-gate:
     needs: occ-preflight
-    name: No Faked Boundary Gate (report-only)
+    name: No Faked Boundary Gate
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
@@ -99,8 +96,7 @@ jobs:
             sleep "$sleep_seconds"
           done
 
-      - name: Run no-faked-boundary gate (full src + tests, REPORT-ONLY)
+      - name: Run no-faked-boundary gate (full src + tests, ENFORCING)
         run: |
           uv run python -m omnibase_core.validation.no_faked_boundary.runtime_no_faked_boundary \
-            --report-only \
             src tests
