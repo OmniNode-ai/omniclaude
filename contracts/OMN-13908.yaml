@@ -1,0 +1,32 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-13908
+title: "Fix worktree SKILL.md base-branch bug and honest node-backing state"
+summary: "Fix worktree skill --audit/--triage base-branch assumption (origin/main -> repo's actual integration branch) and add honest node-backing state note"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: manual
+    description: "Base-branch resolution in the worktree skill no longer hardcodes origin/main"
+    command: "grep -n 'origin/main' plugins/onex/skills/worktree/SKILL.md"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "gh pr checks --repo OmniNode-ai/omniclaude 1856"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "worktree SKILL.md no longer hardcodes origin/main for the audit ahead-count and ship_it PR base branch; both dynamically resolve the repo's actual integration branch (falling back to origin/dev)"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -c 'origin/main' plugins/onex/skills/worktree/SKILL.md | grep -qv '^[0-9]*$' || grep -n 'hardcoded origin/main\\|never a hardcoded' plugins/onex/skills/worktree/SKILL.md"
+  - id: dod-002
+    description: "worktree SKILL.md Runtime Model section states honestly that none of --audit/--triage/--prune is node-backed today"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'Honest node-backing state' plugins/onex/skills/worktree/SKILL.md"
