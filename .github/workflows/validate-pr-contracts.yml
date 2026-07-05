@@ -51,7 +51,7 @@ jobs:
         if: github.event_name != 'merge_group'
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Checkout omnibase_infra (for validation script)
         if: github.event_name != 'merge_group'

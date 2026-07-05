@@ -98,7 +98,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
@@ -1056,7 +1056,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check no hardcoded internal IPs
         working-directory: ${{ github.workspace }}
