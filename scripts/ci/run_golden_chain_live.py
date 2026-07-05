@@ -131,6 +131,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--db-dsn",
+        dest="analytics_url",
         default=(
             os.environ.get("OMNIDASH_ANALYTICS_DB_URL")
             or os.environ.get("DATABASE_URL")
@@ -148,7 +149,7 @@ def _require(value: str | None, name: str) -> str:
 def initialize_database(analytics_url: str) -> None:
     for attempt in range(1, DB_CONNECT_ATTEMPTS + 1):
         try:
-            with psycopg2.connect(analytics_url) as conn:
+            with psycopg2.connect(analytics_url, connect_timeout=5) as conn:
                 conn.autocommit = True
                 with conn.cursor() as cur:
                     cur.execute(DDL)

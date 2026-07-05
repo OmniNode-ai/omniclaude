@@ -215,9 +215,16 @@ jobs:
             lib_dir="${RUNNER_TEMP:-/tmp}/pyright-libatomic"
             mkdir -p "${lib_dir}"
             if command -v apt-get >/dev/null 2>&1 && command -v dpkg-deb >/dev/null 2>&1; then
+              mkdir -p "${lib_dir}/apt/lists/partial" "${lib_dir}/apt/cache/archives/partial"
+              apt_opts=(
+                -o "Dir::State::lists=${lib_dir}/apt/lists"
+                -o "Dir::Cache=${lib_dir}/apt/cache"
+                -o "Dir::State::status=/var/lib/dpkg/status"
+              )
               (
                 cd "${lib_dir}"
-                apt-get download libatomic1
+                apt-get "${apt_opts[@]}" update
+                apt-get "${apt_opts[@]}" download libatomic1
                 dpkg-deb -x libatomic1_*.deb .
               )
               found_dir="$(find "${lib_dir}" -name 'libatomic.so.1*' -print -quit | xargs dirname)"
