@@ -89,6 +89,25 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Ensure pyright native runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          if ldconfig -p | grep -q 'libatomic.so.1'; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            SUDO=""
+            if command -v sudo >/dev/null 2>&1; then
+              SUDO="sudo"
+            fi
+            $SUDO apt-get update
+            $SUDO apt-get install -y libatomic1
+          else
+            echo "::error::libatomic.so.1 is missing and apt-get is unavailable"
+            exit 1
+          fi
+
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v6
@@ -1301,15 +1320,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
-      redpanda:
-        image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
-        options: >-
-          --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
-        ports:
-          - 9092:9092
       postgres:
         image: postgres:16-alpine
         env:
@@ -1351,11 +1361,48 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev --extra kafka
 
+      - name: Start Redpanda
+        run: |
+          set -euo pipefail
+          if command -v sudo >/dev/null 2>&1; then
+            echo 1048576 | sudo tee /proc/sys/fs/aio-max-nr >/dev/null
+          elif [ -w /proc/sys/fs/aio-max-nr ]; then
+            echo 1048576 > /proc/sys/fs/aio-max-nr
+          else
+            echo "::notice::cannot adjust aio-max-nr on this runner"
+          fi
+          docker rm -f omniclaude-golden-chain-redpanda >/dev/null 2>&1 || true
+          docker run -d \
+            --name omniclaude-golden-chain-redpanda \
+            -p 9092:9092 \
+            docker.redpanda.com/redpandadata/redpanda:v24.3.6 \
+            redpanda start \
+            --overprovisioned \
+            --smp 1 \
+            --memory 512M \
+            --reserve-memory 0M \
+            --node-id 0 \
+            --check=false \
+            --kafka-addr PLAINTEXT://0.0.0.0:9092 \
+            --advertise-kafka-addr PLAINTEXT://127.0.0.1:9092
+          for _ in $(seq 1 60); do
+            if docker exec omniclaude-golden-chain-redpanda rpk cluster health | grep -q 'Healthy:.*true'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs omniclaude-golden-chain-redpanda
+          exit 1
+
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
         env:
           OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
+
+      - name: Stop Redpanda
+        if: always()
+        run: docker rm -f omniclaude-golden-chain-redpanda >/dev/null 2>&1 || true
 
   # ============================================================================
   # SECURITY CHECKS
