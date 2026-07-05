@@ -1455,14 +1455,14 @@ jobs:
           docker run -d \
             --name omniclaude-golden-chain-postgres \
             -e POSTGRES_USER=golden_chain \
-            -e POSTGRES_PASSWORD=test \
             -e POSTGRES_DB=omnidash_analytics \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
             -p 127.0.0.1::5432 \
             postgres:16-alpine
 
           for attempt in {1..60}; do
             port="$(docker port omniclaude-golden-chain-postgres 5432/tcp | sed -n 's/.*://p' | head -1)"
-            if [ -n "$port" ] && docker run --rm --network host -e PGPASSWORD=test postgres:16-alpine \
+            if [ -n "$port" ] && docker run --rm --network host postgres:16-alpine \
               pg_isready -h 127.0.0.1 -p "$port" -U golden_chain -d omnidash_analytics; then
               echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
               exit 0
@@ -1478,7 +1478,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain:test@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics" \
+          OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics" \
             uv run python scripts/ci/run_golden_chain_live.py
 
       - name: Stop golden-chain Postgres
