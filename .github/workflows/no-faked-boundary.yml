@@ -83,7 +83,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --no-dev
+        run: uv sync --frozen --no-dev --python "${PYTHON_VERSION}"
 
       - name: Run no-faked-boundary gate (full src + tests, REPORT-ONLY)
         run: |

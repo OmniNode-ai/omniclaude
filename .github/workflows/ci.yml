@@ -2935,9 +2935,14 @@ jobs:
           enable-cache: true
           cache-dependency-glob: 'onex_change_control/uv.lock'
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Install onex_change_control
         working-directory: onex_change_control
-        run: uv sync --all-extras
+        run: uv sync --all-extras --python "${PYTHON_VERSION}"
 
       - name: Validate contract YAML files
         working-directory: onex_change_control

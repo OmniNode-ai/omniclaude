@@ -23,6 +23,9 @@ PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-ga
 INTEGRATION_TESTS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "integration-tests.yml"
 )
+NO_FAKED_BOUNDARY_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "no-faked-boundary.yml"
+)
 VENV_CACHE_RESTORE_IF = "${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}"
 
 
@@ -212,6 +215,28 @@ def test_ci_summary_checks_contract_compliance_result(
     assert '--run-attempt "${RUN_ATTEMPT}"' in run
     assert "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" in run
     assert "CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)" in run
+
+
+def test_contract_compliance_pins_uv_python(ci_workflow: dict[str, Any]) -> None:
+    job = _job(ci_workflow, "contract-compliance")
+    setup_step = _step(job, "Set up Python")
+    install_step = _step(job, "Install onex_change_control")
+
+    assert setup_step.get("uses") == "actions/setup-python@v6"
+    assert setup_step["with"]["python-version"] == "${{ env.PYTHON_VERSION }}"
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_no_faked_boundary_pins_uv_python() -> None:
+    loaded = yaml.safe_load(NO_FAKED_BOUNDARY_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs["no-faked-boundary-gate"]
+    assert isinstance(job, dict)
+
+    install_step = _step(job, "Install dependencies")
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
 
 
 def test_legacy_integration_tests_workflow_remains_manual_only() -> None:
