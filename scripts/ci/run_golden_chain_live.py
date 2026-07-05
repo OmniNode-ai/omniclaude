@@ -36,7 +36,7 @@ TOPIC_TO_TABLE: dict[str, str] = {
 
 ALLOWED_TABLES = frozenset(TOPIC_TO_TABLE.values()) | {"golden_chain_sweep_results"}
 
-DB_CONNECT_ATTEMPTS = 60
+DB_CONNECT_ATTEMPTS = 120
 DB_CONNECT_RETRY_SECONDS = 2.0
 
 DDL = """
