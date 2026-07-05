@@ -296,8 +296,7 @@ jobs:
             apt-get install -y libatomic1
             exit 0
           fi
-          echo "::error::libatomic1 is required for Pyright, but neither sudo nor root apt-get is available"
-          exit 1
+          echo "::warning::libatomic1 is not visible and cannot be installed by this runner; continuing so Pyright reports the real failure if the runtime requires it"
 
       - name: Pyright
         working-directory: ${{ github.workspace }}
