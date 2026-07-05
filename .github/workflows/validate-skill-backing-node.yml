@@ -107,8 +107,7 @@ jobs:
             apt-get install -y build-essential
             exit 0
           fi
-          echo "::error::C compiler is required to build locked dependencies, but this runner cannot install build-essential"
-          exit 1
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
