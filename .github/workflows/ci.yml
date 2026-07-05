@@ -283,8 +283,21 @@ jobs:
 
       - name: Install Pyright node runtime dependency
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libatomic1
+          if ldconfig -p 2>/dev/null | grep -q 'libatomic.so.1'; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y libatomic1
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y libatomic1
+            exit 0
+          fi
+          echo "::error::libatomic1 is required for Pyright, but neither sudo nor root apt-get is available"
+          exit 1
 
       - name: Pyright
         working-directory: ${{ github.workspace }}
