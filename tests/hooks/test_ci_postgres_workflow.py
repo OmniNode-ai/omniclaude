@@ -179,6 +179,11 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert isinstance(services, dict)
     assert "redpanda" in services
     assert "postgres" in services
+    postgres = services["postgres"]
+    assert isinstance(postgres, dict)
+    postgres_options = postgres.get("options")
+    assert isinstance(postgres_options, str)
+    assert "pg_isready -U golden_chain -d omnidash_analytics" in postgres_options
     redpanda = services["redpanda"]
     assert isinstance(redpanda, dict)
     redpanda_options = redpanda.get("options")
