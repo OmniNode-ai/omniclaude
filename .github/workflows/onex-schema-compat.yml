@@ -85,7 +85,7 @@ jobs:
 
       - name: Install omniclaude dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Install onex_change_control schema validator
         working-directory: ${{ github.workspace }}
