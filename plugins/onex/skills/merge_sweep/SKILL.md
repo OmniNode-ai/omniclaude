@@ -1,8 +1,8 @@
 ---
-description: Single-command dispatch shim. Runs `cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep` # local-path-ok: merge_sweep dispatches from the canonical omnibase_infra checkout, not a ticket worktree
-  because the declarative skill CLI is provided by omnibase_infra. The command resolves the skill->node mapping,
-  dispatches node_pr_lifecycle_orchestrator in receipt mode, and prints one typed ModelSkillResult. No inline logic;
-  markdown only.
+description: >-
+  Single-command dispatch shim. Runs the canonical omnibase_infra merge_sweep skill CLI because the declarative
+  skill CLI is provided by omnibase_infra. The command resolves the skill->node mapping, dispatches
+  node_pr_lifecycle_orchestrator in receipt mode, and prints one typed ModelSkillResult. No inline logic; markdown only.
 mode: full
 version: 7.0.0
 level: advanced
