@@ -53,6 +53,7 @@ _assert_equals() {
 test_executable_path_reaches_preflight() {
   local tmp_root mock_bin output exit_code
   tmp_root="$(mktemp -d /tmp/merge-sweep-exec-test-XXXXXX)"
+  trap 'rm -rf "${tmp_root}"' RETURN
   mock_bin="${tmp_root}/bin"
   mkdir -p "${mock_bin}"
 
@@ -79,8 +80,6 @@ MOCK_EOF
   _assert_equals "executable path exits from preflight" "1" "${exit_code}"
   _assert_contains "preflight reports missing configured python" "Missing requirements: ${tmp_root}/missing-python" "${output}"
   _assert_not_contains "executable path is not quarantined" "\"status\":\"quarantined\"" "${output}"
-
-  rm -rf "${tmp_root}"
 }
 
 echo "=== cron merge-sweep executable-path tests ==="

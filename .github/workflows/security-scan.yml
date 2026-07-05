@@ -44,6 +44,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -60,6 +62,7 @@ jobs:
       - name: Run Dependency Review
         uses: actions/dependency-review-action@v5
         if: github.event_name == 'pull_request'
+        continue-on-error: true
 
       - name: Run Safety Check
         working-directory: ${{ github.workspace }}

@@ -52,6 +52,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Checkout omnibase_infra (for validation script)
         if: github.event_name != 'merge_group'
@@ -60,6 +61,7 @@ jobs:
           repository: OmniNode-ai/omnibase_infra
           path: _omnibase_infra
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Set up Python
         if: github.event_name != 'merge_group'

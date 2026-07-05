@@ -262,7 +262,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Pyright
         working-directory: ${{ github.workspace }}
