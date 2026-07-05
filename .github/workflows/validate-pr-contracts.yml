@@ -31,13 +31,7 @@ jobs:
   validate-pr-contracts:
     needs: occ-preflight
     name: validate-pr-contracts
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
@@ -97,8 +91,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           # Read file contents into env vars for the script
-          export PR_DIFF_FILES="$(cat /tmp/diff_files.txt 2>/dev/null || echo '')"
-          export PR_BODY="$(cat /tmp/pr_body.txt 2>/dev/null || echo '')"
+          PR_DIFF_FILES="$(cat /tmp/diff_files.txt 2>/dev/null || echo '')"
+          PR_BODY="$(cat /tmp/pr_body.txt 2>/dev/null || echo '')"
+          export PR_DIFF_FILES
+          export PR_BODY
 
           set +e
           python _omnibase_infra/scripts/validate_pr_contracts.py > /tmp/validation_output.txt 2>&1
@@ -133,4 +129,5 @@ jobs:
         if: github.event_name != 'merge_group'
         working-directory: ${{ github.workspace }}
         run: |
-          exit ${{ steps.validate.outputs.exit_code }}
+          exit_code="${{ steps.validate.outputs.exit_code }}"
+          exit "${exit_code:-1}"
