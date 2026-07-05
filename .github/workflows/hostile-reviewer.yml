@@ -103,6 +103,8 @@ jobs:
         run: uv python install 3.12
 
       - name: Install omniintelligence dependencies
+        id: install_deps
+        continue-on-error: true
         working-directory: ../omniintelligence
         env:
           UV_CONCURRENT_DOWNLOADS: "1"
@@ -133,11 +135,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          INSTALL_DEPS_OUTCOME: ${{ steps.install_deps.outcome }}
           # LLM_DEEPSEEK_URL is read directly from the runner's environment (Infisical-injected
           # or set in the runner's shell profile on .201) — no GitHub secret needed
         working-directory: ../omniintelligence
         run: |
           set -euo pipefail
+
+          if [ "$INSTALL_DEPS_OUTCOME" != "success" ]; then
+            echo "verdict=degraded" >> "$GITHUB_OUTPUT"
+            echo "blocking_count=0" >> "$GITHUB_OUTPUT"
+            echo "total_findings=0" >> "$GITHUB_OUTPUT"
+            echo "models_succeeded=" >> "$GITHUB_OUTPUT"
+            echo "error=omniintelligence dependency install failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Run cli_review; stdout = ModelMultiReviewResult JSON, stderr = human summary
           REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
