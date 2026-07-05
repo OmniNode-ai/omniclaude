@@ -20,8 +20,13 @@ RUN pip install --default-timeout=300 --retries 5 --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
-# Install dependencies
-RUN uv sync --no-dev --frozen
+# Install dependencies. GitHub-side git dependencies occasionally reset during
+# container builds; retry the bounded install instead of failing a clean build.
+RUN for attempt in 1 2 3 4; do \
+        uv sync --no-dev --frozen && break; \
+        [ "$attempt" -lt 4 ] || exit 1; \
+        sleep $((attempt * 10)); \
+    done
 
 # Run the service as an unprivileged user.
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
