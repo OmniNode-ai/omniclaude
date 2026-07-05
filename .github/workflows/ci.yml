@@ -1422,7 +1422,6 @@ jobs:
         ports:
           - 5432/tcp
     env:
-      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
       GOLDEN_CHAIN_TIMEOUT_MS: "30000"
     steps:
       - name: Checkout code
@@ -1449,6 +1448,24 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka
 
+      - name: Allocate Redpanda endpoint
+        run: |
+          set -euo pipefail
+          kafka_host_port="$(python - <<'PY'
+          import socket
+
+          with socket.socket() as sock:
+              sock.bind(("127.0.0.1", 0))
+              print(sock.getsockname()[1])
+          PY
+          )"
+          redpanda_container="omniclaude-golden-chain-redpanda-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "KAFKA_HOST_PORT=${kafka_host_port}"
+            echo "KAFKA_BOOTSTRAP_SERVERS=localhost:${kafka_host_port}"
+            echo "REDPANDA_CONTAINER=${redpanda_container}"
+          } >> "$GITHUB_ENV"
+
       - name: Start Redpanda
         run: |
           set -euo pipefail
@@ -1459,10 +1476,10 @@ jobs:
           else
             echo "::notice::cannot adjust aio-max-nr on this runner"
           fi
-          docker rm -f omniclaude-golden-chain-redpanda >/dev/null 2>&1 || true
+          docker rm -f "${REDPANDA_CONTAINER}" >/dev/null 2>&1 || true
           docker run -d \
-            --name omniclaude-golden-chain-redpanda \
-            -p 9092:9092 \
+            --name "${REDPANDA_CONTAINER}" \
+            -p "127.0.0.1:${KAFKA_HOST_PORT}:9092" \
             docker.redpanda.com/redpandadata/redpanda:v24.3.6 \
             redpanda start \
             --overprovisioned \
@@ -1472,14 +1489,14 @@ jobs:
             --node-id 0 \
             --check=false \
             --kafka-addr PLAINTEXT://0.0.0.0:9092 \
-            --advertise-kafka-addr PLAINTEXT://127.0.0.1:9092
+            --advertise-kafka-addr "PLAINTEXT://127.0.0.1:${KAFKA_HOST_PORT}"
           for _ in $(seq 1 60); do
-            if docker exec omniclaude-golden-chain-redpanda rpk cluster health | grep -q 'Healthy:.*true'; then
+            if docker exec "${REDPANDA_CONTAINER}" rpk cluster health | grep -q 'Healthy:.*true'; then
               exit 0
             fi
             sleep 2
           done
-          docker logs omniclaude-golden-chain-redpanda
+          docker logs "${REDPANDA_CONTAINER}"
           exit 1
 
       - name: Run live golden-chain sweep
@@ -1490,7 +1507,7 @@ jobs:
 
       - name: Stop Redpanda
         if: always()
-        run: docker rm -f omniclaude-golden-chain-redpanda >/dev/null 2>&1 || true
+        run: docker rm -f "${REDPANDA_CONTAINER}" >/dev/null 2>&1 || true
 
   # ============================================================================
   # SECURITY CHECKS
