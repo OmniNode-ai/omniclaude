@@ -1378,8 +1378,8 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: golden_chain
-          POSTGRES_PASSWORD: test
           POSTGRES_DB: omnidash_analytics
+          POSTGRES_HOST_AUTH_METHOD: trust
         options: >-
           --health-cmd "pg_isready -U golden_chain -d omnidash_analytics"
           --health-interval 10s
@@ -1418,7 +1418,7 @@ jobs:
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
         env:
-          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
+          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
 
   # ============================================================================
