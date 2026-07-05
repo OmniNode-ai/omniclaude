@@ -33,7 +33,7 @@ dod_evidence:
     status: "verified"
     checks:
       - check_type: "command"
-        check_value: >-
+        check_value: |-
           python - <<'PY'
           import yaml
           from pathlib import Path

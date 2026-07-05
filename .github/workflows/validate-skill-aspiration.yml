@@ -80,7 +80,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           for attempt in 1 2 3; do
-            if uv sync --all-extras; then
+            if uv sync --all-extras --python "${PYTHON_VERSION}"; then
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then
