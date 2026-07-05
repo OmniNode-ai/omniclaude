@@ -1406,22 +1406,10 @@ jobs:
     # runners provide reliable service port mapping; the self-hosted fleet has
     # shown refused mapped Postgres ports under saturation.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      redpanda:
-        image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
-        options: >-
-          --cpus 1
-          --cpuset-cpus 0
-          --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
-        ports:
-          - 9092:9092
+    timeout-minutes: 20
     env:
-      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
       GOLDEN_CHAIN_TIMEOUT_MS: "30000"
+      GOLDEN_CHAIN_REDPANDA_CONTAINER: omniclaude-golden-chain-redpanda-${{ github.run_id }}
       GOLDEN_CHAIN_PG_CONTAINER: omniclaude-golden-chain-postgres-${{ github.run_id }}
     steps:
       - name: Checkout code
@@ -1448,6 +1436,47 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka
 
+      - name: Start golden-chain Redpanda
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER" >/dev/null 2>&1 || true
+          kafka_port="$(
+            python - <<'PY'
+          import socket
+
+          with socket.socket() as sock:
+              sock.bind(("127.0.0.1", 0))
+              print(sock.getsockname()[1])
+          PY
+          )"
+          docker run -d \
+            --name "$GOLDEN_CHAIN_REDPANDA_CONTAINER" \
+            -p "127.0.0.1:${kafka_port}:9092" \
+            docker.redpanda.com/redpandadata/redpanda:v24.3.6 \
+            redpanda start \
+              --overprovisioned \
+              --smp 1 \
+              --memory 1G \
+              --reserve-memory 0M \
+              --node-id 0 \
+              --check=false \
+              --kafka-addr 0.0.0.0:9092 \
+              --advertise-kafka-addr "127.0.0.1:${kafka_port}"
+
+          for attempt in {1..60}; do
+            if docker exec "$GOLDEN_CHAIN_REDPANDA_CONTAINER" \
+              rpk cluster health | grep -q 'Healthy:.*true'; then
+              echo "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:${kafka_port}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "Waiting for golden-chain Redpanda on 127.0.0.1:${kafka_port} (${attempt}/60)..."
+            sleep 2
+          done
+
+          docker logs "$GOLDEN_CHAIN_REDPANDA_CONTAINER" || true
+          exit 1
+
       - name: Start golden-chain Postgres
         working-directory: ${{ github.workspace }}
         run: |
@@ -1463,8 +1492,8 @@ jobs:
 
           for attempt in {1..60}; do
             port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
-            if [ -n "$port" ] && docker run --rm --network host postgres:16-alpine \
-              pg_isready -h 127.0.0.1 -p "$port" -U golden_chain -d omnidash_analytics; then
+            if [ -n "$port" ] && docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
+              pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics; then
               echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -1479,12 +1508,18 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
+            pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics
           OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics" \
             uv run python scripts/ci/run_golden_chain_live.py
 
       - name: Stop golden-chain Postgres
         if: always()
         run: docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
+
+      - name: Stop golden-chain Redpanda
+        if: always()
+        run: docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER" >/dev/null 2>&1 || true
 
   # ============================================================================
   # SECURITY CHECKS
