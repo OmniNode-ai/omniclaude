@@ -104,7 +104,7 @@ jobs:
 
       - name: Install omniintelligence dependencies
         working-directory: ../omniintelligence
-        run: uv sync --all-extras
+        run: uv sync --all-extras --python 3.12
 
       - name: Run adversarial review
         id: review
