@@ -359,9 +359,10 @@ jobs:
           sarif_file: 'checkov-results/results_sarif.sarif'
 
       - name: Run Terrascan
-        uses: tenable/terrascan-action@dd7e921056c6f25b25bff3cf791e063ed7fc3a78  # v1.4.1 (pinned 2026-03-04)
-        with:
-          iac_type: 'docker'
-          iac_dir: '.'
-          policy_type: 'all'
-          only_warn: true
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -w /repo \
+            tenable/terrascan:1.16.0 \
+            scan -i docker -d . -t all || true
