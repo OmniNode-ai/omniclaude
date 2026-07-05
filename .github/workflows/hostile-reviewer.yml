@@ -136,11 +136,13 @@ jobs:
             exit 0
           fi
 
-          # Parse verdict from JSON using Python inline
-          VERDICT_DATA=$(echo "$REVIEW_JSON" | python3 - <<'PYEOF'
-          import json, sys
+          # Parse verdict from JSON using Python inline. Pass the JSON through
+          # the environment because the heredoc occupies Python's stdin.
+          VERDICT_DATA=$(REVIEW_JSON="$REVIEW_JSON" python3 - <<'PYEOF'
+          import os
+          import json
 
-          data = json.loads(sys.stdin.read())
+          data = json.loads(os.environ["REVIEW_JSON"])
           models_succeeded = data.get("models_succeeded", [])
           total_findings = data.get("total_findings", 0)
 
