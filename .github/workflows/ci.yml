@@ -281,6 +281,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
+      - name: Install Pyright node runtime dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libatomic1
+
       - name: Pyright
         working-directory: ${{ github.workspace }}
         run: uv run pyright src/omniclaude
