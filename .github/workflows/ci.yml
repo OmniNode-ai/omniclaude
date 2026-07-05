@@ -1361,7 +1361,7 @@ jobs:
     # runners provide reliable service port mapping; the self-hosted fleet has
     # shown refused mapped Postgres ports under saturation.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       redpanda:
         image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
