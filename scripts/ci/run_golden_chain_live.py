@@ -358,7 +358,10 @@ async def _consume_until_cancelled(
                 continue
             project_envelope(value, analytics_url)
     finally:
-        await consumer.stop()
+        try:
+            await asyncio.wait_for(consumer.stop(), timeout=10)
+        except TimeoutError:
+            sys.stdout.write("Timed out stopping Kafka consumer after cancellation\n")
 
 
 async def _run_sweep_subprocess(
@@ -387,7 +390,18 @@ async def _run_sweep_subprocess(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    stdout, _ = await process.communicate()
+    try:
+        stdout, _ = await asyncio.wait_for(
+            process.communicate(),
+            timeout=(timeout_ms / 1000) + 90,
+        )
+    except TimeoutError:
+        process.kill()
+        stdout, _ = await process.communicate()
+        if stdout:
+            sys.stdout.write(stdout.decode("utf-8", errors="replace"))
+        sys.stdout.write("Golden-chain sweep subprocess timed out\n")
+        return 124
     if stdout:
         sys.stdout.write(stdout.decode("utf-8", errors="replace"))
     return int(process.returncode or 0)
@@ -405,9 +419,11 @@ async def run_gate(bootstrap_servers: str, analytics_url: str, timeout_ms: int) 
     finally:
         consumer_task.cancel()
         try:
-            await consumer_task
+            await asyncio.wait_for(consumer_task, timeout=15)
         except asyncio.CancelledError:
             pass
+        except TimeoutError:
+            sys.stdout.write("Timed out waiting for Kafka consumer task cancellation\n")
 
 
 def main(argv: list[str] | None = None) -> int:
