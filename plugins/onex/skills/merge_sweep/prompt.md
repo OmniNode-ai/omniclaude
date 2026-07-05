@@ -5,7 +5,7 @@ JSON to stdout — the full handler result, never truncated. RuntimeLocal logs a
 intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep [--repos <a,b>] [--dry-run] [--inventory-only] [--fix-only] [--merge-only] [--max-parallel-polish <n>] [--admin-fallback-threshold-minutes <n>] [--verify] [--verify-timeout-seconds <n>]
+cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep [--repos <a,b>] [--dry-run] [--inventory-only] [--fix-only] [--merge-only] [--max-parallel-polish <n>] [--admin-fallback-threshold-minutes <n>] [--verify] [--verify-timeout-seconds <n>] # local-path-ok: merge_sweep dispatches from the canonical omnibase_infra checkout, not a ticket worktree
 ```
 
 | Argument | Type |
