@@ -22,10 +22,10 @@ That lift must happen as an explicit port (promote skill into
 ``TIER1_DETERMINISTIC_SKILLS`` + add routing + land a node), not as a
 mid-file mutation.
 
-Enforced skills mirror the Tier 3 list on OMN-8766:
+Enforced skills mirror the active Tier 3 list on OMN-8766:
   using_git_worktrees, onboarding, systematic_debugging, multi_agent,
   observability, login, authorize, resume_session, set_session,
-  recall, rewind, crash_recovery, checkpoint, writing_skills
+  recall, rewind, checkpoint, writing_skills
 
 Exit codes:
   0  All instructional skills pass the gate
@@ -60,7 +60,6 @@ TIER3_INSTRUCTIONAL_SKILLS: set[str] = {
     "set_session",
     "recall",
     "rewind",
-    "crash_recovery",
     "checkpoint",
     "writing_skills",
 }
