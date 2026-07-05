@@ -328,7 +328,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate enum governance
         working-directory: ${{ github.workspace }}
@@ -368,7 +368,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate exports
         working-directory: ${{ github.workspace }}
@@ -492,7 +492,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Validate ONEX naming conventions
         working-directory: ${{ github.workspace }}
@@ -1051,7 +1051,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check no datetime.utcnow() usage
         working-directory: ${{ github.workspace }}
@@ -1136,7 +1136,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: F5.1 - Validate no cmd topic uses cleanup.policy=compact
         working-directory: ${{ github.workspace }}
@@ -1187,7 +1187,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check ONEX architectural invariants
         working-directory: ${{ github.workspace }}
@@ -1287,7 +1287,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate golden chain registry
         working-directory: ${{ github.workspace }}
@@ -1343,7 +1343,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run registry consistency tests
         working-directory: ${{ github.workspace }}
@@ -1411,7 +1411,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --extra kafka
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka
 
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
@@ -1582,7 +1582,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Compute changed files
         id: diff
@@ -1723,7 +1723,7 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: |
-          uv sync --frozen --group dev
+          uv sync --frozen --group dev --python "${PYTHON_VERSION}"
           uv pip install pytest-split pytest-cov
 
       - name: Auto-generate skill nodes
@@ -1869,7 +1869,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Install PostgreSQL client
         working-directory: ${{ github.workspace }}
@@ -1972,7 +1972,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run agent framework tests
         working-directory: ${{ github.workspace }}
@@ -2305,7 +2305,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --group dev
+        run: uv sync --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate mode metadata integrity
         working-directory: ${{ github.workspace }}
@@ -2436,7 +2436,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run merge-sweep contract tests
         working-directory: ${{ github.workspace }}
@@ -2515,7 +2515,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check if onex compliance command exists
         id: check-command
@@ -2610,7 +2610,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Validate all agent YAML contracts
         working-directory: ${{ github.workspace }}

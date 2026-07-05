@@ -239,6 +239,31 @@ def test_no_faked_boundary_pins_uv_python() -> None:
     assert '--python "${PYTHON_VERSION}"' in install_step["run"]
 
 
+def test_ci_uv_sync_steps_pin_python(ci_workflow: dict[str, Any]) -> None:
+    jobs = ci_workflow.get("jobs")
+    assert isinstance(jobs, dict)
+
+    offenders: list[str] = []
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run")
+            if not isinstance(run, str) or "uv sync" not in run:
+                continue
+            for line in run.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("uv sync") and "--python" not in stripped:
+                    offenders.append(f"{job_name}: {step.get('name')}: {stripped}")
+
+    assert offenders == []
+
+
 def test_legacy_integration_tests_workflow_remains_manual_only() -> None:
     loaded = yaml.safe_load(INTEGRATION_TESTS_WORKFLOW.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
