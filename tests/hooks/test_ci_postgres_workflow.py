@@ -184,6 +184,7 @@ def test_golden_chain_live_is_required_service_container_gate(
     postgres_options = postgres.get("options")
     assert isinstance(postgres_options, str)
     assert "pg_isready -U golden_chain -d omnidash_analytics" in postgres_options
+    assert postgres.get("ports") == ["5432/tcp"]
     redpanda = services["redpanda"]
     assert isinstance(redpanda, dict)
     redpanda_options = redpanda.get("options")
@@ -199,7 +200,8 @@ def test_golden_chain_live_is_required_service_container_gate(
     step_env = run_step.get("env")
     assert isinstance(step_env, dict)
     assert "OMNIDASH_ANALYTICS_DB_URL" in step_env
-    assert "golden_chain:test" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    assert "golden_chain:test@127.0.0.1" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    assert "job.services.postgres.ports['5432']" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
     assert run_step.get("continue-on-error") is not True
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
 

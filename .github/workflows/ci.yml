@@ -1360,8 +1360,6 @@ jobs:
     # runners provide reliable service port mapping; the self-hosted fleet has
     # shown refused mapped Postgres ports under saturation.
     runs-on: ubuntu-latest
-      }}
->>>>>>> 4df4589b7 (ci: serialize golden-chain live service port)
     timeout-minutes: 20
     services:
       redpanda:
