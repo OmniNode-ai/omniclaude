@@ -189,12 +189,19 @@ def test_golden_chain_live_is_required_service_container_gate(
     env = job.get("env")
     assert isinstance(env, dict)
     assert env.get("KAFKA_BOOTSTRAP_SERVERS") == "localhost:9092"
+    assert (
+        env.get("GOLDEN_CHAIN_PG_CONTAINER")
+        == "omniclaude-golden-chain-postgres-${{ github.run_id }}"
+    )
 
     start_step = _step(job, "Start golden-chain Postgres")
     assert "docker run -d" in start_step["run"]
-    assert "--name omniclaude-golden-chain-postgres" in start_step["run"]
+    assert '--name "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
     assert "-p 127.0.0.1::5432" in start_step["run"]
     assert "POSTGRES_HOST_AUTH_METHOD=trust" in start_step["run"]
+    assert 'docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp' in start_step["run"]
+    assert 'docker logs "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
     assert 'pg_isready -h 127.0.0.1 -p "$port"' in start_step["run"]
     assert "GOLDEN_CHAIN_PGPORT=${port}" in start_step["run"]
 
@@ -208,7 +215,7 @@ def test_golden_chain_live_is_required_service_container_gate(
 
     cleanup_step = _step(job, "Stop golden-chain Postgres")
     assert cleanup_step.get("if") == "always()"
-    assert "docker rm -f omniclaude-golden-chain-postgres" in cleanup_step["run"]
+    assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in cleanup_step["run"]
 
     tests_gate = _job(ci_workflow, "tests-gate")
     needs = tests_gate.get("needs")

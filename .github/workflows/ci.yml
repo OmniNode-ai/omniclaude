@@ -1422,6 +1422,7 @@ jobs:
     env:
       KAFKA_BOOTSTRAP_SERVERS: localhost:9092
       GOLDEN_CHAIN_TIMEOUT_MS: "30000"
+      GOLDEN_CHAIN_PG_CONTAINER: omniclaude-golden-chain-postgres-${{ github.run_id }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1451,9 +1452,9 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          docker rm -f omniclaude-golden-chain-postgres >/dev/null 2>&1 || true
+          docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
           docker run -d \
-            --name omniclaude-golden-chain-postgres \
+            --name "$GOLDEN_CHAIN_PG_CONTAINER" \
             -e POSTGRES_USER=golden_chain \
             -e POSTGRES_DB=omnidash_analytics \
             -e POSTGRES_HOST_AUTH_METHOD=trust \
@@ -1461,7 +1462,7 @@ jobs:
             postgres:16-alpine
 
           for attempt in {1..60}; do
-            port="$(docker port omniclaude-golden-chain-postgres 5432/tcp | sed -n 's/.*://p' | head -1)"
+            port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
             if [ -n "$port" ] && docker run --rm --network host postgres:16-alpine \
               pg_isready -h 127.0.0.1 -p "$port" -U golden_chain -d omnidash_analytics; then
               echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
@@ -1471,7 +1472,7 @@ jobs:
             sleep 2
           done
 
-          docker logs omniclaude-golden-chain-postgres || true
+          docker logs "$GOLDEN_CHAIN_PG_CONTAINER" || true
           exit 1
 
       - name: Run live golden-chain sweep
@@ -1483,7 +1484,7 @@ jobs:
 
       - name: Stop golden-chain Postgres
         if: always()
-        run: docker rm -f omniclaude-golden-chain-postgres >/dev/null 2>&1 || true
+        run: docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
 
   # ============================================================================
   # SECURITY CHECKS
