@@ -245,6 +245,18 @@ def test_no_faked_boundary_pins_uv_python() -> None:
     assert '--python "${PYTHON_VERSION}"' in install_step["run"]
 
 
+def test_plugin_compat_pins_uv_python() -> None:
+    loaded = yaml.safe_load(PLUGIN_COMPAT_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs["plugin-compat-gate"]
+    assert isinstance(job, dict)
+
+    install_step = _step(job, "Install dependencies")
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
 def test_ci_uv_sync_steps_pin_python(ci_workflow: dict[str, Any]) -> None:
     jobs = ci_workflow.get("jobs")
     assert isinstance(jobs, dict)
