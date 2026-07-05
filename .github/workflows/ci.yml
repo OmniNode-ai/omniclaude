@@ -1408,6 +1408,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
+      redpanda:
+        image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
+        options: >-
+          --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 9092:9092
       postgres:
         image: postgres:16-alpine
         env:
@@ -1422,6 +1431,7 @@ jobs:
         ports:
           - 5432/tcp
     env:
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
       GOLDEN_CHAIN_TIMEOUT_MS: "30000"
     steps:
       - name: Checkout code
@@ -1448,66 +1458,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka
 
-      - name: Allocate Redpanda endpoint
-        run: |
-          set -euo pipefail
-          kafka_host_port="$(python - <<'PY'
-          import socket
-
-          with socket.socket() as sock:
-              sock.bind(("127.0.0.1", 0))
-              print(sock.getsockname()[1])
-          PY
-          )"
-          redpanda_container="omniclaude-golden-chain-redpanda-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          {
-            echo "KAFKA_HOST_PORT=${kafka_host_port}"
-            echo "KAFKA_BOOTSTRAP_SERVERS=localhost:${kafka_host_port}"
-            echo "REDPANDA_CONTAINER=${redpanda_container}"
-          } >> "$GITHUB_ENV"
-
-      - name: Start Redpanda
-        run: |
-          set -euo pipefail
-          if command -v sudo >/dev/null 2>&1; then
-            echo 1048576 | sudo tee /proc/sys/fs/aio-max-nr >/dev/null
-          elif [ -w /proc/sys/fs/aio-max-nr ]; then
-            echo 1048576 > /proc/sys/fs/aio-max-nr
-          else
-            echo "::notice::cannot adjust aio-max-nr on this runner"
-          fi
-          docker rm -f "${REDPANDA_CONTAINER}" >/dev/null 2>&1 || true
-          docker run -d \
-            --name "${REDPANDA_CONTAINER}" \
-            -p "127.0.0.1:${KAFKA_HOST_PORT}:9092" \
-            docker.redpanda.com/redpandadata/redpanda:v24.3.6 \
-            redpanda start \
-            --overprovisioned \
-            --smp 1 \
-            --memory 512M \
-            --reserve-memory 0M \
-            --node-id 0 \
-            --check=false \
-            --kafka-addr PLAINTEXT://0.0.0.0:9092 \
-            --advertise-kafka-addr "PLAINTEXT://127.0.0.1:${KAFKA_HOST_PORT}"
-          for _ in $(seq 1 60); do
-            if docker exec "${REDPANDA_CONTAINER}" rpk cluster health | grep -q 'Healthy:.*true'; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker logs "${REDPANDA_CONTAINER}"
-          exit 1
-
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
         env:
           OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
-
-      - name: Stop Redpanda
-        if: always()
-        run: docker rm -f "${REDPANDA_CONTAINER}" >/dev/null 2>&1 || true
 
   # ============================================================================
   # SECURITY CHECKS
