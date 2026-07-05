@@ -291,6 +291,7 @@ jobs:
             ]
           }
           JSON
+          echo "::add-matcher::checkov-problem-matcher-softfail.json"
 
       - name: Run Checkov (IaC scanner)
         uses: bridgecrewio/checkov-action@4a1afa9897f7afe297a3762c926e1e800361464f  # v12.1347.0 (pinned 2026-03-04)
@@ -302,6 +303,10 @@ jobs:
           soft_fail: false
           soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
           hard_fail_on: HIGH,CRITICAL
+
+      - name: Remove Checkov soft-fail problem matcher
+        if: always()
+        run: echo "::remove-matcher owner=checkov-softfail::"
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4
