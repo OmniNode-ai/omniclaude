@@ -145,10 +145,10 @@ def _require(value: str | None, name: str) -> str:
     return value
 
 
-def initialize_database(db_dsn: str) -> None:
+def initialize_database(analytics_url: str) -> None:
     for attempt in range(1, DB_CONNECT_ATTEMPTS + 1):
         try:
-            with psycopg2.connect(db_dsn) as conn:
+            with psycopg2.connect(analytics_url) as conn:
                 conn.autocommit = True
                 with conn.cursor() as cur:
                     cur.execute(DDL)
@@ -170,7 +170,7 @@ def _timestamp(value: object | None) -> str:
 
 
 def _upsert(
-    db_dsn: str,
+    analytics_url: str,
     table: str,
     conflict_key: str,
     row: dict[str, object],
@@ -202,15 +202,15 @@ def _upsert(
             sql.Identifier(conflict_keys[0]), sql.Identifier(conflict_keys[0])
         ),
     )
-    with psycopg2.connect(db_dsn) as conn:
+    with psycopg2.connect(analytics_url) as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute(query, [row[column] for column in columns])
 
 
-def _project_registration(payload: dict[str, object], db_dsn: str) -> None:
+def _project_registration(payload: dict[str, object], analytics_url: str) -> None:
     _upsert(
-        db_dsn,
+        analytics_url,
         "agent_routing_decisions",
         "correlation_id",
         {
@@ -226,9 +226,9 @@ def _project_registration(payload: dict[str, object], db_dsn: str) -> None:
     )
 
 
-def _project_pattern_learning(payload: dict[str, object], db_dsn: str) -> None:
+def _project_pattern_learning(payload: dict[str, object], analytics_url: str) -> None:
     _upsert(
-        db_dsn,
+        analytics_url,
         "pattern_learning_artifacts",
         "pattern_name",
         {
@@ -242,10 +242,10 @@ def _project_pattern_learning(payload: dict[str, object], db_dsn: str) -> None:
     )
 
 
-def _project_delegation(payload: dict[str, object], db_dsn: str) -> None:
+def _project_delegation(payload: dict[str, object], analytics_url: str) -> None:
     delegate_model = str(payload.get("delegate_model") or payload.get("delegated_to"))
     _upsert(
-        db_dsn,
+        analytics_url,
         "delegation_events",
         "correlation_id",
         {
@@ -263,9 +263,9 @@ def _project_delegation(payload: dict[str, object], db_dsn: str) -> None:
     )
 
 
-def _project_routing(payload: dict[str, object], db_dsn: str) -> None:
+def _project_routing(payload: dict[str, object], analytics_url: str) -> None:
     _upsert(
-        db_dsn,
+        analytics_url,
         "llm_routing_decisions",
         "correlation_id",
         {
@@ -280,9 +280,9 @@ def _project_routing(payload: dict[str, object], db_dsn: str) -> None:
     )
 
 
-def _project_evaluation(payload: dict[str, object], db_dsn: str) -> None:
+def _project_evaluation(payload: dict[str, object], analytics_url: str) -> None:
     _upsert(
-        db_dsn,
+        analytics_url,
         "session_outcomes",
         "session_id",
         {
@@ -304,7 +304,7 @@ PROJECTORS: dict[str, Callable[[dict[str, object], str], None]] = {
 }
 
 
-def project_envelope(envelope: dict[str, Any], db_dsn: str) -> None:
+def project_envelope(envelope: dict[str, Any], analytics_url: str) -> None:
     topic = str(envelope.get("event_type") or "")
     table = TOPIC_TO_TABLE.get(topic)
     if table is None:
@@ -312,12 +312,12 @@ def project_envelope(envelope: dict[str, Any], db_dsn: str) -> None:
     payload = envelope.get("payload")
     if not isinstance(payload, dict):
         raise ValueError(f"Envelope payload must be an object for topic {topic}")
-    PROJECTORS[table](payload, db_dsn)
+    PROJECTORS[table](payload, analytics_url)
 
 
 async def _consume_until_cancelled(
     bootstrap_servers: str,
-    db_dsn: str,
+    analytics_url: str,
     consumer_ready: asyncio.Event,
 ) -> None:
     from aiokafka import AIOKafkaConsumer
@@ -355,19 +355,19 @@ async def _consume_until_cancelled(
             value = message.value
             if not isinstance(value, dict):
                 continue
-            project_envelope(value, db_dsn)
+            project_envelope(value, analytics_url)
     finally:
         await consumer.stop()
 
 
 async def _run_sweep_subprocess(
     bootstrap_servers: str,
-    db_dsn: str,
+    analytics_url: str,
     timeout_ms: int,
 ) -> int:
     env = os.environ.copy()
     env["KAFKA_BOOTSTRAP_SERVERS"] = bootstrap_servers
-    env["OMNIDASH_ANALYTICS_DB_URL"] = db_dsn
+    env["OMNIDASH_ANALYTICS_DB_URL"] = analytics_url
     command = [
         sys.executable,
         "-m",
@@ -377,7 +377,7 @@ async def _run_sweep_subprocess(
         "--bootstrap-servers",
         bootstrap_servers,
         "--db-dsn",
-        db_dsn,
+        analytics_url,
         "--json",
     ]
     process = await asyncio.create_subprocess_exec(
@@ -392,15 +392,15 @@ async def _run_sweep_subprocess(
     return int(process.returncode or 0)
 
 
-async def run_gate(bootstrap_servers: str, db_dsn: str, timeout_ms: int) -> int:
-    initialize_database(db_dsn)
+async def run_gate(bootstrap_servers: str, analytics_url: str, timeout_ms: int) -> int:
+    initialize_database(analytics_url)
     consumer_ready = asyncio.Event()
     consumer_task = asyncio.create_task(
-        _consume_until_cancelled(bootstrap_servers, db_dsn, consumer_ready)
+        _consume_until_cancelled(bootstrap_servers, analytics_url, consumer_ready)
     )
     try:
         await asyncio.wait_for(consumer_ready.wait(), timeout=65)
-        return await _run_sweep_subprocess(bootstrap_servers, db_dsn, timeout_ms)
+        return await _run_sweep_subprocess(bootstrap_servers, analytics_url, timeout_ms)
     finally:
         consumer_task.cancel()
         try:
@@ -412,10 +412,10 @@ async def run_gate(bootstrap_servers: str, db_dsn: str, timeout_ms: int) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     bootstrap_servers = _require(args.bootstrap_servers, "KAFKA_BOOTSTRAP_SERVERS")
-    db_dsn = _require(args.db_dsn, "OMNIDASH_ANALYTICS_DB_URL or DATABASE_URL")  # noqa: secrets
+    analytics_url = _require(args.db_dsn, "OMNIDASH_ANALYTICS_DB_URL or DATABASE_URL")  # noqa: secrets
     if hasattr(signal, "SIGPIPE"):
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-    return asyncio.run(run_gate(bootstrap_servers, db_dsn, args.timeout_ms))
+    return asyncio.run(run_gate(bootstrap_servers, analytics_url, args.timeout_ms))
 
 
 if __name__ == "__main__":
