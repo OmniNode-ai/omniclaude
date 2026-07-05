@@ -1412,6 +1412,7 @@ jobs:
         image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
         options: >-
           --cpus 1
+          --cpuset-cpus 0
           --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
           --health-interval 10s
           --health-timeout 5s
