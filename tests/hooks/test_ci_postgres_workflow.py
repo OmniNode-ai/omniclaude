@@ -179,6 +179,12 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert isinstance(services, dict)
     assert "redpanda" in services
     assert "postgres" in services
+    redpanda = services["redpanda"]
+    assert isinstance(redpanda, dict)
+    redpanda_options = redpanda.get("options")
+    assert isinstance(redpanda_options, str)
+    assert "--cpus 1" in redpanda_options
+    assert "--cpuset-cpus 0" in redpanda_options
 
     env = job.get("env")
     assert isinstance(env, dict)
