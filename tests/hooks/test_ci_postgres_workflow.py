@@ -194,12 +194,13 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert "docker run -d" in start_step["run"]
     assert "--name omniclaude-golden-chain-postgres" in start_step["run"]
     assert "-p 127.0.0.1::5432" in start_step["run"]
+    assert "POSTGRES_HOST_AUTH_METHOD=trust" in start_step["run"]
     assert 'pg_isready -h 127.0.0.1 -p "$port"' in start_step["run"]
     assert "GOLDEN_CHAIN_PGPORT=${port}" in start_step["run"]
 
     run_step = _step(job, "Run live golden-chain sweep")
     assert run_step.get("continue-on-error") is not True
-    assert "golden_chain:test@127.0.0.1:${GOLDEN_CHAIN_PGPORT}" in run_step["run"]
+    assert "golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}" in run_step["run"]
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
 
     cleanup_step = _step(job, "Stop golden-chain Postgres")
