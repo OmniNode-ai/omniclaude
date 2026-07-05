@@ -100,7 +100,7 @@ def test_initialize_database_uses_bounded_connect_timeout(
 
     assert calls[0] == {
         "args": ("postgresql://example",),
-        "kwargs": {"connect_timeout": 5},
+        "kwargs": {"connect_timeout": 2},
     }
 
 

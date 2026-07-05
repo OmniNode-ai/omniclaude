@@ -36,7 +36,7 @@ TOPIC_TO_TABLE: dict[str, str] = {
 
 ALLOWED_TABLES = frozenset(TOPIC_TO_TABLE.values()) | {"golden_chain_sweep_results"}
 
-DB_CONNECT_ATTEMPTS = 12
+DB_CONNECT_ATTEMPTS = 60
 DB_CONNECT_RETRY_SECONDS = 2.0
 
 DDL = """
@@ -149,7 +149,7 @@ def _require(value: str | None, name: str) -> str:
 def initialize_database(analytics_url: str) -> None:
     for attempt in range(1, DB_CONNECT_ATTEMPTS + 1):
         try:
-            with psycopg2.connect(analytics_url, connect_timeout=5) as conn:
+            with psycopg2.connect(analytics_url, connect_timeout=2) as conn:
                 conn.autocommit = True
                 with conn.cursor() as cur:
                     cur.execute(DDL)
