@@ -25,6 +25,8 @@ env:
   # avoid false red from transient package transfer stalls.
   UV_HTTP_TIMEOUT: '900'
   UV_CONCURRENT_DOWNLOADS: '4'
+  UV_SYNC_ATTEMPTS: '3'
+  UV_SYNC_RETRY_DELAY_SECONDS: '20'
   # ONEX state directory — required by hooks/lib/onex_state.py (OMN-5632)
   ONEX_STATE_DIR: /tmp/onex-state
 
@@ -100,18 +102,17 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
-              exit 0
-            fi
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::uv sync failed after ${attempt} attempts"
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
               exit "$status"
             fi
-            sleep_seconds=$((attempt * 20))
-            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
             sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
           done
 
       - name: Ruff format check
@@ -279,7 +280,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Pyright
         working-directory: ${{ github.workspace }}
@@ -517,18 +531,17 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if uv sync --frozen --python "${PYTHON_VERSION}"; then
-              exit 0
-            fi
+          attempt=1
+          until uv sync --frozen --python "${PYTHON_VERSION}"; do
             status=$?
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::uv sync failed after ${attempt} attempts"
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
               exit "$status"
             fi
-            sleep_seconds=$((attempt * 20))
-            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
             sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
           done
 
       - name: Validate ONEX naming conventions
@@ -1118,7 +1131,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Check no hardcoded internal IPs
         working-directory: ${{ github.workspace }}
