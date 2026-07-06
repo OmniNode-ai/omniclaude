@@ -15,7 +15,7 @@ entering the queue — this detector surfaces those cases.
 
 Usage:
     python -m plugins.onex.skills._bin._lib.armed_not_enqueued \
-        --repos omniclaude,omnibase_core,omnibase_infra,onex_change_control,omnibase_compat,omnidash,omnimarket \
+        --repos omniclaude,omnibase_core,omnibase_infra,omnibase_compat,omnidash,omnimarket \
         --threshold-minutes 30 \
         --format json
 
@@ -46,11 +46,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Queue repos that are subject to the armed-not-enqueued pattern.
+#: onex_change_control removed 2026-07-06 (OMN-14077): its merge queue was
+#: disabled, so it is no longer queue-controlled — an armed OCC PR merges via
+#: the direct squash path rather than entering a queue, and must NOT be flagged
+#: as "armed but not enqueued" (there is no queue to enqueue into).
 QUEUE_REPOS: tuple[str, ...] = (
     "OmniNode-ai/omniclaude",
     "OmniNode-ai/omnibase_core",
     "OmniNode-ai/omnibase_infra",
-    "OmniNode-ai/onex_change_control",
     "OmniNode-ai/omnibase_compat",
     "OmniNode-ai/omnidash",
     "OmniNode-ai/omnimarket",

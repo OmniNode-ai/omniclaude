@@ -557,17 +557,22 @@ class TestModelInvariants:
             )
 
     def test_queue_repos_constant_covers_all_queue_repos(self) -> None:
-        """QUEUE_REPOS must include all 7 documented queue repos."""
+        """QUEUE_REPOS must include all documented queue repos.
+
+        onex_change_control was removed 2026-07-06 (OMN-14077) when its merge
+        queue (ruleset 16846914) was disabled — it now merges via the direct
+        squash path and is not subject to the armed-not-enqueued pattern.
+        """
         expected = {
             "OmniNode-ai/omniclaude",
             "OmniNode-ai/omnibase_core",
             "OmniNode-ai/omnibase_infra",
-            "OmniNode-ai/onex_change_control",
             "OmniNode-ai/omnibase_compat",
             "OmniNode-ai/omnidash",
             "OmniNode-ai/omnimarket",
         }
         assert set(QUEUE_REPOS) == expected
+        assert "OmniNode-ai/onex_change_control" not in QUEUE_REPOS
 
 
 class TestResolveRepos:
