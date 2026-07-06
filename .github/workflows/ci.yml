@@ -1463,25 +1463,35 @@ jobs:
         run: |
           set -euo pipefail
           docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
+          pg_port="$(
+            python - <<'PY'
+          import socket
+
+          with socket.socket() as sock:
+              sock.bind(("127.0.0.1", 0))
+              print(sock.getsockname()[1])
+          PY
+          )"
           docker run -d \
             --name "$GOLDEN_CHAIN_PG_CONTAINER" \
             -e POSTGRES_USER=golden_chain \
             -e POSTGRES_DB=omnidash_analytics \
             -e POSTGRES_HOST_AUTH_METHOD=trust \
-            -p 127.0.0.1::5432 \
+            -p "127.0.0.1:${pg_port}:5432" \
             postgres:16-alpine
 
-          for attempt in {1..60}; do
-            port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
-            if [ -n "$port" ] && docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
+          docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp
+
+          for attempt in {1..120}; do
+            if docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
               pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics; then
-              if PG_DSN="postgresql://golden_chain@127.0.0.1:${port}/omnidash_analytics" \
+              if PG_DSN="postgresql://golden_chain@127.0.0.1:${pg_port}/omnidash_analytics" \
                 uv run python -c 'import os, psycopg2; conn = psycopg2.connect(os.environ["PG_DSN"], connect_timeout=2); conn.close()'; then
-                echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
+                echo "GOLDEN_CHAIN_PGPORT=${pg_port}" >> "$GITHUB_ENV"
                 exit 0
               fi
             fi
-            echo "Waiting for golden-chain Postgres on 127.0.0.1:${port:-unassigned} (${attempt}/60)..."
+            echo "Waiting for golden-chain Postgres on 127.0.0.1:${pg_port} (${attempt}/120)..."
             sleep 2
           done
 
