@@ -98,7 +98,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
@@ -166,6 +180,8 @@ jobs:
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
             --exclude 'https://dash\.dev\.omninode\.ai'
+            --exclude 'https://www\.psycopg\.org/docs'
+            --exclude 'https://docs\.anthropic\.com'
             --accept 200..=299,429,503
             '**/*.md'
           fail: true
@@ -493,7 +509,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --python "${PYTHON_VERSION}"
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Validate ONEX naming conventions
         working-directory: ${{ github.workspace }}
@@ -1052,7 +1082,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Check no datetime.utcnow() usage
         working-directory: ${{ github.workspace }}
