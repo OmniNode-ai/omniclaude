@@ -52,6 +52,8 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     timeout-minutes: 20
+    env:
+      UV_HTTP_TIMEOUT: "900"
 
     steps:
       - name: Checkout PR branch
