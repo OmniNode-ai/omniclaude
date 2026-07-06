@@ -364,5 +364,5 @@ jobs:
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/repo" \
             -w /repo \
-            tenable/terrascan:1.16.0 \
+            tenable/terrascan:1.19.9 \
             scan -i docker -d . -t all
