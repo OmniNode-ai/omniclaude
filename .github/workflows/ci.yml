@@ -209,6 +209,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Node for Pyright
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       - name: Ensure pyright native runtime libraries
         if: runner.os == 'Linux'
         run: |
