@@ -365,4 +365,4 @@ jobs:
             -v "$GITHUB_WORKSPACE:/repo" \
             -w /repo \
             tenable/terrascan:1.19.9 \
-            scan -i docker -d . -t all
+            scan -i docker -d deployment -t all
