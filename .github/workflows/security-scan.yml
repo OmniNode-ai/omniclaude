@@ -361,8 +361,15 @@ jobs:
       - name: Run Terrascan
         working-directory: ${{ github.workspace }}
         run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/repo" \
-            -w /repo \
-            tenable/terrascan:1.19.9 \
-            scan -i docker -d deployment -t all
+          for attempt in 1 2 3; do
+            docker run --rm \
+              -v "$GITHUB_WORKSPACE:/repo" \
+              -w /repo \
+              tenable/terrascan:1.19.9 \
+              scan -i docker -d deployment -t all && break
+            if [ "$attempt" = 3 ]; then
+              echo "Terrascan failed after 3 attempts"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
