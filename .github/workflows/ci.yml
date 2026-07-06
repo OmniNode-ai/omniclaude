@@ -393,6 +393,23 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install native build toolchain
+        run: |
+          if command -v cc >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y build-essential
+            exit 0
+          fi
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
+
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v6
@@ -1494,7 +1511,8 @@ jobs:
           for attempt in {1..60}; do
             port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
             if [ -n "$port" ] && docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
-              pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics; then
+              pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics && \
+              python -c 'import socket, sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=2).close()' "$port"; then
               echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -1511,6 +1529,7 @@ jobs:
           set -euo pipefail
           docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
             pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics
+          python -c 'import socket, sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5).close()' "$GOLDEN_CHAIN_PGPORT"
           OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics" \
             uv run python scripts/ci/run_golden_chain_live.py
 
