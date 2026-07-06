@@ -31,7 +31,6 @@ on:
       - '.onex_ratchets/skill_receipt_mode_allowlist.yaml'
       - 'scripts/check_skill_dispatch_receipt_mode_wrapper.sh'
       - '.github/workflows/skill-receipt-mode-gate.yml'
-  merge_group:
 
 permissions:
   contents: read

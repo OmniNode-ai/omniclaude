@@ -20,7 +20,6 @@ on:
       - "plugins/onex/skills/**/SKILL.md"
       - "scripts/validation/validate_instructional_skill_routing.py"
       - ".github/workflows/check-instructional-skills.yml"
-  merge_group:
   workflow_dispatch:
 
 concurrency:

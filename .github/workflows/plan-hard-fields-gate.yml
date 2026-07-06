@@ -32,7 +32,6 @@ on:
       - 'docs/tracking/**/*.md'
       - 'scripts/lint_plan_hard_fields.py'
       - '.github/workflows/plan-hard-fields-gate.yml'
-  merge_group:
 
 permissions:
   contents: read

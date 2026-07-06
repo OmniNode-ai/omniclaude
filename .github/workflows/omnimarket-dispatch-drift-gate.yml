@@ -30,7 +30,6 @@ on:
       - 'scripts/check_omnimarket_dispatch_drift.py'
       - '.pre-commit-hooks/check-omnimarket-dispatch-drift.sh'
       - '.github/workflows/omnimarket-dispatch-drift-gate.yml'
-  merge_group:
 
 # Least-privilege: this gate only reads the checked-out tree and runs a stdlib
 # validator.  No write scopes (Checkov CKV2_GHA_1 / write-all default).

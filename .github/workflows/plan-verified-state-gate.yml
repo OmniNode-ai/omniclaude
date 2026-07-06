@@ -28,7 +28,6 @@ on:
       - '.onex_ratchets/plan_verified_state_allowlist.yaml'
       - 'scripts/lint_plan_verified_state.py'
       - '.github/workflows/plan-verified-state-gate.yml'
-  merge_group:
 
 permissions:
   contents: read

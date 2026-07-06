@@ -32,7 +32,6 @@ on:
       - 'scripts/lint_verification_evidence.py'
       - 'docs/standards/VERIFICATION_DOCTRINE.md'
       - '.github/workflows/verification-evidence-lint.yml'
-  merge_group:
 
 permissions:
   contents: read

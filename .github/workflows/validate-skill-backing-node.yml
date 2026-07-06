@@ -38,7 +38,6 @@ on:
       - 'plugins/onex/skills/_lib/skill_backing_node_allowlist.yaml'
       - 'tests/unit/skills/_lib/test_validate_skill_backing_node.py'
       - '.github/workflows/validate-skill-backing-node.yml'
-  merge_group:
 
 env:
   PYTHON_VERSION: "3.12"

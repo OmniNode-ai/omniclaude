@@ -21,7 +21,6 @@ on:
       - 'plugins/onex/skills/**/*.md'
       - 'scripts/lint_skill_mcp_refs.py'
       - '.github/workflows/skill-mcp-ref-lint.yml'
-  merge_group:
 
 jobs:
   skill-mcp-ref-lint:

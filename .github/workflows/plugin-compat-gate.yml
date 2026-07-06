@@ -24,7 +24,6 @@ on:
     paths:
       - 'plugins/onex/**'
       - '.github/workflows/plugin-compat-gate.yml'
-  merge_group:
   workflow_dispatch:
 
 env:

@@ -28,7 +28,6 @@ on:
       - 'docs/evidence/*.md'
       - '.pre-commit-hooks/check-defect-anchor.sh'
       - '.github/workflows/defect-anchor-gate.yml'
-  merge_group:
 
 permissions:
   contents: read
