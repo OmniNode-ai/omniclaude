@@ -1348,9 +1348,10 @@ jobs:
 
       - name: Run registry consistency tests
         working-directory: ${{ github.workspace }}
-        env:
-          OMNIMARKET_TOPICS_REGISTRY_PATH: ${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml
-        run: uv run pytest tests/hooks/test_registry_consistency.py -v
+        run: >-
+          uv run python scripts/validation/check_registry_consistency.py
+          --daemon-registry
+          "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
 
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
