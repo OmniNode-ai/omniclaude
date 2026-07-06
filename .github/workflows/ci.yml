@@ -1475,8 +1475,11 @@ jobs:
             port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
             if [ -n "$port" ] && docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
               pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics; then
-              echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
-              exit 0
+              if PG_DSN="postgresql://golden_chain@127.0.0.1:${port}/omnidash_analytics" \
+                uv run python -c 'import os, psycopg2; conn = psycopg2.connect(os.environ["PG_DSN"], connect_timeout=2); conn.close()'; then
+                echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
+                exit 0
+              fi
             fi
             echo "Waiting for golden-chain Postgres on 127.0.0.1:${port:-unassigned} (${attempt}/60)..."
             sleep 2
