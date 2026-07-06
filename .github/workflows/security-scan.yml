@@ -365,4 +365,4 @@ jobs:
             -v "$GITHUB_WORKSPACE:/repo" \
             -w /repo \
             tenable/terrascan:1.16.0 \
-            scan -i docker -d . -t all || true
+            scan -i docker -d . -t all

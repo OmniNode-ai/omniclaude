@@ -516,9 +516,11 @@ jobs:
 
       - name: Fetch PR base for migration diff
         if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags --depth=1 origin \
-            "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            "+${PR_BASE_SHA}:refs/remotes/origin/${GITHUB_BASE_REF}"
 
       - name: Check migration freeze
         working-directory: ${{ github.workspace }}
