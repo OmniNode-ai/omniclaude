@@ -42,6 +42,7 @@ on:
 env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.6.1"
+  UV_HTTP_TIMEOUT: "900"
 
 concurrency:
   group: skill-backing-node-${{ github.ref }}
@@ -111,7 +112,18 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --all-extras
+        run: |
+          for attempt in 1 2 3; do
+            if uv sync --all-extras; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit 1
+            fi
+            echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
+            sleep $((attempt * 10))
+          done
 
       - name: Run ValidateSkillBackingNode unit tests
         working-directory: ${{ github.workspace }}
