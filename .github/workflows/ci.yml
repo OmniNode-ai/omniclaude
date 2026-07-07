@@ -2528,10 +2528,13 @@ jobs:
       - name: Compute changed files vs PR base
         id: diff
         working-directory: ${{ github.workspace }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ github.base_ref }}" ]; then
-            if git fetch origin "${{ github.base_ref }}" --no-tags --depth=1 && \
-               git diff --name-only "origin/${{ github.base_ref }}"...HEAD > changed.txt; then
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$BASE_REF" ]; then
+            if git fetch origin "$BASE_REF" --no-tags && \
+               git diff --name-only "origin/$BASE_REF"...HEAD > changed.txt; then
               echo "mode=diff" >> "$GITHUB_OUTPUT"
               echo "Changed files:"; cat changed.txt
             else
@@ -2540,12 +2543,14 @@ jobs:
             fi
           else
             echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "Non-PR event (${{ github.event_name }}) — full-tree scan."
+            echo "Non-PR event ($EVENT_NAME) — full-tree scan."
           fi
       - name: Detect AI anti-patterns
         working-directory: ${{ github.workspace }}
+        env:
+          DIFF_MODE: ${{ steps.diff.outputs.mode }}
         run: |
-          if [ "${{ steps.diff.outputs.mode }}" = "diff" ]; then
+          if [ "$DIFF_MODE" = "diff" ]; then
             python scripts/ci/run_aislop_sweep.py --changed-files-from changed.txt
           else
             python scripts/ci/run_aislop_sweep.py --full-tree

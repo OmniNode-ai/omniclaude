@@ -85,8 +85,9 @@ def grep(
     pattern: str,
     *extra_args: str,
     dirs: list[str] | None = None,
-    root: Path = REPO_ROOT,
+    root: Path | None = None,
 ) -> list[str]:
+    root = root if root is not None else REPO_ROOT
     targets = dirs if dirs is not None else ["src"]
     # An explicit-but-empty target list would make grep read stdin and hang;
     # callers guard against it, but treat it as "nothing to scan" defensively.
@@ -121,7 +122,9 @@ def _is_excluded(rel_path: str) -> bool:
     return any(seg in EXCLUDE_DIRS for seg in Path(rel_path).parts)
 
 
-def resolve_scan_targets(changed_files: list[str], root: Path = REPO_ROOT) -> list[str]:
+def resolve_scan_targets(
+    changed_files: list[str], root: Path | None = None
+) -> list[str]:
     """Filter a raw git-diff file list to the src/ ``.py`` files this sweep scans.
 
     Drops non-``.py`` files, anything outside ``src/``, excluded directories, and
@@ -129,6 +132,7 @@ def resolve_scan_targets(changed_files: list[str], root: Path = REPO_ROOT) -> li
     violations off with them). Mirrors the whole-tree scan's coverage exactly,
     just restricted to the diff.
     """
+    root = root if root is not None else REPO_ROOT
     targets: set[str] = set()
     for raw in changed_files:
         rel = raw.strip()
@@ -167,7 +171,7 @@ def should_scan_full_tree(
 
 def collect_findings(
     targets: list[str] | None,
-    root: Path = REPO_ROOT,
+    root: Path | None = None,
 ) -> list[Finding]:
     """Run all three checks over ``targets``.
 
@@ -176,6 +180,7 @@ def collect_findings(
     an empty list means the diff touched no in-scope file, so there is nothing to
     scan and zero findings.
     """
+    root = root if root is not None else REPO_ROOT
     findings: list[Finding] = []
 
     if targets is None:
