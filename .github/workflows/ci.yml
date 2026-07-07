@@ -2852,55 +2852,69 @@ jobs:
 
   ci-summary:
     name: CI Summary
-    # OMN-14127: REQUIRED branch-protection context. Result-reading aggregator
-    # (no heavy work — only reads needs.*.result and posts a status) that runs on
-    # the GitHub-hosted ubuntu-latest runner so the aggregation layer never queues
-    # behind, or is cancelled while waiting for, the saturated self-hosted fleet.
-    # Its needs are the always-run gate aggregators (quality-gate / tests-gate /
-    # security-gate all carry `if: always()`), so with `if: always()` here this
-    # required context reaches a terminal state as soon as those gates resolve.
+    # OMN-14127: REQUIRED branch-protection context, implemented as a NO-`needs`,
+    # GitHub-hosted, FAIL-CLOSED poller. A `needs`-gated job gets no check-run
+    # until its `needs` terminalize, so under self-hosted fleet saturation the old
+    # needs-based CI Summary was ABSENT forever and the PR wedged BLOCKED with no
+    # auto-recovery. With NO `needs` this job's check-run instantiates immediately
+    # (the required context can never be absent); it polls the current run's job
+    # conclusions and posts a terminal success/failure within a bounded deadline.
+    # DEFAULT-DENY: green ONLY when every aggregate gate is present+good AND no
+    # non-allowlisted job failed — see scripts/ci/ci_summary_gate.py for the
+    # auditable gating set + soft-allowlist (unit-tested in
+    # tests/ci/test_ci_summary_gate.py). Pure hosted GitHub-API polling: zero
+    # self-hosted/LAN dependency. DO NOT rename — the job name IS the required
+    # context; a rename re-wedges every PR.
     runs-on: ubuntu-latest
-    needs: [quality-gate, tests-gate, security-gate, compliance, contract-compliance]
     if: always()
+    permissions:
+      actions: read
+      contents: read
+    # Deadline (below) is comfortably under the observed ~167m run-cancellation
+    # window so the required context ALWAYS posts a terminal state first. This
+    # job timeout is only a hard backstop above the internal poll deadline.
+    timeout-minutes: 100
     steps:
-      - name: Check all jobs passed
+      - name: Checkout (gate script)
+        uses: actions/checkout@v7
+      - name: Poll run jobs and compute fail-closed CI Summary verdict
         working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          # Bounded poll window (minutes) — kept under the run-cancel window so
+          # the required context always reaches a terminal state first.
+          DEADLINE_MINUTES: "90"
+          POLL_INTERVAL_SECONDS: "45"
         run: |
-          quality="${{ needs.quality-gate.result }}"
-          tests="${{ needs.tests-gate.result }}"
-          security="${{ needs.security-gate.result }}"
-          compliance="${{ needs.compliance.result }}"
-          contract_compliance="${{ needs.contract-compliance.result }}"
-
-          # OMN-13911: quality-gate/tests-gate/security-gate all carry
-          # if: always() (never structurally skipped), and contract-compliance
-          # only skips on workflow_dispatch (non-gating). None of the four has
-          # a legitimate skip path on pull_request/merge_group/push, so require
-          # strict success — a skipped/neutral/cancelled/failure result must
-          # not slip through silently (same class fixed for the sibling
-          # OMN-13875 gates: omnibase_infra #2188, omnibase_spi #254).
-          FAILED=false
-          for result in "$quality" "$tests" "$security" "$contract_compliance"; do
-            if [[ "$result" != "success" ]]; then
-              FAILED=true
+          set -uo pipefail
+          deadline=$(( $(date +%s) + DEADLINE_MINUTES * 60 ))
+          attempt=0
+          while true; do
+            attempt=$((attempt + 1))
+            if ! gh api --paginate \
+                "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" \
+                --jq '.jobs[]' | jq -s '.' > jobs.json; then
+              echo "gh api fetch failed (attempt ${attempt}); retrying after ${POLL_INTERVAL_SECONDS}s"
+              sleep "${POLL_INTERVAL_SECONDS}"
+              continue
             fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json
+            rc=$?
+            case "${rc}" in
+              0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
+              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)"; exit 1 ;;
+              2) : ;;  # PENDING — gating jobs still running; keep polling
+              *) echo "::error::ci_summary_gate.py returned unexpected code ${rc}; failing closed"; exit 1 ;;
+            esac
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --report-only || true
+              exit 1
+            fi
+            sleep "${POLL_INTERVAL_SECONDS}"
           done
-
-          # Compliance: accept success or skipped (command may not exist yet)
-          if [[ "$compliance" == "failure" || "$compliance" == "cancelled" ]]; then
-            FAILED=true
-          fi
-
-          if [[ "$FAILED" == "true" ]]; then
-            echo "One or more required jobs failed or were cancelled"
-            echo "  Quality Gate: $quality"
-            echo "  Tests Gate: $tests"
-            echo "  Security Gate: $security"
-            echo "  Compliance: $compliance"
-            echo "  Contract Compliance: $contract_compliance"
-            exit 1
-          fi
-          echo "All required jobs passed"
 
   # ============================================================================
   # BUILD (downstream of all gates)
