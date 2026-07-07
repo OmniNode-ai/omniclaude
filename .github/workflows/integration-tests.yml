@@ -29,10 +29,21 @@ env:
   EXPECTED_MIN_TABLES: 10
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   # ============================================================================
   # Integration Tests - Database System
   # ============================================================================
   database-integration:
+    needs: occ-preflight
     name: Database Integration Tests
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -268,6 +279,7 @@ jobs:
   # Integration Tests - Kafka Event Bus
   # ============================================================================
   kafka-integration:
+    needs: occ-preflight
     name: Kafka Integration Tests
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -430,6 +442,7 @@ jobs:
   # Integration Tests - Agent Observability
   # ============================================================================
   agent-observability:
+    needs: occ-preflight
     name: Agent Observability Tests
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -601,6 +614,7 @@ jobs:
   # Integration Tests - Full Pipeline
   # ============================================================================
   full-pipeline:
+    needs: occ-preflight
     name: Full Pipeline Integration Tests
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -734,11 +748,12 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     needs:
+      - occ-preflight
       - database-integration
       - kafka-integration
       - agent-observability
       - full-pipeline
-    if: always()
+    if: needs.occ-preflight.result == 'success' && (always())
 
     steps:
       - name: Download all test results

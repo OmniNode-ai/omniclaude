@@ -35,7 +35,18 @@ permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   daemon-venv-skew-gate:
+    needs: occ-preflight
     name: Daemon Venv Skew Gate
     runs-on: >-
       ${{

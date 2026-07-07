@@ -26,7 +26,18 @@ env:
   REPO_NAME: 'omniclaude'
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   structure-validation:
+    needs: occ-preflight
     name: Repository Structure Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -68,6 +79,7 @@ jobs:
           echo "All required omniclaude directories present."
 
   agent-yaml-compliance:
+    needs: occ-preflight
     name: Agent YAML Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -122,6 +134,7 @@ jobs:
           echo "All agent YAMLs pass compliance checks."
 
   ecosystem-validation:
+    needs: occ-preflight
     name: Ecosystem Integration Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -199,6 +212,7 @@ jobs:
           "
 
   legacy-compatibility-check:
+    needs: occ-preflight
     name: Legacy Compatibility Check
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -250,6 +264,7 @@ jobs:
           echo "Legacy compatibility check passed."
 
   pr-safety-enforcement:
+    needs: occ-preflight
     name: PR Safety Mutation Surface Enforcement
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -447,12 +462,13 @@ jobs:
       }}
     timeout-minutes: 5
     needs:
+      - occ-preflight
       - structure-validation
       - agent-yaml-compliance
       - ecosystem-validation
       - legacy-compatibility-check
       - pr-safety-enforcement
-    if: always()
+    if: needs.occ-preflight.result == 'success' && (always())
     steps:
       - name: Check standards results
         working-directory: ${{ github.workspace }}
@@ -485,6 +501,7 @@ jobs:
           echo "Omni Standards Gate PASSED"
 
   ci-naming-convention:
+    needs: occ-preflight
     name: CI Naming Convention
     runs-on: >-
       ${{
