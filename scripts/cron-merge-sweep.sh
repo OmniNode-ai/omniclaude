@@ -38,6 +38,7 @@ set -euo pipefail
 # Script lives at omni_home/omniclaude/scripts/cron-merge-sweep.sh → two levels up
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+export OMNI_HOME="${OMNI_HOME:-${ONEX_REGISTRY_ROOT}}"
 STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/merge-sweep-results"
 ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
 MARKET_REPO_ROOT="${ONEX_REGISTRY_ROOT}/omnimarket"
@@ -810,8 +811,12 @@ if [[ "${MERGE_SWEEP_SOURCED}" == "true" ]]; then
   return 0
 fi
 
-_queue_heal 2>>"${LOG_DIR}/${RUN_ID}.log" || \
-  log "[queue-heal] WARN: heal block exited non-zero (fail-open, tick continues)"
+if [[ "${DRY_RUN}" == "true" ]]; then
+  log "[queue-heal] Skipping method-mismatch scan in dry-run mode"
+else
+  _queue_heal 2>>"${LOG_DIR}/${RUN_ID}.log" || \
+    log "[queue-heal] WARN: heal block exited non-zero (fail-open, tick continues)"
+fi
 
 # Exit codes:
 # 0 = success

@@ -56,6 +56,11 @@ test_executable_path_reaches_preflight() {
   trap 'rm -rf "${tmp_root}"' RETURN
   mock_bin="${tmp_root}/bin"
   mkdir -p "${mock_bin}"
+  mkdir -p "${tmp_root}/.omnibase"
+
+  cat > "${tmp_root}/.omnibase/.env" <<'ENV_EOF'
+MERGE_SWEEP_TEST_WORKSPACE="${OMNI_HOME}/test-workspace"
+ENV_EOF
 
   cat > "${mock_bin}/gh" <<'MOCK_EOF'
 #!/usr/bin/env bash
@@ -79,6 +84,7 @@ MOCK_EOF
 
   _assert_equals "executable path exits from preflight" "1" "${exit_code}"
   _assert_contains "preflight reports missing configured python" "Missing requirements: ${tmp_root}/missing-python" "${output}"
+  _assert_not_contains "executable path exports OMNI_HOME before env source" "OMNI_HOME: unbound variable" "${output}"
   _assert_not_contains "executable path is not quarantined" "\"status\":\"quarantined\"" "${output}"
 }
 
