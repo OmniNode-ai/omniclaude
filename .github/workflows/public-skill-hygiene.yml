@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Public Skill Hygiene
+
+# OMN-14105: plugins/onex/skills/ is published/public. aislop_sweep
+# intentionally tolerates OmniNode-internal operating detail there (ticket
+# refs, omni_home paths, # local-path-ok escapes) because it exists to keep
+# our own dev loop clean, not to gate what an outside reader sees. This is a
+# separate, stricter gate: operator identity, real hosts/IPs, machine-
+# specific paths, and internal doc citations do not belong in a skill a
+# stranger might read. Detect-only, no auto-fix.
+
+on:
+  push:
+    branches: [main, 'hotfix/**']
+    paths:
+      - 'plugins/onex/skills/**'
+      - 'scripts/check_public_skill_hygiene.py'
+      - 'scripts/public_skill_hygiene_allowlist.yaml'
+      - '.github/workflows/public-skill-hygiene.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'plugins/onex/skills/**'
+      - 'scripts/check_public_skill_hygiene.py'
+      - 'scripts/public_skill_hygiene_allowlist.yaml'
+      - '.github/workflows/public-skill-hygiene.yml'
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  public-skill-hygiene:
+    name: Public Skill Hygiene
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Scan plugins/onex/skills/ for public-exposure hygiene violations
+        working-directory: ${{ github.workspace }}
+        run: uv run --with pyyaml python3 scripts/check_public_skill_hygiene.py

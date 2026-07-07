@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Ghost auto-merge detection and recovery (OMN-6813).
+"""Ghost auto-merge detection and recovery (<TICKET>).
 
 Detects PRs stuck with auto-merge enabled but never entering the merge queue
 due to a GitHub API race condition. Provides recovery by toggling auto-merge

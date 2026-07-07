@@ -25,12 +25,13 @@ For each claim, run the minimum command that directly proves or refutes it:
 
 ```bash
 # RUNTIME_HOST resolves from the environment (set in ~/.omnibase/.env)
-RUNTIME_HOST="${RUNTIME_HOST:?RUNTIME_HOST must be set to the .201 server address}"
+RUNTIME_HOST="${RUNTIME_HOST:?RUNTIME_HOST must be set to the runtime server address}"
+SSH_USER="${SSH_USER:?SSH_USER must be set to the runtime ssh login}"
 
 # Lane/container count
-ssh "jonah@${RUNTIME_HOST}" "docker ps --filter 'label=compose.project=<project>' --format '{{.Names}}' | wc -l"
+ssh "${SSH_USER}@${RUNTIME_HOST}" "docker ps --filter 'label=compose.project=<project>' --format '{{.Names}}' | wc -l"
 # Deployed SHA
-ssh "jonah@${RUNTIME_HOST}" "docker inspect <container> --format '{{.Config.Image}}'"
+ssh "${SSH_USER}@${RUNTIME_HOST}" "docker inspect <container> --format '{{.Config.Image}}'"
 # Endpoint health
 curl -sf "http://${RUNTIME_HOST}:<port>/v1/health" || echo "DEAD"
 # PR/group counts
@@ -105,7 +106,7 @@ as the resolution. Free text is not a valid resolution.
 ## Stale-Doc Findings
 
 - docs/CLAUDE.md: FIXED:a1b2c3d
-- docs/architecture/lane-census.md: DEFERRED:OMN-13034
+- docs/architecture/lane-census.md: DEFERRED:<TICKET>
 ```
 
 Validate each finding against `ModelStaleDocFinding` from

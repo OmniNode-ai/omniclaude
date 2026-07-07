@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""validate_skill_backing_node -- pre-commit invocation shim (OMN-10171, SEAM-2).
+"""validate_skill_backing_node -- pre-commit invocation shim (<TICKET>, SEAM-2).
 
 Canonical implementation moved to omnibase_core per ADR:
   omnibase_core/docs/decisions/adr-2026-04-28-skill-liveness-validator-home.md
@@ -19,7 +19,7 @@ ROOT is passed to the canonical implementation as ``omniclaude_root``.
 
 Bootstrap note: imports from omnibase_core are deferred to function call time
 so this shim is importable before omnibase_core is updated to the version that
-ships validator_skill_backing_node (OMN-10171 transitional window).
+ships validator_skill_backing_node (<TICKET> transitional window).
 """
 
 from __future__ import annotations

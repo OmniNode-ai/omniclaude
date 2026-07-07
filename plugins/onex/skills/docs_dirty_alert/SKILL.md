@@ -1,5 +1,5 @@
 ---
-description: Alert when untracked docs/{handoffs,evidence,plans,deep-dives} files in omni_home exceed a count threshold or are older than 4 hours
+description: Alert when untracked docs/{handoffs,evidence,plans,deep-dives} files in the workspace exceed a count threshold or are older than 4 hours
 mode: full
 version: "1.0.0"
 level: basic
@@ -16,7 +16,7 @@ skill_kind: dispatch
 
 # docs_dirty_alert
 
-Scans the `omni_home` canonical registry for untracked files under
+Scans the canonical registry for untracked files under
 `docs/handoffs`, `docs/evidence`, `docs/plans`, and `docs/deep-dives`.
 
 Fires an alert when either condition is true:
@@ -45,7 +45,7 @@ The cron prompt runs this check and emits a friction entry via
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OMNI_HOME` | Yes | Path to the canonical omni_home registry root |
+| `OMNI_HOME` | Yes | Path to the canonical registry root |
 | `ONEX_STATE_DIR` | Yes | ONEX runtime state directory |
 
 ## Outputs

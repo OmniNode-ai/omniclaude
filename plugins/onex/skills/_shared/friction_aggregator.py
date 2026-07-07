@@ -11,7 +11,7 @@ Thresholds (rolling 30 days):
   - count >= 3  (count-based: recurring nuisance)
   - score >= 9  (score-based: one high or three medium events)
 
-.. versionadded:: OMN-5442
+.. versionadded:: <TICKET>
 """
 
 from __future__ import annotations

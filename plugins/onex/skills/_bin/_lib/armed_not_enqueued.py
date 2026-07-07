@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Armed-not-enqueued detector (OMN-13031).
+"""Armed-not-enqueued detector (<TICKET>).
 
 Flags PRs where:
   - autoMergeRequest != null  (auto-merge is armed)
@@ -24,7 +24,7 @@ Usage:
         --repos OmniNode-ai/omniclaude \
         --format json
 
-[OMN-13031]
+[<TICKET>]
 """
 
 from __future__ import annotations

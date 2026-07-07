@@ -81,7 +81,7 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
    b. Extract DoD/acceptance criteria from description via dod_parser for ticket-specific checks.
       **Exception — never emit `test -f docs/plans/` checks:** the `no-planning-docs` pre-commit
       hook in `onex_change_control` forbids planning docs from existing in that repo (they live
-      in `omni_home/docs/plans/`). Any `check_value` containing `test -f docs/plans/` or
+      in the canonical registry's `docs/plans/`). Any `check_value` containing `test -f docs/plans/` or
       `test -f docs/plans/` variants would be structurally unsatisfiable and must be omitted.
       Other ticket-specific acceptance criteria extracted by dod_parser are retained normally.
    c. Generate contract YAML (stub for non-seam, full for seam tickets)

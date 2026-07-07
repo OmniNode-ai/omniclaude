@@ -41,16 +41,16 @@ Performs 6 sequential environment checks and emits a single go/no-go verdict. Al
 
 ---
 
-## Check 1 — PRO-G40 Drive Mounted
+## Check 1 — Overnight Drive Mounted
 
 Compose with `start_environment` for the drive check rather than reimplementing:
 
 ```bash
-df /Volumes/PRO-G40 2>/dev/null && echo "PRO-G40: MOUNTED" || echo "PRO-G40: NOT MOUNTED — FAIL"
+df "${OVERNIGHT_DRIVE_PATH:?set OVERNIGHT_DRIVE_PATH to the overnight drive mount point}" 2>/dev/null && echo "Overnight drive: MOUNTED" || echo "Overnight drive: NOT MOUNTED — FAIL"
 ```
 
 If NOT MOUNTED:
-- Report: `PRO-G40 drive is not mounted. Overnight sessions that write to /Volumes/PRO-G40 will fail.`
+- Report: `The overnight drive is not mounted. Overnight sessions that write to ${OVERNIGHT_DRIVE_PATH} will fail.`
 - Mark check: FAIL
 - Action: User must manually mount the drive before proceeding.
 
@@ -199,7 +199,7 @@ All checks are PASS (WARNs are acceptable):
 ║         PREFLIGHT: GO                ║
 ╚══════════════════════════════════════╝
 
-Check 1  PRO-G40 Drive      PASS
+Check 1  Overnight Drive    PASS
 Check 2  Machine Identity   PASS
 Check 3  Zombie Agents      PASS  (or WARN — list zombies)
 Check 4  Merge Queue        PASS  (or WARN — list conflicts)
@@ -217,14 +217,14 @@ One or more checks returned FAIL:
 ║         PREFLIGHT: NO-GO             ║
 ╚══════════════════════════════════════╝
 
-Check 1  PRO-G40 Drive      FAIL  ← drive not mounted
+Check 1  Overnight Drive    FAIL  ← drive not mounted
 Check 2  Machine Identity   PASS
 Check 3  Zombie Agents      WARN  (2 zombies — review before continuing)
 Check 4  Merge Queue        PASS
 Check 5  Env Vars           PASS
 
 Issues to resolve before starting:
-  1. Mount PRO-G40 drive (Check 1)
+  1. Mount the overnight drive (Check 1)
 
 Do not start overnight session until all FAIL items are resolved.
 Run /preflight again after fixing.

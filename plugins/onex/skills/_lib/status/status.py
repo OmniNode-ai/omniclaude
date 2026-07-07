@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""OmniClaude status reporter for the /onex-status skill (OMN-2785).
+"""OmniClaude status reporter for the /onex-status skill (<TICKET>).
 
 Displays the current integration tier, probe age, and per-service reachability.
 Runs a fresh probe inline if the capabilities file is missing or stale.
 
-Self-contained: works whether or not capability_probe.py (OMN-2782) is installed.
+Self-contained: works whether or not capability_probe.py (<TICKET>) is installed.
 """
 
 from __future__ import annotations
@@ -251,7 +251,7 @@ def print_status(caps: dict[str, object], refreshed: bool = False) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Try to import capability_probe (OMN-2782) — fallback to inline logic
+# Try to import capability_probe (<TICKET>) — fallback to inline logic
 # ---------------------------------------------------------------------------
 
 

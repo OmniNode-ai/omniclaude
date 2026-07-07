@@ -16,7 +16,7 @@ Surface taxonomy: <category>/<specific>
 Severity weights: low=1, medium=3, high=9
 Threshold: count >= 3 OR severity_score >= 9 (rolling 30 days)
 
-.. versionadded:: OMN-5442
+.. versionadded:: <TICKET>
 """
 
 from __future__ import annotations

@@ -37,7 +37,7 @@ args:
   - name: no-batch
     description: "true | false (default: false); disable gap batching in ticketize mode — create one ticket per skill (legacy per-skill behavior)"
     default: "false"
-ticket: OMN-3503
+ticket: <TICKET>
 ---
 
 # Feature Dashboard

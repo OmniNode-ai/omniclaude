@@ -1,5 +1,5 @@
 ---
-description: Detect uncommitted files in canonical omni_home repo clones and auto-ship each dirty repo to a worktree + PR. Runs node_dirty_canonical_sweep in-process via its module entrypoint (omnimarket).
+description: Detect uncommitted files in canonical workspace repo clones and auto-ship each dirty repo to a worktree + PR. Runs node_dirty_canonical_sweep in-process via its module entrypoint (omnimarket).
 mode: full
 version: 1.0.0
 level: advanced

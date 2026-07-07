@@ -15,11 +15,11 @@ author: OmniClaude Team
 
 # Executing Plans
 
-## Backing Status (OMN-13780) — NON-RUNNABLE via canonical event-bus dispatch
+## Backing Status (<TICKET>) — NON-RUNNABLE via canonical event-bus dispatch
 
 **This skill has no deterministic node backing and is de-listed from event-bus / node-routed dispatch — deliberately, by design.** Its generated orchestrator shell (`node_skill_executing_plans_orchestrator`) is a Polly-passthrough (`maturity: stub` in its contract.yaml), and no CLI or platform-service implementation exists elsewhere. Reviewing a plan, verifying live PR state, and routing to epic_team/ticket_pipeline is a Claude-session-native decision today.
 
-The ticket-count routing decision (>=3 tickets → epic_team, else ticket_pipeline) is a plausible future COMPUTE-node extraction — tracked in OMN-13802 — but the plan review and downstream dispatch stay session-native regardless.
+The ticket-count routing decision (>=3 tickets → epic_team, else ticket_pipeline) is a plausible future COMPUTE-node extraction — tracked in <TICKET> — but the plan review and downstream dispatch stay session-native regardless.
 
 ## Dispatch Surface
 

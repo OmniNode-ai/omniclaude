@@ -5,7 +5,7 @@
 # Source of truth for this skill's Kafka topics.
 # After initial generation, edit intentionally when skill topic requirements change.
 #
-# v7.0.0 (OMN-10167): Skill dispatches the contract-canonical
+# v7.0.0 (<TICKET>): Skill dispatches the contract-canonical
 # pr_lifecycle_orchestrator start envelope through the omnimarket module CLI.
 
 topics:

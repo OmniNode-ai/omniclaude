@@ -46,7 +46,7 @@ onex.evt.omniclaude.tech_debt_sweep-completed.v1
 
 All scanning and ticket creation logic executes inside the general-purpose agent. This skill is a thin shell: parse args, dispatch to node, render results.
 
-Scans all Python repos under `omni_home` for 6 categories of tech debt, deduplicates
+Scans all Python repos under the workspace for 6 categories of tech debt, deduplicates
 findings against existing open Linear tickets, and creates one epic per category with
 closeable tickets grouped by repo and top-level source directory.
 
@@ -87,8 +87,8 @@ authoritative risk score.
 
 ## Repo Discovery
 
-Determine the omni_home root from the current working directory context. If the current
-session is within the `omni_home` directory or a worktree derived from it, use
+Determine the workspace root from the current working directory context. If the current
+session is within the workspace directory or a worktree derived from it, use
 that as the root. Otherwise, check `ONEX_REGISTRY_ROOT` environment variable. Walk up from
 the current directory looking for a parent that contains multiple repos with
 `pyproject.toml` files as a heuristic fallback.
@@ -103,9 +103,9 @@ does not match the discovery criteria, report the error and exit.
 # Pseudocode -- executed via Bash/Glob tool calls, not as Python
 SKIP_REPOS = {"omnidash", "omniweb", "docs", "tmp", "hiring", "omnistream"}
 
-def discover_repos(omni_home: Path, repo_filter: str | None = None) -> list[Path]:
+def discover_repos(workspace_root: Path, repo_filter: str | None = None) -> list[Path]:
     repos = []
-    for d in sorted(omni_home.iterdir()):
+    for d in sorted(workspace_root.iterdir()):
         if not d.is_dir() or d.name in SKIP_REPOS or d.name.startswith("."):
             continue
         if repo_filter and d.name != repo_filter:
@@ -423,7 +423,7 @@ for c in categories:
 
 # Validate repo filter -- exit if repo doesn't exist
 if repo_filter:
-    repos = discover_repos(omni_home, repo_filter)
+    repos = discover_repos(workspace_root, repo_filter)
     if not repos:
         print(f"Repo '{repo_filter}' not found or has no src/ directory")
         # STOP -- do not proceed
@@ -434,7 +434,7 @@ if repo_filter:
 
 ```python
 # Pseudocode -- executed via Bash ls + Glob tool calls
-repos = discover_repos(omni_home, repo_filter)
+repos = discover_repos(workspace_root, repo_filter)
 print(f"Discovered {len(repos)} repos")
 ```
 

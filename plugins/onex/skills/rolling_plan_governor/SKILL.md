@@ -16,7 +16,7 @@ tags:
 author: OmniClaude Team
 args:
   - name: --plan
-    description: "Path to the canonical rolling plan (default: docs/plans/ROLLING_SEVEN_DAY_PLAN.md under the omni_home repo root)"
+    description: "Path to the canonical rolling plan (default: docs/plans/ROLLING_SEVEN_DAY_PLAN.md under the workspace repo root)"
     required: false
   - name: --ledger
     description: "Path(s) to the primary ledger input for this cycle — usually the latest session handoff (default: newest docs/handoff/*handoff*.md). Comma-separated for multiple."
@@ -44,10 +44,9 @@ rewrite the plan from scratch. It is to maintain an accurate, actionable,
 seven-day rolling execution plan based on new evidence, producing the **smallest
 set of changes** necessary to keep the plan true.
 
-The canonical plan is `docs/plans/ROLLING_SEVEN_DAY_PLAN.md` in the `omni_home`
-registry. It is the single driver of daily activity (memory
-`feedback_rolling_seven_day_plan`). This skill is how that document stays
-current between execution cycles.
+The canonical plan is `docs/plans/ROLLING_SEVEN_DAY_PLAN.md` in the canonical
+registry. It is the single driver of daily activity. This skill is how that
+document stays current between execution cycles.
 
 ---
 
@@ -133,7 +132,7 @@ completion/obsolescence signal.
 ### (e) Work-queue shape = ranked work-streams, not day buckets
 
 This project ships via parallel background agents in hours, not day-sequenced
-human effort (memory `feedback_estimation` — never emit multi-day estimates).
+human effort (never emit multi-day estimates).
 The "updated seven-day plan" is therefore the **ranked WS work-queue** (§2:
 `WS-0`, `WS-P`, `WS-1`, …), ordered by the priority ladder below — **not**
 `Day 1…Day 7` buckets. The seven-day window bounds scope; it does not partition
@@ -162,15 +161,16 @@ delta cites the ledger doc by path. Prior deltas are immutable history.
 Resolved operator decisions are struck through with the decision and date
 (`~~...~~ — DECIDED <date>: <ruling>`) and their consequences flow into §2 —
 they are not deleted. New decisions surfaced by the ledger are appended to §3
-(operator/code) or §4 (AWS/Daniyal, approval-gated — never acted on
-unilaterally). Parked scope (§5) moves only on an explicit operator unpark.
+(operator/code) or §4 (AWS/externally-owned infra, approval-gated — never
+acted on unilaterally). Parked scope (§5) moves only on an explicit operator
+unpark.
 
 ### (h) Terminal write + commit (unless --dry-run/--no-commit)
 
 The updated plan is the canonical rolling plan until the next cycle. On a normal
 run: write the file, `git add docs/plans/ROLLING_SEVEN_DAY_PLAN.md` (plus any
 superseded-plan tombstone), commit with an `OMN-XXXX`-tagged message, and report
-the commit sha. The plan lives in `omni_home`'s own git tree (edited in place —
+the commit sha. The plan lives in the workspace's own git tree (edited in place —
 this is not a nested repo clone), so no worktree is required for the plan edit
 itself. `--dry-run` prints the report + proposed diff only; `--no-commit` writes
 but leaves the file dirty.
@@ -240,7 +240,7 @@ changed sections: <§ list>   churn: <+adds/-dels lines>
 | Deleting a task because it fell off the latest handoff | `WORK_DROPPED_WITHOUT_EVIDENCE` |
 | Partitioning work into calendar days | `WRONG_QUEUE_SHAPE` — WS-ranked queue |
 | Editing §0 to "tidy" the operating model | `PREAMBLE_MUTATED_WITHOUT_DIRECTIVE` |
-| Silently acting on a §4 AWS/Daniyal item | Approval-gated — surface it, never execute |
+| Silently acting on a §4 AWS/externally-owned infra item | Approval-gated — surface it, never execute |
 
 ---
 
@@ -257,7 +257,7 @@ plan + live surfaces, reasons over the delta, and writes the canonical plan.
 ## See Also
 
 - `docs/plans/ROLLING_SEVEN_DAY_PLAN.md` — the canonical artifact this governs
-- memory `feedback_rolling_seven_day_plan` — the operator directive that made the plan rolling
-- memory `feedback_estimation` — no multi-day estimates (why the queue is WS-ranked)
+- The operator directive that made the plan rolling
+- No multi-day estimates (why the queue is WS-ranked)
 - `/onex:handoff` — produces the ledger this skill consumes; shares the probe-not-prose discipline
 - `/onex:ticket_plan` — Linear-sourced master backlog (a §2 input, not a substitute)

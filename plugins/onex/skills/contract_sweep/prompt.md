@@ -39,7 +39,7 @@ Runtime-mode-only args:
 omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ```
 
-**Bare clone root**: `$ONEX_REGISTRY_ROOT` (typically `/Volumes/PRO-G40/Code/omni_home`)  # local-path-ok: example default value in documentation
+**Bare clone root**: `$ONEX_REGISTRY_ROOT` (typically `$OMNI_HOME`)
 
 **Change control repo**: `$ONEX_REGISTRY_ROOT/onex_change_control`  # local-path-ok: canonical repo path reference in documentation
 
@@ -54,7 +54,7 @@ Run when mode is `drift` or `full`.
 Before scanning, pull all bare clones to ensure findings reflect the latest `main`:
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok: example command in documentation
+bash $OMNI_HOME/omnibase_infra/scripts/pull-all.sh
 ```
 
 If `pull-all.sh` exits non-zero, **abort the sweep immediately** with an error message

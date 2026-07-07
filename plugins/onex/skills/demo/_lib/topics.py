@@ -5,7 +5,7 @@
 
 Approved topic-constant file (see onex_change_control
 ``check_hardcoded_topics`` APPROVED_BASENAMES). The demo skill ``_lib`` is
-legacy and slated for removal under the OMN-13089 Phase 4 skill-shim
+legacy and slated for removal under the <TICKET> Phase 4 skill-shim
 migration; these constants exist so the dispatcher complies with the
 no-hardcoded-topics gate until then.
 """

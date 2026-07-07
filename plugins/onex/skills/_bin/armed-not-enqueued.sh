@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# Armed-not-enqueued detector (OMN-13031)
+# Armed-not-enqueued detector (<TICKET>)
 # Flags PRs where autoMergeRequest != null AND mergeStateStatus CLEAN AND
 # no ADDED_TO_MERGE_QUEUE_EVENT newer than the arming timestamp, sustained >30min.
 #

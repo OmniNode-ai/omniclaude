@@ -5,7 +5,7 @@
 # Source of truth for this skill's Kafka topics.
 # After initial generation, edit intentionally when skill topic requirements change.
 #
-# v2.0.0 (OMN-12236): Skill dispatches the contract-canonical
+# v2.0.0 (<TICKET>): Skill dispatches the contract-canonical
 # node_skill_dispatch_engine_orchestrator start envelope through the omnimarket module CLI.
 
 topics:

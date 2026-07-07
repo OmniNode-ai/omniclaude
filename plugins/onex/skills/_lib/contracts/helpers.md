@@ -128,7 +128,7 @@ requirements: [...]
 verification: [...]
 context: {...}
 execution:
-  branch: "jonah/omn-xxxx-description"
+  branch: "<user>/omn-xxxx-description"
   pr_url: null
   commits: []
   questions: []
@@ -340,7 +340,7 @@ Skills MUST enforce these rules when creating or updating contracts:
 - `phase` must be one of: `intake | research | questions | spec | implementation | review | done`
 - `requirements` must have at least 1 item when `phase` >= `spec`
 - `verification` must have at least 1 blocking item when `phase` >= `spec`
-- `execution.branch` must match `/^jonah\/omn-\d+/` pattern when set
+- `execution.branch` must match `/^[\w.-]+\/omn-\d+/` pattern when set
 
 ### EpicContract
 - `id` must match `/^OMN-\d+$/` or be `null` (draft)

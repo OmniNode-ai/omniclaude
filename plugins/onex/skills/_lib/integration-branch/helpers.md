@@ -16,13 +16,13 @@ Example: `epic/<epic_id>/integration`
 
 ```bash
 # Pull latest main
-git -C /Volumes/PRO-G40/Code/omni_worktrees/{ticket}/{repo} pull origin main --ff-only  # local-path-ok documentation example showing worktree path pattern
+git -C $OMNI_HOME/omni_worktrees/{ticket}/{repo} pull origin main --ff-only
 
 # Create integration branch from main
-git -C /Volumes/PRO-G40/Code/omni_worktrees/{ticket}/{repo} checkout -b epic/{epic_id}/integration  # local-path-ok documentation example showing worktree path pattern
+git -C $OMNI_HOME/omni_worktrees/{ticket}/{repo} checkout -b epic/{epic_id}/integration
 
 # Push to origin
-git -C /Volumes/PRO-G40/Code/omni_worktrees/{ticket}/{repo} push origin epic/{epic_id}/integration  # local-path-ok documentation example showing worktree path pattern
+git -C $OMNI_HOME/omni_worktrees/{ticket}/{repo} push origin epic/{epic_id}/integration
 ```
 
 This is called once per epic, not once per ticket.
@@ -44,7 +44,7 @@ Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 ## `run_integration_tests(epic_id, repo)` — Procedure
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_worktrees/{any_ticket}/{repo}  # local-path-ok documentation example showing worktree path pattern
+cd $OMNI_HOME/omni_worktrees/{any_ticket}/{repo}
 git checkout epic/{epic_id}/integration
 git pull origin epic/{epic_id}/integration
 uv run pytest tests/ -m "not slow" --tb=short -q 2>&1 | tee $ONEX_STATE_DIR/epics/{epic_id}/integration_test_results.txt

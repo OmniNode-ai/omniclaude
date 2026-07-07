@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""CLI wrapper for the proof reference resolver (OMN-4343).
+"""CLI wrapper for the proof reference resolver (<TICKET>).
 
 Thin wrapper that delegates all logic to the proof_validation library.
 No business logic duplication.

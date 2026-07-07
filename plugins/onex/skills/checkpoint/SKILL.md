@@ -54,11 +54,11 @@ Checkpoints are backed by the `omnibase_infra` checkpoint node infrastructure an
 
 **Announce at start:** "I'm using the checkpoint skill to manage pipeline state."
 
-## Backing Status (OMN-13780)
+## Backing Status (<TICKET>)
 
 Backed by (real, non-stub): `omnibase_infra/src/omnibase_infra/nodes/node_checkpoint_effect/` (EFFECT — read/write/list handlers) and `omnibase_infra/src/omnibase_infra/nodes/node_checkpoint_validate_compute/` (COMPUTE — validate handler), invoked in practice via `plugins/onex/hooks/lib/checkpoint_manager.py` (functional CLI wrapper, no stub markers).
 
-The generated omniclaude shell `node_skill_checkpoint_orchestrator` (`maturity: stub` in its contract.yaml) is a Polly-passthrough that is NOT the real dispatch path for this skill — it exists only from the bulk `generate_skill_node.py` pass and is never actually invoked. `skill_functional_audit`'s naive `node_<skill_name>` path match doesn't resolve to the real omnibase_infra node names above, which is why it (mis)flags this skill as a facade. Tracked cleanup: OMN-13799 (repoint the registry / retire the dead shell).
+The generated omniclaude shell `node_skill_checkpoint_orchestrator` (`maturity: stub` in its contract.yaml) is a Polly-passthrough that is NOT the real dispatch path for this skill — it exists only from the bulk `generate_skill_node.py` pass and is never actually invoked. `skill_functional_audit`'s naive `node_<skill_name>` path match doesn't resolve to the real omnibase_infra node names above, which is why it (mis)flags this skill as a facade. Tracked cleanup: <TICKET> (repoint the registry / retire the dead shell).
 
 ## Storage Layout
 

@@ -12,9 +12,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Configurable output directory
 # Priority: --output-dir flag > LINEAR_INSIGHTS_OUTPUT_DIR env > default
-# Default: ${HOME}/Code/omni_home/omni_save (cross-platform fallback)
-DEFAULT_OUTPUT_DIR="${HOME}/Code/omni_home/omni_save"
+# Default: $OMNI_HOME/omni_save
+DEFAULT_OUTPUT_DIR="${OMNI_HOME}/omni_save"
 OUTPUT_DIR="${LINEAR_INSIGHTS_OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
+
+# Git author name to filter deep-dive commit logs by (default: local git identity; empty matches all)
+GIT_AUTHOR="${GIT_AUTHOR:-$(git config user.name 2>/dev/null)}"
 
 usage() {
     cat << EOF
@@ -39,7 +42,7 @@ Options:
 
 Environment Variables:
   LINEAR_INSIGHTS_OUTPUT_DIR    Default output directory for saved reports
-                                (default: ${HOME}/Code/omni_home/omni_save)
+                                (default: \$OMNI_HOME/omni_save)
 
 Examples:
   # Today's deep dive (display only)
@@ -246,7 +249,7 @@ discover_active_repos() {
 # Code Root Detection & Local Clone Discovery
 # =============================================================================
 # Discovers all local repo clone directories (e.g. omniclaude, omnibase_core under
-# omni_home/, or worktrees under omni_worktrees/<ticket>/<repo>/) so
+# the workspace root, or worktrees under omni_worktrees/<ticket>/<repo>/) so
 # git log commands can be emitted for every clone, not just the primary one.
 # =============================================================================
 
@@ -552,13 +555,13 @@ if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
         local _first=true
         for _clone_dir in "${LOCAL_CLONE_DIRS[@]}"; do
             [[ "$_first" == "true" ]] || printf ',\n'
-            printf '    "cd \\"%s\\" && git log --oneline --format=\\"%%H %%s\\" --since=\\"%s\\" --until=\\"%s 23:59:59\\" --author=\\"Jonah\\""' \
-                "$_clone_dir" "$TARGET_DATE" "$TARGET_DATE"
+            printf '    "cd \\"%s\\" && git log --oneline --format=\\"%%H %%s\\" --since=\\"%s\\" --until=\\"%s 23:59:59\\" --author=\\"%s\\""' \
+                "$_clone_dir" "$TARGET_DATE" "$TARGET_DATE" "$GIT_AUTHOR"
             _first=false
         done
         printf '\n'
     else
-        printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"Jonah\\\""\n' "$TARGET_DATE" "$TARGET_DATE"
+        printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"%s\\\""\n' "$TARGET_DATE" "$TARGET_DATE" "$GIT_AUTHOR"
     fi
     printf '  ],\n'
     printf '  "git_dedup_note": "Deduplicate commits by full SHA — same SHA in multiple clones of the same repo counts once",\n'
@@ -694,12 +697,12 @@ PROMPT_PRE_GIT
 if [[ ${#LOCAL_CLONE_DIRS[@]} -gt 0 ]]; then
     for _clone_dir in "${LOCAL_CLONE_DIRS[@]}"; do
         printf '# %s\n' "$(basename "$_clone_dir")"
-        printf '```bash\ncd "%s" && git log --oneline --format="%%H %%s" --since="%s" --until="%s 23:59:59" --author="Jonah"\n```\n\n' \
-            "$_clone_dir" "$TARGET_DATE" "$TARGET_DATE"
+        printf '```bash\ncd "%s" && git log --oneline --format="%%H %%s" --since="%s" --until="%s 23:59:59" --author="%s"\n```\n\n' \
+            "$_clone_dir" "$TARGET_DATE" "$TARGET_DATE" "$GIT_AUTHOR"
     done
 else
-    printf '```bash\ngit log --oneline --since="%s" --until="%s 23:59:59" --author="Jonah"\n```\n\n' \
-        "$TARGET_DATE" "$TARGET_DATE"
+    printf '```bash\ngit log --oneline --since="%s" --until="%s 23:59:59" --author="%s"\n```\n\n' \
+        "$TARGET_DATE" "$TARGET_DATE" "$GIT_AUTHOR"
 fi
 cat << 'PROMPT_FOOTER'
 
@@ -840,13 +843,13 @@ if [[ "$GENERATE" == "true" ]]; then
         for _clone_dir in "${LOCAL_CLONE_DIRS[@]}"; do
             echo "# $(basename "$_clone_dir")"
             echo '```bash'
-            echo "cd \"${_clone_dir}\" && git log --oneline --format=\"%H %s\" --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
+            echo "cd \"${_clone_dir}\" && git log --oneline --format=\"%H %s\" --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"${GIT_AUTHOR}\""
             echo '```'
             echo ""
         done
     else
         echo '```bash'
-        echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
+        echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"${GIT_AUTHOR}\""
         echo '```'
         echo ""
     fi

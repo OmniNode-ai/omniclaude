@@ -62,10 +62,10 @@ def _resolve_command_topic() -> str:
     returns event_bus.subscribe.topic. Returns an empty string on any
     failure so callers can produce a clear error rather than silently misbehaving.
     """
-    omni_home = os.environ.get("OMNI_HOME", "").strip()
-    if not omni_home:
+    workspace_root = os.environ.get("OMNI_HOME", "").strip()
+    if not workspace_root:
         return ""
-    contract_path = Path(omni_home) / _CONTRACT_RELATIVE_PATH
+    contract_path = Path(workspace_root) / _CONTRACT_RELATIVE_PATH
     if not contract_path.is_file():
         return ""
     try:
