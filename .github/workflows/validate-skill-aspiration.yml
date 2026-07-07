@@ -26,6 +26,7 @@ on:
 env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.6.1"
+  UV_HTTP_TIMEOUT: "600"
 
 concurrency:
   group: skill-aspiration-${{ github.ref }}
