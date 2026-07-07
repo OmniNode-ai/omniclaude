@@ -46,10 +46,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Queue repos that are subject to the armed-not-enqueued pattern.
-#: onex_change_control removed 2026-07-06 (OMN-14077): its merge queue was
-#: disabled, so it is no longer queue-controlled — an armed OCC PR merges via
-#: the direct squash path rather than entering a queue, and must NOT be flagged
-#: as "armed but not enqueued" (there is no queue to enqueue into).
+#: OMN-14077: onex_change_control now follows the direct squash path, so it is
+#: intentionally excluded from queue-enrollment detection.
 QUEUE_REPOS: tuple[str, ...] = (
     "OmniNode-ai/omniclaude",
     "OmniNode-ai/omnibase_core",

@@ -559,9 +559,8 @@ class TestModelInvariants:
     def test_queue_repos_constant_covers_all_queue_repos(self) -> None:
         """QUEUE_REPOS must include all documented queue repos.
 
-        onex_change_control was removed 2026-07-06 (OMN-14077) when its merge
-        queue (ruleset 16846914) was disabled — it now merges via the direct
-        squash path and is not subject to the armed-not-enqueued pattern.
+        OMN-14077 moved onex_change_control to the direct squash path, so it is
+        not subject to the armed-not-enqueued pattern.
         """
         expected = {
             "OmniNode-ai/omniclaude",
