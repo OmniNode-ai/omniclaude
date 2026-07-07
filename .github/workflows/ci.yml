@@ -2514,13 +2514,42 @@ jobs:
       }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      # OMN-14086: diff-scope the sweep on a PR (scan only changed files); every
+      # check is per-file so this preserves detection. Fail-closed to a full-tree
+      # scan when the diff can't be computed or the event has no PR diff
+      # (merge_group/push/schedule). The script itself further escalates to
+      # full-tree when the diff touches the aislop validator sources.
+      - name: Compute changed files vs PR base
+        id: diff
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ github.base_ref }}" ]; then
+            if git fetch origin "${{ github.base_ref }}" --no-tags --depth=1 && \
+               git diff --name-only "origin/${{ github.base_ref }}"...HEAD > changed.txt; then
+              echo "mode=diff" >> "$GITHUB_OUTPUT"
+              echo "Changed files:"; cat changed.txt
+            else
+              echo "mode=full" >> "$GITHUB_OUTPUT"
+              echo "Diff computation failed — failing closed to full-tree scan."
+            fi
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "Non-PR event (${{ github.event_name }}) — full-tree scan."
+          fi
       - name: Detect AI anti-patterns
         working-directory: ${{ github.workspace }}
-        run: python scripts/ci/run_aislop_sweep.py
+        run: |
+          if [ "${{ steps.diff.outputs.mode }}" = "diff" ]; then
+            python scripts/ci/run_aislop_sweep.py --changed-files-from changed.txt
+          else
+            python scripts/ci/run_aislop_sweep.py --full-tree
+          fi
 
   # Agent YAML contract validation (OMN-8914)
   agent-contract-validation:
