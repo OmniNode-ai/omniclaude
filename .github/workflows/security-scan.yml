@@ -274,6 +274,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Run Checkov (IaC scanner)
         uses: bridgecrewio/checkov-action@4a1afa9897f7afe297a3762c926e1e800361464f  # v12.1347.0 (pinned 2026-03-04)
@@ -281,7 +283,7 @@ jobs:
           directory: .
           framework: dockerfile,github_actions
           output_format: sarif
-          output_file_path: checkov-results.sarif
+          output_file_path: checkov-results
           soft_fail: false
           soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
           hard_fail_on: HIGH,CRITICAL
@@ -290,7 +292,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles('checkov-results.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
-          sarif_file: 'checkov-results.sarif'
+          sarif_file: 'checkov-results/results_sarif.sarif'
 
       - name: Run Terrascan
         uses: tenable/terrascan-action@dd7e921056c6f25b25bff3cf791e063ed7fc3a78  # v1.4.1 (pinned 2026-03-04)
