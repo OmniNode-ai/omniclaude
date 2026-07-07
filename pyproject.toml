@@ -15,7 +15,7 @@ dependencies = [
     # omniclaude.shared.models.model_skill_result intentionally falls back to
     # the local legacy model when newer core releases move the export path.
     "omnibase-core>=0.46.4,<0.47.0",
-    "omnibase-spi>=0.22.0,<0.23.0",
+    "omnibase-spi>=0.22.0,<0.24.0",
     "omnibase-infra>=0.38.0,<0.39.0",
     "omnimarket>=0.4.0",
     "omninode-intelligence>=0.24.0,<0.25.0",
@@ -239,7 +239,7 @@ build-backend = "hatchling.build"
 # Override transitive pins so our direct pins win.
 override-dependencies = [
     "omnibase-core>=0.46.4,<0.47.0",
-    "omnibase-spi>=0.22.0,<0.23.0",
+    "omnibase-spi>=0.22.0,<0.24.0",
     "omnibase-infra>=0.38.0,<0.39.0",
 ]
 
