@@ -56,7 +56,7 @@ orders). Otherwise:
 ### 2.1 Identify the prior handoff
 
 ```bash
-cat docs/handoffs/LATEST.md 2>/dev/null || echo "no LATEST.md"
+cat docs/handoff/LATEST.md 2>/dev/null || echo "no LATEST.md"
 ```
 
 ### 2.2 Retract-or-reaffirm standing directives
@@ -69,7 +69,7 @@ Read every directive in the prior handoff. For each, add one inline marker:
 ### 2.3 Tombstone the prior handoff
 
 ```bash
-PRIOR=$(cat docs/handoffs/LATEST.md)
+PRIOR=$(cat docs/handoff/LATEST.md)
 echo "" >> "$PRIOR"
 echo "> SUPERSEDED by <this_handoff_path> at ${PROBE_TIME}" >> "$PRIOR"
 ```
@@ -77,7 +77,7 @@ echo "> SUPERSEDED by <this_handoff_path> at ${PROBE_TIME}" >> "$PRIOR"
 ### 2.4 Update LATEST.md pointer
 
 ```bash
-echo "docs/handoffs/<this_handoff_filename>.md" > docs/handoffs/LATEST.md
+echo "docs/handoff/<this_handoff_filename>.md" > docs/handoff/LATEST.md
 ```
 
 ---
@@ -176,7 +176,7 @@ if [[ -z "$STATE_AS_OF" ]] || [[ "$STATE_AS_OF" < "$PROBE_TIME" ]]; then
 
 > **SUPERSEDED** — runtime state as of this document (${STATE_AS_OF:-epoch}) is
 > older than the final handoff probe time (${PROBE_TIME}). Do not use this
-> document's runtime claims for planning. See: docs/handoffs/<this_handoff>
+> document's runtime claims for planning. See: docs/handoff/<this_handoff>
 EOF
 fi
 ```
@@ -192,8 +192,8 @@ After all five phases pass, commit every modified file.
 ### 6.1 Stage handoff artifacts
 
 ```bash
-git add docs/handoffs/<this_handoff_filename>.md
-git add docs/handoffs/LATEST.md
+git add docs/handoff/<this_handoff_filename>.md
+git add docs/handoff/LATEST.md
 # Stage every docs/** file cited in the handoff body that was modified:
 git add <each cited docs/** path>
 ```
