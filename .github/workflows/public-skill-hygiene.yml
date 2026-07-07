@@ -31,6 +31,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_HTTP_TIMEOUT: "600"
+
 jobs:
   public-skill-hygiene:
     name: Public Skill Hygiene
