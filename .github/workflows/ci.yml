@@ -2901,6 +2901,10 @@ jobs:
             if ! gh api --paginate \
                 "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" \
                 --jq '.jobs[]' | jq -s '.' > jobs.json; then
+              if [ "$(date +%s)" -ge "${deadline}" ]; then
+                echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached while fetching jobs — failing closed"
+                exit 1
+              fi
               echo "gh api fetch failed (attempt ${attempt}); retrying after ${POLL_INTERVAL_SECONDS}s"
               sleep "${POLL_INTERVAL_SECONDS}"
               continue
