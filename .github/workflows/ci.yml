@@ -19,7 +19,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
-  UV_HTTP_TIMEOUT: '300'
+  # OMN-14127: CI gates were failing mechanically while downloading/extracting
+  # large transitive CUDA/PyTorch wheels under fleet/network pressure. Keep the
+  # validators fail-closed, but make dependency installation tolerant enough to
+  # avoid false red from transient package transfer stalls.
+  UV_HTTP_TIMEOUT: '900'
+  UV_CONCURRENT_DOWNLOADS: '4'
   # ONEX state directory — required by hooks/lib/onex_state.py (OMN-5632)
   ONEX_STATE_DIR: /tmp/onex-state
 

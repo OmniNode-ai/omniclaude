@@ -18,7 +18,6 @@ dependencies = [
     "omnibase-spi>=0.22.0,<0.23.0",
     "omnibase-infra>=0.38.0,<0.39.0",
     "omnimarket>=0.4.0",
-    "omninode-intelligence>=0.24.0,<0.25.0",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     "cachetools>=5.0.0",
@@ -66,6 +65,13 @@ skills = [
     "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
 ]
 
+# intelligence is optional because it currently pulls ML inference packages
+# (torch/adaptive-classifier and Linux CUDA wheels). Default CI validators do
+# not execute local intelligence inference and must not install that stack.
+intelligence = [
+    "omninode-intelligence>=0.24.0,<0.25.0",
+]
+
 # full bundles all optional feature sets for a complete local development install.
 full = [
     "aiokafka>=0.11.0,<0.15.0",
@@ -75,6 +81,7 @@ full = [
     "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
     "valkey>=6.0",
     "discord.py>=2.3.0,<3.0.0",
+    "omninode-intelligence>=0.24.0,<0.25.0",
 ]
 
 [dependency-groups]

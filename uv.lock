@@ -2059,7 +2059,6 @@ dependencies = [
     { name = "omnibase-infra" },
     { name = "omnibase-spi" },
     { name = "omnimarket" },
-    { name = "omninode-intelligence" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -2075,6 +2074,7 @@ full = [
     { name = "aiokafka" },
     { name = "confluent-kafka" },
     { name = "discord-py" },
+    { name = "omninode-intelligence" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -2082,6 +2082,9 @@ full = [
 ]
 hooks = [
     { name = "valkey" },
+]
+intelligence = [
+    { name = "omninode-intelligence" },
 ]
 kafka = [
     { name = "aiokafka" },
@@ -2141,7 +2144,8 @@ requires-dist = [
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.0" },
     { name = "omnibase-spi", specifier = ">=0.22.0,<0.23.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=v0.4.0" },
-    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0" },
+    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0" },
+    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.24.0" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
@@ -2159,7 +2163,7 @@ requires-dist = [
     { name = "valkey", marker = "extra == 'full'", specifier = ">=6.0" },
     { name = "valkey", marker = "extra == 'hooks'", specifier = ">=6.0" },
 ]
-provides-extras = ["kafka", "otel", "hooks", "discord", "skills", "full"]
+provides-extras = ["kafka", "otel", "hooks", "discord", "skills", "intelligence", "full"]
 
 [package.metadata.requires-dev]
 dev = [
