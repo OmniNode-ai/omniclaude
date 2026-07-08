@@ -93,6 +93,28 @@ class TestCiSummaryGate:
         assert code == EXIT_FAILURE
         assert "Pyright Type Checking" in report
 
+    def test_cancelled_leaf_waits_for_missing_aggregate_gates(self) -> None:
+        jobs = [_job("Arch: No LinearClient outside effects (check 3)", "cancelled")]
+        code, report = evaluate(jobs)
+        assert code == EXIT_PENDING
+        assert "Arch: No LinearClient outside effects (check 3)" not in report
+        assert "gates missing/pending" in report
+
+    def test_cancelled_leaf_fails_after_aggregate_gates_exist(self) -> None:
+        jobs = _all_gates("success") + [
+            _job("Arch: No LinearClient outside effects (check 3)", "cancelled")
+        ]
+        code, report = evaluate(jobs)
+        assert code == EXIT_FAILURE
+        assert "Arch: No LinearClient outside effects (check 3)" in report
+
+    def test_cancelled_aggregate_gate_still_fails(self) -> None:
+        jobs = _all_gates("success")
+        jobs[0] = _job(GATE_JOBS[0], "cancelled")
+        code, report = evaluate(jobs)
+        assert code == EXIT_FAILURE
+        assert GATE_JOBS[0] in report
+
     def test_allowlisted_job_failure_is_ignored(self) -> None:
         # A failing non-gating job (e.g. Markdown Link Check) must NOT block.
         jobs = _all_gates("success") + [_job("Markdown Link Check", "failure")]
