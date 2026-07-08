@@ -125,6 +125,19 @@ class TestCiSummaryGate:
         code, _ = evaluate(jobs)
         assert code == EXIT_FAILURE
 
+    def test_run_attempt_filters_stale_failure_from_previous_attempt(self) -> None:
+        jobs = [_job(g, "failure", attempt=1) for g in GATE_JOBS]
+        jobs.extend(_job(g, "success", attempt=2) for g in GATE_JOBS)
+        code, _ = evaluate(jobs, run_attempt=2)
+        assert code == EXIT_SUCCESS
+
+    def test_current_attempt_missing_gate_is_pending_not_stale_failure(self) -> None:
+        jobs = [_job(g, "failure", attempt=1) for g in GATE_JOBS]
+        jobs.extend(_job(g, "success", attempt=2) for g in GATE_JOBS[:-1])
+        code, report = evaluate(jobs, run_attempt=2)
+        assert code == EXIT_PENDING
+        assert GATE_JOBS[-1] in report
+
     def test_neutral_conclusion_is_fail_closed(self) -> None:
         jobs = _all_gates("success") + [_job("Some New Job", "neutral")]
         code, _ = evaluate(jobs)
@@ -172,3 +185,9 @@ class TestCiSummaryGateCli:
         jobs[0] = _job(GATE_JOBS[0], "failure")
         result = self._run(jobs, "--report-only")
         assert result.returncode == EXIT_SUCCESS
+
+    def test_cli_run_attempt_ignores_stale_failure(self) -> None:
+        jobs = [_job(g, "failure", attempt=1) for g in GATE_JOBS]
+        jobs.extend(_job(g, "success", attempt=2) for g in GATE_JOBS)
+        result = self._run(jobs, "--run-attempt", "2")
+        assert result.returncode == EXIT_SUCCESS, result.stdout + result.stderr
