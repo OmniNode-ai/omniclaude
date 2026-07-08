@@ -98,11 +98,21 @@ BLOCKING_JQ='[
     )
 ] | length'
 
-RAW=$(gh api graphql --paginate \
-  -f query="$QUERY" \
-  -F owner="$OWNER" \
-  -F repo="$REPO" \
-  -F pr="$PR_NUMBER")
+RAW=""
+for attempt in 1 2 3; do
+  if RAW=$(gh api graphql --paginate \
+    -f query="$QUERY" \
+    -F owner="$OWNER" \
+    -F repo="$REPO" \
+    -F pr="$PR_NUMBER"); then
+    break
+  fi
+  if [ "$attempt" -eq 3 ]; then
+    echo "failed to query review threads after ${attempt} attempts" >&2
+    exit 1
+  fi
+  sleep $((attempt * 5))
+done
 
 # Emit concession acks to stderr so CI logs are auditable
 echo "$RAW" | jq -rs "$CONCESSION_JQ" >&2
