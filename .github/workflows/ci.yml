@@ -32,6 +32,17 @@ jobs:
   # OCC preflight is the first non-OCC CI dependency. If central OCC
   # evidence is missing or red, no runner-heavy validation jobs fan out.
   occ-preflight:
+    # The reusable occ-preflight.yml declares `permissions: {contents: read,
+    # pull-requests: read}`. A called workflow cannot request more than the
+    # caller grants, and this ci.yml has no workflow-level `permissions:` block,
+    # so without this job-level grant the run's token defaults to the repo
+    # `read` default (pull-requests: none) and GitHub rejects the ENTIRE
+    # workflow at startup ("startup_failure"). Mirror the grant the standalone
+    # call-occ-preflight.yml already sets so the reusable's declared scope is
+    # satisfiable. (OMN-14104)
+    permissions:
+      contents: read
+      pull-requests: read
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
     uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
     with:
