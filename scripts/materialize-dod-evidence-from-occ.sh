@@ -94,7 +94,13 @@ if missing_ids:
 
 failed_paths: list[str] = []
 for path in receipt_paths:
-    if not re.search(r"(?m)^status:\s*[\"']?PASS[\"']?\s*$", path.read_text()):
+    text = path.read_text()
+    has_top_level_pass = re.search(r"(?m)^status:\s*[\"']?PASS[\"']?\s*$", text)
+    has_supersession_pass = re.search(
+        r"(?m)^\s+\"?status\"?:\s*[\"']?PASS[\"']?\s*$",
+        text,
+    )
+    if not (has_top_level_pass or has_supersession_pass):
         failed_paths.append(str(path))
 
 if failed_paths:
