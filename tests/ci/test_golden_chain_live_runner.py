@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import psycopg2
 import pytest
 
 from omniclaude.hooks.topics import TopicBase
@@ -113,3 +114,48 @@ def test_project_envelope_materializes_registered_topics(
 
     assert len(captured_upserts) == 1
     assert captured_upserts[0]["table"] == expected_table
+
+
+def test_initialize_database_retries_transient_postgres_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    executed: list[str] = []
+
+    class Cursor:
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            executed.append(query)
+
+    class Connection:
+        autocommit = False
+
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    def fake_connect(db_dsn: str) -> Connection:
+        nonlocal attempts
+        attempts += 1
+        assert db_dsn == "postgresql://example"
+        if attempts == 1:
+            raise psycopg2.OperationalError("service not ready")
+        return Connection()
+
+    monkeypatch.setattr(runner.psycopg2, "connect", fake_connect)
+    monkeypatch.setattr(runner.time, "sleep", lambda _seconds: None)
+
+    runner.initialize_database("postgresql://example")
+
+    assert attempts == 2
+    assert executed == [runner.DDL]

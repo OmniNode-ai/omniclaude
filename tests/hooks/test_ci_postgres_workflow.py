@@ -201,13 +201,17 @@ def test_ci_summary_checks_contract_compliance_result(
     ci_workflow: dict[str, Any],
 ) -> None:
     summary = _job(ci_workflow, "ci-summary")
-    needs = summary.get("needs")
-    assert isinstance(needs, list)
-    assert "contract-compliance" in needs
+    assert "needs" not in summary
+    assert summary.get("runs-on") == "ubuntu-latest"
+    assert summary.get("if") == "always()"
 
-    run = _step(summary, "Check all jobs passed")["run"]
-    assert 'contract_compliance="${{ needs.contract-compliance.result }}"' in run
-    assert '"$quality" "$tests" "$security" "$contract_compliance"' in run
+    run = _step(summary, "Poll run jobs and compute fail-closed CI Summary verdict")[
+        "run"
+    ]
+    assert "scripts/ci/ci_summary_gate.py" in run
+    assert '--run-attempt "${RUN_ATTEMPT}"' in run
+    assert "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" in run
+    assert "CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)" in run
 
 
 def test_legacy_integration_tests_workflow_remains_manual_only() -> None:

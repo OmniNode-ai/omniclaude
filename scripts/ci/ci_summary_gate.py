@@ -183,16 +183,7 @@ def evaluate(
     job_states = _job_states(jobs, run_attempt=run_attempt)
     latest = dedup_latest(jobs, run_attempt=run_attempt)
 
-    # (2) Completeness anchor over the aggregate gates.
-    gate_missing_or_pending = [
-        g
-        for g in gate_jobs
-        if (latest.get(g) is None or latest[g].status != "completed")
-    ]
-
-    # (1) Default-deny failure sweep over every present+completed job. A
-    # cancelled leaf can be a transient runner/API artifact while fail-closed
-    # aggregate gates are still absent; keep polling until those gates exist.
+    # (1) Default-deny failure sweep over every present+completed job.
     sweep_failures = sorted(
         j.name
         for j in job_states
@@ -200,8 +191,14 @@ def evaluate(
         and j.name not in allowlist
         and j.status == "completed"
         and j.conclusion not in GOOD_CONCLUSIONS
-        and not (j.conclusion == "cancelled" and gate_missing_or_pending)
     )
+
+    # (2) Completeness anchor over the aggregate gates.
+    gate_missing_or_pending = [
+        g
+        for g in gate_jobs
+        if (latest.get(g) is None or latest[g].status != "completed")
+    ]
 
     if sweep_failures:
         return EXIT_FAILURE, _report(
