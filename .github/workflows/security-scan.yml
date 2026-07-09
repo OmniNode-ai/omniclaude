@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -52,7 +54,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7 (pinned 2026-07-07)
 
       - name: Export requirements
         working-directory: ${{ github.workspace }}
@@ -95,12 +97,13 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
         uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
-          path: ./
+          path: ${{ github.workspace }}
           base: ${{ github.event.before }}
           head: ${{ github.event.after }}
           extra_args: --only-verified
@@ -118,7 +121,7 @@ jobs:
         if: github.event_name != 'push' && github.event_name != 'pull_request'
         uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
-          path: ./
+          path: ${{ github.workspace }}
           extra_args: --only-verified
 
   # ============================================================================
@@ -148,6 +151,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -184,6 +189,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Move Docker data root to large disk
         run: |
@@ -242,17 +249,23 @@ jobs:
           VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
           curl -L -o dockle.tar.gz "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
           tar zxf dockle.tar.gz
-          dockle_tmp="${RUNNER_TEMP:-/tmp}/dockle"
-          mkdir -p "$dockle_tmp"
-          docker save omniclaude:scan > "$dockle_tmp/omniclaude-scan.tar"
-          export TMPDIR="$dockle_tmp"
+          if command -v sudo >/dev/null 2>&1; then
+            sudo mkdir -p /mnt/dockle
+            sudo chown "$USER:$USER" /mnt/dockle
+            DOCKLE_TMP=/mnt/dockle
+          else
+            DOCKLE_TMP="${RUNNER_TEMP:-/tmp}/dockle"
+            mkdir -p "$DOCKLE_TMP"
+          fi
+          docker save omniclaude:scan > "$DOCKLE_TMP/omniclaude-scan.tar"
+          export TMPDIR="$DOCKLE_TMP"
           ./dockle \
             --timeout 600s \
             --exit-code 1 \
             --exit-level fatal \
             --accept-file settings.py \
             --ignore DKL-DI-0005 \
-            --input "$dockle_tmp/omniclaude-scan.tar"
+            --input "$DOCKLE_TMP/omniclaude-scan.tar"
 
   # ============================================================================
   # Infrastructure as Code Security Scan
