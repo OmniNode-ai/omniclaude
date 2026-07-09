@@ -2661,7 +2661,7 @@ jobs:
       - skill-monorepo-ref-gate
       # Polymorphic-agent regression guard (OMN-9143)
       - no-polymorphic-agent
-    if:  needs.occ-preflight.result == 'success' && (always())
+    if: always()
     steps:
       - name: Check quality results
         working-directory: ${{ github.workspace }}
@@ -2670,6 +2670,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
@@ -2739,7 +2740,7 @@ jobs:
       - database-validation
       - golden-chain-live
       - registry-consistency
-    if:  needs.occ-preflight.result == 'success' && (always())
+    if: always()
     steps:
       - name: Check test results
         working-directory: ${{ github.workspace }}
@@ -2748,6 +2749,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
@@ -2784,7 +2786,7 @@ jobs:
       - occ-preflight
       - security-python
       - detect-secrets
-    if:  needs.occ-preflight.result == 'success' && (always())
+    if: always()
     steps:
       - name: Check security results
         working-directory: ${{ github.workspace }}
@@ -2793,6 +2795,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "security-python=${{ needs.security-python.result }}" \
             "detect-secrets=${{ needs.detect-secrets.result }}"; do
             NAME="${check%%=*}"

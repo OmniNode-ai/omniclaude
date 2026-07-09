@@ -255,15 +255,21 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     needs: [occ-preflight, hostile-review]
-    if: needs.occ-preflight.result == 'success' && (always())
+    if: always()
     steps:
       - name: Evaluate gate
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Hostile Review Gate ==="
+          PREFLIGHT="${{ needs.occ-preflight.result }}"
           RESULT="${{ needs.hostile-review.result }}"
+          echo "occ-preflight: $PREFLIGHT"
           echo "hostile-review: $RESULT"
 
+          if [ "$PREFLIGHT" != "success" ]; then
+            echo "::error::OCC preflight failed or did not complete (result: $PREFLIGHT)."
+            exit 1
+          fi
           if [ "$RESULT" = "failure" ]; then
             echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
             exit 1

@@ -468,7 +468,7 @@ jobs:
       - ecosystem-validation
       - legacy-compatibility-check
       - pr-safety-enforcement
-    if: needs.occ-preflight.result == 'success' && (always())
+    if: always()
     steps:
       - name: Check standards results
         working-directory: ${{ github.workspace }}
@@ -477,6 +477,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "structure-validation=${{ needs.structure-validation.result }}" \
             "agent-yaml-compliance=${{ needs.agent-yaml-compliance.result }}" \
             "ecosystem-validation=${{ needs.ecosystem-validation.result }}" \
