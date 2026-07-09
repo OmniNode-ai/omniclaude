@@ -70,7 +70,7 @@ jobs:
         run: |
           for attempt in {1..4}; do
             rm -rf ../omniintelligence
-            if git clone --depth=1 --filter=blob:none --branch main \
+            if git clone --depth=1 --filter=blob:none --branch dev \
               https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence; then
               exit 0
             fi
@@ -83,7 +83,7 @@ jobs:
         run: |
           for attempt in {1..4}; do
             rm -rf ../omnibase_core
-            if git clone --depth=1 --filter=blob:none --branch main \
+            if git clone --depth=1 --filter=blob:none --branch dev \
               https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core; then
               exit 0
             fi
@@ -96,7 +96,7 @@ jobs:
         run: |
           for attempt in {1..4}; do
             rm -rf ../omnibase_compat
-            if git clone --depth=1 --filter=blob:none --branch main \
+            if git clone --depth=1 --filter=blob:none --branch dev \
               https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat; then
               exit 0
             fi
@@ -127,7 +127,7 @@ jobs:
           set -euo pipefail
 
           attempt=1
-          until uv sync --all-extras --python 3.12; do
+          until uv sync --locked --all-extras --python 3.12; do
             status=$?
             if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
               echo "::error::uv sync failed after ${attempt} attempt(s)"

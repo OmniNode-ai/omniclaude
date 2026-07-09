@@ -152,6 +152,41 @@ def test_review_step_invokes_cli_review_with_model(
     )
 
 
+def test_dependency_clones_track_dev_and_review_install_excludes_rl(
+    workflow: dict[object, object],
+) -> None:
+    """Reviewer support repos must track dev and avoid the Torch/RL install path."""
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+
+    steps = review_job.get("steps") or []
+    assert isinstance(steps, list) and steps
+    run_blocks = [
+        step.get("run", "")
+        for step in steps
+        if isinstance(step, dict) and isinstance(step.get("run"), str)
+    ]
+    combined = "\n".join(run_blocks)
+
+    for repo in ("omniintelligence", "omnibase_core", "omnibase_compat"):
+        repo_url = f"https://github.com/OmniNode-ai/{repo}.git"
+        assert repo_url in combined, f"{repo} clone must be present"
+        assert "--branch dev" in combined, "dependency clones must track dev"
+        assert "--branch main" not in combined, f"{repo} clone must not track main"
+
+    assert "uv sync --locked --all-extras --python 3.12" in combined, (
+        "reviewer dependency install must use the locked review path"
+    )
+    assert "uv sync --all-extras" not in combined, (
+        "bare all-extras install can pull stale main/lock behavior and CUDA wheels"
+    )
+    assert "--group rl" not in combined, (
+        "hostile reviewer must not install the opt-in RL/Torch dependency group"
+    )
+
+
 def test_dependency_install_failure_degrades_instead_of_blocking(
     workflow: dict[object, object],
 ) -> None:
