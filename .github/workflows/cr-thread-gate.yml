@@ -1,6 +1,6 @@
 name: CR Thread Gate
 # Reusable workflow — call via:
-#   uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
+#   uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@dev
 # Required status check string: "gate / CodeRabbit Thread Check"
 # (produced by callers whose job key is named 'gate:' and uses this workflow)
 on:
@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: main
+          ref: dev
           sparse-checkout: scripts/check-unresolved-threads.sh
           sparse-checkout-cone-mode: false
 

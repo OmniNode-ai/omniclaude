@@ -19,7 +19,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
-  UV_HTTP_TIMEOUT: '300'
+  # OMN-14127: CI gates were failing mechanically while downloading/extracting
+  # large transitive CUDA/PyTorch wheels under fleet/network pressure. Keep the
+  # validators fail-closed, but make dependency installation tolerant enough to
+  # avoid false red from transient package transfer stalls.
+  UV_HTTP_TIMEOUT: '900'
+  UV_CONCURRENT_DOWNLOADS: '4'
   # ONEX state directory — required by hooks/lib/onex_state.py (OMN-5632)
   ONEX_STATE_DIR: /tmp/onex-state
 
@@ -45,14 +50,9 @@ jobs:
 
   quality:
     name: Code Quality
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
+    # so required CI does not queue behind self-hosted fleet saturation.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -150,14 +150,10 @@ jobs:
     name: Pyright Type Checking
     needs: zone-filter
     if: needs.zone-filter.outputs.docs_only != 'true'
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: Pyright's bundled node runtime needs libatomic on some Linux
+    # images; the self-hosted fleet is not consistently provisioned and has no
+    # sudo/root repair path. This is a static check, so run it hosted.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -1267,13 +1263,10 @@ jobs:
     name: Golden Chain Live
     needs: zone-filter
     if: needs.zone-filter.outputs.docs_only != 'true'
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: service-container live check with no LAN dependency. Hosted
+    # runners provide reliable service port mapping; the self-hosted fleet has
+    # shown refused mapped Postgres ports under saturation.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
       redpanda:
@@ -1292,10 +1285,10 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: omnidash_analytics
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U golden_chain -d omnidash_analytics"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 12
         ports:
           - 5432/tcp
     env:
@@ -1329,7 +1322,7 @@ jobs:
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
         env:
-          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
+          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
 
   # ============================================================================
@@ -1340,14 +1333,13 @@ jobs:
     name: Python Security Scan
     needs: zone-filter
     if: needs.zone-filter.outputs.docs_only != 'true'
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
+    # scan (bandit) with no self-hosted/LAN dependency, so it runs on the
+    # GitHub-hosted ubuntu-latest runner. Keeping the whole Security Gate subtree
+    # off the self-hosted fleet is what lets the required "Security Gate" context
+    # reach a terminal state even when the self-hosted fleet is fully saturated —
+    # a needs-gated aggregator never posts a status until its needs are terminal.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1390,14 +1382,11 @@ jobs:
 
   detect-secrets:
     name: Secret Detection
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
+    # scan (detect-secrets) with no self-hosted/LAN dependency, so it runs on the
+    # GitHub-hosted ubuntu-latest runner so the whole Security Gate subtree stays
+    # off the saturated self-hosted fleet (see security-python / security-gate).
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -2576,14 +2565,11 @@ jobs:
 
   quality-gate:
     name: Quality Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: result-reading aggregator (no heavy work) feeding the required
+    # "CI Summary" context. Runs on the GitHub-hosted ubuntu-latest runner so the
+    # aggregation layer never queues behind — or gets cancelled while waiting on —
+    # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
+    runs-on: ubuntu-latest
     needs:
       - quality
       - pyright
@@ -2699,14 +2685,11 @@ jobs:
 
   tests-gate:
     name: Tests Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: result-reading aggregator (no heavy work) feeding the required
+    # "CI Summary" context. Runs on the GitHub-hosted ubuntu-latest runner so the
+    # aggregation layer never queues behind — or gets cancelled while waiting on —
+    # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
+    runs-on: ubuntu-latest
     needs:
       - test
       - hooks-tests
@@ -2749,14 +2732,12 @@ jobs:
 
   security-gate:
     name: Security Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: REQUIRED branch-protection context. Result-reading aggregator
+    # (no heavy work) that runs on the GitHub-hosted ubuntu-latest runner. Both of
+    # its leaves (security-python, detect-secrets) are also hosted, so the entire
+    # Security Gate subtree is off the self-hosted fleet and this required context
+    # reaches a terminal state (with `if: always()`) regardless of fleet saturation.
+    runs-on: ubuntu-latest
     needs:
       - security-python
       - detect-secrets
@@ -2864,54 +2845,78 @@ jobs:
 
   ci-summary:
     name: CI Summary
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    needs: [quality-gate, tests-gate, security-gate, compliance, contract-compliance]
+    # OMN-14127: REQUIRED branch-protection context, implemented as a NO-`needs`,
+    # GitHub-hosted, FAIL-CLOSED poller. A `needs`-gated job gets no check-run
+    # until its `needs` terminalize, so under self-hosted fleet saturation the old
+    # needs-based CI Summary was ABSENT forever and the PR wedged BLOCKED with no
+    # auto-recovery. With NO `needs` this job's check-run instantiates immediately
+    # (the required context can never be absent); it polls the current run's job
+    # conclusions and posts a terminal success/failure within a bounded deadline.
+    # DEFAULT-DENY: green ONLY when every aggregate gate is present+good AND no
+    # non-allowlisted job failed — see scripts/ci/ci_summary_gate.py for the
+    # auditable gating set + soft-allowlist (unit-tested in
+    # tests/ci/test_ci_summary_gate.py). Pure hosted GitHub-API polling: zero
+    # self-hosted/LAN dependency. DO NOT rename — the job name IS the required
+    # context; a rename re-wedges every PR.
+    runs-on: ubuntu-latest
     if: always()
+    permissions:
+      actions: read
+      contents: read
+    # Deadline (below) is comfortably under the observed ~167m run-cancellation
+    # window so the required context ALWAYS posts a terminal state first. This
+    # job timeout is only a hard backstop above the internal poll deadline.
+    timeout-minutes: 100
     steps:
-      - name: Check all jobs passed
+      - name: Checkout (gate script)
+        uses: actions/checkout@v7
+      - name: Poll run jobs and compute fail-closed CI Summary verdict
         working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          # Bounded poll window (minutes) — kept under the run-cancel window so
+          # the required context always reaches a terminal state first.
+          DEADLINE_MINUTES: "90"
+          POLL_INTERVAL_SECONDS: "45"
         run: |
-          quality="${{ needs.quality-gate.result }}"
-          tests="${{ needs.tests-gate.result }}"
-          security="${{ needs.security-gate.result }}"
-          compliance="${{ needs.compliance.result }}"
-          contract_compliance="${{ needs.contract-compliance.result }}"
-
-          # OMN-13911: quality-gate/tests-gate/security-gate all carry
-          # if: always() (never structurally skipped), and contract-compliance
-          # only skips on workflow_dispatch (non-gating). None of the four has
-          # a legitimate skip path on pull_request/merge_group/push, so require
-          # strict success — a skipped/neutral/cancelled/failure result must
-          # not slip through silently (same class fixed for the sibling
-          # OMN-13875 gates: omnibase_infra #2188, omnibase_spi #254).
-          FAILED=false
-          for result in "$quality" "$tests" "$security" "$contract_compliance"; do
-            if [[ "$result" != "success" ]]; then
-              FAILED=true
+          # GitHub invokes this step as `bash -e {0}`; disable errexit because the
+          # gate script's non-zero exit codes are handled explicitly below
+          # (2 = PENDING must NOT terminate the poll loop).
+          set +e
+          set -uo pipefail
+          deadline=$(( $(date +%s) + DEADLINE_MINUTES * 60 ))
+          attempt=0
+          while true; do
+            attempt=$((attempt + 1))
+            if ! gh api --paginate \
+                "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" \
+                --jq '.jobs[]' | jq -s '.' > jobs.json; then
+              if [ "$(date +%s)" -ge "${deadline}" ]; then
+                echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached while fetching jobs — failing closed"
+                exit 1
+              fi
+              echo "gh api fetch failed (attempt ${attempt}); retrying after ${POLL_INTERVAL_SECONDS}s"
+              sleep "${POLL_INTERVAL_SECONDS}"
+              continue
             fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}"
+            rc=$?
+            case "${rc}" in
+              0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
+              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)"; exit 1 ;;
+              2) : ;;  # PENDING — gating jobs still running; keep polling
+              *) echo "::error::ci_summary_gate.py returned unexpected code ${rc}; failing closed"; exit 1 ;;
+            esac
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --report-only || true
+              exit 1
+            fi
+            sleep "${POLL_INTERVAL_SECONDS}"
           done
-
-          # Compliance: accept success or skipped (command may not exist yet)
-          if [[ "$compliance" == "failure" || "$compliance" == "cancelled" ]]; then
-            FAILED=true
-          fi
-
-          if [[ "$FAILED" == "true" ]]; then
-            echo "One or more required jobs failed or were cancelled"
-            echo "  Quality Gate: $quality"
-            echo "  Tests Gate: $tests"
-            echo "  Security Gate: $security"
-            echo "  Compliance: $compliance"
-            echo "  Contract Compliance: $contract_compliance"
-            exit 1
-          fi
-          echo "All required jobs passed"
 
   # ============================================================================
   # BUILD (downstream of all gates)

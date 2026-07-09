@@ -17,6 +17,7 @@ import json
 import os
 import signal
 import sys
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -34,6 +35,9 @@ TOPIC_TO_TABLE: dict[str, str] = {
 }
 
 ALLOWED_TABLES = frozenset(TOPIC_TO_TABLE.values()) | {"golden_chain_sweep_results"}
+
+DB_CONNECT_ATTEMPTS = 12
+DB_CONNECT_RETRY_SECONDS = 2.0
 
 DDL = """
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -142,10 +146,17 @@ def _require(value: str | None, name: str) -> str:
 
 
 def initialize_database(db_dsn: str) -> None:
-    with psycopg2.connect(db_dsn) as conn:
-        conn.autocommit = True
-        with conn.cursor() as cur:
-            cur.execute(DDL)
+    for attempt in range(1, DB_CONNECT_ATTEMPTS + 1):
+        try:
+            with psycopg2.connect(db_dsn) as conn:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute(DDL)
+                return
+        except psycopg2.OperationalError:
+            if attempt == DB_CONNECT_ATTEMPTS:
+                raise
+            time.sleep(DB_CONNECT_RETRY_SECONDS)
 
 
 def _valid_uuid(value: object) -> str:
@@ -401,7 +412,7 @@ async def run_gate(bootstrap_servers: str, db_dsn: str, timeout_ms: int) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     bootstrap_servers = _require(args.bootstrap_servers, "KAFKA_BOOTSTRAP_SERVERS")
-    db_dsn = _require(args.db_dsn, "OMNIDASH_ANALYTICS_DB_URL or DATABASE_URL")
+    db_dsn = _require(args.db_dsn, "OMNIDASH_ANALYTICS_DB_URL or DATABASE_URL")  # noqa: secrets
     if hasattr(signal, "SIGPIPE"):
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     return asyncio.run(run_gate(bootstrap_servers, db_dsn, args.timeout_ms))
