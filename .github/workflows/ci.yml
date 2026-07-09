@@ -2834,9 +2834,10 @@ jobs:
       }}
     # Only run when seam-relevant files change
     if: >-
+      needs.occ-preflight.result == 'success' && (
       github.event_name == 'merge_group' ||
       github.event_name == 'push' ||
-      contains(github.event.pull_request.changed_files || '0', '0') == false
+      contains(github.event.pull_request.changed_files || '0', '0') == false)
     steps:
       - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
         with:
