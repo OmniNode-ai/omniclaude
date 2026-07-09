@@ -2386,14 +2386,9 @@ jobs:
   # ============================================================================
   compliance:
     name: Contract Compliance
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight ONEX compliance gate: keep it hosted so the required summary
+    # is not held behind the self-hosted fleet during merge sweeps.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
