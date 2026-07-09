@@ -38,7 +38,7 @@ args:
     description: "Show active and skipped worktrees in addition to stale ones (--prune mode)"
     required: false
   - name: --worktrees-root
-    description: "Override worktrees root path (default: $OMNI_HOME/omni_worktrees)"
+    description: "Override worktrees root path (default: $ONEX_WORKTREES_ROOT)"
     required: false
 ---
 

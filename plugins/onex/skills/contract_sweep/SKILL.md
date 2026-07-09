@@ -114,7 +114,7 @@ This mode combines two detection sub-modes:
 Run the `check_contract_drift.py` script from `onex_change_control` once per repo:
 
 ```bash
-cd $OMNI_HOME/onex_change_control
+cd $ONEX_WORKTREES_ROOT/<ticket>/onex_change_control
 python3 scripts/validation/check_contract_drift.py \
   --root <repo>/src \
   --check <snapshot-file>
