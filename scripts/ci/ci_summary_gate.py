@@ -200,18 +200,18 @@ def evaluate(
         if (latest.get(g) is None or latest[g].status != "completed")
     ]
 
-    if sweep_failures:
-        return EXIT_FAILURE, _report(
-            "FAILURE",
+    if gate_missing_or_pending:
+        return EXIT_PENDING, _report(
+            "PENDING",
             latest,
             gate_jobs,
             allowlist,
             sweep_failures,
             gate_missing_or_pending,
         )
-    if gate_missing_or_pending:
-        return EXIT_PENDING, _report(
-            "PENDING",
+    if sweep_failures:
+        return EXIT_FAILURE, _report(
+            "FAILURE",
             latest,
             gate_jobs,
             allowlist,

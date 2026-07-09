@@ -85,10 +85,17 @@ class TestCiSummaryGate:
         code, _ = evaluate([])
         assert code == EXIT_PENDING
 
-    def test_leaf_failure_fails_even_before_gates_exist(self) -> None:
-        # Default-deny sweep: a non-allowlisted leaf failure fails fast, even if
-        # the aggregate gates have not been created yet.
+    def test_leaf_failure_waits_for_aggregate_gates(self) -> None:
+        # Aggregate gates are the required contract. A leaf can fail early while
+        # its aggregate is still pending; the poller must wait for the aggregate
+        # verdict instead of posting a premature terminal failure.
         jobs = [_job("Pyright Type Checking", "failure")]
+        code, report = evaluate(jobs)
+        assert code == EXIT_PENDING
+        assert "Pyright Type Checking" in report
+
+    def test_leaf_failure_fails_after_aggregate_gates_settle(self) -> None:
+        jobs = _all_gates("success") + [_job("Pyright Type Checking", "failure")]
         code, report = evaluate(jobs)
         assert code == EXIT_FAILURE
         assert "Pyright Type Checking" in report
@@ -132,7 +139,7 @@ class TestCiSummaryGate:
         assert code == EXIT_SUCCESS
 
     def test_same_attempt_duplicate_failure_is_not_hidden_by_success(self) -> None:
-        jobs = _all_gates("success")
+        jobs = [_job(g, "success", attempt=2) for g in GATE_JOBS]
         jobs.extend(
             [
                 _job("Duplicate Job", "failure", attempt=2),
