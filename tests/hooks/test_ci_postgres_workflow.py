@@ -206,7 +206,9 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert "OMNIDASH_ANALYTICS_DB_URL" in step_env
     assert "golden_chain@127.0.0.1" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
     assert "golden_chain:test" not in step_env["OMNIDASH_ANALYTICS_DB_URL"]
-    assert "job.services.postgres.ports['5432']" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    assert (
+        "job.services.postgres.ports['5432']" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    )
     assert run_step.get("continue-on-error") is not True
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
 
