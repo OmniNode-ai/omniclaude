@@ -28,7 +28,11 @@ on:
 
 env:
   PYTHON_VERSION: '3.12'
-  UV_HTTP_TIMEOUT: "300"
+  UV_CONCURRENT_DOWNLOADS: '1'
+  UV_HTTP_TIMEOUT: '600'
+  UV_SYNC_ATTEMPTS: '5'
+  UV_SYNC_RETRY_DELAY_SECONDS: '10'
+  UV_TORCH_BACKEND: cpu
 
 jobs:
   occ-preflight:
@@ -90,16 +94,20 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: |
-          for attempt in 1 2 3; do
-            if uv sync --frozen --python "${PYTHON_VERSION}"; then
-              exit 0
+          set -euo pipefail
+
+          attempt=1
+          until uv sync --frozen --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
             fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::uv sync failed after ${attempt} attempts"
-              exit 1
-            fi
-            echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
-            sleep $((attempt * 10))
+
+            sleep_seconds=$((UV_SYNC_RETRY_DELAY_SECONDS * attempt))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
           done
 
       - name: Run plugin-compat.yaml schema tests
