@@ -762,7 +762,7 @@ repos:
       # artifact is stale. Fires when hook_bits.sh is modified.
       - id: hook-bits-drift
         name: hook_bits.sh drift check (regenerate if EnumHookBit changes)
-        entry: uv --directory ../omnibase_core run python scripts/gen_hook_bits.py --check ../omniclaude/plugins/onex/hooks/lib/hook_bits.sh
+        entry: bash scripts/run-hook-bits-drift.sh
         language: system
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$

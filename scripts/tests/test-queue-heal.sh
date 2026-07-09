@@ -297,7 +297,25 @@ test_fail_open_on_queue_query_error() {
 }
 
 # ---------------------------------------------------------------------------
-# Test 5: Unarmed or non-CLEAN PRs are ignored
+# Test 5: Dry-run mode skips queue-heal entrypoint
+# ---------------------------------------------------------------------------
+
+test_dry_run_skips_queue_heal_entrypoint() {
+  local entrypoint
+  entrypoint="$(awk '
+    /if \[\[ "\$\{MERGE_SWEEP_SOURCED\}" == "true" \]\]/{found=1}
+    found{print}
+    found && /^case "\$\{FINAL_STATUS\}" in/{exit}
+  ' "${SWEEP_SCRIPT}")"
+
+  _assert_contains "dry_run_guard: checks DRY_RUN before queue-heal" \
+    'DRY_RUN.*true' "${entrypoint}"
+  _assert_contains "dry_run_guard: logs queue-heal skip" \
+    "Skipping method-mismatch scan in dry-run mode" "${entrypoint}"
+}
+
+# ---------------------------------------------------------------------------
+# Test 6: Unarmed or non-CLEAN PRs are ignored
 # ---------------------------------------------------------------------------
 
 test_ignores_unarmed_and_non_clean_prs() {
@@ -328,6 +346,7 @@ test_heal_triggered_when_not_in_queue
 test_no_heal_when_already_in_queue
 test_fail_open_on_pr_list_error
 test_fail_open_on_queue_query_error
+test_dry_run_skips_queue_heal_entrypoint
 test_ignores_unarmed_and_non_clean_prs
 
 echo ""

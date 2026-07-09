@@ -56,12 +56,9 @@ this file to auto-approve in-scope Edit/Write requests.
 
 Run the node directly via the ONEX node runner:
 
-```bash
-uv run onex run node_authorize -- \
-  --scope 'src/**' --scope 'tests/**' \
-  --tools Edit --tools Write \
-  --ttl-seconds 14400
-```
+Use the deterministic `node_authorize` entrypoint with scope, tool, and
+TTL arguments. The node runner returns the same typed authorization result
+that the wrapper renders to the user.
 
 Under a full Kafka runtime, the skill wrapper publishes a command envelope to
 `onex.cmd.omnimarket.authorize-start.v1`; the node consumes it, writes the

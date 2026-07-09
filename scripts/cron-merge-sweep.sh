@@ -38,13 +38,16 @@ set -euo pipefail
 # Script lives at omni_home/omniclaude/scripts/cron-merge-sweep.sh → two levels up
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+export OMNI_HOME="${OMNI_HOME:-${ONEX_REGISTRY_ROOT}}"
 STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/merge-sweep-results"
 ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
 MARKET_REPO_ROOT="${ONEX_REGISTRY_ROOT}/omnimarket"
 RUNTIME_REQUEST_BIN="${MARKET_REPO_ROOT}/scripts/run_codex_runtime_request.py"
 PYTHON_BIN="${ONEX_PYTHON_BIN:-/opt/homebrew/bin/python3.13}"
 LOG_DIR="/tmp/merge-sweep-logs"
-PHASE_TIMEOUT=900  # 15 minutes — merge-sweep can be slow with polish
+MAX_SWEEP_PASSES="${MERGE_SWEEP_MAX_SWEEP_PASSES:-20}"
+SWEEP_SLEEP_SECONDS="${MERGE_SWEEP_SLEEP_SECONDS:-1800}"
+PHASE_TIMEOUT="${MERGE_SWEEP_PHASE_TIMEOUT_SECONDS:-$((MAX_SWEEP_PASSES * (SWEEP_SLEEP_SECONDS + 900)))}"
 RUN_ID="merge-sweep-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 DRY_RUN=false
 MERGE_ONLY=false
@@ -103,13 +106,6 @@ done
 MERGE_SWEEP_SOURCED=false
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   MERGE_SWEEP_SOURCED=true
-fi
-
-if [[ "${MERGE_SWEEP_SOURCED}" != "true" ]]; then
-  cat >&2 <<'JSON'
-{"status":"quarantined","reason":"OMN-10181: merge-sweep launchd source remains disabled until OMN-10182 proves both the omnimarket CLI round-trip and the omniclaude run.sh shim path","ticket":"OMN-10181","blocked_by":["OMN-10182"]}
-JSON
-  exit 64
 fi
 
 # ---------------------------------------------------------------------------
@@ -355,6 +351,9 @@ build_runtime_payload() {
     --argjson admin_fallback_threshold_minutes 15 \
     --argjson verify false \
     --argjson verify_timeout_seconds 30 \
+    --argjson loop_until_done true \
+    --argjson max_sweep_passes "${MAX_SWEEP_PASSES}" \
+    --argjson sweep_sleep_seconds "${SWEEP_SLEEP_SECONDS}" \
     '{
       correlation_id: $correlation_id,
       run_id: $run_id,
@@ -371,7 +370,10 @@ build_runtime_payload() {
       enable_admin_merge_fallback: $enable_admin_merge_fallback,
       admin_fallback_threshold_minutes: $admin_fallback_threshold_minutes,
       verify: $verify,
-      verify_timeout_seconds: $verify_timeout_seconds
+      verify_timeout_seconds: $verify_timeout_seconds,
+      loop_until_done: $loop_until_done,
+      max_sweep_passes: $max_sweep_passes,
+      sweep_sleep_seconds: $sweep_sleep_seconds
     }'
 }
 
@@ -409,7 +411,7 @@ run_merge_sweep() {
       env -u PYTHONPATH "${PYTHON_BIN}" "${RUNTIME_REQUEST_BIN}" \
         --node-alias "pr_lifecycle_orchestrator" \
         --payload-file "${payload_file}" \
-        --timeout-ms 300000 \
+        --timeout-ms "$((PHASE_TIMEOUT * 1000))" \
         --correlation-id "${CORRELATION_ID}" \
         > "${output_file}" 2> "${stderr_file}"
   ) || exit_code=$?
@@ -811,8 +813,12 @@ if [[ "${MERGE_SWEEP_SOURCED}" == "true" ]]; then
   return 0
 fi
 
-_queue_heal 2>>"${LOG_DIR}/${RUN_ID}.log" || \
-  log "[queue-heal] WARN: heal block exited non-zero (fail-open, tick continues)"
+if [[ "${DRY_RUN}" == "true" ]]; then
+  log "[queue-heal] Skipping method-mismatch scan in dry-run mode"
+else
+  _queue_heal 2>>"${LOG_DIR}/${RUN_ID}.log" || \
+    log "[queue-heal] WARN: heal block exited non-zero (fail-open, tick continues)"
+fi
 
 # Exit codes:
 # 0 = success

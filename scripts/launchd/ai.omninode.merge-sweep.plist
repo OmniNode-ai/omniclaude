@@ -17,7 +17,7 @@
   <string>ai.omninode.merge-sweep</string>
 
   <key>Disabled</key>
-  <true/>
+  <false/>
 
   <key>ProgramArguments</key>
   <array>

@@ -53,6 +53,18 @@ for tmpl in "${LAUNCHD_SRC}"/*.plist; do
       -e "s|__HOME__|${HOME_RESOLVED}|g" \
       "${tmpl}"
   )"
+  if echo "${rendered}" | awk '
+    /<key>Disabled<\/key>/ {
+      if ($0 ~ /<true\/>/) { found=1; exit }
+      pending=1
+      next
+    }
+    pending && /<true\/>/ { found=1; exit }
+    pending && /<false\/>/ { pending=0; next }
+    END { exit(found ? 0 : 1) }
+  '; then
+    continue
+  fi
   prog="$(
     echo "${rendered}" \
       | awk '/<key>ProgramArguments<\/key>/{flag=1; next} flag && /<string>/{gsub(/.*<string>|<\/string>.*/, ""); print; exit}'
@@ -88,23 +100,23 @@ if echo "${BUILDLOOP_PROG_ARGS}" | grep -q "cron-buildloop.sh"; then
 fi
 pass "buildloop template correctly invokes cron-closeout.sh --build-only"
 
-# --- Test 3b: merge-sweep source quarantine is restored ---------------------
+# --- Test 3b: merge-sweep source quarantine is lifted -----------------------
 MERGE_SWEEP_TMPL="${LAUNCHD_SRC}/ai.omninode.merge-sweep.plist"
 [ -f "${MERGE_SWEEP_TMPL}" ] || fail "merge-sweep template missing at ${MERGE_SWEEP_TMPL}"
 if awk '
   /<key>Disabled<\/key>/ {
-    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<true\/>/) { found=1; exit }
-    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<false\/>/) { pending=0; next }
+    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<false\/>/) { found=1; exit }
+    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<true\/>/) { pending=0; next }
     pending=1
     next
   }
-  pending && /<true\/>/ { found=1; exit }
-  pending && /<false\/>/ { pending=0; next }
+  pending && /<false\/>/ { found=1; exit }
+  pending && /<true\/>/ { pending=0; next }
   END { exit(found ? 0 : 1) }
 ' "${MERGE_SWEEP_TMPL}"; then
-  pass "merge-sweep launchd template remains source-quarantined"
+  pass "merge-sweep launchd template is enabled for install/load"
 else
-  fail "merge-sweep launchd template must be Disabled=true until OMN-10182 proof lands"
+  fail "merge-sweep launchd template must be Disabled=false after OMN-13940 unquarantine"
 fi
 
 # --- Test 4: disabled plists are skipped without load/install ---------------

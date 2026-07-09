@@ -188,11 +188,11 @@ class TestRenderedOutputRejection:
 
 @pytest.mark.unit
 class TestEnforcedSkillsSet:
-    def test_has_fourteen_instructional_skills(self) -> None:
-        # OMN-8766 DoD: instructional skills enforced. The deprecated handoff
-        # skill was removed (superseded by /onex:session, OMN-8340), dropping
-        # the enforced set from 15 to 14.
-        assert len(TIER3_INSTRUCTIONAL_SKILLS) == 14
+    def test_has_thirteen_instructional_skills(self) -> None:
+        # OMN-8766 DoD: active instructional skills enforced. Deprecated
+        # handoff was removed in OMN-8340; crash_recovery was removed in
+        # OMN-12234 after being superseded by /onex:session.
+        assert len(TIER3_INSTRUCTIONAL_SKILLS) == 13
 
     def test_expected_skills_present(self) -> None:
         for skill in (
@@ -207,7 +207,6 @@ class TestEnforcedSkillsSet:
             "set_session",
             "recall",
             "rewind",
-            "crash_recovery",
             "checkpoint",
             "writing_skills",
         ):
@@ -219,6 +218,7 @@ class TestEnforcedSkillsSet:
         # Deterministic skills must not double-register as instructional.
         for skill in (
             "autopilot",
+            "crash_recovery",
             "compliance_sweep",
             "merge_sweep",
             "pr_review",

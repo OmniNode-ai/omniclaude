@@ -1,7 +1,8 @@
 ---
-description: Single-command dispatch shim. Runs `uv run onex skill merge_sweep` which resolves the declarative
-  skill->node mapping, dispatches node_pr_lifecycle_orchestrator in receipt mode, and prints one typed
-  ModelSkillResult. No inline logic; markdown only.
+description: >-
+  Single-command dispatch shim. Runs the canonical omnibase_infra merge_sweep skill CLI because the declarative
+  skill CLI is provided by omnibase_infra. The command resolves the skill->node mapping, dispatches
+  node_pr_lifecycle_orchestrator in receipt mode, and prints one typed ModelSkillResult. No inline logic; markdown only.
 mode: full
 version: 7.0.0
 level: advanced
@@ -51,11 +52,11 @@ skill_kind: dispatch
 
 # /onex:merge_sweep — one command, one typed result
 
-**Skill ID**: `onex:merge_sweep` · **Command**: `uv run onex skill merge_sweep` (omnibase_infra) · **Backing node**: `node_pr_lifecycle_orchestrator` (omnimarket)
+**Skill ID**: `onex:merge_sweep` · **Command**: `cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep` · **Backing node**: `node_pr_lifecycle_orchestrator` (omnimarket) # local-path-ok: merge_sweep dispatches from the canonical omnibase_infra checkout, not a ticket worktree
 
 A dispatch skill IS one CLI call. Payload construction, node dispatch, and
 result extraction all live in the `onex skill` entrypoint (declarative
-`skill_mapping.yaml` registry) — there is no procedure to learn here. The
+`skill_mapping.yaml` registry in omnibase_infra) — there is no procedure to learn here. The
 command prints exactly one typed `ModelSkillResult[ModelPrLifecycleResult]` JSON to
 stdout carrying the FULL handler result; RuntimeLocal logs and intermediate
 context go to a capture file + the artifact store, never to you.
@@ -64,7 +65,7 @@ See `prompt.md` for the one command and how to present the typed result.
 
 ## Routing Contract
 
-The `uv run onex skill merge_sweep` entrypoint publishes to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
+The `cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep` entrypoint publishes to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1` # local-path-ok: merge_sweep dispatches from the canonical omnibase_infra checkout, not a ticket worktree
 through receipt-mode dispatch. If routing fails, surface `SkillRoutingError` directly; do not produce prose.
 
 ## What this skill does NOT do

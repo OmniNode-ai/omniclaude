@@ -57,7 +57,7 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
@@ -65,15 +65,33 @@ jobs:
 
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
-        run: git clone --depth=1 --branch main https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence
+        run: |
+          for attempt in 1 2 3; do
+            git clone --depth=1 --branch main https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence && exit 0
+            rm -rf ../omniintelligence
+            sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Clone omnibase_core
         working-directory: ${{ github.workspace }}
-        run: git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
+        run: |
+          for attempt in 1 2 3; do
+            git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core && exit 0
+            rm -rf ../omnibase_core
+            sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Clone omnibase_compat
         working-directory: ${{ github.workspace }}
-        run: git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat
+        run: |
+          for attempt in 1 2 3; do
+            git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat && exit 0
+            rm -rf ../omnibase_compat
+            sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -86,7 +104,28 @@ jobs:
 
       - name: Install omniintelligence dependencies
         working-directory: ../omniintelligence
-        run: uv sync --all-extras
+        env:
+          UV_CONCURRENT_DOWNLOADS: "1"
+          UV_HTTP_TIMEOUT: "600"
+          UV_SYNC_ATTEMPTS: "5"
+          UV_SYNC_RETRY_DELAY_SECONDS: "10"
+          UV_TORCH_BACKEND: "cpu"
+        run: |
+          set -euo pipefail
+
+          attempt=1
+          until uv sync --all-extras --python 3.12; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+
+            sleep_seconds=$((UV_SYNC_RETRY_DELAY_SECONDS * attempt))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Run adversarial review
         id: review
@@ -110,19 +149,23 @@ jobs:
           # If the CLI itself failed (not model degraded — actual crash), report and exit 0
           # to avoid blocking PRs due to infrastructure issues during pilot phase.
           if [ "${REVIEW_EXIT:-0}" -ne 0 ]; then
-            echo "verdict=degraded" >> "$GITHUB_OUTPUT"
-            echo "blocking_count=0" >> "$GITHUB_OUTPUT"
-            echo "total_findings=0" >> "$GITHUB_OUTPUT"
-            echo "models_succeeded=" >> "$GITHUB_OUTPUT"
-            echo "error=cli_review exited non-zero (all models failed or binary error)" >> "$GITHUB_OUTPUT"
+            {
+              echo "verdict=degraded"
+              echo "blocking_count=0"
+              echo "total_findings=0"
+              echo "models_succeeded="
+              echo "error=cli_review exited non-zero (all models failed or binary error)"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Parse verdict from JSON using Python inline
-          VERDICT_DATA=$(echo "$REVIEW_JSON" | python3 - <<'PYEOF'
-          import json, sys
+          # Parse verdict from JSON using Python inline. Pass the JSON through
+          # the environment because the heredoc occupies Python's stdin.
+          VERDICT_DATA=$(REVIEW_JSON="$REVIEW_JSON" python3 - <<'PYEOF'
+          import os
+          import json
 
-          data = json.loads(sys.stdin.read())
+          data = json.loads(os.environ["REVIEW_JSON"])
           models_succeeded = data.get("models_succeeded", [])
           total_findings = data.get("total_findings", 0)
 

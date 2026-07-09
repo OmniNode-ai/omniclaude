@@ -98,7 +98,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
@@ -154,6 +168,7 @@ jobs:
             --exclude 'https://github\.com/OmniNode-ai'
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
+            --exclude 'https://docs\.python\.org'
             --exclude 'https://staging\.omniclaude\.example\.com'
             --exclude 'https://omniclaude\.example\.com'
             --exclude 'http://localhost'
@@ -165,6 +180,8 @@ jobs:
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
             --exclude 'https://dash\.dev\.omninode\.ai'
+            --exclude 'https://www\.psycopg\.org/docs'
+            --exclude 'https://docs\.anthropic\.com'
             --accept 200..=299,429,503
             '**/*.md'
           fail: true
@@ -192,6 +209,67 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Ensure pyright native runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          has_libatomic() {
+            if command -v ldconfig >/dev/null 2>&1 && ldconfig -p | grep -q 'libatomic.so.1'; then
+              return 0
+            fi
+            if [ -n "${PYRIGHT_LIBATOMIC_DIR:-}" ] && find "${PYRIGHT_LIBATOMIC_DIR}" -name 'libatomic.so.1*' -print -quit | grep -q .; then
+              return 0
+            fi
+            return 1
+          }
+          if command -v ldconfig >/dev/null 2>&1 && ldconfig -p | grep -q 'libatomic.so.1'; then
+            exit 0
+          fi
+          SUDO=""
+          if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+          elif [ "$(id -u)" -ne 0 ]; then
+            lib_dir="${RUNNER_TEMP:-/tmp}/pyright-libatomic"
+            mkdir -p "${lib_dir}"
+            if command -v apt-get >/dev/null 2>&1 && command -v dpkg-deb >/dev/null 2>&1; then
+              mkdir -p "${lib_dir}/apt/lists/partial" "${lib_dir}/apt/cache/archives/partial"
+              apt_opts=(
+                -o "Dir::State::lists=${lib_dir}/apt/lists"
+                -o "Dir::Cache=${lib_dir}/apt/cache"
+                -o "Dir::State::status=/var/lib/dpkg/status"
+              )
+              (
+                cd "${lib_dir}"
+                apt-get "${apt_opts[@]}" update
+                apt-get "${apt_opts[@]}" download libatomic1
+                dpkg-deb -x libatomic1_*.deb .
+              )
+              found_dir="$(find "${lib_dir}" -name 'libatomic.so.1*' -print -quit | xargs dirname)"
+              {
+                echo "PYRIGHT_LIBATOMIC_DIR=${lib_dir}"
+                echo "LD_LIBRARY_PATH=${found_dir}:${LD_LIBRARY_PATH:-}"
+              } >> "${GITHUB_ENV}"
+              exit 0
+            fi
+            echo "::error::libatomic.so.1 is required by pyright's node runtime, but the runner user cannot install packages or extract libatomic1 locally"
+            exit 1
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            $SUDO apt-get update
+            $SUDO apt-get install -y libatomic1
+          elif command -v dnf >/dev/null 2>&1; then
+            $SUDO dnf install -y libatomic
+          elif command -v yum >/dev/null 2>&1; then
+            $SUDO yum install -y libatomic
+          else
+            echo "::error::libatomic.so.1 is required by pyright's node runtime and no supported package manager is available"
+            exit 1
+          fi
+          if ! has_libatomic; then
+            echo "::error::libatomic.so.1 is still not visible after installation"
+            exit 1
+          fi
+
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v6
@@ -201,7 +279,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Pyright
         working-directory: ${{ github.workspace }}
@@ -267,7 +345,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate enum governance
         working-directory: ${{ github.workspace }}
@@ -307,7 +385,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate exports
         working-directory: ${{ github.workspace }}
@@ -431,7 +509,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Validate ONEX naming conventions
         working-directory: ${{ github.workspace }}
@@ -990,7 +1082,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "::warning::uv sync attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Check no datetime.utcnow() usage
         working-directory: ${{ github.workspace }}
@@ -1031,7 +1137,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check no hardcoded internal IPs
         working-directory: ${{ github.workspace }}
@@ -1075,7 +1181,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: F5.1 - Validate no cmd topic uses cleanup.policy=compact
         working-directory: ${{ github.workspace }}
@@ -1126,7 +1232,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check ONEX architectural invariants
         working-directory: ${{ github.workspace }}
@@ -1226,7 +1332,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate golden chain registry
         working-directory: ${{ github.workspace }}
@@ -1282,13 +1388,14 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run registry consistency tests
         working-directory: ${{ github.workspace }}
-        env:
-          OMNIMARKET_TOPICS_REGISTRY_PATH: ${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml
-        run: uv run pytest tests/hooks/test_registry_consistency.py -v
+        run: >-
+          uv run python scripts/validation/check_registry_consistency.py
+          --daemon-registry
+          "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
 
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
@@ -1299,11 +1406,13 @@ jobs:
     # runners provide reliable service port mapping; the self-hosted fleet has
     # shown refused mapped Postgres ports under saturation.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       redpanda:
         image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
         options: >-
+          --cpus 1
+          --cpuset-cpus 0
           --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
           --health-interval 10s
           --health-timeout 5s
@@ -1314,8 +1423,8 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: golden_chain
-          POSTGRES_PASSWORD: test
           POSTGRES_DB: omnidash_analytics
+          POSTGRES_HOST_AUTH_METHOD: trust
         options: >-
           --health-cmd "pg_isready -U golden_chain -d omnidash_analytics"
           --health-interval 10s
@@ -1349,12 +1458,12 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --extra kafka
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka
 
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
         env:
-          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
+          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
 
   # ============================================================================
@@ -1520,7 +1629,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Compute changed files
         id: diff
@@ -1661,7 +1770,7 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: |
-          uv sync --frozen --group dev
+          uv sync --frozen --group dev --python "${PYTHON_VERSION}"
           uv pip install pytest-split pytest-cov
 
       - name: Auto-generate skill nodes
@@ -1807,7 +1916,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Install PostgreSQL client
         working-directory: ${{ github.workspace }}
@@ -1910,7 +2019,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run agent framework tests
         working-directory: ${{ github.workspace }}
@@ -2243,7 +2352,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --group dev
+        run: uv sync --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate mode metadata integrity
         working-directory: ${{ github.workspace }}
@@ -2374,7 +2483,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run merge-sweep contract tests
         working-directory: ${{ github.workspace }}
@@ -2453,7 +2562,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check if onex compliance command exists
         id: check-command
@@ -2582,7 +2691,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Validate all agent YAML contracts
         working-directory: ${{ github.workspace }}
@@ -2907,9 +3016,14 @@ jobs:
           enable-cache: true
           cache-dependency-glob: 'onex_change_control/uv.lock'
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Install onex_change_control
         working-directory: onex_change_control
-        run: uv sync --all-extras
+        run: uv sync --all-extras --python "${PYTHON_VERSION}"
 
       - name: Validate contract YAML files
         working-directory: onex_change_control

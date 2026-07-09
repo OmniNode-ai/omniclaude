@@ -5,7 +5,7 @@ JSON to stdout — the full handler result, never truncated. RuntimeLocal logs a
 intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex skill merge_sweep [--repos <a,b>] [--dry-run] [--inventory-only] [--fix-only] [--merge-only] [--max-parallel-polish <n>] [--admin-fallback-threshold-minutes <n>] [--verify] [--verify-timeout-seconds <n>]
+cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep [--repos <a,b>] [--dry-run] [--inventory-only] [--fix-only] [--merge-only] [--max-parallel-polish <n>] [--admin-fallback-threshold-minutes <n>] [--verify] [--verify-timeout-seconds <n>] # local-path-ok: merge_sweep dispatches from the canonical omnibase_infra checkout, not a ticket worktree
 ```
 
 | Argument | Type |
@@ -20,9 +20,10 @@ uv run onex skill merge_sweep [--repos <a,b>] [--dry-run] [--inventory-only] [--
 | `--verify` | boolean, flag |
 | `--verify-timeout-seconds` | integer |
 
-The command resolves the skill→node mapping, builds the payload, dispatches the
-node in receipt mode, and extracts the result internally. Do NOT construct a
-payload file, `cd` anywhere, or read any intermediate result file.
+The command runs from `omnibase_infra` because that repository provides the
+`onex skill` CLI. It resolves the skill→node mapping, builds the payload,
+dispatches the node in receipt mode, and extracts the result internally. Do NOT construct a
+payload file, change to any other directory, or read any intermediate result file.
 
 ## Present the result
 

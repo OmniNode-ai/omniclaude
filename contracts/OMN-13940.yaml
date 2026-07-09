@@ -1,0 +1,57 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13940"
+title: "Unquarantine merge sweep dispatch skill"
+summary: >-
+  Restore the canonical merge_sweep skill surface so it dispatches through the
+  live omnibase_infra `uv run onex skill merge_sweep` entrypoint and harden the
+  dependency-install CI gates that prove the skill remains valid.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-merge-sweep-command"
+    description: >-
+      The merge_sweep skill and prompt document the canonical omnibase_infra
+      entrypoint instead of the stale omniclaude-local command.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q 'cd "$OMNI_HOME/omnibase_infra" && uv run onex skill merge_sweep'
+          plugins/onex/skills/merge_sweep/SKILL.md plugins/onex/skills/merge_sweep/prompt.md
+  - id: "dod-skill-ci-resilience"
+    description: >-
+      Skill aspiration and plugin compat validation tolerate transient package
+      index or wheel download latency while preserving hard schema checks.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: |-
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          for path in (
+              Path(".github/workflows/validate-skill-aspiration.yml"),
+              Path(".github/workflows/plugin-compat-gate.yml"),
+          ):
+              yaml.safe_load(path.read_text())
+          PY
+  - id: "dod-skill-dry-run"
+    description: >-
+      The live merge_sweep skill entrypoint can be invoked from omnibase_infra
+      in dry-run inventory mode without mutating PRs.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          cd "$OMNI_HOME/omnibase_infra" && ONEX_STATE_DIR="$OMNI_HOME/.onex_state"
+          OMNI_HOME="$OMNI_HOME" uv run onex skill merge_sweep --dry-run
+          --inventory-only --verify-timeout-seconds 5

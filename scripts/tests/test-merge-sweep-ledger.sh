@@ -149,10 +149,49 @@ test_runtime_truth_fields_present() {
   rm -f "${runner}"
 }
 
+test_runtime_payload_enables_watch_loop() {
+  local runner output
+  runner="$(mktemp /tmp/merge-payload-runner-XXXXXX)"
+
+  cat > "${runner}" <<'RUNNER_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+bool_json() {
+  if [[ "$1" == "true" ]]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+RUNNER_EOF
+  _extract_fn "build_runtime_payload" >> "${runner}"
+  cat >> "${runner}" <<'RUNNER_EOF'
+CORRELATION_ID="12345678-1234-1234-1234-123456789abc"
+RUN_ID="merge-sweep-test"
+REPOS_FILTER=""
+ONEX_STATE_DIR="/tmp/onex-state"
+DRY_RUN=false
+MERGE_ONLY=false
+MAX_SWEEP_PASSES=20
+SWEEP_SLEEP_SECONDS=1800
+build_runtime_payload
+RUNNER_EOF
+
+  chmod +x "${runner}"
+  output="$(bash "${runner}")"
+
+  _assert_contains "payload loops until done" '"loop_until_done": true' "${output}"
+  _assert_contains "payload carries max sweep passes" '"max_sweep_passes": 20' "${output}"
+  _assert_contains "payload sleeps thirty minutes between passes" '"sweep_sleep_seconds": 1800' "${output}"
+
+  rm -f "${runner}"
+}
+
 echo "=== merge-sweep ledger tests ==="
 echo ""
 
 test_runtime_truth_fields_present
+test_runtime_payload_enables_watch_loop
 
 echo ""
 echo "--- results ---"

@@ -23,6 +23,9 @@ PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-ga
 INTEGRATION_TESTS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "integration-tests.yml"
 )
+NO_FAKED_BOUNDARY_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "no-faked-boundary.yml"
+)
 VENV_CACHE_RESTORE_IF = "${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}"
 
 
@@ -176,6 +179,22 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert isinstance(services, dict)
     assert "redpanda" in services
     assert "postgres" in services
+    postgres = services["postgres"]
+    assert isinstance(postgres, dict)
+    postgres_env = postgres.get("env")
+    assert isinstance(postgres_env, dict)
+    assert postgres_env.get("POSTGRES_HOST_AUTH_METHOD") == "trust"
+    assert "POSTGRES_PASSWORD" not in postgres_env
+    postgres_options = postgres.get("options")
+    assert isinstance(postgres_options, str)
+    assert "pg_isready -U golden_chain -d omnidash_analytics" in postgres_options
+    assert postgres.get("ports") == ["5432/tcp"]
+    redpanda = services["redpanda"]
+    assert isinstance(redpanda, dict)
+    redpanda_options = redpanda.get("options")
+    assert isinstance(redpanda_options, str)
+    assert "--cpus 1" in redpanda_options
+    assert "--cpuset-cpus 0" in redpanda_options
 
     env = job.get("env")
     assert isinstance(env, dict)
@@ -185,7 +204,11 @@ def test_golden_chain_live_is_required_service_container_gate(
     step_env = run_step.get("env")
     assert isinstance(step_env, dict)
     assert "OMNIDASH_ANALYTICS_DB_URL" in step_env
-    assert "golden_chain:test" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    assert "golden_chain@127.0.0.1" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    assert "golden_chain:test" not in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    assert (
+        "job.services.postgres.ports['5432']" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
+    )
     assert run_step.get("continue-on-error") is not True
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
 
@@ -212,6 +235,65 @@ def test_ci_summary_checks_contract_compliance_result(
     assert '--run-attempt "${RUN_ATTEMPT}"' in run
     assert "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" in run
     assert "CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)" in run
+
+
+def test_contract_compliance_pins_uv_python(ci_workflow: dict[str, Any]) -> None:
+    job = _job(ci_workflow, "contract-compliance")
+    setup_step = _step(job, "Set up Python")
+    install_step = _step(job, "Install onex_change_control")
+
+    assert setup_step.get("uses") == "actions/setup-python@v6"
+    assert setup_step["with"]["python-version"] == "${{ env.PYTHON_VERSION }}"
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_no_faked_boundary_pins_uv_python() -> None:
+    loaded = yaml.safe_load(NO_FAKED_BOUNDARY_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs["no-faked-boundary-gate"]
+    assert isinstance(job, dict)
+
+    install_step = _step(job, "Install dependencies")
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_plugin_compat_pins_uv_python() -> None:
+    loaded = yaml.safe_load(PLUGIN_COMPAT_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs["plugin-compat-gate"]
+    assert isinstance(job, dict)
+
+    install_step = _step(job, "Install dependencies")
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_ci_uv_sync_steps_pin_python(ci_workflow: dict[str, Any]) -> None:
+    jobs = ci_workflow.get("jobs")
+    assert isinstance(jobs, dict)
+
+    offenders: list[str] = []
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run")
+            if not isinstance(run, str) or "uv sync" not in run:
+                continue
+            for line in run.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("uv sync") and "--python" not in stripped:
+                    offenders.append(f"{job_name}: {step.get('name')}: {stripped}")
+
+    assert offenders == []
 
 
 def test_legacy_integration_tests_workflow_remains_manual_only() -> None:

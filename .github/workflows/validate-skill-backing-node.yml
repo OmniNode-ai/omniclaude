@@ -42,6 +42,7 @@ on:
 env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.6.1"
+  UV_HTTP_TIMEOUT: "900"
 
 concurrency:
   group: skill-backing-node-${{ github.ref }}
@@ -92,9 +93,37 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
 
+      - name: Install native build toolchain
+        run: |
+          if command -v cc >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y build-essential
+            exit 0
+          fi
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
+
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --all-extras
+        run: |
+          for attempt in 1 2 3; do
+            if uv sync --all-extras; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit 1
+            fi
+            echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
+            sleep $((attempt * 10))
+          done
 
       - name: Run ValidateSkillBackingNode unit tests
         working-directory: ${{ github.workspace }}

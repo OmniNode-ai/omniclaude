@@ -78,7 +78,18 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --all-extras
+        run: |
+          for attempt in 1 2 3; do
+            if uv sync --all-extras --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep_seconds=$((attempt * 10))
+              echo "::warning::uv sync attempt ${attempt}/3 failed; retrying in ${sleep_seconds}s"
+              sleep "$sleep_seconds"
+            fi
+          done
+          exit 1
 
       - name: Run skill aspiration unit tests
         working-directory: ${{ github.workspace }}

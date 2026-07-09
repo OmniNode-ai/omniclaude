@@ -14,6 +14,13 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSION: '3.12'
+  UV_CONCURRENT_DOWNLOADS: '1'
+  UV_HTTP_TIMEOUT: '600'
+  UV_SYNC_ATTEMPTS: '5'
+  UV_SYNC_RETRY_DELAY_SECONDS: '10'
+
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
@@ -36,11 +43,14 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Checkout omnibase_core
         uses: actions/checkout@v7
@@ -51,14 +61,26 @@ jobs:
           ref: d163312724489f10f58ffdf8115ba1fa9d5783e8 # pragma: allowlist secret
           path: omnibase_core
           token: ${{ secrets.OMNIBASE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
 
       - name: Enforce validator-requirements.yaml
         run: |
           cd omnibase_core
-          uv sync --all-extras
+          for attempt in $(seq 1 "${UV_SYNC_ATTEMPTS}"); do
+            if uv sync --all-extras; then
+              break
+            fi
+            if [ "$attempt" = "${UV_SYNC_ATTEMPTS}" ]; then
+              exit 1
+            fi
+            sleep "${UV_SYNC_RETRY_DELAY_SECONDS}"
+          done
           uv run python -m omnibase_core.validation.validator_requirements_consumer \
             --repo omniclaude \
             --repo-root .. \

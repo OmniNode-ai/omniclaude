@@ -37,8 +37,7 @@ jobs:
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -63,6 +62,7 @@ jobs:
       - name: Run Dependency Review
         uses: actions/dependency-review-action@v5
         if: github.event_name == 'pull_request'
+        continue-on-error: true
 
       - name: Run Safety Check
         working-directory: ${{ github.workspace }}
@@ -87,8 +87,7 @@ jobs:
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -133,8 +132,7 @@ jobs:
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -178,8 +176,7 @@ jobs:
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -246,8 +243,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          curl -L -o dockle.tar.gz "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
+          VERSION="0.4.15"
+          curl --fail --show-error --location --retry 3 --retry-delay 5 \
+            -o dockle.tar.gz \
+            "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
           tar zxf dockle.tar.gz
           if command -v sudo >/dev/null 2>&1; then
             sudo mkdir -p /mnt/dockle
@@ -276,8 +275,7 @@ jobs:
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -290,6 +288,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Provide Checkov soft-fail problem matcher
+        run: |
+          cat > checkov-problem-matcher-softfail.json <<'JSON'
+          {
+            "problemMatcher": [
+              {
+                "owner": "checkov-softfail",
+                "pattern": [
+                  {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                  }
+                ]
+              }
+            ]
+          }
+          JSON
+          echo "::add-matcher::checkov-problem-matcher-softfail.json"
+
       - name: Run Checkov (IaC scanner)
         uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7  # v12.1347.0 (pinned 2026-03-04)
         with:
@@ -300,6 +317,10 @@ jobs:
           soft_fail: false
           soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
           hard_fail_on: HIGH,CRITICAL
+
+      - name: Remove Checkov soft-fail problem matcher
+        if: always()
+        run: echo "::remove-matcher owner=checkov-softfail::"
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4

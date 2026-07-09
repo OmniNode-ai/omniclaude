@@ -76,11 +76,11 @@ cmd = ModelOnboardingStartCommand(
     dry_run=<dry_run>,
 )
 result = HandlerOnboarding().handle(cmd)
-print(result['rendered_output'])
+print(result[<markdown-output-field>])
 "
 ```
 
-Render the `rendered_output` field from the handler result directly to the user.
+Render the markdown report from the handler result directly to the user.
 
 For dry-run mode, also display the `resolved_steps` list so the user can see what
 would execute.

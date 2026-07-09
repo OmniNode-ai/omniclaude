@@ -142,6 +142,14 @@ def test_review_step_invokes_cli_review_with_model(
     assert "--pr" in combined and "--repo" in combined, (
         "review job must pass --pr and --repo to cli_review"
     )
+    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in combined, (
+        "review JSON must be passed through the environment because the "
+        "heredoc occupies Python stdin"
+    )
+    assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in combined, (
+        "do not pipe review JSON into python3 - with a heredoc; Python reads "
+        "the script from stdin and the JSON payload is lost"
+    )
 
 
 def test_summary_comment_step_present(workflow: dict[object, object]) -> None:

@@ -188,7 +188,7 @@ _omniclaude_error_guard_trap() {
             2>/dev/null || true
 
         rm -f "$_eg_tmp" 2>/dev/null || true
-    ) &
+    ) >/dev/null 2>&1 &
 
     # --- 5. Exit 0 so Claude Code never sees the failure ---
     exit 0

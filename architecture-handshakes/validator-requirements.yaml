@@ -61,7 +61,7 @@ required_validators:
 
   hardcoded-local-paths:
     description: |
-      Blocks /Users/, /Volumes/, /home/, C:\Users\ absolute paths in source.
+      Blocks /Users/, /Volumes/, /home/, C:\Users\ absolute paths in source. # local-path-ok: documents validator match examples
       Violations escape this on any repo without the hook wired.
     central_source: "omnibase_core.validation.validator_local_paths"
     pre_commit: required

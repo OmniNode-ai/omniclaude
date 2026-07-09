@@ -49,9 +49,10 @@ class TestMergeSweepSingleCommandShim:
 
     def test_single_onex_skill_command(self) -> None:
         combined = _SKILL_MD.read_text() + "\n" + _PROMPT_MD.read_text()
-        assert re.search(r"\bonex\s+skill\s+merge_sweep\b", combined), (
-            "merge_sweep must invoke `uv run onex skill merge_sweep`"
-        )
+        assert re.search(
+            r'cd\s+"\$OMNI_HOME/omnibase_infra"\s+&&\s+uv\s+run\s+onex\s+skill\s+merge_sweep\b',
+            combined,
+        ), "merge_sweep must invoke `uv run onex skill merge_sweep` from omnibase_infra"
 
     def test_no_bare_runtime_dispatch_in_bash(self) -> None:
         combined = _SKILL_MD.read_text() + "\n" + _PROMPT_MD.read_text()
