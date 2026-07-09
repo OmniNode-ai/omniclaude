@@ -290,7 +290,7 @@ jobs:
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('checkov-results.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: always() && hashFiles('checkov-results/results_sarif.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: 'checkov-results/results_sarif.sarif'
 
