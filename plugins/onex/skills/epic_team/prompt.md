@@ -837,7 +837,7 @@ for wave_idx, wave in enumerate(waves):
         ticket = tickets_by_id.get(ticket_id, {})
         title = ticket.get("title", ticket_id)
         url = ticket.get("url", "")
-        repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"  # local-path-ok: code example in documentation
+        repo_path = f"{os.environ['OMNI_HOME']}/{repo}"
 
         result = Task(
             subagent_type="general-purpose",
@@ -1567,7 +1567,7 @@ ticket_results:                    # ticket_id -> {status, pr_url, branch} (from
   PROJ-1001:
     status: "merged"
     pr_url: "https://github.com/org/omniclaude/pull/42"
-    branch: "jonah/proj-1001-feature"
+    branch: "<user>/proj-1001-feature"
   PROJ-1002:
     status: "failed"
     pr_url: null
@@ -1575,7 +1575,7 @@ ticket_results:                    # ticket_id -> {status, pr_url, branch} (from
   PROJ-1003:
     status: "merged"
     pr_url: "https://github.com/org/omnibase_core/pull/15"
-    branch: "jonah/proj-1003-feature"
+    branch: "<user>/proj-1003-feature"
 
 # DEPRECATED: ticket_status_map was populated by TaskList polling in the old worker model.
 # It is no longer written. Use ticket_results instead.

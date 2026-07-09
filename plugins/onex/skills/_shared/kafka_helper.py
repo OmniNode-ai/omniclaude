@@ -112,7 +112,7 @@ def get_kafka_bootstrap_servers() -> str:
             (code: CONFIGURATION_ERROR)
 
     Note:
-        Default: "localhost:19092" (local Docker Redpanda, OMN-3431).
+        Default: "localhost:19092" (local Docker Redpanda, <TICKET>).
         Set via KAFKA_BOOTSTRAP_SERVERS in .env file.
     """
     bootstrap = settings.get_effective_kafka_bootstrap_servers()
@@ -123,7 +123,7 @@ def get_kafka_bootstrap_servers() -> str:
             message=(
                 "KAFKA_BOOTSTRAP_SERVERS not configured. "
                 "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 in .env file "
-                "(local Docker Redpanda, OMN-3431). "
+                "(local Docker Redpanda, <TICKET>). "
                 "See CLAUDE.md for deployment context details."
             ),
             details={

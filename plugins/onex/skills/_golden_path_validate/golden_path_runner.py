@@ -33,7 +33,7 @@ class EvidenceArtifact(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     node_id: str = Field(..., description="Identifier for the node under test")
-    ticket_id: str = Field(..., description="Linear ticket ID (e.g. OMN-2976)")
+    ticket_id: str = Field(..., description="Linear ticket ID (e.g. <TICKET>)")
     run_id: str = Field(..., description="Unique run identifier (uuid4-based)")
     emitted_at: str = Field(
         ..., description="ISO-8601 timestamp when fixture was emitted"
@@ -67,7 +67,7 @@ class EvidenceArtifact(BaseModel):
     )
     wire_schema_validation_status: str = Field(
         default="not_declared",
-        description="pass | fail | skipped | not_declared — wire schema contract validation (OMN-7374)",
+        description="pass | fail | skipped | not_declared — wire schema contract validation (<TICKET>)",
     )
     wire_schema_mismatches: list[dict[str, str]] = Field(
         default_factory=list,
@@ -209,7 +209,7 @@ class AssertionEngine:
 def _validate_wire_schema(
     contract_path: str | None, event_data: dict[str, Any]
 ) -> tuple[str, list[dict[str, str]]]:
-    """Validate event_data against a wire schema contract YAML (OMN-7374)."""
+    """Validate event_data against a wire schema contract YAML (<TICKET>)."""
     if contract_path is None:
         return "not_declared", []
 

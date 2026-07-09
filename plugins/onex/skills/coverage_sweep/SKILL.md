@@ -1,5 +1,5 @@
 ---
-description: Measure test coverage across all Python repos under omni_home, flag modules below threshold,
+description: Measure test coverage across all Python repos under the workspace, flag modules below threshold,
   and auto-create Linear tickets for coverage gaps
 version: 4.0.0
 mode: full

@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --ticket-id
-    description: "Linear ticket identifier (e.g. OMN-1234)"
+    description: "Linear ticket identifier (e.g. <TICKET>)"
     required: true
   - name: --repo
     description: "Repository slug (optional)"
@@ -37,7 +37,7 @@ args:
 **Version**: 1.1.0
 **Owner**: omniclaude
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_two_strike_arbiter/`
-**Ticket**: OMN-9403
+**Ticket**: <TICKET>
 **Retro**: D-2 (OMN-13048) — first-strike dispatch-surface trace protocol
 
 ---
@@ -80,7 +80,7 @@ Only after the full trace is complete, enumerate the defects and ship fixes as *
 
 ### Rationale
 
-Four-cycle defect ladders (OMN-13003→OMN-13005→OMN-13010→OMN-13012) doubled overnight
+Four-cycle defect ladders (<TICKET>→<TICKET>→<TICKET>→<TICKET>) doubled overnight
 dispatch costs. The fix-then-rediscover pattern is structurally disallowed by this rule
 (Retro D-2, OMN-13048). The mandate is: enumerate ALL defects on first strike, fix once.
 
@@ -99,9 +99,9 @@ dispatch costs. The fix-then-rediscover pattern is structurally disallowed by th
 ## Usage
 
 ```
-/two-strike-arbiter --ticket-id OMN-1234
-/two-strike-arbiter --ticket-id OMN-1234 --repo OmniNode-ai/omniclaude --pr 567
-/two-strike-arbiter --ticket-id OMN-1234 --dry-run
+/two-strike-arbiter --ticket-id <TICKET>
+/two-strike-arbiter --ticket-id <TICKET> --repo OmniNode-ai/omniclaude --pr 567
+/two-strike-arbiter --ticket-id <TICKET> --dry-run
 ```
 
 ---

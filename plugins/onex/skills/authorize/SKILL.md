@@ -27,8 +27,8 @@ args:
 **Usage:** `/authorize [scope] [tools] [ttl_seconds]`
 
 Grant authorization for Edit/Write operations in the current session. Backed
-by `node_authorize` in omnimarket per `feedback_skills_are_wrappers.md` —
-logic lives in the node handler, this skill is a thin UX wrapper.
+by `node_authorize` in omnimarket — logic lives in the node handler, this
+skill is a thin UX wrapper.
 
 ## What This Does
 
@@ -98,4 +98,4 @@ is tracked under the unused-hooks epic.
 ## Related
 
 - Node: `omnimarket/src/omnimarket/nodes/node_authorize/`
-- Reference: `feedback_skills_are_wrappers.md`, `feedback_no_informational_gates.md`
+- Principle: skills are thin wrappers over node logic; gates must be enforced, not merely informational

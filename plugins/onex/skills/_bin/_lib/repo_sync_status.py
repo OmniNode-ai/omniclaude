@@ -9,7 +9,7 @@ Checks the synchronization state between local clone and remote:
 - Active worktrees
 - Stale branches
 
-Works with the omni_home canonical registry structure.
+Works with the canonical registry structure.
 """
 
 from __future__ import annotations
@@ -41,14 +41,14 @@ def _run(
     repo_name = repo_slug.rsplit("/", maxsplit=1)[-1] if "/" in repo_slug else repo_slug
 
     # Try to find local clone in known locations.
-    # ONEX_REGISTRY_ROOT env var takes priority; fallback to ~/Code/omni_home.
-    omni_home = os.environ.get(
+    # ONEX_REGISTRY_ROOT env var takes priority; fallback to a generic workspace guess.
+    workspace_root = os.environ.get(
         "ONEX_REGISTRY_ROOT", ""
     )  # local-path-ok: env var default fallback
     candidates: list[Path] = []
-    if omni_home:
-        candidates.append(Path(omni_home) / repo_name)
-    candidates.append(Path.home() / "Code" / "omni_home" / repo_name)
+    if workspace_root:
+        candidates.append(Path(workspace_root) / repo_name)
+    candidates.append(Path.home() / "Code" / repo_name)
     local_path: Path | None = None
     for candidate in candidates:
         if (candidate / ".git").exists() or (candidate / "HEAD").exists():

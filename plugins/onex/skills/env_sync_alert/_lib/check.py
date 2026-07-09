@@ -223,7 +223,7 @@ def run_alert_check(
         ),
         "timestamp": now.isoformat(),
         "session_id": resolve_session_id(),
-        "context_ticket_id": "OMN-8868",
+        "context_ticket_id": os.environ.get("ENV_SYNC_CONTEXT_TICKET", ""),
     }
 
     friction_dir = config.state_dir / "friction"

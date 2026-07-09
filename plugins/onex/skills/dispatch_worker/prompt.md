@@ -116,7 +116,7 @@ with these rules regardless of role or spec contents:
    bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
    Fix the issue instead of bypassing the gate.
 
-6. **Anchor-first ordering (OMN-13049).** Phase 0 is mandatory and must complete before
+6. **Anchor-first ordering (<TICKET>).** Phase 0 is mandatory and must complete before
    any long implementation leg: (a) verify or file the Linear ticket; (b) push a WIP
    branch to origin (even if the branch is empty). Write a resume manifest to
    `$ONEX_STATE_DIR/manifests/<ticket_id>/manifest.yaml` immediately after the WIP push
@@ -150,12 +150,12 @@ with these rules regardless of role or spec contents:
    ```
    ````
 
-8. **OCC receipt pairing — TOOL-GENERATE, never hand-author (OMN-13050, retro D-4).**
+8. **OCC receipt pairing — TOOL-GENERATE, never hand-author (<TICKET>, retro D-4).**
    Hand-authored OCC receipts wedged OCC PR #2530 four ways and blocked three code
    PRs overnight. If your change touches runtime paths (src nodes/handlers/contracts),
    you MUST pair it with an `onex_change_control` (OCC) contract + DoD receipt. Do NOT
    hand-write the receipt YAML. Generate it with the tool so the full schema —
-   INCLUDING `contract_sha256` (mandatory since OMN-10421; its omission is exactly
+   INCLUDING `contract_sha256` (mandatory since <TICKET>; its omission is exactly
    what wedged #2530) — is emitted and validated against `ModelDodReceipt`:
 
    ```bash
@@ -175,7 +175,7 @@ with these rules regardless of role or spec contents:
      or `skip-deploy-gate` bypass token of the form `[ skip-<gate>: ... ]`
      (written without the inner spaces) — even with a self-written justification —
      hard-FAILS the PR at the reject-deploy-gate-skip pre-commit hook AND the GHA
-     required check — self-judgement is not evidence (OMN-9731). Alternative:
+     required check — self-judgement is not evidence (<TICKET>). Alternative:
      **STOP and report back — any bracketed skip-token hard-fails your PR.** Remove
      the token and fix the real gate input (missing dod_evidence / Evidence-Source
      line / contract). The only escape hatch is a real user-issued
@@ -197,29 +197,29 @@ with these rules regardless of role or spec contents:
      checks. Alternative: patch the code PR body to include both lines via the
      `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` — the REST PATCH +
      read-back path, never the interactive PR-edit command (Projects-classic
-     silent-no-op trap, OMN-13904).
+     silent-no-op trap, <TICKET>).
 
-9. **UI proof requires Playwright, not `curl` (D-6, OMN-13052).** For any DoD item that
+9. **UI proof requires Playwright, not `curl` (D-6, <TICKET>).** For any DoD item that
    touches UI behavior, the required proof is a Playwright interaction with the operator's
    running surface: the live URL, a screenshot, and the network log of the actual request
    the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
    claim — it proves the backend answered, not that the operator's surface renders the data
    or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
-   (OMN-13024) is live.
+   (<TICKET>) is live.
 
-10. **Docker builds run on .201 stability, never in-sandbox (OMN-13775).** Worker
+10. **Docker builds run on the runtime host's stability lane, never in-sandbox (<TICKET>).** Worker
     sandboxes have no docker daemon — `docker build`, `docker compose build`, `docker
     compose up --build`, or any local image rebuild dead-ends inside a dispatched
     worker. If your task requires building, rebuilding, or runtime-verifying a
     container image: author the Dockerfile/compose/source change and open the PR,
     then hand off build + runtime verification to the gated `node_redeploy_orchestrator`
-    path (the `/redeploy` skill) targeting the `.201` **stability-test** lane —
+    path (the `/redeploy` skill) targeting the runtime host's **stability-test** lane —
     never attempt the build locally inside your sandbox, and never SSH + raw
     `docker build`/`docker compose up` yourself (that recreates the same
-    no-raw-prod-bypass anti-pattern OMN-13434 blocks for prod, just aimed at a
+    no-raw-prod-bypass anti-pattern <TICKET> blocks for prod, just aimed at a
     different lane). Verify the built image via the stability-test lane's live
     EFFECT (`rpk`/`psql` against `INFRA_HOST`), never a local container. This gated
-    path depends on the deploy-agent revival (OMN-13772/OMN-13760); if the
+    path depends on the deploy-agent revival (<TICKET>/<TICKET>); if the
     deploy-agent is unavailable, report the PR as authored-only and flag the
     build/runtime-verify step as blocked — do not fall back to in-sandbox docker.
     Full procedure: `docs/runbooks/docker-build-worker-routing.md`.

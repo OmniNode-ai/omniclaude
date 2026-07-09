@@ -26,7 +26,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Repository path
-REPO_PATH="/Volumes/PRO-G40/Code/omni_home"
+REPO_PATH="${OMNI_HOME:?set OMNI_HOME to the workspace path}"
 
 # Function to print colored messages
 print_error() {

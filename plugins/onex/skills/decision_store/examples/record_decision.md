@@ -103,7 +103,7 @@ proceed cflt-abc123 MongoDB is only for event store, PostgreSQL covers all other
 Conflict cflt-abc123 resolved.
   Status:   RESOLVED
   Note:     MongoDB is only for event store, PostgreSQL covers all other persistence — no overlap
-  Resolved: jonah.gabriel
+  Resolved: operator
 
 Semantic check dispatched asynchronously for cflt-abc123 (will update record when complete).
 

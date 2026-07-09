@@ -78,8 +78,8 @@ GITHUB_ORG = "OmniNode-ai"
 ```python
 import os
 
-ONEX_REGISTRY_ROOT = "/Volumes/PRO-G40/Code/omni_home"  # local-path-ok: env var default fallback
-WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees/release"  # local-path-ok: env var default fallback
+ONEX_REGISTRY_ROOT = os.environ["OMNI_HOME"]
+WORKTREE_ROOT = os.path.join(os.environ["OMNI_HOME"], "omni_worktrees", "release")
 STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/release")
 ARCHIVE_DIR = os.path.join(STATE_DIR, "archive")
 ```
@@ -231,7 +231,7 @@ from the plan. This is not an error -- just skip it.
 def drift_guard(scanned_repos: list[str]) -> None:
     """Verify scanned repo set matches the hardcoded tier graph.
 
-    Raises GRAPH_DRIFT if repos exist in omni_home with pyproject.toml
+    Raises GRAPH_DRIFT if repos exist in the workspace with pyproject.toml
     that are not in the tier graph, or vice versa.
     """
     graph_repos = set()
@@ -246,7 +246,7 @@ def drift_guard(scanned_repos: list[str]) -> None:
     if missing_from_graph:
         raise ReleaseError(
             code="GRAPH_DRIFT",
-            message=f"Repos found in omni_home but not in tier graph: {missing_from_graph}. "
+            message=f"Repos found in the workspace but not in tier graph: {missing_from_graph}. "
                     f"Update TIER_GRAPH in prompt.md and SKILL.md."
         )
     # missing_from_scan is OK -- repos with no pyproject.toml are excluded

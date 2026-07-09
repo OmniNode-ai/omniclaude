@@ -38,7 +38,7 @@ args:
     description: "Show active and skipped worktrees in addition to stale ones (--prune mode)"
     required: false
   - name: --worktrees-root
-    description: "Override worktrees root path (default: /Volumes/PRO-G40/Code/omni_worktrees)" # local-path-ok: example in YAML documentation
+    description: "Override worktrees root path (default: $ONEX_WORKTREES_ROOT)"
     required: false
 ---
 
@@ -81,14 +81,14 @@ executable ONEX node today. There is no `worktree*` entry in
 `omnibase_infra/src/omnibase_infra/cli/skill_mapping.yaml` — this skill is prompt-driven
 end-to-end, not node-dispatched. A candidate backing node for the `--prune` op,
 `node_pr_lifecycle_worktree_prune_effect` (omnimarket), had its contract routing fixed in
-OMN-13882, but it is **not wired to this skill**. Wiring it is tracked as follow-up work,
+<TICKET>, but it is **not wired to this skill**. Wiring it is tracked as follow-up work,
 out of scope here — do not treat `--prune` as node-backed until that wiring lands and this
 section is updated.
 
 The typed models live in `src/omniclaude/hooks/worktree_sweep.py` and define the
 report schema: `EnumWorktreeStatus`, `ModelWorktreeEntry`, `ModelWorktreeSweepReport`.
 
-The durability-sweep helpers (OMN-13044) are pure, no-I/O functions in
+The durability-sweep helpers (<TICKET>) are pure, no-I/O functions in
 `src/omniclaude/hooks/lib/worktree_health.py`: `extract_ticket_id`,
 `is_no_ticket_worktree`, `plan_referenced_dirty_files`, `build_rescue_ref`,
 `offvolume_backup_satisfied`, and the `ModelWorktreeDurabilityFlags` model. The
@@ -138,7 +138,7 @@ else:
 execute = bool(args.execute)
 dry_run = not execute
 cron_interval = args.cron  # e.g. "7d", "2h", or None
-worktrees_root = args.worktrees_root or "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok: env var default fallback
+worktrees_root = args.worktrees_root or os.path.join(os.environ["OMNI_HOME"], "omni_worktrees")
 ```
 
 ---
@@ -218,7 +218,7 @@ gh pr list --head "${branch_name}" --state open --json number --jq 'length'
 **SAFE_TO_DELETE — auto-remove:**
 ```bash
 repo_name=$(basename "${worktree_path}")
-git -C "${omni_home}/${repo_name}" worktree remove "${worktree_path}" --force
+git -C "${WORKSPACE_ROOT}/${repo_name}" worktree remove "${worktree_path}" --force
 ticket_dir=$(dirname "${worktree_path}")
 rmdir "${ticket_dir}" 2>/dev/null
 ```
@@ -244,7 +244,7 @@ Total audited: N
 | DIRTY_ACTIVE   | N     | Flagged         |
 ```
 
-### Step 6: Durability sweep (OMN-13044) <!-- ai-slop-ok: skill-step-heading -->
+### Step 6: Durability sweep (<TICKET>) <!-- ai-slop-ok: skill-step-heading -->
 
 Layered on top of the health classification above, the durability sweep flags
 worktrees at risk of stranding or losing work. Backed by the pure helpers in
@@ -389,7 +389,7 @@ gh pr create --repo "$REPO_SLUG" --head "$BRANCH" --base "$integration_branch" \
 
 ### Report <!-- ai-slop-ok: skill-step-heading -->
 
-Write to `docs/tracking/YYYY-MM-DD-worktree-triage.md` in the `omni_home` repository.
+Write to `docs/tracking/YYYY-MM-DD-worktree-triage.md` in the canonical registry.
 Tables: ship_it (with PR URLs), archive (with age/diff), prune (removed).
 
 ---

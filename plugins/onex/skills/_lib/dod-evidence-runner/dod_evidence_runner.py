@@ -31,7 +31,7 @@ try:
 except ImportError:
     _CORE_AVAILABLE = False
 
-# Canonical OMNI_HOME-derived evidence-root resolver (OMN-13136). This replaces
+# Canonical OMNI_HOME-derived evidence-root resolver (<TICKET>). This replaces
 # the legacy ONEX_EVIDENCE_ROOT env-var read: the resolver reads ``OMNI_HOME``
 # fail-fast and returns ``$OMNI_HOME/onex_change_control/evidence`` — the same
 # path the legacy ONEX_EVIDENCE_ROOT env var pointed at. The
@@ -359,11 +359,11 @@ def resolve_evidence_output_dir(ticket_id: str, working_dir: str) -> Path:
     This is the single source of truth for the receipt's default location so
     the writer (``write_evidence_receipt``) and the reader
     (``pre_tool_use_dod_completion_guard.sh``) agree on one absolute path
-    (Enforcement Map F7 round-trip, OMN-13323).
+    (Enforcement Map F7 round-trip, <TICKET>).
 
     Precedence mirrors the canonical ``node_dod_verify`` resolver:
 
-    1. ``resolve_evidence_root()`` (OMN-13136) → ``$OMNI_HOME/onex_change_control/
+    1. ``resolve_evidence_root()`` (<TICKET>) → ``$OMNI_HOME/onex_change_control/
        evidence/<ticket_id>``. This is the primary path: the core resolver reads
        ``OMNI_HOME`` fail-fast and returns the same location the legacy
        ``ONEX_EVIDENCE_ROOT`` env var pointed at, so the receipt still lands
@@ -374,7 +374,7 @@ def resolve_evidence_output_dir(ticket_id: str, working_dir: str) -> Path:
        (local-run default; the guard is fail-open / INACTIVE in that case).
 
     Args:
-        ticket_id: The ticket identifier (e.g., "OMN-5168").
+        ticket_id: The ticket identifier (e.g., "<TICKET>").
         working_dir: Working directory used for the local-run ``.evidence`` default.
 
     Returns:
@@ -402,16 +402,16 @@ def write_evidence_receipt(
     """Write an evidence receipt JSON file and emit a dod.verify.completed event.
 
     Args:
-        ticket_id: The ticket identifier (e.g., "OMN-5168").
+        ticket_id: The ticket identifier (e.g., "<TICKET>").
         contract_path: Path to the contract YAML that was checked.
         run_result: The results from run_dod_evidence().
         working_dir: Working directory for git info (defaults to cwd).
         output_dir: Base directory for evidence output. When omitted, the
             default is resolved by ``resolve_evidence_output_dir`` so the
             receipt lands where ``pre_tool_use_dod_completion_guard.sh`` reads
-            it (round-trip alignment, OMN-13323 / Enforcement Map F7):
+            it (round-trip alignment, <TICKET> / Enforcement Map F7):
             ``$OMNI_HOME/onex_change_control/evidence/<ticket_id>`` via the
-            ``resolve_evidence_root`` core resolver (OMN-13136), else
+            ``resolve_evidence_root`` core resolver (<TICKET>), else
             ``<working_dir>/.evidence/<ticket_id>`` when ``OMNI_HOME`` is unset.
         policy_mode: DoD enforcement policy (advisory/soft/hard). Forwarded
             to the emitted event. Defaults to "advisory".
@@ -463,7 +463,7 @@ def write_evidence_receipt(
             receipt_data = receipt_obj.model_dump(mode="json")
             _used_model = True
         except Exception:  # noqa: BLE001
-            pass  # Fall through to dict path when core lacks new fields (pre-OMN-9792 release)
+            pass  # Fall through to dict path when core lacks new fields (pre-<TICKET> release)
     if not _used_model:
         # Fallback when omnibase_core unavailable or no valid git SHA
         receipt_data = {
@@ -556,7 +556,7 @@ def emit_dod_verify_completed(
     failure. Local JSON receipt writing is NOT affected by emission failures.
 
     Args:
-        ticket_id: Linear ticket identifier (e.g. "OMN-5198").
+        ticket_id: Linear ticket identifier (e.g. "<TICKET>").
         run_result: The EvidenceRunResult from run_dod_evidence().
         policy_mode: DoD enforcement policy (advisory/soft/hard).
         run_id: Unique run identifier. Generated if not provided.

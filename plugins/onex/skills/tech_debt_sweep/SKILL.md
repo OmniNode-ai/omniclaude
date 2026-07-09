@@ -18,7 +18,7 @@ args:
     description: "If true, report findings without creating tickets (default: false)"
     required: false
   - name: project
-    description: "Linear project for new tickets (default: Active Sprint)"
+    description: "Linear project assigned to newly created work items (default: Active Sprint)"
     required: false
 ---
 
@@ -46,7 +46,7 @@ onex.evt.omniclaude.tech_debt_sweep-completed.v1
 
 All scanning and ticket creation logic executes inside the general-purpose agent. This skill is a thin shell: parse args, dispatch to node, render results.
 
-Scans all Python repos under `omni_home` for 6 categories of tech debt, deduplicates
+Scans all Python repos under the workspace for 6 categories of tech debt, deduplicates
 findings against existing open Linear tickets, and creates one epic per category with
 closeable tickets grouped by repo and top-level source directory.
 
@@ -87,10 +87,10 @@ authoritative risk score.
 
 ## Repo Discovery
 
-Determine the omni_home root from the current working directory context. If the current
-session is within the `omni_home` directory or a worktree derived from it, use
-that as the root. Otherwise, check `ONEX_REGISTRY_ROOT` environment variable. Walk up from
-the current directory looking for a parent that contains multiple repos with
+Determine the workspace root from the current working directory context. If the current
+session is within the workspace directory or a worktree derived from it, use
+that as the root. Otherwise, check `ONEX_REGISTRY_ROOT` environment variable. Search upward
+from the current directory to locate a parent containing multiple repositories with
 `pyproject.toml` files as a heuristic fallback.
 
 Scan all directories under the resolved root that contain a `pyproject.toml` with a `src/`
@@ -103,9 +103,9 @@ does not match the discovery criteria, report the error and exit.
 # Pseudocode -- executed via Bash/Glob tool calls, not as Python
 SKIP_REPOS = {"omnidash", "omniweb", "docs", "tmp", "hiring", "omnistream"}
 
-def discover_repos(omni_home: Path, repo_filter: str | None = None) -> list[Path]:
+def discover_repos(workspace_root: Path, repo_filter: str | None = None) -> list[Path]:
     repos = []
-    for d in sorted(omni_home.iterdir()):
+    for d in sorted(workspace_root.iterdir()):
         if not d.is_dir() or d.name in SKIP_REPOS or d.name.startswith("."):
             continue
         if repo_filter and d.name != repo_filter:
@@ -184,7 +184,7 @@ cd {repo} && uv run mypy src/ --warn-unused-ignores --no-error-summary 2>&1 | gr
 
 **Environment sensitivity:** The stale-ignores scanner is advisory and environment-sensitive.
 Repo-local mypy configuration, import breakage, or missing dependencies may reduce coverage.
-If mypy fails to run (missing config, import errors), skip this category for that repo
+If mypy fails to run (missing config, import errors), skip that repo's category scan
 and log: `"stale-ignores: skipping {repo} (mypy failed)"`. Do not block the sweep.
 Repos skipped for stale-ignores must be counted and surfaced explicitly in the summary report.
 
@@ -289,7 +289,7 @@ error out.
 
 ### Filter findings
 
-For each group (potential ticket):
+Per potential ticket group:
 - Compute dedup keys for all findings in the group
 - Remove any finding whose key already appears in ANY open ticket under this epic
 - If all findings are already tracked: skip (don't create ticket)
@@ -357,7 +357,7 @@ Priority mapping:
 ## Closing Behavior
 
 When a ticket is closed (developer fixed the findings):
-- The dedup keys for that ticket are no longer in any open ticket
+- Closed-ticket dedup keys are no longer present in any open ticket
 - If the code was actually fixed, the scanner won't re-detect those findings
 - If the ticket was closed without fixing, the next sweep re-detects and creates a fresh ticket
 - This is correct behavior -- the debt is either gone or re-tracked
@@ -395,7 +395,7 @@ Categories: 6
 Process findings incrementally by category and repo. For each category:
 1. Resolve or create the epic
 2. Load existing dedup keys for that epic
-3. For each repo: scan -> group -> filter -> create tickets
+3. Per repo: scan -> group -> filter -> create tickets
 4. Print category subtotals before moving to the next category
 
 This prevents the model from accumulating thousands of findings in working state
@@ -423,7 +423,7 @@ for c in categories:
 
 # Validate repo filter -- exit if repo doesn't exist
 if repo_filter:
-    repos = discover_repos(omni_home, repo_filter)
+    repos = discover_repos(workspace_root, repo_filter)
     if not repos:
         print(f"Repo '{repo_filter}' not found or has no src/ directory")
         # STOP -- do not proceed
@@ -434,7 +434,7 @@ if repo_filter:
 
 ```python
 # Pseudocode -- executed via Bash ls + Glob tool calls
-repos = discover_repos(omni_home, repo_filter)
+repos = discover_repos(workspace_root, repo_filter)
 print(f"Discovered {len(repos)} repos")
 ```
 

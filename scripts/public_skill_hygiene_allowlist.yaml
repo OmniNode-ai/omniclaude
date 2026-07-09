@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Allowlist + detection roster for scripts/check_public_skill_hygiene.py.
+#
+# `plugins/onex/skills/` is published/public. This config records the
+# DECIDED keeps -- content the stricter public-skill hygiene gate would
+# otherwise flag, with a reason explaining why it's fine to publish as-is.
+# It is not a bypass switch: every entry needs a reason, and an entry only
+# suppresses what it says (path + optional class + optional value_regex),
+# nothing broader.
+#
+# See the module docstring in check_public_skill_hygiene.py for the full
+# schema, the two allowlisting mechanisms (inline `# public-skill-ok:` vs.
+# config entry), and the glob syntax supported by `path_glob`.
+
+# Configurable roster for the `person-name` detection class. Add a name here
+# -- no script change needed. Matched case-insensitively as a whole word.
+person_names:
+  - Daniyal
+  - Brett
+
+entries:
+  # Golden-path replay fixtures cite real ticket IDs as part of the recorded
+  # fixture data. Genericizing them requires a fixture re-record (each
+  # fixture's ticket_id is load-bearing for the replay) -- deferred to a
+  # follow-up ticket rather than done incidentally by this gate.
+  - path_glob: "plugins/onex/skills/_golden_path_validate/**/*.json"
+    class: specific-ticket
+    reason: >-
+      golden-path replay fixture data; genericizing requires a fixture
+      re-record -- deferred to a follow-up ticket.
+
+  # The pattern IS the decommissioned endpoint this denylist guard blocks --
+  # removing the literal address from the guard would defeat the guard.
+  - path_glob: "plugins/onex/skills/gap/legacy-denylist.yaml"
+    value_regex: "192\\.168\\.86\\.200:29092"
+    reason: >-
+      functional denylist guard: the pattern IS the decommissioned endpoint
+      the guard blocks.
+
+  # Generic RFC-1918 / example.com SSRF test payloads (loopback, 10.0.0.x,
+  # *.example.com), not the operator's real host ranges. The real-lan-ip
+  # regex already excludes 10.0.0.x (only 192.168.x.x and 100.(109|99).x.x
+  # are flagged) -- these entries are belt-and-suspenders documentation of
+  # that fact, not a workaround for a real hit.
+  - path_glob: "plugins/onex/skills/_shared/QDRANT_SECURITY.md"
+    class: real-lan-ip
+    reason: >-
+      generic RFC-1918/example.com SSRF test payloads, not operator hosts.
+  - path_glob: "plugins/onex/skills/_shared/test_qdrant_ssrf_protection.py"
+    class: real-lan-ip
+    reason: >-
+      generic RFC-1918/example.com SSRF test payloads, not operator hosts.
+
+  # Documented canonical interpreter path (CLAUDE.md rule 11) -- the same
+  # literal path on every machine of this architecture, not a personal
+  # machine detail -- and overridable via PLUGIN_PYTHON_BIN.
+  - path_glob: "plugins/onex/skills/dispatch_engine/run.sh"
+    value_regex: "/opt/homebrew/bin/python3\\.13"
+    reason: >-
+      documented canonical interpreter (CLAUDE.md rule 11);
+      env-overridable via PLUGIN_PYTHON_BIN.
+
+  # Frontmatter test fixture requires a concrete historical ticket ID for
+  # this skill contract; the value is metadata, not an operational instruction.
+  - path_glob: "plugins/onex/skills/feature_dashboard/SKILL.md"
+    class: specific-ticket
+    value_regex: "OMN-3503"
+    reason: >-
+      test-mandated historical skill contract metadata; retained as a
+      traceability reference, not an operating detail.
+
+  # Two-strike guardrail tests require the originating retro ticket ID so the
+  # dispatch-surface first-strike rule stays traceable.
+  - path_glob: "plugins/onex/skills/two_strike_arbiter/SKILL.md"
+    class: specific-ticket
+    value_regex: "OMN-13048"
+    reason: >-
+      test-mandated retro traceability for the dispatch-surface first-strike
+      guardrail; retained as provenance, not a live workflow reference.

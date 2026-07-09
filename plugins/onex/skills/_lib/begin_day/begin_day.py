@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""begin-day skill implementation (OMN-5349).
+"""begin-day skill implementation (<TICKET>).
 
 Provides pure functions and subprocess-based helpers for the begin-day
 morning investigation pipeline. Each function corresponds to a phase

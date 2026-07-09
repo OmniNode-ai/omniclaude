@@ -207,6 +207,6 @@ topics.yaml  → no Kafka topics (local enforcement only)
 
 ## See Also
 
-- `docs/evidence/2026-06-11-architecture-investigation/PROCESS_FAILURE_RETRO.md` in the omni_home registry §3.C item C-1
+- `docs/evidence/2026-06-11-architecture-investigation/PROCESS_FAILURE_RETRO.md` in the canonical registry §3.C item C-1
 - `/onex:session` — runtime session orchestrator (session state, health gates, dispatch)
 - `/onex:runtime_closeout` — deploy + proof-matrix closeout (runtime artifacts)

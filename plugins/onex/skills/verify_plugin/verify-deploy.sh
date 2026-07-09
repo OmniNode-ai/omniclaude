@@ -43,7 +43,7 @@ fi
 echo -e "\n${bold}Plugin Verification Suite${reset}"
 echo -e "Root: $PLUGIN_ROOT\n"
 
-# OMN-7310: Resolve repo root (plugin is at plugins/onex/, repo root is ../..)
+# <TICKET>: Resolve repo root (plugin is at plugins/onex/, repo root is ../..)
 REPO_ROOT="$(cd "$PLUGIN_ROOT/../.." 2>/dev/null && pwd)"
 
 # CHECK: file_exists — required directories
@@ -85,13 +85,13 @@ while IFS= read -r f; do
 done < <(find "$PLUGIN_ROOT/agents/configs" -name "*.json" 2>/dev/null)
 check "json_valid: $agent_count agent configs (${bad_agents} failures)" test "$bad_agents" -eq 0
 
-# CHECK: skill naming — all snake_case, no kebab-case dirs (OMN-5200)
+# CHECK: skill naming — all snake_case, no kebab-case dirs (<TICKET>)
 kebab_count=0
 kebab_count="$(find "$PLUGIN_ROOT/skills" -maxdepth 1 -mindepth 1 -type d \
   -name '*-*' ! -name '_*' 2>/dev/null | wc -l | tr -d ' ')"
 check "skill_naming: zero kebab-case dirs (found: $kebab_count)" test "$kebab_count" -eq 0
 
-# CHECK: python_import — venv health (OMN-7310: use repo main venv)
+# CHECK: python_import — venv health (<TICKET>: use repo main venv)
 PYTHON="$REPO_ROOT/.venv/bin/python3"
 check "python_import: omnibase_spi"       "$PYTHON" -c "import omnibase_spi"
 check "python_import: omniclaude"         "$PYTHON" -c "import omniclaude"
@@ -128,7 +128,7 @@ done < <(jq -r '.hooks | to_entries[].value.hooks[].command | split("/")[-1]' \
   "$PLUGIN_ROOT/hooks/hooks.json" 2>/dev/null | sort -u)
 check "hook_smoke: $hook_pass hooks pass, $hook_fail fail (exec+shape only)" test "$hook_fail" -eq 0
 
-# CHECK: post-deploy smoke test (OMN-6376)
+# CHECK: post-deploy smoke test (<TICKET>)
 # Run the comprehensive smoke test runner if available at the expected path.
 SMOKE_SCRIPT="$PLUGIN_ROOT/tests/smoke_deploy.sh"
 if [[ -f "$SMOKE_SCRIPT" ]]; then

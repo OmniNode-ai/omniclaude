@@ -220,7 +220,7 @@ def detect_structure(content: str, source_path: str | None = None) -> Any:
     Detection cascade (first match wins):
     1. ## Task N:     → task_sections (canonical)
     2. ## Phase N:    → phase_sections (legacy alias)
-    3. §N / §N.x     → section_headings (OMN-8491)
+    3. §N / §N.x     → section_headings (<TICKET>)
     4. (future arms …)
 
     Raises ValueError if no valid structure is detected or content is empty/whitespace.
@@ -245,7 +245,7 @@ def detect_structure(content: str, source_path: str | None = None) -> Any:
         entries = _extract_numbered_entries(phase_matches, "Phase", content)
         return _make_doc("phase_sections", entries, title, source_path)
 
-    # 3. § headings (OMN-8491)
+    # 3. § headings (<TICKET>)
     section_matches = list(_SECTION_RE.finditer(content))
     if section_matches:
         entries = _extract_section_entries(section_matches, content)

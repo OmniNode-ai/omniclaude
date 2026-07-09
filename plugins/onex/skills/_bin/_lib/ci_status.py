@@ -25,7 +25,7 @@ from .base import (
 )
 
 # ---------------------------------------------------------------------------
-# Required workflow filter (OMN-6812)
+# Required workflow filter (<TICKET>)
 # ---------------------------------------------------------------------------
 # Only these workflow names are considered when checking CI on the default
 # branch.  Auxiliary workflows (release, nightly, plugin-pin-cascade, etc.)
@@ -135,7 +135,7 @@ def _run(
         )
         all_runs = json.loads(result.stdout) if result.stdout.strip() else []
 
-        # Filter to required workflows only (OMN-6812).  Auxiliary workflows
+        # Filter to required workflows only (<TICKET>).  Auxiliary workflows
         # (release, nightly, etc.) are excluded so they don't cause false
         # FAIL signals in the integration sweep.
         runs = [r for r in all_runs if _is_required_workflow(r.get("name", ""))]

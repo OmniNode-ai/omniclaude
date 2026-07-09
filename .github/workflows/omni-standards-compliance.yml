@@ -39,14 +39,9 @@ jobs:
   structure-validation:
     needs: occ-preflight
     name: Repository Structure Validation
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Pure filesystem validation. Keep it hosted so runner saturation cannot
+    # cancel the check and falsely fail the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -204,14 +199,9 @@ jobs:
   legacy-compatibility-check:
     needs: occ-preflight
     name: Legacy Compatibility Check
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Pure filesystem validation. Keep it hosted so runner saturation cannot
+    # cancel the check and falsely fail the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code

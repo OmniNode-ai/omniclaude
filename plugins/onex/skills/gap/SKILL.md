@@ -427,7 +427,7 @@ identifier (the original analysis run), NOT the fix run ID:
 
 ```json
 {
-  "GAP-b7e2d5f8": { "choice": "A", "chosen_at": "...", "by": "jonah" }
+  "GAP-b7e2d5f8": { "choice": "A", "chosen_at": "...", "by": "<user>" }
 }
 ```
 

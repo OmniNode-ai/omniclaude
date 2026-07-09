@@ -3,8 +3,8 @@
 #
 # Usage:
 #   ./run.sh <epic_id> [additional args]
-#   ./run.sh OMN-2000 --dry-run
-#   ./run.sh OMN-2000 --resume
+#   ./run.sh OMN-XXXX --dry-run
+#   ./run.sh OMN-XXXX --resume
 #
 # Invokes claude -p (headless/print mode) with a constrained --allowedTools list
 # to prevent passivity and force completion without interactive approval gates.
@@ -15,7 +15,7 @@
 # - On ambiguity: emit structured JSON to stderr, exit 3 (checkpointable — state on disk)
 # - On blocked tool use: exit 4 (allowedTools violation — never silently skip)
 #
-# OMN-6235
+# <TICKET>
 
 set -euo pipefail
 

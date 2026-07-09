@@ -30,7 +30,7 @@ args:
 **Skill ID**: `onex:runtime_closeout`
 **Version**: 1.0.0
 **Owner**: omniclaude
-**Epic**: OMN-13410
+**Epic**: <TICKET>
 
 ## Usage
 
@@ -69,7 +69,7 @@ the bus — it never runs an in-process loop:
 1. **PREFLIGHT** — read-only identity / broker / projection / migration /
    rollback inspection. Never mutates the lane. A failing preflight completes
    `BLOCKED` before any deploy.
-2. **FITNESS_GATE** — the fresh-deploy fitness gate (OMN-13410 sibling). A
+2. **FITNESS_GATE** — the fresh-deploy fitness gate (<TICKET> sibling). A
    drifted artifact is rejected `BLOCKED` before any lane mutation.
 3. **DEPLOY** — reuses `node_redeploy_orchestrator` (the `redeploy-start`
    command). Prod promotion stays operator-gated by the redeploy orchestrator's

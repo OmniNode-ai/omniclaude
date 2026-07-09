@@ -39,9 +39,9 @@ Runtime-mode-only args:
 omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ```
 
-**Bare clone root**: `$ONEX_REGISTRY_ROOT` (typically `/Volumes/PRO-G40/Code/omni_home`)  # local-path-ok: example default value in documentation
+**Worktree root**: `$ONEX_WORKTREES_ROOT`
 
-**Change control repo**: `$ONEX_REGISTRY_ROOT/onex_change_control`  # local-path-ok: canonical repo path reference in documentation
+**Change control repo**: `$ONEX_WORKTREES_ROOT/<ticket>/onex_change_control`
 
 ---
 
@@ -49,24 +49,25 @@ omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninod
 
 Run when mode is `drift` or `full`.
 
-### Preamble: Pull bare clones
+### Preamble: Pull canonical clones
 
-Before scanning, pull all bare clones to ensure findings reflect the latest `main`:
+Before scanning, refresh the canonical clones to ensure findings reflect the latest `dev`:
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok: example command in documentation
+cd "$ONEX_WORKTREES_ROOT/<ticket>/omnibase_infra"
+git fetch origin dev --prune
 ```
 
-If `pull-all.sh` exits non-zero, **abort the sweep immediately** with an error message
+If the refresh exits non-zero, **abort the sweep immediately** with an error message
 explaining that stale clones may produce ghost findings. Do not silently continue with
 stale data.
 
 ### Phase 1: Contract discovery
 
-For each repo, discover all contract files from the `main` branch:
+For each repo, discover all contract files from the `dev` branch:
 
 ```bash
-git -C $ONEX_REGISTRY_ROOT/<repo> ls-tree -r main --name-only | grep -E '(contract|handler_contract)\.yaml$'  # local-path-ok: command example using canonical repo path
+git -C $ONEX_WORKTREES_ROOT/<ticket>/<repo> ls-tree -r origin/dev --name-only | grep -E '(contract|handler_contract)\.yaml$'
 ```
 
 Build a list of `(repo, path)` pairs. Record the total count.

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""CLI entry point for the armed-not-enqueued detector (OMN-13031).
+"""CLI entry point for the armed-not-enqueued detector (<TICKET>).
 
 Usage:
     python -m _lib.run_armed_not_enqueued [--repos REPOS] [--threshold-minutes N]
@@ -17,7 +17,7 @@ Exit codes:
     0  No flagged PRs (or scan completed with errors but no flags)
     1  One or more PRs are flagged as armed-not-enqueued
 
-[OMN-13031]
+[<TICKET>]
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _positive_int(value: str) -> int:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="run_armed_not_enqueued",
-        description="Armed-not-enqueued detector for ONEX queue repos (OMN-13031)",
+        description="Armed-not-enqueued detector for ONEX queue repos (<TICKET>)",
     )
     parser.add_argument(
         "--repos",

@@ -26,7 +26,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Repository path
-REPO_PATH="/Volumes/PRO-G40/Code/omni_home"
+REPO_PATH="${OMNI_HOME:?set OMNI_HOME to the workspace path}"
 
 # Function to print colored messages
 print_error() {
@@ -50,7 +50,7 @@ check_prerequisites() {
     # Check if repository exists
     if [[ ! -d "$REPO_PATH" ]]; then
         print_error "Repository not found: $REPO_PATH"
-        print_info "Please ensure omni_home is available at this location"
+        print_info "Please ensure the workspace is available at this location"
         exit 1
     fi
 

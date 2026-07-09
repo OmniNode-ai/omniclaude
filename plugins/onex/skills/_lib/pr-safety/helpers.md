@@ -825,7 +825,6 @@ class BoundaryViolationError(Exception):
 
 **MANDATORY** before any `git worktree add`, `git checkout`, or `git push` to a PR branch.
 Never construct branch names from ticket IDs or PR titles -- always fetch from GitHub API.
-See memory rule `feedback_always_fetch_branch_name.md`.
 
 ```python
 def resolve_branch(pr_number: int | str, repo: str) -> str:
@@ -1446,7 +1445,7 @@ def update_pr_branch(repo_full: str, pr_number: int) -> dict:
 
 ## patch_pr_body(repo_full, pr_number, body) / patch_pr_title(repo_full, pr_number, title)
 
-**The only sanctioned way to edit a PR body or title.** Never use `gh pr edit` (OMN-13904).
+**The only sanctioned way to edit a PR body or title.** Never use `gh pr edit` (<TICKET>).
 
 ### Why not `gh pr edit`
 
@@ -1458,7 +1457,7 @@ scope (the standard `gh auth login` token has `repo, workflow, admin:org, ...` b
 - Historically it failed or **silently no-oped** on body edits because the edit path
   fetched `projectCards`/`projectsV2` via GraphQL even when no project field was being
   changed. This is the same defect class as the `gh pr merge --auto --squash` silent
-  no-op (OMN-8653 / OMN-5635, fixed in tooling).
+  no-op (<TICKET>, fixed in tooling).
 - The exposure is version-dependent: on gh 2.89.0 a plain `--body-file` edit was
   observed to apply (verified live 2026-07-03 against OmniNode-ai/omniclaude#1850),
   but the projects lookup path is still wired into the command and older/newer gh

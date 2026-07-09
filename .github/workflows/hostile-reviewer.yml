@@ -28,6 +28,9 @@ permissions:
   pull-requests: write
   contents: read
 
+env:
+  UV_HTTP_TIMEOUT: "300"
+
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.

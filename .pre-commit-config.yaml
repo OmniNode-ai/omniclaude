@@ -211,6 +211,22 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14105: public-skill hygiene gate. plugins/onex/skills/ is
+      # published/public; this is a separate, stricter gate than
+      # aislop_sweep (which intentionally tolerates internal-tooling detail
+      # there) — it flags operator identity, real hosts/IPs, machine-
+      # specific paths, and internal doc citations. Detect-only, no
+      # auto-fix. Allowlist decided keeps in
+      # scripts/public_skill_hygiene_allowlist.yaml or inline with
+      # `# public-skill-ok: <reason>`.
+      - id: check-public-skill-hygiene
+        name: public-skill hygiene gate (OMN-14105)
+        entry: python3 scripts/check_public_skill_hygiene.py
+        language: system
+        files: '^(plugins/onex/skills/|scripts/check_public_skill_hygiene\.py|scripts/public_skill_hygiene_allowlist\.yaml)'
+        pass_filenames: false
+        stages: [pre-commit]
+
       # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep
       # keywords need a precondition-probe: annotation; deliverable sections
       # with file paths need an ## Artifact Manifest section; each manifest

@@ -130,5 +130,5 @@ Showing 1–1 of 1
 
 ID       | Type              | Domain         | Layer        | Resolved By | Resolution Note
 ---------|-------------------|----------------|--------------|-------------|--------------------
-u5v6w7x8 | TECH_STACK_CHOICE | infrastructure | architecture | jonah.gabriel | MongoDB is only for event store; no overlap with PostgreSQL
+u5v6w7x8 | TECH_STACK_CHOICE | infrastructure | architecture | operator | MongoDB is only for event store; no overlap with PostgreSQL
 ```

@@ -8,9 +8,9 @@ sections. Behavioral contracts and hard-fails are in `SKILL.md`.
 
 Resolve paths from the environment — never hardcode absolute paths:
 ```
-PLAN="${PLAN:-$OMNI_HOME/docs/plans/ROLLING_SEVEN_DAY_PLAN.md}"   # local-path-ok: OMNI_HOME = canonical omni_home repo root (root CLAUDE.md rule #6); --plan overrides
+PLAN="${PLAN:-$OMNI_HOME/docs/plans/ROLLING_SEVEN_DAY_PLAN.md}"   # local-path-ok: OMNI_HOME = canonical workspace repo root (root CLAUDE.md rule #6); --plan overrides
 # --ledger, or default to the newest handoff:
-LEDGER="$(ls -t "$OMNI_HOME"/docs/handoff/*handoff*.md 2>/dev/null | head -1)"   # local-path-ok: OMNI_HOME = canonical omni_home repo root
+LEDGER="$(ls -t "$OMNI_HOME"/docs/handoff/*handoff*.md 2>/dev/null | head -1)"   # local-path-ok: OMNI_HOME = canonical workspace repo root
 ```
 
 ---
@@ -24,7 +24,7 @@ Read the full current plan. Extract, without editing anything yet:
   cycle unless the ledger carries an explicit operator directive changing it.
 - **§1 current state** — the last verified snapshot and its `state_as_of` time.
 - **§2 work queue** — the ranked WS work-streams and their tasks/PRs/tickets.
-- **§3/§4/§5** — open decisions (operator, AWS/Daniyal, parked).
+- **§3/§4/§5** — open decisions (operator, AWS/externally-owned infra, parked).
 - **§6 revision log** — the last delta's timestamp (your new delta appends after it).
 - Architectural constraints, dependencies, and the critical path (usually the P0 WS).
 
@@ -84,7 +84,7 @@ Edit `$PLAN` in place with targeted edits — **never** a full rewrite:
    Keep the WS-ranked shape — no day buckets.
 3. **§3/§4/§5** — strike through resolved decisions
    (`~~text~~ — DECIDED <date>: <ruling>`), append new ones. Never
-   unilaterally act on a §4 AWS/Daniyal item — surface only.
+   unilaterally act on a §4 AWS/externally-owned infra item — surface only.
 4. **§0** — untouched unless a cited operator directive changes the operating
    model; if so, edit and cite the directive in the report.
 5. **§6** — append ONE dated delta (do not edit prior deltas): what cleared,
@@ -98,7 +98,7 @@ Edit `$PLAN` in place with targeted edits — **never** a full rewrite:
    Recommended Next Actions → Assumptions).
 2. Unless `--dry-run` or `--no-commit`: stage and commit.
    ```
-   git -C "$OMNI_HOME" add docs/plans/ROLLING_SEVEN_DAY_PLAN.md   # local-path-ok: OMNI_HOME = canonical omni_home repo root
+   git -C "$OMNI_HOME" add docs/plans/ROLLING_SEVEN_DAY_PLAN.md   # local-path-ok: OMNI_HOME = canonical workspace repo root
    git -C "$OMNI_HOME" commit -m "docs(OMN-XXXX): rolling-plan governor re-cut <date> — <one-line>"   # local-path-ok: OMNI_HOME repo root
    ```
    Use the OMN-XXXX from the ledger's driving work (or a plan-maintenance
