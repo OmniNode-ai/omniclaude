@@ -113,13 +113,15 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: |
+          set -euo pipefail
           for attempt in 1 2 3; do
-            if uv sync --all-extras; then
+            if uv sync --frozen --python "${PYTHON_VERSION}"; then
               exit 0
             fi
+            status=$?
             if [ "$attempt" -eq 3 ]; then
               echo "::error::uv sync failed after ${attempt} attempts"
-              exit 1
+              exit "$status"
             fi
             echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
             sleep $((attempt * 10))

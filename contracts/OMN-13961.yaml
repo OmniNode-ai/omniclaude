@@ -25,3 +25,15 @@ dod_evidence:
         check_value: >-
           grep -R "docs/handoff" plugins/onex/skills/handoff/SKILL.md
           plugins/onex/skills/handoff/prompt.md
+  - id: "dod-skill-backing-node-lightweight-install"
+    description: >-
+      The skill backing-node validator installs the frozen default dependency
+      set instead of all optional extras, avoiding intelligence/Torch/CUDA
+      downloads for docs-only skill validation.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q "uv sync --frozen" .github/workflows/validate-skill-backing-node.yml
+          && ! grep -q "uv sync --all-extras" .github/workflows/validate-skill-backing-node.yml
