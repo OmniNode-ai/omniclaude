@@ -333,7 +333,7 @@ def _build_transport_and_handler() -> tuple[object, object]:
         HandlerLlmOpenaiCompatible,
     )
 
-    class _InProcessTransport(MixinLlmHttpTransport):  # type: ignore[misc]
+    class _InProcessTransport(MixinLlmHttpTransport):
         """Minimal concrete transport for in-process Bifrost delegation calls."""
 
         def __init__(self) -> None:

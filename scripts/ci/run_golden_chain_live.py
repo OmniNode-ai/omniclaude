@@ -429,7 +429,9 @@ async def run_gate(bootstrap_servers: str, analytics_url: str, timeout_ms: int) 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     bootstrap_servers = _require(args.bootstrap_servers, "KAFKA_BOOTSTRAP_SERVERS")
-    analytics_url = _require(args.db_dsn, "OMNIDASH_ANALYTICS_DB_URL or DATABASE_URL")  # noqa: secrets
+    analytics_url = _require(
+        args.analytics_url, "OMNIDASH_ANALYTICS_DB_URL or DATABASE_URL"
+    )
     if hasattr(signal, "SIGPIPE"):
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     return asyncio.run(run_gate(bootstrap_servers, analytics_url, args.timeout_ms))
