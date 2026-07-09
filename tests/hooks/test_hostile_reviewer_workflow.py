@@ -152,6 +152,56 @@ def test_review_step_invokes_cli_review_with_model(
     )
 
 
+def test_dependency_install_failure_degrades_instead_of_blocking(
+    workflow: dict[object, object],
+) -> None:
+    """Dependency setup failures are infrastructure degradation, not findings."""
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+
+    steps = review_job.get("steps") or []
+    assert isinstance(steps, list) and steps, "review job must have steps"
+
+    install_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict)
+            and step.get("name") == "Install omniintelligence dependencies"
+        ),
+        None,
+    )
+    assert isinstance(install_step, dict), "dependency install step must exist"
+    assert install_step.get("id") == "install_deps", (
+        "dependency install step must expose an outcome to the review step"
+    )
+    assert install_step.get("continue-on-error") is True, (
+        "dependency install failures must reach the review step as degraded output"
+    )
+
+    review_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict) and step.get("id") == "review"
+        ),
+        None,
+    )
+    assert isinstance(review_step, dict), "review step must exist"
+    env = review_step.get("env")
+    assert isinstance(env, dict)
+    assert env.get("INSTALL_DEPS_OUTCOME") == "${{ steps.install_deps.outcome }}"
+
+    run_text = review_step.get("run")
+    assert isinstance(run_text, str)
+    assert 'if [ "$INSTALL_DEPS_OUTCOME" != "success" ]; then' in run_text
+    assert "verdict=degraded" in run_text
+    assert "omniintelligence dependency install failed" in run_text
+    assert "exit 0" in run_text
+
+
 def test_summary_comment_step_present(workflow: dict[object, object]) -> None:
     """A step must post a summary PR comment via actions/github-script."""
     jobs = workflow.get("jobs")

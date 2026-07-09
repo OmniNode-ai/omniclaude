@@ -6,6 +6,9 @@
 FROM python:3.12-slim
 
 ENV UV_NO_CACHE=1
+ENV UV_HTTP_TIMEOUT=600
+ENV GIT_HTTP_LOW_SPEED_LIMIT=0
+ENV GIT_HTTP_LOW_SPEED_TIME=999999
 ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
@@ -14,14 +17,19 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency management
-RUN pip install --no-cache-dir uv
+RUN pip install --default-timeout=300 --retries 5 --no-cache-dir uv
 
 # Copy package files
 COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
-# Install dependencies
-RUN uv sync --no-dev --frozen
+# Install dependencies. GitHub-side git dependencies occasionally reset during
+# container builds; retry the bounded install instead of failing a clean build.
+RUN for attempt in 1 2 3 4; do \
+        uv sync --no-dev --frozen && break; \
+        [ "$attempt" -lt 4 ] || exit 1; \
+        sleep $((attempt * 10)); \
+    done
 
 # Run the service as an unprivileged user.
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \

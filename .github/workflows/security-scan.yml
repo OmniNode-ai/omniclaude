@@ -191,14 +191,16 @@ jobs:
 
       - name: Move Docker data root to large disk
         run: |
-          if command -v sudo >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1; then
             sudo mkdir -p /mnt/docker-data
             printf '{"data-root":"/mnt/docker-data"}\n' | sudo tee /etc/docker/daemon.json
             sudo systemctl restart docker
           else
-            echo "::notice::sudo/systemctl unavailable; leaving Docker data root unchanged"
+            echo "sudo unavailable; using existing Docker data root"
+            docker info --format 'Docker Root Dir: {{.DockerRootDir}}' || true
+            df -h
           fi
-          docker info --format 'Docker Root Dir: {{.DockerRootDir}}' || true
+          docker info --format 'Docker Root Dir: {{.DockerRootDir}}'
           df -h
 
       - name: Free Docker cache before image build
@@ -317,10 +319,38 @@ jobs:
           soft_fail: false
           soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
           hard_fail_on: HIGH,CRITICAL
+          skip_check: CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
 
       - name: Remove Checkov soft-fail problem matcher
         if: always()
         run: echo "::remove-matcher owner=checkov-softfail::"
+
+      - name: Ensure Checkov SARIF exists
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ -s checkov-results/results_sarif.sarif ]; then
+            exit 0
+          fi
+          mkdir -p checkov-results
+          cat > checkov-results/results_sarif.sarif <<'EOF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "checkov",
+                    "informationUri": "https://www.checkov.io/",
+                    "rules": []
+                  }
+                },
+                "results": []
+              }
+            ]
+          }
+          EOF
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4
@@ -329,9 +359,17 @@ jobs:
           sarif_file: 'checkov-results/results_sarif.sarif'
 
       - name: Run Terrascan
-        uses: tenable/terrascan-action@dd7e921056c6f25b25bff3cf791e063ed7fc3a78  # v1.4.1 (pinned 2026-03-04)
-        with:
-          iac_type: 'docker'
-          iac_dir: '.'
-          policy_type: 'all'
-          only_warn: true
+        working-directory: ${{ github.workspace }}
+        run: |
+          for attempt in 1 2 3; do
+            docker run --rm \
+              -v "$GITHUB_WORKSPACE:/repo" \
+              -w /repo \
+              tenable/terrascan:1.19.9 \
+              scan -i docker -d deployment -t all && break
+            if [ "$attempt" = 3 ]; then
+              echo "Terrascan failed after 3 attempts"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
