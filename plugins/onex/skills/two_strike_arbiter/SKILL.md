@@ -38,7 +38,7 @@ args:
 **Owner**: omniclaude
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_two_strike_arbiter/`
 **Ticket**: <TICKET>
-**Retro**: D-2 (<TICKET>) — first-strike dispatch-surface trace protocol
+**Retro**: D-2 (OMN-13048) — first-strike dispatch-surface trace protocol
 
 ---
 
@@ -82,7 +82,7 @@ Only after the full trace is complete, enumerate the defects and ship fixes as *
 
 Four-cycle defect ladders (<TICKET>→<TICKET>→<TICKET>→<TICKET>) doubled overnight
 dispatch costs. The fix-then-rediscover pattern is structurally disallowed by this rule
-(Retro D-2, <TICKET>). The mandate is: enumerate ALL defects on first strike, fix once.
+(Retro D-2, OMN-13048). The mandate is: enumerate ALL defects on first strike, fix once.
 
 ---
 

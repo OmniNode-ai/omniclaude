@@ -61,3 +61,21 @@ entries:
     reason: >-
       documented canonical interpreter (CLAUDE.md rule 11);
       env-overridable via PLUGIN_PYTHON_BIN.
+
+  # Frontmatter test fixture requires a concrete historical ticket ID for
+  # this skill contract; the value is metadata, not an operational instruction.
+  - path_glob: "plugins/onex/skills/feature_dashboard/SKILL.md"
+    class: specific-ticket
+    value_regex: "OMN-3503"
+    reason: >-
+      test-mandated historical skill contract metadata; retained as a
+      traceability reference, not an operating detail.
+
+  # Two-strike guardrail tests require the originating retro ticket ID so the
+  # dispatch-surface first-strike rule stays traceable.
+  - path_glob: "plugins/onex/skills/two_strike_arbiter/SKILL.md"
+    class: specific-ticket
+    value_regex: "OMN-13048"
+    reason: >-
+      test-mandated retro traceability for the dispatch-surface first-strike
+      guardrail; retained as provenance, not a live workflow reference.
