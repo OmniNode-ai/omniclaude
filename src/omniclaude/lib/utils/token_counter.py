@@ -20,8 +20,13 @@ Notes:
 from __future__ import annotations
 
 import functools
+import logging
+import re
 
+import requests
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 # Safety margin to account for tokenizer differences between tiktoken (cl100k_base)
 # and Claude's actual tokenizer. The two tokenizers can differ by ~10-15%, so callers
@@ -35,12 +40,26 @@ def _get_tokenizer() -> tiktoken.Encoding:
     return tiktoken.get_encoding("cl100k_base")
 
 
+def _count_tokens_approximate(text: str) -> int:
+    """Count tokens with a deterministic local estimate when tiktoken cannot load.
+
+    ``tiktoken.get_encoding("cl100k_base")`` may download encoding data on a cold
+    CI runner. Import-time token constants must not depend on outbound network, so
+    connection failures degrade to this conservative word/punctuation estimate.
+    """
+    if not text:
+        return 0
+    return len(re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE))
+
+
 def count_tokens(text: str) -> int:
     """Count tokens in text using cl100k_base encoding.
 
     Uses a cached tokenizer singleton for performance. The encoding is
     ``cl100k_base`` which is close enough to Claude's tokenization for
-    budget enforcement purposes.
+    budget enforcement purposes. If the encoding is not already available and
+    tiktoken cannot download it, falls back to a deterministic local estimate so
+    tests and import-time constants do not depend on outbound network.
 
     Args:
         text: The text to tokenize.
@@ -54,8 +73,12 @@ def count_tokens(text: str) -> int:
         >>> count_tokens("")
         0
     """
-    tokenizer = _get_tokenizer()
-    return len(tokenizer.encode(text, disallowed_special=()))
+    try:
+        tokenizer = _get_tokenizer()
+        return len(tokenizer.encode(text, disallowed_special=()))
+    except (requests.RequestException, OSError) as exc:
+        logger.warning("tiktoken encoding unavailable; using approximate count: %s", exc)
+        return _count_tokens_approximate(text)
 
 
 __all__ = [
