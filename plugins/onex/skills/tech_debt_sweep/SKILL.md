@@ -18,7 +18,7 @@ args:
     description: "If true, report findings without creating tickets (default: false)"
     required: false
   - name: project
-    description: "Linear project for new tickets (default: Active Sprint)"
+    description: "Linear project assigned to newly created work items (default: Active Sprint)"
     required: false
 ---
 
@@ -89,8 +89,8 @@ authoritative risk score.
 
 Determine the workspace root from the current working directory context. If the current
 session is within the workspace directory or a worktree derived from it, use
-that as the root. Otherwise, check `ONEX_REGISTRY_ROOT` environment variable. Walk up from
-the current directory looking for a parent that contains multiple repos with
+that as the root. Otherwise, check `ONEX_REGISTRY_ROOT` environment variable. Search upward
+from the current directory to locate a parent containing multiple repositories with
 `pyproject.toml` files as a heuristic fallback.
 
 Scan all directories under the resolved root that contain a `pyproject.toml` with a `src/`
@@ -184,7 +184,7 @@ cd {repo} && uv run mypy src/ --warn-unused-ignores --no-error-summary 2>&1 | gr
 
 **Environment sensitivity:** The stale-ignores scanner is advisory and environment-sensitive.
 Repo-local mypy configuration, import breakage, or missing dependencies may reduce coverage.
-If mypy fails to run (missing config, import errors), skip this category for that repo
+If mypy fails to run (missing config, import errors), skip that repo's category scan
 and log: `"stale-ignores: skipping {repo} (mypy failed)"`. Do not block the sweep.
 Repos skipped for stale-ignores must be counted and surfaced explicitly in the summary report.
 
@@ -289,7 +289,7 @@ error out.
 
 ### Filter findings
 
-For each group (potential ticket):
+Per potential ticket group:
 - Compute dedup keys for all findings in the group
 - Remove any finding whose key already appears in ANY open ticket under this epic
 - If all findings are already tracked: skip (don't create ticket)
@@ -357,7 +357,7 @@ Priority mapping:
 ## Closing Behavior
 
 When a ticket is closed (developer fixed the findings):
-- The dedup keys for that ticket are no longer in any open ticket
+- Closed-ticket dedup keys are no longer present in any open ticket
 - If the code was actually fixed, the scanner won't re-detect those findings
 - If the ticket was closed without fixing, the next sweep re-detects and creates a fresh ticket
 - This is correct behavior -- the debt is either gone or re-tracked
@@ -395,7 +395,7 @@ Categories: 6
 Process findings incrementally by category and repo. For each category:
 1. Resolve or create the epic
 2. Load existing dedup keys for that epic
-3. For each repo: scan -> group -> filter -> create tickets
+3. Per repo: scan -> group -> filter -> create tickets
 4. Print category subtotals before moving to the next category
 
 This prevents the model from accumulating thousands of findings in working state
