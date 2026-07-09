@@ -139,6 +139,23 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
+      # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
+      # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero
+      # stamp logic duplicated; the CLI reuses the Piece-2 parser in
+      # omnibase_core. Only *.md/*.txt that already carry an Evidence-Ticket /
+      # Evidence-Source line are checked, so an incomplete or malformed stamp
+      # fails at commit time; arbitrary markdown is never required to carry one.
+      # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10).
+      - id: validate-occ-pr-stamp
+        name: Validate OCC PR metadata stamp (OMN-14190)
+        entry: .pre-commit-hooks/validate-occ-pr-stamp.sh
+        language: script
+        files: '\.(md|txt)$'
+        pass_filenames: true
+        stages: [pre-commit]
+        exclude: '^tests/hooks/fixtures/'
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
