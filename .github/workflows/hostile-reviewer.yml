@@ -29,7 +29,18 @@ permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   hostile-review:
+    needs: occ-preflight
     name: Hostile Reviewer (adversarial gate)
     # self-hosted runner on .201 required — DeepSeek-R1 at :8001 is LAN-only  # onex-allow-internal-ip
     # LLM_DEEPSEEK_URL must be set in the runner's environment (Infisical or shell profile)
@@ -243,16 +254,22 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: [hostile-review]
+    needs: [occ-preflight, hostile-review]
     if: always()
     steps:
       - name: Evaluate gate
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Hostile Review Gate ==="
+          PREFLIGHT="${{ needs.occ-preflight.result }}"
           RESULT="${{ needs.hostile-review.result }}"
+          echo "occ-preflight: $PREFLIGHT"
           echo "hostile-review: $RESULT"
 
+          if [ "$PREFLIGHT" != "success" ]; then
+            echo "::error::OCC preflight failed or did not complete (result: $PREFLIGHT)."
+            exit 1
+          fi
           if [ "$RESULT" = "failure" ]; then
             echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
             exit 1

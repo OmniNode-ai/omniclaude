@@ -29,6 +29,26 @@ env:
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  # OCC preflight is the first non-OCC CI dependency. If central OCC
+  # evidence is missing or red, no runner-heavy validation jobs fan out.
+  occ-preflight:
+    # The reusable occ-preflight.yml declares `permissions: {contents: read,
+    # pull-requests: read}`. A called workflow cannot request more than the
+    # caller grants, and this ci.yml has no workflow-level `permissions:` block,
+    # so without this job-level grant the run's token defaults to the repo
+    # `read` default (pull-requests: none) and GitHub rejects the ENTIRE
+    # workflow at startup ("startup_failure"). Mirror the grant the standalone
+    # call-occ-preflight.yml already sets so the reusable's declared scope is
+    # satisfiable. (OMN-14104)
+    permissions:
+      contents: read
+      pull-requests: read
+    # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   # ============================================================================
   # ZONE FILTER (OMN-10475)
   # ============================================================================
@@ -39,6 +59,7 @@ jobs:
   # Code Quality (ruff+mypy), arch invariants, contract validation, and the
   # receipt-gate caller still run on every PR.
   zone-filter:
+    needs: occ-preflight
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
     uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
     with:
@@ -49,6 +70,7 @@ jobs:
   # ============================================================================
 
   quality:
+    needs: occ-preflight
     name: Code Quality
     # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
     # so required CI does not queue behind self-hosted fleet saturation.
@@ -98,6 +120,7 @@ jobs:
           fi
 
   docs-links:
+    needs: occ-preflight
     name: Markdown Link Check
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -148,8 +171,8 @@ jobs:
 
   pyright:
     name: Pyright Type Checking
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMN-14127: Pyright's bundled node runtime needs libatomic on some Linux
     # images; the self-hosted fleet is not consistently provisioned and has no
     # sudo/root repair path. This is a static check, so run it hosted.
@@ -185,6 +208,7 @@ jobs:
         run: uv run pyright src/omniclaude
 
   check-handshake:
+    needs: occ-preflight
     name: Architecture Handshake
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -194,7 +218,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+    if: needs.occ-preflight.result == 'success' && (github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request')
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -210,6 +234,7 @@ jobs:
         run: ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
 
   enum-governance:
+    needs: occ-preflight
     name: Enum Governance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -249,6 +274,7 @@ jobs:
         run: uv run python scripts/validation/validate_enum_governance.py
 
   exports-validation:
+    needs: occ-preflight
     name: Exports Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -288,6 +314,7 @@ jobs:
         run: uv run python scripts/validation/validate_exports.py
 
   env-var-registry:
+    needs: occ-preflight
     name: "Env Var Registry (OMN-6263)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -325,6 +352,7 @@ jobs:
             --format text
 
   cross-repo-validation:
+    needs: occ-preflight
     name: Kafka Import Guard
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -357,6 +385,7 @@ jobs:
             python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
 
   migration-freeze:
+    needs: occ-preflight
     name: Migration Freeze
     # Lightweight metadata gate: keep it hosted so branch protection cannot
     # wedge behind the self-hosted runner fleet.
@@ -376,6 +405,7 @@ jobs:
           MIGRATION_FREEZE_BYPASS: ${{ contains(github.event.pull_request.labels.*.name, 'db-split-bypass') && 'true' || '' }}
 
   onex-validation:
+    needs: occ-preflight
     name: ONEX Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -474,6 +504,7 @@ jobs:
   # ============================================================================
 
   arch-no-db-in-orchestrator:
+    needs: occ-preflight
     name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -498,6 +529,7 @@ jobs:
         run: python3 scripts/validation/validate_no_db_in_orchestrator.py
 
   arch-no-git-outside-effects:
+    needs: occ-preflight
     name: "Arch: No git/gh calls outside effects (check 2)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -522,6 +554,7 @@ jobs:
         run: python3 scripts/validation/validate_no_git_outside_effects.py
 
   arch-no-linear-outside-effects:
+    needs: occ-preflight
     name: "Arch: No LinearClient outside effects (check 3)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -546,6 +579,7 @@ jobs:
         run: python3 scripts/validation/validate_no_linear_outside_effects.py
 
   arch-no-repo-adapter-in-orchestrator:
+    needs: occ-preflight
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -565,6 +599,7 @@ jobs:
         run: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
 
   arch-no-direct-adapter-in-business-logic:
+    needs: occ-preflight
     name: "Arch: No direct adapter imports in business logic (check 13)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -589,6 +624,7 @@ jobs:
         run: python3 scripts/validation/validate_no_direct_adapter_in_business_logic.py
 
   arch-no-direct-bus-instantiation:
+    needs: occ-preflight
     name: "Arch: No direct EventBus instantiation (OMN-10725)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -613,6 +649,7 @@ jobs:
         run: python3 scripts/validation/validate_no_direct_bus_instantiation.py
 
   arch-no-raw-sqlite3-in-handlers:
+    needs: occ-preflight
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -637,6 +674,7 @@ jobs:
         run: python3 scripts/validation/validate_no_raw_sqlite3.py
 
   arch-no-env-fallbacks:
+    needs: occ-preflight
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -661,6 +699,7 @@ jobs:
         run: python3 scripts/validate_no_env_fallbacks.py
 
   arch-cost-ledger-isolation:
+    needs: occ-preflight
     name: "Arch: ModelCostLedger confined to effects (check 5)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -685,6 +724,7 @@ jobs:
         run: python3 scripts/validation/validate_cost_ledger_isolation.py
 
   arch-topic-naming:
+    needs: occ-preflight
     name: "Arch: onex.* topic naming convention (check 6)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -709,6 +749,7 @@ jobs:
         run: python3 scripts/validation/validate_topic_naming.py
 
   arch-omnidash-db-role:
+    needs: occ-preflight
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -870,6 +911,7 @@ jobs:
           echo "omnidash_readonly DB role CI check PASSED"
 
   arch-cost-ledger-structure:
+    needs: occ-preflight
     name: "Arch: ModelCostLedger run_id field + index (check 9)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -894,6 +936,7 @@ jobs:
         run: python3 scripts/validation/validate_cost_ledger_structure.py
 
   arch-no-direct-kafka-producer:
+    needs: occ-preflight
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -918,6 +961,7 @@ jobs:
         run: python3 scripts/validation/validate_no_direct_kafka_producer.py
 
   arch-no-utcnow:
+    needs: occ-preflight
     name: "Arch: No datetime.utcnow() (check 11)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -953,6 +997,7 @@ jobs:
         run: uv run python scripts/validation/validate_no_utcnow.py
 
   arch-no-hardcoded-ip:
+    needs: occ-preflight
     name: "Arch: No hardcoded internal IPs (check 12)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -997,6 +1042,7 @@ jobs:
   # ============================================================================
 
   arch-no-compact-cmd-topic:
+    needs: occ-preflight
     name: F5.1 No compact cmd topic
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -1036,6 +1082,7 @@ jobs:
         run: uv run python scripts/validation/validate_no_compact_cmd_topic.py
 
   arch-invariants:
+    needs: occ-preflight
     name: Architecture Invariants
     # OMNINODE_SELF_HOSTED_RUNS_ON_V2
     runs-on: >-
@@ -1135,8 +1182,8 @@ jobs:
   # Golden chain registry integrity (OMN-7389)
   golden-chain-integrity:
     name: Golden Chain Integrity
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1194,8 +1241,8 @@ jobs:
   # omnimarket@dev so the comparison targets the live routing authority.
   registry-consistency:
     name: Registry Consistency
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1246,8 +1293,8 @@ jobs:
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
     name: Golden Chain Live
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMN-14127: service-container live check with no LAN dependency. Hosted
     # runners provide reliable service port mapping; the self-hosted fleet has
     # shown refused mapped Postgres ports under saturation.
@@ -1316,8 +1363,8 @@ jobs:
 
   security-python:
     name: Python Security Scan
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
     # scan (bandit) with no self-hosted/LAN dependency, so it runs on the
     # GitHub-hosted ubuntu-latest runner. Keeping the whole Security Gate subtree
@@ -1366,6 +1413,7 @@ jobs:
           path: bandit-report.json
 
   detect-secrets:
+    needs: occ-preflight
     name: Secret Detection
     # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
     # scan (detect-secrets) with no self-hosted/LAN dependency, so it runs on the
@@ -1437,7 +1485,7 @@ jobs:
   # ---------------------------------------------------------------------------
   detect-changes:
     name: Detect Changes
-    needs: [zone-filter, quality-gate]
+    needs: [occ-preflight, zone-filter, quality-gate]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1446,7 +1494,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
+    if:  needs.occ-preflight.result == 'success' && (always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success')
     outputs:
       is_full_suite: ${{ steps.detect.outputs.is_full_suite }}
       full_suite_reason: ${{ steps.detect.outputs.full_suite_reason }}
@@ -1526,7 +1574,7 @@ jobs:
   # selected_paths activate the smart-selection pytest step.
   test:
     name: Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
-    needs: [zone-filter, quality-gate, detect-changes]
+    needs: [occ-preflight, zone-filter, quality-gate, detect-changes]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1535,7 +1583,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
+    if:  needs.occ-preflight.result == 'success' && (always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success')
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -1687,8 +1735,8 @@ jobs:
 
   hooks-tests:
     name: Hooks System Tests
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1828,8 +1876,8 @@ jobs:
 
   agent-framework-tests:
     name: Agent Framework Tests
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1891,6 +1939,7 @@ jobs:
           path: junit-agent-framework.xml
 
   database-validation:
+    needs: occ-preflight
     name: Database Schema Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2002,6 +2051,7 @@ jobs:
   # ============================================================================
 
   dod-evidence-check:
+    needs: occ-preflight
     name: DoD Evidence Check
     # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
@@ -2089,8 +2139,8 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: test
-    if: needs.test.result == 'success'
+    needs: [occ-preflight, test]
+    if: needs.occ-preflight.result == 'success' && (needs.test.result == 'success')
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -2158,6 +2208,7 @@ jobs:
   # Mode Metadata Integrity (OMN-5402)
   # ---------------------------------------------------------------------------
   mode-metadata-guard:
+    needs: occ-preflight
     name: Mode Metadata Integrity
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2199,6 +2250,7 @@ jobs:
         run: uv run pytest tests/unit/test_mode_metadata_integrity.py -v
 
   skill-hygiene:
+    needs: occ-preflight
     name: Skill Hygiene
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2240,6 +2292,7 @@ jobs:
   # Verifies that this repo's dependency pins are compliant with the shared
   # version matrix defined in onex_change_control/standards/version-matrix.yaml.
   version-pin-check:
+    needs: occ-preflight
     name: Version Pin Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2287,6 +2340,7 @@ jobs:
   # Structural regression tests for the merge-sweep skill prompt contract.
   # Prevents Track B dispatch bugs (e.g., --skip-polish leaking into empty check).
   merge-sweep-contract:
+    needs: occ-preflight
     name: Merge-Sweep Contract
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2332,6 +2386,7 @@ jobs:
   # Validates argument parity, sub-skill references, duplicate frontmatter,
   # and spec-prompt predicate coverage across all skills.
   skill-contract-validation:
+    needs: occ-preflight
     name: Skill Contract Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2375,6 +2430,7 @@ jobs:
   # Conditional: only runs if the `onex compliance` command is available.
   # ============================================================================
   compliance:
+    needs: occ-preflight
     name: Contract Compliance
     # Lightweight ONEX compliance gate: keep it hosted so the required summary
     # is not held behind the self-hosted fleet during merge sweeps.
@@ -2447,6 +2503,7 @@ jobs:
   # NOTE: This gate must pass on main — land AFTER hardcoded-path fixes merge.
   # ============================================================================
   aislop-sweep:
+    needs: occ-preflight
     name: Aislop Sweep
     runs-on: >-
       ${{
@@ -2467,6 +2524,7 @@ jobs:
 
   # Agent YAML contract validation (OMN-8914)
   agent-contract-validation:
+    needs: occ-preflight
     name: Agent Contract Validation
     runs-on: >-
       ${{
@@ -2503,6 +2561,7 @@ jobs:
   # NOTE: This gate will FAIL until SD-04/SD-05/SD-07 violations are cleared.
   # Land this PR last in the SD wave so the gate goes green on merge.
   skill-monorepo-ref-gate:
+    needs: occ-preflight
     name: Skill Monorepo-Ref Gate
     runs-on: >-
       ${{
@@ -2520,6 +2579,7 @@ jobs:
   # Regression guard (OMN-9143): block reintroduction of the retired
   # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
   no-polymorphic-agent:
+    needs: occ-preflight
     name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2551,6 +2611,7 @@ jobs:
     # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
     runs-on: ubuntu-latest
     needs:
+      - occ-preflight
       - quality
       - pyright
       - check-handshake
@@ -2609,6 +2670,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
@@ -2671,6 +2733,7 @@ jobs:
     # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
     runs-on: ubuntu-latest
     needs:
+      - occ-preflight
       - test
       - hooks-tests
       - agent-framework-tests
@@ -2686,6 +2749,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
@@ -2719,6 +2783,7 @@ jobs:
     # reaches a terminal state (with `if: always()`) regardless of fleet saturation.
     runs-on: ubuntu-latest
     needs:
+      - occ-preflight
       - security-python
       - detect-secrets
     if: always()
@@ -2730,6 +2795,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "security-python=${{ needs.security-python.result }}" \
             "detect-secrets=${{ needs.detect-secrets.result }}"; do
             NAME="${check%%=*}"
@@ -2757,6 +2823,7 @@ jobs:
   # ============================================================================
 
   boundary-parity:
+    needs: occ-preflight
     name: Cross-Repo Boundary Parity
     runs-on: >-
       ${{
@@ -2767,9 +2834,10 @@ jobs:
       }}
     # Only run when seam-relevant files change
     if: >-
+      needs.occ-preflight.result == 'success' && (
       github.event_name == 'merge_group' ||
       github.event_name == 'push' ||
-      contains(github.event.pull_request.changed_files || '0', '0') == false
+      contains(github.event.pull_request.changed_files || '0', '0') == false)
     steps:
       - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
         with:
@@ -2785,12 +2853,13 @@ jobs:
 
 
   contract-compliance:
+    needs: occ-preflight
     name: Contract Compliance Check
     # Lightweight OCC contract validation: keep it hosted and bounded so it
     # cannot consume or wedge self-hosted capacity during merge sweeps.
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push'
+    if: needs.occ-preflight.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
     steps:
       - uses: actions/checkout@v7
       - name: Checkout onex_change_control
@@ -2916,7 +2985,7 @@ jobs:
       packages: write
       security-events: write
     timeout-minutes: 30
-    needs: [quality-gate, tests-gate, security-gate]
+    needs: [occ-preflight, quality-gate, tests-gate, security-gate]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -3011,8 +3080,8 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: build
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    needs: [occ-preflight, build]
+    if: needs.occ-preflight.result == 'success' && (github.ref == 'refs/heads/develop' && github.event_name == 'push')
     environment:
       name: staging
       url: https://staging.omniclaude.example.com
@@ -3034,8 +3103,8 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [occ-preflight, build]
+    if: needs.occ-preflight.result == 'success' && (github.ref == 'refs/heads/main' && github.event_name == 'push')
     environment:
       name: production
       url: https://omniclaude.example.com
@@ -3048,6 +3117,7 @@ jobs:
         run: echo "Deploying to production environment..."
 
   ai-slop-check:
+    needs: occ-preflight
     name: AI-Slop Pattern Check (strict, PR diff)
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-

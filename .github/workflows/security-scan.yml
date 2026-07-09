@@ -17,12 +17,23 @@ permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   # ============================================================================
   # Dependency Security Scanning
   # ============================================================================
   dependency-scan:
+    needs: occ-preflight
     name: Dependency Security Scan
-    if: github.event_name != 'pull_request'
+    if: needs.occ-preflight.result == 'success' && (github.event_name != 'pull_request')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -69,6 +80,7 @@ jobs:
   # Secret Scanning
   # ============================================================================
   secret-scan:
+    needs: occ-preflight
     name: Secret Scanning
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -113,6 +125,7 @@ jobs:
   # Code Security Analysis
   # ============================================================================
   codeql:
+    needs: occ-preflight
     name: CodeQL Security Analysis
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -154,6 +167,7 @@ jobs:
   # Docker Image Security Scan
   # ============================================================================
   container-scan:
+    needs: occ-preflight
     name: Container Security Scan
     if: github.event_name != 'pull_request'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
@@ -244,6 +258,7 @@ jobs:
   # Infrastructure as Code Security Scan
   # ============================================================================
   iac-scan:
+    needs: occ-preflight
     name: IaC Security Scan
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -259,6 +274,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Run Checkov (IaC scanner)
         uses: bridgecrewio/checkov-action@4a1afa9897f7afe297a3762c926e1e800361464f  # v12.1347.0 (pinned 2026-03-04)
@@ -266,16 +283,16 @@ jobs:
           directory: .
           framework: dockerfile,github_actions
           output_format: sarif
-          output_file_path: checkov-results.sarif
+          output_file_path: checkov-results
           soft_fail: false
           soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
           hard_fail_on: HIGH,CRITICAL
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('checkov-results.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: always() && hashFiles('checkov-results/results_sarif.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
-          sarif_file: 'checkov-results.sarif'
+          sarif_file: 'checkov-results/results_sarif.sarif'
 
       - name: Run Terrascan
         uses: tenable/terrascan-action@dd7e921056c6f25b25bff3cf791e063ed7fc3a78  # v1.4.1 (pinned 2026-03-04)

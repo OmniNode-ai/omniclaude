@@ -28,10 +28,21 @@ on:
 
 env:
   PYTHON_VERSION: '3.12'
-  UV_HTTP_TIMEOUT: '300'
+  UV_HTTP_TIMEOUT: "600"
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   schema-compat:
+    needs: occ-preflight
     name: ONEX Change Control Schema Compatibility
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -43,7 +54,7 @@ jobs:
       }}
     timeout-minutes: 10
     # Only run on PRs from the same repo -- forks lack access to private onex_change_control
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: needs.occ-preflight.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - name: Checkout code

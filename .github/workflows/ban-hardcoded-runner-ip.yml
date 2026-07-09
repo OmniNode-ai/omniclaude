@@ -40,7 +40,18 @@ on:
       - '.github/workflows/**'
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   ban-hardcoded-runner-ip:
+    needs: occ-preflight
     name: ban-hardcoded-runner-ip
     # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
     runs-on: >-
@@ -49,7 +60,7 @@ jobs:
         && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
         || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
       }}
-    if: vars.SKIP_RUNNER_IP_GATE != '1'
+    if: needs.occ-preflight.result == 'success' && (vars.SKIP_RUNNER_IP_GATE != '1')
 
     steps:
       - name: Checkout
