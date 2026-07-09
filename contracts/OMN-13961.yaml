@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13961"
+title: "Use canonical docs/handoff path in handoff skill"
+summary: >-
+  Align the handoff skill instructions with the canonical singular
+  docs/handoff directory so generated handoff artifacts and the LATEST pointer
+  are written to the same path consumed by current session tooling.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-handoff-path-canonicalized"
+    description: >-
+      The handoff skill and execution prompt reference docs/handoff for the
+      generated handoff document and LATEST.md pointer.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -R "docs/handoff" plugins/onex/skills/handoff/SKILL.md
+          plugins/onex/skills/handoff/prompt.md
