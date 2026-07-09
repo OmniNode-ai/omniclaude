@@ -50,14 +50,9 @@ jobs:
 
   quality:
     name: Code Quality
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
+    # so required CI does not queue behind self-hosted fleet saturation.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -78,24 +73,6 @@ jobs:
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install Pyright runtime system dependencies
-        run: |
-          if command -v ldconfig >/dev/null 2>&1 && ldconfig -p | grep -q 'libatomic\.so\.1'; then
-            exit 0
-          fi
-          if command -v sudo >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y libatomic1
-            exit 0
-          fi
-          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-            apt-get update -qq
-            apt-get install -y libatomic1
-            exit 0
-          fi
-          echo "::error::libatomic.so.1 is required by Pyright's node runtime but is unavailable"
-          exit 1
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
@@ -173,14 +150,10 @@ jobs:
     name: Pyright Type Checking
     needs: zone-filter
     if: needs.zone-filter.outputs.docs_only != 'true'
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: Pyright's bundled node runtime needs libatomic on some Linux
+    # images; the self-hosted fleet is not consistently provisioned and has no
+    # sudo/root repair path. This is a static check, so run it hosted.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -1290,13 +1263,10 @@ jobs:
     name: Golden Chain Live
     needs: zone-filter
     if: needs.zone-filter.outputs.docs_only != 'true'
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: service-container live check with no LAN dependency. Hosted
+    # runners provide reliable service port mapping; the self-hosted fleet has
+    # shown refused mapped Postgres ports under saturation.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
       redpanda:
