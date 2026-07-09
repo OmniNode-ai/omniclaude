@@ -547,15 +547,10 @@ jobs:
 
   arch-no-repo-adapter-in-orchestrator:
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Static validation: run hosted so checkout/dependency setup cannot time out
+    # behind the self-hosted fleet and falsely cancel the Quality Gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -924,15 +919,10 @@ jobs:
 
   arch-no-utcnow:
     name: "Arch: No datetime.utcnow() (check 11)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Static validation: run hosted so checkout/dependency setup cannot time out
+    # behind the self-hosted fleet and falsely cancel the Quality Gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
