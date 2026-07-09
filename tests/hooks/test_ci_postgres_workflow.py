@@ -175,42 +175,60 @@ def test_golden_chain_live_is_required_service_container_gate(
     ci_workflow: dict[str, Any],
 ) -> None:
     job = _job(ci_workflow, "golden-chain-live")
-    services = job.get("services")
-    assert isinstance(services, dict)
-    assert "redpanda" in services
-    assert "postgres" in services
-    postgres = services["postgres"]
-    assert isinstance(postgres, dict)
-    postgres_env = postgres.get("env")
-    assert isinstance(postgres_env, dict)
-    assert postgres_env.get("POSTGRES_HOST_AUTH_METHOD") == "trust"
-    assert "POSTGRES_PASSWORD" not in postgres_env
-    postgres_options = postgres.get("options")
-    assert isinstance(postgres_options, str)
-    assert "pg_isready -U golden_chain -d omnidash_analytics" in postgres_options
-    assert postgres.get("ports") == ["5432/tcp"]
-    redpanda = services["redpanda"]
-    assert isinstance(redpanda, dict)
-    redpanda_options = redpanda.get("options")
-    assert isinstance(redpanda_options, str)
-    assert "--cpus 1" in redpanda_options
-    assert "--cpuset-cpus 0" in redpanda_options
+    assert "services" not in job
 
     env = job.get("env")
     assert isinstance(env, dict)
-    assert env.get("KAFKA_BOOTSTRAP_SERVERS") == "localhost:9092"
+    assert "KAFKA_BOOTSTRAP_SERVERS" not in env
+    assert (
+        env.get("GOLDEN_CHAIN_REDPANDA_CONTAINER")
+        == "omniclaude-golden-chain-redpanda-${{ github.run_id }}"
+    )
+    assert (
+        env.get("GOLDEN_CHAIN_PG_CONTAINER")
+        == "omniclaude-golden-chain-postgres-${{ github.run_id }}"
+    )
+
+    redpanda_step = _step(job, "Start golden-chain Redpanda")
+    assert "docker run -d" in redpanda_step["run"]
+    assert '--name "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+    assert 'docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+    assert '-p "127.0.0.1:${kafka_port}:9092"' in redpanda_step["run"]
+    assert '--advertise-kafka-addr "127.0.0.1:${kafka_port}"' in redpanda_step["run"]
+    assert 'docker exec "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+    assert "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:${kafka_port}" in redpanda_step["run"]
+    assert 'docker logs "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+
+    start_step = _step(job, "Start golden-chain Postgres")
+    assert "docker run -d" in start_step["run"]
+    assert '--name "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert "-p 127.0.0.1::5432" in start_step["run"]
+    assert "POSTGRES_HOST_AUTH_METHOD=trust" in start_step["run"]
+    assert 'docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp' in start_step["run"]
+    assert 'docker logs "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert 'docker exec "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert "pg_isready -h 127.0.0.1 -p 5432" in start_step["run"]
+    assert "socket.create_connection" in start_step["run"]
+    assert "GOLDEN_CHAIN_PGPORT=${port}" in start_step["run"]
 
     run_step = _step(job, "Run live golden-chain sweep")
-    step_env = run_step.get("env")
-    assert isinstance(step_env, dict)
-    assert "OMNIDASH_ANALYTICS_DB_URL" in step_env
-    assert "golden_chain@127.0.0.1" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
-    assert "golden_chain:test" not in step_env["OMNIDASH_ANALYTICS_DB_URL"]
-    assert (
-        "job.services.postgres.ports['5432']" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
-    )
     assert run_step.get("continue-on-error") is not True
+    assert 'docker exec "$GOLDEN_CHAIN_PG_CONTAINER"' in run_step["run"]
+    assert "socket.create_connection" in run_step["run"]
+    assert "golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}" in run_step["run"]
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
+
+    cleanup_step = _step(job, "Stop golden-chain Postgres")
+    assert cleanup_step.get("if") == "always()"
+    assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in cleanup_step["run"]
+
+    redpanda_cleanup_step = _step(job, "Stop golden-chain Redpanda")
+    assert redpanda_cleanup_step.get("if") == "always()"
+    assert (
+        'docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER"'
+        in redpanda_cleanup_step["run"]
+    )
 
     tests_gate = _job(ci_workflow, "tests-gate")
     needs = tests_gate.get("needs")
