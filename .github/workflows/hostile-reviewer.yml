@@ -67,7 +67,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           for attempt in 1 2 3; do
-            git clone --depth=1 --branch main https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence && exit 0
+            git clone --depth=1 --branch dev https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence && exit 0
             rm -rf ../omniintelligence
             sleep $((attempt * 10))
           done
@@ -77,7 +77,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           for attempt in 1 2 3; do
-            git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core && exit 0
+            git clone --depth=1 --branch dev https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core && exit 0
             rm -rf ../omnibase_core
             sleep $((attempt * 10))
           done
@@ -87,7 +87,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           for attempt in 1 2 3; do
-            git clone --depth=1 --branch main https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat && exit 0
+            git clone --depth=1 --branch dev https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat && exit 0
             rm -rf ../omnibase_compat
             sleep $((attempt * 10))
           done
@@ -114,7 +114,7 @@ jobs:
           set -euo pipefail
 
           attempt=1
-          until uv sync --all-extras --python 3.12; do
+          until uv sync --locked --all-extras --python 3.12; do
             status=$?
             if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
               echo "::error::uv sync failed after ${attempt} attempt(s)"
