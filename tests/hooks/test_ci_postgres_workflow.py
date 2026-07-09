@@ -203,22 +203,20 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert "docker run -d" in start_step["run"]
     assert '--name "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
     assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
-    assert 'sock.bind(("127.0.0.1", 0))' in start_step["run"]
-    assert '-p "127.0.0.1:${pg_port}:5432"' in start_step["run"]
+    assert "-p 127.0.0.1::5432" in start_step["run"]
     assert "POSTGRES_HOST_AUTH_METHOD=trust" in start_step["run"]
     assert 'docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp' in start_step["run"]
     assert 'docker logs "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
     assert 'docker exec "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
     assert "pg_isready -h 127.0.0.1 -p 5432" in start_step["run"]
-    assert "GOLDEN_CHAIN_PGPORT=${pg_port}" in start_step["run"]
+    assert "socket.create_connection" in start_step["run"]
+    assert "GOLDEN_CHAIN_PGPORT=${port}" in start_step["run"]
 
     run_step = _step(job, "Run live golden-chain sweep")
     assert run_step.get("continue-on-error") is not True
     assert 'docker exec "$GOLDEN_CHAIN_PG_CONTAINER"' in run_step["run"]
-    assert (
-        'OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics"'
-        in run_step["run"]
-    )
+    assert "socket.create_connection" in run_step["run"]
+    assert "golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}" in run_step["run"]
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
 
     cleanup_step = _step(job, "Stop golden-chain Postgres")

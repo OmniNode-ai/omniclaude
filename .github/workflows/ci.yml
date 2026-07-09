@@ -210,6 +210,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Node for Pyright
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       - name: Ensure pyright native runtime libraries
         if: runner.os == 'Linux'
         run: |
@@ -295,6 +300,23 @@ jobs:
             attempt=$((attempt + 1))
           done
 
+      - name: Install Pyright node runtime dependency
+        run: |
+          if ldconfig -p 2>/dev/null | grep -q 'libatomic.so.1'; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y libatomic1
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y libatomic1
+            exit 0
+          fi
+          echo "::warning::libatomic1 is not visible and cannot be installed by this runner; continuing so Pyright reports the real failure if the runtime requires it"
+
       - name: Pyright
         working-directory: ${{ github.workspace }}
         run: uv run pyright src/omniclaude
@@ -359,7 +381,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
+            sleep $((attempt * 10))
+          done
 
       - name: Validate enum governance
         working-directory: ${{ github.workspace }}
@@ -389,6 +424,23 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install native build toolchain
+        run: |
+          if command -v cc >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y build-essential
+            exit 0
+          fi
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
@@ -491,9 +543,11 @@ jobs:
 
       - name: Fetch PR base for migration diff
         if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags --depth=1 origin \
-            "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            "+${PR_BASE_SHA}:refs/remotes/origin/${GITHUB_BASE_REF}"
 
       - name: Check migration freeze
         working-directory: ${{ github.workspace }}
@@ -745,7 +799,10 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 5
+    # Trivial stdlib-only AST scan, but under self-hosted fleet saturation even
+    # checkout + setup-python can exceed a 5-minute job budget and cancel the check.
+    # Give headroom so a <1s validator is not killed by runner startup contention.
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1273,7 +1330,7 @@ jobs:
           fi
 
           mapfile -t changed_skills < <(
-            git diff --name-only --diff-filter=AM "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
+            git diff --name-only --diff-filter=AM "${DIFF_BASE}" HEAD -- 'plugins/onex/skills/**/SKILL.md' |
               awk -F/ '{print $4}' |
               sort -u
           )
@@ -1489,35 +1546,23 @@ jobs:
         run: |
           set -euo pipefail
           docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
-          pg_port="$(
-            python - <<'PY'
-          import socket
-
-          with socket.socket() as sock:
-              sock.bind(("127.0.0.1", 0))
-              print(sock.getsockname()[1])
-          PY
-          )"
           docker run -d \
             --name "$GOLDEN_CHAIN_PG_CONTAINER" \
             -e POSTGRES_USER=golden_chain \
             -e POSTGRES_DB=omnidash_analytics \
             -e POSTGRES_HOST_AUTH_METHOD=trust \
-            -p "127.0.0.1:${pg_port}:5432" \
+            -p 127.0.0.1::5432 \
             postgres:16-alpine
 
-          docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp
-
-          for attempt in {1..120}; do
-            if docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
-              pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics; then
-              if PG_DSN="postgresql://golden_chain@127.0.0.1:${pg_port}/omnidash_analytics" \
-                uv run python -c 'import os, psycopg2; conn = psycopg2.connect(os.environ["PG_DSN"], connect_timeout=2); conn.close()'; then
-                echo "GOLDEN_CHAIN_PGPORT=${pg_port}" >> "$GITHUB_ENV"
-                exit 0
-              fi
+          for attempt in {1..60}; do
+            port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
+            if [ -n "$port" ] && docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
+              pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics && \
+              python -c 'import socket, sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=2).close()' "$port"; then
+              echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
+              exit 0
             fi
-            echo "Waiting for golden-chain Postgres on 127.0.0.1:${pg_port} (${attempt}/120)..."
+            echo "Waiting for golden-chain Postgres on 127.0.0.1:${port:-unassigned} (${attempt}/60)..."
             sleep 2
           done
 
@@ -1530,6 +1575,7 @@ jobs:
           set -euo pipefail
           docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
             pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics
+          python -c 'import socket, sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5).close()' "$GOLDEN_CHAIN_PGPORT"
           OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics" \
             uv run python scripts/ci/run_golden_chain_live.py
 

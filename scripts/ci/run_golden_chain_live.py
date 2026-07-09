@@ -392,12 +392,15 @@ async def _run_sweep_subprocess(
     )
     try:
         stdout, _ = await asyncio.wait_for(
-            process.communicate(),
-            timeout=(timeout_ms / 1000) + 90,
+            process.communicate(), timeout=(timeout_ms / 1000) + 90
         )
     except TimeoutError:
         process.kill()
-        stdout, _ = await process.communicate()
+        try:
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=10)
+        except TimeoutError:
+            stdout = b""
+            sys.stdout.write("Timed out draining killed golden-chain subprocess\n")
         if stdout:
             sys.stdout.write(stdout.decode("utf-8", errors="replace"))
         sys.stdout.write("Golden-chain sweep subprocess timed out\n")
