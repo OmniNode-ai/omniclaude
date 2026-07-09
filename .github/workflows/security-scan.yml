@@ -98,7 +98,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.before }}
@@ -107,7 +107,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (pull request diff)
         if: github.event_name == 'pull_request'
-        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha }}
@@ -116,7 +116,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (full scan)
         if: github.event_name != 'push' && github.event_name != 'pull_request'
-        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           extra_args: --only-verified
@@ -278,7 +278,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@4a1afa9897f7afe297a3762c926e1e800361464f  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
