@@ -79,6 +79,24 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
+      - name: Install Pyright runtime system dependencies
+        run: |
+          if command -v ldconfig >/dev/null 2>&1 && ldconfig -p | grep -q 'libatomic\.so\.1'; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y libatomic1
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update -qq
+            apt-get install -y libatomic1
+            exit 0
+          fi
+          echo "::error::libatomic.so.1 is required by Pyright's node runtime but is unavailable"
+          exit 1
+
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
@@ -1297,10 +1315,10 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: omnidash_analytics
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U golden_chain -d omnidash_analytics"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 12
         ports:
           - 5432/tcp
     env:
@@ -1334,7 +1352,7 @@ jobs:
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
         env:
-          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
+          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
         run: uv run python scripts/ci/run_golden_chain_live.py
 
   # ============================================================================
