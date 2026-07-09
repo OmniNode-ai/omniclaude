@@ -46,8 +46,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Queue repos that are subject to the armed-not-enqueued pattern.
-#: OMN-14077: onex_change_control now follows the direct squash path, so it is
-#: intentionally excluded from queue-enrollment detection.
+#: onex_change_control follows the direct squash path, so it is intentionally
+#: excluded from queue-enrollment detection.
 QUEUE_REPOS: tuple[str, ...] = (
     "OmniNode-ai/omniclaude",
     "OmniNode-ai/omnibase_core",
