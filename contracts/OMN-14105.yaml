@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14105"
+title: "Genericize ONEX skills for public exposure"
+summary: >-
+  Genericize ONEX skill documentation and helper surfaces for public exposure
+  while removing internal and ticket-specific operating detail.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-public-skill-hygiene"
+    description: "Public skill hygiene check passes with no blocked hits."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run --with pyyaml python3 scripts/check_public_skill_hygiene.py
+  - id: "dod-focused-skill-tests"
+    description: "Focused skill validation and CI workflow tests pass."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/unit/skills/_lib/test_validate_skill_backing_node.py
+          tests/hooks/test_ci_postgres_workflow.py
+          tests/ci/test_golden_chain_live_runner.py -q
