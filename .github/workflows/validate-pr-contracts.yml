@@ -12,7 +12,6 @@ name: Validate PR Contracts
 on:
   pull_request:
     branches: [main, dev, develop]
-  merge_group:
 
 concurrency:
   group: validate-pr-contracts-${{ github.ref }}

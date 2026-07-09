@@ -22,7 +22,6 @@ on:
       - 'scripts/validation/validate_skill_aspiration.py'
       - 'tests/unit/skills/_lib/test_validate_skill_aspiration.py'
       - '.github/workflows/validate-skill-aspiration.yml'
-  merge_group:
 
 env:
   PYTHON_VERSION: "3.12"
