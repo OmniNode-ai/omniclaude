@@ -52,6 +52,8 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     timeout-minutes: 20
+    env:
+      UV_HTTP_TIMEOUT: "900"
 
     steps:
       - name: Checkout PR branch
@@ -66,9 +68,12 @@ jobs:
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
         run: |
-          for attempt in 1 2 3; do
-            git clone --depth=1 --branch dev https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence && exit 0
+          for attempt in {1..4}; do
             rm -rf ../omniintelligence
+            if git clone --depth=1 --filter=blob:none --branch dev \
+              https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence; then
+              exit 0
+            fi
             sleep $((attempt * 10))
           done
           exit 1
@@ -76,9 +81,12 @@ jobs:
       - name: Clone omnibase_core
         working-directory: ${{ github.workspace }}
         run: |
-          for attempt in 1 2 3; do
-            git clone --depth=1 --branch dev https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core && exit 0
+          for attempt in {1..4}; do
             rm -rf ../omnibase_core
+            if git clone --depth=1 --filter=blob:none --branch dev \
+              https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core; then
+              exit 0
+            fi
             sleep $((attempt * 10))
           done
           exit 1
@@ -86,9 +94,12 @@ jobs:
       - name: Clone omnibase_compat
         working-directory: ${{ github.workspace }}
         run: |
-          for attempt in 1 2 3; do
-            git clone --depth=1 --branch dev https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat && exit 0
+          for attempt in {1..4}; do
             rm -rf ../omnibase_compat
+            if git clone --depth=1 --filter=blob:none --branch dev \
+              https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat; then
+              exit 0
+            fi
             sleep $((attempt * 10))
           done
           exit 1
