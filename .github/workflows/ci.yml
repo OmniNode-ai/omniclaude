@@ -2182,6 +2182,17 @@ jobs:
           GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          PR_NUMBER="$(jq -r '.pull_request.number // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          if [[ -n "$PR_NUMBER" ]]; then
+            CURRENT_BODY="$(curl -sf \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              | jq -r '.body // ""' 2>/dev/null || true)"
+            if [[ -n "$CURRENT_BODY" ]]; then
+              BODY="$CURRENT_BODY"
+            fi
+          fi
           SOURCE="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-source" {print $2; exit}' | tr -d '\r' | xargs || true)"
           TICKET="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-ticket" {print $2; exit}' | tr -d '\r' | xargs || true)"
           if [[ -z "$TICKET" ]]; then
