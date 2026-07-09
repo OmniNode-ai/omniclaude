@@ -198,10 +198,11 @@ def test_initialize_database_retries_transient_postgres_readiness(
         def cursor(self) -> Cursor:
             return Cursor()
 
-    def fake_connect(db_dsn: str) -> Connection:
+    def fake_connect(db_dsn: str, **kwargs: object) -> Connection:
         nonlocal attempts
         attempts += 1
         assert db_dsn == "postgresql://example"
+        assert kwargs == {"connect_timeout": 2}
         if attempts == 1:
             raise psycopg2.OperationalError("service not ready")
         return Connection()
