@@ -44,9 +44,9 @@ appropriate execution skill based on ticket count.
 
 ---
 
-## The 5-Step Flow
+## Execution Flow
 
-### Step 1: Review Plan <!-- ai-slop-ok: pre-existing step structure -->
+### Plan Review <!-- ai-slop-ok: pre-existing step structure -->
 
 Load the plan file and review it critically before taking any action.
 
@@ -61,23 +61,21 @@ use it directly. Do not re-discover or re-summarize the plan.
    - Missing repo label (required for architecture validation)
    - Steps that reference external systems or secrets not yet available
 3. If concerns exist: raise them with your human partner and wait for resolution before proceeding
-4. If no concerns: proceed to Step 1.5
+4. If no concerns: proceed to live state verification
 
 **Do not proceed to ticket creation if the plan has unresolved questions.**
 
 ---
 
-### Step 1.5: Verify Live PR State <!-- ai-slop-ok: new verification step -->
+### Live State Verification <!-- ai-slop-ok: new verification step -->
 
 If the plan references existing PRs or branches, verify their live state before proceeding.
 Plans often assume a PR is open and mergeable, but reality may have changed since the plan
 was written.
 
-**Run for each PR referenced in the plan:**
-
-```bash
-gh pr view <PR-number> --json state,mergeable,mergeStateStatus,statusCheckRollup,headRefName
-```
+Delegate PR-state lookup to the repository lifecycle node or the session's approved
+repository tool surface. The skill records the outcome only; it does not embed direct
+GitHub CLI calls or PR iteration logic.
 
 **Classification and action:**
 
@@ -94,30 +92,30 @@ gh pr view <PR-number> --json state,mergeable,mergeStateStatus,statusCheckRollup
 **Rules:**
 - Only poll for PENDING state; all other states are immediately actionable or blocking.
 - Never wait more than 90 seconds total for pending checks.
-- If the plan does not reference any PRs or branches, skip this step entirely.
-- After verification, proceed to Step 2.
+- If the plan does not reference any PRs or branches, skip this check entirely.
+- After verification, proceed to dry-run preview.
 
 ---
 
 ### Linear Availability Check
 
-Before Step 2, verify Linear MCP availability (see `_shared/linear-availability-check.md`):
+Before ticket creation, verify Linear MCP availability (see `_shared/linear-availability-check.md`):
 
 1. Call `tracker.list_teams`
 2. If unavailable (or `--local` flag is set):
    - Log: "Linear MCP unavailable — entering local ticket mode"
-   - In Step 2: Still run plan structure validation (task parsing, dependency check).
+   - Still run plan structure validation (task parsing, dependency check).
      Skip only the Linear-specific dry-run preview.
-   - Skip Step 3 (ticket creation) entirely.
-   - At Step 4 (routing): parse the plan directly and dispatch a `general-purpose` agent
-     for each `## Task N:` section. **Do NOT dispatch `onex:ticket-work` or
+   - Skip ticket creation entirely.
+   - At routing time: parse the plan directly and dispatch bounded implementation work
+     by task section. **Do NOT dispatch `onex:ticket-work` or
      `onex:ticket-pipeline`** — they require Linear `ticket_id`.
    - Create local ticket YAML files per `_shared/linear-availability-check.md`
-3. If available: proceed with normal flow (Steps 2-4 unchanged)
+3. If available: proceed with normal ticket creation and routing.
 
 ---
 
-### Step 2: Dry-Run Preview <!-- ai-slop-ok: pre-existing step structure -->
+### Dry-Run Preview <!-- ai-slop-ok: pre-existing step structure -->
 
 Call `onex:plan-to-tickets` with `--dry-run` to preview what tickets would be created.
 
@@ -135,7 +133,7 @@ If the preview looks wrong, stop and discuss with your partner before creating t
 
 ---
 
-### Step 3: Create Tickets <!-- ai-slop-ok: pre-existing step structure -->
+### Ticket Creation <!-- ai-slop-ok: pre-existing step structure -->
 
 Call `onex:plan-to-tickets` (without `--dry-run`) to create the Linear tickets under the epic.
 
@@ -156,7 +154,7 @@ After creation, record:
 
 ---
 
-### Step 4: Route to Execution <!-- ai-slop-ok: pre-existing step structure -->
+### Execution Routing <!-- ai-slop-ok: pre-existing step structure -->
 
 Compute routing from the plan file content, not just ticket count:
 
@@ -185,7 +183,7 @@ ticket assignment, worktree creation, and lifecycle notifications automatically.
 /ticket-pipeline <ticket-id>
 ```
 
-Run `onex:ticket-pipeline` for each ticket sequentially. Each pipeline handles the full
+Run `onex:ticket-pipeline` on the selected ticket sequence. Each pipeline handles the full
 implement → review → PR → CI → merge workflow autonomously.
 
 ---
@@ -219,9 +217,9 @@ the plan. Do not exit plan mode or stop to "await direction" in any other circum
 ## When to Stop and Ask for Help
 
 **STOP executing immediately when:**
-- Plan has critical gaps or missing context (before Step 1.5)
-- A referenced PR is CONFLICTING, FAILING, MERGED, or CLOSED (Step 1.5)
-- Dry-run output reveals structural problems (before Step 3)
+- Plan has critical gaps or missing context (before live state verification)
+- A referenced PR is CONFLICTING, FAILING, MERGED, or CLOSED (during live state verification)
+- Dry-run output reveals structural problems (before ticket creation)
 - `plan-to-tickets` fails with an architecture violation (before routing)
 - A ticket-pipeline run fails and cannot self-recover
 
@@ -247,7 +245,7 @@ This is an offer only — user must approve before dispatch.
 - Review plan critically before creating any tickets
 - Verify live PR state before dry-run if the plan references existing PRs
 - Always dry-run first to preview ticket structure
-- Routing threshold is 3 tickets: `epic-team` for ≥3, `ticket-pipeline` for 1–2
+- Routing threshold is 3 tickets: use `epic-team` at that threshold, otherwise use `ticket-pipeline`
 - Stop and ask if any step surfaces unexpected errors
 
 ---
