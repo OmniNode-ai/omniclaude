@@ -11,7 +11,7 @@
 #
 # Defaults to scanning all queue repos:
 #   OmniNode-ai/omniclaude,OmniNode-ai/omnibase_core,OmniNode-ai/omnibase_infra,
-#   OmniNode-ai/onex_change_control,OmniNode-ai/omnibase_compat,OmniNode-ai/omnidash,OmniNode-ai/omnimarket
+#   OmniNode-ai/omnibase_compat,OmniNode-ai/omnidash,OmniNode-ai/omnimarket
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/_common.sh"

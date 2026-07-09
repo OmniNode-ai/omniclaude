@@ -15,7 +15,7 @@ entering the queue — this detector surfaces those cases.
 
 Usage:
     python -m plugins.onex.skills._bin._lib.armed_not_enqueued \
-        --repos omniclaude,omnibase_core,omnibase_infra,onex_change_control,omnibase_compat,omnidash,omnimarket \
+        --repos omniclaude,omnibase_core,omnibase_infra,omnibase_compat,omnidash,omnimarket \
         --threshold-minutes 30 \
         --format json
 
@@ -46,11 +46,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Queue repos that are subject to the armed-not-enqueued pattern.
+#: OMN-14077: onex_change_control now follows the direct squash path, so it is
+#: intentionally excluded from queue-enrollment detection.
 QUEUE_REPOS: tuple[str, ...] = (
     "OmniNode-ai/omniclaude",
     "OmniNode-ai/omnibase_core",
     "OmniNode-ai/omnibase_infra",
-    "OmniNode-ai/onex_change_control",
     "OmniNode-ai/omnibase_compat",
     "OmniNode-ai/omnidash",
     "OmniNode-ai/omnimarket",
