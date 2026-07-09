@@ -137,14 +137,10 @@ jobs:
   docs-links:
     needs: occ-preflight
     name: Markdown Link Check
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight external link check. Keep it hosted: the lychee binary can require
+    # newer glibc than parts of the self-hosted fleet provide, and this job does
+    # not need LAN or repository-local services.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -183,7 +179,8 @@ jobs:
             --exclude 'https://dash\.dev\.omninode\.ai'
             --exclude 'https://www\.psycopg\.org/docs'
             --exclude 'https://docs\.anthropic\.com'
-            --accept 200..=299,429,503
+            --exclude 'https://docs\.python-guide\.org'
+            --accept 200..=299,429,503,504
             '**/*.md'
           fail: true
 

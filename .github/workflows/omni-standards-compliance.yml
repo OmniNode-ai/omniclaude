@@ -81,14 +81,9 @@ jobs:
   agent-yaml-compliance:
     needs: occ-preflight
     name: Agent YAML Compliance
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Filesystem-only validation. Keep it hosted so self-hosted runner saturation
+    # cannot cancel the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -136,14 +131,9 @@ jobs:
   ecosystem-validation:
     needs: occ-preflight
     name: Ecosystem Integration Validation
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Pure filesystem/JSON validation. Keep it hosted so runner saturation cannot
+    # cancel the check and falsely fail the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -266,14 +256,9 @@ jobs:
   pr-safety-enforcement:
     needs: occ-preflight
     name: PR Safety Mutation Surface Enforcement
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight PR metadata policy check. Keep it hosted so cancellation storms
+    # do not falsely fail the standards gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     # Enforces that only skills/_lib/pr-safety/ may reference PR mutation paths
     # and commands. Added in OMN-2632.
@@ -452,14 +437,9 @@ jobs:
 
   omni-standards-gate:
     name: Omni Standards Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Result-reading aggregator only. Keep the required context hosted so it can
+    # always post once its needs terminalize.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
       - occ-preflight
