@@ -79,6 +79,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           OMNIMARKET_EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
+          UV_HTTP_TIMEOUT: '900'
         run: |
           # tomllib is stdlib (Python 3.11+); no install step needed.
           # No live daemon venv on CI runners — gate runs in lock-consistency mode.

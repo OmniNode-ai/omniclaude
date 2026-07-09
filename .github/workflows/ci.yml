@@ -671,14 +671,8 @@ jobs:
   arch-no-db-in-orchestrator:
     needs: occ-preflight
     name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -696,14 +690,8 @@ jobs:
   arch-no-git-outside-effects:
     needs: occ-preflight
     name: "Arch: No git/gh calls outside effects (check 2)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -721,14 +709,8 @@ jobs:
   arch-no-linear-outside-effects:
     needs: occ-preflight
     name: "Arch: No LinearClient outside effects (check 3)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -766,14 +748,8 @@ jobs:
   arch-no-direct-adapter-in-business-logic:
     needs: occ-preflight
     name: "Arch: No direct adapter imports in business logic (check 13)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -791,14 +767,8 @@ jobs:
   arch-no-direct-bus-instantiation:
     needs: occ-preflight
     name: "Arch: No direct EventBus instantiation (OMN-10725)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     # Trivial stdlib-only AST scan, but under self-hosted fleet saturation even
     # checkout + setup-python can exceed a 5-minute job budget and cancel the check.
     # Give headroom so a <1s validator is not killed by runner startup contention.
@@ -819,14 +789,8 @@ jobs:
   arch-no-raw-sqlite3-in-handlers:
     needs: occ-preflight
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -844,14 +808,8 @@ jobs:
   arch-no-env-fallbacks:
     needs: occ-preflight
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -869,14 +827,8 @@ jobs:
   arch-cost-ledger-isolation:
     needs: occ-preflight
     name: "Arch: ModelCostLedger confined to effects (check 5)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -894,14 +846,8 @@ jobs:
   arch-topic-naming:
     needs: occ-preflight
     name: "Arch: onex.* topic naming convention (check 6)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -919,14 +865,8 @@ jobs:
   arch-omnidash-db-role:
     needs: occ-preflight
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Service-backed validation is lightweight; hosted avoids self-hosted queue cancellation.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
       postgres:
@@ -1081,14 +1021,8 @@ jobs:
   arch-cost-ledger-structure:
     needs: occ-preflight
     name: "Arch: ModelCostLedger run_id field + index (check 9)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -1106,14 +1040,8 @@ jobs:
   arch-no-direct-kafka-producer:
     needs: occ-preflight
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -1156,14 +1084,8 @@ jobs:
   arch-no-hardcoded-ip:
     needs: occ-preflight
     name: "Arch: No hardcoded internal IPs (check 12)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -1214,14 +1136,8 @@ jobs:
   arch-no-compact-cmd-topic:
     needs: occ-preflight
     name: F5.1 No compact cmd topic
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -2482,14 +2398,9 @@ jobs:
   skill-hygiene:
     needs: occ-preflight
     name: Skill Hygiene
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validator with sparse OCC checkout; run hosted so fleet saturation
+    # cannot cancel the required Quality Gate aggregate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
