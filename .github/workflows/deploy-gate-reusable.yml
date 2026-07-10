@@ -34,18 +34,20 @@ on:
         default: contracts
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
+  # OMN-14260: the nested cross-repo occ-preflight job added by #1879 (OMN-14249)
+  # is REVERTED here. It ran in a reusable-within-reusable context (caller
+  # deploy-gate.yml -> this reusable -> nested occ-preflight) and requested
+  # job-level `permissions: pull-requests: read`. A nested reusable can only
+  # narrow the token its caller job passed down; the caller `deploy-gate` job
+  # grants no permissions block, so the request was a compile-time permissions
+  # escalation -> the whole Deploy Gate workflow startup-failed (0 jobs) on every
+  # infra/core/market caller, taking down the required `deploy-gate` context
+  # org-wide. OCC-preflight gating is NOT lost: every caller repo already gates
+  # its own `deploy-gate` job behind a top-level `occ-preflight` job
+  # (infra #2229/OMN-14104, core local occ-preflight.yml, market inline), so the
+  # nested job was redundant. Do NOT re-add it without granting pull-requests to
+  # the caller deploy-gate jobs first (tracked in OMN-14260 follow-up).
   deploy-gate:
-    needs: occ-preflight
     name: deploy-gate
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
