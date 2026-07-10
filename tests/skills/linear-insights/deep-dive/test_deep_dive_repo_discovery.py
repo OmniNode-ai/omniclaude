@@ -41,9 +41,21 @@ DEEP_DIVE_SCRIPT = (
 
 
 def run_deep_dive(*args: str, env: dict | None = None) -> subprocess.CompletedProcess:
-    """Run the deep-dive script with the given arguments."""
+    """Run the deep-dive script with the given arguments.
+
+    The script reads `OMNI_HOME` (fail-fast, no fallback — CLAUDE.md Rule #8)
+    only to build its default `--save` output directory; none of these tests
+    assert on that path. CI runners don't all export `OMNI_HOME`, so supply a
+    synthetic default here rather than letting the subprocess hard-fail on an
+    unrelated unset variable. A real `OMNI_HOME` in the environment, or an
+    explicit override in `env`, still wins.
+    """
     cmd = ["/bin/bash", str(DEEP_DIVE_SCRIPT), *args]
-    merged_env = {**os.environ, **(env or {})}
+    merged_env = {
+        **os.environ,
+        "OMNI_HOME": os.environ.get("OMNI_HOME", str(REPO_ROOT.parent)),
+        **(env or {}),
+    }
     return subprocess.run(
         cmd,
         capture_output=True,
