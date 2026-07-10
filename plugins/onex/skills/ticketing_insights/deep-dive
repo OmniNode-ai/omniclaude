@@ -17,7 +17,7 @@ DEFAULT_OUTPUT_DIR="${OMNI_HOME}/omni_save"
 OUTPUT_DIR="${LINEAR_INSIGHTS_OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
 
 # Git author name to filter deep-dive commit logs by (default: local git identity; empty matches all)
-GIT_AUTHOR="${GIT_AUTHOR:-$(git config user.name 2>/dev/null)}"
+GIT_AUTHOR="${GIT_AUTHOR:-$(git config user.name 2>/dev/null || true)}"
 
 usage() {
     cat << EOF
