@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# _filter_helpers.sh — Skill tier filtering helpers for deploy-local-plugin (OMN-3453, OMN-5400)
+# _filter_helpers.sh — Skill tier filtering helpers for deploy-local-plugin (<TICKET>, <TICKET>)
 #
 # Sourced by deploy.sh; also directly sourceable for unit testing.
 # Requires the following variables to be set by the caller:
@@ -48,7 +48,7 @@ _skill_frontmatter_value() {
 # =============================================================================
 # _skill_passes_mode_filter <skill_dir> → returns 0 (include) or 1 (exclude)
 #
-# Mode filtering (OMN-5400):
+# Mode filtering (<TICKET>):
 #   - Reads OMNICLAUDE_MODE from environment (default: "full").
 #   - When OMNICLAUDE_MODE=lite, only skills with mode: both pass.
 #   - When OMNICLAUDE_MODE=full (or unset), all skills pass mode filtering.
@@ -87,7 +87,7 @@ _skill_passes_mode_filter() {
 # Rules:
 #   - Underscore-prefixed dirs (_lib, _shared, etc.) always pass (internal support libs).
 #   - Skills without a SKILL.md always pass level/debug checks (cannot read frontmatter).
-#   - Mode filter (OMN-5400): applied first; in lite mode, only mode:both skills pass.
+#   - Mode filter (<TICKET>): applied first; in lite mode, only mode:both skills pass.
 #   - When _LEVEL_EXPLICIT=false (default --level advanced, no explicit flag):
 #       only debug:true skills are NOT excluded — full backwards-compatible behaviour.
 #   - When _LEVEL_EXPLICIT=true:
@@ -104,7 +104,7 @@ _skill_passes_filter() {
         return 0
     fi
 
-    # Mode filter (OMN-5400): in lite mode, only mode:both skills pass
+    # Mode filter (<TICKET>): in lite mode, only mode:both skills pass
     if ! _skill_passes_mode_filter "$skill_dir"; then
         return 1
     fi

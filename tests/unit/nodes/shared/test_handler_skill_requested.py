@@ -30,7 +30,6 @@ TestHandleSkillRequestedWithEventEmitter (9 tests — OMN-2773):
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -45,6 +44,7 @@ from omniclaude.shared.models.model_skill_lifecycle_events import (
 )
 from omniclaude.shared.models.model_skill_request import ModelSkillRequest
 from omniclaude.shared.models.model_skill_result import SkillResultStatus
+from tests.support.fake_task_dispatcher import FakeTaskDispatcher
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -123,12 +123,12 @@ class TestHandleSkillRequested:
         request = _make_request(skill_path=skill_path)
 
         output_with_result = "Some output\nRESULT:\nstatus: success\nerror:\n"
-        dispatcher = AsyncMock(return_value=output_with_result)
+        dispatcher = FakeTaskDispatcher(output=output_with_result)
 
         await handle_skill_requested(request, task_dispatcher=dispatcher)
 
-        dispatcher.assert_awaited_once()
-        prompt_arg: str = dispatcher.call_args[0][0]
+        assert dispatcher.await_count == 1
+        prompt_arg: str = dispatcher.last_prompt
         assert skill_path in prompt_arg
 
     @pytest.mark.asyncio
@@ -137,14 +137,13 @@ class TestHandleSkillRequested:
     ) -> None:
         """When task_dispatcher raises, the result status is FAILED."""
         request = _make_request()
-        dispatcher = AsyncMock(side_effect=RuntimeError("connection refused"))
+        dispatcher = FakeTaskDispatcher(error=RuntimeError("connection refused"))
 
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.FAILED
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is not None
-        assert "exception" in error_val.lower()
+        assert result.error is not None
+        assert "exception" in result.error.lower()
         assert result.skill_name == request.skill_name
 
     @pytest.mark.asyncio
@@ -154,16 +153,14 @@ class TestHandleSkillRequested:
         polly_output = (
             "I executed the skill successfully.\nRESULT:\nstatus: success\nerror:\n"
         )
-        dispatcher = AsyncMock(return_value=polly_output)
+        dispatcher = FakeTaskDispatcher(output=polly_output)
 
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.SUCCESS
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is None
-        output_val = result.extra.get("output") if result.extra else None
-        assert output_val is not None
-        assert "RESULT:" in output_val
+        assert result.error is None
+        assert result.output is not None
+        assert "RESULT:" in result.output
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_partial_when_no_result_block(
@@ -171,14 +168,13 @@ class TestHandleSkillRequested:
     ) -> None:
         """Output missing the RESULT: block produces a PARTIAL result."""
         request = _make_request()
-        dispatcher = AsyncMock(return_value="Done, but no structured block here.")
+        dispatcher = FakeTaskDispatcher(output="Done, but no structured block here.")
 
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.PARTIAL
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is not None
-        assert error_val == "No RESULT: block in output"
+        assert result.error is not None
+        assert result.error == "No RESULT: block in output"
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_failed_status_from_result_block(
@@ -192,24 +188,23 @@ class TestHandleSkillRequested:
             "status: failed\n"
             "error: skill script exited with code 1\n"
         )
-        dispatcher = AsyncMock(return_value=polly_output)
+        dispatcher = FakeTaskDispatcher(output=polly_output)
 
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.FAILED
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val == "skill script exited with code 1"
+        assert result.error == "skill script exited with code 1"
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_includes_args_in_prompt(self) -> None:
         """Args are serialized into the prompt dispatched to Polly."""
         request = _make_request(args={"verbose": "", "pr": "42"})
         output = "RESULT:\nstatus: success\nerror:\n"
-        dispatcher = AsyncMock(return_value=output)
+        dispatcher = FakeTaskDispatcher(output=output)
 
         await handle_skill_requested(request, task_dispatcher=dispatcher)
 
-        prompt_arg: str = dispatcher.call_args[0][0]
+        prompt_arg: str = dispatcher.last_prompt
         assert "--verbose" in prompt_arg
         assert "--pr 42" in prompt_arg
 
@@ -222,7 +217,7 @@ class TestHandleSkillRequested:
         polly_output = (
             "Skill execution finished.\nRESULT:\nstatus: in-progress\nerror:\n"
         )
-        dispatcher = AsyncMock(return_value=polly_output)
+        dispatcher = FakeTaskDispatcher(output=polly_output)
 
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
@@ -251,13 +246,12 @@ class TestHandleSkillRequested:
             "status: failed\n"
             "error: trailing noise from verbose output\n"
         )
-        dispatcher = AsyncMock(return_value=polly_output)
+        dispatcher = FakeTaskDispatcher(output=polly_output)
 
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.SUCCESS
-        error_val = result.extra.get("error") if result.extra else None
-        assert error_val is None
+        assert result.error is None
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +303,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             return True
 
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         await handle_skill_requested(
             request,
@@ -335,7 +329,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             return True
 
         request = _make_request()
-        dispatcher = AsyncMock(side_effect=RuntimeError("dispatch failed"))
+        dispatcher = FakeTaskDispatcher(error=RuntimeError("dispatch failed"))
 
         result = await handle_skill_requested(
             request,
@@ -355,7 +349,7 @@ class TestHandleSkillRequestedWithEventEmitter:
     async def test_no_emit_when_emitter_is_none(self) -> None:
         """When event_emitter is None, no emission occurs and existing behaviour is unchanged."""
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         # Should not raise; existing callers pass no event_emitter
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
@@ -370,7 +364,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             raise OSError("socket unavailable")
 
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         # Must not raise despite emitter raising
         result = await handle_skill_requested(
@@ -391,7 +385,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             return True
 
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         await handle_skill_requested(
             request,
@@ -415,7 +409,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             return True
 
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         await handle_skill_requested(
             request,
@@ -443,7 +437,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             return True
 
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         await handle_skill_requested(
             request,
@@ -468,7 +462,7 @@ class TestHandleSkillRequestedWithEventEmitter:
             return True
 
         request = _make_request()
-        dispatcher = AsyncMock(return_value="RESULT:\nstatus: success\nerror:\n")
+        dispatcher = FakeTaskDispatcher(output="RESULT:\nstatus: success\nerror:\n")
 
         await handle_skill_requested(
             request,

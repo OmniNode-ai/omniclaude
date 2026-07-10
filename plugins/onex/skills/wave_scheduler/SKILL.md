@@ -54,11 +54,11 @@ boundary_exempt: true
 
 ---
 
-## Backing Status (OMN-13780) — NON-RUNNABLE via canonical event-bus dispatch
+## Backing Status (<TICKET>) — NON-RUNNABLE via canonical event-bus dispatch
 
 **This skill has no deterministic node backing and is de-listed from event-bus / node-routed dispatch — deliberately, by design.** Its generated orchestrator shell (`node_skill_wave_scheduler_orchestrator`) is a Polly-passthrough (`maturity: stub` in its contract.yaml), and no CLI or platform-service implementation exists elsewhere. The parallel per-wave agent dispatch that consumes the computed schedule is inherently Claude-session-native.
 
-The DAG-construction + wave-computation core (topological sort, level assignment, max-concurrency splitting) is pure and I/O-free — a strong COMPUTE-node candidate. Extracting it into a real `node_wave_scheduler_compute` is tracked in OMN-13803.
+The DAG-construction + wave-computation core (topological sort, level assignment, max-concurrency splitting) is pure and I/O-free — a strong COMPUTE-node candidate. Extracting it into a real `node_wave_scheduler_compute` is tracked in <TICKET>.
 
 ---
 

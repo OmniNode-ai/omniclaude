@@ -34,7 +34,7 @@ dod_evidence:
       - check_type: "command"
         check_value: >-
           grep -q 'node: node_hostile_reviewer_orchestrator' plugins/onex/plugin-compat.yaml &&
-          grep -q 'onex.evt.omnimarket.hostile-reviewer-completed.v1' plugins/onex/plugin-compat.yaml &&
+          grep -q 'hostile-reviewer-completed.v1' plugins/onex/plugin-compat.yaml &&
           ! grep -q 'hostile-reviewer-phase-transition' plugins/onex/plugin-compat.yaml
   - id: "dod-skill-backing-node-repointed"
     description: >-

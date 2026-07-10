@@ -9,7 +9,8 @@ Non-blocking in MVP: results are delivered asynchronously and update the conflic
 record when they arrive. The pipeline does not wait for semantic results before
 continuing (unless the caller explicitly awaits).
 
-LLM endpoint: DeepSeek-R1 at LLM_DEEPSEEK_R1_URL (see ~/.claude/CLAUDE.md for endpoint)
+LLM endpoint: DeepSeek-R1 at LLM_DEEPSEEK_R1_URL (configurable via environment; falls
+back to a local default when unset)
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-_DEEPSEEK_DEFAULT = "http://192.168.86.200:8101"  # onex-allow-internal-ip
+_DEEPSEEK_DEFAULT = "http://localhost:8101"
 DEEPSEEK_R1_URL = os.environ.get("LLM_DEEPSEEK_R1_URL", _DEEPSEEK_DEFAULT)
 SEMANTIC_CHECK_TIMEOUT_S = 30.0
 SEMANTIC_CHECK_MODEL = "deepseek-r1"  # model tag served at the endpoint

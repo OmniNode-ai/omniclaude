@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-13904",
+  "status": "PASS",
+  "run_timestamp": "2026-07-03T23:10:00Z",
+  "summary": "PASS: makes the patch_pr_body()/patch_pr_title() PR-edit helpers real in _lib/pr-safety/helpers.md (REST PATCH /repos/{owner}/{repo}/pulls/{n} via gh api + mandatory read-back verification), killing the gh pr edit Projects-classic silent-no-op trap at the tooling layer (same defect class as OMN-8653/OMN-5635). Removes the dead [[reference_gh_pr_edit_projects_classic]] tribal-memory pointer from dispatch_worker/prompt.md now that the helper is mechanical. Raw 'gh pr edit' in non-allowlisted skills remains mechanically flagged by the 'Enforce PR mutation command bans' step in .github/workflows/omni-standards-compliance.yml.",
+  "checks": [
+    {
+      "name": "patch_pr_body helper is real, REST PATCH + read-back",
+      "status": "PASS",
+      "command": "grep -q 'def patch_pr_body' plugins/onex/skills/_lib/pr-safety/helpers.md && grep -q 'read-back' plugins/onex/skills/_lib/pr-safety/helpers.md  # helper section present with mandatory read-back verification"
+    },
+    {
+      "name": "dispatch_worker no longer points at tribal memory",
+      "status": "PASS",
+      "command": "! grep -q 'reference_gh_pr_edit_projects_classic' plugins/onex/skills/dispatch_worker/prompt.md  # dead memory pointer removed, replaced by the mechanical helper reference"
+    },
+    {
+      "name": "compliance-gate mutation-ban greps stay green",
+      "status": "PASS",
+      "command": "grep -r 'gh pr edit' plugins/onex/skills/ --include='*.md' | grep -vE '<allowlist>|_lib/pr-safety'  # zero matches — simulated all 6 ban greps from omni-standards-compliance.yml locally, all OK"
+    },
+    {
+      "name": "failure-mode pin-down (live reproduction 2026-07-03)",
+      "status": "PASS",
+      "command": "gh api repos/OmniNode-ai/omniclaude --jq .has_projects  # true on all probed OmniNode-ai repos; token scopes lack read:project; gh 2.89.0 body edit applied (marker round-trip on #1850) — exposure is version-dependent, REST PATCH path documented as canonical"
+    },
+    {
+      "name": "full suite, no -k filter",
+      "status": "PASS",
+      "command": "env -u PYTHONPATH KAFKA_BOOTSTRAP_SERVERS=localhost:19092 uv run pytest tests/ -q  # 11299 passed, 112 skipped; 11 failures proven pre-existing at base SHA 73cbe85dd on a pristine worktree (8 identical env failures, 3 load-sensitive shell suites passing in isolation)"
+    }
+  ]
+}

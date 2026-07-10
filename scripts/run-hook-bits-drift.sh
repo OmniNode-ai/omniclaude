@@ -18,9 +18,15 @@
 
 set -euo pipefail
 
+OMNICLAUDE_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
 # Resolve the omnibase_core directory.
 if [[ -n "${OMNI_HOME:-}" && -d "${OMNI_HOME}/omnibase_core" ]]; then
     OBC_DIR="${OMNI_HOME}/omnibase_core"
+elif [[ "${OMNICLAUDE_DIR}" == */omni_worktrees/* && -d "${OMNICLAUDE_DIR%%/omni_worktrees/*}/omnibase_core" ]]; then
+    # Ticket worktree layout:
+    #   $OMNI_HOME/omni_worktrees/<ticket>/omniclaude
+    OBC_DIR="${OMNICLAUDE_DIR%%/omni_worktrees/*}/omnibase_core"
 elif [[ -d "$(dirname "$0")/../../../omnibase_core" ]]; then
     # Fallback: three levels up from scripts/ reaches the workspace root.
     # Works for omni_home/omniclaude/scripts/ → omni_home/omnibase_core.
@@ -36,4 +42,4 @@ fi
 
 HOOK_BITS_SH="plugins/onex/hooks/lib/hook_bits.sh"
 
-exec uv --directory "${OBC_DIR}" run python scripts/gen_hook_bits.py --check "../omniclaude/${HOOK_BITS_SH}"
+exec uv --directory "${OBC_DIR}" run python scripts/gen_hook_bits.py --check "${OMNICLAUDE_DIR}/${HOOK_BITS_SH}"

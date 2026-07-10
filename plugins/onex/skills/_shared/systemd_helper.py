@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Dual-scope systemd unit probe [OMN-8853].
+"""Dual-scope systemd unit probe [<TICKET>].
 
 Probes BOTH system and user systemd scopes before reporting a unit missing.
 Prior agents produced false negatives on deploy-agent.service by only checking

@@ -53,7 +53,7 @@ Store both as `{url}` and `{target}` for all subsequent phases.
 
 **Cloud DB reference** (for triage inspection):
 ```
-Port-forward: ./tools/cloud-dev-connect.sh (from omni_home/)
+Port-forward: ./tools/cloud-dev-connect.sh (from the workspace root)
 Postgres:     localhost:5436 → dev/dev-postgres:5432
 DB:           omnidash_analytics
 Role:         role_omnidash
@@ -213,7 +213,7 @@ You MUST follow the systematic-debugging skill (5 phases):
 ## Worktree Setup
 Create worktrees for each affected repo:
   TICKET={dashboard_sweep_epic_id}
-  BRANCH=jonah/{ticket_slug}-fix-{domain_id}
+  BRANCH=<user>/{ticket_slug}-fix-{domain_id}
 
   For each repo in {repos_likely_affected}:
     git -C $ONEX_WORKTREES_ROOT/../{repo} worktree add \
@@ -265,7 +265,7 @@ After all debug agents complete, for each domain with `status=fix_ready`:
 **Create PR** (title MUST contain `OMN-XXXX` — CI blocks merge without it):
 ```bash
 cd $ONEX_WORKTREES_ROOT/{dashboard_sweep_epic_id}/{repo}-{domain_id}
-git push -u origin jonah/{ticket_slug}-fix-{domain_id}
+git push -u origin <user>/{ticket_slug}-fix-{domain_id}
 gh pr create \
   --repo OmniNode-ai/{repo} \
   --title "fix(dashboard): {domain_id} — {root_cause} [{dashboard_sweep_epic_id}]" \
@@ -307,7 +307,7 @@ tracker.save_issue(
 
 ## Fix
 PR: {pr_url}
-Branch: jonah/omn-5057-fix-{domain_id}
+Branch: <user>/{ticket_slug}-fix-{domain_id}
 
 ## Files Changed
 {files_changed}

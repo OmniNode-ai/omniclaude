@@ -20,9 +20,9 @@ defaults:
 # =============================================================================
 user:
   id: "7a850ce1-f95e-431f-b4e3-62f7449f04c0"
-  name: "Jonah Gray"
-  email: "jonah@omninode.ai"
-  displayName: "jonah"
+  name: "${OPERATOR_NAME}"
+  email: "${OPERATOR_EMAIL}"
+  displayName: "${OPERATOR_HANDLE}"
 
 # =============================================================================
 # TEAM CONFIGURATION
@@ -43,7 +43,7 @@ projects:
     name: "MVP - OmniNode Platform Foundation"
     shortcuts: ["mvp", "foundation", "platform-foundation"]
     status: "Planned"
-    lead: "Jonah Gray"
+    lead: "${OPERATOR_NAME}"
 
   Beta:
     id: "5db5e69e-a78d-4b6f-b78c-e59b929b9b4f"
@@ -152,7 +152,7 @@ cache:
 # OUTPUT CONFIGURATION
 # =============================================================================
 output:
-  deep_dive_dir: "${HOME}/Code/omni_home/omni_save"
+  deep_dive_dir: "${OMNI_HOME}/omni_save"
   snapshot_dir: ".cache/snapshots"
   default_format: "markdown"
 

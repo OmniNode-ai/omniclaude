@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# Skill Progression Graph (OMN-3455)
+# Skill Progression Graph (<TICKET>)
 #
 # Defines which skills "unlock" which other skills based on usage history.
 # SessionStart reads ~/.claude/onex-skill-usage.log and injects 1-2 suggestions

@@ -23,6 +23,9 @@ PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-ga
 INTEGRATION_TESTS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "integration-tests.yml"
 )
+NO_FAKED_BOUNDARY_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "no-faked-boundary.yml"
+)
 VENV_CACHE_RESTORE_IF = "${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}"
 
 
@@ -172,22 +175,60 @@ def test_golden_chain_live_is_required_service_container_gate(
     ci_workflow: dict[str, Any],
 ) -> None:
     job = _job(ci_workflow, "golden-chain-live")
-    services = job.get("services")
-    assert isinstance(services, dict)
-    assert "redpanda" in services
-    assert "postgres" in services
+    assert "services" not in job
 
     env = job.get("env")
     assert isinstance(env, dict)
-    assert env.get("KAFKA_BOOTSTRAP_SERVERS") == "localhost:9092"
+    assert "KAFKA_BOOTSTRAP_SERVERS" not in env
+    assert (
+        env.get("GOLDEN_CHAIN_REDPANDA_CONTAINER")
+        == "omniclaude-golden-chain-redpanda-${{ github.run_id }}"
+    )
+    assert (
+        env.get("GOLDEN_CHAIN_PG_CONTAINER")
+        == "omniclaude-golden-chain-postgres-${{ github.run_id }}"
+    )
+
+    redpanda_step = _step(job, "Start golden-chain Redpanda")
+    assert "docker run -d" in redpanda_step["run"]
+    assert '--name "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+    assert 'docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+    assert '-p "127.0.0.1:${kafka_port}:9092"' in redpanda_step["run"]
+    assert '--advertise-kafka-addr "127.0.0.1:${kafka_port}"' in redpanda_step["run"]
+    assert 'docker exec "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+    assert "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:${kafka_port}" in redpanda_step["run"]
+    assert 'docker logs "$GOLDEN_CHAIN_REDPANDA_CONTAINER"' in redpanda_step["run"]
+
+    start_step = _step(job, "Start golden-chain Postgres")
+    assert "docker run -d" in start_step["run"]
+    assert '--name "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert "-p 127.0.0.1::5432" in start_step["run"]
+    assert "POSTGRES_HOST_AUTH_METHOD=trust" in start_step["run"]
+    assert 'docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp' in start_step["run"]
+    assert 'docker logs "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert 'docker exec "$GOLDEN_CHAIN_PG_CONTAINER"' in start_step["run"]
+    assert "pg_isready -h 127.0.0.1 -p 5432" in start_step["run"]
+    assert "socket.create_connection" in start_step["run"]
+    assert "GOLDEN_CHAIN_PGPORT=${port}" in start_step["run"]
 
     run_step = _step(job, "Run live golden-chain sweep")
-    step_env = run_step.get("env")
-    assert isinstance(step_env, dict)
-    assert "OMNIDASH_ANALYTICS_DB_URL" in step_env
-    assert "golden_chain:test" in step_env["OMNIDASH_ANALYTICS_DB_URL"]
     assert run_step.get("continue-on-error") is not True
+    assert 'docker exec "$GOLDEN_CHAIN_PG_CONTAINER"' in run_step["run"]
+    assert "socket.create_connection" in run_step["run"]
+    assert "golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}" in run_step["run"]
     assert "scripts/ci/run_golden_chain_live.py" in run_step["run"]
+
+    cleanup_step = _step(job, "Stop golden-chain Postgres")
+    assert cleanup_step.get("if") == "always()"
+    assert 'docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER"' in cleanup_step["run"]
+
+    redpanda_cleanup_step = _step(job, "Stop golden-chain Redpanda")
+    assert redpanda_cleanup_step.get("if") == "always()"
+    assert (
+        'docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER"'
+        in redpanda_cleanup_step["run"]
+    )
 
     tests_gate = _job(ci_workflow, "tests-gate")
     needs = tests_gate.get("needs")
@@ -201,13 +242,76 @@ def test_ci_summary_checks_contract_compliance_result(
     ci_workflow: dict[str, Any],
 ) -> None:
     summary = _job(ci_workflow, "ci-summary")
-    needs = summary.get("needs")
-    assert isinstance(needs, list)
-    assert "contract-compliance" in needs
+    assert "needs" not in summary
+    assert summary.get("runs-on") == "ubuntu-latest"
+    assert summary.get("if") == "always()"
 
-    run = _step(summary, "Check all jobs passed")["run"]
-    assert 'contract_compliance="${{ needs.contract-compliance.result }}"' in run
-    assert '"$quality" "$tests" "$security" "$contract_compliance"' in run
+    run = _step(summary, "Poll run jobs and compute fail-closed CI Summary verdict")[
+        "run"
+    ]
+    assert "scripts/ci/ci_summary_gate.py" in run
+    assert '--run-attempt "${RUN_ATTEMPT}"' in run
+    assert "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" in run
+    assert "CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)" in run
+
+
+def test_contract_compliance_pins_uv_python(ci_workflow: dict[str, Any]) -> None:
+    job = _job(ci_workflow, "contract-compliance")
+    setup_step = _step(job, "Set up Python")
+    install_step = _step(job, "Install onex_change_control")
+
+    assert setup_step.get("uses") == "actions/setup-python@v6"
+    assert setup_step["with"]["python-version"] == "${{ env.PYTHON_VERSION }}"
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_no_faked_boundary_pins_uv_python() -> None:
+    loaded = yaml.safe_load(NO_FAKED_BOUNDARY_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs["no-faked-boundary-gate"]
+    assert isinstance(job, dict)
+
+    install_step = _step(job, "Install dependencies")
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_plugin_compat_pins_uv_python() -> None:
+    loaded = yaml.safe_load(PLUGIN_COMPAT_WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs["plugin-compat-gate"]
+    assert isinstance(job, dict)
+
+    install_step = _step(job, "Install dependencies")
+    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
+
+
+def test_ci_uv_sync_steps_pin_python(ci_workflow: dict[str, Any]) -> None:
+    jobs = ci_workflow.get("jobs")
+    assert isinstance(jobs, dict)
+
+    offenders: list[str] = []
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run")
+            if not isinstance(run, str) or "uv sync" not in run:
+                continue
+            for line in run.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("uv sync") and "--python" not in stripped:
+                    offenders.append(f"{job_name}: {step.get('name')}: {stripped}")
+
+    assert offenders == []
 
 
 def test_legacy_integration_tests_workflow_remains_manual_only() -> None:

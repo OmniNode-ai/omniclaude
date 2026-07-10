@@ -87,7 +87,7 @@ class RoutingEventClient:
     and IntelligenceEventClient.
     """
 
-    # Kafka topic names — canonical TopicBase constants (OMN-2940)
+    # Kafka topic names — canonical TopicBase constants
     TOPIC_REQUEST = TopicBase.ROUTING_REQUESTED
     TOPIC_COMPLETED = TopicBase.ROUTING_COMPLETED
     TOPIC_FAILED = TopicBase.ROUTING_FAILED

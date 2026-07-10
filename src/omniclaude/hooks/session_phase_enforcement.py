@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 from pathlib import Path
+from typing import cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict
@@ -51,7 +52,7 @@ class ModelPhaseState(BaseModel):
     halt_reason: str | None = None
 
 
-def _load_phase_state(state_dir: Path) -> dict | None:
+def _load_phase_state(state_dir: Path) -> dict[str, object] | None:
     path = state_dir / _PHASE_STATE_REL
     if not path.exists():
         return None
@@ -128,10 +129,10 @@ def build_enforcement_directive(state_dir: Path | None = None) -> str:
     if not raw:
         return ""
 
-    evaluation: str = raw.get("last_evaluation", "")
-    current_phase: str = raw.get("current_phase", "unknown")
-    next_phase: str = raw.get("next_phase", "unknown")
-    budget_elapsed_pct: int | float = raw.get("budget_elapsed_pct", 0)
+    evaluation = cast("str", raw.get("last_evaluation", ""))
+    current_phase = cast("str", raw.get("current_phase", "unknown"))
+    next_phase = cast("str", raw.get("next_phase", "unknown"))
+    budget_elapsed_pct = cast("int | float", raw.get("budget_elapsed_pct", 0))
 
     if evaluation == "transition_required":
         return (

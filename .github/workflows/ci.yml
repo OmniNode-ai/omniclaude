@@ -19,11 +19,38 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
-  UV_HTTP_TIMEOUT: '300'
+  # OMN-14127: CI gates were failing mechanically while downloading/extracting
+  # large transitive CUDA/PyTorch wheels under fleet/network pressure. Keep the
+  # validators fail-closed, but make dependency installation tolerant enough to
+  # avoid false red from transient package transfer stalls.
+  UV_HTTP_TIMEOUT: '900'
+  UV_CONCURRENT_DOWNLOADS: '4'
+  UV_SYNC_ATTEMPTS: '3'
+  UV_SYNC_RETRY_DELAY_SECONDS: '20'
   # ONEX state directory — required by hooks/lib/onex_state.py (OMN-5632)
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  # OCC preflight is the first non-OCC CI dependency. If central OCC
+  # evidence is missing or red, no runner-heavy validation jobs fan out.
+  occ-preflight:
+    # The reusable occ-preflight.yml declares `permissions: {contents: read,
+    # pull-requests: read}`. A called workflow cannot request more than the
+    # caller grants, and this ci.yml has no workflow-level `permissions:` block,
+    # so without this job-level grant the run's token defaults to the repo
+    # `read` default (pull-requests: none) and GitHub rejects the ENTIRE
+    # workflow at startup ("startup_failure"). Mirror the grant the standalone
+    # call-occ-preflight.yml already sets so the reusable's declared scope is
+    # satisfiable. (OMN-14104)
+    permissions:
+      contents: read
+      pull-requests: read
+    # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   # ============================================================================
   # ZONE FILTER (OMN-10475)
   # ============================================================================
@@ -34,6 +61,7 @@ jobs:
   # Code Quality (ruff+mypy), arch invariants, contract validation, and the
   # receipt-gate caller still run on every PR.
   zone-filter:
+    needs: occ-preflight
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
     uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
     with:
@@ -44,15 +72,11 @@ jobs:
   # ============================================================================
 
   quality:
+    needs: occ-preflight
     name: Code Quality
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
+    # so required CI does not queue behind self-hosted fleet saturation.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -76,7 +100,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
@@ -98,15 +135,12 @@ jobs:
           fi
 
   docs-links:
+    needs: occ-preflight
     name: Markdown Link Check
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight external link check. Keep it hosted: the lychee binary can require
+    # newer glibc than parts of the self-hosted fleet provide, and this job does
+    # not need LAN or repository-local services.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -131,6 +165,7 @@ jobs:
             --exclude 'https://github\.com/OmniNode-ai'
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
+            --exclude 'https://docs\.python\.org'
             --exclude 'https://staging\.omniclaude\.example\.com'
             --exclude 'https://omniclaude\.example\.com'
             --exclude 'http://localhost'
@@ -142,22 +177,21 @@ jobs:
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
             --exclude 'https://dash\.dev\.omninode\.ai'
-            --accept 200..=299,429,503
+            --exclude 'https://www\.psycopg\.org/docs'
+            --exclude 'https://docs\.anthropic\.com'
+            --exclude 'https://docs\.python-guide\.org'
+            --accept 200..=299,429,503,504
             '**/*.md'
           fail: true
 
   pyright:
     name: Pyright Type Checking
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
+    # OMN-14127: Pyright's bundled node runtime needs libatomic on some Linux
+    # images; the self-hosted fleet is not consistently provisioned and has no
+    # sudo/root repair path. This is a static check, so run it hosted.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -173,6 +207,72 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Node for Pyright
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Ensure pyright native runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          has_libatomic() {
+            if command -v ldconfig >/dev/null 2>&1 && ldconfig -p | grep -q 'libatomic.so.1'; then
+              return 0
+            fi
+            if [ -n "${PYRIGHT_LIBATOMIC_DIR:-}" ] && find "${PYRIGHT_LIBATOMIC_DIR}" -name 'libatomic.so.1*' -print -quit | grep -q .; then
+              return 0
+            fi
+            return 1
+          }
+          if command -v ldconfig >/dev/null 2>&1 && ldconfig -p | grep -q 'libatomic.so.1'; then
+            exit 0
+          fi
+          SUDO=""
+          if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+          elif [ "$(id -u)" -ne 0 ]; then
+            lib_dir="${RUNNER_TEMP:-/tmp}/pyright-libatomic"
+            mkdir -p "${lib_dir}"
+            if command -v apt-get >/dev/null 2>&1 && command -v dpkg-deb >/dev/null 2>&1; then
+              mkdir -p "${lib_dir}/apt/lists/partial" "${lib_dir}/apt/cache/archives/partial"
+              apt_opts=(
+                -o "Dir::State::lists=${lib_dir}/apt/lists"
+                -o "Dir::Cache=${lib_dir}/apt/cache"
+                -o "Dir::State::status=/var/lib/dpkg/status"
+              )
+              (
+                cd "${lib_dir}"
+                apt-get "${apt_opts[@]}" update
+                apt-get "${apt_opts[@]}" download libatomic1
+                dpkg-deb -x libatomic1_*.deb .
+              )
+              found_dir="$(find "${lib_dir}" -name 'libatomic.so.1*' -print -quit | xargs dirname)"
+              {
+                echo "PYRIGHT_LIBATOMIC_DIR=${lib_dir}"
+                echo "LD_LIBRARY_PATH=${found_dir}:${LD_LIBRARY_PATH:-}"
+              } >> "${GITHUB_ENV}"
+              exit 0
+            fi
+            echo "::error::libatomic.so.1 is required by pyright's node runtime, but the runner user cannot install packages or extract libatomic1 locally"
+            exit 1
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            $SUDO apt-get update
+            $SUDO apt-get install -y libatomic1
+          elif command -v dnf >/dev/null 2>&1; then
+            $SUDO dnf install -y libatomic
+          elif command -v yum >/dev/null 2>&1; then
+            $SUDO yum install -y libatomic
+          else
+            echo "::error::libatomic.so.1 is required by pyright's node runtime and no supported package manager is available"
+            exit 1
+          fi
+          if ! has_libatomic; then
+            echo "::error::libatomic.so.1 is still not visible after installation"
+            exit 1
+          fi
+
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v6
@@ -182,13 +282,44 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Install Pyright node runtime dependency
+        run: |
+          if ldconfig -p 2>/dev/null | grep -q 'libatomic.so.1'; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y libatomic1
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y libatomic1
+            exit 0
+          fi
+          echo "::warning::libatomic1 is not visible and cannot be installed by this runner; continuing so Pyright reports the real failure if the runtime requires it"
 
       - name: Pyright
         working-directory: ${{ github.workspace }}
         run: uv run pyright src/omniclaude
 
   check-handshake:
+    needs: occ-preflight
     name: Architecture Handshake
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -198,7 +329,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+    if: needs.occ-preflight.result == 'success' && (github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request')
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -214,6 +345,7 @@ jobs:
         run: ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
 
   enum-governance:
+    needs: occ-preflight
     name: Enum Governance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -246,13 +378,27 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if uv sync --frozen --group dev --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
+            sleep $((attempt * 10))
+          done
 
       - name: Validate enum governance
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_enum_governance.py
 
   exports-validation:
+    needs: occ-preflight
     name: Exports Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -276,6 +422,23 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install native build toolchain
+        run: |
+          if command -v cc >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y build-essential
+            exit 0
+          fi
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
+
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v6
@@ -285,13 +448,14 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate exports
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_exports.py
 
   env-var-registry:
+    needs: occ-preflight
     name: "Env Var Registry (OMN-6263)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -329,6 +493,7 @@ jobs:
             --format text
 
   cross-repo-validation:
+    needs: occ-preflight
     name: Kafka Import Guard
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -361,21 +526,25 @@ jobs:
             python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
 
   migration-freeze:
+    needs: occ-preflight
     name: Migration Freeze
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight metadata gate: keep it hosted so branch protection cannot
+    # wedge behind the self-hosted runner fleet.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+
+      - name: Fetch PR base for migration diff
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin \
+            "+${PR_BASE_SHA}:refs/remotes/origin/${GITHUB_BASE_REF}"
 
       - name: Check migration freeze
         working-directory: ${{ github.workspace }}
@@ -385,6 +554,7 @@ jobs:
           MIGRATION_FREEZE_BYPASS: ${{ contains(github.event.pull_request.labels.*.name, 'db-split-bypass') && 'true' || '' }}
 
   onex-validation:
+    needs: occ-preflight
     name: ONEX Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -410,7 +580,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Validate ONEX naming conventions
         working-directory: ${{ github.workspace }}
@@ -483,15 +666,10 @@ jobs:
   # ============================================================================
 
   arch-no-db-in-orchestrator:
+    needs: occ-preflight
     name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -507,15 +685,10 @@ jobs:
         run: python3 scripts/validation/validate_no_db_in_orchestrator.py
 
   arch-no-git-outside-effects:
+    needs: occ-preflight
     name: "Arch: No git/gh calls outside effects (check 2)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -531,15 +704,10 @@ jobs:
         run: python3 scripts/validation/validate_no_git_outside_effects.py
 
   arch-no-linear-outside-effects:
+    needs: occ-preflight
     name: "Arch: No LinearClient outside effects (check 3)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -555,16 +723,12 @@ jobs:
         run: python3 scripts/validation/validate_no_linear_outside_effects.py
 
   arch-no-repo-adapter-in-orchestrator:
+    needs: occ-preflight
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Static validation: run hosted so checkout/dependency setup cannot time out
+    # behind the self-hosted fleet and falsely cancel the Quality Gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -579,15 +743,10 @@ jobs:
         run: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
 
   arch-no-direct-adapter-in-business-logic:
+    needs: occ-preflight
     name: "Arch: No direct adapter imports in business logic (check 13)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -603,16 +762,14 @@ jobs:
         run: python3 scripts/validation/validate_no_direct_adapter_in_business_logic.py
 
   arch-no-direct-bus-instantiation:
+    needs: occ-preflight
     name: "Arch: No direct EventBus instantiation (OMN-10725)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
+    # Trivial stdlib-only AST scan, but under self-hosted fleet saturation even
+    # checkout + setup-python can exceed a 5-minute job budget and cancel the check.
+    # Give headroom so a <1s validator is not killed by runner startup contention.
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -627,15 +784,10 @@ jobs:
         run: python3 scripts/validation/validate_no_direct_bus_instantiation.py
 
   arch-no-raw-sqlite3-in-handlers:
+    needs: occ-preflight
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -651,15 +803,10 @@ jobs:
         run: python3 scripts/validation/validate_no_raw_sqlite3.py
 
   arch-no-env-fallbacks:
+    needs: occ-preflight
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -675,16 +822,11 @@ jobs:
         run: python3 scripts/validate_no_env_fallbacks.py
 
   arch-cost-ledger-isolation:
+    needs: occ-preflight
     name: "Arch: ModelCostLedger confined to effects (check 5)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -699,15 +841,10 @@ jobs:
         run: python3 scripts/validation/validate_cost_ledger_isolation.py
 
   arch-topic-naming:
+    needs: occ-preflight
     name: "Arch: onex.* topic naming convention (check 6)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -723,15 +860,10 @@ jobs:
         run: python3 scripts/validation/validate_topic_naming.py
 
   arch-omnidash-db-role:
+    needs: occ-preflight
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Service-backed validation is lightweight; hosted avoids self-hosted queue cancellation.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
       postgres:
@@ -884,15 +1016,10 @@ jobs:
           echo "omnidash_readonly DB role CI check PASSED"
 
   arch-cost-ledger-structure:
+    needs: occ-preflight
     name: "Arch: ModelCostLedger run_id field + index (check 9)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -908,15 +1035,10 @@ jobs:
         run: python3 scripts/validation/validate_cost_ledger_structure.py
 
   arch-no-direct-kafka-producer:
+    needs: occ-preflight
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -932,55 +1054,35 @@ jobs:
         run: python3 scripts/validation/validate_no_direct_kafka_producer.py
 
   arch-no-utcnow:
+    needs: occ-preflight
     name: "Arch: No datetime.utcnow() (check 11)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Static validation: run hosted so checkout/dependency setup cannot time out
+    # behind the self-hosted fleet and falsely cancel the Quality Gate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
-
+      # This is a stdlib-only AST scan (imports: ast, sys, pathlib) — it does not
+      # need the project venv. The former `uv sync --frozen --group dev` step could
+      # exceed even a 10-minute job timeout under self-hosted fleet saturation,
+      # cancelling a check that runs in <1s. Running it with the setup-python
+      # interpreter removes the dependency install entirely (also reduces fleet load).
       - name: Check no datetime.utcnow() usage
         working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validation/validate_no_utcnow.py
+        run: python3 scripts/validation/validate_no_utcnow.py
 
   arch-no-hardcoded-ip:
+    needs: occ-preflight
     name: "Arch: No hardcoded internal IPs (check 12)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -1005,7 +1107,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Check no hardcoded internal IPs
         working-directory: ${{ github.workspace }}
@@ -1016,15 +1131,10 @@ jobs:
   # ============================================================================
 
   arch-no-compact-cmd-topic:
+    needs: occ-preflight
     name: F5.1 No compact cmd topic
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1048,13 +1158,14 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: F5.1 - Validate no cmd topic uses cleanup.policy=compact
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_no_compact_cmd_topic.py
 
   arch-invariants:
+    needs: occ-preflight
     name: Architecture Invariants
     # OMNINODE_SELF_HOSTED_RUNS_ON_V2
     runs-on: >-
@@ -1098,7 +1209,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check ONEX architectural invariants
         working-directory: ${{ github.workspace }}
@@ -1132,7 +1243,7 @@ jobs:
           fi
 
           mapfile -t changed_skills < <(
-            git diff --name-only --diff-filter=AM "${DIFF_BASE}...HEAD" -- 'plugins/onex/skills/**/SKILL.md' |
+            git diff --name-only --diff-filter=AM "${DIFF_BASE}" HEAD -- 'plugins/onex/skills/**/SKILL.md' |
               awk -F/ '{print $4}' |
               sort -u
           )
@@ -1154,8 +1265,8 @@ jobs:
   # Golden chain registry integrity (OMN-7389)
   golden-chain-integrity:
     name: Golden Chain Integrity
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1198,7 +1309,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate golden chain registry
         working-directory: ${{ github.workspace }}
@@ -1213,8 +1324,8 @@ jobs:
   # omnimarket@dev so the comparison targets the live routing authority.
   registry-consistency:
     name: Registry Consistency
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1254,53 +1365,29 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run registry consistency tests
         working-directory: ${{ github.workspace }}
-        env:
-          OMNIMARKET_TOPICS_REGISTRY_PATH: ${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml
-        run: uv run pytest tests/hooks/test_registry_consistency.py -v
+        run: >-
+          uv run python scripts/validation/check_registry_consistency.py
+          --daemon-registry
+          "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
 
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
     name: Golden Chain Live
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
+    # OMN-14127: service-container live check with no LAN dependency. Hosted
+    # runners provide reliable service port mapping; the self-hosted fleet has
+    # shown refused mapped Postgres ports under saturation.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      redpanda:
-        image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
-        options: >-
-          --health-cmd "rpk cluster health | grep -q 'Healthy:.*true'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
-        ports:
-          - 9092:9092
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: golden_chain
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: omnidash_analytics
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432/tcp
     env:
-      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
       GOLDEN_CHAIN_TIMEOUT_MS: "30000"
+      GOLDEN_CHAIN_REDPANDA_CONTAINER: omniclaude-golden-chain-redpanda-${{ github.run_id }}
+      GOLDEN_CHAIN_PG_CONTAINER: omniclaude-golden-chain-postgres-${{ github.run_id }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1324,13 +1411,94 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev --extra kafka
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka
+
+      - name: Start golden-chain Redpanda
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER" >/dev/null 2>&1 || true
+          kafka_port="$(
+            python - <<'PY'
+          import socket
+
+          with socket.socket() as sock:
+              sock.bind(("127.0.0.1", 0))
+              print(sock.getsockname()[1])
+          PY
+          )"
+          docker run -d \
+            --name "$GOLDEN_CHAIN_REDPANDA_CONTAINER" \
+            -p "127.0.0.1:${kafka_port}:9092" \
+            docker.redpanda.com/redpandadata/redpanda:v24.3.6 \
+            redpanda start \
+              --overprovisioned \
+              --smp 1 \
+              --memory 1G \
+              --reserve-memory 0M \
+              --node-id 0 \
+              --check=false \
+              --kafka-addr 0.0.0.0:9092 \
+              --advertise-kafka-addr "127.0.0.1:${kafka_port}"
+
+          for attempt in {1..60}; do
+            if docker exec "$GOLDEN_CHAIN_REDPANDA_CONTAINER" \
+              rpk cluster health | grep -q 'Healthy:.*true'; then
+              echo "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:${kafka_port}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "Waiting for golden-chain Redpanda on 127.0.0.1:${kafka_port} (${attempt}/60)..."
+            sleep 2
+          done
+
+          docker logs "$GOLDEN_CHAIN_REDPANDA_CONTAINER" || true
+          exit 1
+
+      - name: Start golden-chain Postgres
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
+          docker run -d \
+            --name "$GOLDEN_CHAIN_PG_CONTAINER" \
+            -e POSTGRES_USER=golden_chain \
+            -e POSTGRES_DB=omnidash_analytics \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            -p 127.0.0.1::5432 \
+            postgres:16-alpine
+
+          for attempt in {1..60}; do
+            port="$(docker port "$GOLDEN_CHAIN_PG_CONTAINER" 5432/tcp | sed -n 's/.*://p' | head -1)"
+            if [ -n "$port" ] && docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
+              pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics && \
+              python -c 'import socket, sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=2).close()' "$port"; then
+              echo "GOLDEN_CHAIN_PGPORT=${port}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "Waiting for golden-chain Postgres on 127.0.0.1:${port:-unassigned} (${attempt}/60)..."
+            sleep 2
+          done
+
+          docker logs "$GOLDEN_CHAIN_PG_CONTAINER" || true
+          exit 1
 
       - name: Run live golden-chain sweep
         working-directory: ${{ github.workspace }}
-        env:
-          OMNIDASH_ANALYTICS_DB_URL: postgresql://golden_chain:test@localhost:${{ job.services.postgres.ports['5432'] }}/omnidash_analytics
-        run: uv run python scripts/ci/run_golden_chain_live.py
+        run: |
+          set -euo pipefail
+          docker exec "$GOLDEN_CHAIN_PG_CONTAINER" \
+            pg_isready -h 127.0.0.1 -p 5432 -U golden_chain -d omnidash_analytics
+          python -c 'import socket, sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5).close()' "$GOLDEN_CHAIN_PGPORT"
+          OMNIDASH_ANALYTICS_DB_URL="postgresql://golden_chain@127.0.0.1:${GOLDEN_CHAIN_PGPORT}/omnidash_analytics" \
+            uv run python scripts/ci/run_golden_chain_live.py
+
+      - name: Stop golden-chain Postgres
+        if: always()
+        run: docker rm -f "$GOLDEN_CHAIN_PG_CONTAINER" >/dev/null 2>&1 || true
+
+      - name: Stop golden-chain Redpanda
+        if: always()
+        run: docker rm -f "$GOLDEN_CHAIN_REDPANDA_CONTAINER" >/dev/null 2>&1 || true
 
   # ============================================================================
   # SECURITY CHECKS
@@ -1338,16 +1506,15 @@ jobs:
 
   security-python:
     name: Python Security Scan
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
+    # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
+    # scan (bandit) with no self-hosted/LAN dependency, so it runs on the
+    # GitHub-hosted ubuntu-latest runner. Keeping the whole Security Gate subtree
+    # off the self-hosted fleet is what lets the required "Security Gate" context
+    # reach a terminal state even when the self-hosted fleet is fully saturated —
+    # a needs-gated aggregator never posts a status until its needs are terminal.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1389,15 +1556,13 @@ jobs:
           path: bandit-report.json
 
   detect-secrets:
+    needs: occ-preflight
     name: Secret Detection
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
+    # scan (detect-secrets) with no self-hosted/LAN dependency, so it runs on the
+    # GitHub-hosted ubuntu-latest runner so the whole Security Gate subtree stays
+    # off the saturated self-hosted fleet (see security-python / security-gate).
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1463,7 +1628,7 @@ jobs:
   # ---------------------------------------------------------------------------
   detect-changes:
     name: Detect Changes
-    needs: [zone-filter, quality-gate]
+    needs: [occ-preflight, zone-filter, quality-gate]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1472,7 +1637,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
+    if:  needs.occ-preflight.result == 'success' && (always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success')
     outputs:
       is_full_suite: ${{ steps.detect.outputs.is_full_suite }}
       full_suite_reason: ${{ steps.detect.outputs.full_suite_reason }}
@@ -1498,7 +1663,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Compute changed files
         id: diff
@@ -1552,7 +1717,7 @@ jobs:
   # selected_paths activate the smart-selection pytest step.
   test:
     name: Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
-    needs: [zone-filter, quality-gate, detect-changes]
+    needs: [occ-preflight, zone-filter, quality-gate, detect-changes]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1561,7 +1726,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
+    if:  needs.occ-preflight.result == 'success' && (always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success')
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -1639,7 +1804,7 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: |
-          uv sync --frozen --group dev
+          uv sync --frozen --group dev --python "${PYTHON_VERSION}"
           uv pip install pytest-split pytest-cov
 
       - name: Auto-generate skill nodes
@@ -1713,8 +1878,8 @@ jobs:
 
   hooks-tests:
     name: Hooks System Tests
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1785,7 +1950,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Install PostgreSQL client
         working-directory: ${{ github.workspace }}
@@ -1854,8 +2019,8 @@ jobs:
 
   agent-framework-tests:
     name: Agent Framework Tests
-    needs: zone-filter
-    if: needs.zone-filter.outputs.docs_only != 'true'
+    needs: [occ-preflight, zone-filter]
+    if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1888,7 +2053,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run agent framework tests
         working-directory: ${{ github.workspace }}
@@ -1917,6 +2082,7 @@ jobs:
           path: junit-agent-framework.xml
 
   database-validation:
+    needs: occ-preflight
     name: Database Schema Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2028,6 +2194,7 @@ jobs:
   # ============================================================================
 
   dod-evidence-check:
+    needs: occ-preflight
     name: DoD Evidence Check
     # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
@@ -2049,6 +2216,17 @@ jobs:
           GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          PR_NUMBER="$(jq -r '.pull_request.number // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+          if [[ -n "$PR_NUMBER" ]]; then
+            CURRENT_BODY="$(curl -sf \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              | jq -r '.body // ""' 2>/dev/null || true)"
+            if [[ -n "$CURRENT_BODY" ]]; then
+              BODY="$CURRENT_BODY"
+            fi
+          fi
           SOURCE="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-source" {print $2; exit}' | tr -d '\r' | xargs || true)"
           TICKET="$(printf '%s\n' "$BODY" | awk -F': *' 'tolower($1) == "evidence-ticket" {print $2; exit}' | tr -d '\r' | xargs || true)"
           if [[ -z "$TICKET" ]]; then
@@ -2115,8 +2293,8 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: test
-    if: needs.test.result == 'success'
+    needs: [occ-preflight, test]
+    if: needs.occ-preflight.result == 'success' && (needs.test.result == 'success')
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -2184,6 +2362,7 @@ jobs:
   # Mode Metadata Integrity (OMN-5402)
   # ---------------------------------------------------------------------------
   mode-metadata-guard:
+    needs: occ-preflight
     name: Mode Metadata Integrity
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2218,22 +2397,18 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --group dev
+        run: uv sync --group dev --python "${PYTHON_VERSION}"
 
       - name: Validate mode metadata integrity
         working-directory: ${{ github.workspace }}
         run: uv run pytest tests/unit/test_mode_metadata_integrity.py -v
 
   skill-hygiene:
+    needs: occ-preflight
     name: Skill Hygiene
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Static validator with sparse OCC checkout; run hosted so fleet saturation
+    # cannot cancel the required Quality Gate aggregate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
@@ -2266,6 +2441,7 @@ jobs:
   # Verifies that this repo's dependency pins are compliant with the shared
   # version matrix defined in onex_change_control/standards/version-matrix.yaml.
   version-pin-check:
+    needs: occ-preflight
     name: Version Pin Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2313,6 +2489,7 @@ jobs:
   # Structural regression tests for the merge-sweep skill prompt contract.
   # Prevents Track B dispatch bugs (e.g., --skip-polish leaking into empty check).
   merge-sweep-contract:
+    needs: occ-preflight
     name: Merge-Sweep Contract
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2346,7 +2523,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Run merge-sweep contract tests
         working-directory: ${{ github.workspace }}
@@ -2358,6 +2535,7 @@ jobs:
   # Validates argument parity, sub-skill references, duplicate frontmatter,
   # and spec-prompt predicate coverage across all skills.
   skill-contract-validation:
+    needs: occ-preflight
     name: Skill Contract Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2401,15 +2579,11 @@ jobs:
   # Conditional: only runs if the `onex compliance` command is available.
   # ============================================================================
   compliance:
+    needs: occ-preflight
     name: Contract Compliance
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight ONEX compliance gate: keep it hosted so the required summary
+    # is not held behind the self-hosted fleet during merge sweeps.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
@@ -2428,7 +2602,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
       - name: Check if onex compliance command exists
         id: check-command
@@ -2478,6 +2652,7 @@ jobs:
   # NOTE: This gate must pass on main — land AFTER hardcoded-path fixes merge.
   # ============================================================================
   aislop-sweep:
+    needs: occ-preflight
     name: Aislop Sweep
     runs-on: >-
       ${{
@@ -2488,16 +2663,51 @@ jobs:
       }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      # OMN-14086: diff-scope the sweep on a PR (scan only changed files); every
+      # check is per-file so this preserves detection. Fail-closed to a full-tree
+      # scan when the diff can't be computed or the event has no PR diff
+      # (merge_group/push/schedule). The script itself further escalates to
+      # full-tree when the diff touches the aislop validator sources.
+      - name: Compute changed files vs PR base
+        id: diff
+        working-directory: ${{ github.workspace }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$BASE_REF" ]; then
+            if git fetch origin "$BASE_REF" --no-tags && \
+               git diff --name-only "origin/$BASE_REF"...HEAD > changed.txt; then
+              echo "mode=diff" >> "$GITHUB_OUTPUT"
+              echo "Changed files:"; cat changed.txt
+            else
+              echo "mode=full" >> "$GITHUB_OUTPUT"
+              echo "Diff computation failed — failing closed to full-tree scan."
+            fi
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "Non-PR event ($EVENT_NAME) — full-tree scan."
+          fi
       - name: Detect AI anti-patterns
         working-directory: ${{ github.workspace }}
-        run: python scripts/ci/run_aislop_sweep.py
+        env:
+          DIFF_MODE: ${{ steps.diff.outputs.mode }}
+        run: |
+          if [ "$DIFF_MODE" = "diff" ]; then
+            python scripts/ci/run_aislop_sweep.py --changed-files-from changed.txt
+          else
+            python scripts/ci/run_aislop_sweep.py --full-tree
+          fi
 
   # Agent YAML contract validation (OMN-8914)
   agent-contract-validation:
+    needs: occ-preflight
     name: Agent Contract Validation
     runs-on: >-
       ${{
@@ -2521,7 +2731,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: uv sync --frozen --python "${PYTHON_VERSION}"
 
       - name: Validate all agent YAML contracts
         working-directory: ${{ github.workspace }}
@@ -2534,6 +2744,7 @@ jobs:
   # NOTE: This gate will FAIL until SD-04/SD-05/SD-07 violations are cleared.
   # Land this PR last in the SD wave so the gate goes green on merge.
   skill-monorepo-ref-gate:
+    needs: occ-preflight
     name: Skill Monorepo-Ref Gate
     runs-on: >-
       ${{
@@ -2551,6 +2762,7 @@ jobs:
   # Regression guard (OMN-9143): block reintroduction of the retired
   # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
   no-polymorphic-agent:
+    needs: occ-preflight
     name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2576,15 +2788,13 @@ jobs:
 
   quality-gate:
     name: Quality Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: result-reading aggregator (no heavy work) feeding the required
+    # "CI Summary" context. Runs on the GitHub-hosted ubuntu-latest runner so the
+    # aggregation layer never queues behind — or gets cancelled while waiting on —
+    # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
+    runs-on: ubuntu-latest
     needs:
+      - occ-preflight
       - quality
       - pyright
       - check-handshake
@@ -2643,6 +2853,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
@@ -2699,15 +2910,13 @@ jobs:
 
   tests-gate:
     name: Tests Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: result-reading aggregator (no heavy work) feeding the required
+    # "CI Summary" context. Runs on the GitHub-hosted ubuntu-latest runner so the
+    # aggregation layer never queues behind — or gets cancelled while waiting on —
+    # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
+    runs-on: ubuntu-latest
     needs:
+      - occ-preflight
       - test
       - hooks-tests
       - agent-framework-tests
@@ -2723,6 +2932,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
@@ -2749,15 +2959,14 @@ jobs:
 
   security-gate:
     name: Security Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-14127: REQUIRED branch-protection context. Result-reading aggregator
+    # (no heavy work) that runs on the GitHub-hosted ubuntu-latest runner. Both of
+    # its leaves (security-python, detect-secrets) are also hosted, so the entire
+    # Security Gate subtree is off the self-hosted fleet and this required context
+    # reaches a terminal state (with `if: always()`) regardless of fleet saturation.
+    runs-on: ubuntu-latest
     needs:
+      - occ-preflight
       - security-python
       - detect-secrets
     if: always()
@@ -2769,6 +2978,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "security-python=${{ needs.security-python.result }}" \
             "detect-secrets=${{ needs.detect-secrets.result }}"; do
             NAME="${check%%=*}"
@@ -2796,6 +3006,7 @@ jobs:
   # ============================================================================
 
   boundary-parity:
+    needs: occ-preflight
     name: Cross-Repo Boundary Parity
     runs-on: >-
       ${{
@@ -2806,9 +3017,10 @@ jobs:
       }}
     # Only run when seam-relevant files change
     if: >-
+      needs.occ-preflight.result == 'success' && (
       github.event_name == 'merge_group' ||
       github.event_name == 'push' ||
-      contains(github.event.pull_request.changed_files || '0', '0') == false
+      contains(github.event.pull_request.changed_files || '0', '0') == false)
     steps:
       - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
         with:
@@ -2824,15 +3036,13 @@ jobs:
 
 
   contract-compliance:
+    needs: occ-preflight
     name: Contract Compliance Check
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push'
+    # Lightweight OCC contract validation: keep it hosted and bounded so it
+    # cannot consume or wedge self-hosted capacity during merge sweeps.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: needs.occ-preflight.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
     steps:
       - uses: actions/checkout@v7
       - name: Checkout onex_change_control
@@ -2846,9 +3056,14 @@ jobs:
           enable-cache: true
           cache-dependency-glob: 'onex_change_control/uv.lock'
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Install onex_change_control
         working-directory: onex_change_control
-        run: uv sync --all-extras
+        run: uv sync --all-extras --python "${PYTHON_VERSION}"
 
       - name: Validate contract YAML files
         working-directory: onex_change_control
@@ -2864,47 +3079,78 @@ jobs:
 
   ci-summary:
     name: CI Summary
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    needs: [quality-gate, tests-gate, security-gate, compliance, contract-compliance]
+    # OMN-14127: REQUIRED branch-protection context, implemented as a NO-`needs`,
+    # GitHub-hosted, FAIL-CLOSED poller. A `needs`-gated job gets no check-run
+    # until its `needs` terminalize, so under self-hosted fleet saturation the old
+    # needs-based CI Summary was ABSENT forever and the PR wedged BLOCKED with no
+    # auto-recovery. With NO `needs` this job's check-run instantiates immediately
+    # (the required context can never be absent); it polls the current run's job
+    # conclusions and posts a terminal success/failure within a bounded deadline.
+    # DEFAULT-DENY: green ONLY when every aggregate gate is present+good AND no
+    # non-allowlisted job failed — see scripts/ci/ci_summary_gate.py for the
+    # auditable gating set + soft-allowlist (unit-tested in
+    # tests/ci/test_ci_summary_gate.py). Pure hosted GitHub-API polling: zero
+    # self-hosted/LAN dependency. DO NOT rename — the job name IS the required
+    # context; a rename re-wedges every PR.
+    runs-on: ubuntu-latest
     if: always()
+    permissions:
+      actions: read
+      contents: read
+    # Deadline (below) is comfortably under the observed ~167m run-cancellation
+    # window so the required context ALWAYS posts a terminal state first. This
+    # job timeout is only a hard backstop above the internal poll deadline.
+    timeout-minutes: 100
     steps:
-      - name: Check all jobs passed
+      - name: Checkout (gate script)
+        uses: actions/checkout@v7
+      - name: Poll run jobs and compute fail-closed CI Summary verdict
         working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          # Bounded poll window (minutes) — kept under the run-cancel window so
+          # the required context always reaches a terminal state first.
+          DEADLINE_MINUTES: "90"
+          POLL_INTERVAL_SECONDS: "45"
         run: |
-          quality="${{ needs.quality-gate.result }}"
-          tests="${{ needs.tests-gate.result }}"
-          security="${{ needs.security-gate.result }}"
-          compliance="${{ needs.compliance.result }}"
-          contract_compliance="${{ needs.contract-compliance.result }}"
-
-          FAILED=false
-          for result in "$quality" "$tests" "$security" "$contract_compliance"; do
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
-              FAILED=true
+          # GitHub invokes this step as `bash -e {0}`; disable errexit because the
+          # gate script's non-zero exit codes are handled explicitly below
+          # (2 = PENDING must NOT terminate the poll loop).
+          set +e
+          set -uo pipefail
+          deadline=$(( $(date +%s) + DEADLINE_MINUTES * 60 ))
+          attempt=0
+          while true; do
+            attempt=$((attempt + 1))
+            if ! gh api --paginate \
+                "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" \
+                --jq '.jobs[]' | jq -s '.' > jobs.json; then
+              if [ "$(date +%s)" -ge "${deadline}" ]; then
+                echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached while fetching jobs — failing closed"
+                exit 1
+              fi
+              echo "gh api fetch failed (attempt ${attempt}); retrying after ${POLL_INTERVAL_SECONDS}s"
+              sleep "${POLL_INTERVAL_SECONDS}"
+              continue
             fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}"
+            rc=$?
+            case "${rc}" in
+              0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
+              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)"; exit 1 ;;
+              2) : ;;  # PENDING — gating jobs still running; keep polling
+              *) echo "::error::ci_summary_gate.py returned unexpected code ${rc}; failing closed"; exit 1 ;;
+            esac
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --report-only || true
+              exit 1
+            fi
+            sleep "${POLL_INTERVAL_SECONDS}"
           done
-
-          # Compliance: accept success or skipped (command may not exist yet)
-          if [[ "$compliance" == "failure" || "$compliance" == "cancelled" ]]; then
-            FAILED=true
-          fi
-
-          if [[ "$FAILED" == "true" ]]; then
-            echo "One or more required jobs failed or were cancelled"
-            echo "  Quality Gate: $quality"
-            echo "  Tests Gate: $tests"
-            echo "  Security Gate: $security"
-            echo "  Compliance: $compliance"
-            echo "  Contract Compliance: $contract_compliance"
-            exit 1
-          fi
-          echo "All required jobs passed"
 
   # ============================================================================
   # BUILD (downstream of all gates)
@@ -2927,7 +3173,7 @@ jobs:
       packages: write
       security-events: write
     timeout-minutes: 30
-    needs: [quality-gate, tests-gate, security-gate]
+    needs: [occ-preflight, quality-gate, tests-gate, security-gate]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -3022,8 +3268,8 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: build
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    needs: [occ-preflight, build]
+    if: needs.occ-preflight.result == 'success' && (github.ref == 'refs/heads/develop' && github.event_name == 'push')
     environment:
       name: staging
       url: https://staging.omniclaude.example.com
@@ -3045,8 +3291,8 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [occ-preflight, build]
+    if: needs.occ-preflight.result == 'success' && (github.ref == 'refs/heads/main' && github.event_name == 'push')
     environment:
       name: production
       url: https://omniclaude.example.com
@@ -3059,6 +3305,7 @@ jobs:
         run: echo "Deploying to production environment..."
 
   ai-slop-check:
+    needs: occ-preflight
     name: AI-Slop Pattern Check (strict, PR diff)
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-

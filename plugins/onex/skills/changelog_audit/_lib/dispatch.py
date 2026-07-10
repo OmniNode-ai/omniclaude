@@ -71,10 +71,10 @@ def _onex_state_dir() -> Path:
     if state:
         return Path(state)
     home = Path.home()
-    candidates = [
-        home / ".onex_state",
-        home / "Code" / "omni_home" / ".onex_state",
-    ]
+    candidates = [home / ".onex_state"]
+    workspace_root = os.environ.get("OMNI_HOME", "")
+    if workspace_root:
+        candidates.append(Path(workspace_root) / ".onex_state")
     for c in candidates:
         if c.exists():
             return c
@@ -184,9 +184,9 @@ def _parse_changelog_entries(
 
 def _grep_workspace(pattern: str) -> list[str]:
     """Return file:line matches for pattern across workspace Python/YAML/JSON/MD files."""
-    workspace = os.environ.get(
-        "CLAUDE_WORKSPACE", str(Path.home() / "Code" / "omni_home")
-    )
+    workspace = os.environ.get("CLAUDE_WORKSPACE") or os.environ.get("OMNI_HOME", "")
+    if not workspace:
+        return []
     try:
         result = subprocess.run(
             [

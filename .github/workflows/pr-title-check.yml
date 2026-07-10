@@ -6,10 +6,21 @@ name: PR Title Check
 
 on:
   pull_request:
-    types: [opened, edited]
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   pr-title:
+    needs: occ-preflight
     # self-gating-ok: cross-repo reusable workflow; PR Title Check is not a required status check on main (tracked in OMN-9039)
     uses: OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@main
     permissions:

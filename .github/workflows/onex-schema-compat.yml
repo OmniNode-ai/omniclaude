@@ -24,14 +24,30 @@ on:
     branches: [main, develop, 'hotfix/**']
   pull_request:
     branches: [main, dev, develop]
-  merge_group:
   workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.12'
+  UV_PYTHON: '3.12'
+  UV_CONCURRENT_DOWNLOADS: '1'
+  UV_HTTP_TIMEOUT: '900'
+  UV_SYNC_ATTEMPTS: '5'
+  UV_SYNC_RETRY_DELAY_SECONDS: '10'
+  UV_TORCH_BACKEND: cpu
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   schema-compat:
+    needs: occ-preflight
     name: ONEX Change Control Schema Compatibility
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -41,9 +57,9 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 10
+    timeout-minutes: 20
     # Only run on PRs from the same repo -- forks lack access to private onex_change_control
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: needs.occ-preflight.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - name: Checkout code
@@ -60,10 +76,25 @@ jobs:
         with:
           version: "0.6.1"
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python
+        run: uv python install "${PYTHON_VERSION}"
+
+      - name: Install native build toolchain
+        run: |
+          if command -v cc >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y build-essential
+            exit 0
+          fi
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
 
       - name: Load cached venv
         if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
@@ -74,7 +105,22 @@ jobs:
 
       - name: Install omniclaude dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --frozen
+        run: |
+          set -euo pipefail
+
+          attempt=1
+          until uv sync --frozen --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+
+            sleep_seconds=$((UV_SYNC_RETRY_DELAY_SECONDS * attempt))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
 
       - name: Install onex_change_control schema validator
         working-directory: ${{ github.workspace }}

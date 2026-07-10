@@ -35,7 +35,7 @@ class FrictionSignal:
     """Agent session identifier, if available."""
 
     ticket_id: str | None = None
-    """Associated ticket ID (e.g. 'OMN-1234'), if available."""
+    """Associated ticket ID (e.g. '<TICKET>'), if available."""
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:

@@ -35,7 +35,18 @@ on:
   merge_group:
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   scan-skip-tokens:
+    needs: occ-preflight
     name: scan / reject-skip-gate-token
     runs-on: >-
       ${{
@@ -47,22 +58,25 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
+      # OMN-13934: No `actions/checkout`. Every surface this job scans is sourced
+      # from the GitHub API (event payload, `gh pr view`, `gh pr diff`), so it
+      # needs neither working tree nor git history. The previous checkout used
+      # `fetch-depth: 0` (full history + all tags); on a COLD self-hosted runner
+      # that fetch alone exceeded the 5-minute timeout, cancelling the job (~5:11)
+      # and wedging content-innocent PRs on this REQUIRED org-wide gate. Dropping
+      # the checkout is the fix; `GH_REPO` gives `gh` its repo context without a
+      # local remote.
       - name: Resolve PR body and metadata
         id: resolve-body
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           EVENT_NAME: ${{ github.event_name }}
           MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
-        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
@@ -212,14 +226,13 @@ jobs:
       - name: Scan all PR surfaces for skip-gate bypass tokens
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RESOLVED_BODY_PATH: ${{ steps.resolve-body.outputs.body_path }}
           RESOLVED_PR_NUMBER: ${{ steps.resolve-body.outputs.pr_number }}
           RESOLVED_PR_AUTHOR: ${{ steps.resolve-body.outputs.pr_author }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           EVENT_NAME: ${{ github.event_name }}
-          GITHUB_BASE_REF: ${{ github.base_ref }}
           REPO: ${{ github.repository }}
-        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 
@@ -256,18 +269,34 @@ jobs:
             # Surface 3: Commit messages in the PR
             COMMIT_MESSAGES=$(gh pr view "${RESOLVED_PR_NUMBER}" --json commits --jq '[.commits[].messageHeadline] | join("\n")' 2>/dev/null || true)
 
-            # Surface 4: Changed file diff
-            # Only scan PR-body-like file types (md, yaml, yml, txt) to avoid
-            # false positives on source code that legitimately discusses skip tokens
-            # (validators, tests, docs). The pre-commit hook applies the same filter.
-            # Filter on filename headers ("+++ b/file.ext") then include following added lines.
-            BASE_REF="${GITHUB_BASE_REF:-main}"
-            DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '*.md' '*.yaml' '*.yml' '*.txt' ':(exclude).github/workflows/reject-deploy-gate-skip.yml' | grep '^+' || true)
+            # Surfaces 4 & 5 read the PR diff from the GitHub API (`gh pr diff`)
+            # instead of a local `git diff`, so this job needs no checkout/history
+            # (OMN-13934 — cold-runner fetch-depth:0 timeout). The awk filters
+            # reproduce the prior git pathspecs exactly: added lines only, scoped
+            # by file path, self-workflow excluded.
+            PR_DIFF_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/skip-token-prdiff.XXXXXX")"
+            gh pr diff "${RESOLVED_PR_NUMBER}" > "${PR_DIFF_FILE}" 2>/dev/null || true
 
-            # Surface 5: committed agent session evidence. This is intentionally
-            # scoped to .onex_state/evidence so source/tests can still document
-            # the token matcher without tripping the required check.
-            SESSION_EVIDENCE_DIFF=$(git diff "origin/${BASE_REF}...HEAD" -- '.onex_state/evidence/**' | grep '^+' || true)
+            # Surface 4: Changed body-like file types (md, yaml, yml, txt), added
+            # lines only, excluding this workflow file. Restricting to body-like
+            # types avoids false positives on source/tests that legitimately
+            # discuss skip tokens; the pre-commit hook applies the same filter.
+            DIFF=$(awk '
+              /^\+\+\+ / { p=$2; sub(/^b\//, "", p); f=p; next }
+              /^--- / { next }
+              /^diff --git / { f=""; next }
+              /^\+/ { if (f != "" && f ~ /\.(md|yaml|yml|txt)$/ && f != ".github/workflows/reject-deploy-gate-skip.yml") print }
+            ' "${PR_DIFF_FILE}" || true)
+
+            # Surface 5: committed agent session evidence (any file type under
+            # .onex_state/evidence/), added lines only. Scoped so source/tests can
+            # still document the token matcher without tripping the required check.
+            SESSION_EVIDENCE_DIFF=$(awk '
+              /^\+\+\+ / { p=$2; sub(/^b\//, "", p); f=p; next }
+              /^--- / { next }
+              /^diff --git / { f=""; next }
+              /^\+/ { if (f ~ /^\.onex_state\/evidence\//) print }
+            ' "${PR_DIFF_FILE}" || true)
           else
             echo "::notice::No PR number available — skipping title, commit, and diff scans."
           fi

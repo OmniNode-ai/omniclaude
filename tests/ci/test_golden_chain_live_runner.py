@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import psycopg2
 import pytest
 
 from omniclaude.hooks.topics import TopicBase
@@ -47,6 +48,60 @@ def test_project_envelope_ignores_unregistered_topic(
     )
 
     assert captured_upserts == []
+
+
+def test_parser_maps_db_dsn_to_analytics_url() -> None:
+    args = runner._parser().parse_args(
+        [
+            "--bootstrap-servers",
+            "localhost:9092",
+            "--db-dsn",
+            "postgresql://example",
+        ]
+    )
+
+    assert args.analytics_url == "postgresql://example"
+
+
+def test_initialize_database_uses_bounded_connect_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeCursor:
+        def __enter__(self) -> FakeCursor:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def execute(self, ddl: str) -> None:
+            calls.append({"ddl": ddl})
+
+    class FakeConnection:
+        autocommit = False
+
+        def __enter__(self) -> FakeConnection:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    def fake_connect(*args: object, **kwargs: object) -> FakeConnection:
+        calls.append({"args": args, "kwargs": kwargs})
+        return FakeConnection()
+
+    monkeypatch.setattr(psycopg2, "connect", fake_connect)
+
+    runner.initialize_database("postgresql://example")
+
+    assert calls[0] == {
+        "args": ("postgresql://example",),
+        "kwargs": {"connect_timeout": 2},
+    }
 
 
 @pytest.mark.parametrize(
@@ -113,3 +168,49 @@ def test_project_envelope_materializes_registered_topics(
 
     assert len(captured_upserts) == 1
     assert captured_upserts[0]["table"] == expected_table
+
+
+def test_initialize_database_retries_transient_postgres_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    executed: list[str] = []
+
+    class Cursor:
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            executed.append(query)
+
+    class Connection:
+        autocommit = False
+
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    def fake_connect(db_dsn: str, **kwargs: object) -> Connection:
+        nonlocal attempts
+        attempts += 1
+        assert db_dsn == "postgresql://example"
+        assert kwargs == {"connect_timeout": 2}
+        if attempts == 1:
+            raise psycopg2.OperationalError("service not ready")
+        return Connection()
+
+    monkeypatch.setattr(runner.psycopg2, "connect", fake_connect)
+    monkeypatch.setattr(runner.time, "sleep", lambda _seconds: None)
+
+    runner.initialize_database("postgresql://example")
+
+    assert attempts == 2
+    assert executed == [runner.DDL]

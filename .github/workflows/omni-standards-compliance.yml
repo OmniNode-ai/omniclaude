@@ -20,24 +20,29 @@ on:
     branches: [main, develop, 'hotfix/**']
   pull_request:
     branches: [main, dev, develop]
-  merge_group:
   workflow_dispatch:
 
 env:
   REPO_NAME: 'omniclaude'
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   structure-validation:
+    needs: occ-preflight
     name: Repository Structure Validation
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 5
+    # Pure filesystem validation. Keep it hosted so runner saturation cannot
+    # cancel the check and falsely fail the required standards aggregator.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -69,15 +74,11 @@ jobs:
           echo "All required omniclaude directories present."
 
   agent-yaml-compliance:
+    needs: occ-preflight
     name: Agent YAML Compliance
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Filesystem-only validation. Keep it hosted so self-hosted runner saturation
+    # cannot cancel the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -123,15 +124,11 @@ jobs:
           echo "All agent YAMLs pass compliance checks."
 
   ecosystem-validation:
+    needs: occ-preflight
     name: Ecosystem Integration Validation
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Pure filesystem/JSON validation. Keep it hosted so runner saturation cannot
+    # cancel the check and falsely fail the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -200,15 +197,11 @@ jobs:
           "
 
   legacy-compatibility-check:
+    needs: occ-preflight
     name: Legacy Compatibility Check
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Pure filesystem validation. Keep it hosted so runner saturation cannot
+    # cancel the check and falsely fail the required standards aggregator.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -251,15 +244,11 @@ jobs:
           echo "Legacy compatibility check passed."
 
   pr-safety-enforcement:
+    needs: occ-preflight
     name: PR Safety Mutation Surface Enforcement
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Lightweight PR metadata policy check. Keep it hosted so cancellation storms
+    # do not falsely fail the standards gate.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     # Enforces that only skills/_lib/pr-safety/ may reference PR mutation paths
     # and commands. Added in OMN-2632.
@@ -438,16 +427,12 @@ jobs:
 
   omni-standards-gate:
     name: Omni Standards Gate
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # Result-reading aggregator only. Keep the required context hosted so it can
+    # always post once its needs terminalize.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
+      - occ-preflight
       - structure-validation
       - agent-yaml-compliance
       - ecosystem-validation
@@ -462,6 +447,7 @@ jobs:
           FAILED=false
 
           for check in \
+            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "structure-validation=${{ needs.structure-validation.result }}" \
             "agent-yaml-compliance=${{ needs.agent-yaml-compliance.result }}" \
             "ecosystem-validation=${{ needs.ecosystem-validation.result }}" \
@@ -486,6 +472,7 @@ jobs:
           echo "Omni Standards Gate PASSED"
 
   ci-naming-convention:
+    needs: occ-preflight
     name: CI Naming Convention
     runs-on: >-
       ${{

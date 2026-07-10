@@ -1,0 +1,105 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-13501 / OMN-13502 (WS-F): no-faked-boundary gate — ENFORCING for omniclaude.
+#
+# A hand-written class/object standing in for the platform's OWN inference /
+# routing / dispatch boundary (agent router, skill dispatcher, local-LLM
+# inference egress, dispatch bridge) that returns canned / prompt-echoed output,
+# or a patch("httpx.Client") / MagicMock substituting that egress inside a
+# real-dispatch test, is a FAKE of our architecture. This gate turns the
+# "handler-isolation tests pass while live fails" failure mode into a mechanical
+# detector.
+#
+# The detector is the pure COMPUTE HandlerNoFakedBoundaryCompute (OMN-13497)
+# executed over the in-memory event bus by runtime_no_faked_boundary, shipped in
+# omnibase_core 0.46.4 (PR #1377 detector-FP fix + PR #1379 gate; released
+# 2026-07-03). omniclaude takes 0.46.4 via OMN-13898/OMN-13894. The canonical
+# recorded-replay seam (patch("httpx.Client",
+# return_value=<RecordedReplayInferenceTransport>), OMN-13499) is exempt.
+#
+# ENFORCING: the REAL burn-down (recorded-replay transports for the
+# egress/agent sites and real EventBusInmemory wiring for the routing sites)
+# landed in OMN-13500 (#1849), taking omniclaude's detector self-scan from 61
+# findings (55 mock_assigned_to_boundary + 6 patch_httpx_egress) to zero. This
+# PR (OMN-13501/13502 Phase 3) drops --report-only so the gate fails the build
+# on any new faked-boundary finding, and the job name becomes a dev
+# branch-protection required context (wedge-safe: merge_group trigger, no
+# paths filter, fail-propagating). Mirrors omnibase_core's blocking gate.
+#
+# Suppress an approved fixture line with:  # onex-allow-faked-boundary
+
+name: No Faked Boundary Gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.12'
+  UV_CONCURRENT_DOWNLOADS: '1'
+  UV_HTTP_TIMEOUT: '600'
+  UV_SYNC_ATTEMPTS: '5'
+  UV_SYNC_RETRY_DELAY_SECONDS: '10'
+  UV_TORCH_BACKEND: cpu
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  no-faked-boundary-gate:
+    needs: occ-preflight
+    name: No Faked Boundary Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Install Python
+        run: uv python install "${PYTHON_VERSION}"
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          attempt=1
+          until uv sync --frozen --no-dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+
+            sleep_seconds=$((UV_SYNC_RETRY_DELAY_SECONDS * attempt))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Run no-faked-boundary gate (full src + tests, ENFORCING)
+        run: |
+          uv run python -m omnibase_core.validation.no_faked_boundary.runtime_no_faked_boundary \
+            src tests

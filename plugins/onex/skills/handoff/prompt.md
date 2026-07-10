@@ -25,12 +25,13 @@ For each claim, run the minimum command that directly proves or refutes it:
 
 ```bash
 # RUNTIME_HOST resolves from the environment (set in ~/.omnibase/.env)
-RUNTIME_HOST="${RUNTIME_HOST:?RUNTIME_HOST must be set to the .201 server address}"
+RUNTIME_HOST="${RUNTIME_HOST:?RUNTIME_HOST must be set to the runtime server address}"
+SSH_USER="${SSH_USER:?SSH_USER must be set to the runtime ssh login}"
 
 # Lane/container count
-ssh "jonah@${RUNTIME_HOST}" "docker ps --filter 'label=compose.project=<project>' --format '{{.Names}}' | wc -l"
+ssh "${SSH_USER}@${RUNTIME_HOST}" "docker ps --filter 'label=compose.project=<project>' --format '{{.Names}}' | wc -l"
 # Deployed SHA
-ssh "jonah@${RUNTIME_HOST}" "docker inspect <container> --format '{{.Config.Image}}'"
+ssh "${SSH_USER}@${RUNTIME_HOST}" "docker inspect <container> --format '{{.Config.Image}}'"
 # Endpoint health
 curl -sf "http://${RUNTIME_HOST}:<port>/v1/health" || echo "DEAD"
 # PR/group counts
@@ -56,7 +57,7 @@ orders). Otherwise:
 ### 2.1 Identify the prior handoff
 
 ```bash
-cat docs/handoffs/LATEST.md 2>/dev/null || echo "no LATEST.md"
+cat docs/handoff/LATEST.md 2>/dev/null || echo "no LATEST.md"
 ```
 
 ### 2.2 Retract-or-reaffirm standing directives
@@ -69,7 +70,7 @@ Read every directive in the prior handoff. For each, add one inline marker:
 ### 2.3 Tombstone the prior handoff
 
 ```bash
-PRIOR=$(cat docs/handoffs/LATEST.md)
+PRIOR=$(cat docs/handoff/LATEST.md)
 echo "" >> "$PRIOR"
 echo "> SUPERSEDED by <this_handoff_path> at ${PROBE_TIME}" >> "$PRIOR"
 ```
@@ -77,7 +78,7 @@ echo "> SUPERSEDED by <this_handoff_path> at ${PROBE_TIME}" >> "$PRIOR"
 ### 2.4 Update LATEST.md pointer
 
 ```bash
-echo "docs/handoffs/<this_handoff_filename>.md" > docs/handoffs/LATEST.md
+echo "docs/handoff/<this_handoff_filename>.md" > docs/handoff/LATEST.md
 ```
 
 ---
@@ -105,7 +106,7 @@ as the resolution. Free text is not a valid resolution.
 ## Stale-Doc Findings
 
 - docs/CLAUDE.md: FIXED:a1b2c3d
-- docs/architecture/lane-census.md: DEFERRED:OMN-13034
+- docs/architecture/lane-census.md: DEFERRED:<TICKET>
 ```
 
 Validate each finding against `ModelStaleDocFinding` from
@@ -176,7 +177,7 @@ if [[ -z "$STATE_AS_OF" ]] || [[ "$STATE_AS_OF" < "$PROBE_TIME" ]]; then
 
 > **SUPERSEDED** — runtime state as of this document (${STATE_AS_OF:-epoch}) is
 > older than the final handoff probe time (${PROBE_TIME}). Do not use this
-> document's runtime claims for planning. See: docs/handoffs/<this_handoff>
+> document's runtime claims for planning. See: docs/handoff/<this_handoff>
 EOF
 fi
 ```
@@ -192,8 +193,8 @@ After all five phases pass, commit every modified file.
 ### 6.1 Stage handoff artifacts
 
 ```bash
-git add docs/handoffs/<this_handoff_filename>.md
-git add docs/handoffs/LATEST.md
+git add docs/handoff/<this_handoff_filename>.md
+git add docs/handoff/LATEST.md
 # Stage every docs/** file cited in the handoff body that was modified:
 git add <each cited docs/** path>
 ```

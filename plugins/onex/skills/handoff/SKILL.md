@@ -87,7 +87,7 @@ When a prior handoff or standing-orders directive is superseded:
    > SUPERSEDED by <path-to-this-handoff> at <UTC timestamp>
    ```
    This edit is part of the terminal commit (behavior c).
-3. **LATEST.md pointer**: write or overwrite `docs/handoffs/LATEST.md` with a
+3. **LATEST.md pointer**: write or overwrite `docs/handoff/LATEST.md` with a
    one-line pointer to the new handoff path. Include in the terminal commit.
 
 Failing to tombstone means the next session operator may resume from stale context.
@@ -98,7 +98,7 @@ The handoff session MUST NOT end with uncommitted handoff artifacts. Before
 emitting the handoff summary to the operator:
 
 1. `git add <handoff_file>` — the primary handoff document.
-2. `git add docs/handoffs/LATEST.md` — the LATEST pointer (behavior b).
+2. `git add docs/handoff/LATEST.md` — the LATEST pointer (behavior b).
 3. `git add <every docs/** path cited in the handoff body>` — stale-doc fixes,
    tombstoned prior handoffs, plan updates referenced by name.
 4. `git commit -m "docs: night-final handoff <date> [OMN-session]"`
@@ -207,6 +207,6 @@ topics.yaml  → no Kafka topics (local enforcement only)
 
 ## See Also
 
-- `docs/evidence/2026-06-11-architecture-investigation/PROCESS_FAILURE_RETRO.md` in the omni_home registry §3.C item C-1
+- `docs/evidence/2026-06-11-architecture-investigation/PROCESS_FAILURE_RETRO.md` in the canonical registry §3.C item C-1
 - `/onex:session` — runtime session orchestrator (session state, health gates, dispatch)
 - `/onex:runtime_closeout` — deploy + proof-matrix closeout (runtime artifacts)

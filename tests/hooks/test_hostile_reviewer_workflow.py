@@ -142,6 +142,99 @@ def test_review_step_invokes_cli_review_with_model(
     assert "--pr" in combined and "--repo" in combined, (
         "review job must pass --pr and --repo to cli_review"
     )
+    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in combined, (
+        "review JSON must be passed through the environment because the "
+        "heredoc occupies Python stdin"
+    )
+    assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in combined, (
+        "do not pipe review JSON into python3 - with a heredoc; Python reads "
+        "the script from stdin and the JSON payload is lost"
+    )
+
+
+def test_dependency_clones_track_dev_and_review_install_excludes_rl(
+    workflow: dict[object, object],
+) -> None:
+    """Reviewer support repos must track dev and avoid the Torch/RL install path."""
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+
+    steps = review_job.get("steps") or []
+    assert isinstance(steps, list) and steps
+    run_blocks = [
+        step.get("run", "")
+        for step in steps
+        if isinstance(step, dict) and isinstance(step.get("run"), str)
+    ]
+    combined = "\n".join(run_blocks)
+
+    for repo in ("omniintelligence", "omnibase_core", "omnibase_compat"):
+        repo_url = f"https://github.com/OmniNode-ai/{repo}.git"
+        assert repo_url in combined, f"{repo} clone must be present"
+        assert "--branch dev" in combined, "dependency clones must track dev"
+        assert "--branch main" not in combined, f"{repo} clone must not track main"
+
+    assert "uv sync --locked --all-extras --python 3.12" in combined, (
+        "reviewer dependency install must use the locked review path"
+    )
+    assert "uv sync --all-extras" not in combined, (
+        "bare all-extras install can pull stale main/lock behavior and CUDA wheels"
+    )
+    assert "--group rl" not in combined, (
+        "hostile reviewer must not install the opt-in RL/Torch dependency group"
+    )
+
+
+def test_dependency_install_failure_degrades_instead_of_blocking(
+    workflow: dict[object, object],
+) -> None:
+    """Dependency setup failures are infrastructure degradation, not findings."""
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+
+    steps = review_job.get("steps") or []
+    assert isinstance(steps, list) and steps, "review job must have steps"
+
+    install_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict)
+            and step.get("name") == "Install omniintelligence dependencies"
+        ),
+        None,
+    )
+    assert isinstance(install_step, dict), "dependency install step must exist"
+    assert install_step.get("id") == "install_deps", (
+        "dependency install step must expose an outcome to the review step"
+    )
+    assert install_step.get("continue-on-error") is True, (
+        "dependency install failures must reach the review step as degraded output"
+    )
+
+    review_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict) and step.get("id") == "review"
+        ),
+        None,
+    )
+    assert isinstance(review_step, dict), "review step must exist"
+    env = review_step.get("env")
+    assert isinstance(env, dict)
+    assert env.get("INSTALL_DEPS_OUTCOME") == "${{ steps.install_deps.outcome }}"
+
+    run_text = review_step.get("run")
+    assert isinstance(run_text, str)
+    assert 'if [ "$INSTALL_DEPS_OUTCOME" != "success" ]; then' in run_text
+    assert "verdict=degraded" in run_text
+    assert "omniintelligence dependency install failed" in run_text
+    assert "exit 0" in run_text
 
 
 def test_summary_comment_step_present(workflow: dict[object, object]) -> None:

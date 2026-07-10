@@ -35,13 +35,23 @@ on:
     branches: [main, dev]
   push:
     branches: [main]
-  merge_group:
 
 permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   concurrency-primitive-guard:
+    needs: occ-preflight
     name: concurrency-primitive-guard
     # OMNI_RUNNER_SELECTOR_V1 — trusted events use self-hosted runner;
     # public fork PRs use ubuntu-latest.
@@ -64,7 +74,20 @@ jobs:
       - name: Fetch base branch for diff
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin "${{ github.base_ref }}" --quiet
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if git fetch origin "${{ github.base_ref }}" --quiet; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::git fetch origin ${{ github.base_ref }} failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * 10))
+            echo "::warning::git fetch attempt ${attempt}/3 failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+          done
 
       - name: Set up Python
         uses: actions/setup-python@v6

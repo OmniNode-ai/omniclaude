@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""check_system_health execute — fast system snapshot [OMN-8853].
+"""check_system_health execute — fast system snapshot [<TICKET>].
 
 Checks Docker services and critical systemd units (system + user scopes).
 """
@@ -21,7 +21,7 @@ if _SKILLS_DIR not in sys.path:
 
 from systemd_helper import EnumSystemdUnitState, check_systemd_unit  # noqa: E402
 
-# Critical systemd units to probe on the .201 host.
+# Critical systemd units to probe on the runtime host.
 _SYSTEMD_UNITS: list[str] = [
     "deploy-agent.service",
     "omnidash.service",

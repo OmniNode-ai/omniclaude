@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Validate that deterministic SKILL.md claims have backing-node behavior.
 
-OMN-9075 first slice: extract high-signal receipt/artifact/event claims from
+<TICKET> first slice: extract high-signal receipt/artifact/event claims from
 SKILL.md files and fail when the backing node has no corresponding behavior.
 This intentionally starts with deterministic patterns instead of broad NLP.
 """

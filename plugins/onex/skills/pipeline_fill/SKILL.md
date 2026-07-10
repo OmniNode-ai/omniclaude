@@ -193,7 +193,7 @@ They accept the same `ModelPipelineFillCommand` fields (`correlation_id`, `top_n
 `wave_cap`, `min_score`, `dry_run`, `state_dir`) — `run-node`'s `--input` takes
 the JSON payload inline as text, `node`/`run`'s `--input` takes a path to a
 JSON file. `pipeline_fill` is registered for the newer single-command `onex
-skill <name>` dispatch (OMN-13688, mirroring `onex:session`'s migration) in
+skill <name>` dispatch (<TICKET>, mirroring `onex:session`'s migration) in
 `omnibase_infra`'s `skill_mapping.yaml`, but that registration has not yet
 reached the omnibase-infra release pinned by omnimarket — `onex skill
 pipeline_fill` currently fails with `Unknown skill 'pipeline_fill'` (verified

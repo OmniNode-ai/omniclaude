@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Each epic gets a dedicated integration branch. Instead of PRs going directly to `main`,
-they merge into the epic integration branch first. Only the integration branch merges to main.
+Each epic gets a dedicated integration branch. Instead of PRs going directly to `dev`,
+they merge into the epic integration branch first. Only the integration branch merges to dev.
 This prevents individual PR ordering bugs and catches epic-level integration failures early.
 
 ## Branch Naming Convention
@@ -15,14 +15,14 @@ Example: `epic/<epic_id>/integration`
 ## `create_integration_branch(epic_id, repo)` — Procedure
 
 ```bash
-# Pull latest main
-git -C /Volumes/PRO-G40/Code/omni_worktrees/{ticket}/{repo} pull origin main --ff-only  # local-path-ok documentation example showing worktree path pattern
+# Pull latest dev
+git -C $ONEX_WORKTREES_ROOT/{ticket}/{repo} pull origin dev --ff-only
 
-# Create integration branch from main
-git -C /Volumes/PRO-G40/Code/omni_worktrees/{ticket}/{repo} checkout -b epic/{epic_id}/integration  # local-path-ok documentation example showing worktree path pattern
+# Create integration branch from dev
+git -C $ONEX_WORKTREES_ROOT/{ticket}/{repo} checkout -b epic/{epic_id}/integration
 
 # Push to origin
-git -C /Volumes/PRO-G40/Code/omni_worktrees/{ticket}/{repo} push origin epic/{epic_id}/integration  # local-path-ok documentation example showing worktree path pattern
+git -C $ONEX_WORKTREES_ROOT/{ticket}/{repo} push origin epic/{epic_id}/integration
 ```
 
 This is called once per epic, not once per ticket.
@@ -32,7 +32,7 @@ This is called once per epic, not once per ticket.
 Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 
 1. Confirm PR is labeled `mergeable` (check labels via `gh pr view`)
-2. Confirm PR is rebased on `epic/{epic_id}/integration`, not `main`
+2. Confirm PR is rebased on `epic/{epic_id}/integration`, not `dev`
    - If not: use `mutate_pr(pr_key, action="rebase_for_integration", run_id=run_id, fn=...)` to update the base branch
 3. Merge via `mutate_pr(pr_key, action="merge_into_integration", run_id=run_id, fn=...)`:
    - Inside `fn`: invoke the squash-merge subprocess command for the PR (use `@_lib/pr-safety/helpers.md` for the merge call)
@@ -44,7 +44,7 @@ Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 ## `run_integration_tests(epic_id, repo)` — Procedure
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_worktrees/{any_ticket}/{repo}  # local-path-ok documentation example showing worktree path pattern
+cd $ONEX_WORKTREES_ROOT/{any_ticket}/{repo}
 git checkout epic/{epic_id}/integration
 git pull origin epic/{epic_id}/integration
 uv run pytest tests/ -m "not slow" --tb=short -q 2>&1 | tee $ONEX_STATE_DIR/epics/{epic_id}/integration_test_results.txt
@@ -70,7 +70,7 @@ Write `$ONEX_STATE_DIR/epics/{epic_id}/integration_report.md`:
 {paste test output summary}
 
 ## Recommendation
-{"READY TO MERGE TO MAIN" or "BLOCKED — fix failures before merging to main"}
+{"READY TO MERGE TO DEV" or "BLOCKED — fix failures before merging to dev"}
 ```
 
 Post report summary to the epic Slack thread (LOW_RISK, no gate).

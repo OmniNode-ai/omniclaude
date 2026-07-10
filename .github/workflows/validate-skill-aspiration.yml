@@ -22,18 +22,29 @@ on:
       - 'scripts/validation/validate_skill_aspiration.py'
       - 'tests/unit/skills/_lib/test_validate_skill_aspiration.py'
       - '.github/workflows/validate-skill-aspiration.yml'
-  merge_group:
 
 env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.6.1"
+  UV_HTTP_TIMEOUT: "600"
 
 concurrency:
   group: skill-aspiration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   validate:
+    needs: occ-preflight
     name: validate
     runs-on: >-
       ${{
@@ -67,7 +78,18 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
-        run: uv sync --all-extras
+        run: |
+          for attempt in 1 2 3; do
+            if uv sync --all-extras --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep_seconds=$((attempt * 10))
+              echo "::warning::uv sync attempt ${attempt}/3 failed; retrying in ${sleep_seconds}s"
+              sleep "$sleep_seconds"
+            fi
+          done
+          exit 1
 
       - name: Run skill aspiration unit tests
         working-directory: ${{ github.workspace }}

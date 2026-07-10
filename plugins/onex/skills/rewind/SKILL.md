@@ -36,7 +36,7 @@ Enables temporal queries like "What was CAIA doing yesterday at 3pm?"
 ```
 ### CAIA — April 1, 2026 3:00pm - 4:30pm
 
-**Ticket:** TASK-7241 | **Branch:** jonah/task-7241-learning-models
+**Ticket:** TASK-7241 | **Branch:** <user>/task-7241-learning-models
 **Outcome:** success (1.5 hours)
 **Files:** src/omnibase_infra/models/agent_learning/model_agent_learning.py (+4 more)
 **Errors encountered:** 2 (ImportError, pytest failure)

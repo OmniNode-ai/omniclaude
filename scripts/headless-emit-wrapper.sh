@@ -99,6 +99,7 @@ emit_task_event() {
     # Produce via kcat against the configured broker. -P producer mode,
     # -c 1 exits after one message so kcat never blocks. Capture stderr
     # so the degraded log preserves the root cause.
+    set +e
     if [[ -n "${timeout_cmd}" ]]; then
       emit_err="$(printf '%s' "${payload}" \
         | "${timeout_cmd}" "${HEADLESS_EMIT_KCAT_TIMEOUT_SEC}" \
@@ -108,6 +109,7 @@ emit_task_event() {
         | kcat -P -b "${HEADLESS_EMIT_BROKERS}" -t "${topic}" -c 1 2>&1)"
     fi
     rc=$?
+    set -e
   fi
 
   if [[ "${rc}" -eq 0 ]]; then

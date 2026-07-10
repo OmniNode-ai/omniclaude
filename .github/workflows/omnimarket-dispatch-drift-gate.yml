@@ -30,7 +30,6 @@ on:
       - 'scripts/check_omnimarket_dispatch_drift.py'
       - '.pre-commit-hooks/check-omnimarket-dispatch-drift.sh'
       - '.github/workflows/omnimarket-dispatch-drift-gate.yml'
-  merge_group:
 
 # Least-privilege: this gate only reads the checked-out tree and runs a stdlib
 # validator.  No write scopes (Checkov CKV2_GHA_1 / write-all default).
@@ -38,7 +37,18 @@ permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   omnimarket-dispatch-drift-gate:
+    needs: occ-preflight
     name: Omnimarket Dispatch Drift Gate
     runs-on: >-
       ${{
@@ -69,6 +79,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           OMNIMARKET_EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
+          UV_HTTP_TIMEOUT: '900'
         run: |
           # tomllib is stdlib (Python 3.11+); no install step needed.
           # No live daemon venv on CI runners — gate runs in lock-consistency mode.

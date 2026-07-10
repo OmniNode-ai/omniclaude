@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -29,6 +28,7 @@ from omniclaude.nodes.node_agent_router.models import (
     ModelAgentRouterRequest,
     ModelAgentRouterResult,
 )
+from tests.support.fake_agent_router import FakeAgentRouter
 
 # ---------------------------------------------------------------------------
 # Minimal stubs matching AgentRecommendation / ConfidenceScore dataclass shape
@@ -91,9 +91,9 @@ class TestRouteSuccess:
     async def test_route_returns_routed_true_when_recommendations(self) -> None:
         handler = HandlerAgentRouter()
         rec = _StubRecommendation()
-        mock_router = MagicMock()
-        mock_router.route.return_value = [rec]
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [rec]
+        handler._router = fake_router
 
         result = await handler.route(_make_request())
 
@@ -118,9 +118,9 @@ class TestRouteSuccess:
             reason="api trigger",
             definition_path="/fake/agent-api.yaml",
         )
-        mock_router = MagicMock()
-        mock_router.route.return_value = [rec]
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [rec]
+        handler._router = fake_router
 
         result = await handler.route(_make_request("design an api"))
 
@@ -140,27 +140,25 @@ class TestRouteSuccess:
     @pytest.mark.unit
     async def test_route_passes_context_to_router(self) -> None:
         handler = HandlerAgentRouter()
-        mock_router = MagicMock()
-        mock_router.route.return_value = []
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = []
+        handler._router = fake_router
 
         ctx = {"domain": "testing", "session_id": "abc123"}
         await handler.route(_make_request(context=ctx))
 
-        call_kwargs = mock_router.route.call_args
-        assert call_kwargs.kwargs["context"] == ctx
+        assert fake_router.last_route_call["context"] == ctx
 
     @pytest.mark.unit
     async def test_route_passes_max_recommendations_to_router(self) -> None:
         handler = HandlerAgentRouter()
-        mock_router = MagicMock()
-        mock_router.route.return_value = []
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = []
+        handler._router = fake_router
 
         await handler.route(_make_request(max_recommendations=7))
 
-        call_kwargs = mock_router.route.call_args
-        assert call_kwargs.kwargs["max_recommendations"] == 7
+        assert fake_router.last_route_call["max_recommendations"] == 7
 
     @pytest.mark.unit
     async def test_route_multiple_recommendations_preserved_order(self) -> None:
@@ -176,9 +174,9 @@ class TestRouteSuccess:
                 agent_name="agent-c", confidence=_StubConfidence(total=0.5)
             ),
         ]
-        mock_router = MagicMock()
-        mock_router.route.return_value = recs
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = recs
+        handler._router = fake_router
 
         result = await handler.route(_make_request())
 
@@ -197,9 +195,9 @@ class TestRouteEmpty:
     @pytest.mark.unit
     async def test_route_returns_routed_false_when_empty_list(self) -> None:
         handler = HandlerAgentRouter()
-        mock_router = MagicMock()
-        mock_router.route.return_value = []
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = []
+        handler._router = fake_router
 
         result = await handler.route(_make_request())
 
@@ -226,9 +224,9 @@ class TestRouteFailure:
     @pytest.mark.unit
     async def test_route_returns_empty_when_router_raises(self) -> None:
         handler = HandlerAgentRouter()
-        mock_router = MagicMock()
-        mock_router.route.side_effect = RuntimeError("registry broken")
-        handler._router = mock_router
+        fake_router = FakeAgentRouter()
+        fake_router.route_exc = RuntimeError("registry broken")
+        handler._router = fake_router
 
         result = await handler.route(_make_request())
 

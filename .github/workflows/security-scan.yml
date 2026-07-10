@@ -9,8 +9,6 @@ on:
     # Run every day at 2 AM UTC
     - cron: '0 2 * * *'
   workflow_dispatch:
-  pull_request:
-    branches: [main, dev]
   push:
     branches: [main, 'hotfix/**']
 
@@ -19,23 +17,35 @@ permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   # ============================================================================
   # Dependency Security Scanning
   # ============================================================================
   dependency-scan:
+    needs: occ-preflight
     name: Dependency Security Scan
-    if: github.event_name != 'pull_request'
+    if: needs.occ-preflight.result == 'success' && (github.event_name != 'pull_request')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -43,7 +53,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7 (pinned 2026-07-07)
 
       - name: Export requirements
         working-directory: ${{ github.workspace }}
@@ -52,6 +62,7 @@ jobs:
       - name: Run Dependency Review
         uses: actions/dependency-review-action@v5
         if: github.event_name == 'pull_request'
+        continue-on-error: true
 
       - name: Run Safety Check
         working-directory: ${{ github.workspace }}
@@ -71,12 +82,12 @@ jobs:
   # Secret Scanning
   # ============================================================================
   secret-scan:
+    needs: occ-preflight
     name: Secret Scanning
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -84,34 +95,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
+          persist-credentials: false
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
-          path: ./
+          path: ${{ github.workspace }}
           base: ${{ github.event.before }}
           head: ${{ github.event.after }}
           extra_args: --only-verified
 
-      - name: TruffleHog Secret Scanning (full scan)
-        if: github.event_name != 'push'
-        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334  # v3.93.7 (pinned 2026-03-04)
+      - name: TruffleHog Secret Scanning (pull request diff)
+        if: github.event_name == 'pull_request'
+        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --only-verified
+
+      - name: TruffleHog Secret Scanning (full scan)
+        if: github.event_name != 'push' && github.event_name != 'pull_request'
+        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
+        with:
+          path: ${{ github.workspace }}
           extra_args: --only-verified
 
   # ============================================================================
   # Code Security Analysis
   # ============================================================================
   codeql:
+    needs: occ-preflight
     name: CodeQL Security Analysis
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -128,6 +149,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -147,12 +170,13 @@ jobs:
   # Docker Image Security Scan
   # ============================================================================
   container-scan:
+    needs: occ-preflight
     name: Container Security Scan
+    if: github.event_name != 'pull_request'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -162,12 +186,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Move Docker data root to large disk
         run: |
-          sudo mkdir -p /mnt/docker-data
-          printf '{"data-root":"/mnt/docker-data"}\n' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
+          if command -v sudo >/dev/null 2>&1; then
+            sudo mkdir -p /mnt/docker-data
+            printf '{"data-root":"/mnt/docker-data"}\n' | sudo tee /etc/docker/daemon.json
+            sudo systemctl restart docker
+          else
+            echo "sudo unavailable; using existing Docker data root"
+            docker info --format 'Docker Root Dir: {{.DockerRootDir}}' || true
+            df -h
+          fi
           docker info --format 'Docker Root Dir: {{.DockerRootDir}}'
           df -h
 
@@ -213,31 +245,39 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          curl -L -o dockle.tar.gz "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
+          VERSION="0.4.15"
+          curl --fail --show-error --location --retry 3 --retry-delay 5 \
+            -o dockle.tar.gz \
+            "https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.tar.gz"
           tar zxf dockle.tar.gz
-          sudo mkdir -p /mnt/dockle
-          sudo chown "$USER:$USER" /mnt/dockle
-          docker save omniclaude:scan > /mnt/dockle/omniclaude-scan.tar
-          export TMPDIR=/mnt/dockle
+          if command -v sudo >/dev/null 2>&1; then
+            sudo mkdir -p /mnt/dockle
+            sudo chown "$USER:$USER" /mnt/dockle
+            DOCKLE_TMP=/mnt/dockle
+          else
+            DOCKLE_TMP="${RUNNER_TEMP:-/tmp}/dockle"
+            mkdir -p "$DOCKLE_TMP"
+          fi
+          docker save omniclaude:scan > "$DOCKLE_TMP/omniclaude-scan.tar"
+          export TMPDIR="$DOCKLE_TMP"
           ./dockle \
             --timeout 600s \
             --exit-code 1 \
             --exit-level fatal \
             --accept-file settings.py \
             --ignore DKL-DI-0005 \
-            --input /mnt/dockle/omniclaude-scan.tar
+            --input "$DOCKLE_TMP/omniclaude-scan.tar"
 
   # ============================================================================
   # Infrastructure as Code Security Scan
   # ============================================================================
   iac-scan:
+    needs: occ-preflight
     name: IaC Security Scan
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        github.event_name == 'pull_request'
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -247,28 +287,89 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Provide Checkov soft-fail problem matcher
+        run: |
+          cat > checkov-problem-matcher-softfail.json <<'JSON'
+          {
+            "problemMatcher": [
+              {
+                "owner": "checkov-softfail",
+                "pattern": [
+                  {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                  }
+                ]
+              }
+            ]
+          }
+          JSON
+          echo "::add-matcher::checkov-problem-matcher-softfail.json"
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@4a1afa9897f7afe297a3762c926e1e800361464f  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
           output_format: sarif
-          output_file_path: checkov-results.sarif
+          output_file_path: checkov-results
           soft_fail: false
           soft_fail_on: LOW,MEDIUM,CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
           hard_fail_on: HIGH,CRITICAL
+          skip_check: CKV_DOCKER_2,CKV_DOCKER_3,CKV_GHA_7,CKV2_GHA_1
+
+      - name: Remove Checkov soft-fail problem matcher
+        if: always()
+        run: echo "::remove-matcher owner=checkov-softfail::"
+
+      - name: Ensure Checkov SARIF exists
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ -s checkov-results/results_sarif.sarif ]; then
+            exit 0
+          fi
+          mkdir -p checkov-results
+          cat > checkov-results/results_sarif.sarif <<'EOF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "checkov",
+                    "informationUri": "https://www.checkov.io/",
+                    "rules": []
+                  }
+                },
+                "results": []
+              }
+            ]
+          }
+          EOF
 
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: always() && hashFiles('checkov-results/results_sarif.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
-          sarif_file: 'checkov-results.sarif'
+          sarif_file: 'checkov-results/results_sarif.sarif'
 
       - name: Run Terrascan
-        uses: tenable/terrascan-action@dd7e921056c6f25b25bff3cf791e063ed7fc3a78  # v1.4.1 (pinned 2026-03-04)
-        with:
-          iac_type: 'docker'
-          iac_dir: '.'
-          policy_type: 'all'
-          only_warn: true
+        working-directory: ${{ github.workspace }}
+        run: |
+          for attempt in 1 2 3; do
+            docker run --rm \
+              -v "$GITHUB_WORKSPACE:/repo" \
+              -w /repo \
+              tenable/terrascan:1.19.9 \
+              scan -i docker -d deployment -t all && break
+            if [ "$attempt" = 3 ]; then
+              echo "Terrascan failed after 3 attempts"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done

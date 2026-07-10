@@ -28,7 +28,6 @@ on:
       - '.pre-commit-hooks/check-daemon-venv-skew.sh'
       - 'plugins/onex/hooks/scripts/ensure-plugin-venv.sh'
       - '.github/workflows/daemon-venv-skew-gate.yml'
-  merge_group:
 
 # Least-privilege: this gate only reads the checked-out tree and runs a stdlib
 # validator. No write scopes (Checkov CKV2_GHA_1 / write-all default).
@@ -36,7 +35,18 @@ permissions:
   contents: read
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   daemon-venv-skew-gate:
+    needs: occ-preflight
     name: Daemon Venv Skew Gate
     runs-on: >-
       ${{

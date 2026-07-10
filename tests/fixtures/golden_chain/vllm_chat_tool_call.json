@@ -1,0 +1,56 @@
+{
+  "fixture_version": "golden_chain_fixture.v1",
+  "provenance": {
+    "endpoint": "http://localhost:8000/v1/chat/completions",
+    "endpoint_ref": "local-coder",
+    "fixture_version": "golden_chain_fixture.v1",
+    "model_id": "Qwen3.6-35B-A3B",
+    "prompt_hash": "sha256:4d9f65360f0c1b9e41f47b731a5e424185c72b23992aad7500ef253fefff3196",
+    "provider": "vllm",
+    "recorded_at": "2026-07-03T17:30:16.307177+00:00",
+    "request_hash": "sha256:d8b24ada5390e87a4e015bab6c2b57bcd8f78882f5042d31659e1e8c0d111103",
+    "routing_contract_hash": "none",
+    "routing_overlay_hash": "none"
+  },
+  "raw_response": {
+    "choices": [
+      {
+        "finish_reason": "tool_calls",
+        "index": 0,
+        "logprobs": null,
+        "message": {
+          "annotations": null,
+          "audio": null,
+          "content": "The user wants me to read a file located at `/tmp/test.py`.\nI have a tool called `read_file` that takes a `path` parameter.\nI will call this tool with the path `/tmp/test.py`.\n</think>\n\n",
+          "function_call": null,
+          "reasoning": null,
+          "refusal": null,
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "function": {
+                "arguments": "{\"path\": \"/tmp/test.py\"}",
+                "name": "read_file"
+              },
+              "id": "chatcmpl-tool-bba8b5dc844715cd",
+              "type": "function"
+            }
+          ]
+        },
+        "routed_experts": null,
+        "stop_reason": null,
+        "token_ids": null
+      }
+    ],
+    "created": 1783099815,
+    "id": "chatcmpl-99f964abda5fc0a3",
+    "model": "Qwen3.6-35B-A3B",
+    "object": "chat.completion",
+    "usage": {
+      "completion_tokens": 77,
+      "prompt_tokens": 280,
+      "prompt_tokens_details": null,
+      "total_tokens": 357
+    }
+  }
+}

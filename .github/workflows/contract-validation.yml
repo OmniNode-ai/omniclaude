@@ -37,17 +37,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   contract-validation:
+    needs: occ-preflight
     name: contract-validation
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 10
+    # Lightweight required metadata gate: keep it hosted so merge sweeps do not
+    # wait on the self-hosted fleet for contract presence/schema checks.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Auth preflight — confirm onex_change_control action is accessible
@@ -119,14 +125,14 @@ jobs:
           echo "=== Proof Reference Resolution (v1) ==="
           echo "SEMANTICS: RESOLVED = reference plausibility only; not proof of test execution."
           set +e
-          uv run python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
+          python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
             --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml" \
             --json > "/tmp/proof_resolution_${TICKET_ID}.json"
           json_status=$?
 
-          uv run python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
+          python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
             --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml"

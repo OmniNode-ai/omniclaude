@@ -20,11 +20,11 @@ boundary_exempt: true
 
 # Epic Team Orchestration
 
-## Backing Status (OMN-13780) — NON-RUNNABLE via canonical event-bus dispatch
+## Backing Status (<TICKET>) — NON-RUNNABLE via canonical event-bus dispatch
 
 **This skill has no deterministic node backing and is de-listed from event-bus / node-routed dispatch — deliberately, by design.** Its omniclaude "node" (`node_skill_epic_team_orchestrator`) is a generated Polly-passthrough shell (`maturity: stub` in its contract.yaml). Its real execution mechanism, `plugins/onex/skills/epic_team/run.sh`, itself shells out to `claude -p` (headless Claude Code) — still an LLM session, not a canonical COMPUTE/EFFECT/ORCHESTRATOR/REDUCER node. Spawning live `Task()`/`TeamCreate()` subagents is inherently a Claude-session capability; there is no I/O boundary a backend node can call to create a new agent session.
 
-This is intentional, not a gap to silently paper over: epic_team is, and should remain, session-native (Skill-tool / headless-launcher driven only). Future evaluation of a gated-EFFECT wrapper around the `run.sh` launch step is tracked in OMN-13801.
+This is intentional, not a gap to silently paper over: epic_team is, and should remain, session-native (Skill-tool / headless-launcher driven only). Future evaluation of a gated-EFFECT wrapper around the `run.sh` launch step is tracked in <TICKET>.
 
 ## Tools Required
 
@@ -636,7 +636,7 @@ checkpoint:
       tickets: [PROJ-1003]
       status: pending
   open_prs:
-    PROJ-1001: {pr_number: 45, repo: "omniclaude", branch: "jonah/omn-2001-..."}
+    PROJ-1001: {pr_number: 45, repo: "omniclaude", branch: "<user>/omn-2001-..."}
   failures:
     PROJ-1003: {class: "ci_failure_ruff", attempts: 1, last_error: "..."}
   last_update_utc: "2026-03-06T..."

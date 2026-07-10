@@ -35,6 +35,7 @@ from route_via_events_wrapper import (
 )
 
 from tests.constants import MODEL_LOCAL_GENERAL
+from tests.support.fake_agent_router import FakeAgentRouter
 
 _ROUTING_MODEL = MODEL_LOCAL_GENERAL
 
@@ -184,9 +185,9 @@ class TestRouteViaEventsWithMockedRouter:
         mock_recommendation.reason = "Exact match: 'test'"
         mock_recommendation.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_recommendation]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_recommendation]
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "domain_context": "testing",
@@ -195,7 +196,7 @@ class TestRouteViaEventsWithMockedRouter:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("run tests for my code", "corr-123")
 
         assert result["selected_agent"] == "agent-testing"
@@ -215,11 +216,11 @@ class TestRouteViaEventsWithMockedRouter:
         mock_recommendation.reason = "Fuzzy match"
         mock_recommendation.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_recommendation]
-        mock_router.registry = {"agents": {}}
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_recommendation]
+        fake_router.registry = {"agents": {}}
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("vague prompt", "corr-123")
 
         assert result["selected_agent"] == DEFAULT_AGENT
@@ -228,11 +229,11 @@ class TestRouteViaEventsWithMockedRouter:
 
     def test_no_matches_falls_back_to_default(self):
         """No trigger matches should fall back to polymorphic-agent."""
-        mock_router = MagicMock()
-        mock_router.route.return_value = []  # No matches
-        mock_router.registry = {"agents": {}}
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = []  # No matches
+        fake_router.registry = {"agents": {}}
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("completely unrelated prompt", "corr-123")
 
         assert result["selected_agent"] == DEFAULT_AGENT
@@ -252,9 +253,9 @@ class TestRouteViaEventsWithMockedRouter:
         mock_recommendation.reason = "Explicitly requested by user"
         mock_recommendation.is_explicit = True
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_recommendation]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_recommendation]
+        fake_router.registry = {
             "agents": {
                 "agent-debug": {
                     "domain_context": "debugging",
@@ -263,7 +264,7 @@ class TestRouteViaEventsWithMockedRouter:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("use agent-debug to fix this", "corr-123")
 
         assert result["selected_agent"] == "agent-debug"
@@ -281,11 +282,11 @@ class TestRouteViaEventsWithMockedRouter:
 
     def test_router_error_falls_back_gracefully(self):
         """Router error should fall back to polymorphic-agent."""
-        mock_router = MagicMock()
-        mock_router.route.side_effect = RuntimeError("Router error")
-        mock_router.registry = {"agents": {}}
+        fake_router = FakeAgentRouter()
+        fake_router.route_exc = RuntimeError("Router error")
+        fake_router.registry = {"agents": {}}
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("test prompt", "corr-123")
 
         assert result["selected_agent"] == DEFAULT_AGENT
@@ -473,9 +474,9 @@ class TestCandidateListFormatting:
             rec.is_explicit = False
             mock_recs.append(rec)
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = mock_recs
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = mock_recs
+        fake_router.registry = {
             "agents": {
                 "agent-pr-review": {
                     "domain_context": "code_review",
@@ -492,7 +493,7 @@ class TestCandidateListFormatting:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("review PR 92", "corr-123")
 
         candidates = result["candidates"]
@@ -513,9 +514,9 @@ class TestCandidateListFormatting:
         mock_rec.reason = "Exact match: 'debug'"
         mock_rec.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_rec]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_rec]
+        fake_router.registry = {
             "agents": {
                 "agent-debug": {
                     "domain_context": "debugging",
@@ -524,7 +525,7 @@ class TestCandidateListFormatting:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("debug this error", "corr-123")
 
         candidate = result["candidates"][0]
@@ -539,11 +540,11 @@ class TestCandidateListFormatting:
 
     def test_candidates_empty_when_no_matches(self):
         """Candidates should be empty when no trigger matches found."""
-        mock_router = MagicMock()
-        mock_router.route.return_value = []
-        mock_router.registry = {"agents": {}}
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = []
+        fake_router.registry = {"agents": {}}
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("completely unrelated text", "corr-123")
 
         assert result["candidates"] == []
@@ -574,13 +575,13 @@ class TestCandidateListFormatting:
             rec.is_explicit = False
             mock_recs.append(rec)
 
-        mock_router = MagicMock()
+        fake_router = FakeAgentRouter()
         # AgentRouter.route() returns sorted results, so the wrapper
         # should preserve that ordering when building the candidates list.
-        mock_router.route.return_value = sorted(
+        fake_router.recommendations = sorted(
             mock_recs, key=lambda r: r.confidence.total, reverse=True
         )
-        mock_router.registry = {
+        fake_router.registry = {
             "agents": {
                 "agent-a": {"description": "Agent A"},
                 "agent-b": {"description": "Agent B"},
@@ -588,7 +589,7 @@ class TestCandidateListFormatting:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("test prompt", "corr-123")
 
         scores = [c["score"] for c in result["candidates"]]
@@ -609,11 +610,11 @@ class TestCandidateListFormatting:
         mock_rec.reason = "Match"
         mock_rec.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_rec]
-        mock_router.registry = {"agents": {"agent-test": {"description": "Test"}}}
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_rec]
+        fake_router.registry = {"agents": {"agent-test": {"description": "Test"}}}
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             # Force timeout by setting _start_time far in the past (10 seconds ago),
             # so elapsed time exceeds the 1ms timeout_ms budget.
             result = route_via_events(
@@ -644,9 +645,9 @@ class TestCandidateListFormatting:
         mock_rec.reason = "Trigger match"
         mock_rec.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_rec]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_rec]
+        fake_router.registry = {
             "agents": {
                 "agent-deploy": {
                     "domain_context": "devops",
@@ -656,7 +657,7 @@ class TestCandidateListFormatting:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("deploy to production", "corr-123")
 
         assert (
@@ -696,11 +697,11 @@ class TestConfidenceThreshold:
         mock_recommendation.reason = "Match"
         mock_recommendation.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_recommendation]
-        mock_router.registry = {"agents": {}}
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_recommendation]
+        fake_router.registry = {"agents": {}}
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("test", "corr")
 
         assert result["selected_agent"] == DEFAULT_AGENT
@@ -718,9 +719,9 @@ class TestConfidenceThreshold:
         mock_recommendation.reason = "Match"
         mock_recommendation.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_recommendation]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_recommendation]
+        fake_router.registry = {
             "agents": {
                 "agent-test": {
                     "domain_context": "testing",
@@ -729,7 +730,7 @@ class TestConfidenceThreshold:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("test", "corr")
 
         assert result["selected_agent"] == "agent-test"
@@ -747,9 +748,9 @@ class TestConfidenceThreshold:
         mock_recommendation.reason = "Match"
         mock_recommendation.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_recommendation]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_recommendation]
+        fake_router.registry = {
             "agents": {
                 "agent-test": {
                     "domain_context": "testing",
@@ -758,7 +759,7 @@ class TestConfidenceThreshold:
             }
         }
 
-        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+        with patch("route_via_events_wrapper._get_router", return_value=fake_router):
             result = route_via_events("test", "corr")
 
         assert result["selected_agent"] == "agent-test"
@@ -999,8 +1000,8 @@ class TestRouteViaLlmFallback:
         Exercises the guard at the top of _route_via_llm that rejects empty
         agent definition sequences before constructing HandlerRoutingLlm.
         """
-        mock_router = MagicMock()
-        mock_router.registry = {"agents": {}}
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {"agents": {}}
 
         with (
             patch(
@@ -1011,7 +1012,7 @@ class TestRouteViaLlmFallback:
                 "route_via_events_wrapper._run_async",
                 return_value=True,  # Health check passes
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
             patch(
                 "route_via_events_wrapper._build_agent_definitions",
                 return_value=(),
@@ -1023,8 +1024,8 @@ class TestRouteViaLlmFallback:
 
     def test_returns_none_on_llm_timeout(self):
         """Returns None when the LLM call times out."""
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-debugger": {"description": "Debug agent"},
             }
@@ -1049,7 +1050,7 @@ class TestRouteViaLlmFallback:
                 "route_via_events_wrapper._run_async",
                 side_effect=_run_async_side_effect,
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
             patch(
                 "route_via_events_wrapper._build_agent_definitions",
                 return_value=(MagicMock(),),
@@ -1061,8 +1062,8 @@ class TestRouteViaLlmFallback:
 
     def test_returns_none_on_llm_exception(self):
         """Returns None on any unexpected LLM call exception."""
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-debugger": {"description": "Debug agent"},
             }
@@ -1086,7 +1087,7 @@ class TestRouteViaLlmFallback:
                 "route_via_events_wrapper._run_async",
                 side_effect=_run_async_side_effect,
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
             patch(
                 "route_via_events_wrapper._build_agent_definitions",
                 return_value=(MagicMock(),),
@@ -1104,8 +1105,8 @@ class TestRouteViaLlmFallback:
         response). The reasoning field should fall back to an empty string
         rather than raising AttributeError on .explanation.
         """
-        mock_router = MagicMock()
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.registry = {
             "agents": {
                 "agent-debugger": {
                     "description": "Debug agent",
@@ -1143,7 +1144,7 @@ class TestRouteViaLlmFallback:
                 "route_via_events_wrapper._run_async",
                 side_effect=_run_async_side_effect,
             ),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
             patch(
                 "route_via_events_wrapper._build_agent_definitions",
                 return_value=(MagicMock(),),
@@ -1204,9 +1205,9 @@ class TestRouteViaEventsLlmIntegration:
         mock_rec.reason = "Trigger match: 'test'"
         mock_rec.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_rec]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_rec]
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "domain_context": "testing",
@@ -1221,7 +1222,7 @@ class TestRouteViaEventsLlmIntegration:
             ),
             patch("route_via_events_wrapper._use_llm_routing", return_value=True),
             patch("route_via_events_wrapper._route_via_llm", return_value=None),
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
         ):
             result = route_via_events("run tests", "corr-123")
 
@@ -1304,9 +1305,9 @@ class TestRouteViaEventsLlmIntegration:
         mock_rec.reason = "Trigger match: 'test'"
         mock_rec.is_explicit = False
 
-        mock_router = MagicMock()
-        mock_router.route.return_value = [mock_rec]
-        mock_router.registry = {
+        fake_router = FakeAgentRouter()
+        fake_router.recommendations = [mock_rec]
+        fake_router.registry = {
             "agents": {
                 "agent-testing": {
                     "domain_context": "testing",
@@ -1324,7 +1325,7 @@ class TestRouteViaEventsLlmIntegration:
                 return_value=mock_guard,
             ),
             patch("route_via_events_wrapper._route_via_llm") as mock_llm_route,
-            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch("route_via_events_wrapper._get_router", return_value=fake_router),
         ):
             result = route_via_events("run tests", "corr-123")
 

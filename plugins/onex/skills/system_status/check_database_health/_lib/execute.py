@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""check_database_health execute — database health via runtime HTTP endpoint [OMN-10492].
+"""check_database_health execute — database health via runtime HTTP endpoint [<TICKET>].
 
 Probes database health through the omninode-runtime health endpoint instead of
 connecting to Postgres directly from the Mac. The correct data access path is:
@@ -24,7 +24,7 @@ import requests
 
 _RUNTIME_HEALTH_URL = os.environ.get(
     "OMNINODE_RUNTIME_HEALTH_URL",
-    "http://192.168.86.201:8085/health",  # onex-allow-internal-ip  # kafka-fallback-ok
+    "http://localhost:8085/health",  # kafka-fallback-ok
 )
 _TIMEOUT_S = 5.0
 

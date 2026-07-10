@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# Armed-not-enqueued detector (OMN-13031)
+# Armed-not-enqueued detector (<TICKET>)
 # Flags PRs where autoMergeRequest != null AND mergeStateStatus CLEAN AND
 # no ADDED_TO_MERGE_QUEUE_EVENT newer than the arming timestamp, sustained >30min.
 #
@@ -11,7 +11,7 @@
 #
 # Defaults to scanning all queue repos:
 #   OmniNode-ai/omniclaude,OmniNode-ai/omnibase_core,OmniNode-ai/omnibase_infra,
-#   OmniNode-ai/onex_change_control,OmniNode-ai/omnibase_compat,OmniNode-ai/omnidash,OmniNode-ai/omnimarket
+#   OmniNode-ai/omnibase_compat,OmniNode-ai/omnidash,OmniNode-ai/omnimarket
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/_common.sh"

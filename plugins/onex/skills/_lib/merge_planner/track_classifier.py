@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Merge-sweep Track A/B/C PR classifier for OMN-6506.
+"""Merge-sweep Track A/B/C PR classifier for <TICKET>.
 
 Classifies PRs into merge-sweep tracks:
     Track A — ready to merge (all checks pass, no unresolved comments, mergeable)
@@ -173,7 +173,7 @@ def is_in_merge_queue(pr: ModelPRClassificationInput) -> bool:
     Use this guard before any operation that would dequeue the PR
     (e.g., disableAutoMerge, re-enqueue). Dequeuing and re-enqueuing
     doubles CI time because the concurrency group runs both CI jobs
-    sequentially (OMN-6468).
+    sequentially (<TICKET>).
     """
     return pr.in_merge_queue
 

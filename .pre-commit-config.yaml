@@ -139,6 +139,23 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
+      # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
+      # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero
+      # stamp logic duplicated; the CLI reuses the Piece-2 parser in
+      # omnibase_core. Only *.md/*.txt that already carry an Evidence-Ticket /
+      # Evidence-Source line are checked, so an incomplete or malformed stamp
+      # fails at commit time; arbitrary markdown is never required to carry one.
+      # Hard fail — no warn-only (CLAUDE.md Rule #5 + Rule #10).
+      - id: validate-occ-pr-stamp
+        name: Validate OCC PR metadata stamp (OMN-14190)
+        entry: .pre-commit-hooks/validate-occ-pr-stamp.sh
+        language: script
+        files: '\.(md|txt)$'
+        pass_filenames: true
+        stages: [pre-commit]
+        exclude: '^tests/hooks/fixtures/'
+
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
@@ -176,6 +193,30 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # OMN-13501 / OMN-13502 (WS-F): no-faked-boundary detector, ENFORCING.
+      # A hand-written stand-in for omniclaude's OWN inference/routing/dispatch
+      # boundary (agent router, skill dispatcher, local-LLM egress), or a
+      # patch("httpx.Client")/MagicMock substituting that egress in a real-dispatch
+      # test, is a FAKE of our architecture. Detector ships in omnibase_core 0.46.4
+      # (OMN-13898/13894 pin). The 61 pre-existing findings were burned down with
+      # REAL fixes (recorded-replay transports for egress/agent — OMN-13499 — and
+      # real EventBusInmemory wiring for routing) in OMN-13500 (#1849); the detector
+      # now reports zero findings, so --report-only drops here and the CI job flips
+      # required (OMN-13501/13502 Phase 3). CI mirror: .github/workflows/no-faked-boundary.yml.
+      # Suppress an approved fixture line with: # onex-allow-faked-boundary
+      - id: check-no-faked-boundary
+        name: No faked inference/routing/dispatch boundary — COMPUTE/bus (OMN-13501)
+        entry: uv run python -m omnibase_core.validation.no_faked_boundary.runtime_no_faked_boundary
+        language: system
+        types: [python]
+        exclude: >-
+          (?x)^(
+            archived/|
+            archive/
+          )
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-8776: regression guard — skill prompts must not hardcode
       # `mcp__linear-server__*` tool names. Ticketing operations route
       # through ProtocolProjectTracker (`uv run onex run node_*`).
@@ -185,6 +226,22 @@ repos:
         language: system
         files: '^plugins/onex/skills/.*\.md$'
         pass_filenames: true
+        stages: [pre-commit]
+
+      # OMN-14105: public-skill hygiene gate. plugins/onex/skills/ is
+      # published/public; this is a separate, stricter gate than
+      # aislop_sweep (which intentionally tolerates internal-tooling detail
+      # there) — it flags operator identity, real hosts/IPs, machine-
+      # specific paths, and internal doc citations. Detect-only, no
+      # auto-fix. Allowlist decided keeps in
+      # scripts/public_skill_hygiene_allowlist.yaml or inline with
+      # `# public-skill-ok: <reason>`.
+      - id: check-public-skill-hygiene
+        name: public-skill hygiene gate (OMN-14105)
+        entry: python3 scripts/check_public_skill_hygiene.py
+        language: system
+        files: '^(plugins/onex/skills/|scripts/check_public_skill_hygiene\.py|scripts/public_skill_hygiene_allowlist\.yaml)'
+        pass_filenames: false
         stages: [pre-commit]
 
       # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep
@@ -738,7 +795,7 @@ repos:
       # artifact is stale. Fires when hook_bits.sh is modified.
       - id: hook-bits-drift
         name: hook_bits.sh drift check (regenerate if EnumHookBit changes)
-        entry: uv --directory ../omnibase_core run python scripts/gen_hook_bits.py --check ../omniclaude/plugins/onex/hooks/lib/hook_bits.sh
+        entry: bash scripts/run-hook-bits-drift.sh
         language: system
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$

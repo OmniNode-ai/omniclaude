@@ -27,8 +27,8 @@ args:
 **Usage:** `/authorize [scope] [tools] [ttl_seconds]`
 
 Grant authorization for Edit/Write operations in the current session. Backed
-by `node_authorize` in omnimarket per `feedback_skills_are_wrappers.md` —
-logic lives in the node handler, this skill is a thin UX wrapper.
+by `node_authorize` in omnimarket — logic lives in the node handler, this
+skill is a thin UX wrapper.
 
 ## What This Does
 
@@ -56,12 +56,9 @@ this file to auto-approve in-scope Edit/Write requests.
 
 Run the node directly via the ONEX node runner:
 
-```bash
-uv run onex run node_authorize -- \
-  --scope 'src/**' --scope 'tests/**' \
-  --tools Edit --tools Write \
-  --ttl-seconds 14400
-```
+Use the deterministic `node_authorize` entrypoint with scope, tool, and
+TTL arguments. The node runner returns the same typed authorization result
+that the wrapper renders to the user.
 
 Under a full Kafka runtime, the skill wrapper publishes a command envelope to
 `onex.cmd.omnimarket.authorize-start.v1`; the node consumes it, writes the
@@ -101,4 +98,4 @@ is tracked under the unused-hooks epic.
 ## Related
 
 - Node: `omnimarket/src/omnimarket/nodes/node_authorize/`
-- Reference: `feedback_skills_are_wrappers.md`, `feedback_no_informational_gates.md`
+- Principle: skills are thin wrappers over node logic; gates must be enforced, not merely informational

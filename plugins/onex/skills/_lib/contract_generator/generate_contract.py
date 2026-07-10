@@ -13,12 +13,12 @@ import yaml
 
 
 def _ticket_id_slug(ticket_id: str) -> str:
-    """Convert 'OMN-1234' to 'omn-1234' for use in topic/path names."""
+    """Convert '<TICKET>' to 'omn-1234' for use in topic/path names."""
     return ticket_id.lower()
 
 
 def _ticket_id_camel(ticket_id: str) -> str:
-    """Convert 'OMN-1234' to 'Omn1234' for use in schema class names."""
+    """Convert '<TICKET>' to 'Omn1234' for use in schema class names."""
     parts = ticket_id.split("-")
     return (
         parts[0].capitalize() + parts[1]
@@ -63,7 +63,7 @@ def generate_skeleton_contract(
     """Generate a skeleton contract YAML string.
 
     Args:
-        ticket_id: Linear ticket ID (e.g., "OMN-1234")
+        ticket_id: Linear ticket ID (e.g., "<TICKET>")
         summary: One-line ticket summary
         is_seam_ticket: Whether ticket touches cross-repo interfaces
         interfaces_touched: List of EnumInterfaceSurface values

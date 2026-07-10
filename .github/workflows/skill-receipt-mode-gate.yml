@@ -31,7 +31,6 @@ on:
       - '.onex_ratchets/skill_receipt_mode_allowlist.yaml'
       - 'scripts/check_skill_dispatch_receipt_mode_wrapper.sh'
       - '.github/workflows/skill-receipt-mode-gate.yml'
-  merge_group:
 
 permissions:
   contents: read
@@ -41,7 +40,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
   skill-receipt-mode-gate:
+    needs: occ-preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

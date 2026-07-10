@@ -825,7 +825,6 @@ class BoundaryViolationError(Exception):
 
 **MANDATORY** before any `git worktree add`, `git checkout`, or `git push` to a PR branch.
 Never construct branch names from ticket IDs or PR titles -- always fetch from GitHub API.
-See memory rule `feedback_always_fetch_branch_name.md`.
 
 ```python
 def resolve_branch(pr_number: int | str, repo: str) -> str:
@@ -1441,6 +1440,106 @@ def update_pr_branch(repo_full: str, pr_number: int) -> dict:
         )
     return {"status": "updated"}
 ```
+
+---
+
+## patch_pr_body(repo_full, pr_number, body) / patch_pr_title(repo_full, pr_number, title)
+
+**The only sanctioned way to edit a PR body or title.** Never use `gh pr edit` (<TICKET>).
+
+### Why not `gh pr edit`
+
+`gh pr edit` is a documented trap on repos with classic Projects enabled (`has_projects:
+true` — ALL OmniNode-ai repos as of 2026-07-03) when the token lacks the `read:project`
+scope (the standard `gh auth login` token has `repo, workflow, admin:org, ...` but NOT
+`read:project`):
+
+- Historically it failed or **silently no-oped** on body edits because the edit path
+  fetched `projectCards`/`projectsV2` via GraphQL even when no project field was being
+  changed. This is the same defect class as the `gh pr merge --auto --squash` silent
+  no-op (<TICKET>, fixed in tooling).
+- The exposure is version-dependent: on gh 2.89.0 a plain `--body-file` edit was
+  observed to apply (verified live 2026-07-03 against OmniNode-ai/omniclaude#1850),
+  but the projects lookup path is still wired into the command and older/newer gh
+  versions have regressed before. Field evidence: omnimarket
+  `node_pr_lifecycle_fix_effect/handlers/adapter_occ_autobind.py` documents live
+  silent no-ops ("friction #7") and uses REST PATCH for exactly this reason.
+- A silent no-op on a body edit is catastrophic for Receipt-Gate flows: the worker
+  believes `Evidence-Source:`/`Evidence-Ticket:` lines were added, CI stays red, and
+  the failure is misattributed.
+
+The REST PATCH endpoint (`PATCH /repos/{owner}/{repo}/pulls/{n}`) never touches the
+Projects GraphQL surface, needs only the `repo` scope, and combined with a mandatory
+read-back check cannot silently no-op.
+
+```python
+def _patch_pr_field(repo_full: str, pr_number: int, field: str, value: str) -> dict:
+    """
+    PATCH a single PR field via REST and verify by read-back.
+
+    Raises:
+        subprocess.CalledProcessError — gh command failed
+        RuntimeError — PATCH returned success but read-back does not match
+                       (the silent-no-op class this helper exists to kill)
+    """
+    result = subprocess.run(
+        [
+            "gh", "api", "-X", "PATCH",
+            f"repos/{repo_full}/pulls/{pr_number}",
+            "-f", f"{field}={value}",
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr,
+        )
+
+    # Mandatory read-back: PATCH success alone is not proof of application.
+    verify = subprocess.run(
+        ["gh", "api", f"repos/{repo_full}/pulls/{pr_number}", "--jq", f".{field}"],
+        capture_output=True, text=True, timeout=30,
+    )
+    # GitHub normalizes line endings; compare normalized.
+    def _norm(s: str) -> str:
+        return s.replace("\r\n", "\n").strip()
+    if verify.returncode != 0 or _norm(verify.stdout) != _norm(value):
+        raise RuntimeError(
+            f"patch_pr_{field}: PATCH reported success but read-back of "
+            f"{repo_full}#{pr_number}.{field} does not match — silent no-op detected"
+        )
+    return {"status": "patched", "field": field}
+
+
+def patch_pr_body(repo_full: str, pr_number: int, body: str) -> dict:
+    """Set a PR body via REST PATCH + read-back verification."""
+    return _patch_pr_field(repo_full, pr_number, "body", body)
+
+
+def patch_pr_title(repo_full: str, pr_number: int, title: str) -> dict:
+    """Set a PR title via REST PATCH + read-back verification."""
+    return _patch_pr_field(repo_full, pr_number, "title", title)
+```
+
+### Canonical bash form (for skill prompts)
+
+Write the new body to a file first (survives quoting/newlines), PATCH, then prove
+application by diffing the read-back — a zero-diff is the evidence line:
+
+```bash
+# body from file: -F value with @ prefix reads the file contents
+gh api -X PATCH "repos/$REPO_FULL/pulls/$PR_NUM" -F "body=@$BODY_FILE"
+
+# mandatory read-back proof (exit 0 = applied; any diff = silent no-op, hard-fail)
+gh api "repos/$REPO_FULL/pulls/$PR_NUM" --jq .body \
+  | diff - "$BODY_FILE"
+```
+
+Raw `gh pr edit` in a non-allowlisted skill is flagged by the existing
+"Enforce PR mutation command bans" step in
+`.github/workflows/omni-standards-compliance.yml` (zero tolerance outside
+`_lib/pr-safety/`).
 
 ---
 

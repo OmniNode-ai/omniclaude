@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# OMN-10239 runtime-backed skill migration manifest.
+# <TICKET> runtime-backed skill migration manifest.
 #
 # This is the initial advisory slice only. Each entry declares the canonical
 # runtime-backed path the skill should converge on. The validator inventories
@@ -24,12 +24,12 @@ skills:
   pr_review:
     canonical_path: onex_run_node
     canonical_target: node_pr_review_orchestrator
-    notes: Backed by node_pr_review_orchestrator (the OMN-13212 decomposition of the deleted node_pr_review_bot shell).
+    notes: Backed by node_pr_review_orchestrator (the <TICKET> decomposition of the deleted node_pr_review_bot shell).
 
   pr_review_bot:
     canonical_path: onex_run_node
     canonical_target: node_pr_review_orchestrator
-    notes: Backed by node_pr_review_orchestrator (the OMN-13212 decomposition of the deleted node_pr_review_bot shell).
+    notes: Backed by node_pr_review_orchestrator (the <TICKET> decomposition of the deleted node_pr_review_bot shell).
 
   delegate:
     canonical_path: runtime_skill_client
