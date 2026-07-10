@@ -9,6 +9,8 @@ Root cause: OMN-8841 — Dockerfile.runtime changed, deploy never dispatched,
 Canonical source: OMN-9685 (omnibase_core PR #902) — narrowed path patterns,
                   removed skip-token bypass.
 DGM-Phase6: moved here for single-source reuse across all repos.
+OMN-14244: re-narrowed the ``src/*/cli/*.py`` heuristic — see the comment
+           above ``CLI_PATH_PATTERNS`` below for what changed and why.
 
 Usage (CI):
     python validate_pr_deploy_required.py \
@@ -67,12 +69,43 @@ RUNTIME_PATH_PATTERNS = [
     "src/*/handlers/**/*.py",
     "src/*/services/*.py",
     "src/*/services/**/*.py",
-    "src/*/cli/*.py",
-    "src/*/cli/**/*.py",
+    # Docker-management packages (OMN-14244): any file under a top-level
+    # src/<pkg>/docker/ tree is deploy code by construction (compose
+    # generation/validation, docker-compose CLI dispatch — e.g.
+    # omnibase_infra's docker/catalog/cli.py, which the old cli/-directory
+    # heuristic below MISSED entirely because "cli" is the filename here, not
+    # a directory segment). The middle "*" binds exactly one path segment, so
+    # this does NOT match src/*/models/docker/* (pure Pydantic/dataclass
+    # models with zero I/O, one level deeper) — verified via _glob_to_regex.
+    "src/*/docker/*.py",
+    "src/*/docker/**/*.py",
     # Contract files trigger deploy (behavior change) — scoped to src/ to avoid
     # matching test fixtures and example directories.
     "src/**/contract.yaml",
 ]
+
+# CLI modules (OMN-14244): OMN-9685 gated EVERY file under a src/*/cli/ tree,
+# which is provably too broad — a pure PR-metadata/text-processing CLI (e.g.
+# omnibase_infra's cli_occ.py: click plumbing over a text parser, zero
+# docker/subprocess/kafka/ssh surface) is not deploy-relevant just because it
+# lives in a directory named "cli". These paths are matched separately from
+# RUNTIME_PATH_PATTERNS above and additionally require a deploy-signal content
+# hit (see CLI_DEPLOY_SIGNAL_PATTERN / _cli_file_has_deploy_signal) before
+# they trigger the gate. A file that cannot be read fails CLOSED (still
+# gated) — see _cli_file_has_deploy_signal.
+CLI_PATH_PATTERNS = [
+    "src/*/cli/*.py",
+    "src/*/cli/**/*.py",
+]
+
+# Deploy-relevant surfaces referenced by a CLI module's own source: any of
+# these mean the module can act on docker/compose, shell out, reach a remote
+# host, or dispatch onto Kafka (rpk / redeploy) — i.e. it is a genuine deploy
+# CLI, not a pure data/text-processing one. Word-boundary, case-insensitive.
+CLI_DEPLOY_SIGNAL_PATTERN = re.compile(
+    r"\b(docker|subprocess|paramiko|fabric|kafka|rpk|compose|ssh|deploy)\b",
+    re.IGNORECASE,
+)
 
 # Deploy evidence: a dod_evidence check whose check_value contains one of these.
 DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
@@ -97,6 +130,9 @@ def _glob_to_regex(pattern: str) -> Pattern[str]:
 
 _COMPILED_RUNTIME_PATTERNS: list[Pattern[str]] = [
     _glob_to_regex(p) for p in RUNTIME_PATH_PATTERNS
+]
+_COMPILED_CLI_PATTERNS: list[Pattern[str]] = [
+    _glob_to_regex(p) for p in CLI_PATH_PATTERNS
 ]
 
 # Ticket ID pattern in PR body / commit messages
@@ -137,14 +173,39 @@ class OccEvidenceResolution:
     message: str = ""
 
 
+def _cli_file_has_deploy_signal(path: str) -> bool:
+    """Return True if a src/*/cli/ file references a deploy-relevant surface.
+
+    Reads the file relative to the current working directory (CI runs this
+    validator from the checked-out caller-repo root, so changed-file paths
+    resolve directly). A file that cannot be read — deleted, renamed, or the
+    working tree isn't checked out — fails CLOSED: treated as a hit so an
+    unreadable CLI file is never silently exempted from the gate.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return True
+    return bool(CLI_DEPLOY_SIGNAL_PATTERN.search(text))
+
+
 def find_runtime_paths(changed_files: list[str]) -> list[str]:
-    """Return subset of changed_files that match runtime path patterns."""
+    """Return subset of changed_files that match runtime path patterns.
+
+    CLI_PATH_PATTERNS files (src/*/cli/**) are matched separately from the
+    unconditional RUNTIME_PATH_PATTERNS: they only count as a hit when their
+    own content carries a deploy-relevant signal (see
+    _cli_file_has_deploy_signal / OMN-14244).
+    """
     hits: list[str] = []
     for f in changed_files:
-        for regex in _COMPILED_RUNTIME_PATTERNS:
-            if regex.match(f):
-                hits.append(f)
-                break
+        if any(regex.match(f) for regex in _COMPILED_RUNTIME_PATTERNS):
+            hits.append(f)
+            continue
+        if any(regex.match(f) for regex in _COMPILED_CLI_PATTERNS) and (
+            _cli_file_has_deploy_signal(f)
+        ):
+            hits.append(f)
     return hits
 
 
