@@ -8,14 +8,20 @@ onex hook surface, destroying the deliberate OMN-13244 measurement baseline
 latency/usefulness is being measured -- they must stay disabled until an
 explicit operator decision re-registers them.
 
-OMN-13856 (operator-approved, 2026-07-02) carves ONE exception into that
-baseline: the Done-flip durable-evidence guard is re-registered as the minimal
-"Option A" carve-out (no fake Done). Everything else stays disabled. These tests
-therefore lock in a *narrowed* baseline:
+OMN-13856 (operator-approved, 2026-07-02) carved ONE exception into that
+baseline: the Done-flip durable-evidence guard, re-registered as the minimal
+"Option A" carve-out (no fake Done). OMN-14330 carves a second, equally
+targeted exception: the OMN-7018 worktree canonical-root guard, extracted
+into a dedicated ``pre_tool_use_worktree_guard.sh`` script containing ONLY
+the ``git worktree add`` canonical-root check -- not the rest of
+``pre_tool_use_bash_guard.sh`` / ``bash_guard.py`` (destructive-command
+HARD_BLOCK, ``--no-verify`` enforcement, ``gh pr merge`` mismatch blocking,
+SOFT_ALERT, CONTEXT_ADVISORY), which remain unregistered. Everything else
+stays disabled. These tests therefore lock in a *narrowed* baseline:
 
-1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard and
-   nothing else, while retaining the ``$schema`` / ``description`` / ``version``
-   metadata keys.
+1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard
+   and the worktree canonical-root guard and nothing else, while retaining
+   the ``$schema`` / ``description`` / ``version`` metadata keys.
 2. The skill-substitution guard machinery (module, config YAML, wrapper
    script, tests) REMAINS on disk -- unregistered, so activating it later is
    a one-line config add and an explicit operator decision, not a code
@@ -43,50 +49,56 @@ _GUARD_FILES = (
 )
 
 
-# The ONLY hook re-registered by the OMN-13856 Option A carve-out.
+# The two hooks re-registered by the OMN-13856 + OMN-14330 carve-outs, in
+# hooks.json registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
+)
+_WORKTREE_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_worktree_guard.sh"
 )
 
 
 def test_hooks_json_is_narrowed_option_a_baseline() -> None:
-    """hooks.json registers EXACTLY the Done-flip guard (OMN-13856 carve-out).
+    """hooks.json registers EXACTLY the Done-flip + worktree guards.
 
     The OMN-13244 measurement baseline stays intact for every context-injection
-    hook; the operator-approved OMN-13856 carve-out re-registers ONE guard — the
-    Done-flip durable-evidence gate — and nothing else. Any additional
+    hook; the operator-approved OMN-13856 and OMN-14330 carve-outs re-register
+    exactly two guards — the Done-flip durable-evidence gate and the OMN-7018
+    worktree canonical-root gate — and nothing else. Any additional
     registration means the disabled measurement hooks were re-enabled without an
-    explicit operator decision (see OMN-13846); a removal of this entry means the
-    fake-Done gate regressed.
+    explicit operator decision (see OMN-13846); removal of either entry means
+    the corresponding guard regressed.
     """
     data = json.loads(_HOOKS_JSON.read_text())
     hooks = data.get("hooks", {})
 
     # Exactly one event class, PreToolUse, is registered.
     assert set(hooks.keys()) == {"PreToolUse"}, (
-        "hooks.json must register ONLY PreToolUse for the OMN-13856 Option A "
-        f"carve-out (measurement baseline otherwise intact). Found event classes: "
+        "hooks.json must register ONLY PreToolUse for the OMN-13856/OMN-14330 "
+        f"carve-outs (measurement baseline otherwise intact). Found event classes: "
         f"{sorted(hooks.keys())!r}"
     )
 
-    # Exactly one command is wired, and it is the Done-flip guard.
+    # Exactly two commands are wired: Done-flip guard, then worktree guard.
     commands = [
         hook.get("command", "")
         for group in hooks["PreToolUse"]
         for hook in group.get("hooks", [])
     ]
-    assert commands == [_DONE_FLIP_GUARD_COMMAND], (
+    assert commands == [_DONE_FLIP_GUARD_COMMAND, _WORKTREE_GUARD_COMMAND], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
-        "guard and nothing else (OMN-13856 Option A carve-out). A different or "
-        "additional command means either the measurement baseline was re-enabled "
-        "without an operator decision (OMN-13846) or the fake-Done gate regressed. "
-        f"Found: {commands!r}"
+        "guard and the worktree canonical-root guard and nothing else (OMN-13856 + "
+        "OMN-14330 carve-outs). A different or additional command means either the "
+        "measurement baseline was re-enabled without an operator decision "
+        f"(OMN-13846) or one of the guards regressed. Found: {commands!r}"
     )
 
-    # The matcher must target the Linear write tools that flip Done.
+    # The matchers must target the Linear write tools that flip Done, then Bash.
     matchers = [group.get("matcher", "") for group in hooks["PreToolUse"]]
-    assert matchers == ["^mcp__linear-server__(save_issue|update_issue)$"], (
-        f"Done-flip guard must match Linear save_issue/update_issue. Found: {matchers!r}"
+    assert matchers == ["^mcp__linear-server__(save_issue|update_issue)$", "Bash"], (
+        f"Done-flip guard must match Linear save_issue/update_issue and the "
+        f"worktree guard must match Bash. Found: {matchers!r}"
     )
 
 
@@ -111,4 +123,34 @@ def test_skill_substitution_guard_machinery_remains_on_disk(rel_path: str) -> No
         f"Skill-substitution guard file missing: {rel_path}. The OMN-13244 baseline "
         "unregisters the guard but must retain its machinery on disk so re-enabling "
         "is a one-line config add (see OMN-13846)."
+    )
+
+
+def test_bash_guard_and_bash_guard_py_remain_on_disk_unregistered() -> None:
+    """pre_tool_use_bash_guard.sh + bash_guard.py stay on disk, unregistered.
+
+    The OMN-14330 carve-out extracts a dedicated, minimal worktree-only script
+    rather than registering the full bash guard (which bundles destructive-
+    command HARD_BLOCK, ``--no-verify`` enforcement, ``gh pr merge`` mismatch
+    blocking, SOFT_ALERT, and CONTEXT_ADVISORY checks alongside the worktree
+    check). Both files must remain present so re-registering the full guard
+    later is a one-line config add and an explicit operator decision.
+    """
+    for rel_path in (
+        "plugins/onex/hooks/scripts/pre_tool_use_bash_guard.sh",
+        "plugins/onex/hooks/lib/bash_guard.py",
+    ):
+        path = _REPO_ROOT / rel_path
+        assert path.is_file(), f"Expected file missing: {rel_path}"
+
+    data = json.loads(_HOOKS_JSON.read_text())
+    hooks = data.get("hooks", {})
+    commands = [
+        hook.get("command", "")
+        for group in hooks.get("PreToolUse", [])
+        for hook in group.get("hooks", [])
+    ]
+    assert not any(cmd.endswith("pre_tool_use_bash_guard.sh") for cmd in commands), (
+        "pre_tool_use_bash_guard.sh must NOT be registered by the OMN-14330 "
+        "carve-out — only the dedicated pre_tool_use_worktree_guard.sh is."
     )
