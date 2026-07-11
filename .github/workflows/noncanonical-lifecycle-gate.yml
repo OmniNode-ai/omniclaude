@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-14350: non-canonical lifecycle-class ratchet — dedicated CI gate.
+#
+# omniclaude does not run pre-commit in CI, so the pre-commit ratchet hook is advisory
+# here. This workflow makes the ratchet a real server-side merge gate (Operating
+# Rule #5, "enforcement not detection"): it installs the omnibase_core validator from
+# the pinned core SHA in an isolated env and ratchets omniclaude's frozen allowlist
+# (.onex_ratchets/noncanonical_class_allowlist.yaml). Any NEW non-canonical class
+# (Service/Engine/Adapter/Router/Daemon/Manager/Runner/Registry/Controller/Server/
+# Client) outside the baseline — or a stale allowlist entry (--check-stale) — fails.
+#
+# The pinned core ref MUST be a specific SHA carrying the validator + its
+# .pre-commit-hooks.yaml export (core dev HEAD after #1430 squash-merges) — never a
+# moving ref like @dev. The token below is a HOLD placeholder; this PR stays unopened
+# until it is replaced with the real post-#1430-merge SHA.
+#
+# The job name "no-noncanonical-lifecycle-classes" is unique so it can be flipped to a
+# REQUIRED status check in branch protection (a separate step, post-merge).
+
+name: Non-Canonical Lifecycle-Class Ratchet
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+  push:
+    branches: [main, dev, "hotfix/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noncanonical-lifecycle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  no-noncanonical-lifecycle-classes:
+    name: no-noncanonical-lifecycle-classes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+
+      - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
+        run: |
+          uv run --no-project \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@63635097705d832e0ee9c4811093efb31349105c' \
+            python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
+            --check-stale \
+            --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
+            src/omniclaude
