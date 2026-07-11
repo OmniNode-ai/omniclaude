@@ -42,9 +42,10 @@ Then **verify the probeable claims against live surfaces** — the ledger is a
 report, not truth. Batch these:
 
 ```
-# PR states cited in the ledger (merged? open? red?)
-gh pr view <n> --repo OmniNode-ai/<repo> --json number,state,mergedAt,mergeStateStatus
-gh pr checks <n> --repo OmniNode-ai/<repo>
+# PR states cited in the ledger (merged? open? red?) — structured rows out,
+# never a raw gh JSON dump (a prior raw-gh probe burned ~127k tokens here).
+onex skill pr_state --operation pr_status --repo OmniNode-ai/<repo> --pr <n>
+onex skill pr_state --operation ci_checks --repo OmniNode-ai/<repo> --pr <n>
 
 # Ticket states (via the linear MCP tools, when a Done/Started flip is claimed)
 # Runtime/lane claims (only when §1 asserts lane health):
