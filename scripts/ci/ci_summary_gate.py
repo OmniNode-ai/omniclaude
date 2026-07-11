@@ -61,6 +61,7 @@ GATE_JOBS: tuple[str, ...] = (
     "Security Gate",
     "Contract Compliance Check",
     "Contract Compliance",
+    "no-noncanonical-lifecycle-classes",  # OMN-14350 non-canonical lifecycle-class ratchet
 )
 
 # Jobs that do NOT gate merge today (verified against ci.yml gate ``needs`` on

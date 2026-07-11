@@ -3077,6 +3077,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  no-noncanonical-lifecycle-classes:
+    name: no-noncanonical-lifecycle-classes
+    # OMN-14350: non-canonical lifecycle-class ratchet — a CI Summary GATE_JOB
+    # (scripts/ci/ci_summary_gate.py GATE_JOBS). Unconditional (no needs/if) so CI
+    # Summary WAITS for it and requires a good conclusion — a red ratchet fails the
+    # required "CI Summary" check; the job never skips so it cannot be masked.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
+        run: |
+          uv run --no-project \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@63635097705d832e0ee9c4811093efb31349105c' \
+            python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
+            --check-stale \
+            --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
+            src/omniclaude
+
   ci-summary:
     name: CI Summary
     # OMN-14127: REQUIRED branch-protection context, implemented as a NO-`needs`,
