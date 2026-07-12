@@ -2,6 +2,21 @@
 # SPDX-License-Identifier: MIT
 """Tool-generate a complete OCC DoD receipt (OMN-13050, retro D-4).
 
+.. deprecated:: OMN-14285
+   RETIRED IN INTENT — do not adopt for new work. This is a bespoke, mis-layered
+   (top plugin layer authoring platform-wide change-control evidence) OCC-receipt
+   writer that also carries the pre-OMN-14255 head-SHA defect (``--commit-sha`` is
+   documented as the *pre-merge* head SHA and stamped verbatim into ``commit_sha``,
+   which on squash-merge-only repos is structurally un-passable against
+   ``CONTRACT_CITES_MERGE_COMMIT``). The canonical OCC companion producer is the
+   node-based ``OccCompanionEmitter`` (omnimarket ``node_pr_lifecycle_fix_effect``),
+   fed by the born-path ``call-occ-autobind.yml`` trigger; the shift-left local
+   fallback is ``onex occ validate|stamp`` (omnibase_infra ``cli_occ``). Hard
+   deletion of this script + ``tests/scripts/test_scaffold_occ_receipt.py`` is
+   gated (per the OCC-autogen mechanization design) on the S1a convergence PR
+   landing plus adoption evidence, and requires superseding the OMN-10421 /
+   OMN-13050 / OMN-13060 DoD ``check_value`` citations that run this test.
+
 Hand-authored OCC receipts wedged OCC PR #2530 four ways and blocked three
 downstream code PRs overnight. This tool makes the receipt-creation path
 *tool-generated* so each of those four wedges is either structurally
