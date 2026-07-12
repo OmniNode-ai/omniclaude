@@ -70,7 +70,7 @@ the intended execution path. Any combination may be supplied or discovered:
 
 - The current plan (`--plan`) — intended execution path, includes the durable §0 preamble.
 - The ledger (`--ledger`) — the latest handoff(s), a project activity log, or session notes.
-- Live control-plane surfaces — `gh pr list/view/checks`, Linear (issue state), `git log`, `ssh` runtime probes.
+- Live control-plane surfaces — `onex skill pr_state` (structured per-PR/CI status; prefer this over raw `gh pr view/checks`), `gh pr list` (org-wide listing has no node-backed replacement yet), Linear (issue state), `git log`, `ssh` runtime probes.
 - Completed work, PRs, commits, tickets, blockers, design decisions, notes, new requirements.
 - A design doc, Linear/GitHub epic, milestone, specification, or backlog.
 
