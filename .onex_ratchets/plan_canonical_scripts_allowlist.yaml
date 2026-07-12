@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Grandfather allowlist for the plan-canonical-scripts gate (OMN-14476).
+#
+# Plans listed here predate the gate and are exempt from the requirement that a
+# plan proposing a new scripts/** file declare its canonical form (build it as a
+# CONTRACT+NODE+HANDLER, or declare a reviewed exception with a ticket).
+#
+# BURN-DOWN ONLY. This list must never grow. New or modified plans under
+# docs/plans/ or docs/tracking/ must comply. To clear an entry: add the
+# 'canonical-form:' declaration (or redesign the work as a node), then delete
+# its line here.
+#
+# Enforced by: scripts/lint_plan_canonical_scripts.py
+#              .github/workflows/plan-canonical-scripts-gate.yml (CI)
+#              pre-commit hook lint-plan-canonical-scripts
+#
+# Refs: OMN-14476 (this gate), OMN-14475 (code-time deny-new guard).
+allowed: []

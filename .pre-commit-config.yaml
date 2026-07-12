@@ -271,6 +271,18 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14476: block plans proposing a new scripts/** file without a
+      # 'canonical-form:' declaration (design as a node, or a reviewed
+      # exception). Complements the code-time deny-new guard (OMN-14475).
+      # CI mirror: .github/workflows/plan-canonical-scripts-gate.yml
+      - id: lint-plan-canonical-scripts
+        name: enforce plans declare canonical-form for proposed scripts/** files
+        entry: python3 scripts/lint_plan_canonical_scripts.py
+        language: system
+        files: '^docs/(plans|tracking)/.*\.md$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-9072: regression guard — every hookSpecificOutput emission must
       # include hookEventName, else Claude Code silently drops the payload.
       - id: check-hook-event-names
