@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Plan Canonical Scripts Gate
+
+# OMN-14476: block plans that propose a new scripts/** file without declaring
+# its canonical form. Complements the code-time deny-new guard (OMN-14475) by
+# catching non-canonical script proposals at planning time. Every plan under
+# docs/plans/ or docs/tracking/ that proposes creating a scripts/**.{py,sh,bash}
+# file must either design it as a CONTRACT+NODE+HANDLER or carry a
+# 'canonical-form:' declaration. Plans that predate the gate are grandfathered
+# via .onex_ratchets/plan_canonical_scripts_allowlist.yaml (burn-down only).
+# Epic: OMN-13674.
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'docs/plans/**/*.md'
+      - 'docs/tracking/**/*.md'
+      - '.onex_ratchets/plan_canonical_scripts_allowlist.yaml'
+      - 'scripts/lint_plan_canonical_scripts.py'
+      - '.github/workflows/plan-canonical-scripts-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'docs/plans/**/*.md'
+      - 'docs/tracking/**/*.md'
+      - '.onex_ratchets/plan_canonical_scripts_allowlist.yaml'
+      - 'scripts/lint_plan_canonical_scripts.py'
+      - '.github/workflows/plan-canonical-scripts-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  plan-canonical-scripts-gate:
+    needs: occ-preflight
+    name: Plan Canonical Scripts Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan docs/plans + docs/tracking for undeclared new-script proposals
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_plan_canonical_scripts.py
