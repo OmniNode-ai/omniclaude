@@ -299,6 +299,15 @@ def _command_of(tokens: list[str]) -> tuple[str | None, list[str]]:
     Skips leading ``!`` negation, ``VAR=value`` assignments, and transparent
     wrappers (``env -u PYTHONPATH docker exec ...`` must still resolve to
     ``docker``; ``timeout 30 kubectl ...`` to ``kubectl``).
+
+    ``command -v``/``command -V`` is a POSIX PATH-lookup builtin, not
+    execution: ``command -v docker`` only tests that ``docker`` resolves to
+    an executable, so its exit status carries no information about whether
+    docker itself would succeed. Unwrapping it to ``docker`` (as with a real
+    wrapper like ``env``) would let a lookup-only check pass as a live probe
+    — the same vacuous-acceptance defect this file exists to close. Detected
+    before generic wrapper-flag consumption so it can short-circuit to "no
+    command" instead of falling through to the wrapped executable.
     """
     idx = 0
     in_wrapper = False
@@ -308,6 +317,10 @@ def _command_of(tokens: list[str]) -> tuple[str | None, list[str]]:
             idx += 1
             continue
         if Path(word).name.lower() in WRAPPER_COMMANDS:
+            if Path(word).name.lower() == "command" and idx + 1 < len(tokens) and (
+                tokens[idx + 1] in ("-v", "-V")
+            ):
+                return None, []
             in_wrapper = True
             idx += 1
             continue

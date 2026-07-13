@@ -13,11 +13,12 @@ standard the fix demands:
   VACUOUS. The old matcher rejected that too. Such a test goes green against the
   UNFIXED code and proves nothing.
 
-Every rejection test below is therefore paired with an assertion that the LEGACY
-substring matcher **ACCEPTS** the same input (``_legacy_has_deploy_keyword(v) is
-True``). That pairing is what makes the RED real: it proves the input actually
-reaches the old accept-path, so ``falsifiable is False`` is a genuine behavioural
-change against the EXISTS-but-WRONG state — not a green on absence.
+Every regression rejection test in sections 1-3 is therefore paired with an assertion
+that the LEGACY substring matcher **ACCEPTS** the same input
+(``_legacy_has_deploy_keyword(v) is True``). That pairing is what makes the RED real:
+it proves the input actually reaches the old accept-path, so ``falsifiable is False``
+is a genuine behavioural change against the EXISTS-but-WRONG state — not a green on
+absence.
 
 The vacuous fixtures are **verbatim strings from the live onex_change_control
 corpus**, not strings invented for this test. An audit of OCC@dev (6,944
@@ -235,6 +236,13 @@ def test_real_probes_are_accepted(name: str, value: str) -> None:
         "cat deploy_notes.txt",
         "grep -q PASS docs/evidence/deploy-report.md",  # non-receipt file, still no probe
         "docker exec 'unbalanced",  # unparseable -> fails CLOSED
+        # `command -v`/`command -V` is a POSIX PATH-lookup builtin, not execution:
+        # it only tests that `docker` resolves to an executable, so its exit
+        # status carries no information about a live deployed surface. Unwrapping
+        # it to `docker` (like a real wrapper) would be a false accept — CodeRabbit
+        # finding on this PR.
+        "command -v docker",
+        "command -V docker",
     ],
 )
 def test_non_probes_fail_closed(value: object) -> None:
