@@ -355,10 +355,15 @@ fi  # HAS_JQ for Section C
 ###############################################################################
 
 # tcp_up HOST PORT — 🟢 if TCP port open within 1s, 🔴 otherwise.
+# NOTE: `-G 1` bounds the CONNECT phase. macOS BSD nc's `-w` only bounds the
+# final read, NOT connection setup, so `-w 1` alone lets an unroutable host
+# (e.g. a LAN IP while off-network) block ~75s on kernel SYN-retransmit and
+# stall the whole status line past Claude Code's render timeout. `-G` is the
+# portable connect timeout and keeps this probe within its 1s budget.
 tcp_up() {
   local h="$1" p="$2" rc=1
   if command -v nc >/dev/null 2>&1; then
-    nc -z -w 1 "$h" "$p" 2>/dev/null && rc=0
+    nc -z -G 1 -w 1 "$h" "$p" 2>/dev/null && rc=0
   else
     ( echo >/dev/tcp/"$h"/"$p" ) 2>/dev/null && rc=0
   fi
