@@ -24,6 +24,17 @@ inputs:
       workflow checks out OCC and passes _occ/contracts here.
     required: false
     default: _occ/contracts
+  falsifiability-mode:
+    description: >
+      OMN-14505 rollout knob: "report" (default) computes the falsifiability
+      verdict and logs a ::warning:: for vacuous deploy evidence, but the
+      gate's exit status stays on the legacy substring rule. "enforce" makes
+      falsifiability load-bearing. Composite actions cannot read the `vars`
+      context directly, so callers resolve the org variable
+      (`${{ vars.DEPLOY_GATE_FALSIFIABILITY || 'report' }}`) and pass it in
+      here.
+    required: false
+    default: report
 
 runs:
   using: composite
@@ -57,7 +68,11 @@ runs:
         # no code change required. Audit (OMN-14505): 1,140 of 1,167 deploy-gated
         # contracts (97.7%) currently declare NO falsifiable deploy probe, so
         # enforcing before the honest-probe path exists would jam every runtime PR.
-        DEPLOY_GATE_FALSIFIABILITY: ${{ vars.DEPLOY_GATE_FALSIFIABILITY || 'report' }}
+        # Composite actions cannot reference the `vars` context directly (GitHub
+        # Actions restriction — "Unrecognized named-value: 'vars'"), so the org
+        # variable is resolved by the CALLER at job/workflow scope and threaded
+        # through as the `falsifiability-mode` input instead.
+        DEPLOY_GATE_FALSIFIABILITY: ${{ inputs.falsifiability-mode }}
       run: |
         if ! changed_files="$(gh pr diff "$PR_NUMBER" --name-only 2>/tmp/deploy-gate-gh-diff.err | tr '\n' ' ')"; then
           base_ref="${GITHUB_BASE_REF:-main}"
