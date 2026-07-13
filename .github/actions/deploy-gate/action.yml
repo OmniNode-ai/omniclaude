@@ -49,6 +49,15 @@ runs:
         PR_NUMBER: ${{ inputs.pr-number }}
         CONTRACTS_DIR: ${{ inputs.contracts-dir }}
         ACTION_PATH: ${{ github.action_path }}
+        # OMN-14505 rollout knob. "report" (the default) computes the falsifiability
+        # verdict and logs a ::warning:: for every cited ticket whose deploy evidence
+        # is vacuous, but the gate's EXIT STATUS stays on the legacy substring rule —
+        # so landing this fix cannot wedge any of the 4 consuming repos. Flip to
+        # "enforce" org-wide by setting the DEPLOY_GATE_FALSIFIABILITY org variable;
+        # no code change required. Audit (OMN-14505): 1,140 of 1,167 deploy-gated
+        # contracts (97.7%) currently declare NO falsifiable deploy probe, so
+        # enforcing before the honest-probe path exists would jam every runtime PR.
+        DEPLOY_GATE_FALSIFIABILITY: ${{ vars.DEPLOY_GATE_FALSIFIABILITY || 'report' }}
       run: |
         if ! changed_files="$(gh pr diff "$PR_NUMBER" --name-only 2>/tmp/deploy-gate-gh-diff.err | tr '\n' ' ')"; then
           base_ref="${GITHUB_BASE_REF:-main}"
