@@ -29,10 +29,9 @@ inputs:
       OMN-14505 rollout knob: "report" (default) computes the falsifiability
       verdict and logs a ::warning:: for vacuous deploy evidence, but the
       gate's exit status stays on the legacy substring rule. "enforce" makes
-      falsifiability load-bearing. Composite actions cannot read the `vars`
-      context directly, so callers resolve the org variable
-      (`${{ vars.DEPLOY_GATE_FALSIFIABILITY || 'report' }}`) and pass it in
-      here.
+      falsifiability load-bearing. Composite actions cannot read the vars
+      context directly, so callers resolve the DEPLOY_GATE_FALSIFIABILITY
+      org variable at job scope and pass the resolved value in here.
     required: false
     default: report
 
