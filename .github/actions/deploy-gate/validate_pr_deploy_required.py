@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -107,8 +109,336 @@ CLI_DEPLOY_SIGNAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Deploy evidence: a dod_evidence check whose check_value contains one of these.
-DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
+# ---------------------------------------------------------------------------
+# Deploy evidence falsifiability (OMN-14505).
+#
+# The legacy rule was a substring test:
+#
+#     DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
+#     if any(kw in check_value.lower() for kw in DEPLOY_KEYWORDS): return True
+#
+# Because the bare word "deploy" was a keyword, ANY check_value containing the
+# word "deploy" satisfied a REQUIRED merge gate — including one that verifies
+# nothing. Worse, the receipt paths are themselves named `dod-deploy-*`, so a
+# check_value passed on the *filename* alone. An audit of onex_change_control@dev
+# (6,944 contracts) found 1,123 of 1,268 satisfying checks were circular greps of
+# the receipt file the same OCC companion PR authored:
+#
+#     grep -q '^status: PASS$' drift/dod_receipts/OMN-X/dod-deploy-assessment/command.yaml
+#
+# — they grep their own receipt for text their own author wrote into it, so they
+# can never go RED.
+#
+# Tightening the word list does NOT fix this: 66 of those circular checks ALREADY
+# embed `docker exec` / `rpk topic produce` as *quoted text* inside the grep, so a
+# stricter list passes them unchanged. A substring test structurally cannot tell
+# "the probe executes" from "the probe's name appears as an argument to echo".
+#
+# The rule below is two-part, and the DENY runs first and unconditionally:
+#
+#   1. DENY self-reference — a check that reads back the receipt/contract tree the
+#      evidence author writes is circular by construction. This is what defeats
+#      embedding a probe keyword inside a quoted string.
+#   2. ALLOW only a live-surface probe in COMMAND POSITION — the check_value is
+#      shell-parsed (split on && || ; |, recursing into $(...) and `bash -c`), and
+#      at least one segment's *command* must be a probe binary. `echo 'docker exec'`
+#      does not qualify: shlex keeps "docker exec" as a single quoted argument to
+#      `echo`, so `docker` never reaches command position.
+#
+# The distinguishing property is where the check's exit status gets its information.
+# A real probe queries a live external surface whose state is NOT under the author's
+# control at authoring time; a vacuous check reads back artifacts the author wrote.
+#
+# Fails CLOSED: an empty, non-string, or unparseable check_value is REJECTED.
+# ---------------------------------------------------------------------------
+
+# Retained ONLY for the report-only rollout stage (see FALSIFIABILITY_MODE_ENV):
+# the legacy verdict is still computed so CI can log the old-vs-new delta before
+# the new rule becomes load-bearing.
+LEGACY_DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
+
+# Commands that probe a LIVE runtime surface. Their exit status depends on the
+# state of a deployed system, not on the content of a file the author wrote.
+LIVE_PROBE_COMMANDS = frozenset(
+    {
+        # containers / orchestrators
+        "docker",
+        "docker-compose",
+        "podman",
+        "nerdctl",
+        "kubectl",
+        # message broker
+        "rpk",
+        "kcat",
+        "kafkacat",
+        # datastores
+        "psql",
+        "mysql",
+        "redis-cli",
+        "valkey-cli",
+        "mongosh",
+        # HTTP surfaces
+        "curl",
+        "wget",
+        "httpie",
+        # remote hosts
+        "ssh",
+        # ONEX node dispatch against the live runtime
+        "onex",
+    }
+)
+
+# Transparent wrappers: they execute their argument, so the real command is the
+# next token. `env -u PYTHONPATH docker exec ...` must still resolve to `docker`.
+WRAPPER_COMMANDS = frozenset(
+    {
+        "env",
+        "sudo",
+        "time",
+        "timeout",
+        "nohup",
+        "stdbuf",
+        "nice",
+        "command",
+        "exec",
+        "xargs",
+        "then",
+        "do",
+    }
+)
+
+# Shells whose `-c <string>` argument is itself a script to parse.
+SHELL_COMMANDS = frozenset({"bash", "sh", "zsh", "dash"})
+
+# Artifact trees the evidence author writes in the SAME OCC companion PR. A
+# check_value that reads these back is self-referential: its verdict is decided by
+# text the author typed, not by the state of any deployed system.
+SELF_REFERENTIAL_PATTERNS: list[Pattern[str]] = [
+    # the DoD receipt tree — drift/dod_receipts/OMN-X/<item>/command.yaml
+    re.compile(r"dod_receipts", re.IGNORECASE),
+    # $CONTRACT_REPO_DIR / ${CONTRACT_REPO_DIR} — the OCC checkout root
+    re.compile(r"\$\{?CONTRACT_REPO_DIR\b", re.IGNORECASE),
+    # the ticket's own contract file
+    re.compile(r"contracts/OMN-\d+\.ya?ml", re.IGNORECASE),
+]
+
+# Rollout control (OMN-14505). "report" computes the falsifiability verdict and
+# logs it, but the gate's exit status stays on the legacy rule — zero merge risk
+# while the true failure population is measured across the 4 consuming repos.
+# "enforce" makes falsifiability load-bearing. The flip is an env change, not a
+# code change: the enforce path is fully implemented and tested.
+FALSIFIABILITY_MODE_ENV = "DEPLOY_GATE_FALSIFIABILITY"
+FALSIFIABILITY_MODE_DEFAULT = "report"
+
+# Author-facing guidance. It deliberately describes the PROPERTY required, not a
+# word to type — the whole defect was that the gate advertised a magic substring,
+# so authors supplied the substring instead of the evidence.
+DEPLOY_EVIDENCE_GUIDANCE = (
+    "Add a dod_evidence item to onex_change_control/contracts/OMN-XXXX.yaml whose "
+    "check_value is a FALSIFIABLE deploy probe: it must execute a command against a "
+    "live surface (docker/kubectl/rpk/psql/curl/ssh/onex) so that its exit status "
+    "depends on the state of the deployed system. It must NOT read back the receipt "
+    "or contract your own PR authors (drift/dod_receipts/..., $CONTRACT_REPO_DIR) — "
+    "such a check greps text you wrote and can never go RED. "
+    "Good: docker exec ${RUNTIME_CONTAINER:-omninode-runtime} python -c 'import <changed_module>'. "
+    "Rejected: grep -q '^status: PASS$' drift/dod_receipts/OMN-XXXX/dod-deploy/command.yaml."
+)
+
+_CMD_SUBST_RE = re.compile(r"\$\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+_BACKTICK_RE = re.compile(r"`([^`]*)`")
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+# Shell operators that terminate one command and begin the next. Split on these
+# only AFTER lexing — a `;` inside a quoted python -c string is data, not an
+# operator, and splitting the raw text on it corrupts the quoting.
+_OPERATOR_TOKENS = frozenset({"&&", "||", "|", ";", "&", "(", ")", "\n"})
+
+# Wrapper flags that consume the following token as their value, so the real
+# command is two tokens further on (`env -u PYTHONPATH docker exec ...`).
+_WRAPPER_FLAGS_WITH_ARG = frozenset(
+    {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
+)
+
+# `timeout 30`, `timeout 1m` — a bare duration argument to a wrapper.
+_DURATION_RE = re.compile(r"^\d+(\.\d+)?[smhd]?$")
+
+
+@dataclass(frozen=True)
+class CheckVerdict:
+    """Why one check_value was accepted or rejected as deploy evidence."""
+
+    falsifiable: bool
+    reason: str
+
+
+def _lex(script: str) -> list[str]:
+    """Lex a shell script into tokens, with operators kept as their own tokens.
+
+    ``punctuation_chars=True`` is what makes this correct: it groups ``&&`` / ``||``
+    as single tokens AND — critically — it lexes *after* quote handling, so a ``;``
+    inside ``python -c "a; b"`` stays inside the quoted token instead of being
+    mistaken for a command separator.
+
+    Quote-stripping is also what makes the whole rule work: ``echo 'docker exec x'``
+    lexes to ``['echo', 'docker exec x']``, so the probe name inside the quotes is a
+    single *argument* token and can never reach command position.
+
+    An unparseable script (unbalanced quotes) fails CLOSED — no tokens, no probe.
+    """
+    lexer = shlex.shlex(script, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        return list(lexer)
+    except ValueError:
+        return []
+
+
+def _command_of(tokens: list[str]) -> tuple[str | None, list[str]]:
+    """Return (command, remaining_args) for one pipeline segment.
+
+    Skips leading ``!`` negation, ``VAR=value`` assignments, and transparent
+    wrappers (``env -u PYTHONPATH docker exec ...`` must still resolve to
+    ``docker``; ``timeout 30 kubectl ...`` to ``kubectl``).
+
+    ``command -v``/``command -V`` is a POSIX PATH-lookup builtin, not
+    execution: ``command -v docker`` only tests that ``docker`` resolves to
+    an executable, so its exit status carries no information about whether
+    docker itself would succeed. Unwrapping it to ``docker`` (as with a real
+    wrapper like ``env``) would let a lookup-only check pass as a live probe
+    — the same vacuous-acceptance defect this file exists to close. Detected
+    before generic wrapper-flag consumption so it can short-circuit to "no
+    command" instead of falling through to the wrapped executable.
+    """
+    idx = 0
+    in_wrapper = False
+    while idx < len(tokens):
+        word = tokens[idx]
+        if word == "!" or _ASSIGNMENT_RE.match(word):
+            idx += 1
+            continue
+        if Path(word).name.lower() in WRAPPER_COMMANDS:
+            if Path(word).name.lower() == "command" and idx + 1 < len(tokens) and (
+                tokens[idx + 1] in ("-v", "-V")
+            ):
+                return None, []
+            in_wrapper = True
+            idx += 1
+            continue
+        if in_wrapper:
+            # Consume the wrapper's own flags/arguments until the real command.
+            if word in _WRAPPER_FLAGS_WITH_ARG:
+                idx += 2
+                continue
+            if word.startswith("-") or _DURATION_RE.match(word):
+                idx += 1
+                continue
+        break
+    if idx >= len(tokens):
+        return None, []
+    return Path(tokens[idx]).name.lower(), tokens[idx + 1 :]
+
+
+def _commands_in(script: str, depth: int = 0) -> set[str]:
+    """Return the commands appearing in COMMAND POSITION in a shell script.
+
+    Recurses into ``$(...)`` / backtick substitutions and ``bash -c '<script>'``,
+    because a probe genuinely executes in all three positions. Depth-bounded so
+    pathological nesting cannot spin.
+    """
+    if depth > 4 or not script.strip():
+        return set()
+
+    found: set[str] = set()
+
+    # Commands inside substitutions ARE executed — recurse before stripping them.
+    for match in _CMD_SUBST_RE.finditer(script):
+        found |= _commands_in(match.group(1), depth + 1)
+    for match in _BACKTICK_RE.finditer(script):
+        found |= _commands_in(match.group(1), depth + 1)
+
+    # Replace substitutions with a space so their inner text is not re-read as a
+    # top-level argument. Substituting a space (not "") keeps surrounding quotes
+    # balanced: `test "$(docker ...)" = x` -> `test " " = x`.
+    stripped = _BACKTICK_RE.sub(" ", _CMD_SUBST_RE.sub(" ", script))
+
+    # Split the LEXED token stream on operator tokens — never the raw text.
+    segment: list[str] = []
+    segments: list[list[str]] = []
+    for token in _lex(stripped):
+        if token in _OPERATOR_TOKENS:
+            segments.append(segment)
+            segment = []
+        else:
+            segment.append(token)
+    segments.append(segment)
+
+    for tokens in segments:
+        command, rest = _command_of(tokens)
+        if command is None:
+            continue
+
+        # `bash -c '<script>'` — the -c argument is a script, not an argument.
+        if command in SHELL_COMMANDS:
+            if "-c" in rest:
+                c_at = rest.index("-c")
+                if c_at + 1 < len(rest):
+                    found |= _commands_in(rest[c_at + 1], depth + 1)
+            continue
+
+        found.add(command)
+
+    return found
+
+
+def classify_check_value(value: object) -> CheckVerdict:
+    """Decide whether a check_value is a FALSIFIABLE deploy probe.
+
+    Falsifiable means: run it against un-deployed / unfixed code and it goes RED.
+    Fails CLOSED — anything not provably a live probe is rejected.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return CheckVerdict(False, "check_value is empty or not a string")
+
+    # (1) DENY self-reference FIRST and unconditionally. This is the rule that
+    # defeats embedding a probe keyword as quoted text beside a circular grep.
+    for pattern in SELF_REFERENTIAL_PATTERNS:
+        if pattern.search(value):
+            return CheckVerdict(
+                False,
+                "self-referential: reads back the receipt/contract tree the "
+                "evidence author writes in the same PR, so its verdict is decided "
+                "by text the author typed, not by the state of a deployed system "
+                f"(matched {pattern.pattern!r})",
+            )
+
+    # (2) ALLOW only a live-surface probe in COMMAND POSITION.
+    commands = _commands_in(value)
+    probes = commands & LIVE_PROBE_COMMANDS
+    if not probes:
+        return CheckVerdict(
+            False,
+            "no live-surface probe in command position — the check's exit status "
+            "cannot depend on the state of the deployed system (commands found: "
+            f"{sorted(commands) or 'none'}; expected one of: "
+            f"{sorted(LIVE_PROBE_COMMANDS)})",
+        )
+
+    return CheckVerdict(
+        True, f"live-surface probe in command position: {sorted(probes)}"
+    )
+
+
+def _legacy_has_deploy_keyword(value: object) -> bool:
+    """The pre-OMN-14505 substring rule. Retained only for report-mode delta logs."""
+    if not isinstance(value, str):
+        return False
+    return any(kw in value.lower() for kw in LEGACY_DEPLOY_KEYWORDS)
+
+
+def falsifiability_mode() -> str:
+    """Resolve the rollout mode: 'report' (default) or 'enforce'."""
+    mode = os.environ.get(FALSIFIABILITY_MODE_ENV, FALSIFIABILITY_MODE_DEFAULT)
+    return mode.strip().lower() or FALSIFIABILITY_MODE_DEFAULT
 
 
 def _glob_to_regex(pattern: str) -> Pattern[str]:
@@ -385,27 +715,60 @@ def resolve_occ_evidence_source(
     )
 
 
-def has_deploy_evidence(contract_path: Path) -> bool:
-    """Return True if the ticket contract has at least one deploy DoD evidence item."""
+def iter_check_values(contract_path: Path) -> list[tuple[str, object]]:
+    """Yield (evidence_item_id, check_value) for every check in a ticket contract."""
     if not contract_path.exists():
-        return False
+        return []
     import yaml
 
     try:
         with contract_path.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     except (yaml.YAMLError, OSError):
-        return False
+        return []
 
     dod_evidence = data.get("dod_evidence", []) if isinstance(data, dict) else []
+    out: list[tuple[str, object]] = []
     for item in dod_evidence:
-        checks = item.get("checks", []) if isinstance(item, dict) else []
-        for check in checks:
-            value = check.get("check_value", "") if isinstance(check, dict) else ""
-            if isinstance(value, str):
-                if any(kw in value.lower() for kw in DEPLOY_KEYWORDS):
-                    return True
-    return False
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or item.get("evidence_id") or "?")
+        for check in item.get("checks", []) or []:
+            if isinstance(check, dict):
+                out.append((item_id, check.get("check_value", "")))
+    return out
+
+
+def has_deploy_evidence(contract_path: Path) -> bool:
+    """Return True if the contract declares at least one FALSIFIABLE deploy probe.
+
+    OMN-14505: this used to be a substring test for the word "deploy", which any
+    string containing that word satisfied. It is now a falsifiability test — see
+    ``classify_check_value``. In "report" mode (the rollout default) the returned
+    verdict stays on the legacy rule so no repo's merges are wedged, but the
+    falsifiability verdict is computed and logged so the delta is measurable.
+    """
+    checks = iter_check_values(contract_path)
+    enforce = falsifiability_mode() == "enforce"
+
+    falsifiable = [(i, v) for i, v in checks if classify_check_value(v).falsifiable]
+    legacy = [(i, v) for i, v in checks if _legacy_has_deploy_keyword(v)]
+
+    if enforce:
+        return bool(falsifiable)
+
+    # Report mode: surface the vacuous checks the legacy rule is about to accept.
+    if legacy and not falsifiable:
+        print(
+            f"::warning::deploy-gate falsifiability (OMN-14505, report-only): "
+            f"{contract_path.name} passes the LEGACY substring rule but declares NO "
+            f"falsifiable deploy probe. Under enforcement this ticket would FAIL. "
+            f"Vacuous checks: "
+            + "; ".join(
+                f"[{i}] {classify_check_value(v).reason}" for i, v in legacy[:3]
+            )
+        )
+    return bool(legacy)
 
 
 def validate_pr_deploy_gate(
@@ -448,10 +811,8 @@ def validate_pr_deploy_gate(
             message=(
                 "DEPLOY GATE FAILED: PR touches runtime paths but cites no OMN-XXXX ticket. "
                 f"Runtime paths: {runtime_hits}. "
-                "Add a dod_evidence item with check_value containing 'deploy', "
-                "'docker exec', or 'rpk topic produce' to the ticket contract in "
-                "onex_change_control/contracts/OMN-XXXX.yaml. "
-                "See OMN-8912, OMN-9685, and OMN-11423."
+                f"{DEPLOY_EVIDENCE_GUIDANCE} "
+                "See OMN-8912, OMN-9685, OMN-11423, and OMN-14505."
             ),
         )
 
@@ -491,14 +852,22 @@ def validate_pr_deploy_gate(
         )
     if no_deploy:
         parts.append(
-            f"Tickets found but missing deploy evidence (check_value must contain "
-            f"'docker exec', 'rpk topic produce', or 'deploy'): {no_deploy}."
+            f"Tickets found but declaring no falsifiable deploy probe: {no_deploy}."
         )
+        for ticket_id in no_deploy:
+            for item_id, value in iter_check_values(
+                contracts_dir / f"{ticket_id}.yaml"
+            ):
+                verdict = classify_check_value(value)
+                if not verdict.falsifiable and _legacy_has_deploy_keyword(value):
+                    parts.append(
+                        f"  {ticket_id} [{item_id}] REJECTED — {verdict.reason}"
+                    )
+    parts.append(DEPLOY_EVIDENCE_GUIDANCE)
     parts.append(
-        "Add a dod_evidence item with check_value containing 'deploy', 'docker exec', or "
-        "'rpk topic produce' to onex_change_control/contracts/OMN-XXXX.yaml. "
         "Root cause: OMN-8841 (deploy-agent inactive 2 days post-Dockerfile change). "
-        "Gate: OMN-8912. Contract source fix: OMN-11423."
+        "Gate: OMN-8912. Contract source fix: OMN-11423. "
+        "Falsifiability fix: OMN-14505."
     )
 
     return DeployGateResult(

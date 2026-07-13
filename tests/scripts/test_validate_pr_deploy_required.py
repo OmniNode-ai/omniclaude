@@ -128,8 +128,23 @@ class TestFindRuntimePaths:
 def _write_contract(contracts_dir: Path, ticket_id: str, has_deploy: bool) -> None:
     data: dict = {"dod_evidence": []}
     if has_deploy:
+        # OMN-14505: this fixture used to be the prose string
+        # "deploy omnibase_core to .201" — no probe at all, asserted to PASS the
+        # gate purely because it contained the word "deploy". The test suite
+        # encoded the very defect the gate was supposed to catch. It is now a real
+        # falsifiable probe, so these tests pass under BOTH report and enforce mode.
         data["dod_evidence"] = [
-            {"checks": [{"check_value": "deploy omnibase_core to .201"}]}
+            {
+                "id": "dod-deploy-smoke",
+                "checks": [
+                    {
+                        "check_value": (
+                            "docker exec ${RUNTIME_CONTAINER:-omninode-runtime} "
+                            'python -c "import omnibase_core; print(omnibase_core.__version__)"'
+                        )
+                    }
+                ],
+            }
         ]
     (contracts_dir / f"{ticket_id}.yaml").write_text(yaml.dump(data))
 
