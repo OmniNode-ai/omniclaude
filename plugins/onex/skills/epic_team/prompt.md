@@ -1432,12 +1432,19 @@ tickets where agents claimed completion without verified DoD evidence.
 
 3. **Load `dod_evidence[]`** from each contract:
    - If empty or missing, mark as `skipped` (no DoD to verify)
-   - If present, invoke the evidence runner:
+   - If present, invoke the evidence runner. Pass `workspace=` explicitly --
+     the ticket's own worktree path, recorded on `ticket_results` under the
+     `worktree` key (see the `task_completed` event above) -- rather than
+     relying on the ambient CWD (an un-workspaced check_value resolves
+     against whatever directory happens to be current, not necessarily the
+     product repo this ticket touched):
      ```python
      # Use the shared runner
      from dod_evidence_runner import run_dod_evidence, write_evidence_receipt
-     result = run_dod_evidence(contract["dod_evidence"])
-     write_evidence_receipt(ticket_id, contract_path, result)
+     ticket_meta = ticket_results[ticket_id]
+     workspace = ticket_meta.get("worktree")
+     result = run_dod_evidence(contract["dod_evidence"], workspace=workspace)
+     write_evidence_receipt(ticket_id, contract_path, result, working_dir=workspace)
      ```
 
 4. **Produce epic-level audit report**:

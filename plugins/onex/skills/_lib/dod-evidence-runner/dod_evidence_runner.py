@@ -44,6 +44,27 @@ try:
 except ImportError:
     resolve_evidence_root = None  # type: ignore[assignment]
 
+# <TICKET>: import the inert-check detector from the hosted Contract
+# Compliance engine instead of forking a second copy of the regex patterns.
+# Before this, a check_value that only reads ``drift/dod_receipts/`` or
+# ``contracts/OMN-*`` (structurally incapable of observing the product) would
+# locally report whatever its raw glob/grep/exit code happened to be -- often
+# a false "verified" -- while the hosted CI gate demoted the identical check
+# to WARN. That divergence is exactly what let OCC PRs look valid locally and
+# fail remotely. Guarded because an omniclaude build pinned to an
+# onex-change-control release that predates <TICKET> (no
+# ``contract_compliance_check`` module yet) must not crash -- it degrades to
+# "no demotion" rather than reintroducing a duplicate.
+try:
+    from onex_change_control.scripts.contract_compliance_check import (
+        _is_inert_check as _occ_is_inert_check,
+    )
+
+    _OCC_COMPLIANCE_ENGINE_AVAILABLE = True
+except ImportError:
+    _occ_is_inert_check = None  # type: ignore[assignment]
+    _OCC_COMPLIANCE_ENGINE_AVAILABLE = False
+
 _DEFAULT_TIMEOUT_SECONDS = 30
 
 logger = logging.getLogger(__name__)
@@ -81,7 +102,30 @@ class EvidenceRunResult:
     details: list[EvidenceItemResult] = field(default_factory=list)
 
 
-def _run_check_test_exists(check_value: str | dict[str, str]) -> CheckResult:
+def is_inert_check(check_value: str | dict[str, str]) -> bool:
+    """True if check_value can only observe the OCC receipt/contract store.
+
+    Delegates to the same ``_is_inert_check`` the hosted Contract Compliance
+    gate enforces (onex_change_control.scripts.contract_compliance_check),
+    so a check that is inert is treated identically local vs hosted rather
+    than maintained as a second copy of the pattern list. When the shared
+    engine is unavailable (stale onex-change-control pin), degrades to "not
+    inert" -- i.e. no local demotion -- rather than reimplementing the
+    regex, so the hosted gate remains the single source of truth for what
+    counts as inert.
+    """
+    if not _OCC_COMPLIANCE_ENGINE_AVAILABLE:
+        logger.debug(
+            "onex_change_control.scripts.contract_compliance_check unavailable; "
+            "inert-check demotion skipped locally (hosted gate still enforces it)"
+        )
+        return False
+    return bool(_occ_is_inert_check(check_value))
+
+
+def _run_check_test_exists(
+    check_value: str | dict[str, str], workspace: Path
+) -> CheckResult:
     """Check if test files exist matching the pattern."""
     pattern = str(check_value)
     # Ensure we look for test files
@@ -91,7 +135,7 @@ def _run_check_test_exists(check_value: str | dict[str, str]) -> CheckResult:
         search = pattern
 
     matches = (
-        list(Path().glob(search))
+        list(workspace.glob(search))
         if not Path(search).is_absolute()
         else list(Path("/").glob(search.lstrip("/")))
     )
@@ -110,8 +154,21 @@ def _run_check_test_exists(check_value: str | dict[str, str]) -> CheckResult:
     )
 
 
-def _run_check_test_passes(check_value: str | dict[str, str]) -> CheckResult:
-    """Run pytest and check exit code."""
+def _run_check_test_passes(
+    check_value: str | dict[str, str], workspace: Path
+) -> CheckResult:
+    """Run the check_value as a command and check exit code.
+
+    <TICKET>: investigated unifying this with the hosted ``test_passes``
+    semantics (poll ``gh pr checks`` for CI green, ignoring check_value) and
+    found the real corpus contradicts that: many onex_change_control
+    contracts author ``test_passes`` with a real command (``npm run test``,
+    ``uv run pytest ...``) expecting it to EXECUTE. Hosted's gh-poll
+    semantics only make sense post-PR, once CI has already run; locally
+    (pre-PR, no CI yet) running the command directly is the only thing that
+    can be checked. This divergence is intentional and lifecycle-driven, not
+    a defect -- left unchanged.
+    """
     cmd = str(check_value)
     try:
         result = subprocess.run(
@@ -121,6 +178,7 @@ def _run_check_test_passes(check_value: str | dict[str, str]) -> CheckResult:
             text=True,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
             check=False,
+            cwd=workspace,
         )
         if result.returncode == 0:
             return CheckResult(
@@ -144,15 +202,17 @@ def _run_check_test_passes(check_value: str | dict[str, str]) -> CheckResult:
         )
 
 
-def _run_check_file_exists(check_value: str | dict[str, str]) -> CheckResult:
+def _run_check_file_exists(
+    check_value: str | dict[str, str], workspace: Path
+) -> CheckResult:
     """Check if files matching a glob pattern exist."""
     pattern = str(check_value)
     p = Path(pattern)
-    base = p.parent if p.parent != Path() else Path()
+    base = workspace / p.parent if p.parent != Path() else workspace
     matches = (
         list(base.glob(p.name))
         if "*" not in str(p.parent)
-        else list(Path().glob(pattern))
+        else list(workspace.glob(pattern))
     )
     if matches:
         return CheckResult(
@@ -169,7 +229,7 @@ def _run_check_file_exists(check_value: str | dict[str, str]) -> CheckResult:
     )
 
 
-def _run_check_grep(check_value: str | dict[str, str]) -> CheckResult:
+def _run_check_grep(check_value: str | dict[str, str], workspace: Path) -> CheckResult:
     """Search for a pattern in files."""
     if isinstance(check_value, dict):
         pattern = check_value.get("pattern", "")
@@ -185,6 +245,7 @@ def _run_check_grep(check_value: str | dict[str, str]) -> CheckResult:
             text=True,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
             check=False,
+            cwd=workspace,
         )
         if result.returncode == 0 and result.stdout.strip():
             files = result.stdout.strip().split("\n")
@@ -209,7 +270,9 @@ def _run_check_grep(check_value: str | dict[str, str]) -> CheckResult:
         )
 
 
-def _run_check_command(check_value: str | dict[str, str]) -> CheckResult:
+def _run_check_command(
+    check_value: str | dict[str, str], workspace: Path
+) -> CheckResult:
     """Run an arbitrary command and check exit code."""
     cmd = str(check_value)
     try:
@@ -220,6 +283,7 @@ def _run_check_command(check_value: str | dict[str, str]) -> CheckResult:
             text=True,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
             check=False,
+            cwd=workspace,
         )
         if result.returncode == 0:
             return CheckResult(
@@ -243,7 +307,9 @@ def _run_check_command(check_value: str | dict[str, str]) -> CheckResult:
         )
 
 
-def _run_check_endpoint(check_value: str | dict[str, str]) -> CheckResult:
+def _run_check_endpoint(
+    check_value: str | dict[str, str], _workspace: Path
+) -> CheckResult:
     """Check if an endpoint is reachable (skipped — requires live infra)."""
     return CheckResult(
         check_type="endpoint",
@@ -265,6 +331,7 @@ _CHECK_RUNNERS = {
 
 def run_dod_evidence(
     evidence_items: list[dict[str, Any]],
+    workspace: Path | str | None = None,
 ) -> EvidenceRunResult:
     """Run all DoD evidence checks and produce structured results.
 
@@ -272,11 +339,21 @@ def run_dod_evidence(
         evidence_items: List of dod_evidence item dicts from the contract,
             each with keys: id, description, checks (list of {check_type, check_value}),
             and optionally status.
+        workspace: Product checkout the checks run against. Defaults to CWD
+            (matching the hosted Contract Compliance gate's own
+            ``Path.cwd()`` fallback when ``--workspace`` is omitted) --
+            callers that know the real product root (e.g. dod_sweep,
+            epic_team) should pass it explicitly rather than rely on
+            whatever directory the caller happened to be in when it
+            invoked this function. <TICKET>: previously every check ran
+            with no cwd binding at all (ambient-CWD execution) -- the same
+            class of defect a prior fix closed on the hosted side.
 
     Returns:
         EvidenceRunResult with aggregate counts and per-item details.
 
     """
+    resolved_workspace = Path(workspace).resolve() if workspace else Path.cwd()
     result = EvidenceRunResult(total=len(evidence_items))
 
     for item in evidence_items:
@@ -293,8 +370,16 @@ def run_dod_evidence(
 
             runner = _CHECK_RUNNERS.get(check_type, _run_check_command)
             start = time.monotonic()
-            cr = runner(check_value)
+            cr = runner(check_value, resolved_workspace)
             cr.duration_ms = (time.monotonic() - start) * 1000
+
+            if is_inert_check(check_value):
+                # <TICKET> parity with the hosted demotion rule: a check
+                # that can only observe the OCC receipt/contract store
+                # proves nothing about this product, whatever its raw result
+                # was. Never let it launder as "verified".
+                cr.status = "skipped"
+                cr.message = f"INERT (reads OCC store, not the product): {cr.message}"
 
             check_results.append(cr)
 
