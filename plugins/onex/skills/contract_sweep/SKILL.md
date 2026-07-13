@@ -25,7 +25,7 @@ args:
     description: "Shorthand for --mode compliance"
     required: false
   - name: --repos
-    description: "Comma-separated repo names. REQUIRED for --compliance (harness-collected census — see Compliance Mode). Optional for --drift (default: all 8 repos)."
+    description: "Comma-separated repo names. REQUIRED for --compliance (harness-collected census — see Compliance Mode). Optional with --drift (default: all 8 repos)."
     required: false
   - name: --dry-run
     description: "Print findings only, no ticket creation"
@@ -212,7 +212,7 @@ workflow step, `scripts/ci/run_contract_sweep_gate.py`, or an equivalent harness
 an operator-typed convenience value and never prose in this file:
 
 ```bash
-uv run python -m omnimarket.nodes.node_contract_sweep --repos omnimarket
+uv run python -m omnimarket.nodes.node_contract_sweep --repos omnimarket  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
 ```
 
 Prints a `ContractSweepResult` JSON to stdout (`violations`, `contracts_checked`,
