@@ -828,6 +828,20 @@ allowed_extras:
       reference only and will be removed in a follow-up cleanup ticket.
     ticket: OMN-10834
 
+  - topic: "onex.cmd.omnibase-infra.delegation-request.v1"
+    lifecycle: integration
+    reason: >
+      Canonical delegation command topic. Was previously declared in omniclaude's
+      own node_delegation_orchestrator/contract.yaml (subscribe_topics) — a
+      confirmed-dead, never-live-wired duplicate of omnimarket's canonical node,
+      deleted in OMN-14584. Producer-side contract ownership now lives exclusively
+      in omnimarket (node_delegation_orchestrator/contract.yaml event_bus). Still
+      referenced here as TopicBase.DELEGATION_REQUEST by
+      node_golden_chain_payload_compute/chain_registry.py for golden-chain
+      head-topic registration; no omniclaude node contract can own a
+      foreign-domain command topic.
+    ticket: OMN-14584
+
   # ---------------------------------------------------------------------------
   # Durable capture topics (OMN-13092)
   # Producer-side contract ownership lives in omnimarket:
