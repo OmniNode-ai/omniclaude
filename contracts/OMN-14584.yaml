@@ -1,0 +1,54 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14584"
+title: "Delete dead omniclaude delegation orchestrator duplicate"
+summary: >-
+  Repo-local contract for omniclaude#1900. The change deletes the dead omniclaude
+  node_delegation_orchestrator duplicate, removes orphaned topic/runtime references,
+  and adds a cross-repo node identity gate so future bare-name node collisions are
+  caught before runtime boot or graph ingestion.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused unit and node tests pass for the deletion and regression gate."
+    command: "uv run pytest tests/unit/ tests/nodes/"
+  - kind: "tests"
+    description: "Topic governance remains valid after deleting the orphaned topics."
+    command: "uv run pytest tests/unit/test_topic_governance.py"
+  - kind: "lint"
+    description: "Ruff, mypy, pre-commit, and pre-push hooks pass."
+    command: "uv run ruff format && uv run ruff check --fix && uv run mypy src/omniclaude/ && uv run pre-commit run"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-dead-node-contract-deleted"
+    description: >-
+      The omniclaude node_delegation_orchestrator implementation and contract are
+      deleted from the product tree; omnimarket remains the canonical owner.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test ! -e src/omniclaude/nodes/node_delegation_orchestrator/contract.yaml"
+  - id: "dod-node-identity-gate"
+    description: >-
+      The regression suite and pre-commit wiring include the node identity keying
+      guard that prevents future bare-name node collisions.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f tests/unit/test_no_duplicate_node_contracts.py && grep -q check_node_identity_keying.py .pre-commit-config.yaml"
+  - id: "dod-deploy-assessment"
+    description: >-
+      This PR changes source, validation, tests, and contract evidence only; it
+      does not change Dockerfiles, compose files, or deployment scripts.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "! git diff --name-only origin/dev...HEAD | grep -qE '(^|/)(Dockerfile|docker-compose|deploy/|deployment/)'"
