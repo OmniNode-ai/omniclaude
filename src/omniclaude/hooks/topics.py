@@ -509,11 +509,14 @@ class TopicBase(StrEnum):
     DELEGATION_INFRA_COMPLETED = "onex.evt.omnibase-infra.delegation-completed.v1"
     """Canonical delegation completion event owned by omnibase_infra."""
 
-    DELEGATION_COMPLETED = "onex.evt.omniclaude.delegation-completed.v1"
-    """Emitted when a delegation pipeline run completes successfully."""
-
-    DELEGATION_FAILED = "onex.evt.omniclaude.delegation-failed.v1"
-    """Emitted when a delegation pipeline run fails at any stage."""
+    # OMN-14584: DELEGATION_COMPLETED / DELEGATION_FAILED (the
+    # onex.evt.omniclaude.delegation-{completed,failed}.v1 variants) were
+    # removed. They were declared and emitted exclusively by omniclaude's own
+    # node_delegation_orchestrator — a confirmed-dead, never-live-wired
+    # duplicate of omnimarket's canonical node (see OMN-14584) — and had zero
+    # other producers or consumers anywhere in this repo. The canonical
+    # terminal event is DELEGATION_INFRA_COMPLETED above, owned by
+    # omnimarket's contract.
 
     # ==========================================================================
     # Hook health observability topics (OMN-7157)

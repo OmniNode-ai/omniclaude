@@ -212,7 +212,7 @@ workflow step, `scripts/ci/run_contract_sweep_gate.py`, or an equivalent harness
 an operator-typed convenience value and never prose in this file:
 
 ```bash
-uv run python -m omnimarket.nodes.node_contract_sweep --repos omnimarket  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
+python -m omnimarket.nodes.node_contract_sweep --repos omnimarket  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
 ```
 
 Prints a `ContractSweepResult` JSON to stdout (`violations`, `contracts_checked`,

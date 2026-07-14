@@ -638,6 +638,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14584: bare-name node-identity-keying check (fast, author-time).
+      # Generalizes three independently-discovered-and-fixed incidents
+      # (OMN-10865, OMN-14571, OMN-14575) into one AST-based gate: keying a
+      # cross-package node/contract collection on a bare `.name` attribute
+      # silently collapses same-named nodes from different packages.
+      # Suppress a genuine false positive with # node-identity-keying-ok: <reason>
+      - id: check-node-identity-keying
+        name: Node-identity bare-name-keying check
+        language: system
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/check_node_identity_keying.py
+        types: [python]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-8622: aislop prohibited-pattern check (fast, changed-files only)
       # Complements check-ai-slop (docstring/boilerplate patterns) by catching
       # prohibited env vars and compat-shims in changed Python files.
