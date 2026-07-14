@@ -357,7 +357,7 @@ Run when mode is `compliance`.
 convenience value:
 
 ```bash
-uv run python -m omnimarket.nodes.node_contract_sweep --repos <repo1,repo2,...>  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
+python -m omnimarket.nodes.node_contract_sweep --repos <repo1,repo2,...>  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
 ```
 
 Prints a `ContractSweepResult` JSON to stdout: `violations`, `contracts_checked`,

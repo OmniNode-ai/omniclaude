@@ -17,7 +17,7 @@ evidence_requirements:
   - kind: "tests"
     description: "Topic governance remains valid after deleting the orphaned topics."
     command: "uv run pytest tests/unit/test_topic_governance.py"
-  - kind: "lint"
+  - kind: "ci"
     description: "Ruff, mypy, pre-commit, and pre-push hooks pass."
     command: "uv run ruff format && uv run ruff check --fix && uv run mypy src/omniclaude/ && uv run pre-commit run"
 emergency_bypass:
