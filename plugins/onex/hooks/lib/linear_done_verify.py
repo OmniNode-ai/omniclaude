@@ -55,6 +55,14 @@ BLOCKING_MERGE_STATES = {"BLOCKED", "DIRTY", "BEHIND"}
 
 DEFAULT_OWNER = "OmniNode-ai"
 
+# Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
+# deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
+# satisfies nor blocks a *product* ticket's Done — it is a receipt companion,
+# not the shipped work. Filter these out of the merge-check ref set so a merged
+# OCC receipt never *by itself* flips a product ticket Done, and an open OCC
+# receipt never blocks a legitimately-merged product ticket.
+_WEAK_SIGNAL_REPOS = {"onex_change_control"}
+
 
 @dataclass
 class PRRef:
@@ -114,6 +122,18 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
         refs[key] = PRRef(number=num, repo=default_repo)
 
     return list(refs.values())
+
+
+def is_weak_signal_ref(ref: PRRef) -> bool:
+    """Return True if a PR reference is a WEAK close-signal (OMN-14641).
+
+    Currently: any ``onex_change_control`` PR — OCC receipts / evidence
+    companions. These never gate a product ticket's Done in either direction.
+    A bare ``#N`` reference (repo resolved from the product ticket's default
+    repo) is a product PR and is never weak.
+    """
+    repo = (ref.repo or "").rsplit("/", 1)[-1].strip().lower()
+    return repo in _WEAK_SIGNAL_REPOS
 
 
 def is_exempt(description: str, labels: list[str] | None) -> bool:
@@ -252,44 +272,61 @@ def verify(
 
     Returns allowed=True if the transition should proceed, allowed=False with a
     reason string describing the blocking PRs otherwise.
+
+    OMN-14641: the cited-PR merge check runs BEFORE the ``close-if-done``
+    exemption. The label was previously a blanket merge-check bypass — a ticket
+    carrying it could flip Done with its linked product PR still OPEN (the
+    OMN-14582 false-Done). The exemption now applies *only* when no product PR
+    is cited (decision-only tickets, epic roll-ups); it can never waive an
+    open/unmerged cited PR.
     """
-    if is_exempt(description, labels):
-        return VerificationResult(allowed=True, reason="exempt")
+    # Product PR references only — weak-signal (onex_change_control) refs are
+    # filtered out so an OCC evidence companion never gates a product Done.
+    refs = [
+        ref
+        for ref in parse_pr_refs(description, default_repo=default_repo)
+        if not is_weak_signal_ref(ref)
+    ]
 
-    refs = parse_pr_refs(description, default_repo=default_repo)
-    if not refs:
-        # No PR references — trust the human; nothing to verify.
-        return VerificationResult(allowed=True, reason="no_pr_references")
+    if refs:
+        statuses = [fetcher(ref) for ref in refs]
+        blocking = [s for s in statuses if classify_blocking(s)]
+        if not blocking:
+            return VerificationResult(
+                allowed=True,
+                reason="all_prs_merged",
+                pr_statuses=statuses,
+            )
 
-    statuses = [fetcher(ref) for ref in refs]
-    blocking = [s for s in statuses if classify_blocking(s)]
-
-    if not blocking:
+        lines = ["Cannot mark Done — referenced PRs are not merged:"]
+        for status in blocking:
+            repo = status.ref.repo or "?"
+            if status.error:
+                lines.append(f"  - {repo}#{status.ref.number}: {status.error}")
+            else:
+                lines.append(
+                    f"  - {repo}#{status.ref.number}: state={status.state} "
+                    f"mergeState={status.merge_state}"
+                )
+        lines.append(
+            "A `close-if-done` label/frontmatter does NOT waive an open cited "
+            "PR (OMN-14641) — merge the linked PR, or cite the merged "
+            "implementing PR. The exemption only applies when no product PR is "
+            "cited."
+        )
         return VerificationResult(
-            allowed=True,
-            reason="all_prs_merged",
+            allowed=False,
+            reason="\n".join(lines),
             pr_statuses=statuses,
         )
 
-    lines = ["Cannot mark Done — referenced PRs are not merged:"]
-    for status in blocking:
-        repo = status.ref.repo or "?"
-        if status.error:
-            lines.append(f"  - {repo}#{status.ref.number}: {status.error}")
-        else:
-            lines.append(
-                f"  - {repo}#{status.ref.number}: state={status.state} "
-                f"mergeState={status.merge_state}"
-            )
-    lines.append(
-        "Add `close-if-done: true` label or frontmatter to exempt "
-        "verified-already-merged tickets."
-    )
-    return VerificationResult(
-        allowed=False,
-        reason="\n".join(lines),
-        pr_statuses=statuses,
-    )
+    # No product PR cited — the exemption may legitimately apply (decision-only
+    # tickets, epic ALL_CHILDREN_DONE roll-ups that carry the label).
+    if is_exempt(description, labels):
+        return VerificationResult(allowed=True, reason="exempt")
+
+    # No PR references and no exemption — trust the human; nothing to verify.
+    return VerificationResult(allowed=True, reason="no_pr_references")
 
 
 def _load_stdin_tool_call() -> dict[str, Any]:
@@ -310,6 +347,7 @@ query($id: String!) {
     description
     state { name }
     labels { nodes { name } }
+    attachments { nodes { url } }
   }
 }
 """.strip()
@@ -363,13 +401,37 @@ def _fetch_linear_issue(ticket_id: str) -> dict[str, Any] | None:
         return None
 
     label_nodes = (issue.get("labels") or {}).get("nodes") or []
+    attachment_nodes = (issue.get("attachments") or {}).get("nodes") or []
     return {
         "id": issue.get("id"),
         "title": issue.get("title"),
         "description": issue.get("description") or "",
         "state": (issue.get("state") or {}).get("name") or "",
         "labels": [n.get("name") for n in label_nodes if n.get("name")],
+        # Linear GitHub-integration links the PR as an attachment, NOT as a
+        # `#N` mention in the description. Surface those URLs so the merge check
+        # sees the *linked* PR even when it is not cited in the ticket body —
+        # this is the OMN-14582 false-Done shape (label-driven close while the
+        # linked PR was still OPEN). See OMN-14641.
+        "attachment_urls": [n.get("url") for n in attachment_nodes if n.get("url")],
     }
+
+
+def augment_description_with_attachments(
+    description: str, attachment_urls: list[str] | None
+) -> str:
+    """Append linked-PR attachment URLs to the description for verification.
+
+    The merge check parses PR references out of free text, so appending the
+    Linear GitHub-integration attachment URLs (which carry the *linked* PR) lets
+    a status-only Done flip be verified against the linked PR even when the
+    ticket body does not cite it with a `#N` mention. Non-PR attachment URLs are
+    harmlessly ignored by :func:`parse_pr_refs`. Pure function.
+    """
+    urls = [u for u in (attachment_urls or []) if u]
+    if not urls:
+        return description
+    return description + "\n\n" + "\n".join(urls)
 
 
 def main() -> int:
@@ -416,6 +478,12 @@ def main() -> int:
             return 2
         description = str(issue.get("description") or "")
         labels = labels or list(issue.get("labels") or [])
+        # Fold in the linked-PR attachment URLs so the merge check sees the PR
+        # linked via the Linear GitHub integration, not only PRs cited in the
+        # body (OMN-14641 — the OMN-14582 linked-but-uncited false-Done shape).
+        description = augment_description_with_attachments(
+            description, list(issue.get("attachment_urls") or [])
+        )
 
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
 
