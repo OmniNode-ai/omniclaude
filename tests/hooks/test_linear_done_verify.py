@@ -135,25 +135,89 @@ class TestVerify:
         assert result.allowed is True
         assert result.reason == "no_pr_references"
 
-    def test_allows_when_exempt_via_label(self) -> None:
+    def test_allows_when_exempt_via_label_and_no_pr_cited(self) -> None:
+        """close-if-done exempts a decision-only ticket with NO product PR."""
         result = verify(
-            description="Done. #202 is still open in GitHub but merged on disk.",
+            description="Decision-only ticket — no implementing PR.",
             labels=["close-if-done"],
             default_repo="OmniNode-ai/omniclaude",
-            fetcher=_blocked,
+            fetcher=_blocked,  # must never be called — no refs
         )
         assert result.allowed is True
         assert result.reason == "exempt"
 
-    def test_allows_when_exempt_via_frontmatter(self) -> None:
+    def test_allows_when_exempt_via_frontmatter_and_no_pr_cited(self) -> None:
         result = verify(
-            description="close-if-done: true\n\nDone. #202",
+            description="close-if-done: true\n\nRolled up; no PR of its own.",
             labels=[],
             default_repo="OmniNode-ai/omniclaude",
             fetcher=_blocked,
         )
         assert result.allowed is True
         assert result.reason == "exempt"
+
+    def test_close_if_done_label_does_NOT_waive_open_cited_pr(self) -> None:
+        """OMN-14641 core fix: the label was a blanket merge-check bypass.
+
+        A ticket carrying `close-if-done` with an OPEN cited product PR (the
+        OMN-14582 false-Done shape) must now BLOCK — the label no longer waives
+        an unmerged cited PR.
+        """
+        result = verify(
+            description="Done. PR: #1754",
+            labels=["close-if-done"],
+            default_repo="OmniNode-ai/omnimarket",
+            fetcher=_blocked,
+        )
+        assert result.allowed is False
+        assert "OmniNode-ai/omnimarket#1754" in result.reason
+        assert "close-if-done" in result.reason
+
+    def test_frontmatter_does_NOT_waive_open_cited_pr(self) -> None:
+        result = verify(
+            description="close-if-done: true\n\nDone. #202",
+            labels=[],
+            default_repo="OmniNode-ai/omniclaude",
+            fetcher=_blocked,
+        )
+        assert result.allowed is False
+        assert "#202" in result.reason
+
+    def test_occ_evidence_pr_is_weak_and_filtered(self) -> None:
+        """A cited onex_change_control (OCC) PR is a WEAK signal: it neither
+        satisfies nor blocks a product Done. With only an open OCC PR cited and
+        a close-if-done label, the transition is treated as no-product-PR and
+        the exemption applies (deliverable 3)."""
+        result = verify(
+            description=(
+                "Evidence: https://github.com/OmniNode-ai/onex_change_control/pull/4222"
+            ),
+            labels=["close-if-done"],
+            default_repo="OmniNode-ai/omnimarket",
+            fetcher=_blocked,  # would block if the OCC ref were treated as product
+        )
+        assert result.allowed is True
+        assert result.reason == "exempt"
+
+    def test_open_product_pr_blocks_even_with_merged_occ_pr(self) -> None:
+        """A merged OCC evidence PR does not satisfy Done while the product PR
+        is still open."""
+
+        def fetcher(ref: PRRef) -> PRStatus:
+            return _blocked(ref)  # product #1754 open
+
+        result = verify(
+            description=(
+                "Product: #1754\n"
+                "Evidence: https://github.com/OmniNode-ai/onex_change_control/pull/4222"
+            ),
+            labels=[],
+            default_repo="OmniNode-ai/omnimarket",
+            fetcher=fetcher,
+        )
+        assert result.allowed is False
+        assert "#1754" in result.reason
+        assert "onex_change_control" not in result.reason  # OCC filtered out
 
     def test_rejects_on_gh_timeout(self) -> None:
         result = verify(
@@ -258,7 +322,25 @@ class TestShellWrapper:
         )
         assert result.returncode == 0
 
-    def test_allows_done_with_exempt_label(self) -> None:
+    def test_allows_done_with_exempt_label_and_no_pr(self) -> None:
+        """close-if-done exempts a decision-only ticket with NO cited PR."""
+        result = _run_hook(
+            {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {
+                    "id": "OMN-1",
+                    "state": "Done",
+                    "description": "Decision-only cleanup — no implementing PR.",
+                    "labels": ["close-if-done"],
+                },
+            }
+        )
+        assert result.returncode == 0
+
+    def test_close_if_done_does_not_bypass_open_cited_pr(self) -> None:
+        """OMN-14641: the label must NOT waive an unmerged cited PR. A bare
+        `#202` has no resolvable repo → treated as unverifiable → BLOCK (exit 2),
+        even with the close-if-done label. Hermetic: no gh/network call."""
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
@@ -270,7 +352,7 @@ class TestShellWrapper:
                 },
             }
         )
-        assert result.returncode == 0
+        assert result.returncode == 2
 
 
 class TestClassification:
@@ -372,6 +454,13 @@ class TestFetchLinearIssue:
                         "description": "Fixed in #202",
                         "state": {"name": "Done"},
                         "labels": {"nodes": [{"name": "close-if-done"}]},
+                        "attachments": {
+                            "nodes": [
+                                {
+                                    "url": "https://github.com/OmniNode-ai/omnimarket/pull/1754"
+                                }
+                            ]
+                        },
                     }
                 }
             }
@@ -390,6 +479,9 @@ class TestFetchLinearIssue:
         assert result["id"] == "OMN-9454"
         assert result["description"] == "Fixed in #202"
         assert result["labels"] == ["close-if-done"]
+        assert result["attachment_urls"] == [
+            "https://github.com/OmniNode-ai/omnimarket/pull/1754"
+        ]
 
     def test_returns_none_on_network_error(
         self, monkeypatch: pytest.MonkeyPatch

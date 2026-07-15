@@ -29,15 +29,19 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
 
 1. Not a ``save_issue``/``update_issue`` call, or not a Done-class target state
    → ALLOW (nothing to verify).
-2. Carve-outs (encoded explicitly, never inferred — design §2):
-   - cancel-class target state (``canceled/duplicate/won't do``) → ALLOW;
-   - explicit exemption label / ``close-if-done`` frontmatter (covers
-     decision-only tickets and epic ALL_CHILDREN_DONE roll-ups, which carry the
-     label) → ALLOW.
-3. Durable evidence path A — merged PR: if the ticket description cites PRs and
-   every cited PR is ``MERGED`` → ALLOW. If any cited PR is open / unmerged →
-   BLOCK. (A "superseded-by-merged-sibling" close is a merged-PR citation and is
-   accepted here.)
+2. cancel-class target state (``canceled/duplicate/won't do``) → ALLOW.
+3. Durable evidence path A — merged PR: if the ticket cites (or links via a
+   Linear attachment) any *product* PR and every one is ``MERGED`` → ALLOW. If
+   any is open / unmerged → BLOCK. (A "superseded-by-merged-sibling" close is a
+   merged-PR citation and is accepted here.) ``onex_change_control`` evidence /
+   OCC-receipt PRs are WEAK signals and are filtered out — they never gate a
+   product Done in either direction (OMN-14641, deliverable 3).
+3a. Exemption carve-out — an explicit ``close-if-done`` label / frontmatter
+    (covers decision-only tickets and epic ALL_CHILDREN_DONE roll-ups) → ALLOW,
+    but ONLY when no product PR is cited/linked. OMN-14641: the label was
+    previously a blanket merge-check bypass, so a ticket carrying it flipped Done
+    with its linked product PR still OPEN (the OMN-14582 false-Done). The label
+    can no longer waive an open cited/linked PR — that path BLOCKS at step 3.
 4. Durable evidence path B — OCC receipt on ``origin/dev``: a schema-valid
    ``status == PASS`` ``node_dod_verify`` receipt bound to the ticket under
    ``drift/dod_receipts/<TICKET>/`` on ``origin/dev`` of the local
@@ -84,6 +88,7 @@ from typing import Any
 # Sibling module (same lib/ dir). The shell wrapper runs this file directly, so
 # its directory is on sys.path[0] and the import resolves without packaging.
 from linear_done_verify import (
+    augment_description_with_attachments,
     fetch_pr_status,
     is_cancel_state,
     is_done_state,
@@ -342,24 +347,40 @@ def decide(
             description = str(issue.get("description") or "")
             if not labels:
                 labels = [str(x) for x in (issue.get("labels") or [])]
+            # Fold in the linked-PR attachment URLs (Linear GitHub integration
+            # links the PR as an attachment, not a `#N` body mention) so the
+            # merge check sees the *linked* PR even when it is uncited. This is
+            # the OMN-14582 false-Done shape — a label-driven close while the
+            # linked product PR was still OPEN (OMN-14641).
+            description = augment_description_with_attachments(
+                description, [str(x) for x in (issue.get("attachment_urls") or [])]
+            )
 
-    # (2) explicit exemption label / close-if-done frontmatter. Covers
-    # decision-only tickets and epic ALL_CHILDREN_DONE roll-ups (which carry the
-    # label). Encoded explicitly — never inferred from ticket shape.
-    if is_exempt(description, labels):
-        return Decision(True, "carve_out:exempt_label")
-
-    # (3) durable evidence path A — merged PR citation.
+    # (3) durable evidence path A — merged product-PR citation. This runs BEFORE
+    # the close-if-done exemption carve-out (OMN-14641): the label was a blanket
+    # merge-check bypass, so a ticket carrying it could flip Done with its linked
+    # product PR still OPEN. verify() now blocks on any open cited product PR
+    # regardless of the label; the exemption is honored only below, when NO
+    # product PR is cited.
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
     pr_result = verify(
         description, labels, default_repo=default_repo, fetcher=pr_fetcher
     )
     if not pr_result.allowed:
         # A cited PR is open / unmerged / unresolvable — the classic OMN-8375
-        # "Done while PR still BLOCKED" shape. Block outright.
+        # "Done while PR still BLOCKED" shape (and the OMN-14582 label-bypass
+        # shape). Block outright — the close-if-done label does not waive this.
         return Decision(False, f"pr_not_merged\n{pr_result.reason}")
     if pr_result.reason == "all_prs_merged":
         return Decision(True, "durable_evidence:all_prs_merged")
+
+    # (2) explicit exemption label / close-if-done frontmatter. Covers
+    # decision-only tickets and epic ALL_CHILDREN_DONE roll-ups (which carry the
+    # label). Encoded explicitly — never inferred from ticket shape. Valid ONLY
+    # here, where no product PR is cited; an open cited PR already returned above
+    # (OMN-14641 — the label can no longer bypass an unmerged linked PR).
+    if is_exempt(description, labels):
+        return Decision(True, "carve_out:exempt_label")
 
     # pr_result.allowed with reason "no_pr_references" is NOT durable evidence on
     # its own — this is the incident shape (Done, no PR cited). Fall through to

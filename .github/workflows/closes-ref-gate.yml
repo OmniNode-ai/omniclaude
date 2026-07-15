@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Closes-Reference Gate (OMN-14641).
+#
+# Requires a STRONG close signal on product PRs so that a real merge closes its
+# own Linear ticket — either a `Closes|Fixes|Resolves OMN-####` line in the PR
+# body, or a branch-primary head branch (`omn-####-...`). A bare `OMN-####`
+# mention is a WEAK signal that does NOT close a ticket.
+#
+# Root cause it closes: the 2026-07-15 false-Done incident (OMN-14582), where a
+# `close-if-done` label sweep flipped tickets to Done on bare cross-references
+# with the linked PR still OPEN. CLAUDE.md Rule #5 — enforcement, not detection.
+#
+# NOTE: this gate is intentionally NOT yet a required status check. Promoting it
+# to required would wedge existing open PRs that use bare-token references. See
+# the PR body's "REQUIRES MAINTAINER APPROVAL" section before flipping it.
+#
+# Escape (PR-body): [closes-ref-exempt: <reason>]  (ticketless chore/docs/hotfix)
+
+name: Closes Reference Gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: closes-ref-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  closes-ref-gate:
+    name: closes-ref-gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Require a strong close signal on the PR
+        # PR fields are passed via env (never interpolated into the shell) to
+        # avoid script injection from untrusted PR content.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: python3 scripts/lint_closes_ref.py

@@ -139,6 +139,78 @@ def test_exempt_label_allows() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# REGRESSION: the OMN-14582 shape — close-if-done label MUST NOT waive an open
+# cited/linked product PR (OMN-14641). This is the integrity bug being fixed.
+# --------------------------------------------------------------------------- #
+
+
+def test_close_if_done_label_does_not_bypass_open_cited_pr() -> None:
+    """A close-if-done ticket that cites an OPEN product PR in its body → BLOCK.
+
+    Before OMN-14641 the label short-circuited to ALLOW before any PR check.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-14582",
+            "state": "Done",
+            "description": (
+                "Phase 1 only. PR: https://github.com/OmniNode-ai/omnimarket/pull/1754"
+            ),
+            "labels": ["close-if-done"],
+        },
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_open_fetcher)
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+
+
+def test_close_if_done_label_does_not_bypass_open_linked_attachment_pr() -> None:
+    """The exact OMN-14582 shape: status-only Done flip, PR linked via a Linear
+    attachment (not cited in the body), close-if-done label present, PR OPEN.
+
+    The guard folds the attachment URL into the merge check and BLOCKS — the
+    OCC probe is never reached because the linked product PR is unmerged.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-14582", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_open_fetcher,
+        linear_fetcher=lambda _t: {
+            "description": "",
+            "labels": ["close-if-done"],
+            "attachment_urls": ["https://github.com/OmniNode-ai/omnimarket/pull/1754"],
+        },
+    )
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+
+
+def test_close_if_done_label_allows_merged_linked_attachment_pr() -> None:
+    """Symmetric: when the linked PR is MERGED, the Done flip is ALLOWED."""
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-14582", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_merged_fetcher,
+        linear_fetcher=lambda _t: {
+            "description": "",
+            "labels": ["close-if-done"],
+            "attachment_urls": ["https://github.com/OmniNode-ai/omnimarket/pull/1754"],
+        },
+    )
+    assert d.allowed
+    assert d.reason == "durable_evidence:all_prs_merged"
+
+
+# --------------------------------------------------------------------------- #
 # REGRESSION: the wf_1628d9a5 incident shape must be BLOCKED
 # --------------------------------------------------------------------------- #
 
