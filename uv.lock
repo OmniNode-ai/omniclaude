@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.46.5,<0.47.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.3" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=28fc304101dae6fbf39e257827edb6b93929f595" },
+    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
 ]
 
 [[package]]
@@ -1813,7 +1813,7 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.4.0" },
     { name = "kafka-python", specifier = ">=2.3.0" },
     { name = "mypy", specifier = ">=1.17.0" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=28fc304101dae6fbf39e257827edb6b93929f595" },
+    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
     { name = "opentelemetry-api", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.23.0,<2.0.0" },
@@ -1884,7 +1884,7 @@ dependencies = [
 [[package]]
 name = "onex-change-control"
 version = "0.5.1"
-source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=28fc304101dae6fbf39e257827edb6b93929f595#28fc304101dae6fbf39e257827edb6b93929f595" }
+source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb#47342e562a516b0278e22a974f35cbf2a64b33eb" }
 dependencies = [
     { name = "colorama" },
     { name = "omnibase-core" },
