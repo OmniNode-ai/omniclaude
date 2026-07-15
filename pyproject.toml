@@ -248,6 +248,7 @@ override-dependencies = [
     "omnibase-core>=0.46.5,<0.47.0",
     "omnibase-spi>=0.23.1,<0.24.0",
     "omnibase-infra>=0.38.3,<0.39.0",
+    "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
 ]
 
 [tool.uv.sources]
@@ -255,7 +256,7 @@ override-dependencies = [
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
 # gate passes; the version constraint above governs core resolution.
 omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.3" }  # pragma: allowlist secret
-onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "4877d3c223517cb0c7e1eca462ba0f4d38916314" }  # pragma: allowlist secret
+onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret

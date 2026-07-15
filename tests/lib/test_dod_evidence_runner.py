@@ -23,9 +23,11 @@ sys.path.insert(
     ),
 )
 
+import dod_evidence_runner
 from dod_evidence_runner import (
     EvidenceRunResult,
     emit_dod_verify_completed,
+    is_inert_check,
     run_dod_evidence,
     write_evidence_receipt,
 )
@@ -225,6 +227,167 @@ class TestCommandCheck:
             result = run_dod_evidence(items)
         assert result.failed == 1
         assert "Timeout" in result.details[0].checks[0].message
+
+
+class TestWorkspaceThreading:
+    """OMN-14458: checks must run against an explicit workspace, not ambient CWD.
+
+    Before this fix, ``_run_check_command``/``_run_check_grep``/etc. passed no
+    ``cwd`` to subprocess at all -- the same class of defect OMN-14436 fixed on
+    the hosted Contract Compliance gate. RED-against-exists-but-wrong: a
+    cwd-relative check_value must resolve against the *passed* workspace, not
+    wherever the test runner's process cwd happens to be.
+    """
+
+    def test_command_check_resolves_relative_to_passed_workspace(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "marker.txt").write_text("present")
+        items = [
+            {
+                "id": "dod-001",
+                "description": "Marker file present",
+                "checks": [
+                    {"check_type": "command", "check_value": "test -f marker.txt"}
+                ],
+            }
+        ]
+        # Without the real workspace, the relative path can't resolve from the
+        # test process's actual cwd (this repo root has no marker.txt).
+        result_default = run_dod_evidence(items)
+        assert result_default.failed == 1, (
+            "Expected the un-workspaced run to fail from the ambient CWD"
+        )
+
+        result_scoped = run_dod_evidence(items, workspace=tmp_path)
+        assert result_scoped.verified == 1, (
+            "Passing workspace=tmp_path must make the relative check resolve there"
+        )
+
+    def test_grep_check_resolves_relative_to_passed_workspace(
+        self, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "handler.py").write_text("class ModelDodCheck:\n    pass\n")
+        items = [
+            {
+                "id": "dod-001",
+                "description": "Pattern found",
+                "checks": [
+                    {
+                        "check_type": "grep",
+                        "check_value": {
+                            "pattern": "class ModelDodCheck",
+                            "path": "src",
+                        },
+                    }
+                ],
+            }
+        ]
+        result_default = run_dod_evidence(items)
+        assert result_default.failed == 1
+
+        result_scoped = run_dod_evidence(items, workspace=tmp_path)
+        assert result_scoped.verified == 1
+
+    def test_file_exists_check_resolves_relative_to_passed_workspace(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "config.yaml").write_text("key: value")
+        items = [
+            {
+                "id": "dod-001",
+                "description": "Config exists",
+                "checks": [{"check_type": "file_exists", "check_value": "config.yaml"}],
+            }
+        ]
+        result_default = run_dod_evidence(items)
+        assert result_default.failed == 1
+
+        result_scoped = run_dod_evidence(items, workspace=tmp_path)
+        assert result_scoped.verified == 1
+
+
+class TestInertCheckDemotion:
+    """OMN-14458 parity with the hosted OMN-14436 inert-check demotion.
+
+    A check_value that can only observe the OCC receipt/contract store
+    (``drift/dod_receipts/...``, ``contracts/OMN-...``) proves nothing about
+    the product. Hosted demotes such a check to WARN regardless of its raw
+    result, so it can never launder a red PR into green evidence. Locally,
+    the equivalent demotion is to ``skipped`` -- never ``verified``.
+    """
+
+    def test_shared_engine_import_is_available_in_this_environment(self) -> None:
+        """Sanity check: if this is False, the tests below prove nothing
+        (they'd degrade to "no demotion" -- see is_inert_check's fallback)."""
+        assert dod_evidence_runner._OCC_COMPLIANCE_ENGINE_AVAILABLE is True, (
+            "onex_change_control.scripts.contract_compliance_check must be "
+            "importable in this test environment for inert-check parity to "
+            "actually be exercised"
+        )
+
+    def test_is_inert_check_delegates_to_the_shared_engine_not_a_fork(self) -> None:
+        """Proof of single source of truth: the SAME function object, not a
+        second copy of the regex patterns."""
+        from onex_change_control.scripts.contract_compliance_check import (
+            _is_inert_check as hosted_is_inert_check,
+        )
+
+        assert dod_evidence_runner._occ_is_inert_check is hosted_is_inert_check
+
+    def test_inert_check_value_is_never_verified_even_when_it_would_pass(
+        self, tmp_path: Path
+    ) -> None:
+        """An inert check_value that would otherwise PASS must still be
+        demoted -- an inert PASS is exactly the laundering this exists to stop."""
+        receipt_dir = tmp_path / "drift" / "dod_receipts" / "OMN-1"
+        receipt_dir.mkdir(parents=True)
+        (receipt_dir / "command.yaml").write_text("status: PASS\n")
+        items = [
+            {
+                "id": "dod-001",
+                "description": "Inert receipt grep",
+                "checks": [
+                    {
+                        "check_type": "grep",
+                        "check_value": {
+                            "pattern": "status: PASS",
+                            "path": "drift/dod_receipts/OMN-1",
+                        },
+                    }
+                ],
+            }
+        ]
+        # Without demotion this would be "verified" (the pattern is genuinely
+        # present) -- proving the demotion actually fires, not just that the
+        # check fails on its own.
+        result = run_dod_evidence(items, workspace=tmp_path)
+        assert result.verified == 0
+        assert result.skipped == 1
+        assert "INERT" in result.details[0].checks[0].message
+
+    def test_honest_product_check_is_not_demoted(self, tmp_path: Path) -> None:
+        (tmp_path / "real_file.py").write_text("x = 1\n")
+        items = [
+            {
+                "id": "dod-001",
+                "description": "Real product file",
+                "checks": [
+                    {"check_type": "file_exists", "check_value": "real_file.py"}
+                ],
+            }
+        ]
+        result = run_dod_evidence(items, workspace=tmp_path)
+        assert result.verified == 1
+
+    def test_is_inert_check_matches_hosted_patterns(self) -> None:
+        assert (
+            is_inert_check("grep x drift/dod_receipts/OMN-1/dod-x/command.yaml") is True
+        )
+        assert is_inert_check("test -f contracts/OMN-14391.yaml") is True
+        assert is_inert_check("test -f src/real_file.py") is False
 
 
 class TestRunnerStructuredResult:
