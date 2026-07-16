@@ -1,0 +1,8 @@
+Validating marketplace manifest: omniclaude/.claude-plugin/marketplace.json
+
+⚠ Found 2 warnings:
+
+  ❯ plugins[0].version: Entry declares version "2.1.6" but plugins/onex/.claude-plugin/plugin.json says "2.3.1". At install time, plugin.json wins (calculatePluginVersion precedence) — the entry version is silently ignored. Update this entry to "2.3.1" to match.
+  ❯ plugins[0] plugin.json → requires: Unknown field 'requires'. Claude Code ignores it at load time.
+
+✔ Validation passed with warnings

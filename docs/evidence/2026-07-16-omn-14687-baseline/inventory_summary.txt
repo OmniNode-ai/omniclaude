@@ -1,0 +1,4 @@
+validate_full_market_skill_inventory: 118 surfaces, 86 error(s), 46 warning(s)
+  classes: {'dispatch': 68, 'pure_skill': 10, 'retired': 9, 'stub_scaffold': 21, 'sub_skill': 10}
+  findings: {'direct_handler_import': 6, 'direct_http_cli_api_bypass': 42, 'missing_contract': 1, 'missing_node': 37, 'node_not_implemented': 0, 'not_implemented_handler': 0, 'placeholder_dispatch': 46}
+  wrote: docs/evidence/2026-07-16-omn-14687-baseline/full_market_skill_inventory.yaml

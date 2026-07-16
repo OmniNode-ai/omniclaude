@@ -871,6 +871,20 @@ repos:
         stages: [pre-commit]
         files: ^plugins/onex/skills/.*/SKILL\.md$
 
+      # TEMPORARY Phase-0 migration gate (OMN-14687, epic OMN-14686): every
+      # filesystem-discovered plugin component (skill / hook script / agent
+      # config) must be classified in plugins/distribution_manifest.yaml with a
+      # valid exposure (stable|beta|hidden|retired). Prevents an unclassified
+      # component being added mid-migration. Phase 3 retires this hook + the
+      # validator when the permanent typed distribution-contract checks land.
+      - id: validate-distribution-classification
+        name: Distribution Classification (OMN-14687, temporary Phase-0 gate)
+        entry: python3 scripts/validation/validate_distribution_classification.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(plugins/onex/(skills|hooks/scripts|agents/configs)/|plugins/distribution_manifest\.yaml|scripts/validation/validate_distribution_classification\.py)
+
       # Topic naming lint — validate onex.{kind}.{producer}.{event}.v{n} convention
       # (OMN-3259) Triggers on any *.py change; always scans full source tree.
       # Pre-existing violations suppressed by scripts/validation/topic_naming_baseline.txt
