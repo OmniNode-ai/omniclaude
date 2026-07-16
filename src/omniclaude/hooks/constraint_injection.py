@@ -130,8 +130,8 @@ BUILTIN_CONSTRAINTS: tuple[ModelConstraintTemplate, ...] = (
     ModelConstraintTemplate(
         name="bus_policy_local",
         domain=EnumConstraintDomain.BUS_POLICY,
-        rule="Docker containers use redpanda:9092 (internal). Host scripts use localhost:19092. Never use port 29092 inside docker-compose.",
-        reason="Two-bus architecture: cloud bus (29092) vs local Docker bus (19092).",
+        rule="Docker containers use redpanda:9092 (internal). Host scripts use localhost:19092. Never use port 29092 inside docker-compose.",  # cloud-bus-ok OMN-14655
+        reason="Two-bus architecture: cloud bus (29092) vs local Docker bus (19092).",  # cloud-bus-ok OMN-14655
     ),
     ModelConstraintTemplate(
         name="no_env_fallbacks",

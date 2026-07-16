@@ -27,22 +27,22 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
-  # Stub implementation detection — sourced from omnibase_core (OMN-5599)
-  - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 458f44ef24564956c6430ae7671570aed035c853 # pragma: allowlist secret
-    hooks:
-      - id: check-stub-implementations
-
-  # OMN-14350: non-canonical lifecycle-class ratchet (fan-out from the omnibase_core
-  # canary #1430). Consumes the canonical omnibase_core remote hook and ratchets this
-  # repo's frozen residual set (.onex_ratchets/noncanonical_class_allowlist.yaml) DOWN
-  # toward zero. rev MUST be a specific core SHA carrying the validator + its
-  # .pre-commit-hooks.yaml export (core dev HEAD after #1430 squash-merges) — never a
-  # moving ref like @dev (required gate; deterministic-truth doctrine). The token below
-  # is a HOLD placeholder; this PR stays unopened until the real post-merge SHA is set.
+  # OMN-14655 (SHA reconciliation, D1f/§3d.8): converged from two separate
+  # omnibase_core repo: blocks pinned at DIFFERENT revs (458f44e for
+  # check-stub-implementations, 63635097 for no-noncanonical-lifecycle-classes)
+  # into one block at 63635097705d832e0ee9c4811093efb31349105c -- the SAME
+  # SHA ci.yml:3102 pins for the canonical `omnibase-core @ git+...` ratchet
+  # (`no-noncanonical-lifecycle-classes`, OMN-14350). check-stub-implementations
+  # is exported unchanged (same entry/args) in .pre-commit-hooks.yaml at
+  # 63635097; the hook body diff between the two SHAs is comment-only
+  # (verified via `git diff 458f44e 63635097 -- scripts/validation/check_stub_implementations.py`).
+  # A single rev means block staleness can never regress silently again; see
+  # the pin-parity-check hook below, which fails closed if this rev and
+  # ci.yml:3102's pin ever diverge.
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: 63635097705d832e0ee9c4811093efb31349105c # pragma: allowlist secret
     hooks:
+      - id: check-stub-implementations
       - id: no-noncanonical-lifecycle-classes
         args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
         files: ^src/omniclaude/.*\.py$
@@ -438,6 +438,124 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # --------------------------------------------------------------------------
+      # OMN-14655 (WS7 canary, ticket-plan docs/plans/2026-07-15-ci-precommit-gate-parity-plan.md):
+      # DRIFT-1 fix — the `arch-*` AST-scan validators below have run in CI
+      # (ci.yml) since their respective landing tickets but had NO pre-commit
+      # mirror, so violations only ever surfaced after push. Each entry below
+      # invokes the EXACT CI entrypoint (same script, same args, same bare
+      # `python3` invocation CI uses) — no rule logic is re-implemented here.
+      # All are stdlib-only AST/regex scans (ast/re/sys/pathlib), verified via
+      # `grep '^import\|^from' scripts/validation/<script>.py`, so `python3`
+      # (no uv sync / venv) is both correct and matches CI's bare-interpreter
+      # invocation for the non-uv jobs.
+      # --------------------------------------------------------------------------
+      - id: arch-no-db-in-orchestrator
+        name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
+        entry: python3 scripts/validation/validate_no_db_in_orchestrator.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-git-outside-effects
+        name: "Arch: No git/gh calls outside effects (check 2)"
+        entry: python3 scripts/validation/validate_no_git_outside_effects.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-linear-outside-effects
+        name: "Arch: No LinearClient outside effects (check 3)"
+        entry: python3 scripts/validation/validate_no_linear_outside_effects.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-repo-adapter-in-orchestrator
+        name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
+        entry: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-cost-ledger-isolation
+        name: "Arch: ModelCostLedger confined to effects (check 5)"
+        entry: python3 scripts/validation/validate_cost_ledger_isolation.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-topic-naming
+        name: "Arch: onex.* topic naming convention (check 6)"
+        # NOTE: distinct from the existing `topic-naming-lint` hook (below),
+        # which runs scripts/validation/run_topic_lint.sh — a different
+        # program against a baseline file. This wires CI's own
+        # validate_topic_naming.py entrypoint for exact DRY parity.
+        entry: python3 scripts/validation/validate_topic_naming.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-cost-ledger-structure
+        name: "Arch: ModelCostLedger run_id field + index (check 9)"
+        entry: python3 scripts/validation/validate_cost_ledger_structure.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-direct-kafka-producer
+        name: "Arch: No direct Kafka producer outside publisher (check 10)"
+        entry: python3 scripts/validation/validate_no_direct_kafka_producer.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-utcnow
+        name: "Arch: No datetime.utcnow() usage (check 11)"
+        entry: python3 scripts/validation/validate_no_utcnow.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-hardcoded-ip
+        name: "Arch: No hardcoded internal IPs (check 12)"
+        # CI (ci.yml arch-no-hardcoded-ip) invokes this via `uv run python`
+        # (unlike the other arch-* checks above, which CI runs bare). Mirror
+        # that exact invocation via the worktree-safe uv wrapper rather than
+        # dropping to bare python3, to stay byte-for-byte DRY with the live
+        # CI entrypoint. (Follow-up: CI could drop its own uv sync/uv run to
+        # bare python3 like the other arch-* jobs since this script is also
+        # stdlib-only -- out of scope for this canary; track separately.)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_ip.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: check-env-var-registry
+        name: "Env Var Registry (OMN-6263)"
+        # Invokes CI's exact arg-string (ci.yml env-var-registry job) — no
+        # re-implementation.
+        entry: >-
+          python3 scripts/ci/check_env_var_registry.py
+          --scan-dirs src/omniclaude plugins/onex/hooks/lib
+          --registry .env.example
+          --allowlist-file .env.allowlist
+          --format text
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # ============================================================
       # STAGE 2: PRE-PUSH (thorough checks before sharing)
       # ============================================================
@@ -451,13 +569,17 @@ repos:
         pass_filenames: true
         stages: [pre-push]
 
+      # OMN-14655: rescoped to the EXACT CI command (ci.yml "Mypy type checking"
+      # step: `uv run mypy src/ --config-file mypy.ini`) so local == CI. The
+      # previous entry ran `mypy src/omniclaude/hooks/ src/omniclaude/config/
+      # --ignore-missing-imports` -- 2 of ~15 top-level src/omniclaude/
+      # subdirs, no config file -- while claiming "match CI" in its name.
+      # Missing-stub imports outside those 2 subdirs silently passed locally
+      # and only ever failed on CI. pre-push is the thorough-checks stage
+      # (not the <15s pre-commit budget), so the full-tree run belongs here.
       - id: mypy-type-check
         name: mypy (type checking - match CI)
-        # SCOPE: Currently limited to hooks/ and config/ (strict, well-typed modules)
-        # TODO(post-Beta): After lib/ deletion, expand to full src/omniclaude/:
-        #   entry: bash -c 'uv run mypy src/omniclaude/ --ignore-missing-imports'
-        # Exclusion: lib/ contains legacy code that will be deleted post-Beta
-        entry: bash -c 'bash scripts/uv-run-worktree-safe.sh mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
+        entry: bash scripts/uv-run-worktree-safe.sh mypy src/ --config-file mypy.ini
         language: system
         pass_filenames: false
         always_run: true
@@ -840,6 +962,37 @@ repos:
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$
         stages: [pre-commit]
+
+      # OMN-14655 (D5, §3d.7): fail-loud meta-gate over this very file.
+      # Hard-rejects the exit-0-on-missing-path / WARN-SKIP-degrade class
+      # that made `skill-contract-validation` and `no-cloud-bus` false-green,
+      # any undocumented SKIP/BYPASS-env-var-gated exit 0, and any `stages:`
+      # value default_install_hook_types does not install. Wired as BOTH a
+      # pre-commit hook (here) and a required CI gate
+      # (.github/workflows/precommit-fail-loud-gate.yml) in this same PR so
+      # the class cannot regenerate on the next wrapper script.
+      - id: precommit-fail-loud-meta-gate
+        name: Pre-commit fail-loud meta-gate (OMN-14655)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_fail_loud.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        files: ^(\.pre-commit-config\.yaml|scripts/.*\.sh|\.pre-commit-hooks/.*\.sh)$
+
+      # OMN-14655 (D5, §3d.8): pin-parity ratchet. Fails closed the moment
+      # the pre-commit `rev:` pin for a shared omnibase_core validator
+      # diverges from the SHA .github/workflows/ci.yml pins for the same
+      # validator (the DRIFT-3 class that produced two disagreeing
+      # omnibase_core blocks in this file before OMN-14655 converged them).
+      - id: precommit-pin-parity
+        name: Pre-commit/CI pin-parity check (OMN-14655)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_pin_parity.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        files: ^(\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$
 
 # Configuration
 default_install_hook_types: [pre-commit, pre-push, commit-msg]
