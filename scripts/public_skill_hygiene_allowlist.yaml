@@ -34,7 +34,7 @@ entries:
   # The pattern IS the decommissioned endpoint this denylist guard blocks --
   # removing the literal address from the guard would defeat the guard.
   - path_glob: "plugins/onex/skills/gap/legacy-denylist.yaml"
-    value_regex: "192\\.168\\.86\\.200:29092"
+    value_regex: "192\\.168\\.86\\.200:29092"  # cloud-bus-ok OMN-14655
     reason: >-
       functional denylist guard: the pattern IS the decommissioned endpoint
       the guard blocks.
