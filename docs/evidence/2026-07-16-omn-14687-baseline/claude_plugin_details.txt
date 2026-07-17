@@ -1,0 +1,127 @@
+onex 2.3.1
+  Unified ONEX architecture plugin with intelligent agent routing, manifest injection, quality enforcement, 53 polymorphic YAML agents, 40+ reusable skills, and 10+ custom slash commands for comprehensive workflow automation and observability
+  Source: onex@omninode-tools
+
+Component inventory
+  Skills (108)  adversarial_pipeline, agent_healthcheck, aislop_sweep, architectural_invariant_loop, authorize, auto_merge, autopilot, baseline, build_loop, bus_audit, changelog_audit, checkpoint, ci_watch, coderabbit_triage, compliance_sweep, contract_sweep, coverage_sweep, create_followup_tickets, create_ticket, dashboard_sweep, data_flow_sweep, database_sweep, decision_store, decompose_epic, delegate, demo, demo_readiness_team, dep_cascade_dedup, design_to_plan, dispatch_engine, dispatch_queue_drainer, dispatch_watchdog, dispatch_worker, doc_freshness_sweep, docs_dirty_alert, dod_sweep, dod_verify, duplication_sweep, env_parity, env_sync_alert, epic_team, executing_plans, feature_dashboard, friction_triage, gap, generate_node, golden_chain_sweep, handoff, hook_health_alert, hostile_reviewer, insights_to_plan, integration_sweep, linear_housekeeping, local_review, login, merge_sweep, multi_agent, observability, onboarding, pipeline_audit, pipeline_fill, plan_audit, plan_to_tickets, platform_readiness, pr_polish, pr_review, pr_review_bot, pr_watch, preflight, recall, record_friction, redeploy, refill_sprint, release, resume_session, rewind, rolling_plan_governor, rrh, runner, runtime_closeout, runtime_sweep, self_healing_dispatch, session, set_session, shim_audit, ship_dirty_canonical, skill_functional_audit, start_environment, status, system_status, systematic_debugging, tech_debt_sweep, ticket_pipeline, ticket_plan, ticket_work, ticketing_epic_org, ticketing_insights, ticketing_triage, two_strike_arbiter, unstick_queue, using_git_worktrees, verification_receipt_generator, verification_sweep, verified_dispatch, verify_plugin, wave_scheduler, worktree, writing_skills
+  Agents (0)
+  Hooks (1)  PreToolUse  (harness-only — no model context cost)
+  MCP servers (0)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~7,573 tok   added to every session
+
+Per-component (rounded)
+  component                       always-on  on-invoke
+  database_sweep                       ~120       ~540
+  multi_agent                           ~40      ~6.4k
+  demo                                  ~80       ~690
+  ticket_pipeline                      ~100      ~1.4k
+  auto_merge                            ~40       ~530
+  decompose_epic                        ~40      ~2.8k
+  record_friction                       ~30      ~1.6k
+  ticket_work                           ~70      ~1.3k
+  agent_healthcheck                    ~100       ~730
+  system_status                         ~60      ~1.1k
+  systematic_debugging                 ~110      ~5.4k
+  coderabbit_triage                     ~70       ~550
+  insights_to_plan                      ~50      ~4.8k
+  adversarial_pipeline                  ~80      ~1.5k
+  create_followup_tickets               ~40      ~2.7k
+  compliance_sweep                     ~110       ~640
+  ticketing_triage                      ~30       ~810
+  using_git_worktrees                   ~80      ~4.1k
+  create_ticket                         ~40       ~540
+  docs_dirty_alert                      ~60       ~510
+  skill_functional_audit               ~110      ~4.9k
+  unstick_queue                         ~50       ~950
+  two_strike_arbiter                    ~70      ~1.7k
+  rolling_plan_governor                ~190      ~3.9k
+  checkpoint                            ~30      ~4.1k
+  shim_audit                            ~80       ~530
+  pipeline_fill                         ~60        ~3k
+  verification_sweep                   ~120      ~5.3k
+  executing_plans                      ~110      ~4.3k
+  feature_dashboard                     ~70      ~5.7k
+  contract_sweep                        ~70      ~3.9k
+  set_session                           ~40       ~780
+  wave_scheduler                       ~140      ~6.9k
+  golden_chain_sweep                    ~40       ~980
+  pr_review                             ~40       ~510
+  handoff                              ~160      ~2.9k
+  pr_polish                             ~60       ~530
+  runner                                ~40      ~5.6k
+  dep_cascade_dedup                     ~70      ~1.2k
+  ci_watch                              ~30       ~380
+  friction_triage                       ~40      ~2.1k
+  worktree                              ~50      ~6.3k
+  writing_skills                        ~90      ~9.6k
+  merge_sweep                          ~130       ~770
+  baseline                              ~40      ~1.2k
+  demo_readiness_team                   ~50      ~2.8k
+  delegate                             ~110       ~810
+  refill_sprint                         ~50      ~1.7k
+  release                              ~120      ~3.8k
+  rewind                                ~50       ~700
+  dispatch_queue_drainer                ~80      ~1.1k
+  hostile_reviewer                     ~110       ~570
+  ship_dirty_canonical                  ~80      ~1.5k
+  ticketing_insights                    ~40        ~8k
+  plan_audit                            ~70      ~1.8k
+  status                                ~70      ~1.4k
+  self_healing_dispatch                ~110      ~2.8k
+  observability                         ~40      ~3.3k
+  design_to_plan                        ~50       ~550
+  recall                                ~90      ~2.8k
+  decision_store                        ~40      ~3.9k
+  pr_watch                              ~40      ~1.1k
+  gap                                   ~30      ~7.8k
+  hook_health_alert                     ~40       ~850
+  rrh                                   ~60        ~3k
+  bus_audit                             ~30       ~410
+  authorize                             ~30      ~1.2k
+  changelog_audit                       ~50      ~1.1k
+  plan_to_tickets                       ~50       ~540
+  tech_debt_sweep                       ~50      ~7.3k
+  pr_review_bot                         ~90       ~520
+  generate_node                         ~50        ~6k
+  local_review                          ~40       ~870
+  ticketing_epic_org                    ~70      ~4.2k
+  dashboard_sweep                      ~100      ~1.2k
+  verify_plugin                         ~60      ~1.7k
+  env_sync_alert                        ~40       ~290
+  dispatch_watchdog                     ~70      ~4.6k
+  platform_readiness                   ~120       ~650
+  dispatch_engine                       ~90      ~1.2k
+  redeploy                              ~70      ~1.1k
+  env_parity                            ~50      ~1.4k
+  integration_sweep                     ~50      ~2.4k
+  verification_receipt_generator        ~50       ~690
+  aislop_sweep                         ~110       ~620
+  data_flow_sweep                       ~70       ~640
+  resume_session                        ~40      ~3.5k
+  epic_team                             ~40     ~15.2k
+  build_loop                            ~90       ~610
+  start_environment                     ~50      ~3.8k
+  runtime_sweep                        ~180      ~1.5k
+  ticket_plan                           ~70      ~3.2k
+  autopilot                             ~40       ~180
+  architectural_invariant_loop         ~110      ~1.4k
+  doc_freshness_sweep                   ~80       ~550
+  verified_dispatch                     ~70       ~760
+  login                                 ~60        ~1k
+  onboarding                            ~30       ~990
+  pipeline_audit                       ~110       ~10k
+  dispatch_worker                       ~40      ~3.2k
+  runtime_closeout                      ~90      ~1.6k
+  preflight                             ~90      ~2.6k
+  duplication_sweep                    ~100       ~550
+  dod_sweep                             ~40      ~3.4k
+  linear_housekeeping                   ~70       ~540
+  dod_verify                            ~80       ~530
+  session                              ~100       ~640
+  coverage_sweep                        ~60       ~540
+
+  On-invoke cost is paid each time a skill or agent fires.
+  Token counts are estimates and may differ from actual usage.

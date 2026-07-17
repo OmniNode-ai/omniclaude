@@ -1,0 +1,2258 @@
+# Distribution manifest (OMN-14687 Phase 0 draft) — typed component-assignment inventory.
+# Authority: filesystem discovery is the INPUT; this manifest is the classification authority.
+# 100% of the filesystem-discovered inventory is assigned; zero ambiguous/unassigned.
+schema_version: 0.1.0-draft
+manifest_kind: distribution_manifest
+ticket: OMN-14687
+epic: OMN-14686
+generated: '2026-07-16'
+status: phase0-baseline-freeze-draft
+note: Phase 0 baseline-freeze DRAFT. Exposure=beta means BETA-CANDIDATE pending the Phase 2 admission gates (real impl, tests, runtime proof); it is NOT an admission decision. Frozen extra-forbidden Pydantic
+  models + the permanent validators land in Phase 3.
+instrument:
+  token_always_on: claude plugin details onex@omninode-tools -> 'Projected token cost / Always-on'
+  inventory: scripts/validation/validate_full_market_skill_inventory.py (filesystem SKILL.md discovery)
+baseline_measurements:
+  always_on_tokens_full_plugin: 7573
+  always_on_tokens_stable_delegate_projection: 110
+  stable_token_budget: 250
+  installed_source_mb_per_version: 39
+  git_tracked_distributable_mb: 5.27
+  hooks_logs_gitignored_mb: 30
+  skills_surfaces_filesystem: 118
+  skills_loaded: 108
+exposure_counts:
+  beta: 139
+  hidden: 122
+  stable: 1
+component_counts:
+  total: 262
+  skills: 118
+  hooks: 91
+  agents: 53
+components:
+- id: adversarial_pipeline
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/adversarial_pipeline/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: agent_healthcheck
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/agent_healthcheck/SKILL.md
+  backing_nodes:
+  - node_worker_stall_recovery
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_worker_stall_recovery'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: aislop_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/aislop_sweep/SKILL.md
+  backing_nodes:
+  - node_aislop_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_aislop_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: architectural_invariant_loop
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/architectural_invariant_loop/SKILL.md
+  backing_nodes:
+  - node_architectural_invariant_loop
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_architectural_invariant_loop'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: authorize
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/authorize/SKILL.md
+  backing_nodes:
+  - node_authorize
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_authorize'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: auto_merge
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/auto_merge/SKILL.md
+  backing_nodes:
+  - node_auto_merge_effect
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_auto_merge_effect'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: autopilot
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/autopilot/SKILL.md
+  backing_nodes:
+  - node_skill_autopilot_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: baseline
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/baseline/SKILL.md
+  backing_nodes:
+  - node_baseline_capture
+  - node_baseline_compare
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_baseline_capture'', ''node_baseline_compare'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: build_loop
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/build_loop/SKILL.md
+  backing_nodes:
+  - node_build_loop
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_build_loop'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: bus_audit
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/bus_audit/SKILL.md
+  backing_nodes:
+  - node_bus_audit_compute
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_bus_audit_compute'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: changelog_audit
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: retired
+  path: plugins/onex/skills/changelog_audit/SKILL.md
+  backing_nodes:
+  - node_linear_ticket_creator
+  rationale: 'scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded skill); reclassified by evidence -> hidden due to disqualifying findings: [''direct_http_cli_api_bypass'',
+    ''missing_node''].'
+- id: checkpoint
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/checkpoint/SKILL.md
+  backing_nodes:
+  - node_checkpoint_effect
+  - node_checkpoint_validate_compute
+  - node_skill_checkpoint_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: ci_watch
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/ci_watch/SKILL.md
+  backing_nodes:
+  - node_ci_watch
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_ci_watch'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: coderabbit_triage
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/coderabbit_triage/SKILL.md
+  backing_nodes:
+  - node_coderabbit_triage
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_coderabbit_triage'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: compliance_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/compliance_sweep/SKILL.md
+  backing_nodes:
+  - node_compliance_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_compliance_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: contract_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/contract_sweep/SKILL.md
+  backing_nodes:
+  - node_contract_drift_compute
+  - node_contract_sweep
+  - node_name
+  - node_type
+  - node_version
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass'', ''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: coverage_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/coverage_sweep/SKILL.md
+  backing_nodes:
+  - node_coverage_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_coverage_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: create_followup_tickets
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/create_followup_tickets/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: create_ticket
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/create_ticket/SKILL.md
+  backing_nodes:
+  - node_create_ticket
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_create_ticket'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: dashboard_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/dashboard_sweep/SKILL.md
+  backing_nodes:
+  - node_dashboard_sweep
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: data_flow_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/data_flow_sweep/SKILL.md
+  backing_nodes:
+  - node_data_flow_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_data_flow_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: database_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/database_sweep/SKILL.md
+  backing_nodes:
+  - node_database_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_database_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: decision_store
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/decision_store/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: decompose_epic
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/decompose_epic/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: delegate
+  kind: skill
+  exposure: stable
+  owning_package: onex
+  surface_class: dispatch
+  path: plugins/onex/skills/delegate/SKILL.md
+  backing_nodes:
+  - node_delegate_skill_orchestrator
+  rationale: Sole stable skill; clean dispatch to node_delegate_skill_orchestrator (exists, contracted).
+- id: demo
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/demo/SKILL.md
+  backing_nodes:
+  - node_demo_cost_compute
+  - node_demo_fanout_orchestrator
+  - node_demo_renderer_effect
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: demo_readiness_team
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/demo_readiness_team/SKILL.md
+  backing_nodes:
+  - node_demo_drift_detector
+  - node_demo_fix_dispatcher
+  - node_demo_rehearsal
+  - node_morning_handoff_generator
+  rationale: 'class=dispatch with disqualifying findings: [''direct_handler_import''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: dep_cascade_dedup
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: retired
+  path: plugins/onex/skills/dep_cascade_dedup/SKILL.md
+  backing_nodes: []
+  rationale: 'scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded skill); reclassified by evidence -> hidden due to disqualifying findings: [''direct_http_cli_api_bypass''].'
+- id: design_to_plan
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/design_to_plan/SKILL.md
+  backing_nodes:
+  - node_design_to_plan
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_design_to_plan'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: dispatch_engine
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/dispatch_engine/SKILL.md
+  backing_nodes:
+  - node_skill_dispatch_engine_orchestrator
+  - node_skill_overseer_verify_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: dispatch_queue_drainer
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/dispatch_queue_drainer/SKILL.md
+  backing_nodes:
+  - node_dispatch_queue_drainer
+  - node_dispatch_worker
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_dispatch_queue_drainer'', ''node_dispatch_worker'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: dispatch_watchdog
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/dispatch_watchdog/SKILL.md
+  backing_nodes:
+  - node_skill_dispatch_watchdog_orchestrator
+  - node_worker_stall_recovery
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: dispatch_worker
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/dispatch_worker/SKILL.md
+  backing_nodes:
+  - node_dispatch_worker
+  - node_redeploy_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: doc_freshness_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/doc_freshness_sweep/SKILL.md
+  backing_nodes:
+  - node_doc_freshness_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_doc_freshness_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: docs_dirty_alert
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/docs_dirty_alert/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: dod_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/dod_sweep/SKILL.md
+  backing_nodes:
+  - node_dod_sweep_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: dod_verify
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/dod_verify/SKILL.md
+  backing_nodes:
+  - node_dod_verify
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_dod_verify'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: duplication_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/duplication_sweep/SKILL.md
+  backing_nodes:
+  - node_duplication_sweep
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_duplication_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: env_parity
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/env_parity/SKILL.md
+  backing_nodes:
+  - node_env_parity_compute
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: env_sync_alert
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/env_sync_alert/SKILL.md
+  backing_nodes: []
+  rationale: 'class=pure_skill with disqualifying findings: [''direct_http_cli_api_bypass''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: epic_team
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: retired
+  path: plugins/onex/skills/epic_team/SKILL.md
+  backing_nodes:
+  - node_skill_epic_team_orchestrator
+  rationale: 'scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded skill); reclassified by evidence -> hidden due to disqualifying findings: [''direct_http_cli_api_bypass'',
+    ''missing_node'', ''placeholder_dispatch''].'
+- id: executing_plans
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/executing_plans/SKILL.md
+  backing_nodes:
+  - node_skill_executing_plans_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: feature_dashboard
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/feature_dashboard/SKILL.md
+  backing_nodes:
+  - node_skill_
+  - node_skill_feature_dashboard_orchestrator
+  - node_type
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: friction_triage
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/friction_triage/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: gap
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: retired
+  path: plugins/onex/skills/gap/SKILL.md
+  backing_nodes:
+  - node_gap_compute
+  rationale: 'scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded skill); reclassified by evidence -> hidden due to disqualifying findings: [''direct_http_cli_api_bypass'',
+    ''placeholder_dispatch''].'
+- id: generate_node
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/generate_node/SKILL.md
+  backing_nodes:
+  - node_desc
+  - node_name
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass'', ''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: golden_chain_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/golden_chain_sweep/SKILL.md
+  backing_nodes:
+  - node_golden_chain_sweep
+  - node_name
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: handoff
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: retired
+  path: plugins/onex/skills/handoff/SKILL.md
+  backing_nodes: []
+  rationale: 'scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded skill); reclassified by evidence -> hidden due to disqualifying findings: [''direct_http_cli_api_bypass''].'
+- id: hook_health_alert
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/hook_health_alert/SKILL.md
+  backing_nodes:
+  - node_dispatch
+  - node_dispatch_dimensions
+  - node_platform_diagnostics
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: hostile_reviewer
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/hostile_reviewer/SKILL.md
+  backing_nodes:
+  - node_hostile_reviewer_orchestrator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_hostile_reviewer_orchestrator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: insights_to_plan
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/insights_to_plan/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: integration_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/integration_sweep/SKILL.md
+  backing_nodes:
+  - node_integration_sweep_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: linear_housekeeping
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/linear_housekeeping/SKILL.md
+  backing_nodes:
+  - node_linear_triage
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_linear_triage'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: local_review
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/local_review/SKILL.md
+  backing_nodes:
+  - node_local_review
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_local_review'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: login
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/login/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: merge_sweep
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/merge_sweep/SKILL.md
+  backing_nodes:
+  - node_pr_lifecycle_orchestrator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_pr_lifecycle_orchestrator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: multi_agent
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/multi_agent/SKILL.md
+  backing_nodes:
+  - node_user_reducer
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass'', ''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: observability
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/observability/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: onboarding
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/onboarding/SKILL.md
+  backing_nodes:
+  - node_onboarding
+  rationale: 'class=dispatch with disqualifying findings: [''direct_handler_import''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: pipeline_audit
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: retired
+  path: plugins/onex/skills/pipeline_audit/SKILL.md
+  backing_nodes:
+  - node_skill_pipeline_audit_orchestrator
+  rationale: 'scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded skill); reclassified by evidence -> hidden due to disqualifying findings: [''missing_node''].'
+- id: pipeline_fill
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/pipeline_fill/SKILL.md
+  backing_nodes:
+  - node_pipeline_fill
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_pipeline_fill'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: plan_audit
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/plan_audit/SKILL.md
+  backing_nodes:
+  - node_skill_plan_audit_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: plan_to_tickets
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/plan_to_tickets/SKILL.md
+  backing_nodes:
+  - node_plan_to_tickets
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_plan_to_tickets'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: platform_readiness
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/platform_readiness/SKILL.md
+  backing_nodes:
+  - node_platform_readiness
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_platform_readiness'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: pr_polish
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/pr_polish/SKILL.md
+  backing_nodes:
+  - node_pr_polish
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_pr_polish'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: pr_review
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/pr_review/SKILL.md
+  backing_nodes:
+  - node_skill_pr_review_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: pr_review_bot
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/pr_review_bot/SKILL.md
+  backing_nodes:
+  - node_pr_review_orchestrator
+  - node_skill_pr_review_bot_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: pr_watch
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/pr_watch/SKILL.md
+  backing_nodes:
+  - node_github_pr_watcher_effect
+  - node_pr_watch_orchestrator
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: preflight
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/preflight/SKILL.md
+  backing_nodes:
+  - node_session_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: recall
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/recall/SKILL.md
+  backing_nodes:
+  - node_agent_learning_retrieval_effect
+  - node_knowledge_query_federation_orchestrator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_agent_learning_retrieval_effect'', ''node_knowledge_query_federation_orchestrator'']. Beta-CANDIDATE pending Phase
+    2 admission proof.'
+- id: record_friction
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/record_friction/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: redeploy
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/redeploy/SKILL.md
+  backing_nodes:
+  - node_prod_promotion_gate_compute
+  - node_redeploy
+  - node_redeploy_deploy_effect
+  - node_redeploy_fsm_reducer
+  - node_redeploy_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_contract''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: refill_sprint
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: retired
+  path: plugins/onex/skills/refill_sprint/SKILL.md
+  backing_nodes: []
+  rationale: scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded, clean findings); reclassified -> beta-CANDIDATE pending Phase 2 admission proof.
+- id: release
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/release/SKILL.md
+  backing_nodes:
+  - node_release
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: resume_session
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/resume_session/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: rewind
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/rewind/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: rolling_plan_governor
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: retired
+  path: plugins/onex/skills/rolling_plan_governor/SKILL.md
+  backing_nodes: []
+  rationale: scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded, clean findings); reclassified -> beta-CANDIDATE pending Phase 2 admission proof.
+- id: rrh
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/rrh/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: runner
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/runner/SKILL.md
+  backing_nodes:
+  - node_version
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass'', ''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: runtime_closeout
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/runtime_closeout/SKILL.md
+  backing_nodes:
+  - node_golden_chain_sweep
+  - node_integration_sweep
+  - node_integration_sweep_orchestrator
+  - node_redeploy_orchestrator
+  - node_runtime_closeout_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: runtime_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/runtime_sweep/SKILL.md
+  backing_nodes:
+  - node_foo_bar
+  - node_name
+  - node_runtime_sweep
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: self_healing_dispatch
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/self_healing_dispatch/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: session
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/session/SKILL.md
+  backing_nodes:
+  - node_session_orchestrator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_session_orchestrator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: set_session
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/set_session/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: shim_audit
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/shim_audit/SKILL.md
+  backing_nodes:
+  - node_shim_scanner
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_shim_scanner'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: ship_dirty_canonical
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/ship_dirty_canonical/SKILL.md
+  backing_nodes:
+  - node_dirty_canonical_sweep
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: skill_functional_audit
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/skill_functional_audit/SKILL.md
+  backing_nodes:
+  - node_aislop_sweep
+  - node_checkpoint_effect
+  - node_checkpoint_validate_compute
+  - node_path
+  - node_pipeline_fill
+  - node_session_orchestrator
+  - node_worker_stall_recovery
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: start_environment
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/start_environment/SKILL.md
+  backing_nodes:
+  - node_environment_health_scanner
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: status
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/status/SKILL.md
+  backing_nodes:
+  - node_pr_lifecycle_orchestrator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_pr_lifecycle_orchestrator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: system_status
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/system_status/SKILL.md
+  backing_nodes:
+  - node_dispatch
+  - node_dispatch_dimensions
+  - node_platform_diagnostics
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: system_status/check_agent_performance
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_agent_performance/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_database_health
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_database_health/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_infrastructure
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_infrastructure/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_kafka_topics
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_kafka_topics/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_pattern_discovery
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_pattern_discovery/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_recent_activity
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_recent_activity/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_service_status
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_service_status/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/check_system_health
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/check_system_health/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/diagnose_issues
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/diagnose_issues/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: system_status/generate_status_report
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: sub_skill
+  path: plugins/onex/skills/system_status/generate_status_report/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=sub_skill (internal nested component, not independently listed).
+- id: systematic_debugging
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/systematic_debugging/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: tech_debt_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/tech_debt_sweep/SKILL.md
+  backing_nodes:
+  - node_skill_tech_debt_sweep_orchestrator
+  rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: ticket_pipeline
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/ticket_pipeline/SKILL.md
+  backing_nodes:
+  - node_ticket_pipeline
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_ticket_pipeline'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: ticket_plan
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/ticket_plan/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: ticket_work
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/ticket_work/SKILL.md
+  backing_nodes:
+  - node_ticket_research_enrichment_compute
+  - node_ticket_work
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: ticketing_epic_org
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/ticketing_epic_org/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: ticketing_insights
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/ticketing_insights/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: ticketing_triage
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/ticketing_triage/SKILL.md
+  backing_nodes:
+  - node_linear_triage
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_linear_triage'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: two_strike_arbiter
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/two_strike_arbiter/SKILL.md
+  backing_nodes:
+  - node_two_strike_arbiter
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_two_strike_arbiter'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: unstick_queue
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/unstick_queue/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: using_git_worktrees
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: retired
+  path: plugins/onex/skills/using_git_worktrees/SKILL.md
+  backing_nodes: []
+  rationale: scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded, clean findings); reclassified -> beta-CANDIDATE pending Phase 2 admission proof.
+- id: verification_receipt_generator
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/verification_receipt_generator/SKILL.md
+  backing_nodes:
+  - node_verification_receipt_generator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_verification_receipt_generator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: verification_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/verification_sweep/SKILL.md
+  backing_nodes: []
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: verified_dispatch
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/verified_dispatch/SKILL.md
+  backing_nodes:
+  - node_verified_dispatch_orchestrator
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_verified_dispatch_orchestrator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: verify_plugin
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/verify_plugin/SKILL.md
+  backing_nodes:
+  - node_verify_effect
+  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_verify_effect'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: wave_scheduler
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: stub_scaffold
+  path: plugins/onex/skills/wave_scheduler/SKILL.md
+  backing_nodes:
+  - node_skill_wave_scheduler_orchestrator
+  - node_wave_scheduler_compute
+  rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: worktree
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/worktree/SKILL.md
+  backing_nodes:
+  - node_pr_lifecycle_worktree_prune_effect
+  rationale: 'class=dispatch with disqualifying findings: [''direct_http_cli_api_bypass''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: writing_skills
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/writing_skills/SKILL.md
+  backing_nodes: []
+  rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: hooks/scripts/common.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/common.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/delegation-config.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/delegation-config.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/deploy.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/deploy.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/ensure-plugin-venv.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/ensure-plugin-venv.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/epic_postaction_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/epic_postaction_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/epic_preflight_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/epic_preflight_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/error-guard.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/error-guard.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/file-path-convention-inject.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/file-path-convention-inject.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/grep_guard_no_polymorphic_agent.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/grep_guard_no_polymorphic_agent.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/hook-gate.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook-gate.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/hook-runtime-client.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook-runtime-client.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/hook_dispatch_claim_posttool.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook_dispatch_claim_posttool.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/hook_dispatch_claim_pretool.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook_dispatch_claim_pretool.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/hook_idle_notification_ratelimit.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook_idle_notification_ratelimit.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/hook_verifier_role_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook_verifier_role_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/onex-paths.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/onex-paths.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/permission_denied_logger.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/permission_denied_logger.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post-skill-delegation-enforcer.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post-skill-delegation-enforcer.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post-tool-delegation-counter.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post-tool-delegation-counter.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post-tool-use-quality.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post-tool-use-quality.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post-tool-use-test-reminder.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post-tool-use-test-reminder.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_agent_result_verifier.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_agent_result_verifier.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_auto_checkpoint.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_auto_checkpoint.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_auto_hostile_review.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_auto_hostile_review.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_changeset_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_changeset_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_commit_verify.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_commit_verify.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_cost_accounting.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_cost_accounting.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_cron_action_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_cron_action_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_env_var_sync.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_env_var_sync.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_kafka_poison_message_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_kafka_poison_message_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_output_suppressor.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_output_suppressor.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_return_path_auditor.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_return_path_auditor.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_state_verify.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_state_verify.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_subagent_tool_log.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_subagent_tool_log.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_team_observability.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_team_observability.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_trajectory.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_trajectory.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_tsc_check.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_tsc_check.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre-commit-no-inprocess-fallback.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/pre-compact-probe.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre-compact-probe.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre-compact.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre-compact.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre-tool-use-quality.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre-tool-use-quality.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_agent_dispatch_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_agent_dispatch_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_agent_tool_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_agent_tool_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_authorization_shim.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_authorization_shim.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_bash_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_bash_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_branch_protection_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_branch_protection_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_changeset_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_changeset_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_context_scope_auditor.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_context_scope_auditor.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_delegation.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_delegation.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_dispatch_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_dispatch_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_dispatch_guard_ticket_evidence.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_dispatch_guard_ticket_evidence.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_dispatch_mode_guardrail.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_dispatch_mode_guardrail.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_dod_completion_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_dod_completion_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_done_flip_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_done_flip_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_hostile_review_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_hostile_review_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_linear_done_verify.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_linear_done_verify.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_model_router.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_model_router.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_overseer_foreground_block.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_overseer_foreground_block.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_pipeline_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_pipeline_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_plan_existence_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_plan_existence_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_poly_enforcer.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_poly_enforcer.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_prepush_validator.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_prepush_validator.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_scope_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_scope_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_skill_substitution_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_skill_substitution_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_sweep_preflight.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_sweep_preflight.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_task_boundary_tests.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_task_boundary_tests.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_tdd_dispatch_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_tdd_dispatch_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_team_lead_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_team_lead_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_workflow_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_workflow_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_worktree_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_worktree_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/register-tab.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/register-tab.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/session-end.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/session-end.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/session-start.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/session-start.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/session_start_onex_cli_pin_check.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/session_start_onex_cli_pin_check.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/skip_token_surface_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/skip_token_surface_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/statusline.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/statusline.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/stop.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/stop.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/stop_failure_logger.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/stop_failure_logger.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/stop_quality_gate.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/stop_quality_gate.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/stop_session_bootstrap_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/stop_session_bootstrap_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/subagent-start.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/subagent-start.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/subagent_skip_token_surface_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/subagent_skip_token_surface_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/subagent_stop_claim_verifier.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/subagent_stop_claim_verifier.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/test-hooks.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/test-hooks.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/test_injection_probe.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/test_injection_probe.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
+- id: hooks/scripts/user-prompt-delegation-rule.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user-prompt-delegation-rule.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/user-prompt-submit.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user-prompt-submit.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/user_prompt_bootstrap_injector.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user_prompt_bootstrap_injector.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/user_prompt_delegation_classifier.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user_prompt_delegation_classifier.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/user_prompt_session_phase_enforcement.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user_prompt_session_phase_enforcement.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/user_prompt_structured_handoff_nudge.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user_prompt_structured_handoff_nudge.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: agents/configs/address-pr-comments.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/address-pr-comments.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/agent-address-pr-comments.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/agent-address-pr-comments.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/agent-epic-worker.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/agent-epic-worker.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/agent-observability.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/agent-observability.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/agent-registry.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/agent-registry.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/agent-task-verifier.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/agent-task-verifier.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/api-architect.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/api-architect.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/ast-generator.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/ast-generator.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/code-quality-analyzer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/code-quality-analyzer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/commit.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/commit.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/content-summarizer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/content-summarizer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/context-gatherer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/context-gatherer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/contract-driven-generator.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/contract-driven-generator.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/contract-validator.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/contract-validator.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/debug-database.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/debug-database.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/debug-intelligence.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/debug-intelligence.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/debug-log-writer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/debug-log-writer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/debug.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/debug.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/devops-infrastructure.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/devops-infrastructure.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/documentation-architect.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/documentation-architect.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/documentation-indexer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/documentation-indexer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/frontend-developer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/frontend-developer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/intelligence-initializer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/intelligence-initializer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/multi-step-framework.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/multi-step-framework.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/omniagent-batch-processor.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/omniagent-batch-processor.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/omniagent-smart-responder.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/onex-coordinator.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/onex-coordinator.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/onex-readme.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/onex-readme.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/overnight-automation.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/overnight-automation.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/parameter-collector.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/parameter-collector.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/performance.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/performance.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/pr-create.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/pr-create.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/pr-review.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/pr-review.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/pr-ticket-writer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/pr-ticket-writer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/pr-workflow.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/pr-workflow.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/production-monitor.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/production-monitor.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/python-fastapi-expert.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/python-fastapi-expert.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/quota-optimizer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/quota-optimizer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/rag-query.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/rag-query.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/rag-update.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/rag-update.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/repository-crawler-claude-code.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/repository-crawler-claude-code.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/repository-crawler.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/repository-crawler.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/repository-setup.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/repository-setup.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/research.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/research.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/security-audit.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/security-audit.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/structured-logging.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/structured-logging.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/testing.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/testing.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/ticket-manager.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/ticket-manager.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/type-validator.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/type-validator.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/ui-testing.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/ui-testing.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/velocity-log-writer.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/velocity-log-writer.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/velocity-tracker.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/velocity-tracker.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
+- id: agents/configs/workflow-generator.yaml
+  kind: agent
+  exposure: hidden
+  owning_package: internal
+  surface_class: agent_config
+  path: plugins/onex/agents/configs/workflow-generator.yaml
+  backing_nodes: []
+  rationale: internal polymorphic routing config (0 load as Claude Code agents per `claude plugin details`); not in stable, not independently listed.
