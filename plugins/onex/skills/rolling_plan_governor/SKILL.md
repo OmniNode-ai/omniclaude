@@ -81,6 +81,22 @@ probeable claim (a PR merged, a ticket Done, a lane healthy), the **live
 surface** (`gh`/Linear/`ssh`) outranks both — a handoff body is a report, not a
 truth surface (consistent with `/onex:handoff` behavior (a)).
 
+### Model roles: Opus orchestrates; Fable reviews the bounded diff
+
+**Opus is the foreground orchestrator.** It gathers and reconciles live state,
+classifies contradictions, decides the required plan changes, protects stable
+sections, verifies the proposed diff, and performs the terminal write.
+
+**Fable is the constrained plan-diff reviewer.** After Opus has assembled the
+evidence and change set, Fable may return a small, evidence-cited unified diff.
+It must not rewrite the plan, re-probe live state independently, or become the
+authority for prioritization or completion. Its output is a proposal for Opus
+to accept or reject hunk by hunk.
+
+Where the runtime cannot dispatch a separate Fable review, Opus still follows
+the same bounded-diff contract and records that no independent Fable pass ran.
+The absence of a reviewer is never permission to rewrite stable plan sections.
+
 ---
 
 ## Behavioral Contracts
@@ -174,6 +190,18 @@ the commit sha. The plan lives in the workspace's own git tree (edited in place 
 this is not a nested repo clone), so no worktree is required for the plan edit
 itself. `--dry-run` prints the report + proposed diff only; `--no-commit` writes
 but leaves the file dirty.
+
+### (i) Fable diff review before the terminal write
+
+Before Phase 4 applies an edit, Opus sends Fable the already-reconciled change
+set, relevant plan excerpts, and cited evidence. Fable returns only a bounded
+unified diff plus a short hunk-to-evidence map. It must preserve untouched
+sections byte-for-byte.
+
+Opus rejects any Fable hunk that lacks evidence, changes §0 without an explicit
+operator directive, drops unfinished work, or expands the scope beyond the
+identified delta. Apply only accepted hunks. The terminal report records whether
+the Fable diff pass ran and any rejected hunks.
 
 ---
 
