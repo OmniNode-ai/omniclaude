@@ -366,13 +366,16 @@ def test_shadow_workflow_has_no_occ_preflight_in_needs_chain() -> None:
 
 
 @pytest.mark.unit
-def test_shadow_workflow_is_no_needs_poller() -> None:
-    # The omniclaude shadow inherits the ci-summary no-needs poller posture: the
-    # single evaluate job has NO `needs:` at all, so it instantiates immediately
-    # and cannot be sequenced behind occ-preflight.
+def test_shadow_workflow_reason_graph_needs_only_shadow_subchecks() -> None:
+    # The omniclaude shadow runs its own OCC-independent subchecks. The reason
+    # graph may depend on those shadow jobs, but must never be sequenced behind
+    # occ-preflight or any authoritative CI aggregate.
     wf = _load_yaml(_SHADOW_WF)
-    for name, job in wf["jobs"].items():
-        assert "needs" not in job, f"shadow job {name} must have no needs (poller)"
+    reason_graph = wf["jobs"]["reason-graph"]
+    needs = reason_graph.get("needs", [])
+    if isinstance(needs, str):
+        needs = [needs]
+    assert sorted(needs) == ["lint-shadow", "tests-shadow", "typecheck-shadow"]
 
 
 @pytest.mark.unit
