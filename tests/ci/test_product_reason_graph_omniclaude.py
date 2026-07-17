@@ -30,6 +30,7 @@ from scripts.ci.product_reason_graph import (
     STATUS_BLOCKED_UPSTREAM,
     STATUS_FAILED,
     build_reason_graph,
+    exit_code_for_graph,
     map_checkruns_to_facts,
     root_receipt_id,
 )
@@ -375,7 +376,15 @@ def test_shadow_workflow_reason_graph_needs_only_shadow_subchecks() -> None:
     needs = reason_graph.get("needs", [])
     if isinstance(needs, str):
         needs = [needs]
-    assert sorted(needs) == ["lint-shadow", "tests-shadow", "typecheck-shadow"]
+    # OMN-14709: `security-shadow` is now a needed subcheck — before it existed
+    # the graph never received a `security` fact and mis-rooted healthy PRs as
+    # RUNNER_INFRA. Still no occ-preflight anywhere in the chain.
+    assert sorted(needs) == [
+        "lint-shadow",
+        "security-shadow",
+        "tests-shadow",
+        "typecheck-shadow",
+    ]
 
 
 @pytest.mark.unit
@@ -391,3 +400,181 @@ def test_shadow_workflow_never_triggers_occ_request() -> None:
     # It calls no reusable OCC workflow; it only runs the product reason-graph.
     assert not any("uses:" in ln and "occ" in ln.lower() for ln in executable)
     assert "product_reason_graph.py" in text
+
+
+# --------------------------------------------------------------------------
+# OMN-14709 — ENFORCING flip. The reason-graph exits NON-ZERO on a PRODUCT
+# defect while every non-product root (and green) stays exit 0. The workflow
+# stays NON-required, so a red shadow reports but cannot block a merge.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_exit_code_report_only_is_always_zero() -> None:
+    # Without enforcement the surface is always exit 0 — the historical behavior.
+    red = build_reason_graph(
+        {"head_sha": _HEAD, "subchecks": {**_green_subchecks(), "security": "failure"}}
+    )
+    assert red["root"]["kind"] == PRODUCT_FAILED
+    assert exit_code_for_graph(red, enforce=False) == 0
+
+
+@pytest.mark.unit
+def test_exit_code_enforcing_fails_only_on_product_root() -> None:
+    # PRODUCT defect -> non-zero.
+    for failing in ("security", "lint", "typecheck", "tests"):
+        subchecks = _green_subchecks()
+        subchecks[failing] = "failure"
+        graph = build_reason_graph({"head_sha": _HEAD, "subchecks": subchecks})
+        assert graph["root"]["kind"] == PRODUCT_FAILED
+        assert exit_code_for_graph(graph, enforce=True) != 0, failing
+
+    # Green head -> exit 0.
+    green = build_reason_graph({"head_sha": _HEAD, "subchecks": _green_subchecks()})
+    assert green["root"] is None
+    assert exit_code_for_graph(green, enforce=True) == 0
+
+    # RUNNER_INFRA (non-product) -> exit 0.
+    infra = build_reason_graph(
+        {"head_sha": _HEAD, "subchecks": {**_green_subchecks(), "tests": "cancelled"}}
+    )
+    assert infra["root"]["kind"] == RUNNER_INFRA
+    assert exit_code_for_graph(infra, enforce=True) == 0
+
+    # EVIDENCE_MISSING (non-product) -> exit 0.
+    evidence = build_reason_graph(
+        {
+            "head_sha": _HEAD,
+            "subchecks": dict.fromkeys(_SUBCHECKS, "skipped"),
+            "occ_eligibility": "failure",
+        }
+    )
+    assert evidence["root"]["kind"] == EVIDENCE_MISSING
+    assert exit_code_for_graph(evidence, enforce=True) == 0
+
+    # GITHUB_API_OUTAGE (non-product) -> exit 0.
+    api = build_reason_graph(
+        {"head_sha": _HEAD, "subchecks": _green_subchecks(), "gh_api": "5xx"}
+    )
+    assert api["root"]["kind"] == GITHUB_API_OUTAGE
+    assert exit_code_for_graph(api, enforce=True) == 0
+
+
+@pytest.mark.unit
+def test_healthy_full_facts_classify_product_green_and_exit_zero() -> None:
+    # The OMN-14709 false-RUNNER_INFRA fix: a healthy PR carrying ALL six product
+    # subchecks (INCLUDING the previously-missing `security`) classifies
+    # product_green and, enforcing, exits 0 — it no longer mis-roots as infra.
+    graph = build_reason_graph({"head_sha": _HEAD, "subchecks": _green_subchecks()})
+    assert graph["root"] is None
+    assert graph["product_outcome"] == "product_green"
+    assert exit_code_for_graph(graph, enforce=True) == 0
+
+
+@pytest.mark.unit
+def test_missing_security_fact_still_mis_roots_as_runner_infra() -> None:
+    # Regression guard proving the ROOT CAUSE: when `security` is omitted from the
+    # facts (the pre-OMN-14709 workflow bug), an otherwise-green head mis-roots as
+    # RUNNER_INFRA. This is why the workflow MUST feed the security-shadow result.
+    subchecks = {
+        "change_detection": "success",
+        "lint": "success",
+        "typecheck": "success",
+        "tests": "success",
+        "coverage": "success",
+        # security intentionally absent
+    }
+    graph = build_reason_graph({"head_sha": _HEAD, "subchecks": subchecks})
+    assert graph["root"]["kind"] == RUNNER_INFRA
+    assert "security" in graph["root"]["primary_signal"]
+
+
+@pytest.mark.unit
+def test_cli_graph_enforce_product_exits_nonzero_on_seeded_product_red() -> None:
+    # Load-bearing CLI proof: seeded PRODUCT_FAILED facts -> exit non-zero.
+    facts = {
+        "head_sha": _HEAD,
+        "subchecks": {**_green_subchecks(), "security": "failure"},
+    }
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "graph",
+            "--facts-json",
+            json.dumps(facts),
+            "--enforce-product",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0
+    payload = json.loads(proc.stdout)  # JSON still emitted before the failure code
+    assert payload["root"]["kind"] == PRODUCT_FAILED
+
+
+@pytest.mark.unit
+def test_cli_graph_enforce_product_exits_zero_on_green() -> None:
+    facts = {"head_sha": _HEAD, "subchecks": _green_subchecks()}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "graph",
+            "--facts-json",
+            json.dumps(facts),
+            "--enforce-product",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["root"] is None
+
+
+@pytest.mark.unit
+def test_cli_graph_enforce_product_exits_zero_on_runner_infra() -> None:
+    # Non-product root under enforcement stays exit 0 (reports, does not fail).
+    facts = {
+        "head_sha": _HEAD,
+        "subchecks": {**_green_subchecks(), "tests": "cancelled"},
+    }
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "graph",
+            "--facts-json",
+            json.dumps(facts),
+            "--enforce-product",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["root"]["kind"] == RUNNER_INFRA
+
+
+@pytest.mark.unit
+def test_shadow_workflow_reason_graph_step_is_enforcing() -> None:
+    # The workflow flips the shadow to enforcing via --enforce-product AND feeds
+    # the security subcheck fact — both required for the OMN-14709 cutover.
+    text = _SHADOW_WF.read_text(encoding="utf-8")
+    assert "--enforce-product" in text
+    assert "SECURITY_CONCLUSION" in text
+    assert "security-shadow" in text
+
+
+@pytest.mark.unit
+def test_shadow_workflow_has_security_shadow_job() -> None:
+    wf = _load_yaml(_SHADOW_WF)
+    assert "security-shadow" in wf["jobs"]
+    security_job = wf["jobs"]["security-shadow"]
+    needs = security_job.get("needs", [])
+    if isinstance(needs, str):
+        needs = [needs]
+    # OCC-independent by construction: no occ-preflight in the security chain.
+    assert "occ-preflight" not in needs

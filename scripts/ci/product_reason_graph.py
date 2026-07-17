@@ -401,6 +401,29 @@ _SYNTHETIC_REPORTER: dict[str, str] = {
 }
 
 
+def exit_code_for_graph(graph: dict[str, Any], *, enforce: bool) -> int:
+    """Process exit code for the reason-graph CLI (the ENFORCING surface, WS4).
+
+    Report-only (``enforce=False``): always ``0`` — the historical shadow
+    behavior, preserved so the un-flagged CLI never blocks anything.
+
+    Enforcing (``enforce=True``): return ``1`` **only** when the single elected
+    root is a genuine PRODUCT defect (:data:`PRODUCT_FAILED` — lint/typecheck/
+    tests/coverage/security/change-detection red). Every *non-product* root
+    (:data:`GITHUB_API_OUTAGE`, :data:`RUNNER_INFRA`, :data:`POLICY_HELD`,
+    :data:`EVIDENCE_MISSING`, :data:`DEPLOY_TRIGGER_FAILED`) and a green/READY
+    head stay ``0``. The shadow therefore reports infra / evidence / policy /
+    API-outage noise without failing on it — only a real product defect turns
+    the (still NON-required) check red. This is the WS4 red-side parity signal.
+    """
+    if not enforce:
+        return 0
+    root = graph.get("root")
+    if root is not None and root.get("kind") == PRODUCT_FAILED:
+        return 1
+    return 0
+
+
 def _render_summary(graph: dict[str, Any]) -> str:
     root = graph["root"]
     lines = ["## CI Reason Graph (report-only)", ""]
@@ -447,6 +470,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also print a Markdown summary block to stderr.",
     )
+    p.add_argument(
+        "--enforce-product",
+        action="store_true",
+        help=(
+            "ENFORCING mode (WS4): exit non-zero when the elected root is a "
+            "PRODUCT defect (PRODUCT_FAILED). Non-product roots and a green head "
+            "still exit 0. Omit for the historical report-only (always-0) surface."
+        ),
+    )
 
     pp = sub.add_parser(
         "poll",
@@ -470,6 +502,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also print a Markdown summary block to stderr.",
     )
+    pp.add_argument(
+        "--enforce-product",
+        action="store_true",
+        help=(
+            "ENFORCING mode (WS4): exit non-zero when the elected root is a "
+            "PRODUCT defect (PRODUCT_FAILED). Non-product roots and a green head "
+            "still exit 0. Omit for the historical report-only (always-0) surface."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -482,8 +523,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(graph, sort_keys=True))
         if args.summary:
             print(_render_summary(graph), file=sys.stderr)
-        # Report-only: this surface never fails the check.
-        return 0
+        # Report-only unless --enforce-product: then fail ONLY on a PRODUCT root.
+        return exit_code_for_graph(graph, enforce=args.enforce_product)
 
     if args.command == "poll":
         if args.check_runs_file:
@@ -508,8 +549,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(graph, sort_keys=True))
         if args.summary:
             print(_render_summary(graph), file=sys.stderr)
-        # Report-only: this surface never fails the check.
-        return 0
+        # Report-only unless --enforce-product: then fail ONLY on a PRODUCT root.
+        return exit_code_for_graph(graph, enforce=args.enforce_product)
 
     # argparse `required=True` subparsers make an unknown command unreachable;
     # parser.error is NoReturn, satisfying the int return contract.
