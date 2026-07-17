@@ -1,0 +1,113 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Product Readiness — SHADOW poller (OMN-14706 / OMN-14644 Phase 3, CI-01/CI-02).
+#
+# Phase 3 fan-out to omniclaude. This workflow adds an ADDITIVE, report-only
+# Product Readiness surface that evaluates the substantive product proof
+# (change-detection, lint, typecheck, tests, security, coverage) *independently
+# of* `occ-preflight`, then emits the typed reason-graph. It mirrors the proven
+# omnimarket shadow (#1796), adapted to omniclaude's no-needs poller posture
+# (the `ci-summary` / `ci_summary_gate.py` shape): a single job with NO `needs:`
+# that instantiates immediately and reads the head's leaf product check-runs via
+# the Checks API — deliberately the LEAF checks, NOT the `Quality/Tests/Security
+# Gate` aggregators, which re-report `occ-preflight.result`.
+#
+# LOAD-BEARING INVARIANTS (do not weaken — see design §1.1):
+#   1. NO `occ-preflight` anywhere in this workflow's needs-chain. The single job
+#      has NO `needs:` at all, so Product Readiness reports FIRST on the exact
+#      head SHA, before any OCC evidence exists.
+#   2. This workflow NEVER references or triggers `call-occ-preflight.yml` and so
+#      mints NO OCC request. The authoritative OCC path is untouched and still
+#      runs from its own workflow exactly as before.
+#   3. REPORT-ONLY / NON-REQUIRED. The only branch-protection-required context on
+#      `dev` is `CI Summary` (ci.yml) — this workflow adds `product-readiness-
+#      shadow / evaluate` as a NON-required shadow context and cannot wedge a
+#      merge. It does NOT edit the `Quality/Tests/Security Gate` OCC re-reporting;
+#      breaking that transitive coupling is a separate operator-gated WS4 step.
+#
+# During the shadow window, the reason-graph verdict is compared against the OLD
+# authoritative `CI Summary` outcome across live PR classes. Cutover to a
+# required context happens only after a zero-disagreement window + operator
+# approval (WS4). Do NOT do it here.
+
+name: product-readiness-shadow
+
+on:
+  pull_request:
+    branches: [main, dev]
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+
+permissions:
+  contents: read
+  checks: read
+
+# Shadow surface: newer head supersedes an in-flight shadow run for the same ref.
+concurrency:
+  group: product-readiness-shadow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # NO occ-preflight in this needs-chain. NO `needs:` at all — the check-run
+  # instantiates immediately and polls the head's leaf product conclusions.
+  # Surfaced NON-required context: `product-readiness-shadow / evaluate`.
+  evaluate:
+    name: evaluate
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 6
+    steps:
+      - name: Check out repo (for the reason-graph emitter)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Emit Product Readiness reason graph (report-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Exact head SHA the graph is content-addressed to. For pull_request
+          # use the PR head (github.sha is the ephemeral merge commit); for
+          # merge_group use the queued head; else the pushed SHA.
+          HEAD_SHA: >-
+            ${{ github.event.pull_request.head.sha
+              || github.event.merge_group.head_sha
+              || github.sha }}
+        run: |
+          set -uo pipefail
+
+          # Read the head's leaf product check-runs (OCC-independent). This is a
+          # read-only Checks-API poll; it creates no OCC request and adds no
+          # `needs:` edge. `gh api --paginate` streams one object per check-run
+          # across pages; `jq -s` slurps them into a single {check_runs: [...]}.
+          check_runs="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs" \
+            --paginate \
+            --jq '.check_runs[] | {name: .name, conclusion: .conclusion}' \
+            | jq -s '{check_runs: .}')"
+          # Fail-closed default if the poll produced nothing (report-only surface).
+          if [ -z "${check_runs}" ]; then
+            check_runs='{"check_runs": []}'
+          fi
+
+          graph="$(python scripts/ci/product_reason_graph.py poll \
+            --head-sha "${HEAD_SHA}" \
+            --check-runs-json "${check_runs}" \
+            --summary 2> summary.md)"
+          echo "$graph"
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+          root_kind="$(printf '%s' "$graph" | jq -r '.root.kind // "READY"')"
+          if [ "$root_kind" = "READY" ]; then
+            echo "::notice title=CI Reason Graph::READY — product dimension is green (report-only)"
+          else
+            echo "::warning title=CI Reason Graph::ROOT ${root_kind} (report-only shadow; not merge-blocking)"
+          fi
+
+          # Report-only shadow: always succeed. Never wedge a merge.
+          exit 0
