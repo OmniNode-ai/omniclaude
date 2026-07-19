@@ -30,6 +30,19 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
 1. Not a ``save_issue``/``update_issue`` call, or not a Done-class target state
    → ALLOW (nothing to verify).
 2. cancel-class target state (``canceled/duplicate/won't do``) → ALLOW.
+2a. Durable evidence path C — deploy-readback marker (OMN-14792): a
+    runtime-deploy ticket whose DoD is a live readback, not a merged product PR
+    (``node_dod_verify`` structurally skips such tickets —
+    ``reference_dod_verify_cannot_close_deploy_tickets`` — and they close via an
+    operator deliberate-Done). When a ``deploy-readback-proven: <probe + exit-0
+    receipt>`` marker with real evidence is present, the merge check is SCOPED to
+    DoD-*implementing* PRs (``verify_implementing``): full-URL / resolvable bare
+    ``#N`` citations, EXCLUDING scratch/throwaway/live-mint-annotated PRs and
+    unresolvable merge-chain-narrative ``#N`` refs. No unmerged implementing PR
+    → ALLOW; an unmerged implementing PR still BLOCKS (the marker is not a
+    blanket bypass — the OMN-14641 lesson). This closes the OMN-14437 false block
+    where the guard treated a closed scratch live-mint PR and bare narrative
+    numbers as blocking DoD evidence.
 3. Durable evidence path A — merged PR: if the ticket cites (or links via a
    Linear attachment) any *product* PR and every one is ``MERGED`` → ALLOW. If
    any is open / unmerged → BLOCK. (A "superseded-by-merged-sibling" close is a
@@ -93,7 +106,9 @@ from linear_done_verify import (
     is_cancel_state,
     is_done_state,
     is_exempt,
+    parse_deploy_readback_marker,
     verify,
+    verify_implementing,
 )
 
 _LINEAR_TOOLS = frozenset(
@@ -356,13 +371,38 @@ def decide(
                 description, [str(x) for x in (issue.get("attachment_urls") or [])]
             )
 
+    default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
+
+    # (3-pre) durable evidence path C — deploy-readback marker (OMN-14792). A
+    # runtime-deploy ticket's DoD is a live readback (effects image rebuilt to
+    # dev-tip + a clean probe read off the deployed bytes), NOT a merged product
+    # PR: node_dod_verify structurally skips such tickets
+    # (reference_dod_verify_cannot_close_deploy_tickets) and they close via an
+    # operator deliberate-Done. Before this carve-out the guard false-blocked
+    # them (the OMN-14437 shape) because it treated every PR string in the body
+    # — a scratch/throwaway live-mint readback PR, and bare merge-chain-narrative
+    # numbers — as blocking DoD evidence.
+    #
+    # When a `deploy-readback-proven:` marker with real evidence is present, the
+    # merge check is SCOPED to DoD-*implementing* PRs only (verify_implementing:
+    # full-URL / resolvable bare #N, excluding scratch-annotated and
+    # unresolvable-narrative refs). If any implementing PR is unmerged the flip
+    # still BLOCKS — the marker is not a blanket bypass (the OMN-14641 lesson).
+    # Otherwise the live-readback attestation stands in for a merged PR.
+    if parse_deploy_readback_marker(description) is not None:
+        impl_result = verify_implementing(
+            description, labels, default_repo=default_repo, fetcher=pr_fetcher
+        )
+        if not impl_result.allowed:
+            return Decision(False, f"pr_not_merged\n{impl_result.reason}")
+        return Decision(True, "durable_evidence:deploy_readback_proven")
+
     # (3) durable evidence path A — merged product-PR citation. This runs BEFORE
     # the close-if-done exemption carve-out (OMN-14641): the label was a blanket
     # merge-check bypass, so a ticket carrying it could flip Done with its linked
     # product PR still OPEN. verify() now blocks on any open cited product PR
     # regardless of the label; the exemption is honored only below, when NO
     # product PR is cited.
-    default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
     pr_result = verify(
         description, labels, default_repo=default_repo, fetcher=pr_fetcher
     )

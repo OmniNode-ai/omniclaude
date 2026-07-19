@@ -375,6 +375,125 @@ class TestClassification:
         assert linear_done_verify.classify_blocking(status) is False
 
 
+class TestDeployReadback:
+    """OMN-14792: deploy-readback marker + scoped implementing-PR scan."""
+
+    def test_marker_returns_evidence_value(self) -> None:
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "deploy-readback-proven: rebuilt dev effects; probe exit 0"
+            )
+            == "rebuilt dev effects; probe exit 0"
+        )
+
+    def test_marker_case_insensitive_key_and_underscore_variant(self) -> None:
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "Deploy-Readback-Proven: evidence A"
+            )
+            == "evidence A"
+        )
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "deploy_readback_proven: evidence B"
+            )
+            == "evidence B"
+        )
+
+    def test_marker_tolerates_leading_markdown(self) -> None:
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "- deploy-readback-proven: bulleted evidence"
+            )
+            == "bulleted evidence"
+        )
+
+    def test_marker_absent_returns_none(self) -> None:
+        assert linear_done_verify.parse_deploy_readback_marker("no marker here") is None
+
+    def test_empty_marker_returns_none(self) -> None:
+        """A content-free marker is not accepted (no blanket bypass token)."""
+        assert (
+            linear_done_verify.parse_deploy_readback_marker("deploy-readback-proven:")
+            is None
+        )
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "deploy-readback-proven:   "
+            )
+            is None
+        )
+
+    def test_scratch_annotation_detection(self) -> None:
+        assert linear_done_verify.line_is_scratch_annotated("scratch live-mint PR")
+        assert linear_done_verify.line_is_scratch_annotated("throwaway readback PR")
+        assert linear_done_verify.line_is_scratch_annotated("do-not-merge test PR")
+        # A normal implementing line mentioning "tests" is NOT scratch.
+        assert not linear_done_verify.line_is_scratch_annotated(
+            "added tests in https://github.com/OmniNode-ai/omniclaude/pull/1"
+        )
+
+    def test_implementing_refs_exclude_scratch_annotated_url(self) -> None:
+        desc = (
+            "Scratch live-mint PR (throwaway):\n"
+            "https://github.com/OmniNode-ai/omnimarket/pull/1817\n"
+        )
+        assert linear_done_verify.parse_implementing_pr_refs(desc) == []
+
+    def test_implementing_refs_exclude_unresolvable_bare_numbers(self) -> None:
+        desc = "Historical merge-chain: #1724 / #3990 / #3995 (context only)."
+        # No default_repo → bare numbers are narrative, not implementing refs.
+        assert linear_done_verify.parse_implementing_pr_refs(desc) == []
+
+    def test_implementing_refs_keep_full_url_on_normal_line(self) -> None:
+        desc = "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/2000"
+        refs = linear_done_verify.parse_implementing_pr_refs(desc)
+        assert len(refs) == 1
+        assert refs[0].repo == "OmniNode-ai/omnimarket"
+        assert refs[0].number == 2000
+
+    def test_implementing_refs_resolve_bare_number_with_default_repo(self) -> None:
+        refs = linear_done_verify.parse_implementing_pr_refs(
+            "Fixed in #2000", default_repo="OmniNode-ai/omnimarket"
+        )
+        assert len(refs) == 1
+        assert refs[0].number == 2000
+
+    def test_implementing_refs_filter_weak_signal_occ(self) -> None:
+        desc = "Evidence https://github.com/OmniNode-ai/onex_change_control/pull/4222"
+        assert linear_done_verify.parse_implementing_pr_refs(desc) == []
+
+    def test_verify_implementing_no_pr_allows(self) -> None:
+        result = linear_done_verify.verify_implementing(
+            description="deploy-readback-proven: probe exit 0\nScratch: "
+            "https://github.com/OmniNode-ai/omnimarket/pull/1817",
+            labels=[],
+            fetcher=_blocked,  # must never be called — scratch ref excluded
+        )
+        assert result.allowed is True
+        assert result.reason == "no_implementing_pr"
+
+    def test_verify_implementing_blocks_open_pr(self) -> None:
+        result = linear_done_verify.verify_implementing(
+            description="Implemented in "
+            "https://github.com/OmniNode-ai/omnimarket/pull/2000",
+            labels=[],
+            fetcher=_blocked,
+        )
+        assert result.allowed is False
+        assert "OmniNode-ai/omnimarket#2000" in result.reason
+
+    def test_verify_implementing_allows_merged_pr(self) -> None:
+        result = linear_done_verify.verify_implementing(
+            description="Implemented in "
+            "https://github.com/OmniNode-ai/omnimarket/pull/2000",
+            labels=[],
+            fetcher=_merged,
+        )
+        assert result.allowed is True
+        assert result.reason == "all_implementing_prs_merged"
+
+
 class TestMainFailClosed:
     def test_main_rejects_when_linear_fetch_fails(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
