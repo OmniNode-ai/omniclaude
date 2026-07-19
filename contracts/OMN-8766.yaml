@@ -1,0 +1,28 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-8766"
+title: "Instructional and deterministic skill routing gate pair"
+summary: >-
+  Records the Tier 1 deterministic-routing counterpart to the already-wired
+  Tier 3 instructional skill-routing gate, keeping the OMN-8749/OMN-8766 pair
+  enforced through repo-local contracts for runtime skill-document changes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-pr-1914-routing-gate-pair"
+    description: >-
+      omniclaude PR #1914 documents why the deterministic validator is wired
+      alongside the existing instructional skill-routing gate and keeps the
+      invariant blocking in pre-commit and CI.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1914 --repo OmniNode-ai/omniclaude --json body
+          --jq '.body | contains("check-deterministic-skills")'

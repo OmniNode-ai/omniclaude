@@ -1,0 +1,30 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14808"
+title: "Reconcile deterministic skill routing validator to live Tier 1 skills"
+summary: >-
+  Reconciles the deterministic skill-routing validator with the live omniclaude
+  skill tree, wires it into pre-commit and CI, removes contract_sweep from the
+  deterministic dispatch set after its fictional runtime mode was removed, and
+  adds truthful routing-contract text for pr_review and pr_review_bot.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-pr-1914-validator-reconcile"
+    description: >-
+      omniclaude PR #1914 updates the deterministic skill-routing validator,
+      its tests, the two dispatch skill documents, pre-commit wiring, and CI
+      workflow wiring. The PR body records the RED live-tree violations and the
+      GREEN validator/test results.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1914 --repo OmniNode-ai/omniclaude --json headRefOid
+          --jq '.headRefOid == "7535d616fc39a438169b1751b8858486260b0224"'
