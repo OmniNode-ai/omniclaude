@@ -856,6 +856,23 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/
+
+      # Deterministic-skill routing enforcement (OMN-8749, wired under OMN-14808).
+      # Tier 1 counterpart to validate-instructional-skill-routing (OMN-8766)
+      # above. Every Tier 1 deterministic skill's SKILL.md must contain a node
+      # dispatch instruction, a `SkillRoutingError` reference (the live wire
+      # contract emitted by both dispatch CLIs), and no prose-fallback routing
+      # instruction. BLOCKING (no --report): the reconciled tree is green, so
+      # any NEW drift fails at commit. Stdlib-only validator -> bare python3
+      # (matches the arch-* hooks). CI mirror:
+      # .github/workflows/check-deterministic-skills.yml.
+      - id: validate-deterministic-skill-routing
+        name: ONEX Deterministic Skill Routing Enforcement (OMN-8749)
+        language: system
+        entry: python3 scripts/validation/validate_deterministic_skill_routing.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(plugins/onex/skills/.*/SKILL\.md|scripts/validation/validate_deterministic_skill_routing\.py)$
       # OMN-12237 (Wave 7): Reject new imperative patterns in skills/*/SKILL.md.
       # Imperative inline logic (Agent(, TeamCreate, curl, gh api, psql, ssh,
       # asyncio.run, direct http://localhost/192.168 calls) must live in nodes.

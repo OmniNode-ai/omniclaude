@@ -227,6 +227,15 @@ class TestEnforcedSkillsSet:
         ):
             assert s not in ENFORCED_SKILLS, f"{s} should not be in ENFORCED_SKILLS"
 
+    def test_contract_sweep_reclassified_out(self) -> None:
+        # OMN-14808: contract_sweep is NOT a deterministic run-node/dispatch
+        # skill. Its only node-invocation path was deleted as fiction in
+        # #1897 / OMN-14542 (registration_only never existed on the
+        # extra="forbid" request model). It must stay reclassified out of
+        # Tier 1 — re-adding it would re-introduce that fiction to satisfy the
+        # DISPATCH regex.
+        assert "contract_sweep" not in ENFORCED_SKILLS
+
 
 @pytest.mark.unit
 class TestScanSkillsRoot:
@@ -307,4 +316,25 @@ class TestCliInterface:
         assert result.returncode == 0, (
             f"Expected exit 0, got {result.returncode}.\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+
+@pytest.mark.unit
+class TestLiveTreeGreen:
+    """OMN-14808: the real regression guard.
+
+    Every prior test uses synthetic fixtures. This one runs the validator
+    against the ACTUAL committed skills tree and asserts zero violations, so
+    that a drift between a Tier 1 skill's SKILL.md and its routing contract
+    (or a stale TIER1 membership entry) fails the suite directly — the same
+    invariant the wired pre-commit hook + CI gate enforce.
+    """
+
+    def test_real_skills_tree_has_zero_violations(self) -> None:
+        skills_root = REPO_ROOT / "plugins" / "onex" / "skills"
+        assert skills_root.is_dir(), f"skills root not found: {skills_root}"
+        result = scan_skills_root(skills_root)
+        assert result.total_violations == 0, (
+            "Deterministic-skill-routing violations on the live tree:\n"
+            + "\n".join(v.format_line() for v in result.violations)
         )
