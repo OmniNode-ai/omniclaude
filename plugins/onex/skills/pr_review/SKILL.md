@@ -51,6 +51,12 @@ context go to a capture file + the artifact store, never to you.
 
 See `prompt.md` for the one command and how to present the typed result.
 
+## Routing Contract
+
+The `uv run onex skill pr_review` entrypoint publishes to `onex.cmd.omnimarket.pr-review-bot-start.v1`
+(the `node_pr_review_orchestrator` start topic) through receipt-mode dispatch. If routing fails,
+surface `SkillRoutingError` directly; do not produce prose.
+
 ## What this skill does NOT do
 
 - Construct a payload file, `cd` anywhere, or `cat` a workflow_result.json (all internal to `onex skill`)
