@@ -63,6 +63,32 @@ DEFAULT_OWNER = "OmniNode-ai"
 # receipt never blocks a legitimately-merged product ticket.
 _WEAK_SIGNAL_REPOS = {"onex_change_control"}
 
+# Scratch/throwaway PR annotation vocabulary (OMN-14792). A PR reference on a
+# line explicitly labelled as a scratch / live-mint / throwaway / do-not-merge
+# artifact is NOT a DoD-implementing citation — it is a disposable test PR
+# (e.g. a live-readback mint PR that is intentionally closed, never merged).
+# Matched only for the *scoped* implementing-PR scan (the deploy-readback path);
+# the unconditional ``verify`` path is intentionally left untouched. The tokens
+# are deliberately specific phrases — bare ``test`` is excluded so that an
+# ordinary implementing PR line such as "added tests in <url>" is never
+# mistaken for a scratch reference.
+_SCRATCH_ANNOTATION_RE = re.compile(
+    r"\b(scratch|throwaway|live[-\s]?mint|readback[-\s]?pr|"
+    r"do[-\s]?not[-\s]?merge|dnm|test[-\s]?pr|test[-\s]?only)\b",
+    re.IGNORECASE,
+)
+
+# Deploy-readback evidence marker keys (OMN-14792). A runtime-deploy ticket's
+# DoD is a live readback (an effects image rebuilt to dev-tip + a clean probe
+# read off the deployed bytes), NOT a merged product PR — ``node_dod_verify``
+# structurally skips such tickets (memory
+# ``reference_dod_verify_cannot_close_deploy_tickets``) and they close via an
+# operator deliberate-Done. This marker is the sanctioned deploy-proof signal
+# the Done-flip guard accepts in lieu of a merged PR.
+DEPLOY_READBACK_MARKER_KEYS = frozenset(
+    {"deploy-readback-proven", "deploy_readback_proven"}
+)
+
 
 @dataclass
 class PRRef:
@@ -327,6 +353,179 @@ def verify(
 
     # No PR references and no exemption — trust the human; nothing to verify.
     return VerificationResult(allowed=True, reason="no_pr_references")
+
+
+# ---------------------------------------------------------------------------
+# Deploy-readback path (OMN-14792) — scoped implementing-PR scan + marker parse
+# ---------------------------------------------------------------------------
+
+
+def line_is_scratch_annotated(line: str) -> bool:
+    """Return True if a description line explicitly labels a scratch/test PR.
+
+    Used only by :func:`parse_implementing_pr_refs` to drop a live-mint /
+    throwaway PR reference (e.g. an intentionally-closed readback PR) from the
+    DoD-implementing set. Pure function.
+    """
+    return bool(_SCRATCH_ANNOTATION_RE.search(line))
+
+
+def _split_paragraphs(text: str) -> list[list[str]]:
+    """Split ``text`` into blank-line-delimited paragraphs (lists of lines).
+
+    A run of consecutive non-blank lines forms one paragraph; whitespace-only
+    lines are delimiters and are dropped. Pure function.
+    """
+    paragraphs: list[list[str]] = []
+    current: list[str] = []
+    for line in text.splitlines():
+        if line.strip():
+            current.append(line)
+        elif current:
+            paragraphs.append(current)
+            current = []
+    if current:
+        paragraphs.append(current)
+    return paragraphs
+
+
+def parse_implementing_pr_refs(
+    description: str, default_repo: str | None = None
+) -> list[PRRef]:
+    """Extract only the *DoD-implementing* product PR references.
+
+    This is the scoped counterpart to :func:`parse_pr_refs`, used exclusively by
+    the deploy-readback path (OMN-14792). It answers "which PRs does this ticket
+    cite as implementing the work?" — as opposed to every ``#N`` string that
+    happens to appear in the body — by excluding:
+
+    * lines explicitly annotated scratch/throwaway/live-mint/do-not-merge
+      (:func:`line_is_scratch_annotated`) — a disposable readback PR is not
+      implementing work;
+    * bare ``#N`` references that cannot be resolved to a repo (no
+      ``default_repo``) — an unrepo'd ``#N`` in a historical merge-chain
+      narrative is context, not a verifiable DoD citation, and the
+      unconditional path only ever surfaced it as an un-verifiable error; and
+    * weak-signal ``onex_change_control`` evidence-companion PRs
+      (:func:`is_weak_signal_ref`), as elsewhere.
+
+    A fully-qualified ``https://github.com/owner/repo/pull/N`` URL in a
+    non-scratch paragraph is always kept — that is a real, verifiable
+    implementing citation. Scratch annotation is scoped to the blank-line-
+    delimited paragraph the reference sits in, so a label line followed by the
+    URL on the next line (the common Linear layout) is correctly excluded.
+    Pure function (no I/O).
+    """
+    refs: dict[tuple[str, int], PRRef] = {}
+
+    for paragraph in _split_paragraphs(description):
+        # A paragraph is scratch if ANY of its lines carries a scratch/throwaway
+        # annotation — the label may precede or follow the reference line.
+        if any(line_is_scratch_annotated(line) for line in paragraph):
+            continue
+        block = "\n".join(paragraph)
+
+        for url_match in _PR_URL_RE.finditer(block):
+            owner = url_match.group(1)
+            repo_name = url_match.group(2)
+            num = int(url_match.group(3))
+            full_repo = f"{owner}/{repo_name}"
+            refs[(full_repo, num)] = PRRef(number=num, repo=full_repo)
+
+        # A bare ``#N`` is only an implementing citation when it resolves to a
+        # concrete repo. Without a default repo it is unverifiable narrative and
+        # is dropped rather than surfaced as a false-blocking "cannot verify".
+        if default_repo:
+            for num_match in _PR_NUMBER_RE.finditer(block):
+                num = int(num_match.group(1))
+                key = (default_repo, num)
+                if key not in refs:
+                    refs[key] = PRRef(number=num, repo=default_repo)
+
+    return [ref for ref in refs.values() if not is_weak_signal_ref(ref)]
+
+
+def verify_implementing(
+    description: str,
+    labels: list[str] | None,
+    default_repo: str | None = None,
+    fetcher: Any = fetch_pr_status,
+) -> VerificationResult:
+    """Scoped merge check for the deploy-readback path (OMN-14792).
+
+    Verifies only the DoD-*implementing* product PRs
+    (:func:`parse_implementing_pr_refs`) — scratch/throwaway PRs and
+    unresolvable narrative ``#N`` refs are ignored. Returns ``allowed=True``
+    with reason ``no_implementing_pr`` when nothing implementing is cited (the
+    common runtime-deploy shape: the DoD is a live readback, not a PR).
+
+    This is invoked ONLY when a deploy-readback marker is present, and it exists
+    so the marker can never waive an unmerged *real* implementing PR — the same
+    integrity rule OMN-14641 applied to the ``close-if-done`` label. ``labels``
+    is accepted for signature parity with :func:`verify` but is not consulted
+    here (the marker, not a label, authorizes this path).
+    """
+    del labels  # signature parity with verify(); not consulted on this path.
+
+    refs = parse_implementing_pr_refs(description, default_repo=default_repo)
+    if not refs:
+        return VerificationResult(allowed=True, reason="no_implementing_pr")
+
+    statuses = [fetcher(ref) for ref in refs]
+    blocking = [s for s in statuses if classify_blocking(s)]
+    if not blocking:
+        return VerificationResult(
+            allowed=True,
+            reason="all_implementing_prs_merged",
+            pr_statuses=statuses,
+        )
+
+    lines = ["Cannot mark Done — a DoD-implementing PR is not merged:"]
+    for status in blocking:
+        repo = status.ref.repo or "?"
+        if status.error:
+            lines.append(f"  - {repo}#{status.ref.number}: {status.error}")
+        else:
+            lines.append(
+                f"  - {repo}#{status.ref.number}: state={status.state} "
+                f"mergeState={status.merge_state}"
+            )
+    lines.append(
+        "A deploy-readback marker does NOT waive an open implementing PR "
+        "(OMN-14792 / OMN-14641) — merge the implementing PR, or remove the "
+        "citation if it is not part of this ticket's DoD."
+    )
+    return VerificationResult(
+        allowed=False,
+        reason="\n".join(lines),
+        pr_statuses=statuses,
+    )
+
+
+def parse_deploy_readback_marker(description: str) -> str | None:
+    """Return the evidence body of a ``deploy-readback-proven:`` marker, or None.
+
+    Recognises a frontmatter/body line of the form::
+
+        deploy-readback-proven: <probe + exit-0 receipt evidence>
+
+    (leading list/heading punctuation is tolerated, key is case-insensitive,
+    ``-`` and ``_`` spellings both accepted). Returns the stripped evidence
+    value when present and NON-EMPTY, else ``None``.
+
+    A content-free marker (``deploy-readback-proven:`` with no value) is
+    deliberately NOT accepted: requiring the probe/receipt body prevents the
+    marker from degrading into a blanket bypass token the way the bare
+    ``close-if-done`` label once did (OMN-14641). Pure function.
+    """
+    for line in description.splitlines():
+        stripped = line.strip().lstrip("-*# ").strip()
+        if ":" not in stripped:
+            continue
+        key, _, value = stripped.partition(":")
+        if key.strip().lower() in DEPLOY_READBACK_MARKER_KEYS and value.strip():
+            return value.strip()
+    return None
 
 
 def _load_stdin_tool_call() -> dict[str, Any]:

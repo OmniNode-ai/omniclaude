@@ -75,6 +75,17 @@ def _open_fetcher(_ref: Any):
     return _pr_status("OPEN")
 
 
+def _closed_fetcher(_ref: Any):
+    """A CLOSED-without-merge PR (the scratch live-mint readback shape)."""
+    return _pr_status("CLOSED")
+
+
+def _never_called_fetcher(_ref: Any):
+    raise AssertionError(
+        "no scratch / narrative PR ref must be fetched on the deploy-readback path"
+    )
+
+
 def _no_receipt_probe(_ticket_id: str) -> bool:
     """No PASS OCC receipt on origin/dev (incident / unresolved)."""
     return False
@@ -325,6 +336,144 @@ def test_legit_occ_receipt_is_allowed() -> None:
     d = guard.decide(call, occ_probe=_receipt_probe, linear_fetcher=_no_linear)
     assert d.allowed
     assert d.reason == "durable_evidence:occ_receipt_on_dev"
+
+
+# --------------------------------------------------------------------------- #
+# OMN-14792: deploy-readback marker path — runtime-deploy tickets proven by a
+# live readback (no merged implementing PR) must be ALLOWED, while the marker
+# must NOT become a blanket bypass for an unmerged implementing PR.
+# --------------------------------------------------------------------------- #
+
+# The OMN-14437 shape: a runtime-deploy ticket whose completion evidence is a
+# live readback. Its only PR references are (a) an intentionally-closed scratch
+# live-mint readback PR and (b) bare merge-chain-narrative numbers with no repo.
+# Neither is a DoD-implementing citation; both previously false-blocked the flip.
+_OMN_14437_DESCRIPTION = """\
+## Effects runtime image rebuilt to dev-tip (runtime-deploy)
+
+deploy-readback-proven: DEV effects image rebuilt to dev-tip; clean 30/0 live \
+OCC mint read back off the deployed bytes; introspection probe exit 0
+
+Scratch live-mint readback PR (intentional throwaway, do-not-merge):
+https://github.com/OmniNode-ai/omnimarket/pull/1817
+
+Historical merge-chain narrative (context only — landed long ago): the OCC
+autobind emitter fixes shipped across #1724 / #3990 / #3995.
+"""
+
+
+def test_deploy_readback_ticket_with_scratch_and_narrative_is_allowed() -> None:
+    """OMN-14437 shape → ALLOWED via the deploy-readback marker.
+
+    The scratch closed PR and bare narrative numbers must NOT be fetched or
+    treated as blocking DoD evidence — ``_never_called_fetcher`` proves none of
+    them reach the PR-status probe.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-14437",
+            "state": "Done",
+            "description": _OMN_14437_DESCRIPTION,
+        },
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_never_called_fetcher,
+        linear_fetcher=_no_linear,
+    )
+    assert d.allowed
+    assert d.reason == "durable_evidence:deploy_readback_proven"
+
+
+def test_deploy_readback_status_only_update_is_allowed() -> None:
+    """Status-only Done flip: the marker is read from the live description."""
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-14437", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_never_called_fetcher,
+        linear_fetcher=lambda _t: {
+            "description": _OMN_14437_DESCRIPTION,
+            "labels": [],
+        },
+    )
+    assert d.allowed
+    assert d.reason == "durable_evidence:deploy_readback_proven"
+
+
+def test_deploy_readback_marker_does_not_bypass_open_implementing_pr() -> None:
+    """The marker is NOT a blanket bypass: a ticket carrying it that also cites
+    an OPEN *implementing* product PR (no scratch annotation) is still BLOCKED.
+
+    This is the OMN-14641 integrity rule applied to the deploy-readback path.
+    """
+    desc = (
+        "deploy-readback-proven: rebuilt dev effects to dev-tip; probe exit 0\n\n"
+        "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/2000\n"
+    )
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {"id": "OMN-14999", "state": "Done", "description": desc},
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_open_fetcher)
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+
+
+def test_deploy_readback_marker_allows_when_implementing_pr_merged() -> None:
+    """Symmetric: a marker ticket whose implementing PR is MERGED is ALLOWED."""
+    desc = (
+        "deploy-readback-proven: rebuilt dev effects to dev-tip; probe exit 0\n\n"
+        "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/2000\n"
+    )
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {"id": "OMN-14998", "state": "Done", "description": desc},
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_merged_fetcher)
+    assert d.allowed
+    assert d.reason == "durable_evidence:deploy_readback_proven"
+
+
+def test_empty_deploy_readback_marker_is_not_accepted() -> None:
+    """A content-free ``deploy-readback-proven:`` (no probe/receipt evidence) is
+    NOT a bypass token — it falls through to the normal fail-closed path."""
+    desc = "deploy-readback-proven:\n\nno actual readback evidence provided"
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {"id": "OMN-15000", "state": "Done", "description": desc},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_no_receipt_probe,
+        pr_fetcher=_open_fetcher,
+        linear_fetcher=_no_linear,
+    )
+    assert not d.allowed
+    assert "no_durable_evidence" in d.reason
+
+
+def test_code_ticket_open_implementing_pr_blocked_without_marker() -> None:
+    """Acceptance pair: a code ticket citing an OPEN implementing PR and NO
+    deploy-readback marker is still BLOCKED (the marker path is never entered)."""
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-14997",
+            "state": "Done",
+            "description": (
+                "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/2001"
+            ),
+        },
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_open_fetcher)
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
 
 
 # --------------------------------------------------------------------------- #
