@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Required-Check Skip-Vector Guard — local caller for omniclaude's own PRs.
+# OMN-14854 (canary rollout; no fan-out to other repos in this PR).
+#
+# Produces required status check: "required-check-skip-guard / check-skip-vectors"
+#
+# NOT YET added to required_status_checks on this branch (see design spec
+# section 5 ordering + .github/required-checks.yaml, where this context's
+# manifest row is `mode: ADVISORY`). The branch-protection flip to REQUIRED
+# happens in a follow-up PR only after this workflow has posted green on `dev`
+# at least twice — never in the same PR that introduces the workflow, to avoid
+# a self-inflicted wedge (a PR blocked on a required check that has never
+# successfully run under real conditions).
+#
+# IMPORTANT: this trigger MUST NOT carry a `paths:`/`paths-ignore:` filter
+# (design spec section 4c). This is the one required-check workflow that is
+# exempt from "narrow the trigger for efficiency" — a path filter here would
+# be the exact self-referential skip-vector this guard exists to catch.
+
+name: Required-Check Skip-Vector Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  required-check-skip-guard:
+    needs: occ-preflight
+    uses: ./.github/workflows/required-check-skip-guard-reusable.yml
