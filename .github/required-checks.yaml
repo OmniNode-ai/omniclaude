@@ -1,204 +1,501 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# required-checks.yaml v2
+# required-checks.yaml v3 (OMN-14854)
 # Location: .github/required-checks.yaml
-# Upgraded: OMN-2228 (Phase 5 CI Consolidation)
+# Upgraded from v2 (OMN-2228) to schema v3: this file is now the OPERATIONAL
+# input to the Required-Check Skip-Vector Guard (validate_no_required_check_skip_vectors.py).
 #
-# The `gates` list is the ONLY operational contract for branch protection.
-# The `checks` list is documentation only -- it has NO operational effect.
-# See: CI_CD_STANDARDS.md (Invariant 2: Single Source of Truth)
+# Exhaustive: every context in required_status_checks.contexts for omniclaude's
+# `dev` branch has a `mode: REQUIRED` row below (fetched via
+# `gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks`,
+# 57 contexts, verified 2026-07-20). The privileged reconcile job
+# (required-check-manifest-reconcile.yml) fails closed if this file and live
+# branch protection diverge in either direction.
+#
+# Do NOT rename/remove a REQUIRED row without following the Branch Protection
+# Migration Safety procedure — flip branch protection first (or same PR), then
+# update this file, so the reconcile job never observes a divergence window.
+#
+# `job_path` len 1 = Shape A (direct job); len 2 = Shape B/C
+# ([caller_job_id, reusable_job_id]) per the design spec's context->job
+# resolution algorithm (OMN-14854 ticket, spec section 1).
 
-schema_version: 2
+schema_version: 3
 classification: toolchain
+repo: omniclaude
 
-# =============================================================================
-# GATES: API-stable check names for branch protection
-# These are the ONLY check names that branch protection should require.
-# Do NOT rename without following the Branch Protection Migration Safety
-# procedure in CI_CD_STANDARDS.md.
-# =============================================================================
 gates:
-  - name: "Quality Gate"
+  - name: "CI Summary"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    rationale: >
-      Aggregates all Tier A code quality checks: lint, mypy, pyright,
-      exports validation, enum governance, Kafka import guard,
-      migration freeze, architecture handshake, ONEX compliance.
+    job_path: ["ci-summary"]
+    skip_semantics: never
+    rationale: "Fail-closed no-needs poller aggregating all ci.yml job conclusions; DO NOT rename (OMN-14127)."
 
-  - name: "Tests Gate"
+  - name: "reason-graph"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: product-readiness-shadow.yml
+    job_path: ["reason-graph"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "AI-Slop Pattern Check (strict, PR diff)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    rationale: >
-      Aggregates all test execution: 5-split test matrix, hooks system tests,
-      agent framework tests, database schema validation.
+    job_path: ["ai-slop-check"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Security Gate"
+  - name: "Agent Contract Validation"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    rationale: >
-      Aggregates security scanning: Bandit SAST and secret detection.
+    job_path: ["agent-contract-validation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Omni Standards Gate"
-    workflow: omni-standards-compliance.yml
-    rationale: >
-      Aggregates omniclaude-specific structural and ecosystem standards:
-      repository structure validation, agent YAML compliance (schema_version +
-      agent- naming prefix), ecosystem integration validation (CLAUDE.md,
-      hooks.json), and legacy compatibility checks.
-
-# =============================================================================
-# CHECKS: Documentary listing (NO operational effect)
-# Branch protection MUST NOT reference check names from this section.
-# =============================================================================
-checks:
-  # Tier A-Org (universal)
-  - name: "Code Quality"
-    tier: A-Org
+  - name: "Aislop Sweep"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "ruff format + ruff check + mypy"
+    job_path: ["aislop-sweep"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Python Security Scan"
-    tier: A-Org
+  - name: "Arch: ModelCostLedger confined to effects (check 5)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Security Gate"
-    rationale: "Bandit SAST (medium+ severity)"
+    job_path: ["arch-cost-ledger-isolation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Secret Detection"
-    tier: A-Org
+  - name: "Arch: ModelCostLedger run_id field + index (check 9)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Security Gate"
-    rationale: "detect-secrets scan for leaked credentials"
+    job_path: ["arch-cost-ledger-structure"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  # Tier A-Runtime (per-technology)
-  - name: "Pyright Type Checking"
-    tier: A-Runtime
+  - name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "Pyright strict type checking on src/omniclaude/"
+    job_path: ["arch-no-db-in-orchestrator"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Exports Validation"
-    tier: A-Runtime
+  - name: "Arch: No LinearClient outside effects (check 3)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "__all__ exports reference real symbols"
+    job_path: ["arch-no-linear-outside-effects"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Enum Governance"
-    tier: A-Runtime
+  - name: "Arch: No datetime.utcnow() (check 11)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "ONEX enum naming conventions (UPPER_SNAKE_CASE)"
+    job_path: ["arch-no-utcnow"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Kafka Import Guard"
-    tier: A-Runtime
+  - name: "Arch: No direct EventBus instantiation (OMN-10725)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "ARCH-002: no direct Kafka imports in nodes/handlers"
+    job_path: ["arch-no-direct-bus-instantiation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Migration Freeze"
-    tier: A-Runtime
+  - name: "Arch: No direct Kafka producer outside publisher (check 10)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "Blocks new migrations during DB-SPLIT (OMN-2055)"
+    job_path: ["arch-no-direct-kafka-producer"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "ONEX Compliance"
-    tier: A-Runtime
+  - name: "Arch: No direct adapter imports in business logic (check 13)"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "ONEX architecture naming, contracts, method signatures"
+    job_path: ["arch-no-direct-adapter-in-business-logic"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: No git/gh calls outside effects (check 2)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-no-git-outside-effects"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: No hardcoded internal IPs (check 12)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-no-hardcoded-ip"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: No localhost/default env fallbacks (OMN-10658)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-no-env-fallbacks"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["no-polymorphic-agent"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-no-raw-sqlite3-in-handlers"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-no-repo-adapter-in-orchestrator"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-omnidash-db-role"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Arch: onex.* topic naming convention (check 6)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-topic-naming"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
   - name: "Architecture Handshake"
-    tier: A-Runtime
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Quality Gate"
-    rationale: "Cross-repo architecture handshake is current (skips fork PRs)"
+    job_path: ["check-handshake"]
+    skip_semantics: neutral_ok
+    rationale: "Architecture handshake vs omnibase_core. KNOWN FINDING (OMN-14854 guard build): job 'check-handshake' has a job-level `if:` that explicitly re-checks needs.occ-preflight.result inside the condition (vector-2) instead of relying on implicit needs-skip propagation. skip_semantics: neutral_ok pending triage in OMN-14856 (decide: move to step-level if, or ratify as an accepted exception)."
 
-  - name: "Tests (Split N/5)"
-    tier: A-Runtime
+  - name: "Architecture Invariants"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Tests Gate"
-    rationale: "5-split test matrix -- use Tests Gate aggregator instead"
+    job_path: ["arch-invariants"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Hooks System Tests"
-    tier: A-Runtime
+  - name: "Code Quality"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Tests Gate"
-    rationale: "Hook scripts and handler modules"
+    job_path: ["quality"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Agent Framework Tests"
-    tier: A-Runtime
+  - name: "Cross-Repo Boundary Parity"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Tests Gate"
-    rationale: "Agent YAML loading and framework validation"
+    job_path: ["boundary-parity"]
+    skip_semantics: neutral_ok
+    rationale: "Kafka import guard (ARCH-002). KNOWN FINDING (OMN-14854 guard build): job 'boundary-parity' has a job-level `if:` that explicitly re-checks needs.occ-preflight.result inside the condition (vector-2). skip_semantics: neutral_ok pending triage in OMN-14856."
 
   - name: "Database Schema Validation"
-    tier: A-Runtime
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: "Tests Gate"
-    rationale: "DB schema consistency checks"
+    job_path: ["database-validation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  # Tier A-Runtime (omni-standards-compliance.yml)
-  - name: "Repository Structure Validation"
-    tier: A-Runtime
-    workflow: omni-standards-compliance.yml
-    gate: "Omni Standards Gate"
-    rationale: "Required omniclaude directories (src/omniclaude, plugins/onex, etc.) are present"
-
-  - name: "Agent YAML Compliance"
-    tier: A-Runtime
-    workflow: omni-standards-compliance.yml
-    gate: "Omni Standards Gate"
-    rationale: "Agent YAMLs have schema_version field and agent_identity.name starts with 'agent-'"
-
-  - name: "Ecosystem Integration Validation"
-    tier: A-Runtime
-    workflow: omni-standards-compliance.yml
-    gate: "Omni Standards Gate"
-    rationale: "CLAUDE.md exists; hooks.json is valid JSON with correct schema fields"
-
-  - name: "Legacy Compatibility Check"
-    tier: A-Runtime
-    workflow: omni-standards-compliance.yml
-    gate: "Omni Standards Gate"
-    rationale: "Forbidden legacy patterns absent (dual model dirs, poetry.lock)"
-
-  # Tier A-Runtime (validate-agent-configs.yml)
-  - name: "Agent Config Schema Validation"
-    tier: A-Runtime
-    workflow: validate-agent-configs.yml
-    gate: null
-    rationale: "Validates agent config YAMLs against ModelAgentConfig Pydantic schema from onex_change_control (OMN-8910)"
-
-  # Tier C (profile / informational)
-  - name: "Merge Test Coverage"
-    tier: C
+  - name: "DoD Evidence Check"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: null
-    rationale: "Coverage reporting -- not a correctness check"
+    job_path: ["dod-evidence-check"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Build Docker Image"
-    tier: C
+  - name: "Enum Governance"
+    mode: REQUIRED
+    producer_kind: local
     workflow: ci.yml
-    gate: null
-    rationale: "Downstream of all gates -- redundant if gates pass"
+    job_path: ["enum-governance"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-# =============================================================================
-# EXCLUDED (not in any gate, documented for audit trail)
-# =============================================================================
-excluded:
-  - name: "Performance Benchmarks"
-    reason: "Removed from CI -- informational metrics should not block merges"
+  - name: "Env Var Registry (OMN-6263)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["env-var-registry"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Docker Compose Stack Validation"
-    reason: "Removed from CI -- infrastructure validation, not code correctness"
+  - name: "Exports Validation"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["exports-validation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Integration Tests"
-    reason: "Separate workflow (integration-tests.yml) -- requires remote services, runs on main/develop only"
+  - name: "F5.1 No compact cmd topic"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["arch-no-compact-cmd-topic"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Code Quality (Strict Mode)"
-    reason: "Eliminated -- redundant with Code Quality from consolidated workflow"
+  - name: "Kafka Import Guard"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["cross-repo-validation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "Enhanced Unit Tests Gate"
-    reason: "Eliminated -- consolidated into Tests Gate"
+  - name: "Markdown Link Check"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["docs-links"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
 
-  - name: "CI Tests Gate"
-    reason: "Eliminated -- consolidated into Tests Gate"
+  - name: "Merge-Sweep Contract"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["merge-sweep-contract"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Migration Freeze"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["migration-freeze"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Mode Metadata Integrity"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["mode-metadata-guard"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "ONEX Compliance"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["onex-validation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Quality Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["quality-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Secret Detection"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["detect-secrets"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Skill Contract Validation"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["skill-contract-validation"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Skill Hygiene"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["skill-hygiene"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Skill Monorepo-Ref Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["skill-monorepo-ref-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Tests Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["tests-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Version Pin Compliance"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["version-pin-check"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "no-noncanonical-lifecycle-classes"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["no-noncanonical-lifecycle-classes"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Omni Standards Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: omni-standards-compliance.yml
+    job_path: ["omni-standards-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Hostile Review Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: hostile-reviewer.yml
+    job_path: ["hostile-review-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "Canonical Inference Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: canonical-inference-gate.yml
+    job_path: ["canonical-inference-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "pr-title / check-title"
+    mode: REQUIRED
+    producer_kind: cross_repo
+    caller_workflow: pr-title-check.yml
+    caller_job: pr-title
+    cross_repo_ref: "OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@dev"
+    skip_semantics: never
+    rationale: "PR title ticket-reference check (cross-repo reusable hosted in onex_change_control)."
+
+  - name: "URL Authority Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: url-authority-gate.yml
+    job_path: ["url-authority-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "No Faked Boundary Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: no-faked-boundary.yml
+    job_path: ["no-faked-boundary-gate"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "main-target-guard"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: main-target-guard.yml
+    job_path: ["main-target-guard"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "non-dev-base-guard"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: non-dev-base-guard.yml
+    job_path: ["non-dev-base-guard"]
+    skip_semantics: never
+    rationale: "Live required status check on omniclaude dev branch protection."
+
+  - name: "occ-preflight / eligibility"
+    mode: REQUIRED
+    producer_kind: cross_repo
+    caller_workflow: auto-merge.yml
+    caller_job: occ-preflight
+    cross_repo_ref: "OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main"
+    skip_semantics: never
+    rationale: "Central OCC eligibility gate (cross-repo reusable hosted in omnibase_core)."
+
+  - name: "call-reject-skip-token / scan / reject-skip-gate-token"
+    mode: REQUIRED
+    producer_kind: local
+    caller_workflow: call-reject-skip.yml
+    caller_job: call-reject-skip-token
+    reusable_workflow: reject-deploy-gate-skip.yml
+    reusable_job: scan-skip-tokens
+    skip_semantics: never
+    rationale: "Skip-token bypass scanner (OMN-10347/10422/10971) — the gate this guard's own design is modeled on."
+
+  - name: "gate / CodeRabbit Thread Check"
+    mode: REQUIRED
+    producer_kind: local
+    caller_workflow: cr-thread-gate-caller.yml
+    caller_job: gate
+    reusable_workflow: cr-thread-gate.yml
+    reusable_job: gate
+    skip_semantics: neutral_ok
+    rationale: "CodeRabbit thread resolution gate (primary caller). KNOWN FINDING (OMN-14854 guard build): caller job 'gate' has an ungated `if:` (github.actor != 'dependabot[bot]') — vector-3. Believed to be an intentional dependabot exemption (github.actor is not spoofable), not an attacker-controlled bypass, but not yet human-ratified. skip_semantics: neutral_ok pending triage in OMN-14856."
+
+  - name: "cr-thread-gate / CodeRabbit Thread Check"
+    mode: REQUIRED
+    producer_kind: local
+    caller_workflow: cr-thread-check.yml
+    caller_job: cr-thread-gate
+    reusable_workflow: cr-thread-gate.yml
+    reusable_job: gate
+    skip_semantics: neutral_ok
+    rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. KNOWN FINDING (OMN-14854 guard build): same dependabot-actor vector-3 shape as 'gate / CodeRabbit Thread Check'. skip_semantics: neutral_ok pending triage in OMN-14856."
+
+  - name: "required-check-skip-guard / check-skip-vectors"
+    mode: ADVISORY
+    producer_kind: local
+    caller_workflow: required-check-skip-guard-caller.yml
+    caller_job: required-check-skip-guard
+    reusable_workflow: required-check-skip-guard-reusable.yml
+    reusable_job: check-skip-vectors
+    skip_semantics: never
+    rationale: "OMN-14854: this guard's own required check. Runs on every PR but is NOT YET in required_status_checks — per design spec section 5 ordering, the branch-protection flip happens only after 2 independent green runs on dev, tracked as a follow-up. mode stays ADVISORY until that flip lands (same PR as the flip, per schema-v3 rule: mode changes and branch-protection changes land together)."

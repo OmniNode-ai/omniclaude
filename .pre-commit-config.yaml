@@ -153,6 +153,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14854: Required-Check Skip-Vector Guard. Fails closed if a staged
+      # workflow file or the required-checks manifest introduces a path-scoped
+      # trigger, an ungated job-level `if:`, an ungated reusable-caller `if:`,
+      # or a missing pull_request/merge_group trigger on any REQUIRED context.
+      # Same validator runs in CI (required-check-skip-guard-reusable.yml) —
+      # local and CI verdicts can never diverge.
+      - id: reject-required-check-skip-vector
+        name: Reject skip vectors on required-check workflows (OMN-14854)
+        entry: .pre-commit-hooks/reject-required-check-skip-vector.sh
+        language: script
+        pass_filenames: false
+        files: '^\.github/(workflows/.*\.ya?ml|required-checks\.yaml)$'
+        stages: [pre-commit]
+
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
       # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
       # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero
