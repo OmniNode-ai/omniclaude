@@ -46,7 +46,7 @@ jobs:
       contents: read
       pull-requests: read
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@dev
     with:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
@@ -63,7 +63,7 @@ jobs:
   zone-filter:
     needs: occ-preflight
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@dev
     with:
       python-version: "3.12"
 
@@ -325,7 +325,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -351,7 +353,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -404,7 +408,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -461,7 +467,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -499,7 +507,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -560,7 +570,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1171,7 +1183,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1271,7 +1285,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1330,7 +1346,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1633,7 +1651,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1722,7 +1742,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1884,7 +1906,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2025,7 +2049,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2088,7 +2114,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2200,7 +2228,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2289,7 +2319,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2368,7 +2400,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2447,7 +2481,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2495,7 +2531,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2541,7 +2579,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2657,7 +2697,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2712,7 +2754,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2749,7 +2793,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2768,7 +2814,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3011,7 +3059,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3192,7 +3242,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3292,7 +3344,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3315,7 +3369,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3339,7 +3395,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
