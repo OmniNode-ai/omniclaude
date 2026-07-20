@@ -12,7 +12,7 @@ permissions:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@dev
     permissions:
       contents: read
       pull-requests: read
@@ -23,4 +23,4 @@ jobs:
   imperative-contract-guard:
     needs: occ-preflight
     # self-gating-ok: central guard is intentionally shared across repos; caller PRs do not modify the referenced workflow.
-    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@main
+    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@dev
