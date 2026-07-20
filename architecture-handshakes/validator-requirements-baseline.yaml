@@ -32,9 +32,6 @@ classification:
     pre_commit: backlog
     ci_workflow: backlog
     tracking: OMN-9048
-  pydantic-patterns:
-    ci_workflow: backlog
-    tracking: OMN-9048
   single-class-per-file:
     ci_workflow: backlog
     tracking: OMN-9048
@@ -60,9 +57,6 @@ gaps:
     kind: MISSING_PRE_COMMIT
   - repo: omniclaude
     validator: naming-conventions
-    kind: MISSING_CI_WORKFLOW
-  - repo: omniclaude
-    validator: pydantic-patterns
     kind: MISSING_CI_WORKFLOW
   - repo: omniclaude
     validator: single-class-per-file
