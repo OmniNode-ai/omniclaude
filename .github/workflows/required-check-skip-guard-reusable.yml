@@ -16,7 +16,11 @@
 # Usage in caller repos:
 #   jobs:
 #     required-check-skip-guard:
-#       uses: OmniNode-ai/omniclaude/.github/workflows/required-check-skip-guard-reusable.yml@main
+#       uses: OmniNode-ai/omniclaude/.github/workflows/required-check-skip-guard-reusable.yml@dev
+#
+# Promotion note: until omniclaude dev is promoted to main, callers must use @dev
+# and this reusable must fetch validator files from @dev. Re-pin both to @main
+# only after the workflow and action paths exist on main.
 #
 # IMPORTANT (design spec section 4c — anti-self-wedge): the CALLER job's own
 # pull_request/merge_group trigger in each repo's workflow file MUST NOT carry
@@ -65,7 +69,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: main
+          ref: dev
           path: .omniclaude-skip-guard
           persist-credentials: false
           sparse-checkout: |
