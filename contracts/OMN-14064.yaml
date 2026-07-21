@@ -1,0 +1,26 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14064"
+title: "Record PyPI dependency-pin resolvability incident"
+summary: >-
+  Repo-local contract for the incident motivating the OMN-14070 release gate.
+  Published package dependency pins must resolve from the public PyPI index.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "The release pin resolvability test suite passes."
+    command: "uv run pytest tests/ci/test_verify_pypi_pin_resolvability.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-pypi-pin-incident-regression"
+    description: "A nonexistent dependency pin is rejected by the release verification script."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/ci/test_verify_pypi_pin_resolvability.py -q"
