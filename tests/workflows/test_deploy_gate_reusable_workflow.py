@@ -65,7 +65,7 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     assert fetch_step["if"] == "github.event_name != 'merge_group'"
     assert (
         fetch_step["uses"]
-        == "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+        == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     )
     assert fetch_step["with"]["repository"] == "OmniNode-ai/omniclaude"
     assert fetch_step["with"]["persist-credentials"] is False
