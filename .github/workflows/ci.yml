@@ -346,6 +346,83 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
 
+  # Canonical handler-shape GROWTH RATCHET fan-out (OMN-14588, per OMN-14355/14368).
+  # compliance_sweep checks handler HYGIENE but is blind to handler SHAPE, so a
+  # non-canonical handler passes green CI. This classifies each omniclaude node's
+  # contract-declared handler (definition B: typed-payload handle(request) ->
+  # response, adapted by the shared runtime, no envelope in the core), WARNs the
+  # committed baseline's debt (scripts/ci/canonical_handler_shape_baseline.py,
+  # OMN-14588: 132 non-canonical / 132 scanned), and HARD-FAILS a NEW non-canonical
+  # node or baseline-count growth. Sourced from a sibling omnibase_core checkout
+  # (the classifier lives at omnibase_core's repo-root scripts/ci/, not the
+  # installed package). Runs --full (not the default --scope changed): the
+  # classifier's diff-scoped git-diff runs with cwd = the classifier's OWN repo,
+  # wrong for a fan-out invocation against this sibling checkout — --full is
+  # cheap here (~132 nodes, sub-second). --receipts-dir is mandatory (mirrors the
+  # OMN-14633 fix in the omnibase_infra fan-out): the classifier's default for a
+  # non-core --package is a directory NEXT TO ITS OWN __file__ (inside the
+  # ephemeral sibling checkout), which never contains this repo's committed
+  # receipts. No pre-commit mirror yet: same infeasibility already verified for
+  # the omnimarket/omnibase_infra fan-outs (OMN-14372/14587) — pre-commit's
+  # language:python remote-hook install only ships the installed
+  # src/omnibase_core/ package (classifier isn't importable that way) and
+  # language:script has no dependency isolation (the classifier needs the
+  # data-modeling/yaml-parsing libraries already vendored in this repo's own
+  # venv); real fix is OMN-14563 (relocate the classifier into an installed
+  # omnibase_core module). CI-only matches the omnimarket/omnibase_infra
+  # precedent.
+  canon-shape-ratchet:
+    needs: occ-preflight
+    name: Canonical Handler-Shape Ratchet
+    # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
+    # so required CI does not queue behind self-hosted fleet saturation.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Checkout omnibase_core validator source
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnibase_core
+          ref: dev
+          path: .ci/omnibase_core
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Canonical handler-shape ratchet (OMN-14355 fan-out, OMN-14588)
+        run: |
+          uv run python .ci/omnibase_core/scripts/ci/canonical_handler_shape.py \
+            --package omniclaude --src-root src \
+            --baseline scripts/ci/canonical_handler_shape_baseline.py \
+            --receipts-dir scripts/ci/adequacy_receipts \
+            --full
+
   enum-governance:
     needs: occ-preflight
     name: Enum Governance
@@ -2846,6 +2923,7 @@ jobs:
       - quality
       - pyright
       - check-handshake
+      - canon-shape-ratchet
       - enum-governance
       - exports-validation
       - env-var-registry
@@ -2905,6 +2983,7 @@ jobs:
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
+            "canon-shape-ratchet=${{ needs.canon-shape-ratchet.result }}" \
             "enum-governance=${{ needs.enum-governance.result }}" \
             "exports-validation=${{ needs.exports-validation.result }}" \
             "env-var-registry=${{ needs.env-var-registry.result }}" \
