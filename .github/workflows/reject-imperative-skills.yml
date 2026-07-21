@@ -21,7 +21,11 @@ name: Reject imperative patterns in skills
 
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    # OMN-14908 (C3): no `edited`. This gate scans changed SKILL.md files for
+    # imperative patterns; a PR title/body edit cannot introduce or remove a
+    # violation, so re-firing on `edited` is pure waste. Code changes still
+    # arrive via synchronize/opened.
+    types: [opened, synchronize]
     paths:
       - 'plugins/onex/skills/**/SKILL.md'
       - '.pre-commit-hooks/reject-imperative-skill-patterns.sh'

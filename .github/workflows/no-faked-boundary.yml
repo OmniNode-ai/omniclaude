@@ -33,7 +33,12 @@ name: No Faked Boundary Gate
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    # OMN-14908 (C3): no `edited`. This gate scans src/tests for faked
+    # inference/routing boundaries; a PR title/body edit cannot introduce or
+    # remove a violation, so re-firing on `edited` is pure waste (this job also
+    # runs a full `uv sync`). Code changes still arrive via
+    # synchronize/opened/reopened.
+    types: [opened, synchronize, reopened]
     branches: [main, dev]
 
 permissions:

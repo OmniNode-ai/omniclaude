@@ -33,7 +33,11 @@ name: Canonical Inference Gate
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    # OMN-14908 (C3): no `edited`. This gate scans code only (model shell-outs /
+    # env-model reads); a PR title/body edit cannot introduce or remove a
+    # violation, so re-firing on `edited` is pure waste. Code changes still
+    # arrive via synchronize/opened/reopened.
+    types: [opened, synchronize, reopened]
     branches: [main, dev]
 
 permissions:
