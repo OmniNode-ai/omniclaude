@@ -251,6 +251,25 @@ SELF_REFERENTIAL_PATTERNS: list[Pattern[str]] = [
 FALSIFIABILITY_MODE_ENV = "DEPLOY_GATE_FALSIFIABILITY"
 FALSIFIABILITY_MODE_DEFAULT = "report"
 
+# ---------------------------------------------------------------------------
+# OMN-14443: the falsifiability ratchet.
+#
+# OMN-14505 shipped classify_check_value() as a REAL classifier, but kept it
+# report-only because a blind global "enforce" flip would fail deploy-gate on
+# every one of the ~98% of the live onex_change_control corpus that only ever
+# declared vacuous evidence — wedging merges org-wide is not an acceptable
+# fix for a false-green.
+#
+# The ratchet closes the loophole PROSPECTIVELY without that blast radius:
+# tickets present in the frozen GRANDFATHER_FILE snapshot (weak evidence that
+# already existed at snapshot time) keep the legacy soft-pass; every ticket
+# NOT in that snapshot — i.e. every ticket newly authored after it — is held
+# to the real bar unconditionally: it must declare a falsifiable probe or the
+# gate FAILS, regardless of FALSIFIABILITY_MODE_ENV. This is fail-closed for
+# new tickets and a no-op for every ticket that was already passing.
+# ---------------------------------------------------------------------------
+GRANDFATHER_FILE = Path(__file__).parent / "deploy_gate_legacy_grandfather.yaml"
+
 # Author-facing guidance. It deliberately describes the PROPERTY required, not a
 # word to type — the whole defect was that the gate advertised a magic substring,
 # so authors supplied the substring instead of the evidence.
@@ -777,7 +796,40 @@ def iter_check_values(contract_path: Path) -> list[tuple[str, object]]:
     return out
 
 
-def has_deploy_evidence(contract_path: Path) -> bool:
+def _load_grandfather_tickets(
+    grandfather_file: Path | None = None,
+) -> frozenset[str]:
+    """Load the frozen OMN-14443 ratchet snapshot of vacuous-only ticket IDs.
+
+    Missing or unparseable file fails CLOSED to an EMPTY set — i.e. every
+    ticket is then held to the real falsifiability bar. A broken/absent
+    snapshot must never silently grandfather everything.
+
+    ``grandfather_file`` defaults to the module-level ``GRANDFATHER_FILE``
+    global, resolved at CALL time (not bound as a function-definition-time
+    default) so that tests can ``monkeypatch`` the module global and have it
+    take effect.
+    """
+    if grandfather_file is None:
+        grandfather_file = GRANDFATHER_FILE
+    if not grandfather_file.exists():
+        return frozenset()
+    import yaml
+
+    try:
+        with grandfather_file.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+    except (yaml.YAMLError, OSError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    tickets = data.get("tickets", [])
+    if not isinstance(tickets, list):
+        return frozenset()
+    return frozenset(str(t).upper() for t in tickets if isinstance(t, str))
+
+
+def has_deploy_evidence(contract_path: Path, ticket_id: str | None = None) -> bool:
     """Return True if the contract declares at least one FALSIFIABLE deploy probe.
 
     OMN-14505: this used to be a substring test for the word "deploy", which any
@@ -785,6 +837,13 @@ def has_deploy_evidence(contract_path: Path) -> bool:
     ``classify_check_value``. In "report" mode (the rollout default) the returned
     verdict stays on the legacy rule so no repo's merges are wedged, but the
     falsifiability verdict is computed and logged so the delta is measurable.
+
+    OMN-14443: report mode is no longer an unconditional soft-pass. A ticket
+    with ONLY vacuous evidence is soft-passed if and only if it is present in
+    the frozen ``GRANDFATHER_FILE`` snapshot. A ticket NOT in that snapshot —
+    every ticket authored after the snapshot was taken — is held to the real
+    bar unconditionally: vacuous-only evidence FAILS the gate, closing the
+    false-green prospectively without wedging any pre-existing ticket.
     """
     checks = iter_check_values(contract_path)
     enforce = falsifiability_mode() == "enforce"
@@ -792,21 +851,52 @@ def has_deploy_evidence(contract_path: Path) -> bool:
     falsifiable = [(i, v) for i, v in checks if classify_check_value(v).falsifiable]
     legacy = [(i, v) for i, v in checks if _legacy_has_deploy_keyword(v)]
 
-    if enforce:
-        return bool(falsifiable)
+    if falsifiable:
+        return True
+    if not legacy:
+        return False
 
-    # Report mode: surface the vacuous checks the legacy rule is about to accept.
-    if legacy and not falsifiable:
+    # Vacuous-only evidence from here down: legacy-passing, not falsifiable.
+    if enforce:
+        return False
+
+    grandfathered = (
+        ticket_id is not None and ticket_id.upper() in _load_grandfather_tickets()
+    )
+
+    if grandfathered:
         print(
-            f"::warning::deploy-gate falsifiability (OMN-14505, report-only): "
+            f"::warning::deploy-gate falsifiability (OMN-14505, grandfathered): "
             f"{contract_path.name} passes the LEGACY substring rule but declares NO "
-            f"falsifiable deploy probe. Under enforcement this ticket would FAIL. "
+            f"falsifiable deploy probe. It is soft-passed only because it is in the "
+            f"frozen OMN-14443 grandfather snapshot ({GRANDFATHER_FILE.name}). "
             f"Vacuous checks: "
             + "; ".join(
                 f"[{i}] {classify_check_value(v).reason}" for i, v in legacy[:3]
             )
         )
-    return bool(legacy)
+        return True
+
+    if ticket_id is None:
+        # Back-compat path (no ticket_id supplied by the caller): behave as the
+        # pre-OMN-14443 report-mode soft-pass so existing direct callers of this
+        # function are not silently broken by the ratchet.
+        print(
+            f"::warning::deploy-gate falsifiability (OMN-14505, report-only, "
+            f"no ticket_id supplied): {contract_path.name} passes the LEGACY "
+            f"substring rule but declares NO falsifiable deploy probe."
+        )
+        return True
+
+    print(
+        f"::error::deploy-gate falsifiability ratchet (OMN-14443): {ticket_id} is "
+        f"NOT in the frozen grandfather snapshot ({GRANDFATHER_FILE.name}) and "
+        f"{contract_path.name} declares NO falsifiable deploy probe — only vacuous "
+        f"(self-referential or non-executing) evidence. New tickets must declare a "
+        f"real live-surface probe. Vacuous checks: "
+        + "; ".join(f"[{i}] {classify_check_value(v).reason}" for i, v in legacy[:3])
+    )
+    return False
 
 
 def validate_pr_deploy_gate(
@@ -859,7 +949,7 @@ def validate_pr_deploy_gate(
     for ticket_id in ticket_ids:
         contract_path = contracts_dir / f"{ticket_id}.yaml"
         tickets_checked.append(ticket_id)
-        if has_deploy_evidence(contract_path):
+        if has_deploy_evidence(contract_path, ticket_id=ticket_id):
             return DeployGateResult(
                 passed=True,
                 runtime_paths_hit=runtime_hits,
@@ -876,7 +966,7 @@ def validate_pr_deploy_gate(
         t
         for t in ticket_ids
         if (contracts_dir / f"{t}.yaml").exists()
-        and not has_deploy_evidence(contracts_dir / f"{t}.yaml")
+        and not has_deploy_evidence(contracts_dir / f"{t}.yaml", ticket_id=t)
     ]
 
     parts: list[str] = [
