@@ -217,6 +217,8 @@ an operator-typed convenience value and never prose in this file:
 python -m omnimarket.nodes.node_contract_sweep --repos omnimarket  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
 ```
 
+If dispatch/routing fails, surface `SkillRoutingError` directly; do not produce prose.
+
 Prints a `ContractSweepResult` JSON to stdout (`violations`, `contracts_checked`,
 `scanned_count`, `summary`, `status`, `missing_repos`, `scope_error`).
 
