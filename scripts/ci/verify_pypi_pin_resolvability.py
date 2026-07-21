@@ -55,6 +55,17 @@ from pathlib import Path
 _INSTALL_TIMEOUT_SECONDS = 300
 
 
+def _timeout_log(exc: subprocess.TimeoutExpired) -> str:
+    """Render a timeout as controlled gate output instead of a traceback."""
+    command = " ".join(str(part) for part in exc.cmd)
+    output = exc.stdout or ""
+    stderr = exc.stderr or ""
+    return (
+        f"ERROR: command timed out after {exc.timeout} seconds: {command}\n"
+        f"{output}{stderr}"
+    )
+
+
 def _resolve_uv() -> str:
     """Resolve the absolute path to the ``uv`` binary.
 
@@ -98,14 +109,17 @@ def verify_pin_resolvability(wheel_path: Path) -> tuple[bool, str]:
         tmp_path = Path(tmp)
         venv_dir = tmp_path / "venv"
 
-        create = subprocess.run(  # nosec B603 - fixed argv, no shell, fully-qualified uv path
-            [uv_bin, "venv", str(venv_dir)],
-            cwd=tmp_path,
-            capture_output=True,
-            text=True,
-            timeout=_INSTALL_TIMEOUT_SECONDS,
-            check=False,
-        )
+        try:
+            create = subprocess.run(  # nosec B603 - fixed argv, no shell, fully-qualified uv path
+                [uv_bin, "venv", str(venv_dir)],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                timeout=_INSTALL_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return False, _timeout_log(exc)
         if create.returncode != 0:
             return False, create.stdout + create.stderr
 
@@ -113,22 +127,25 @@ def verify_pin_resolvability(wheel_path: Path) -> tuple[bool, str]:
         scratch_wheel.write_bytes(wheel_path.read_bytes())
 
         venv_python = venv_dir / "bin" / "python"
-        proc = subprocess.run(  # nosec B603 - fixed argv, no shell, fully-qualified uv path
-            [
-                uv_bin,
-                "pip",
-                "install",
-                "--python",
-                str(venv_python),
-                "--no-cache",
-                str(scratch_wheel),
-            ],
-            cwd=tmp_path,
-            capture_output=True,
-            text=True,
-            timeout=_INSTALL_TIMEOUT_SECONDS,
-            check=False,
-        )
+        try:
+            proc = subprocess.run(  # nosec B603 - fixed argv, no shell, fully-qualified uv path
+                [
+                    uv_bin,
+                    "pip",
+                    "install",
+                    "--python",
+                    str(venv_python),
+                    "--no-cache",
+                    str(scratch_wheel),
+                ],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                timeout=_INSTALL_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return False, create.stdout + create.stderr + _timeout_log(exc)
         return (
             proc.returncode == 0,
             create.stdout + create.stderr + proc.stdout + proc.stderr,

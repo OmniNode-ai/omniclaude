@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.ci import verify_pypi_pin_resolvability
 from scripts.ci.verify_pypi_pin_resolvability import (
     find_single_wheel,
     verify_pin_resolvability,
@@ -63,6 +64,43 @@ def test_find_single_wheel_ignores_sdist_and_returns_the_wheel(
     wheel.write_bytes(b"")
     (tmp_path / "pkg-1.0.tar.gz").write_bytes(b"")
     assert find_single_wheel(tmp_path) == wheel
+
+
+@pytest.mark.parametrize("timeout_on", ["venv", "install"])
+def test_verify_pin_resolvability_returns_controlled_timeout_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    timeout_on: str,
+) -> None:
+    wheel = tmp_path / "pkg-1.0-py3-none-any.whl"
+    wheel.write_bytes(b"wheel")
+    monkeypatch.setattr(
+        verify_pypi_pin_resolvability, "_resolve_uv", lambda: "/usr/bin/uv"
+    )
+
+    calls = 0
+
+    def fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        if (timeout_on == "venv" and calls == 1) or (
+            timeout_on == "install" and calls == 2
+        ):
+            raise subprocess.TimeoutExpired(
+                command, 300, output="partial output", stderr="timeout stderr"
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="created\n", stderr="")
+
+    monkeypatch.setattr(verify_pypi_pin_resolvability.subprocess, "run", fake_run)
+
+    ok, log = verify_pin_resolvability(wheel)
+
+    assert ok is False
+    assert "timed out after 300 seconds" in log
+    assert "partial output" in log
+    assert "timeout stderr" in log
 
 
 # ---------------------------------------------------------------------------
