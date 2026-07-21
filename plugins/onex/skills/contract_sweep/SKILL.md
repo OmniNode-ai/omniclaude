@@ -45,6 +45,8 @@ args:
 
 **Announce at start:** "I'm using the contract-sweep skill."
 
+If routing fails, surface `SkillRoutingError` directly; do not produce prose.
+
 Unified contract health skill combining two detection modes:
 
 1. **Drift mode** (`--drift`) — Static cross-repo contract drift detection. Wraps the
