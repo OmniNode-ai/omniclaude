@@ -1,0 +1,26 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-8765"
+title: "Validate deterministic skill routing references"
+summary: >-
+  Tier-1 skills provide the required typed routing-failure reference consumed
+  by the deterministic skill-routing validator.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "The deterministic skill routing validator passes for contract_sweep."
+    command: "uv run python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills --skill contract_sweep"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-skill-routing-validator"
+    description: "The routing validator accepts the contract_sweep typed failure directive."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills --skill contract_sweep"

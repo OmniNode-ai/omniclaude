@@ -1,0 +1,26 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14881"
+title: "Document deterministic skill routing failure behavior"
+summary: >-
+  The contract_sweep skill documents that routing failures surface the typed
+  SkillRoutingError directly rather than producing prose.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "The focused deterministic skill routing validator passes."
+    command: "uv run python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills --skill contract_sweep"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-contract-sweep-routing-reference"
+    description: "contract_sweep declares the deterministic routing failure behavior."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills --skill contract_sweep"
