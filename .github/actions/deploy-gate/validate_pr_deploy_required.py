@@ -185,6 +185,27 @@ LIVE_PROBE_COMMANDS = frozenset(
         "ssh",
         # ONEX node dispatch against the live runtime
         "onex",
+        # GitHub REST API content reads — OMN-14443 backfill: reads the
+        # actual state of a *different* repo (the product repo whose deploy
+        # is being assessed) at a pinned commit SHA. This is the ONLY
+        # live-probe command that is simultaneously (a) reachable from every
+        # CI runner (github.com, not a LAN/.201 host — unlike
+        # docker/kubectl/rpk/psql, which need a live daemon or LAN route this
+        # classifier's own LIVE_PROBE_COMMANDS list otherwise assumes CI does
+        # not have) and (b) NOT flagged by onex_change_control's OMN-14051
+        # hermetic-command guard (contract_compliance_check.py's
+        # _REMOTE_SHELL_BINS / _DAEMON_BINS / _NET_FETCH_BINS deny lists do
+        # not include `gh`, and that guard's own rejection message recommends
+        # `gh api repos/OWNER/REPO/pulls/<pr> --jq .merged` as the canonical
+        # non-inert check). Deliberately scoped to the compound token
+        # "gh-api" (see ``_commands_in``), NOT bare "gh": `gh pr view/list/
+        # status` only report PR/issue metadata and are trivially true via
+        # almost every ticket's own generated self-bind check
+        # (`gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state`) —
+        # accepting bare `gh` would retroactively reclassify hundreds of
+        # pre-existing, non-substantive self-bind checks across the corpus as
+        # "falsifiable". Only `gh api ...` (a genuine content read) qualifies.
+        "gh-api",
     }
 )
 
@@ -236,11 +257,14 @@ FALSIFIABILITY_MODE_DEFAULT = "report"
 DEPLOY_EVIDENCE_GUIDANCE = (
     "Add a dod_evidence item to onex_change_control/contracts/OMN-XXXX.yaml whose "
     "check_value is a FALSIFIABLE deploy probe: it must execute a command against a "
-    "live surface (docker/kubectl/rpk/psql/curl/ssh/onex) so that its exit status "
+    "live surface (docker/kubectl/rpk/psql/curl/ssh/onex/gh) so that its exit status "
     "depends on the state of the deployed system. It must NOT read back the receipt "
     "or contract your own PR authors (drift/dod_receipts/..., $CONTRACT_REPO_DIR) — "
     "such a check greps text you wrote and can never go RED. "
     "Good: docker exec ${RUNTIME_CONTAINER:-omninode-runtime} python -c 'import <changed_module>'. "
+    "Good (compute-only/no-live-deploy tickets, hermetic under onex_change_control's "
+    "OMN-14051 guard): gh api repos/OWNER/REPO/contents/<changed_path>?ref=<merge_sha> "
+    "--jq .content | base64 -d | grep -q '<symbol the fix introduces>'. "
     "Rejected: grep -q '^status: PASS$' drift/dod_receipts/OMN-XXXX/dod-deploy/command.yaml."
 )
 
@@ -317,8 +341,10 @@ def _command_of(tokens: list[str]) -> tuple[str | None, list[str]]:
             idx += 1
             continue
         if Path(word).name.lower() in WRAPPER_COMMANDS:
-            if Path(word).name.lower() == "command" and idx + 1 < len(tokens) and (
-                tokens[idx + 1] in ("-v", "-V")
+            if (
+                Path(word).name.lower() == "command"
+                and idx + 1 < len(tokens)
+                and (tokens[idx + 1] in ("-v", "-V"))
             ):
                 return None, []
             in_wrapper = True
@@ -386,6 +412,18 @@ def _commands_in(script: str, depth: int = 0) -> set[str]:
             continue
 
         found.add(command)
+
+        # `gh api ...` specifically — NOT bare `gh`. `gh pr view/list/status`
+        # only report PR/issue metadata (state, existence) and are trivially
+        # true for almost every ticket via its own generated self-bind check
+        # (`gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state`);
+        # accepting bare `gh` would retroactively reclassify hundreds of those
+        # pre-existing, non-substantive self-bind checks as "falsifiable"
+        # across the whole corpus. `gh api ...` reads actual repo CONTENT at a
+        # ref, which is the live, non-self-referential surface this ticket
+        # backfills against — see LIVE_PROBE_COMMANDS comment.
+        if command == "gh" and rest and rest[0] == "api":
+            found.add("gh-api")
 
     return found
 
