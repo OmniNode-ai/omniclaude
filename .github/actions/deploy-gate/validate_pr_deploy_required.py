@@ -185,22 +185,27 @@ LIVE_PROBE_COMMANDS = frozenset(
         "ssh",
         # ONEX node dispatch against the live runtime
         "onex",
-        # GitHub REST/GraphQL API — OMN-14443 backfill: reads the actual state
-        # of a *different* repo (the product repo whose deploy is being
-        # assessed) at a pinned commit SHA. This is the ONLY live-probe
-        # command that is simultaneously (a) reachable from every CI runner
-        # (github.com, not a LAN/.201 host — unlike docker/kubectl/rpk/psql,
-        # which need a live daemon or LAN route this classifier's own
-        # LIVE_PROBE_COMMANDS list otherwise assumes CI does not have) and
-        # (b) NOT flagged by onex_change_control's OMN-14051 hermetic-command
-        # guard (contract_compliance_check.py's _REMOTE_SHELL_BINS /
-        # _DAEMON_BINS / _NET_FETCH_BINS deny lists do not include `gh`, and
-        # that guard's own rejection message recommends
+        # GitHub REST API content reads — OMN-14443 backfill: reads the
+        # actual state of a *different* repo (the product repo whose deploy
+        # is being assessed) at a pinned commit SHA. This is the ONLY
+        # live-probe command that is simultaneously (a) reachable from every
+        # CI runner (github.com, not a LAN/.201 host — unlike
+        # docker/kubectl/rpk/psql, which need a live daemon or LAN route this
+        # classifier's own LIVE_PROBE_COMMANDS list otherwise assumes CI does
+        # not have) and (b) NOT flagged by onex_change_control's OMN-14051
+        # hermetic-command guard (contract_compliance_check.py's
+        # _REMOTE_SHELL_BINS / _DAEMON_BINS / _NET_FETCH_BINS deny lists do
+        # not include `gh`, and that guard's own rejection message recommends
         # `gh api repos/OWNER/REPO/pulls/<pr> --jq .merged` as the canonical
-        # non-inert check). Without `gh`, no check_value can satisfy both
-        # gates for a ticket whose deploy-relevant change lives in a
-        # cross-repo PR already merged to git but not to a live runtime.
-        "gh",
+        # non-inert check). Deliberately scoped to the compound token
+        # "gh-api" (see ``_commands_in``), NOT bare "gh": `gh pr view/list/
+        # status` only report PR/issue metadata and are trivially true via
+        # almost every ticket's own generated self-bind check
+        # (`gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state`) —
+        # accepting bare `gh` would retroactively reclassify hundreds of
+        # pre-existing, non-substantive self-bind checks across the corpus as
+        # "falsifiable". Only `gh api ...` (a genuine content read) qualifies.
+        "gh-api",
     }
 )
 
@@ -407,6 +412,18 @@ def _commands_in(script: str, depth: int = 0) -> set[str]:
             continue
 
         found.add(command)
+
+        # `gh api ...` specifically — NOT bare `gh`. `gh pr view/list/status`
+        # only report PR/issue metadata (state, existence) and are trivially
+        # true for almost every ticket via its own generated self-bind check
+        # (`gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state`);
+        # accepting bare `gh` would retroactively reclassify hundreds of those
+        # pre-existing, non-substantive self-bind checks as "falsifiable"
+        # across the whole corpus. `gh api ...` reads actual repo CONTENT at a
+        # ref, which is the live, non-self-referential surface this ticket
+        # backfills against — see LIVE_PROBE_COMMANDS comment.
+        if command == "gh" and rest and rest[0] == "api":
+            found.add("gh-api")
 
     return found
 

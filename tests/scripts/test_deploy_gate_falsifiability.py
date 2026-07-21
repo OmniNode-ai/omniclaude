@@ -214,6 +214,53 @@ class TestAdversarialEmbedTrap:
         assert "no live-surface probe in command position" in verdict.reason
 
 
+@pytest.mark.unit
+class TestGhIsNarrowedToApiSubcommand:
+    """OMN-14443 backfill: `gh` must be accepted ONLY as `gh api ...`.
+
+    A naive `"gh"` entry in LIVE_PROBE_COMMANDS would retroactively reclassify
+    hundreds of pre-existing, non-substantive `gh pr view/diff/list ...`
+    self-bind and scope checks as "falsifiable" corpus-wide (verified against
+    the live onex_change_control@dev corpus while authoring this fix: bare
+    `gh` jumped legacy-pass-and-now-falsifiable from 27 to 280 of 1341; the
+    `gh-api`-only form keeps it at a much smaller, precise set). Every OCC
+    autobind companion carries a `gh pr view ${PR_NUMBER} --repo ${REPO}
+    --json number,state` self-bind check, so accepting bare `gh` would have
+    made nearly the entire corpus trivially pass deploy-gate again — the
+    exact regression this whole matcher exists to prevent.
+    """
+
+    def test_gh_api_is_accepted(self) -> None:
+        verdict = classify_check_value(
+            'gh api "repos/OWNER/REPO/contents/path?ref=abc123" --jq .content'
+        )
+        assert verdict.falsifiable is True
+        assert "gh-api" in verdict.reason
+
+    def test_bare_gh_pr_view_self_bind_is_rejected(self) -> None:
+        """The universal OCC autobind self-bind check_value must NOT qualify."""
+        verdict = classify_check_value(
+            "gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state"
+        )
+        assert verdict.falsifiable is False
+        assert "gh" in verdict.reason  # reported as seen, just not a probe
+
+    def test_gh_pr_diff_grep_is_rejected(self) -> None:
+        """Diff-content greps are a real signal but deliberately out of scope
+        for this fix — only `gh api` is accepted, so a follow-on decision is
+        required before widening further."""
+        verdict = classify_check_value(
+            'gh pr diff ${PR_NUMBER} --repo OWNER/REPO | grep -q "some_module"'
+        )
+        assert verdict.falsifiable is False
+
+    def test_gh_api_via_env_wrapper_still_resolves(self) -> None:
+        verdict = classify_check_value(
+            'env -u PYTHONPATH gh api "repos/OWNER/REPO/contents/x?ref=abc" --jq .content'
+        )
+        assert verdict.falsifiable is True
+
+
 # ---------------------------------------------------------------------------
 # 3. No false negatives — real probes stay accepted, or every repo wedges.
 # ---------------------------------------------------------------------------
