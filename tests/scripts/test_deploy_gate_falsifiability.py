@@ -127,6 +127,17 @@ REAL_CORPUS: dict[str, str] = {
         'test "$(docker inspect -f {{.State.Running}} omninode-runtime)" = "true"'
     ),
     "timeout_wrapper": "timeout 30 kubectl exec deploy/onex-runtime -- python -c 'import omnimarket'",
+    # OMN-14443 backfill — the ONLY live-probe command reachable from every CI
+    # runner (github.com, not a LAN/.201 host) that is ALSO not flagged by
+    # onex_change_control's OMN-14051 hermetic-command guard, which is why that
+    # guard's own rejection message recommends this exact `gh api` pattern.
+    # Pinned to an immutable commit SHA, asserting a real content symbol —
+    # mirrors the OCC#4012/OMN-14418 precedent.
+    "gh_api_content_pinned_symbol": (
+        'CONTENT="$(gh api '
+        '"repos/OmniNode-ai/omnibase_infra/contents/src/x/handler.py?ref=abc123" '
+        '--jq .content | base64 -d)" && echo "$CONTENT" | grep -q "def handle"'
+    ),
 }
 
 
