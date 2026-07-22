@@ -1,0 +1,182 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# call-occ-companion-effect-reusable.yml
+#
+# Reusable occ-companion-effect publisher (OMN-14941, the born path for the
+# canonical RSD-3 OCC writer). On a ticketed product PR (opened/synchronize) it
+# publishes `onex.cmd.omnimarket.occ-companion-effect-requested.v1`; the .201
+# dev-lane effects runtime (node_occ_companion_effect) consumes it, runs the
+# deterministic read -> compute -> write OCC-companion cycle, and stamps
+# `Evidence-Source: OCC#<n>` back onto the product PR. Only this path mints
+# `occ:machine-minted` + `minted_by_node=true`.
+#
+# WHY A REUSABLE (single source of truth): same construction as
+# call-occ-autobind-reusable.yml. The publish LOGIC lives in exactly one place —
+# omnimarket's canonical `scripts/publish_occ_companion_effect_command.py`,
+# which file-path-loads its sibling `scripts/publish_occ_autobind_command.py`
+# for the OMN-14801/OMN-14813 lane-overlay + trusted-runner + producer helpers,
+# resolves `config/ci_bus_lanes.yaml` for the lane broker, and reads the topic
+# constant from `src/omnimarket/events/topics.py`. This workflow does NOT copy
+# or re-implement any of that; it sparse-checks-out those FOUR files (the full
+# file-path-load closure — the sibling script is required, not optional) and
+# runs the publisher verbatim. omnimarket is PUBLIC, so the caller's default
+# GITHUB_TOKEN can check it out (persist-credentials: false).
+#
+# SECRET-FREE (deliberate delta vs call-occ-autobind-reusable.yml): the dev
+# lane's broker is declared DIRECTLY in the committed omnimarket
+# `config/ci_bus_lanes.yaml` overlay (OMN-14813 — config-not-secret, the
+# OMN-14800 silent-repoint fix). This workflow therefore injects no Kafka
+# bootstrap or SASL values from caller-repo secrets, and caller repos need no
+# Kafka-related secrets at all. Do NOT reintroduce the caller-repo
+# bootstrap-servers secret env here: the publisher prefers the committed
+# overlay value and fail-loud-checks any injected value against it; the
+# dev-lane listener is plaintext, so SASL is unused. The static regression
+# test (tests/workflows/test_call_occ_companion_effect_reusable.py) pins this.
+#
+# BROKER / RUNNER BIFURCATION (OMN-14451, identical to the autobind reusable):
+# trusted (non-fork) PR events run on the self-hosted omnibase-ci runner on
+# .201, which reaches the dev-lane broker; fork PRs fall back to ubuntu-latest
+# where the publisher skips gracefully (exit 0). `RUNNER_IS_TRUSTED` is
+# threaded into the publish step so the script fails LOUD (exit 1) on the
+# trusted runner for an unresolvable lane / unreachable broker / undelivered
+# message, instead of a silent green no-op (OMN-14639).
+#
+# Usage in caller repos (no Kafka secrets required):
+#   jobs:
+#     occ-companion-effect:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/call-occ-companion-effect-reusable.yml@dev
+#       with:
+#         lane: dev
+#
+# Ticket: OMN-14941 (OMN-14811 / OMN-14801 / OMN-14813 / OMN-14451 lineage)
+
+name: OCC Companion Effect Publisher (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      lane:
+        description: >
+          CI bus lane id resolved against omnimarket config/ci_bus_lanes.yaml
+          to decide the bus target (OMN-14801). The dev lane declares a
+          concrete committed broker (OMN-14813), so no broker secret is
+          injected or required.
+        type: string
+        required: false
+        default: dev
+      omnimarket-ref:
+        description: >
+          git ref of OmniNode-ai/omnimarket to source the canonical publisher
+          (scripts/publish_occ_companion_effect_command.py), its file-path-
+          loaded sibling (scripts/publish_occ_autobind_command.py), the lane
+          overlay (config/ci_bus_lanes.yaml) and the topic registry
+          (src/omnimarket/events/topics.py) from. Pinned to `dev` because the
+          companion-effect publisher lands on omnimarket `dev` via the
+          OMN-14941 omnimarket PR and is NOT promoted to omnimarket `main` —
+          at `main` the script does not exist, so a `main` pin is the exact
+          E1/OMN-14811 verifier failure class (a 404 sparse checkout).
+          RE-PIN TO `main` once OMN-14941 promotes to omnimarket main
+          (OMN-14812-style follow-up) so this shared reusable no longer tracks
+          a moving `dev` branch.
+        type: string
+        required: false
+        # re-pin to `main` after OMN-14941 promotes to omnimarket main
+        # (OMN-14812-style follow-up)
+        default: dev
+    # No `secrets:` block, deliberately — see SECRET-FREE header note.
+
+permissions:
+  contents: read
+
+jobs:
+  publish-occ-companion-effect:
+    name: Publish occ-companion-effect command
+    # Defensive gate (identical to the autobind reusable, OMN-13990 H4): skip
+    # dependency bots (exempt from occ-preflight too) and PRs with no OMN
+    # ticket token in the title or branch. Any caller invoking this reusable
+    # inherits the gate for free; a ticketless PR is fixed by the pr-title
+    # gate, not papered over with a mechanical companion. Callers may ALSO
+    # gate their `uses:` job so the reusable is not even invoked for non-OMN
+    # PRs.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'renovate[bot]' &&
+      (contains(github.event.pull_request.title, 'OMN-') ||
+       contains(github.event.pull_request.head.ref, 'OMN-'))
+    # OMNI_RUNNER_SELECTOR_V1 — trusted (non-fork) PRs run on the self-hosted
+    # omnibase-ci runner so the publisher reaches the local lane broker; fork
+    # PRs fall back to ubuntu-latest (publisher skips gracefully, no broker).
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    # OMN-14451: same fork/non-fork test as `runs-on:` above, threaded into
+    # the publish step so the script can fail loudly (not silently exit 0)
+    # when the broker is unreachable on the trusted lane where a real broker
+    # MUST exist.
+    env:
+      RUNNER_IS_TRUSTED: >-
+        ${{
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name != github.repository)
+          && 'false' || 'true'
+        }}
+    timeout-minutes: 5
+
+    steps:
+      # The publish LOGIC is owned by omnimarket. Pull ONLY the four files the
+      # thin publisher needs (script + file-path-loaded sibling + lane overlay
+      # + topic registry) from omnimarket@<ref> into a side path so nothing
+      # from the caller checkout is touched. persist-credentials: false — this
+      # job never pushes to git.
+      - name: Fetch canonical occ-companion-effect publisher (omnimarket)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: ${{ inputs.omnimarket-ref }}
+          path: .occ-companion-effect-src
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/publish_occ_companion_effect_command.py
+            scripts/publish_occ_autobind_command.py
+            config/ci_bus_lanes.yaml
+            src/omnimarket/events/topics.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          # Kept deliberately thin — the publisher loads the topic registry and
+          # its sibling script by file path and never imports the omnimarket
+          # product graph. pyyaml parses the checked-in config/ci_bus_lanes.yaml
+          # lane overlay (OMN-14801). pydantic is deliberately absent: neither
+          # file-path-loaded script imports it (the wire payload is bare JSON;
+          # the consumer model validates it runtime-side).
+          pip install --quiet confluent-kafka click pyyaml
+
+      - name: Publish onex.cmd.omnimarket.occ-companion-effect-requested.v1
+        # All potentially attacker-controlled inputs (PR body) are passed
+        # through environment variables — never interpolated into the script
+        # text — to prevent shell injection. PR_BODY powers the publisher-side
+        # idempotency skip: when the body already carries
+        # "Evidence-Source: OCC#", the companion is already bound and the
+        # publisher exits 0 loudly without publishing (OMN-14941). No broker
+        # env is injected: the publisher resolves the committed overlay broker
+        # for the lane directly (OMN-14813).
+        env:
+          PR_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          LANE: ${{ inputs.lane }}
+        working-directory: .occ-companion-effect-src
+        run: |
+          python scripts/publish_occ_companion_effect_command.py --lane "${LANE}"
