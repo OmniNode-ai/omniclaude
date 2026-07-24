@@ -107,7 +107,12 @@ jobs:
       (contains(github.event.pull_request.title, 'OMN-') ||
        contains(github.event.pull_request.head.ref, 'OMN-'))
     uses: OmniNode-ai/omniclaude/.github/workflows/call-occ-autobind-reusable.yml@dev
-    secrets: inherit
+    # pragma: allowlist secret -- `secrets: inherit` is a GHA syntax keyword,
+    # not a literal secret; detect-secrets' Secret Keyword heuristic
+    # false-positives on the word "secrets:" here (CI's Secret Detection job
+    # scans .github/workflows/, unlike the local pre-commit hook which
+    # excludes that path -- OMN-15015).
+    secrets: inherit  # pragma: allowlist secret
     with:
       lane: dev
 
