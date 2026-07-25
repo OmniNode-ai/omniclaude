@@ -80,6 +80,10 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     assert resolve_step["id"] == "resolve_occ_evidence"
     assert "--resolve-occ-ref" in resolve_step["run"]
     assert '--github-output "$GITHUB_OUTPUT"' in resolve_step["run"]
+    assert "python -m pip install pyyaml" in resolve_step["run"]
+    assert resolve_step["run"].index("python -m pip install pyyaml") < resolve_step[
+        "run"
+    ].index("validate_pr_deploy_required.py")
 
     step = _step(
         job, "Checkout onex_change_control contracts (canonical contract source)"
