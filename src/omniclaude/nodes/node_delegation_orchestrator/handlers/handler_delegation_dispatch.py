@@ -122,9 +122,7 @@ def select_backend(
             return _route_from_endpoint(backend="local_vllm", endpoint=endpoint)
 
     # 3. Gemini CLI
-    if shutil.which(
-        "gemini"
-    ):  # canonical-inference-ok: legacy deprecated select_backend() fallback, superseded by omnimarket node_delegate_skill_orchestrator bifrost routing; removal tracked under OMN-13215  # canonical-inference-ok: legacy non-contract route
+    if shutil.which("gemini"):  # canonical-inference-ok: legacy non-contract route
         return DelegationRoute(
             backend="gemini_cli",
             base_url="cli://gemini",
