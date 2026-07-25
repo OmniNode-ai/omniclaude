@@ -73,6 +73,7 @@ jobs:
 
   quality:
     needs: occ-preflight
+    if: always()
     name: Code Quality
     # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
     # so required CI does not queue behind self-hosted fleet saturation.
@@ -136,6 +137,7 @@ jobs:
 
   docs-links:
     needs: occ-preflight
+    if: always()
     name: Markdown Link Check
     # Lightweight external link check. Keep it hosted: the lychee binary can require
     # newer glibc than parts of the self-hosted fleet provide, and this job does
@@ -425,6 +427,7 @@ jobs:
 
   enum-governance:
     needs: occ-preflight
+    if: always()
     name: Enum Governance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -480,6 +483,7 @@ jobs:
 
   exports-validation:
     needs: occ-preflight
+    if: always()
     name: Exports Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -539,6 +543,7 @@ jobs:
 
   env-var-registry:
     needs: occ-preflight
+    if: always()
     name: "Env Var Registry (OMN-6263)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -579,6 +584,7 @@ jobs:
 
   cross-repo-validation:
     needs: occ-preflight
+    if: always()
     name: Kafka Import Guard
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -614,6 +620,7 @@ jobs:
 
   migration-freeze:
     needs: occ-preflight
+    if: always()
     name: Migration Freeze
     # Lightweight metadata gate: keep it hosted so branch protection cannot
     # wedge behind the self-hosted runner fleet.
@@ -642,6 +649,7 @@ jobs:
 
   onex-validation:
     needs: occ-preflight
+    if: always()
     name: ONEX Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -756,6 +764,7 @@ jobs:
 
   arch-no-db-in-orchestrator:
     needs: occ-preflight
+    if: always()
     name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -775,6 +784,7 @@ jobs:
 
   arch-no-git-outside-effects:
     needs: occ-preflight
+    if: always()
     name: "Arch: No git/gh calls outside effects (check 2)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -794,6 +804,7 @@ jobs:
 
   arch-no-linear-outside-effects:
     needs: occ-preflight
+    if: always()
     name: "Arch: No LinearClient outside effects (check 3)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -813,6 +824,7 @@ jobs:
 
   arch-no-repo-adapter-in-orchestrator:
     needs: occ-preflight
+    if: always()
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -833,6 +845,7 @@ jobs:
 
   arch-no-direct-adapter-in-business-logic:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct adapter imports in business logic (check 13)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -852,6 +865,7 @@ jobs:
 
   arch-no-direct-bus-instantiation:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct EventBus instantiation (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -874,6 +888,7 @@ jobs:
 
   arch-no-raw-sqlite3-in-handlers:
     needs: occ-preflight
+    if: always()
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -893,6 +908,7 @@ jobs:
 
   arch-no-env-fallbacks:
     needs: occ-preflight
+    if: always()
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -912,6 +928,7 @@ jobs:
 
   arch-cost-ledger-isolation:
     needs: occ-preflight
+    if: always()
     name: "Arch: ModelCostLedger confined to effects (check 5)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -931,6 +948,7 @@ jobs:
 
   arch-topic-naming:
     needs: occ-preflight
+    if: always()
     name: "Arch: onex.* topic naming convention (check 6)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -950,6 +968,7 @@ jobs:
 
   arch-omnidash-db-role:
     needs: occ-preflight
+    if: always()
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
     # Service-backed validation is lightweight; hosted avoids self-hosted queue cancellation.
     runs-on: ubuntu-latest
@@ -1106,6 +1125,7 @@ jobs:
 
   arch-cost-ledger-structure:
     needs: occ-preflight
+    if: always()
     name: "Arch: ModelCostLedger run_id field + index (check 9)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1125,6 +1145,7 @@ jobs:
 
   arch-no-direct-kafka-producer:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1144,6 +1165,7 @@ jobs:
 
   arch-no-utcnow:
     needs: occ-preflight
+    if: always()
     name: "Arch: No datetime.utcnow() (check 11)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -1169,6 +1191,7 @@ jobs:
 
   arch-no-hardcoded-ip:
     needs: occ-preflight
+    if: always()
     name: "Arch: No hardcoded internal IPs (check 12)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1221,6 +1244,7 @@ jobs:
 
   arch-no-compact-cmd-topic:
     needs: occ-preflight
+    if: always()
     name: F5.1 No compact cmd topic
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1255,6 +1279,7 @@ jobs:
 
   arch-invariants:
     needs: occ-preflight
+    if: always()
     name: Architecture Invariants
     # OMNINODE_SELF_HOSTED_RUNS_ON_V2
     runs-on: >-
@@ -1652,6 +1677,7 @@ jobs:
 
   detect-secrets:
     needs: occ-preflight
+    if: always()
     name: Secret Detection
     # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
     # scan (detect-secrets) with no self-hosted/LAN dependency, so it runs on the
@@ -2186,6 +2212,7 @@ jobs:
 
   database-validation:
     needs: occ-preflight
+    if: always()
     name: Database Schema Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2300,6 +2327,7 @@ jobs:
 
   dod-evidence-check:
     needs: occ-preflight
+    if: always()
     name: DoD Evidence Check
     # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
@@ -2472,6 +2500,7 @@ jobs:
   # ---------------------------------------------------------------------------
   mode-metadata-guard:
     needs: occ-preflight
+    if: always()
     name: Mode Metadata Integrity
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2516,6 +2545,7 @@ jobs:
 
   skill-hygiene:
     needs: occ-preflight
+    if: always()
     name: Skill Hygiene
     # Static validator with sparse OCC checkout; run hosted so fleet saturation
     # cannot cancel the required Quality Gate aggregate.
@@ -2553,6 +2583,7 @@ jobs:
   # version matrix defined in onex_change_control/standards/version-matrix.yaml.
   version-pin-check:
     needs: occ-preflight
+    if: always()
     name: Version Pin Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2603,6 +2634,7 @@ jobs:
   # Prevents Track B dispatch bugs (e.g., --skip-polish leaking into empty check).
   merge-sweep-contract:
     needs: occ-preflight
+    if: always()
     name: Merge-Sweep Contract
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2651,6 +2683,7 @@ jobs:
   # and spec-prompt predicate coverage across all skills.
   skill-contract-validation:
     needs: occ-preflight
+    if: always()
     name: Skill Contract Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2770,6 +2803,7 @@ jobs:
   # ============================================================================
   aislop-sweep:
     needs: occ-preflight
+    if: always()
     name: Aislop Sweep
     runs-on: >-
       ${{
@@ -2827,6 +2861,7 @@ jobs:
   # Agent YAML contract validation (OMN-8914)
   agent-contract-validation:
     needs: occ-preflight
+    if: always()
     name: Agent Contract Validation
     runs-on: >-
       ${{
@@ -2866,6 +2901,7 @@ jobs:
   # Land this PR last in the SD wave so the gate goes green on merge.
   skill-monorepo-ref-gate:
     needs: occ-preflight
+    if: always()
     name: Skill Monorepo-Ref Gate
     runs-on: >-
       ${{
@@ -2886,6 +2922,7 @@ jobs:
   # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
   no-polymorphic-agent:
     needs: occ-preflight
+    if: always()
     name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -3469,6 +3506,7 @@ jobs:
 
   ai-slop-check:
     needs: occ-preflight
+    if: always()
     name: AI-Slop Pattern Check (strict, PR diff)
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
