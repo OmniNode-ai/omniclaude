@@ -258,6 +258,20 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         ),
         r"\1***REDACTED***",
     ),
+    # Prose-form credential mentions (OMN-15062). MUST stay in sync with
+    # plugins/onex/hooks/lib/secret_redactor.py's SECRET_PATTERNS -- see
+    # that module's docstring for the coverage-limit rationale (bare
+    # unlabeled high-entropy strings are NOT caught by this or any pattern
+    # here; a labeled mention like "the password is <token>" is).
+    (
+        re.compile(
+            r"(\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
+            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*[`'\"]?)"
+            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
 ]
 
 # Flag to track if sanitization has been bypassed (for defensive monitoring)

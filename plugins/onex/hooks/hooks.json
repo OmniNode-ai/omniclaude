@@ -1,7 +1,7 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
-  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856 and OMN-14330 carve-outs. Every context-injection/measurement hook stays DISABLED; the only re-registered hooks are the Done-flip durable-evidence guard (OMN-13856, operator-approved, no fake Done) and the OMN-7018 worktree canonical-root guard (OMN-14330, blocks `git worktree add` outside $OMNI_HOME/omni_worktrees). All other scripts remain on disk and re-registration stays a pure config change.",
-  "version": "1.4.0",
+  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856, OMN-14330, and OMN-15062 carve-outs. Every context-injection/measurement hook stays DISABLED; the only re-registered hooks are the Done-flip durable-evidence guard (OMN-13856, operator-approved, no fake Done), the OMN-7018 worktree canonical-root guard (OMN-14330, blocks `git worktree add` outside $OMNI_HOME/omni_worktrees), and the SubagentStop secret-leak guard (OMN-15062, blocks a subagent's final report from completing when it matches a known secret pattern -- narrowly scoped security control, not a re-enable of the disabled context-injection/measurement hooks). All other scripts remain on disk and re-registration stays a pure config change.",
+  "version": "1.5.0",
   "hooks": {
     "PreToolUse": [
       {
@@ -19,6 +19,16 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_worktree_guard.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_secret_leak_guard.sh"
           }
         ]
       }

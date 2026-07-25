@@ -99,6 +99,41 @@ class TestRedactSecrets:
         assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
         assert "REDACTED" in result
 
+    def test_redacts_prose_form_postgres_password(self) -> None:
+        """OMN-15062: 'the Postgres password is <token>' (no '=' or ':') is redacted.
+
+        This is the exact shape that leaked on 2026-07-24 — a credential
+        severity probe narrated the value in prose rather than key=value
+        form, which the pre-existing strict key=value pattern did not
+        catch (it requires '=' or ':' immediately after the label).
+        """
+        text = "The Postgres password is xK9mP2vL8nQ4wR2ne and appears in 3 files."
+        result = redact_secrets(text)
+        assert "xK9mP2vL8nQ4wR2ne" not in result
+        assert "REDACTED" in result
+
+    def test_redacts_prose_form_backtick_credential(self) -> None:
+        """OMN-15062: credential mentioned with intervening words + backticks."""
+        text = "the leaked credential value is `s3cr3tTok3nHere123`, rotate it"
+        result = redact_secrets(text)
+        assert "s3cr3tTok3nHere123" not in result
+        assert "REDACTED" in result
+
+    def test_bare_unlabeled_high_entropy_string_not_caught(self) -> None:
+        """OMN-15062 documented limit: a bare high-entropy string with no
+        provider prefix and no label word (password/secret/token/credential/
+        api_key) nearby is indistinguishable from a hash, UUID, or
+        correlation ID by pattern matching, and is intentionally NOT
+        redacted. This test pins the limit so it is not silently "fixed"
+        into a blanket entropy heuristic that would mass-false-positive on
+        this codebase's own SHAs/UUIDs/correlation IDs.
+        """
+        text = "The value is xK9mP2vL8nQ4wR2ne2f8Ta1"
+        # No label word ("password"/"secret"/"token"/"credential"/"api_key")
+        # anywhere near the value -> not matched. This is the hard case the
+        # module docstring calls out explicitly.
+        assert not contains_secrets(text)
+
 
 class TestRedactSecretsWithCount:
     """Test secret redaction with count tracking."""

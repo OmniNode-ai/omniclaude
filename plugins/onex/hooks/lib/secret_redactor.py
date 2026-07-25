@@ -2,12 +2,31 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Secret redaction for hook event payloads.
+"""Secret redaction for hook event payloads and agent-produced text.
 
 Uses re.search() (not match) for pattern detection to find secrets
 anywhere in the text, not just at the start.
 
 Part of OMN-1889: Emit injection metrics + utilization signal.
+Extended under OMN-15062 (prose-form credential mentions in agent report
+text) — see subagent_secret_leak_guard.py for the SubagentStop hook that
+applies these patterns to a subagent's final message.
+
+KNOWN COVERAGE LIMIT (OMN-15062): a bare, unlabeled high-entropy string
+(e.g. a raw Postgres password quoted with no "password:"/"password="/
+"password is" context and no connection-string prefix) is NOT reliably
+distinguishable from a hash, a UUID, a git SHA, or a correlation ID by
+pattern matching alone -- this codebase's own logs are full of legitimate
+high-entropy strings. Adding a blanket entropy/length heuristic to this
+SHARED module would mass-false-positive on those and break every other
+consumer of SECRET_PATTERNS. This module therefore only catches credentials
+that are prefixed (sk-, AKIA, ghp_, AIza, ...), embedded in a connection
+string, or mentioned in prose near a label word (password/secret/token/
+credential/api_key). An agent that pastes a bare secret with zero
+surrounding label text will not be caught here -- that gap is a detection
+limit, not a bug, and needs a different control (e.g. do not put agents in
+a position where they read a raw secret and then narrate it back at all;
+see the OMN-15062 PR body for the read-vs-emit boundary discussion).
 """
 
 from __future__ import annotations
@@ -65,6 +84,23 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(
             r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Prose-form credential mentions (OMN-15062): catches free-text agent
+    # report language like "the Postgres password is <token>" or
+    # "credential: `<token>`" that the strict key=value pattern above misses
+    # because there is no literal "=" or ":" immediately before the value in
+    # some phrasings, or the value is wrapped in backticks/quotes with
+    # intervening words ("password for the db is"). Still requires a label
+    # word within a few tokens of the value -- see the module docstring for
+    # what this cannot catch (bare unlabeled high-entropy strings).
+    (
+        re.compile(
+            r"(\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
+            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*[`'\"]?)"
+            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",
