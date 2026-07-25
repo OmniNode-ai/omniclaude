@@ -122,9 +122,9 @@ BLOCKING_JQ='[
 # "hardcoded" AND naming one of the common leaked-credential shapes. Narrow by
 # design — this must not fire on unrelated Critical findings (RCE/eval,
 # injection, etc.) that have no "rotate a secret" remediation step.
-SECRET_KEYWORD_RE='hardcoded'
-SECRET_TYPE_RE='webhook|api[ _-]?key|password|token|private[ _-]?key|credential'
-SECRET_SEVERITY_RE='critical'
+SECRET_KEYWORD_RE='hardcoded'  # pragma: allowlist secret
+SECRET_TYPE_RE='webhook|api[ _-]?key|password|token|private[ _-]?key|credential'  # pragma: allowlist secret
+SECRET_SEVERITY_RE='critical'  # pragma: allowlist secret
 
 # Human-authored rotation-evidence marker, anywhere in the thread (not just
 # the first comment). Mirrors the `# skip-token-allowed: <receipt-id>`
