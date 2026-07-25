@@ -30,6 +30,15 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
 1. Not a ``save_issue``/``update_issue`` call, or not a Done-class target state
    → ALLOW (nothing to verify).
 2. cancel-class target state (``canceled/duplicate/won't do``) → ALLOW.
+2b. Unchecked acceptance-criteria checkbox gate (OMN-15030): if the ticket's
+    current description contains any unchecked GFM task-list box (``- [ ]``)
+    → BLOCK, unconditionally — no later evidence path (merged PR, OCC receipt,
+    exempt label) waives this. Every later path proves *some* evidence exists;
+    none of them prove the ticket's own stated acceptance criteria were met.
+    OMN-13991 is the concrete incident this closes: a genuinely merged, cited,
+    implementing PR still under-delivered against the ticket's own DoD text,
+    and passed every existing presence-check because "merged" was treated as
+    sufficient. See :func:`find_unchecked_acceptance_boxes`.
 2a. Durable evidence path C — deploy-readback marker (OMN-14792): a
     runtime-deploy ticket whose DoD is a live readback, not a merged product PR
     (``node_dod_verify`` structurally skips such tickets —
@@ -114,6 +123,51 @@ from linear_done_verify import (
 _LINEAR_TOOLS = frozenset(
     {"mcp__linear-server__save_issue", "mcp__linear-server__update_issue"}
 )
+
+# OMN-15030: unchecked markdown acceptance-criteria checkbox gate.
+#
+# Every evidence path above this check (merged-PR citation, OCC receipt,
+# exempt label) proves *something shipped* — none of them prove the shipped
+# thing satisfies what the ticket's own author wrote down as the acceptance
+# bar. OMN-13991 is the concrete incident: a genuinely MERGED, genuinely
+# CITED, genuinely implementing PR (omnimarket#1838) still under-delivered
+# against the ticket's own DoD text ("Staged: shadow -> measured ->
+# enforcing"), and every existing presence-check (this guard's merged-PR
+# path, node_linear_triage's close_evidence_gate, DurableEvidenceGate's
+# CONTRACT_CITES_MERGE_COMMIT) passes on a merged-but-incomplete PR by
+# design — "merged" is not "matches the ticket's stated DoD."
+#
+# A mechanical presence-check can never fully verify DoD-prose-vs-PR-content
+# match (that is a judgment call). What IS mechanically checkable, and today
+# checked nowhere, is whether the ticket's OWN description still carries
+# unchecked GFM task-list boxes (`- [ ]`) at the moment of the Done flip —
+# per feedback_specify_acceptance_tests_in_the_ticket, acceptance criteria
+# belong in the ticket as checkboxes, and an unchecked box at Done-flip time
+# is a plain, first-party admission that the ticket's own author does not
+# consider the work complete. This is additive to every other path below —
+# it can BLOCK even when a merged PR is cited (unlike the exempt-label and
+# deploy-readback carve-outs, which are about *what kind* of evidence is
+# owed, not whether that evidence's own text is self-consistent).
+_UNCHECKED_BOX_RE = re.compile(
+    r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[ \][ \t]+\S.*$", re.MULTILINE
+)
+_MAX_UNCHECKED_BOX_SNIPPET_CHARS = 240
+
+
+def find_unchecked_acceptance_boxes(description: str) -> list[str]:
+    """Return every unchecked GFM task-list line (`- [ ]  ...`) in ``description``.
+
+    Matches ``-``/``*``/``+`` bullets and ``1.``/``1)`` numbered items whose
+    checkbox is unchecked (``[ ]``) and followed by non-blank text — a bare
+    ``[ ]`` token elsewhere in prose (not a list-item checkbox) does not
+    match. Checked boxes (``[x]``/``[X]``) never match. Pure function — no
+    I/O, no network, no subprocess.
+    """
+    return [
+        line.strip()[:_MAX_UNCHECKED_BOX_SNIPPET_CHARS]
+        for line in _UNCHECKED_BOX_RE.findall(description or "")
+    ]
+
 
 # The OCC governance ref to read durable receipts from. OCC governance is
 # dev-targeted — receipts land on ``dev`` first (OMN-12593), so ``origin/dev``
@@ -370,6 +424,29 @@ def decide(
             description = augment_description_with_attachments(
                 description, [str(x) for x in (issue.get("attachment_urls") or [])]
             )
+
+    # (2b) unchecked acceptance-criteria checkbox gate (OMN-15030). Runs BEFORE
+    # every evidence path below and is not waivable by any of them — a merged
+    # PR, a PASS OCC receipt, or an exempt label all prove *some* evidence
+    # exists, none of them prove the ticket's own stated acceptance criteria
+    # were met. An unchecked `- [ ]` box in the ticket's current description
+    # is the ticket author's own admission of incompleteness; refusing here is
+    # the mechanical, judgment-free proxy for "does the shipped PR satisfy
+    # this ticket's DoD" that no presence-check below can express.
+    unchecked_boxes = find_unchecked_acceptance_boxes(description)
+    if unchecked_boxes:
+        preview = "; ".join(unchecked_boxes[:5])
+        more = (
+            f" (+{len(unchecked_boxes) - 5} more)" if len(unchecked_boxes) > 5 else ""
+        )
+        return Decision(
+            False,
+            f"unchecked_acceptance_criteria: {len(unchecked_boxes)} unchecked "
+            f"box(es) remain in the ticket description: {preview}{more}. Check "
+            "every acceptance-criteria box (or remove/rewrite the ones that no "
+            "longer apply) before flipping Done — a merged PR or OCC receipt "
+            "does not waive this (OMN-15030 / OMN-13991).",
+        )
 
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
 

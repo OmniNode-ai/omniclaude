@@ -339,6 +339,166 @@ def test_legit_occ_receipt_is_allowed() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# OMN-15030 / OMN-13991: unchecked acceptance-criteria checkbox gate.
+#
+# Reproduces the OMN-13991 false-Done SHAPE — a genuinely merged, genuinely
+# cited, genuinely implementing PR whose own body admits the ticket's DoD was
+# not fully delivered ("Staged: shadow -> measured -> enforcing" only reached
+# "measured"). The guard's merged-PR-citation path (path A) ALLOWS this by
+# design — "merged" is the only thing it checks. The checkbox gate is the
+# first mechanism that can BLOCK on the ticket's own stated, still-unmet
+# acceptance criteria regardless of what evidence is otherwise cited.
+# --------------------------------------------------------------------------- #
+
+# OMN-13991's real DoD, rewritten with GFM checkboxes as
+# feedback_specify_acceptance_tests_in_the_ticket prescribes for new tickets.
+_OMN_13991_SHAPED_DESCRIPTION = """\
+## DoD
+
+- [x] `DurableEvidenceGate.enforce_default` runs on the live Linear-Done \
+transition (not test-only).
+- [ ] Staged: shadow -> measured -> enforcing, with evidence the enforcing \
+flip does not block legitimate Done transitions.
+
+Implemented in https://github.com/OmniNode-ai/omnimarket/pull/1838
+"""
+
+
+def test_find_unchecked_acceptance_boxes_matches_bullets_and_numbered_items() -> None:
+    boxes = guard.find_unchecked_acceptance_boxes(
+        "- [ ] bullet item\n"
+        "* [ ] star item\n"
+        "1. [ ] numbered item\n"
+        "2) [ ] paren-numbered item\n"
+        "- [x] checked item (not returned)\n"
+        "- [X] checked uppercase (not returned)\n"
+        "plain text mentioning [ ] mid-sentence (not a list item)\n"
+    )
+    assert boxes == [
+        "- [ ] bullet item",
+        "* [ ] star item",
+        "1. [ ] numbered item",
+        "2) [ ] paren-numbered item",
+    ]
+
+
+def test_find_unchecked_acceptance_boxes_empty_for_no_boxes() -> None:
+    assert guard.find_unchecked_acceptance_boxes("no boxes here at all") == []
+    assert guard.find_unchecked_acceptance_boxes("") == []
+
+
+def test_red_merged_pr_with_unchecked_acceptance_box_is_accepted_by_the_old_path() -> (
+    None
+):
+    """RED: replaying ONLY the pre-existing merged-PR check (path A) on the
+    OMN-13991 SHAPE allows the flip — proving the gap this ticket closes.
+    """
+    from linear_done_verify import verify
+
+    result = verify(
+        _OMN_13991_SHAPED_DESCRIPTION, [], default_repo=None, fetcher=_merged_fetcher
+    )
+    assert result.allowed
+    assert result.reason == "all_prs_merged"
+
+
+def test_green_merged_pr_with_unchecked_acceptance_box_is_blocked() -> None:
+    """GREEN: the real ``decide()`` entrypoint — which now runs the checkbox
+    gate BEFORE the merged-PR path — blocks the same OMN-13991-shaped call.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-13991",
+            "state": "Done",
+            "description": _OMN_13991_SHAPED_DESCRIPTION,
+        },
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_never_called_fetcher,
+    )
+    assert not d.allowed
+    assert "unchecked_acceptance_criteria" in d.reason
+    assert "Staged: shadow -> measured -> enforcing" in d.reason
+
+
+def test_all_boxes_checked_is_not_blocked_by_the_checkbox_gate() -> None:
+    """A ticket whose author checked every box is unaffected — the gate is
+    additive, not a new universal requirement to add checkboxes at all.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-13991",
+            "state": "Done",
+            "description": (
+                "## DoD\n\n- [x] first item done\n- [x] second item done\n\n"
+                "Implemented in "
+                "https://github.com/OmniNode-ai/omnimarket/pull/1838"
+            ),
+        },
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_merged_fetcher)
+    assert d.allowed
+    assert d.reason == "durable_evidence:all_prs_merged"
+
+
+def test_unchecked_box_blocks_even_with_occ_receipt_evidence() -> None:
+    """The checkbox gate is not waivable by the OCC-receipt path either — it
+    runs before all evidence paths, including the receipt path.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-8",
+            "state": "Done",
+            "description": "## DoD\n\n- [ ] unmet acceptance criterion\n",
+        },
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe, linear_fetcher=_no_linear)
+    assert not d.allowed
+    assert "unchecked_acceptance_criteria" in d.reason
+
+
+def test_unchecked_box_blocks_even_with_exempt_label() -> None:
+    """The checkbox gate runs before the close-if-done exemption carve-out."""
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-9",
+            "state": "Done",
+            "description": "## DoD\n\n- [ ] unmet acceptance criterion\n",
+            "labels": ["close-if-done"],
+        },
+    }
+    d = guard.decide(call, occ_probe=_never_called_probe)
+    assert not d.allowed
+    assert "unchecked_acceptance_criteria" in d.reason
+
+
+def test_status_only_update_checks_live_fetched_description_for_boxes() -> None:
+    """Status-only updates (no description in the call) must still be checked
+    against the LIVE Linear description, matching the existing live-fetch
+    behavior for PR citations / exemption labels.
+    """
+
+    def _live_with_unchecked_box(_ticket_id: str) -> dict[str, Any]:
+        return {"description": "- [ ] still open item", "labels": []}
+
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {"id": "OMN-10", "state": "Done"},
+    }
+    d = guard.decide(
+        call, occ_probe=_never_called_probe, linear_fetcher=_live_with_unchecked_box
+    )
+    assert not d.allowed
+    assert "unchecked_acceptance_criteria" in d.reason
+
+
+# --------------------------------------------------------------------------- #
 # OMN-14792: deploy-readback marker path — runtime-deploy tickets proven by a
 # live readback (no merged implementing PR) must be ALLOWED, while the marker
 # must NOT become a blanket bypass for an unmerged implementing PR.
