@@ -576,6 +576,94 @@ def _cli_file_has_deploy_signal(path: str) -> bool:
     return bool(CLI_DEPLOY_SIGNAL_PATTERN.search(text))
 
 
+# ---------------------------------------------------------------------------
+# Pure-COMPUTE node exemption (OMN-15065).
+#
+# RUNTIME_PATH_PATTERNS matches every file under src/*/nodes/<name>/
+# unconditionally (contract.yaml, handlers/**, models/**), which does not
+# distinguish a def-B COMPUTE node (rule 7a: handle(request) -> response, no
+# I/O, no event_bus, not a running service) from a node that genuinely
+# deploys onto the runtime (Kafka-wired EFFECT/ORCHESTRATOR/REDUCER, or a
+# COMPUTE node that IS bus-wired, e.g. node_advanced_features_resolve_compute).
+#
+# A pure-COMPUTE node deploys nothing, so there is no live surface for it to
+# probe (docker exec / rpk / kubectl / psql / ... all require a running
+# service). Before this fix the gate's only passing path for such a node was
+# a PR author hand-authoring a dod_evidence check_value that satisfies the
+# matcher without proving anything live — i.e. fabricated evidence. See
+# OMN-14232 (named this exact fix direction, closed without landing it).
+#
+# The exemption is derived from the node's OWN contract.yaml content — never
+# from a PR-author-supplied flag, which could be set to dodge the gate. A
+# node under nodes/<name>/ is exempt iff its contract simultaneously
+# declares a compute archetype AND no event_bus topics AND no external
+# transport. A compute-archetype node that keeps any bus/transport surface
+# (e.g. node_advanced_features_resolve_compute: node_type=compute but
+# Kafka-wired via event_bus) is NOT exempt — it deploys via the runtime and
+# stays gated on real deploy evidence. Unreadable/unparsable contract.yaml
+# fails CLOSED — treated as NOT exempt, still gated.
+# ---------------------------------------------------------------------------
+_COMPUTE_NODE_TYPES = frozenset({"compute", "compute_generic"})
+_NON_EXTERNAL_TRANSPORTS = frozenset({"", "inmemory", "in_memory", "in-memory"})
+_NODE_DIR_RE = re.compile(r"^(.*/nodes/[^/]+)/")
+
+
+def _node_dir_of(path: str) -> str | None:
+    """Return the `.../nodes/<name>` directory prefix of `path`, if any."""
+    match = _NODE_DIR_RE.match(path)
+    return match.group(1) if match else None
+
+
+def _node_contract_proves_non_deployable(node_dir: str) -> bool:
+    """Return True iff `<node_dir>/contract.yaml` proves the node is a pure,
+    non-bus-wired COMPUTE node with nothing to deploy.
+
+    Reads relative to the current working directory (CI runs this validator
+    from the checked-out caller-repo root). Fails CLOSED on any of: missing
+    file, unparsable YAML, non-mapping content, missing/ambiguous archetype
+    fields, or any declared bus/transport surface.
+    """
+    try:
+        text = Path(node_dir, "contract.yaml").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return False
+
+    import yaml
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    if not isinstance(data, dict):
+        return False
+
+    node_type = str(data.get("node_type") or "").strip().strip('"').lower()
+    descriptor = data.get("descriptor")
+    archetype = ""
+    if isinstance(descriptor, dict):
+        archetype = str(descriptor.get("node_archetype") or "").strip().lower()
+    if node_type not in _COMPUTE_NODE_TYPES and archetype not in _COMPUTE_NODE_TYPES:
+        return False
+
+    event_bus = data.get("event_bus")
+    if isinstance(event_bus, dict):
+        publish_topics = event_bus.get("publish_topics") or []
+        subscribe_topics = event_bus.get("subscribe_topics") or []
+        if publish_topics or subscribe_topics:
+            return False
+
+    metadata = data.get("metadata")
+    transport_type = ""
+    if isinstance(metadata, dict):
+        transport_type = str(metadata.get("transport_type") or "").strip().lower()
+    if transport_type not in _NON_EXTERNAL_TRANSPORTS:
+        return False
+
+    return True
+
+
 def find_runtime_paths(changed_files: list[str]) -> list[str]:
     """Return subset of changed_files that match runtime path patterns.
 
@@ -583,16 +671,33 @@ def find_runtime_paths(changed_files: list[str]) -> list[str]:
     unconditional RUNTIME_PATH_PATTERNS: they only count as a hit when their
     own content carries a deploy-relevant signal (see
     _cli_file_has_deploy_signal / OMN-14244).
+
+    A file under nodes/<name>/ is excluded from the result (OMN-15065) when
+    that node's own contract.yaml proves it is a pure, non-bus-wired COMPUTE
+    node — see _node_contract_proves_non_deployable. The per-node verdict is
+    memoized so a multi-file node diff only reads contract.yaml once.
     """
     hits: list[str] = []
+    node_exemptions: dict[str, bool] = {}
     for f in changed_files:
-        if any(regex.match(f) for regex in _COMPILED_RUNTIME_PATTERNS):
-            hits.append(f)
+        matched = any(regex.match(f) for regex in _COMPILED_RUNTIME_PATTERNS)
+        if not matched:
+            matched = any(
+                regex.match(f) for regex in _COMPILED_CLI_PATTERNS
+            ) and _cli_file_has_deploy_signal(f)
+        if not matched:
             continue
-        if any(regex.match(f) for regex in _COMPILED_CLI_PATTERNS) and (
-            _cli_file_has_deploy_signal(f)
-        ):
-            hits.append(f)
+
+        node_dir = _node_dir_of(f)
+        if node_dir is not None:
+            if node_dir not in node_exemptions:
+                node_exemptions[node_dir] = _node_contract_proves_non_deployable(
+                    node_dir
+                )
+            if node_exemptions[node_dir]:
+                continue
+
+        hits.append(f)
     return hits
 
 
