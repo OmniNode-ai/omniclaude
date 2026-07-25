@@ -35,5 +35,6 @@ jobs:
 
   call-reject-skip-token:
     needs: occ-preflight
+    if: always()
     # self-gating-ok: omniclaude is the host repo for this reusable workflow; the caller is intentionally cross-repo and not a self-gating check on omniclaude's own required status checks
     uses: ./.github/workflows/reject-deploy-gate-skip.yml

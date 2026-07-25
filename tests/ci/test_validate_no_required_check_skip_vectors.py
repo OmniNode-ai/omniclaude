@@ -503,6 +503,143 @@ def test_neutral_ok_does_not_suppress_missing_trigger(tmp_path: Path) -> None:
     assert any(f.vector == "vector-4-no-pr-trigger" for f in findings)
 
 
+def test_needs_occ_preflight_cascade_is_red(tmp_path: Path) -> None:
+    """Vector 5 (OMN-15057). Reproduces the REAL omnimarket deploy-gate.yml
+    shape: a same-file 'OCC Preflight Dependency' poller job that `exit 1`s
+    when occ-preflight/eligibility fails, and a downstream required-context
+    job with `needs: occ-preflight` and NO job-level `if:` override.
+
+    GitHub's *implicit* job-level `if:` is `success()` evaluated over the
+    job's `needs:` list -- not an unconditional true. When the poller job
+    fails, the downstream job is SKIPPED, and a skipped job satisfies GitHub
+    branch protection (skipped counts as passing). This is a live silent-pass
+    bypass, structurally identical to vector-2, but keyed off `needs:`
+    instead of `if:` -- vectors 1-4 never inspect `needs:` at all, so this
+    shape was a blind spot until OMN-15057.
+
+    Live proof: omnimarket#1880 -- 18 required gates (including this guard's
+    OWN required check) went `skipped` when occ-preflight failed on first
+    run, satisfying branch protection without ever executing.
+    """
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {
+            "deploy-gate.yml": """\
+                name: Deploy Gate
+                on:
+                  pull_request:
+                    branches: [main, dev, develop]
+                  merge_group: {}
+                jobs:
+                  occ-preflight:
+                    name: OCC Preflight Dependency
+                    runs-on: ubuntu-latest
+                    steps:
+                      - name: Wait for required OCC preflight
+                        run: "exit 1  # simplified: real script polls then exits 1 on failure"
+                  deploy-gate:
+                    needs: occ-preflight
+                    name: deploy-gate
+                    runs-on: ubuntu-latest
+                    steps: [{run: "echo run"}]
+                """
+        },
+        [_manifest_row("deploy-gate")],
+    )
+    findings = run(manifest_path, wf_dir)
+    assert any(f.vector == "vector-5-ungated-needs-cascade" for f in findings), (
+        f"expected RED for needs:occ-preflight cascade, got: {findings}"
+    )
+
+
+def test_needs_with_if_always_override_is_green(tmp_path: Path) -> None:
+    """The sanctioned fix shape: `if: always()` on the downstream job means
+    it always runs regardless of the needs-job's conclusion, so an explicit
+    in-job check (not modeled by this guard) is the job's own responsibility.
+    Must not false-positive."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {
+            "gate.yml": """\
+                name: X
+                on:
+                  pull_request: {}
+                jobs:
+                  occ-preflight:
+                    name: OCC Preflight Dependency
+                    runs-on: ubuntu-latest
+                    steps: [{run: "exit 1"}]
+                  gate:
+                    needs: occ-preflight
+                    if: always()
+                    name: Required Gate
+                    runs-on: ubuntu-latest
+                    steps: [{run: "echo hi"}]
+                """
+        },
+        [_manifest_row("Required Gate")],
+    )
+    findings = run(manifest_path, wf_dir)
+    assert findings == []
+
+
+def test_needs_absent_is_unaffected_by_vector_5(tmp_path: Path) -> None:
+    """No `needs:` at all -- vector 5 must never fire (negative control,
+    mirrors the OMN-14668-fixed precommit-fail-loud-gate.yml shape)."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {
+            "gate.yml": """\
+                name: X
+                on:
+                  pull_request: {}
+                jobs:
+                  gate:
+                    name: Required Gate
+                    runs-on: ubuntu-latest
+                    steps: [{run: "echo hi"}]
+                """
+        },
+        [_manifest_row("Required Gate")],
+    )
+    findings = run(manifest_path, wf_dir)
+    assert findings == []
+
+
+def test_neutral_ok_with_rationale_suppresses_needs_cascade(tmp_path: Path) -> None:
+    """The same sanctioned escape hatch (design spec section 3a) applies to
+    vector-5: a ratified `neutral_ok` + rationale suppresses it."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {
+            "gate.yml": """\
+                name: X
+                on:
+                  pull_request: {}
+                jobs:
+                  occ-preflight:
+                    name: OCC Preflight Dependency
+                    runs-on: ubuntu-latest
+                    steps: [{run: "exit 1"}]
+                  gate:
+                    needs: occ-preflight
+                    name: Required Gate
+                    runs-on: ubuntu-latest
+                    steps: [{run: "echo hi"}]
+                """
+        },
+        [
+            _manifest_row(
+                "Required Gate",
+                skip_semantics="neutral_ok",
+                rationale="Ratified exception, see OMN-99999.",
+            )
+        ],
+    )
+    findings = run(manifest_path, wf_dir)
+    assert findings == []
+
+
 def test_advisory_gate_is_never_checked(tmp_path: Path) -> None:
     manifest_path, wf_dir = _write(
         tmp_path,

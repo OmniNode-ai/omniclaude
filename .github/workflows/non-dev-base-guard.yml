@@ -31,6 +31,7 @@ jobs:
 
   non-dev-base-guard:
     needs: occ-preflight
+    if: always()
     name: non-dev-base-guard
     runs-on: >-
       ${{
