@@ -84,11 +84,13 @@ handler_routing:
     - operation: "delegation.dispatch"
       handler:
         name: "HandlerDelegationDispatch"
+        class: "HandlerDelegationDispatch"
         module: "omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_dispatch"
       description: "Classify prompt, select backend, route to LLM effect node"
     - operation: "delegation.result"
       handler:
         name: "HandlerDelegationResult"
+        class: "HandlerDelegationResult"
         module: "omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_result"
       description: "Receive LLM response, run quality gate, emit terminal event"
   execution_mode: "single"

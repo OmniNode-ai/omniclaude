@@ -247,8 +247,17 @@ def handle_cross_cli_dispatch(
     return invoker.invoke(command)
 
 
+class HandlerDelegationDispatch:
+    """Canonical typed-payload wrapper for delegation dispatch."""
+
+    def handle(self, command: ModelDelegationCommand) -> ModelDelegationDispatchResult:
+        """Dispatch a typed delegation command."""
+        return handle_delegation_dispatch(command)
+
+
 __all__ = [
     "DelegationRoute",
+    "HandlerDelegationDispatch",
     "handle_cross_cli_dispatch",
     "handle_delegation_dispatch",
     "select_backend",
