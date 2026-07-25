@@ -390,26 +390,29 @@ repos:
         stages: [pre-commit]
 
       # --------------------------------------------------------------------------
-      # detect-secrets baseline regeneration
+      # detect-secrets baseline guard (OMN-15068)
       # Problem: .secrets.baseline stores line numbers. When new jobs are added to
       # CI workflows, all downstream line numbers shift, causing false-positive
-      # "Secret Detection" CI failures on every such PR (OMN-2625).
-      # Solution: Regenerate the baseline before each commit so committed line
-      # numbers always reflect the current codebase state. CI comparison then
-      # finds zero delta because baseline was already updated.
-      # Uses the same --exclude-files patterns as the CI detect-secrets job.
+      # "Secret Detection" CI failures on every such PR (OMN-2625). The original
+      # fix for that (unconditionally regenerating + `git add`ing the baseline,
+      # always exiting 0) conflated "line churn on a known finding" with "brand
+      # new finding" -- it silently absorbed genuinely new secrets as unaudited
+      # entries on every commit, and CI's own detect-secrets job then diffed
+      # against that already-laundered baseline and found zero delta. A synthetic
+      # AWS key pair planted in a scratch clone committed cleanly under the old
+      # hook body (OMN-15068 RED-first proof).
+      # Solution: scripts/detect_secrets_guard.py still regenerates the baseline
+      # (so line-number churn on already-known findings is absorbed silently,
+      # same convenience as before), but BLOCKS the commit when a genuinely new
+      # finding (file + hashed_secret not present in the last-committed baseline)
+      # has not been explicitly audited (`is_secret` key set via
+      # `detect-secrets audit .secrets.baseline`). Fails closed on missing tool,
+      # scan error, or unreadable/corrupt baseline. See the script's module
+      # docstring for the full design.
       # --------------------------------------------------------------------------
       - id: detect-secrets-update
-        name: regenerate .secrets.baseline (prevent line-shift false positives)
-        entry: bash -c '
-          detect-secrets scan \
-            --baseline .secrets.baseline \
-            --exclude-files "\.lock$" \
-            --exclude-files "\.env\.example$" \
-            --exclude-files "bandit-report\.json$" \
-            --exclude-files "^tests/" \
-            --exclude-files "security-report\.json$" \
-          && git add .secrets.baseline'
+        name: guard .secrets.baseline (block new unaudited findings, OMN-15068)
+        entry: python3 scripts/detect_secrets_guard.py
         language: system
         pass_filenames: false
         always_run: true
