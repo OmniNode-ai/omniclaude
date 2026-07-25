@@ -12,6 +12,26 @@
 # cr_concession_ack lines.
 # Threads with more comments than fetched (totalCount > fetched) are skipped
 # and counted as blocking (conservative: never wrongly exclude on partial data).
+#
+# SECRET-CLASS ESCALATION (OMN-15061): a CodeRabbit "Critical...hardcoded
+# <webhook|api key|password|token|credential|private key>" finding is a
+# distinct, higher-severity class than an ordinary review nit. GitHub/
+# CodeRabbit auto-resolve a thread the instant the *visible diff* changes near
+# the flagged range — that only proves the literal was swapped for an
+# env-var/placeholder, never that the leaked value itself was rotated/revoked
+# at its source (Slack, a cloud provider, etc). PR #22 in this repo
+# (2025-11-08) is the forensic case: a real Slack webhook was flagged Critical,
+# auto-resolved by coderabbitai[bot] itself with zero human reply, and stayed
+# live and public for ~260 days.
+#
+# For this class, `isResolved == true` is NOT sufficient on its own. The
+# thread additionally requires a durable, human-authored (never bot-authored)
+# `rotation-evidence: <reason-or-ticket>` marker somewhere in the thread —
+# mirrors the `# skip-token-allowed: <receipt-id>` escape-hatch pattern already
+# used for the deploy-gate skip-token gate elsewhere in this workspace. No
+# marker = still counted as blocking, regardless of isResolved/isOutdated.
+# Ambiguous/ambiguously-classified findings are NOT exempted by this rule —
+# only findings that fail to match the secret-class signature at all skip it.
 set -euo pipefail
 
 OWNER="${1:?owner required}"
@@ -98,6 +118,67 @@ BLOCKING_JQ='[
     )
 ] | length'
 
+# Secret-class signature: a CodeRabbit finding tagged Critical AND naming
+# "hardcoded" AND naming one of the common leaked-credential shapes. Narrow by
+# design — this must not fire on unrelated Critical findings (RCE/eval,
+# injection, etc.) that have no "rotate a secret" remediation step.
+SECRET_KEYWORD_RE='hardcoded'  # pragma: allowlist secret
+SECRET_TYPE_RE='webhook|api[ _-]?key|password|token|private[ _-]?key|credential'  # pragma: allowlist secret
+SECRET_SEVERITY_RE='critical'  # pragma: allowlist secret
+
+# Human-authored rotation-evidence marker, anywhere in the thread (not just
+# the first comment). Mirrors the `# skip-token-allowed: <receipt-id>`
+# escape-hatch convention used elsewhere in this workspace for gate bypasses:
+# a structured, durable, non-bot-authored annotation is required — CodeRabbit
+# itself declaring "Addressed in commit X" does NOT count, since that is
+# exactly the mechanism that let PR #22's webhook go unrotated for ~260 days.
+ROTATION_EVIDENCE_JQ='
+  [.comments.nodes[] | '"$HUMAN_REBUTTAL_FILTER"' | (.body // "")]
+  | any(test("rotation-evidence:\\s*\\S+"; "i"))
+'
+
+# Threads counted as blocking under the secret-class escalation: isResolved
+# (by any actor, including the bot itself) but with no rotation-evidence
+# marker. Deliberately does NOT re-select isResolved==false threads — those
+# are already covered by BLOCKING_JQ above, so this stays additive and
+# non-double-counting by construction.
+SECRET_BLOCKING_JQ='[
+  .[].data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == true)
+  | select(
+      .comments.nodes[0] != null and (
+        ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
+        ((.comments.nodes[0].body // "") | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
+      )
+    )
+  | select(.comments.nodes[0].body // "" | test("'"$SECRET_KEYWORD_RE"'"; "i"))
+  | select(.comments.nodes[0].body // "" | test("'"$SECRET_TYPE_RE"'"; "i"))
+  | select(.comments.nodes[0].body // "" | test("'"$SECRET_SEVERITY_RE"'"; "i"))
+  | select(
+      (.comments.totalCount > (.comments.nodes | length))
+      or
+      (('"$ROTATION_EVIDENCE_JQ"') | not)
+    )
+] | length'
+
+# Audit line for secret-class threads correctly exempted via rotation-evidence.
+SECRET_EVIDENCE_ACK_JQ='[
+  .[].data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == true)
+  | select(
+      .comments.nodes[0] != null and (
+        ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
+        ((.comments.nodes[0].body // "") | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
+      )
+    )
+  | select(.comments.nodes[0].body // "" | test("'"$SECRET_KEYWORD_RE"'"; "i"))
+  | select(.comments.nodes[0].body // "" | test("'"$SECRET_TYPE_RE"'"; "i"))
+  | select(.comments.nodes[0].body // "" | test("'"$SECRET_SEVERITY_RE"'"; "i"))
+  | select(.comments.totalCount <= (.comments.nodes | length))
+  | select('"$ROTATION_EVIDENCE_JQ"')
+  | "secret_rotation_evidence_ack path=\(.comments.nodes[0].body[:60] // "unknown" | gsub("\\n";" "))"
+][]'
+
 RAW=""
 for attempt in 1 2 3; do
   if RAW=$(gh api graphql --paginate \
@@ -116,6 +197,13 @@ done
 
 # Emit concession acks to stderr so CI logs are auditable
 echo "$RAW" | jq -rs "$CONCESSION_JQ" >&2
+echo "$RAW" | jq -rs "$SECRET_EVIDENCE_ACK_JQ" >&2
 
-COUNT=$(echo "$RAW" | jq -s "$BLOCKING_JQ")
+BLOCKING_COUNT=$(echo "$RAW" | jq -s "$BLOCKING_JQ")
+SECRET_BLOCKING_COUNT=$(echo "$RAW" | jq -s "$SECRET_BLOCKING_JQ")
+if [ "$SECRET_BLOCKING_COUNT" -gt 0 ]; then
+  echo "::error::${SECRET_BLOCKING_COUNT} CodeRabbit CRITICAL hardcoded-credential thread(s) resolved without a rotation-evidence marker. A code-diff swap (env-var indirection) is not proof the leaked value was rotated at its source. Post a human PR comment 'rotation-evidence: <ticket-or-reason>' on the thread only after the actual credential has been revoked/rotated out of band." >&2
+fi
+
+COUNT=$((BLOCKING_COUNT + SECRET_BLOCKING_COUNT))
 echo "$COUNT"

@@ -83,6 +83,21 @@ jobs:
             exit 1
           }
 
+      - name: Verify PyPI dependency-pin resolvability (OMN-14070)
+        working-directory: ${{ github.workspace }}
+        # omnimarket 0.4.6 was published pinning a nonexistent
+        # omnibase-compat==0.5.1 (OMN-14064) because nothing anywhere resolved
+        # a package's declared [project.dependencies] pins against the real
+        # PyPI index -- local/CI resolution is silently short-circuited by
+        # [tool.uv.sources] git-rev overrides, which `uv build` bakes past
+        # unverified into the wheel's real Requires-Dist metadata. This step
+        # installs the just-built wheel with `uv pip install` (never
+        # `uv sync`/`uv add`, so [tool.uv.sources] is structurally
+        # unreachable) into a bare scratch venv with no project config, so a
+        # broken pin fails the release *before* `uv publish` runs.
+        run: |
+          python3 scripts/ci/verify_pypi_pin_resolvability.py dist/
+
       - name: Publish to PyPI
         working-directory: ${{ github.workspace }}
         run: |

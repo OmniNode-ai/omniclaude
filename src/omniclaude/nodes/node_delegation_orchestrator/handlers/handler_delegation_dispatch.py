@@ -9,8 +9,8 @@
     ``~/.omninode/delegation/bifrost_overrides.yaml``).
 
     The ``/onex:delegate`` skill dispatches to the omnimarket node, NOT this handler.
-    This module remains wired in the omniclaude ``contract.yaml`` for backwards
-    compatibility with the cross-CLI dispatch path (``handle_cross_cli_dispatch``).
+    This module no longer owns an omniclaude node contract. It is retained for
+    backwards compatibility with legacy model tests and direct imports.
 
 Legacy backend selection fallback chain (hardcoded, not config-driven):
     1. OpenRouter GLM-4.7-Flash (if API key configured)
@@ -122,7 +122,7 @@ def select_backend(
             return _route_from_endpoint(backend="local_vllm", endpoint=endpoint)
 
     # 3. Gemini CLI
-    if shutil.which("gemini"):
+    if shutil.which("gemini"):  # canonical-inference-ok: legacy non-contract route
         return DelegationRoute(
             backend="gemini_cli",
             base_url="cli://gemini",
@@ -131,7 +131,7 @@ def select_backend(
         )
 
     # 4. Codex CLI
-    if shutil.which("codex"):
+    if shutil.which("codex"):  # canonical-inference-ok: legacy non-contract route
         return DelegationRoute(
             backend="codex_cli",
             base_url="cli://codex",
@@ -247,8 +247,17 @@ def handle_cross_cli_dispatch(
     return invoker.invoke(command)
 
 
+class HandlerDelegationDispatch:
+    """Canonical typed-payload wrapper for delegation dispatch."""
+
+    def handle(self, command: ModelDelegationCommand) -> ModelDelegationDispatchResult:
+        """Dispatch a typed delegation command."""
+        return handle_delegation_dispatch(command)
+
+
 __all__ = [
     "DelegationRoute",
+    "HandlerDelegationDispatch",
     "handle_cross_cli_dispatch",
     "handle_delegation_dispatch",
     "select_backend",

@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14870"
+title: "Declare contract_sweep routing failure handling"
+summary: >-
+  Repo-local contract for omniclaude#1922. The change makes the contract_sweep
+  dispatch skill state the deterministic routing-failure behavior required by
+  the skill-routing validator.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused deterministic skill-routing validator passes for contract_sweep."
+    command: "uv run python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills --skill contract_sweep"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-contract-sweep-routing-failure-text"
+    description: >-
+      contract_sweep documents that routing failures surface SkillRoutingError
+      directly without prose.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'If routing fails, surface SkillRoutingError directly; do not produce prose.' plugins/onex/skills/contract_sweep/SKILL.md"
+  - id: "dod-contract-sweep-validator-focused"
+    description: >-
+      The focused deterministic skill-routing validator passes for
+      contract_sweep after the routing-failure sentence is present.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills --skill contract_sweep"

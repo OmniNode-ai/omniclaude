@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Precommit Fail-Loud Gate
+
+# OMN-14655 (D5, §3d.7 / §3d.8): CI mirror of the two new local pre-commit
+# meta-gates over .pre-commit-config.yaml:
+#
+#   1. Fail-loud meta-gate — hard-rejects the exit-0-on-missing-path /
+#      WARN-SKIP-degrade shape that made `skill-contract-validation` and
+#      `no-cloud-bus` false-green (a skipped gate must be indistinguishable
+#      from a failing gate), plus any hook `stages:` value that
+#      `default_install_hook_types` does not install.
+#   2. Pin-parity check — fails closed if the pre-commit `rev:` pin for a
+#      shared omnibase_core validator diverges from the SHA
+#      .github/workflows/ci.yml pins for that same validator (DRIFT-3).
+#
+# Enforcement, not detection (CLAUDE.md Rule #5): this workflow is wired as
+# a required status check in the SAME PR that adds the pre-commit hooks
+# (precommit-fail-loud-meta-gate, precommit-pin-parity), so the checks it
+# encodes cannot regress silently.
+#
+# Pre-commit mirror: precommit-fail-loud-meta-gate + precommit-pin-parity
+# hooks in .pre-commit-config.yaml.
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - '.pre-commit-config.yaml'
+      - '.github/workflows/ci.yml'
+      - 'scripts/validation/validate_precommit_fail_loud.py'
+      - 'scripts/validation/validate_precommit_pin_parity.py'
+      - '.github/workflows/precommit-fail-loud-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - '.pre-commit-config.yaml'
+      - '.github/workflows/ci.yml'
+      - 'scripts/validation/validate_precommit_fail_loud.py'
+      - 'scripts/validation/validate_precommit_pin_parity.py'
+      - '.github/workflows/precommit-fail-loud-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@dev
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  precommit-fail-loud-gate:
+    needs: occ-preflight
+    name: Precommit Fail-Loud Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.base.ref == 'dev'))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Fail-loud meta-gate (exit-0-on-missing / stages coverage)
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run --no-project --with pyyaml \
+            python3 scripts/validation/validate_precommit_fail_loud.py
+
+      - name: Pin-parity check (pre-commit rev vs CI-pinned SHA)
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run --no-project --with pyyaml \
+            python3 scripts/validation/validate_precommit_pin_parity.py

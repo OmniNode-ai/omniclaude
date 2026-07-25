@@ -1,0 +1,181 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# call-occ-autobind-reusable.yml
+#
+# Reusable OCC-autobind publisher (OMN-14811). Centralises the born-path trigger
+# that omnimarket has run inline since OMN-13990/OMN-13317: on a ticketed product
+# PR (opened/synchronize) it publishes `onex.cmd.omnimarket.occ-autobind.v1`, and
+# the .201 effects runtime (node_pr_lifecycle_fix_effect -> OccCompanionEmitter)
+# mints the OCC evidence companion and PATCHes `Evidence-Source: OCC#<n>` back onto
+# the product PR — zero manual authoring.
+#
+# WHY A REUSABLE (single source of truth):
+#   The publish LOGIC lives in exactly one place — omnimarket's canonical
+#   `scripts/publish_occ_autobind_command.py`, its `config/ci_bus_lanes.yaml` lane
+#   overlay (OMN-14801) and its `src/omnimarket/events/topics.py` topic registry.
+#   This workflow does NOT copy or re-implement that logic; it sparse-checks-out
+#   the canonical omnimarket tree (currently at `@dev` — see omnimarket-ref below;
+#   the `--lane`/lane-overlay/fail-loud publisher lands on omnimarket dev via
+#   OMN-14801 and is not yet promoted to omnimarket main) and runs the script
+#   verbatim, exactly as `deploy-gate-reusable.yml` sparse-checks-out omniclaude
+#   support scripts. RE-PIN to `@main` after OMN-14801 promotes (follow-up OMN-14812).
+#   omnimarket stays the single owner; every caller repo (omnibase_infra canary,
+#   then core/omniclaude fan-out) inherits identical behaviour and the live lane
+#   overlay without a divergent copy. omnimarket is PUBLIC, so the caller's
+#   default GITHUB_TOKEN can check it out (persist-credentials: false).
+#
+# BROKER / RUNNER BIFURCATION (mirrors omnimarket call-occ-autobind.yml,
+# OMN-14451):
+#   Trusted (non-fork) PR events run on the self-hosted omnibase-ci runner on
+#   .201, which reaches the dev-lane broker; fork PRs fall back to ubuntu-latest
+#   where the publisher skips gracefully (exit 0). `RUNNER_IS_TRUSTED` is threaded
+#   into the publish step so the script fails LOUD (exit 1) on the trusted runner
+#   for an unresolvable lane / missing-or-mismatched broker / undelivered message,
+#   instead of a silent green no-op.
+#
+# LANE RESOLUTION (OMN-14801 / incident OMN-14800):
+#   The caller passes `lane` (default `dev`). The script resolves it against the
+#   checked-out `config/ci_bus_lanes.yaml` overlay to pick the bus target and to
+#   fail-loud-check the injected `secrets.KAFKA_BOOTSTRAP_SERVERS` against the
+#   lane's declared broker (silent dev->stability repoint guard). `dev` is
+#   declared `from-secret` while a KAFKA_BOOTSTRAP_SERVERS rotation is in flight,
+#   so the injected secret remains the broker; this workflow does NOT remove or
+#   bypass the secret. A caller repo therefore needs a repo-level
+#   `KAFKA_BOOTSTRAP_SERVERS` secret pointed at the DEV broker (never stability).
+#
+# Usage in caller repos:
+#   jobs:
+#     occ-autobind:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/call-occ-autobind-reusable.yml@main
+#       secrets: inherit
+#       with:
+#         lane: dev
+#
+# Ticket: OMN-14811 (OMN-13990 / OMN-13317 / OMN-14451 / OMN-14801 lineage)
+
+name: OCC Autobind Publisher (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      lane:
+        description: >
+          CI bus lane id resolved against omnimarket config/ci_bus_lanes.yaml to
+          decide the bus target and to fail-loud-check the injected
+          KAFKA_BOOTSTRAP_SERVERS against the lane's declared broker (OMN-14801).
+        type: string
+        required: false
+        default: dev
+      omnimarket-ref:
+        description: >
+          git ref of OmniNode-ai/omnimarket to source the canonical publisher
+          (scripts/publish_occ_autobind_command.py), lane overlay
+          (config/ci_bus_lanes.yaml) and topic registry from. Pinned to `dev`
+          because the `--lane` publisher, the `config/ci_bus_lanes.yaml` overlay,
+          `_resolve_lane_broker`, the `RUNNER_IS_TRUSTED` fail-loud (sys.exit(1))
+          and the stability->in-memory no-op ALL land on omnimarket `dev` via
+          OMN-14801 and are NOT yet promoted to omnimarket `main` — at `main` the
+          script has no `--lane` option and no lane overlay, so the fail-loud/lane
+          logic is unreachable (verifier finding, OMN-14811).
+          RE-PIN TO `main` once OMN-14801 promotes to omnimarket main (tracked by
+          follow-up OMN-14812) so this shared reusable no longer tracks a moving
+          `dev` branch.
+        type: string
+        required: false
+        # re-pin to `main` after OMN-14801 promotes to omnimarket main (follow-up OMN-14812)
+        default: dev
+    # Secrets (KAFKA_BOOTSTRAP_SERVERS, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD)
+    # are passed by the caller via `secrets: inherit`.
+
+permissions:
+  contents: read
+
+jobs:
+  publish-occ-autobind:
+    name: Publish occ-autobind command
+    # Defensive gate (identical to omnimarket's inline caller, OMN-13990 H4): skip
+    # dependency bots (exempt from occ-preflight too) and PRs with no OMN ticket
+    # token in the title or branch. Any caller invoking this reusable inherits the
+    # gate for free; a ticketless PR is fixed by the pr-title gate, not papered
+    # over with a mechanical companion. Callers may ALSO gate their `uses:` job so
+    # the reusable is not even invoked for non-OMN PRs.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'renovate[bot]' &&
+      (contains(github.event.pull_request.title, 'OMN-') ||
+       contains(github.event.pull_request.head.ref, 'OMN-'))
+    # OMNI_RUNNER_SELECTOR_V1 — trusted (non-fork) PRs run on the self-hosted
+    # omnibase-ci runner so the publisher reaches the local lane broker; fork PRs
+    # fall back to ubuntu-latest (publisher skips gracefully, no broker).
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    # OMN-14451: same fork/non-fork test as `runs-on:` above, threaded into the
+    # publish step so the script can fail loudly (not silently exit 0) when the
+    # broker is unresolvable on the trusted lane where a real broker MUST exist.
+    env:
+      RUNNER_IS_TRUSTED: >-
+        ${{
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name != github.repository)
+          && 'false' || 'true'
+        }}
+    timeout-minutes: 5
+
+    steps:
+      # The publish LOGIC is owned by omnimarket. Pull ONLY the three files the
+      # thin publisher needs (script + lane overlay + topic registry) from
+      # omnimarket@<ref> into a side path so nothing from the caller checkout is
+      # touched. persist-credentials: false — this job never pushes to git.
+      - name: Fetch canonical OCC-autobind publisher (omnimarket)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: ${{ inputs.omnimarket-ref }}
+          path: .occ-autobind-src
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/publish_occ_autobind_command.py
+            config/ci_bus_lanes.yaml
+            src/omnimarket/events/topics.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          # Kept deliberately thin — the publisher loads topics.py by file path and
+          # never imports the omnimarket product graph. pyyaml parses the checked-in
+          # config/ci_bus_lanes.yaml lane overlay (OMN-14801).
+          pip install --quiet confluent-kafka click pydantic pyyaml
+
+      - name: Publish onex.cmd.omnimarket.occ-autobind.v1
+        # All potentially attacker-controlled inputs (branch name, PR title) are
+        # passed through environment variables to prevent shell injection.
+        #
+        # KAFKA_BOOTSTRAP_SERVERS comes from the caller's repo secret (the dev-lane
+        # broker; `dev` is `from-secret` in the overlay). On a fork/cloud runner it
+        # is absent and the publisher skips gracefully; on the trusted runner it is
+        # required and a miss fails loud (OMN-14451/OMN-14801).
+        env:
+          KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
+          KAFKA_SASL_USERNAME: ${{ secrets.KAFKA_SASL_USERNAME }}
+          KAFKA_SASL_PASSWORD: ${{ secrets.KAFKA_SASL_PASSWORD }}
+          PR_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          # Best-effort ticket extraction; the script also parses the branch ref.
+          PR_TICKET: ""
+          LANE: ${{ inputs.lane }}
+        working-directory: .occ-autobind-src
+        run: |
+          python scripts/publish_occ_autobind_command.py --lane "${LANE}"

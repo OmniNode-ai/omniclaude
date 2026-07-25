@@ -52,8 +52,9 @@ jobs:
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+        ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+         (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -69,7 +70,7 @@ jobs:
       # step below can invoke it without polluting the caller checkout.
       - name: Fetch deploy-gate support scripts (omniclaude)
         if: github.event_name != 'merge_group'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
           ref: main
@@ -153,3 +154,7 @@ jobs:
           pr-number: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           contracts-dir: _occ/contracts
+          # OMN-14505: composite actions cannot read `vars` directly, so the
+          # org variable is resolved here (job scope, where `vars` is valid)
+          # and threaded through as an input.
+          falsifiability-mode: ${{ vars.DEPLOY_GATE_FALSIFIABILITY || 'report' }}

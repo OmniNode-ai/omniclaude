@@ -55,6 +55,40 @@ BLOCKING_MERGE_STATES = {"BLOCKED", "DIRTY", "BEHIND"}
 
 DEFAULT_OWNER = "OmniNode-ai"
 
+# Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
+# deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
+# satisfies nor blocks a *product* ticket's Done — it is a receipt companion,
+# not the shipped work. Filter these out of the merge-check ref set so a merged
+# OCC receipt never *by itself* flips a product ticket Done, and an open OCC
+# receipt never blocks a legitimately-merged product ticket.
+_WEAK_SIGNAL_REPOS = {"onex_change_control"}
+
+# Scratch/throwaway PR annotation vocabulary (OMN-14792). A PR reference on a
+# line explicitly labelled as a scratch / live-mint / throwaway / do-not-merge
+# artifact is NOT a DoD-implementing citation — it is a disposable test PR
+# (e.g. a live-readback mint PR that is intentionally closed, never merged).
+# Matched only for the *scoped* implementing-PR scan (the deploy-readback path);
+# the unconditional ``verify`` path is intentionally left untouched. The tokens
+# are deliberately specific phrases — bare ``test`` is excluded so that an
+# ordinary implementing PR line such as "added tests in <url>" is never
+# mistaken for a scratch reference.
+_SCRATCH_ANNOTATION_RE = re.compile(
+    r"\b(scratch|throwaway|live[-\s]?mint|readback[-\s]?pr|"
+    r"do[-\s]?not[-\s]?merge|dnm|test[-\s]?pr|test[-\s]?only)\b",
+    re.IGNORECASE,
+)
+
+# Deploy-readback evidence marker keys (OMN-14792). A runtime-deploy ticket's
+# DoD is a live readback (an effects image rebuilt to dev-tip + a clean probe
+# read off the deployed bytes), NOT a merged product PR — ``node_dod_verify``
+# structurally skips such tickets (memory
+# ``reference_dod_verify_cannot_close_deploy_tickets``) and they close via an
+# operator deliberate-Done. This marker is the sanctioned deploy-proof signal
+# the Done-flip guard accepts in lieu of a merged PR.
+DEPLOY_READBACK_MARKER_KEYS = frozenset(
+    {"deploy-readback-proven", "deploy_readback_proven"}
+)
+
 
 @dataclass
 class PRRef:
@@ -114,6 +148,18 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
         refs[key] = PRRef(number=num, repo=default_repo)
 
     return list(refs.values())
+
+
+def is_weak_signal_ref(ref: PRRef) -> bool:
+    """Return True if a PR reference is a WEAK close-signal (OMN-14641).
+
+    Currently: any ``onex_change_control`` PR — OCC receipts / evidence
+    companions. These never gate a product ticket's Done in either direction.
+    A bare ``#N`` reference (repo resolved from the product ticket's default
+    repo) is a product PR and is never weak.
+    """
+    repo = (ref.repo or "").rsplit("/", 1)[-1].strip().lower()
+    return repo in _WEAK_SIGNAL_REPOS
 
 
 def is_exempt(description: str, labels: list[str] | None) -> bool:
@@ -252,26 +298,189 @@ def verify(
 
     Returns allowed=True if the transition should proceed, allowed=False with a
     reason string describing the blocking PRs otherwise.
+
+    OMN-14641: the cited-PR merge check runs BEFORE the ``close-if-done``
+    exemption. The label was previously a blanket merge-check bypass — a ticket
+    carrying it could flip Done with its linked product PR still OPEN (the
+    OMN-14582 false-Done). The exemption now applies *only* when no product PR
+    is cited (decision-only tickets, epic roll-ups); it can never waive an
+    open/unmerged cited PR.
     """
-    if is_exempt(description, labels):
-        return VerificationResult(allowed=True, reason="exempt")
+    # Product PR references only — weak-signal (onex_change_control) refs are
+    # filtered out so an OCC evidence companion never gates a product Done.
+    refs = [
+        ref
+        for ref in parse_pr_refs(description, default_repo=default_repo)
+        if not is_weak_signal_ref(ref)
+    ]
 
-    refs = parse_pr_refs(description, default_repo=default_repo)
-    if not refs:
-        # No PR references — trust the human; nothing to verify.
-        return VerificationResult(allowed=True, reason="no_pr_references")
+    if refs:
+        statuses = [fetcher(ref) for ref in refs]
+        blocking = [s for s in statuses if classify_blocking(s)]
+        if not blocking:
+            return VerificationResult(
+                allowed=True,
+                reason="all_prs_merged",
+                pr_statuses=statuses,
+            )
 
-    statuses = [fetcher(ref) for ref in refs]
-    blocking = [s for s in statuses if classify_blocking(s)]
-
-    if not blocking:
+        lines = ["Cannot mark Done — referenced PRs are not merged:"]
+        for status in blocking:
+            repo = status.ref.repo or "?"
+            if status.error:
+                lines.append(f"  - {repo}#{status.ref.number}: {status.error}")
+            else:
+                lines.append(
+                    f"  - {repo}#{status.ref.number}: state={status.state} "
+                    f"mergeState={status.merge_state}"
+                )
+        lines.append(
+            "A `close-if-done` label/frontmatter does NOT waive an open cited "
+            "PR (OMN-14641) — merge the linked PR, or cite the merged "
+            "implementing PR. The exemption only applies when no product PR is "
+            "cited."
+        )
         return VerificationResult(
-            allowed=True,
-            reason="all_prs_merged",
+            allowed=False,
+            reason="\n".join(lines),
             pr_statuses=statuses,
         )
 
-    lines = ["Cannot mark Done — referenced PRs are not merged:"]
+    # No product PR cited — the exemption may legitimately apply (decision-only
+    # tickets, epic ALL_CHILDREN_DONE roll-ups that carry the label).
+    if is_exempt(description, labels):
+        return VerificationResult(allowed=True, reason="exempt")
+
+    # No PR references and no exemption — trust the human; nothing to verify.
+    return VerificationResult(allowed=True, reason="no_pr_references")
+
+
+# ---------------------------------------------------------------------------
+# Deploy-readback path (OMN-14792) — scoped implementing-PR scan + marker parse
+# ---------------------------------------------------------------------------
+
+
+def line_is_scratch_annotated(line: str) -> bool:
+    """Return True if a description line explicitly labels a scratch/test PR.
+
+    Used only by :func:`parse_implementing_pr_refs` to drop a live-mint /
+    throwaway PR reference (e.g. an intentionally-closed readback PR) from the
+    DoD-implementing set. Pure function.
+    """
+    return bool(_SCRATCH_ANNOTATION_RE.search(line))
+
+
+def _split_paragraphs(text: str) -> list[list[str]]:
+    """Split ``text`` into blank-line-delimited paragraphs (lists of lines).
+
+    A run of consecutive non-blank lines forms one paragraph; whitespace-only
+    lines are delimiters and are dropped. Pure function.
+    """
+    paragraphs: list[list[str]] = []
+    current: list[str] = []
+    for line in text.splitlines():
+        if line.strip():
+            current.append(line)
+        elif current:
+            paragraphs.append(current)
+            current = []
+    if current:
+        paragraphs.append(current)
+    return paragraphs
+
+
+def parse_implementing_pr_refs(
+    description: str, default_repo: str | None = None
+) -> list[PRRef]:
+    """Extract only the *DoD-implementing* product PR references.
+
+    This is the scoped counterpart to :func:`parse_pr_refs`, used exclusively by
+    the deploy-readback path (OMN-14792). It answers "which PRs does this ticket
+    cite as implementing the work?" — as opposed to every ``#N`` string that
+    happens to appear in the body — by excluding:
+
+    * lines explicitly annotated scratch/throwaway/live-mint/do-not-merge
+      (:func:`line_is_scratch_annotated`) — a disposable readback PR is not
+      implementing work;
+    * bare ``#N`` references that cannot be resolved to a repo (no
+      ``default_repo``) — an unrepo'd ``#N`` in a historical merge-chain
+      narrative is context, not a verifiable DoD citation, and the
+      unconditional path only ever surfaced it as an un-verifiable error; and
+    * weak-signal ``onex_change_control`` evidence-companion PRs
+      (:func:`is_weak_signal_ref`), as elsewhere.
+
+    A fully-qualified ``https://github.com/owner/repo/pull/N`` URL in a
+    non-scratch paragraph is always kept — that is a real, verifiable
+    implementing citation. Scratch annotation is scoped to the blank-line-
+    delimited paragraph the reference sits in, so a label line followed by the
+    URL on the next line (the common Linear layout) is correctly excluded.
+    Pure function (no I/O).
+    """
+    refs: dict[tuple[str, int], PRRef] = {}
+
+    for paragraph in _split_paragraphs(description):
+        # A paragraph is scratch if ANY of its lines carries a scratch/throwaway
+        # annotation — the label may precede or follow the reference line.
+        if any(line_is_scratch_annotated(line) for line in paragraph):
+            continue
+        block = "\n".join(paragraph)
+
+        for url_match in _PR_URL_RE.finditer(block):
+            owner = url_match.group(1)
+            repo_name = url_match.group(2)
+            num = int(url_match.group(3))
+            full_repo = f"{owner}/{repo_name}"
+            refs[(full_repo, num)] = PRRef(number=num, repo=full_repo)
+
+        # A bare ``#N`` is only an implementing citation when it resolves to a
+        # concrete repo. Without a default repo it is unverifiable narrative and
+        # is dropped rather than surfaced as a false-blocking "cannot verify".
+        if default_repo:
+            for num_match in _PR_NUMBER_RE.finditer(block):
+                num = int(num_match.group(1))
+                key = (default_repo, num)
+                if key not in refs:
+                    refs[key] = PRRef(number=num, repo=default_repo)
+
+    return [ref for ref in refs.values() if not is_weak_signal_ref(ref)]
+
+
+def verify_implementing(
+    description: str,
+    labels: list[str] | None,
+    default_repo: str | None = None,
+    fetcher: Any = fetch_pr_status,
+) -> VerificationResult:
+    """Scoped merge check for the deploy-readback path (OMN-14792).
+
+    Verifies only the DoD-*implementing* product PRs
+    (:func:`parse_implementing_pr_refs`) — scratch/throwaway PRs and
+    unresolvable narrative ``#N`` refs are ignored. Returns ``allowed=True``
+    with reason ``no_implementing_pr`` when nothing implementing is cited (the
+    common runtime-deploy shape: the DoD is a live readback, not a PR).
+
+    This is invoked ONLY when a deploy-readback marker is present, and it exists
+    so the marker can never waive an unmerged *real* implementing PR — the same
+    integrity rule OMN-14641 applied to the ``close-if-done`` label. ``labels``
+    is accepted for signature parity with :func:`verify` but is not consulted
+    here (the marker, not a label, authorizes this path).
+    """
+    del labels  # signature parity with verify(); not consulted on this path.
+
+    refs = parse_implementing_pr_refs(description, default_repo=default_repo)
+    if not refs:
+        return VerificationResult(allowed=True, reason="no_implementing_pr")
+
+    statuses = [fetcher(ref) for ref in refs]
+    blocking = [s for s in statuses if classify_blocking(s)]
+    if not blocking:
+        return VerificationResult(
+            allowed=True,
+            reason="all_implementing_prs_merged",
+            pr_statuses=statuses,
+        )
+
+    lines = ["Cannot mark Done — a DoD-implementing PR is not merged:"]
     for status in blocking:
         repo = status.ref.repo or "?"
         if status.error:
@@ -282,14 +491,41 @@ def verify(
                 f"mergeState={status.merge_state}"
             )
     lines.append(
-        "Add `close-if-done: true` label or frontmatter to exempt "
-        "verified-already-merged tickets."
+        "A deploy-readback marker does NOT waive an open implementing PR "
+        "(OMN-14792 / OMN-14641) — merge the implementing PR, or remove the "
+        "citation if it is not part of this ticket's DoD."
     )
     return VerificationResult(
         allowed=False,
         reason="\n".join(lines),
         pr_statuses=statuses,
     )
+
+
+def parse_deploy_readback_marker(description: str) -> str | None:
+    """Return the evidence body of a ``deploy-readback-proven:`` marker, or None.
+
+    Recognises a frontmatter/body line of the form::
+
+        deploy-readback-proven: <probe + exit-0 receipt evidence>
+
+    (leading list/heading punctuation is tolerated, key is case-insensitive,
+    ``-`` and ``_`` spellings both accepted). Returns the stripped evidence
+    value when present and NON-EMPTY, else ``None``.
+
+    A content-free marker (``deploy-readback-proven:`` with no value) is
+    deliberately NOT accepted: requiring the probe/receipt body prevents the
+    marker from degrading into a blanket bypass token the way the bare
+    ``close-if-done`` label once did (OMN-14641). Pure function.
+    """
+    for line in description.splitlines():
+        stripped = line.strip().lstrip("-*# ").strip()
+        if ":" not in stripped:
+            continue
+        key, _, value = stripped.partition(":")
+        if key.strip().lower() in DEPLOY_READBACK_MARKER_KEYS and value.strip():
+            return value.strip()
+    return None
 
 
 def _load_stdin_tool_call() -> dict[str, Any]:
@@ -310,6 +546,7 @@ query($id: String!) {
     description
     state { name }
     labels { nodes { name } }
+    attachments { nodes { url } }
   }
 }
 """.strip()
@@ -363,13 +600,37 @@ def _fetch_linear_issue(ticket_id: str) -> dict[str, Any] | None:
         return None
 
     label_nodes = (issue.get("labels") or {}).get("nodes") or []
+    attachment_nodes = (issue.get("attachments") or {}).get("nodes") or []
     return {
         "id": issue.get("id"),
         "title": issue.get("title"),
         "description": issue.get("description") or "",
         "state": (issue.get("state") or {}).get("name") or "",
         "labels": [n.get("name") for n in label_nodes if n.get("name")],
+        # Linear GitHub-integration links the PR as an attachment, NOT as a
+        # `#N` mention in the description. Surface those URLs so the merge check
+        # sees the *linked* PR even when it is not cited in the ticket body —
+        # this is the OMN-14582 false-Done shape (label-driven close while the
+        # linked PR was still OPEN). See OMN-14641.
+        "attachment_urls": [n.get("url") for n in attachment_nodes if n.get("url")],
     }
+
+
+def augment_description_with_attachments(
+    description: str, attachment_urls: list[str] | None
+) -> str:
+    """Append linked-PR attachment URLs to the description for verification.
+
+    The merge check parses PR references out of free text, so appending the
+    Linear GitHub-integration attachment URLs (which carry the *linked* PR) lets
+    a status-only Done flip be verified against the linked PR even when the
+    ticket body does not cite it with a `#N` mention. Non-PR attachment URLs are
+    harmlessly ignored by :func:`parse_pr_refs`. Pure function.
+    """
+    urls = [u for u in (attachment_urls or []) if u]
+    if not urls:
+        return description
+    return description + "\n\n" + "\n".join(urls)
 
 
 def main() -> int:
@@ -416,6 +677,12 @@ def main() -> int:
             return 2
         description = str(issue.get("description") or "")
         labels = labels or list(issue.get("labels") or [])
+        # Fold in the linked-PR attachment URLs so the merge check sees the PR
+        # linked via the Linear GitHub integration, not only PRs cited in the
+        # body (OMN-14641 — the OMN-14582 linked-but-uncited false-Done shape).
+        description = augment_description_with_attachments(
+            description, list(issue.get("attachment_urls") or [])
+        )
 
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
 

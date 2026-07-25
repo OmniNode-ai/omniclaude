@@ -27,11 +27,25 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
-  # Stub implementation detection — sourced from omnibase_core (OMN-5599)
+  # OMN-14655 (SHA reconciliation, D1f/§3d.8): converged from two separate
+  # omnibase_core repo: blocks pinned at DIFFERENT revs (458f44e for
+  # check-stub-implementations, 63635097 for no-noncanonical-lifecycle-classes)
+  # into one block at 63635097705d832e0ee9c4811093efb31349105c -- the SAME
+  # SHA ci.yml:3102 pins for the canonical `omnibase-core @ git+...` ratchet
+  # (`no-noncanonical-lifecycle-classes`, OMN-14350). check-stub-implementations
+  # is exported unchanged (same entry/args) in .pre-commit-hooks.yaml at
+  # 63635097; the hook body diff between the two SHAs is comment-only
+  # (verified via `git diff 458f44e 63635097 -- scripts/validation/check_stub_implementations.py`).
+  # A single rev means block staleness can never regress silently again; see
+  # the pin-parity-check hook below, which fails closed if this rev and
+  # ci.yml:3102's pin ever diverge.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 458f44ef24564956c6430ae7671570aed035c853 # pragma: allowlist secret
+    rev: 63635097705d832e0ee9c4811093efb31349105c # pragma: allowlist secret
     hooks:
       - id: check-stub-implementations
+      - id: no-noncanonical-lifecycle-classes
+        args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
+        files: ^src/omniclaude/.*\.py$
 
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
@@ -137,6 +151,20 @@ repos:
         language: script
         types_or: [python, shell]
         pass_filenames: true
+        stages: [pre-commit]
+
+      # OMN-14854: Required-Check Skip-Vector Guard. Fails closed if a staged
+      # workflow file or the required-checks manifest introduces a path-scoped
+      # trigger, an ungated job-level `if:`, an ungated reusable-caller `if:`,
+      # or a missing pull_request/merge_group trigger on any REQUIRED context.
+      # Same validator runs in CI (required-check-skip-guard-reusable.yml) —
+      # local and CI verdicts can never diverge.
+      - id: reject-required-check-skip-vector
+        name: Reject skip vectors on required-check workflows (OMN-14854)
+        entry: .pre-commit-hooks/reject-required-check-skip-vector.sh
+        language: script
+        pass_filenames: false
+        files: '^\.github/(workflows/.*\.ya?ml|required-checks\.yaml)$'
         stages: [pre-commit]
 
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
@@ -257,6 +285,18 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14476: block plans proposing a new scripts/** file without a
+      # 'canonical-form:' declaration (design as a node, or a reviewed
+      # exception). Complements the code-time deny-new guard (OMN-14475).
+      # CI mirror: .github/workflows/plan-canonical-scripts-gate.yml
+      - id: lint-plan-canonical-scripts
+        name: enforce plans declare canonical-form for proposed scripts/** files
+        entry: python3 scripts/lint_plan_canonical_scripts.py
+        language: system
+        files: '^docs/(plans|tracking)/.*\.md$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-9072: regression guard — every hookSpecificOutput emission must
       # include hookEventName, else Claude Code silently drops the payload.
       - id: check-hook-event-names
@@ -350,26 +390,29 @@ repos:
         stages: [pre-commit]
 
       # --------------------------------------------------------------------------
-      # detect-secrets baseline regeneration
+      # detect-secrets baseline guard (OMN-15068)
       # Problem: .secrets.baseline stores line numbers. When new jobs are added to
       # CI workflows, all downstream line numbers shift, causing false-positive
-      # "Secret Detection" CI failures on every such PR (OMN-2625).
-      # Solution: Regenerate the baseline before each commit so committed line
-      # numbers always reflect the current codebase state. CI comparison then
-      # finds zero delta because baseline was already updated.
-      # Uses the same --exclude-files patterns as the CI detect-secrets job.
+      # "Secret Detection" CI failures on every such PR (OMN-2625). The original
+      # fix for that (unconditionally regenerating + `git add`ing the baseline,
+      # always exiting 0) conflated "line churn on a known finding" with "brand
+      # new finding" -- it silently absorbed genuinely new secrets as unaudited
+      # entries on every commit, and CI's own detect-secrets job then diffed
+      # against that already-laundered baseline and found zero delta. A synthetic
+      # AWS key pair planted in a scratch clone committed cleanly under the old
+      # hook body (OMN-15068 RED-first proof).
+      # Solution: scripts/detect_secrets_guard.py still regenerates the baseline
+      # (so line-number churn on already-known findings is absorbed silently,
+      # same convenience as before), but BLOCKS the commit when a genuinely new
+      # finding (file + hashed_secret not present in the last-committed baseline)
+      # has not been explicitly audited (`is_secret` key set via
+      # `detect-secrets audit .secrets.baseline`). Fails closed on missing tool,
+      # scan error, or unreadable/corrupt baseline. See the script's module
+      # docstring for the full design.
       # --------------------------------------------------------------------------
       - id: detect-secrets-update
-        name: regenerate .secrets.baseline (prevent line-shift false positives)
-        entry: bash -c '
-          detect-secrets scan \
-            --baseline .secrets.baseline \
-            --exclude-files "\.lock$" \
-            --exclude-files "\.env\.example$" \
-            --exclude-files "bandit-report\.json$" \
-            --exclude-files "^tests/" \
-            --exclude-files "security-report\.json$" \
-          && git add .secrets.baseline'
+        name: guard .secrets.baseline (block new unaudited findings, OMN-15068)
+        entry: python3 scripts/detect_secrets_guard.py
         language: system
         pass_filenames: false
         always_run: true
@@ -412,6 +455,124 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # --------------------------------------------------------------------------
+      # OMN-14655 (WS7 canary, ticket-plan docs/plans/2026-07-15-ci-precommit-gate-parity-plan.md):
+      # DRIFT-1 fix — the `arch-*` AST-scan validators below have run in CI
+      # (ci.yml) since their respective landing tickets but had NO pre-commit
+      # mirror, so violations only ever surfaced after push. Each entry below
+      # invokes the EXACT CI entrypoint (same script, same args, same bare
+      # `python3` invocation CI uses) — no rule logic is re-implemented here.
+      # All are stdlib-only AST/regex scans (ast/re/sys/pathlib), verified via
+      # `grep '^import\|^from' scripts/validation/<script>.py`, so `python3`
+      # (no uv sync / venv) is both correct and matches CI's bare-interpreter
+      # invocation for the non-uv jobs.
+      # --------------------------------------------------------------------------
+      - id: arch-no-db-in-orchestrator
+        name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
+        entry: python3 scripts/validation/validate_no_db_in_orchestrator.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-git-outside-effects
+        name: "Arch: No git/gh calls outside effects (check 2)"
+        entry: python3 scripts/validation/validate_no_git_outside_effects.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-linear-outside-effects
+        name: "Arch: No LinearClient outside effects (check 3)"
+        entry: python3 scripts/validation/validate_no_linear_outside_effects.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-repo-adapter-in-orchestrator
+        name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
+        entry: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-cost-ledger-isolation
+        name: "Arch: ModelCostLedger confined to effects (check 5)"
+        entry: python3 scripts/validation/validate_cost_ledger_isolation.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-topic-naming
+        name: "Arch: onex.* topic naming convention (check 6)"
+        # NOTE: distinct from the existing `topic-naming-lint` hook (below),
+        # which runs scripts/validation/run_topic_lint.sh — a different
+        # program against a baseline file. This wires CI's own
+        # validate_topic_naming.py entrypoint for exact DRY parity.
+        entry: python3 scripts/validation/validate_topic_naming.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-cost-ledger-structure
+        name: "Arch: ModelCostLedger run_id field + index (check 9)"
+        entry: python3 scripts/validation/validate_cost_ledger_structure.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-direct-kafka-producer
+        name: "Arch: No direct Kafka producer outside publisher (check 10)"
+        entry: python3 scripts/validation/validate_no_direct_kafka_producer.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-utcnow
+        name: "Arch: No datetime.utcnow() usage (check 11)"
+        entry: python3 scripts/validation/validate_no_utcnow.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: arch-no-hardcoded-ip
+        name: "Arch: No hardcoded internal IPs (check 12)"
+        # CI (ci.yml arch-no-hardcoded-ip) invokes this via `uv run python`
+        # (unlike the other arch-* checks above, which CI runs bare). Mirror
+        # that exact invocation via the worktree-safe uv wrapper rather than
+        # dropping to bare python3, to stay byte-for-byte DRY with the live
+        # CI entrypoint. (Follow-up: CI could drop its own uv sync/uv run to
+        # bare python3 like the other arch-* jobs since this script is also
+        # stdlib-only -- out of scope for this canary; track separately.)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_ip.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: check-env-var-registry
+        name: "Env Var Registry (OMN-6263)"
+        # Invokes CI's exact arg-string (ci.yml env-var-registry job) — no
+        # re-implementation.
+        entry: >-
+          python3 scripts/ci/check_env_var_registry.py
+          --scan-dirs src/omniclaude plugins/onex/hooks/lib
+          --registry .env.example
+          --allowlist-file .env.allowlist
+          --format text
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # ============================================================
       # STAGE 2: PRE-PUSH (thorough checks before sharing)
       # ============================================================
@@ -425,13 +586,17 @@ repos:
         pass_filenames: true
         stages: [pre-push]
 
+      # OMN-14655: rescoped to the EXACT CI command (ci.yml "Mypy type checking"
+      # step: `uv run mypy src/ --config-file mypy.ini`) so local == CI. The
+      # previous entry ran `mypy src/omniclaude/hooks/ src/omniclaude/config/
+      # --ignore-missing-imports` -- 2 of ~15 top-level src/omniclaude/
+      # subdirs, no config file -- while claiming "match CI" in its name.
+      # Missing-stub imports outside those 2 subdirs silently passed locally
+      # and only ever failed on CI. pre-push is the thorough-checks stage
+      # (not the <15s pre-commit budget), so the full-tree run belongs here.
       - id: mypy-type-check
         name: mypy (type checking - match CI)
-        # SCOPE: Currently limited to hooks/ and config/ (strict, well-typed modules)
-        # TODO(post-Beta): After lib/ deletion, expand to full src/omniclaude/:
-        #   entry: bash -c 'uv run mypy src/omniclaude/ --ignore-missing-imports'
-        # Exclusion: lib/ contains legacy code that will be deleted post-Beta
-        entry: bash -c 'bash scripts/uv-run-worktree-safe.sh mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
+        entry: bash scripts/uv-run-worktree-safe.sh mypy src/ --config-file mypy.ini
         language: system
         pass_filenames: false
         always_run: true
@@ -612,6 +777,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-14584: bare-name node-identity-keying check (fast, author-time).
+      # Generalizes three independently-discovered-and-fixed incidents
+      # (OMN-10865, OMN-14571, OMN-14575) into one AST-based gate: keying a
+      # cross-package node/contract collection on a bare `.name` attribute
+      # silently collapses same-named nodes from different packages.
+      # Suppress a genuine false positive with # node-identity-keying-ok: <reason>
+      - id: check-node-identity-keying
+        name: Node-identity bare-name-keying check
+        language: system
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/check_node_identity_keying.py
+        types: [python]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-8622: aislop prohibited-pattern check (fast, changed-files only)
       # Complements check-ai-slop (docstring/boilerplate patterns) by catching
       # prohibited env vars and compat-shims in changed Python files.
@@ -694,6 +873,23 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/
+
+      # Deterministic-skill routing enforcement (OMN-8749, wired under OMN-14808).
+      # Tier 1 counterpart to validate-instructional-skill-routing (OMN-8766)
+      # above. Every Tier 1 deterministic skill's SKILL.md must contain a node
+      # dispatch instruction, a `SkillRoutingError` reference (the live wire
+      # contract emitted by both dispatch CLIs), and no prose-fallback routing
+      # instruction. BLOCKING (no --report): the reconciled tree is green, so
+      # any NEW drift fails at commit. Stdlib-only validator -> bare python3
+      # (matches the arch-* hooks). CI mirror:
+      # .github/workflows/check-deterministic-skills.yml.
+      - id: validate-deterministic-skill-routing
+        name: ONEX Deterministic Skill Routing Enforcement (OMN-8749)
+        language: system
+        entry: python3 scripts/validation/validate_deterministic_skill_routing.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(plugins/onex/skills/.*/SKILL\.md|scripts/validation/validate_deterministic_skill_routing\.py)$
       # OMN-12237 (Wave 7): Reject new imperative patterns in skills/*/SKILL.md.
       # Imperative inline logic (Agent(, TeamCreate, curl, gh api, psql, ssh,
       # asyncio.run, direct http://localhost/192.168 calls) must live in nodes.
@@ -708,6 +904,20 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^plugins/onex/skills/.*/SKILL\.md$
+
+      # TEMPORARY Phase-0 migration gate (OMN-14687, epic OMN-14686): every
+      # filesystem-discovered plugin component (skill / hook script / agent
+      # config) must be classified in plugins/distribution_manifest.yaml with a
+      # valid exposure (stable|beta|hidden|retired). Prevents an unclassified
+      # component being added mid-migration. Phase 3 retires this hook + the
+      # validator when the permanent typed distribution-contract checks land.
+      - id: validate-distribution-classification
+        name: Distribution Classification (OMN-14687, temporary Phase-0 gate)
+        entry: python3 scripts/validation/validate_distribution_classification.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(plugins/onex/(skills|hooks/scripts|agents/configs)/|plugins/distribution_manifest\.yaml|scripts/validation/validate_distribution_classification\.py)
 
       # Topic naming lint — validate onex.{kind}.{producer}.{event}.v{n} convention
       # (OMN-3259) Triggers on any *.py change; always scans full source tree.
@@ -800,6 +1010,37 @@ repos:
         pass_filenames: false
         files: ^plugins/onex/hooks/lib/hook_bits\.sh$
         stages: [pre-commit]
+
+      # OMN-14655 (D5, §3d.7): fail-loud meta-gate over this very file.
+      # Hard-rejects the exit-0-on-missing-path / WARN-SKIP-degrade class
+      # that made `skill-contract-validation` and `no-cloud-bus` false-green,
+      # any undocumented SKIP/BYPASS-env-var-gated exit 0, and any `stages:`
+      # value default_install_hook_types does not install. Wired as BOTH a
+      # pre-commit hook (here) and a required CI gate
+      # (.github/workflows/precommit-fail-loud-gate.yml) in this same PR so
+      # the class cannot regenerate on the next wrapper script.
+      - id: precommit-fail-loud-meta-gate
+        name: Pre-commit fail-loud meta-gate (OMN-14655)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_fail_loud.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        files: ^(\.pre-commit-config\.yaml|scripts/.*\.sh|\.pre-commit-hooks/.*\.sh)$
+
+      # OMN-14655 (D5, §3d.8): pin-parity ratchet. Fails closed the moment
+      # the pre-commit `rev:` pin for a shared omnibase_core validator
+      # diverges from the SHA .github/workflows/ci.yml pins for the same
+      # validator (the DRIFT-3 class that produced two disagreeing
+      # omnibase_core blocks in this file before OMN-14655 converged them).
+      - id: precommit-pin-parity
+        name: Pre-commit/CI pin-parity check (OMN-14655)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_pin_parity.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        files: ^(\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$
 
 # Configuration
 default_install_hook_types: [pre-commit, pre-push, commit-msg]

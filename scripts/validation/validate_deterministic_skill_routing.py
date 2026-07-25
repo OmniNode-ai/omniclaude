@@ -6,9 +6,23 @@
 CI validator: Deterministic Skill Routing Enforcement (OMN-8749, S2)
 
 Verifies that every Tier 1 deterministic skill SKILL.md contains:
-  1. A node dispatch command (``onex node`` or ``onex run-node``)
-  2. ``SkillRoutingError`` error handling text
-  3. No prose fallback instructions for routing failures
+  1. A node dispatch instruction. Two canonical shapes are accepted, matching
+     how these skills actually reach a node:
+       * a direct ``onex node`` / ``onex run-node`` invocation (legacy
+         run-node skills), or
+       * a receipt-mode dispatch through the ``onex skill`` entrypoint, which
+         publishes to a node's ``onex.cmd.*`` start topic (the current
+         ``skill_kind: dispatch`` shape). The DISPATCH regex recognizes the
+         "publishes to ``onex.cmd.<...>``" / "Kafka publish" prose these skills
+         carry in their Routing Contract section.
+  2. ``SkillRoutingError`` — the real, live wire contract. It is the
+     ``omnibase_spi.exceptions_skill_routing.SkillRoutingError`` class
+     (SPI public API + event_registry), emitted as the ``error_type`` JSON
+     envelope value by BOTH dispatch CLIs (``omnibase_core.cli.cli_run_node``
+     and ``omnibase_infra.cli.cli_node``). A deterministic skill must instruct
+     the agent to surface that envelope directly.
+  3. No prose fallback instructions for routing failures (``do not produce
+     prose``).
 
 Skills missing their backing node (T1-07, T1-09, T1-14, T1-17, T1-19, T1-25)
 are excluded via the ``MISSING_NODE_SKILLS`` set.
@@ -22,7 +36,13 @@ Usage:
   python scripts/validation/validate_deterministic_skill_routing.py --report
   python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills
 
-Linear: OMN-8749
+Wiring: this validator is enforced as a blocking pre-commit hook
+(``deterministic-skill-routing`` in ``.pre-commit-config.yaml``) and a required
+CI gate (``.github/workflows/check-deterministic-skills.yml``). It is the Tier 1
+counterpart to the Tier 3 ``validate_instructional_skill_routing.py`` gate
+(OMN-8766); wiring it closes the OMN-8749/8766 pair.
+
+Linear: OMN-8749, OMN-14808 (validator/reality reconcile + wiring)
 """
 
 from __future__ import annotations
@@ -38,7 +58,18 @@ TIER1_DETERMINISTIC_SKILLS: set[str] = {
     "build_loop",
     "ci_watch",
     "compliance_sweep",
-    "contract_sweep",
+    # NOTE (OMN-14808): contract_sweep was REMOVED from this set. It is not a
+    # deterministic run-node/dispatch skill: its only node-invocation path (the
+    # "Runtime Mode" that called `onex run-node node_contract_sweep`) was
+    # deleted as fiction in #1897 / OMN-14542 (the field never existed on the
+    # node's `extra="forbid"` request model). Its real modes are a static
+    # cross-repo drift check and a filesystem `python -m ...node_contract_sweep`
+    # compliance sweep — neither publishes to an `onex.cmd.*` start topic via
+    # receipt-mode dispatch, nor surfaces the SkillRoutingError envelope. Before
+    # this fix it passed the DISPATCH check ONLY by accident: the regex matched
+    # the negative sentence describing the deleted fiction. Re-adding a
+    # SkillRoutingError reference would re-introduce that exact fiction, so it
+    # is reclassified out of Tier 1 instead.
     "dashboard_sweep",
     "data_flow_sweep",
     "golden_chain_sweep",

@@ -260,7 +260,7 @@ def test_contract_compliance_pins_uv_python(ci_workflow: dict[str, Any]) -> None
     setup_step = _step(job, "Set up Python")
     install_step = _step(job, "Install onex_change_control")
 
-    assert setup_step.get("uses") == "actions/setup-python@v6"
+    assert setup_step.get("uses") == "actions/setup-python@v7"
     assert setup_step["with"]["python-version"] == "${{ env.PYTHON_VERSION }}"
     assert '--python "${PYTHON_VERSION}"' in install_step["run"]
 

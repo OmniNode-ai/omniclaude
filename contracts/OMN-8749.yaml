@@ -1,0 +1,28 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-8749"
+title: "Deterministic skill routing validation"
+summary: >-
+  Tracks the Tier 1 deterministic skill-routing invariant: dispatch-backed
+  skills must document the routing contract and typed SkillRoutingError behavior
+  instead of falling back to hand-written prose.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omniclaude-pr-1914-deterministic-routing"
+    description: >-
+      omniclaude PR #1914 wires the deterministic skill-routing validator and
+      proves it fails on a seeded missing Routing Contract and passes on the
+      reconciled live skills tree.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          gh pr view 1914 --repo OmniNode-ai/omniclaude --json body
+          --jq '.body | contains("validate_deterministic_skill_routing.py --report")'

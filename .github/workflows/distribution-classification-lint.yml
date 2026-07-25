@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Distribution Classification Lint
+
+# TEMPORARY Phase-0 migration gate (OMN-14687, epic OMN-14686).
+# Fails closed if any filesystem-discovered plugin component (skill, hook
+# script, agent config) is NOT classified in plugins/distribution_manifest.yaml
+# with a valid exposure (stable|beta|hidden|retired). Prevents an unclassified
+# component from being added while the minimal-plugin migration is in flight.
+# Phase 3 replaces this with the permanent typed distribution-contract
+# validators and retires this workflow + validator.
+
+on:
+  push:
+    branches: [main, 'hotfix/**']
+    paths:
+      - 'plugins/onex/skills/**'
+      - 'plugins/onex/hooks/scripts/**'
+      - 'plugins/onex/agents/configs/**'
+      - 'plugins/distribution_manifest.yaml'
+      - 'scripts/validation/validate_distribution_classification.py'
+      - 'scripts/validation/validate_full_market_skill_inventory.py'
+      - '.github/workflows/distribution-classification-lint.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'plugins/onex/skills/**'
+      - 'plugins/onex/hooks/scripts/**'
+      - 'plugins/onex/agents/configs/**'
+      - 'plugins/distribution_manifest.yaml'
+      - 'scripts/validation/validate_distribution_classification.py'
+      - 'scripts/validation/validate_full_market_skill_inventory.py'
+      - '.github/workflows/distribution-classification-lint.yml'
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  distribution-classification-lint:
+    needs: occ-preflight
+    name: Distribution Classification Lint
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Every plugin component is classified in the distribution manifest
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/validation/validate_distribution_classification.py

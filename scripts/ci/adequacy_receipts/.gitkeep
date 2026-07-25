@@ -1,0 +1,4 @@
+Committed adequacy receipts for the canonical handler-shape ratchet (OMN-14355
+fan-out, OMN-14588). One <node_id>.json (+ .equivalence.json or .handflip.json)
+per node that flips NON_CANONICAL -> canonical. Empty at genesis: the baseline
+generated for OMN-14588 has zero proven flips.

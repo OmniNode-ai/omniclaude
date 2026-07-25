@@ -61,7 +61,14 @@ GATE_JOBS: tuple[str, ...] = (
     "Security Gate",
     "Contract Compliance Check",
     "Contract Compliance",
+    "no-noncanonical-lifecycle-classes",  # OMN-14350 non-canonical lifecycle-class ratchet
 )
+
+# OMN-14350: jobs that must be EXACTLY ``success`` — stricter than GATE_JOBS
+# membership (which accepts ``success``||``skipped`` via GOOD_CONCLUSIONS). A
+# SKIPPED or CANCELLED ratchet is un-enforced and MUST fail closed, matching the
+# strict-success posture of the other 7 repos' CI Summary verdicts.
+STRICT_SUCCESS_JOBS: frozenset[str] = frozenset({"no-noncanonical-lifecycle-classes"})
 
 # Jobs that do NOT gate merge today (verified against ci.yml gate ``needs`` on
 # 2026-07-07). The default-deny sweep ignores these so it never newly-wedges a
@@ -192,6 +199,18 @@ def evaluate(
         and j.status == "completed"
         and j.conclusion not in GOOD_CONCLUSIONS
     )
+
+    # (1b) OMN-14350: strict-success jobs must be EXACTLY 'success'. A skipped/
+    # cancelled ratchet passes the default-deny sweep (skipped is in GOOD_CONCLUSIONS)
+    # but is un-enforced, so it must fail closed here.
+    strict_success_failures = sorted(
+        name
+        for name in STRICT_SUCCESS_JOBS
+        if (st := latest.get(name)) is not None
+        and st.status == "completed"
+        and st.conclusion != "success"
+    )
+    sweep_failures = sorted(set(sweep_failures) | set(strict_success_failures))
 
     # (2) Completeness anchor over the aggregate gates.
     gate_missing_or_pending = [

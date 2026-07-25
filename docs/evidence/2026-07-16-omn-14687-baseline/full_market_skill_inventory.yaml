@@ -1,0 +1,2691 @@
+report_version: '1'
+skills_root: plugins/onex/skills
+nodes_root: omnimarket/src/omnimarket/nodes
+total_surfaces: 118
+class_counts:
+  dispatch: 68
+  pure_skill: 10
+  retired: 9
+  stub_scaffold: 21
+  sub_skill: 10
+finding_counts:
+  direct_handler_import: 6
+  direct_http_cli_api_bypass: 42
+  missing_contract: 1
+  missing_node: 37
+  node_not_implemented: 0
+  not_implemented_handler: 0
+  placeholder_dispatch: 46
+skills:
+- name: adversarial_pipeline
+  path: plugins/onex/skills/adversarial_pipeline/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/adversarial_pipeline/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: agent_healthcheck
+  path: plugins/onex/skills/agent_healthcheck/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/agent_healthcheck/SKILL.md
+  - plugins/onex/skills/agent_healthcheck/topics.yaml
+  backing_nodes:
+  - name: node_worker_stall_recovery
+    path: omnimarket/src/omnimarket/nodes/node_worker_stall_recovery
+    contract_path: omnimarket/src/omnimarket/nodes/node_worker_stall_recovery/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: aislop_sweep
+  path: plugins/onex/skills/aislop_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/aislop_sweep/SKILL.md
+  - plugins/onex/skills/aislop_sweep/prompt.md
+  - plugins/onex/skills/aislop_sweep/topics.yaml
+  backing_nodes:
+  - name: node_aislop_sweep
+    path: omnimarket/src/omnimarket/nodes/node_aislop_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_aislop_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: architectural_invariant_loop
+  path: plugins/onex/skills/architectural_invariant_loop/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/architectural_invariant_loop/SKILL.md
+  backing_nodes:
+  - name: node_architectural_invariant_loop
+    path: omnimarket/src/omnimarket/nodes/node_architectural_invariant_loop
+    contract_path: omnimarket/src/omnimarket/nodes/node_architectural_invariant_loop/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: authorize
+  path: plugins/onex/skills/authorize/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/authorize/SKILL.md
+  backing_nodes:
+  - name: node_authorize
+    path: omnimarket/src/omnimarket/nodes/node_authorize
+    contract_path: omnimarket/src/omnimarket/nodes/node_authorize/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: auto_merge
+  path: plugins/onex/skills/auto_merge/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/auto_merge/SKILL.md
+  - plugins/onex/skills/auto_merge/prompt.md
+  - plugins/onex/skills/auto_merge/topics.yaml
+  backing_nodes:
+  - name: node_auto_merge_effect
+    path: omnimarket/src/omnimarket/nodes/node_auto_merge_effect
+    contract_path: omnimarket/src/omnimarket/nodes/node_auto_merge_effect/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: autopilot
+  path: plugins/onex/skills/autopilot/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/autopilot/SKILL.md
+  backing_nodes:
+  - name: node_skill_autopilot_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/autopilot/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_autopilot_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_autopilot_orchestrator
+  class: dispatch
+- name: baseline
+  path: plugins/onex/skills/baseline/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/baseline/SKILL.md
+  backing_nodes:
+  - name: node_baseline_capture
+    path: omnimarket/src/omnimarket/nodes/node_baseline_capture
+    contract_path: omnimarket/src/omnimarket/nodes/node_baseline_capture/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_baseline_compare
+    path: omnimarket/src/omnimarket/nodes/node_baseline_compare
+    contract_path: omnimarket/src/omnimarket/nodes/node_baseline_compare/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: build_loop
+  path: plugins/onex/skills/build_loop/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/build_loop/SKILL.md
+  - plugins/onex/skills/build_loop/prompt.md
+  - plugins/onex/skills/build_loop/topics.yaml
+  backing_nodes:
+  - name: node_build_loop
+    path: omnimarket/src/omnimarket/nodes/node_build_loop
+    contract_path: omnimarket/src/omnimarket/nodes/node_build_loop/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: bus_audit
+  path: plugins/onex/skills/bus_audit/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/bus_audit/SKILL.md
+  backing_nodes:
+  - name: node_bus_audit_compute
+    path: omnimarket/src/omnimarket/nodes/node_bus_audit_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_bus_audit_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: changelog_audit
+  path: plugins/onex/skills/changelog_audit/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/changelog_audit/SKILL.md
+  - plugins/onex/skills/changelog_audit/_lib/dispatch.py
+  backing_nodes:
+  - name: node_linear_ticket_creator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/changelog_audit/_lib/dispatch.py
+    line: 21
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/changelog_audit/SKILL.md
+    line: 1
+    message: Referenced backing node node_linear_ticket_creator is missing from nodes
+      root.
+    evidence: node_linear_ticket_creator
+  class: retired
+- name: checkpoint
+  path: plugins/onex/skills/checkpoint/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/checkpoint/SKILL.md
+  - plugins/onex/skills/checkpoint/topics.yaml
+  backing_nodes:
+  - name: node_checkpoint_effect
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_checkpoint_validate_compute
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_skill_checkpoint_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/checkpoint/SKILL.md
+    line: 1
+    message: Referenced backing node node_checkpoint_effect is missing from nodes
+      root.
+    evidence: node_checkpoint_effect
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/checkpoint/SKILL.md
+    line: 1
+    message: Referenced backing node node_checkpoint_validate_compute is missing from
+      nodes root.
+    evidence: node_checkpoint_validate_compute
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/checkpoint/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_checkpoint_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_checkpoint_orchestrator
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/checkpoint/SKILL.md
+    line: 59
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: onex/hooks/lib/checkpoint_manager.py` (functional CLI wrapper, no stub
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/checkpoint/SKILL.md
+    line: 59
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'stub): `omnibase_infra/src/omnibase_infra/nodes/node'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/checkpoint/SKILL.md
+    line: 61
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node_skill_checkpoint_orchestrator` (`maturity: stub'
+  class: stub_scaffold
+- name: ci_watch
+  path: plugins/onex/skills/ci_watch/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ci_watch/SKILL.md
+  - plugins/onex/skills/ci_watch/topics.yaml
+  backing_nodes:
+  - name: node_ci_watch
+    path: omnimarket/src/omnimarket/nodes/node_ci_watch
+    contract_path: omnimarket/src/omnimarket/nodes/node_ci_watch/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: coderabbit_triage
+  path: plugins/onex/skills/coderabbit_triage/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/coderabbit_triage/SKILL.md
+  - plugins/onex/skills/coderabbit_triage/prompt.md
+  backing_nodes:
+  - name: node_coderabbit_triage
+    path: omnimarket/src/omnimarket/nodes/node_coderabbit_triage
+    contract_path: omnimarket/src/omnimarket/nodes/node_coderabbit_triage/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: compliance_sweep
+  path: plugins/onex/skills/compliance_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/compliance_sweep/SKILL.md
+  - plugins/onex/skills/compliance_sweep/prompt.md
+  backing_nodes:
+  - name: node_compliance_sweep
+    path: omnimarket/src/omnimarket/nodes/node_compliance_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_compliance_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: contract_sweep
+  path: plugins/onex/skills/contract_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/contract_sweep/SKILL.md
+  - plugins/onex/skills/contract_sweep/prompt.md
+  backing_nodes:
+  - name: node_contract_drift_compute
+    path: omnimarket/src/omnimarket/nodes/node_contract_drift_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_contract_drift_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_contract_sweep
+    path: omnimarket/src/omnimarket/nodes/node_contract_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_contract_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_name
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_type
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_version
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/contract_sweep/SKILL.md
+    line: 214
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: python -m omnimarket.nodes.
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/contract_sweep/prompt.md
+    line: 359
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: python -m omnimarket.nodes.
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/contract_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_name is missing from nodes root.
+    evidence: node_name
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/contract_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_type is missing from nodes root.
+    evidence: node_type
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/contract_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_version is missing from nodes root.
+    evidence: node_version
+  class: dispatch
+- name: coverage_sweep
+  path: plugins/onex/skills/coverage_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/coverage_sweep/SKILL.md
+  - plugins/onex/skills/coverage_sweep/prompt.md
+  - plugins/onex/skills/coverage_sweep/topics.yaml
+  backing_nodes:
+  - name: node_coverage_sweep
+    path: omnimarket/src/omnimarket/nodes/node_coverage_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_coverage_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: create_followup_tickets
+  path: plugins/onex/skills/create_followup_tickets/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/create_followup_tickets/SKILL.md
+  - plugins/onex/skills/create_followup_tickets/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: create_ticket
+  path: plugins/onex/skills/create_ticket/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/create_ticket/SKILL.md
+  - plugins/onex/skills/create_ticket/prompt.md
+  - plugins/onex/skills/create_ticket/topics.yaml
+  backing_nodes:
+  - name: node_create_ticket
+    path: omnimarket/src/omnimarket/nodes/node_create_ticket
+    contract_path: omnimarket/src/omnimarket/nodes/node_create_ticket/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: dashboard_sweep
+  path: plugins/onex/skills/dashboard_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dashboard_sweep/SKILL.md
+  - plugins/onex/skills/dashboard_sweep/prompt.md
+  - plugins/onex/skills/dashboard_sweep/topics.yaml
+  backing_nodes:
+  - name: node_dashboard_sweep
+    path: omnimarket/src/omnimarket/nodes/node_dashboard_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_dashboard_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dashboard_sweep/prompt.md
+    line: 268
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dashboard_sweep/prompt.md
+    line: 323
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dashboard_sweep/prompt.md
+    line: 347
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  class: stub_scaffold
+- name: data_flow_sweep
+  path: plugins/onex/skills/data_flow_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/data_flow_sweep/SKILL.md
+  - plugins/onex/skills/data_flow_sweep/prompt.md
+  - plugins/onex/skills/data_flow_sweep/topics.yaml
+  backing_nodes:
+  - name: node_data_flow_sweep
+    path: omnimarket/src/omnimarket/nodes/node_data_flow_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_data_flow_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: database_sweep
+  path: plugins/onex/skills/database_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/database_sweep/SKILL.md
+  - plugins/onex/skills/database_sweep/prompt.md
+  - plugins/onex/skills/database_sweep/topics.yaml
+  backing_nodes:
+  - name: node_database_sweep
+    path: omnimarket/src/omnimarket/nodes/node_database_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_database_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: decision_store
+  path: plugins/onex/skills/decision_store/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/decision_store/SKILL.md
+  - plugins/onex/skills/decision_store/prompt.md
+  - plugins/onex/skills/decision_store/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: decompose_epic
+  path: plugins/onex/skills/decompose_epic/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/decompose_epic/SKILL.md
+  - plugins/onex/skills/decompose_epic/prompt.md
+  - plugins/onex/skills/decompose_epic/topics.yaml
+  backing_nodes: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/decompose_epic/SKILL.md
+    line: 97
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/decompose_epic/SKILL.md
+    line: 148
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'not yet implemented.** Write to: `$ONEX'
+  class: stub_scaffold
+- name: delegate
+  path: plugins/onex/skills/delegate/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/delegate/SKILL.md
+  - plugins/onex/skills/delegate/prompt.md
+  backing_nodes:
+  - name: node_delegate_skill_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: demo
+  path: plugins/onex/skills/demo/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/demo/SKILL.md
+  - plugins/onex/skills/demo/_lib/__init__.py
+  - plugins/onex/skills/demo/_lib/dispatch.py
+  - plugins/onex/skills/demo/_lib/topics.py
+  backing_nodes:
+  - name: node_demo_cost_compute
+    path: omnimarket/src/omnimarket/nodes/node_demo_cost_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_demo_cost_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_demo_fanout_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_demo_fanout_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_demo_fanout_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_demo_renderer_effect
+    path: omnimarket/src/omnimarket/nodes/node_demo_renderer_effect
+    contract_path: omnimarket/src/omnimarket/nodes/node_demo_renderer_effect/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/demo/_lib/dispatch.py
+    line: 89
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'onex-deterministic": { "outputs": [ "Deterministic fixture: generated
+      local test scaffold'
+  class: stub_scaffold
+- name: demo_readiness_team
+  path: plugins/onex/skills/demo_readiness_team/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/demo_readiness_team/SKILL.md
+  backing_nodes:
+  - name: node_demo_drift_detector
+    path: omnimarket/src/omnimarket/nodes/node_demo_drift_detector
+    contract_path: omnimarket/src/omnimarket/nodes/node_demo_drift_detector/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_demo_fix_dispatcher
+    path: omnimarket/src/omnimarket/nodes/node_demo_fix_dispatcher
+    contract_path: omnimarket/src/omnimarket/nodes/node_demo_fix_dispatcher/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_demo_rehearsal
+    path: omnimarket/src/omnimarket/nodes/node_demo_rehearsal
+    contract_path: omnimarket/src/omnimarket/nodes/node_demo_rehearsal/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_morning_handoff_generator
+    path: omnimarket/src/omnimarket/nodes/node_morning_handoff_generator
+    contract_path: omnimarket/src/omnimarket/nodes/node_morning_handoff_generator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_handler_import
+    severity: ERROR
+    path: plugins/onex/skills/demo_readiness_team/SKILL.md
+    line: 153
+    message: Skill surface imports an omnimarket handler directly instead of routing
+      through a node contract.
+    evidence: from omnimarket.nodes.node_demo_rehearsal.handlers.handler_demo_rehearsal
+      import
+  - kind: direct_handler_import
+    severity: ERROR
+    path: plugins/onex/skills/demo_readiness_team/SKILL.md
+    line: 169
+    message: Skill surface imports an omnimarket handler directly instead of routing
+      through a node contract.
+    evidence: from omnimarket.nodes.node_demo_drift_detector.handlers.handler_demo_drift_detector
+      import
+  - kind: direct_handler_import
+    severity: ERROR
+    path: plugins/onex/skills/demo_readiness_team/SKILL.md
+    line: 185
+    message: Skill surface imports an omnimarket handler directly instead of routing
+      through a node contract.
+    evidence: from omnimarket.nodes.node_demo_fix_dispatcher.handlers.handler_demo_fix_dispatcher
+      import
+  - kind: direct_handler_import
+    severity: ERROR
+    path: plugins/onex/skills/demo_readiness_team/SKILL.md
+    line: 202
+    message: Skill surface imports an omnimarket handler directly instead of routing
+      through a node contract.
+    evidence: from omnimarket.nodes.node_morning_handoff_generator.handlers.handler_morning_handoff_generator
+      import
+  class: dispatch
+- name: dep_cascade_dedup
+  path: plugins/onex/skills/dep_cascade_dedup/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dep_cascade_dedup/SKILL.md
+  - plugins/onex/skills/dep_cascade_dedup/topics.yaml
+  backing_nodes: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dep_cascade_dedup/SKILL.md
+    line: 18
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh repo
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dep_cascade_dedup/SKILL.md
+    line: 67
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dep_cascade_dedup/SKILL.md
+    line: 96
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  class: retired
+- name: design_to_plan
+  path: plugins/onex/skills/design_to_plan/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/design_to_plan/SKILL.md
+  - plugins/onex/skills/design_to_plan/prompt.md
+  - plugins/onex/skills/design_to_plan/topics.yaml
+  backing_nodes:
+  - name: node_design_to_plan
+    path: omnimarket/src/omnimarket/nodes/node_design_to_plan
+    contract_path: omnimarket/src/omnimarket/nodes/node_design_to_plan/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: dispatch_engine
+  path: plugins/onex/skills/dispatch_engine/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dispatch_engine/SKILL.md
+  - plugins/onex/skills/dispatch_engine/_lib/__init__.py
+  - plugins/onex/skills/dispatch_engine/_lib/run.py
+  - plugins/onex/skills/dispatch_engine/run.sh
+  - plugins/onex/skills/dispatch_engine/topics.yaml
+  backing_nodes:
+  - name: node_skill_dispatch_engine_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_skill_dispatch_engine_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_skill_dispatch_engine_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_skill_overseer_verify_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_skill_overseer_verify_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_skill_overseer_verify_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dispatch_engine/_lib/run.py
+    line: 154
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dispatch_engine/_lib/run.py
+    line: 157
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/dispatch_engine/_lib/run.py
+    line: 164
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dispatch_engine/SKILL.md
+    line: 12
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'dispatch-only - routing-enforced author: omninode args: - name: --dry-run
+      description: "Return a dry_run placeholder'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dispatch_engine/SKILL.md
+    line: 43
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: onex run-node node_skill_dispatch_engine_orchestrator` path. No inline
+      placeholder
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dispatch_engine/SKILL.md
+    line: 45
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'Scaffold only. Returned a `"dispatched"` placeholder. ## What this
+      skill does Dispatches through `onex run-node node_skill_dispatch'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dispatch_engine/SKILL.md
+    line: 49
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: node owns backlog polling, gap detection, and builder fan-out. This
+      shim contains no orchestration logic, no inline placeholder
+  class: stub_scaffold
+- name: dispatch_queue_drainer
+  path: plugins/onex/skills/dispatch_queue_drainer/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dispatch_queue_drainer/SKILL.md
+  backing_nodes:
+  - name: node_dispatch_queue_drainer
+    path: omnimarket/src/omnimarket/nodes/node_dispatch_queue_drainer
+    contract_path: omnimarket/src/omnimarket/nodes/node_dispatch_queue_drainer/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_dispatch_worker
+    path: omnimarket/src/omnimarket/nodes/node_dispatch_worker
+    contract_path: omnimarket/src/omnimarket/nodes/node_dispatch_worker/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: dispatch_watchdog
+  path: plugins/onex/skills/dispatch_watchdog/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dispatch_watchdog/SKILL.md
+  backing_nodes:
+  - name: node_skill_dispatch_watchdog_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_worker_stall_recovery
+    path: omnimarket/src/omnimarket/nodes/node_worker_stall_recovery
+    contract_path: omnimarket/src/omnimarket/nodes/node_worker_stall_recovery/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/dispatch_watchdog/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_dispatch_watchdog_orchestrator is
+      missing from nodes root.
+    evidence: node_skill_dispatch_watchdog_orchestrator
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dispatch_watchdog/SKILL.md
+    line: 39
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node" (`node_skill_dispatch_watchdog_orchestrator`) is a generated
+      Polly-passthrough shell (`maturity: stub'
+  class: stub_scaffold
+- name: dispatch_worker
+  path: plugins/onex/skills/dispatch_worker/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dispatch_worker/SKILL.md
+  - plugins/onex/skills/dispatch_worker/prompt.md
+  - plugins/onex/skills/dispatch_worker/topics.yaml
+  backing_nodes:
+  - name: node_dispatch_worker
+    path: omnimarket/src/omnimarket/nodes/node_dispatch_worker
+    contract_path: omnimarket/src/omnimarket/nodes/node_dispatch_worker/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_redeploy_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_handler_import
+    severity: ERROR
+    path: plugins/onex/skills/dispatch_worker/prompt.md
+    line: 58
+    message: Skill surface imports an omnimarket handler directly instead of routing
+      through a node contract.
+    evidence: from omnimarket.nodes.node_dispatch_worker.handlers.handler_dispatch_worker
+      import
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dispatch_worker/prompt.md
+    line: 163
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: scaffold_occ_receipt.py <TICKET-ID> \ --pr-number <OCC-PR#> --commit-sha
+      <code-PR-head-SHA> \ --occ-root <path-to-onex
+  class: stub_scaffold
+- name: doc_freshness_sweep
+  path: plugins/onex/skills/doc_freshness_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/doc_freshness_sweep/SKILL.md
+  - plugins/onex/skills/doc_freshness_sweep/prompt.md
+  backing_nodes:
+  - name: node_doc_freshness_sweep
+    path: omnimarket/src/omnimarket/nodes/node_doc_freshness_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_doc_freshness_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: docs_dirty_alert
+  path: plugins/onex/skills/docs_dirty_alert/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/docs_dirty_alert/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: dod_sweep
+  path: plugins/onex/skills/dod_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dod_sweep/SKILL.md
+  - plugins/onex/skills/dod_sweep/prompt.md
+  backing_nodes:
+  - name: node_dod_sweep_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_dod_sweep_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_dod_sweep_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dod_sweep/SKILL.md
+    line: 61
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: node_dod_sweep_orchestrator handler --> receipt persistence is not yet
+      implemented
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/dod_sweep/prompt.md
+    line: 1
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: dispatches to node_dod_sweep_orchestrator (stub
+  class: stub_scaffold
+- name: dod_verify
+  path: plugins/onex/skills/dod_verify/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/dod_verify/SKILL.md
+  - plugins/onex/skills/dod_verify/prompt.md
+  backing_nodes:
+  - name: node_dod_verify
+    path: omnimarket/src/omnimarket/nodes/node_dod_verify
+    contract_path: omnimarket/src/omnimarket/nodes/node_dod_verify/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: duplication_sweep
+  path: plugins/onex/skills/duplication_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/duplication_sweep/SKILL.md
+  - plugins/onex/skills/duplication_sweep/prompt.md
+  - plugins/onex/skills/duplication_sweep/topics.yaml
+  backing_nodes:
+  - name: node_duplication_sweep
+    path: omnimarket/src/omnimarket/nodes/node_duplication_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_duplication_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: env_parity
+  path: plugins/onex/skills/env_parity/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/env_parity/SKILL.md
+  - plugins/onex/skills/env_parity/prompt.md
+  - plugins/onex/skills/env_parity/topics.yaml
+  backing_nodes:
+  - name: node_env_parity_compute
+    path: omnimarket/src/omnimarket/nodes/node_env_parity_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_env_parity_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/env_parity/prompt.md
+    line: 1
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: dispatches to node_env_parity_compute (stub
+  class: stub_scaffold
+- name: env_sync_alert
+  path: plugins/onex/skills/env_sync_alert/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/env_sync_alert/SKILL.md
+  - plugins/onex/skills/env_sync_alert/_lib/__init__.py
+  - plugins/onex/skills/env_sync_alert/_lib/check.py
+  backing_nodes: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/env_sync_alert/_lib/check.py
+    line: 253
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/env_sync_alert/_lib/check.py
+    line: 288
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/env_sync_alert/_lib/check.py
+    line: 297
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: urllib.request
+  class: pure_skill
+- name: epic_team
+  path: plugins/onex/skills/epic_team/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/epic_team/SKILL.md
+  - plugins/onex/skills/epic_team/prompt.md
+  - plugins/onex/skills/epic_team/repo_manifest.yaml
+  - plugins/onex/skills/epic_team/run.sh
+  - plugins/onex/skills/epic_team/topics.yaml
+  backing_nodes:
+  - name: node_skill_epic_team_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/epic_team/prompt.md
+    line: 188
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/epic_team/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_epic_team_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_epic_team_orchestrator
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/epic_team/SKILL.md
+    line: 25
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node" (`node_skill_epic_team_orchestrator`) is a generated Polly-passthrough
+      shell (`maturity: stub'
+  class: retired
+- name: executing_plans
+  path: plugins/onex/skills/executing_plans/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/executing_plans/SKILL.md
+  - plugins/onex/skills/executing_plans/topics.yaml
+  backing_nodes:
+  - name: node_skill_executing_plans_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/executing_plans/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_executing_plans_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_executing_plans_orchestrator
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/executing_plans/SKILL.md
+    line: 20
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node_skill_executing_plans_orchestrator`) is a Polly-passthrough (`maturity:
+      stub'
+  class: stub_scaffold
+- name: feature_dashboard
+  path: plugins/onex/skills/feature_dashboard/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/feature_dashboard/SKILL.md
+  - plugins/onex/skills/feature_dashboard/topics.yaml
+  backing_nodes:
+  - name: node_skill_
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_skill_feature_dashboard_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_type
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/feature_dashboard/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_ is missing from nodes root.
+    evidence: node_skill_
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/feature_dashboard/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_feature_dashboard_orchestrator is
+      missing from nodes root.
+    evidence: node_skill_feature_dashboard_orchestrator
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/feature_dashboard/SKILL.md
+    line: 1
+    message: Referenced backing node node_type is missing from nodes root.
+    evidence: node_type
+  class: stub_scaffold
+- name: friction_triage
+  path: plugins/onex/skills/friction_triage/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/friction_triage/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: gap
+  path: plugins/onex/skills/gap/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/gap/SKILL.md
+  - plugins/onex/skills/gap/legacy-denylist.yaml
+  - plugins/onex/skills/gap/prompt.md
+  - plugins/onex/skills/gap/suppressions.yaml
+  - plugins/onex/skills/gap/topics.yaml
+  backing_nodes:
+  - name: node_gap_compute
+    path: omnimarket/src/omnimarket/nodes/node_gap_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_gap_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/gap/prompt.md
+    line: 115
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh api
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/gap/prompt.md
+    line: 1
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: dispatches to node_gap_compute (stub
+  class: retired
+- name: generate_node
+  path: plugins/onex/skills/generate_node/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/generate_node/README.md
+  - plugins/onex/skills/generate_node/SKILL.md
+  - plugins/onex/skills/generate_node/topics.yaml
+  backing_nodes:
+  - name: node_desc
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_name
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/generate_node/SKILL.md
+    line: 359
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl http://
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/generate_node/SKILL.md
+    line: 360
+    message: 'Skill boundary validator found a direct API bypass: Use a node handler
+      for HTTP calls instead of inline ''curl''. Dispatch via: uv run onex run node_<name>
+      -- <flags>'
+    evidence: 'curl http://<redpanda-console-host>:8080  # Redpanda Console'
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/generate_node/SKILL.md
+    line: 1
+    message: Referenced backing node node_desc is missing from nodes root.
+    evidence: node_desc
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/generate_node/SKILL.md
+    line: 1
+    message: Referenced backing node node_name is missing from nodes root.
+    evidence: node_name
+  class: dispatch
+- name: golden_chain_sweep
+  path: plugins/onex/skills/golden_chain_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/golden_chain_sweep/SKILL.md
+  - plugins/onex/skills/golden_chain_sweep/prompt.md
+  backing_nodes:
+  - name: node_golden_chain_sweep
+    path: omnimarket/src/omnimarket/nodes/node_golden_chain_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_name
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/golden_chain_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_name is missing from nodes root.
+    evidence: node_name
+  class: dispatch
+- name: handoff
+  path: plugins/onex/skills/handoff/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/handoff/SKILL.md
+  - plugins/onex/skills/handoff/prompt.md
+  backing_nodes: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/handoff/prompt.md
+    line: 35
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/handoff/prompt.md
+    line: 38
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/handoff/prompt.md
+    line: 45
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/handoff/prompt.md
+    line: 131
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  class: retired
+- name: hook_health_alert
+  path: plugins/onex/skills/hook_health_alert/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/hook_health_alert/SKILL.md
+  backing_nodes:
+  - name: node_dispatch
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_dispatch_dimensions
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_platform_diagnostics
+    path: omnimarket/src/omnimarket/nodes/node_platform_diagnostics
+    contract_path: omnimarket/src/omnimarket/nodes/node_platform_diagnostics/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/hook_health_alert/SKILL.md
+    line: 1
+    message: Referenced backing node node_dispatch is missing from nodes root.
+    evidence: node_dispatch
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/hook_health_alert/SKILL.md
+    line: 1
+    message: Referenced backing node node_dispatch_dimensions is missing from nodes
+      root.
+    evidence: node_dispatch_dimensions
+  class: stub_scaffold
+- name: hostile_reviewer
+  path: plugins/onex/skills/hostile_reviewer/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/hostile_reviewer/SKILL.md
+  - plugins/onex/skills/hostile_reviewer/prompt.md
+  - plugins/onex/skills/hostile_reviewer/topics.yaml
+  backing_nodes:
+  - name: node_hostile_reviewer_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_hostile_reviewer_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_hostile_reviewer_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: insights_to_plan
+  path: plugins/onex/skills/insights_to_plan/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/insights_to_plan/SKILL.md
+  - plugins/onex/skills/insights_to_plan/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: integration_sweep
+  path: plugins/onex/skills/integration_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/integration_sweep/SKILL.md
+  - plugins/onex/skills/integration_sweep/prompt.md
+  - plugins/onex/skills/integration_sweep/topics.yaml
+  backing_nodes:
+  - name: node_integration_sweep_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_integration_sweep_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_integration_sweep_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/integration_sweep/prompt.md
+    line: 1
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: dispatches to node_integration_sweep_orchestrator (stub
+  class: stub_scaffold
+- name: linear_housekeeping
+  path: plugins/onex/skills/linear_housekeeping/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/linear_housekeeping/SKILL.md
+  - plugins/onex/skills/linear_housekeeping/prompt.md
+  - plugins/onex/skills/linear_housekeeping/topics.yaml
+  backing_nodes:
+  - name: node_linear_triage
+    path: omnimarket/src/omnimarket/nodes/node_linear_triage
+    contract_path: omnimarket/src/omnimarket/nodes/node_linear_triage/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: local_review
+  path: plugins/onex/skills/local_review/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/local_review/SKILL.md
+  - plugins/onex/skills/local_review/prompt.md
+  - plugins/onex/skills/local_review/topics.yaml
+  backing_nodes:
+  - name: node_local_review
+    path: omnimarket/src/omnimarket/nodes/node_local_review
+    contract_path: omnimarket/src/omnimarket/nodes/node_local_review/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: login
+  path: plugins/onex/skills/login/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/login/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: merge_sweep
+  path: plugins/onex/skills/merge_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/merge_sweep/SKILL.md
+  - plugins/onex/skills/merge_sweep/prompt.md
+  - plugins/onex/skills/merge_sweep/topics.yaml
+  backing_nodes:
+  - name: node_pr_lifecycle_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: multi_agent
+  path: plugins/onex/skills/multi_agent/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/multi_agent/SKILL.md
+  - plugins/onex/skills/multi_agent/prompt.md
+  - plugins/onex/skills/multi_agent/topics.yaml
+  backing_nodes:
+  - name: node_user_reducer
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/multi_agent/SKILL.md
+    line: 316
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/multi_agent/SKILL.md
+    line: 336
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/multi_agent/SKILL.md
+    line: 337
+    message: 'Skill boundary validator found a direct API bypass: Use a node handler
+      instead of direct ''gh'' CLI calls. Dispatch via: uv run onex run node_<name>
+      -- <flags>'
+    evidence: gh pr merge --auto --squash "$PR_NUMBER" --repo "$REPO"
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/multi_agent/SKILL.md
+    line: 1
+    message: Referenced backing node node_user_reducer is missing from nodes root.
+    evidence: node_user_reducer
+  class: dispatch
+- name: observability
+  path: plugins/onex/skills/observability/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/observability/SKILL.md
+  - plugins/onex/skills/observability/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: onboarding
+  path: plugins/onex/skills/onboarding/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/onboarding/SKILL.md
+  backing_nodes:
+  - name: node_onboarding
+    path: omnimarket/src/omnimarket/nodes/node_onboarding
+    contract_path: omnimarket/src/omnimarket/nodes/node_onboarding/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_handler_import
+    severity: ERROR
+    path: plugins/onex/skills/onboarding/SKILL.md
+    line: 70
+    message: Skill surface imports an omnimarket handler directly instead of routing
+      through a node contract.
+    evidence: from omnimarket.nodes.node_onboarding.handlers.handler_onboarding import
+  class: dispatch
+- name: pipeline_audit
+  path: plugins/onex/skills/pipeline_audit/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/pipeline_audit/SKILL.md
+  - plugins/onex/skills/pipeline_audit/topics.yaml
+  backing_nodes:
+  - name: node_skill_pipeline_audit_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/pipeline_audit/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_pipeline_audit_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_pipeline_audit_orchestrator
+  class: retired
+- name: pipeline_fill
+  path: plugins/onex/skills/pipeline_fill/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/pipeline_fill/SKILL.md
+  backing_nodes:
+  - name: node_pipeline_fill
+    path: omnimarket/src/omnimarket/nodes/node_pipeline_fill
+    contract_path: omnimarket/src/omnimarket/nodes/node_pipeline_fill/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: plan_audit
+  path: plugins/onex/skills/plan_audit/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/plan_audit/SKILL.md
+  - plugins/onex/skills/plan_audit/prompt.md
+  backing_nodes:
+  - name: node_skill_plan_audit_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/plan_audit/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_plan_audit_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_plan_audit_orchestrator
+  class: dispatch
+- name: plan_to_tickets
+  path: plugins/onex/skills/plan_to_tickets/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/plan_to_tickets/SKILL.md
+  - plugins/onex/skills/plan_to_tickets/prompt.md
+  - plugins/onex/skills/plan_to_tickets/topics.yaml
+  backing_nodes:
+  - name: node_plan_to_tickets
+    path: omnimarket/src/omnimarket/nodes/node_plan_to_tickets
+    contract_path: omnimarket/src/omnimarket/nodes/node_plan_to_tickets/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: platform_readiness
+  path: plugins/onex/skills/platform_readiness/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/platform_readiness/SKILL.md
+  - plugins/onex/skills/platform_readiness/prompt.md
+  backing_nodes:
+  - name: node_platform_readiness
+    path: omnimarket/src/omnimarket/nodes/node_platform_readiness
+    contract_path: omnimarket/src/omnimarket/nodes/node_platform_readiness/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: pr_polish
+  path: plugins/onex/skills/pr_polish/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/pr_polish/SKILL.md
+  - plugins/onex/skills/pr_polish/prompt.md
+  - plugins/onex/skills/pr_polish/topics.yaml
+  backing_nodes:
+  - name: node_pr_polish
+    path: omnimarket/src/omnimarket/nodes/node_pr_polish
+    contract_path: omnimarket/src/omnimarket/nodes/node_pr_polish/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: pr_review
+  path: plugins/onex/skills/pr_review/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/pr_review/SKILL.md
+  - plugins/onex/skills/pr_review/prompt.md
+  - plugins/onex/skills/pr_review/topics.yaml
+  backing_nodes:
+  - name: node_skill_pr_review_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/pr_review/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_pr_review_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_pr_review_orchestrator
+  class: dispatch
+- name: pr_review_bot
+  path: plugins/onex/skills/pr_review_bot/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/pr_review_bot/SKILL.md
+  - plugins/onex/skills/pr_review_bot/prompt.md
+  backing_nodes:
+  - name: node_pr_review_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_pr_review_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_pr_review_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_skill_pr_review_bot_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/pr_review_bot/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_pr_review_bot_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_pr_review_bot_orchestrator
+  class: dispatch
+- name: pr_watch
+  path: plugins/onex/skills/pr_watch/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/pr_watch/SKILL.md
+  - plugins/onex/skills/pr_watch/prompt.md
+  - plugins/onex/skills/pr_watch/topics.yaml
+  backing_nodes:
+  - name: node_github_pr_watcher_effect
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_pr_watch_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_pr_watch_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_pr_watch_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/pr_watch/SKILL.md
+    line: 1
+    message: Referenced backing node node_github_pr_watcher_effect is missing from
+      nodes root.
+    evidence: node_github_pr_watcher_effect
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/pr_watch/prompt.md
+    line: 1
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: dispatches to node_pr_watch_orchestrator (stub
+  class: stub_scaffold
+- name: preflight
+  path: plugins/onex/skills/preflight/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/preflight/SKILL.md
+  backing_nodes:
+  - name: node_session_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_session_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_session_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/preflight/SKILL.md
+    line: 126
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  class: dispatch
+- name: recall
+  path: plugins/onex/skills/recall/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/recall/SKILL.md
+  backing_nodes:
+  - name: node_agent_learning_retrieval_effect
+    path: omnimarket/src/omnimarket/nodes/node_agent_learning_retrieval_effect
+    contract_path: omnimarket/src/omnimarket/nodes/node_agent_learning_retrieval_effect/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_knowledge_query_federation_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_knowledge_query_federation_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_knowledge_query_federation_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: record_friction
+  path: plugins/onex/skills/record_friction/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/record_friction/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: redeploy
+  path: plugins/onex/skills/redeploy/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/redeploy/SKILL.md
+  - plugins/onex/skills/redeploy/topics.yaml
+  backing_nodes:
+  - name: node_prod_promotion_gate_compute
+    path: omnimarket/src/omnimarket/nodes/node_prod_promotion_gate_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_prod_promotion_gate_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_redeploy
+    path: omnimarket/src/omnimarket/nodes/node_redeploy
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_redeploy_deploy_effect
+    path: omnimarket/src/omnimarket/nodes/node_redeploy_deploy_effect
+    contract_path: omnimarket/src/omnimarket/nodes/node_redeploy_deploy_effect/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_redeploy_fsm_reducer
+    path: omnimarket/src/omnimarket/nodes/node_redeploy_fsm_reducer
+    contract_path: omnimarket/src/omnimarket/nodes/node_redeploy_fsm_reducer/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_redeploy_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_contract
+    severity: ERROR
+    path: omnimarket/src/omnimarket/nodes/node_redeploy
+    line: 1
+    message: Referenced backing node node_redeploy is missing contract.yaml.
+    evidence: node_redeploy
+  class: dispatch
+- name: refill_sprint
+  path: plugins/onex/skills/refill_sprint/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/refill_sprint/SKILL.md
+  - plugins/onex/skills/refill_sprint/prompt.md
+  - plugins/onex/skills/refill_sprint/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: retired
+- name: release
+  path: plugins/onex/skills/release/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/release/SKILL.md
+  - plugins/onex/skills/release/prompt.md
+  - plugins/onex/skills/release/topics.yaml
+  backing_nodes:
+  - name: node_release
+    path: omnimarket/src/omnimarket/nodes/node_release
+    contract_path: omnimarket/src/omnimarket/nodes/node_release/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/release/prompt.md
+    line: 974
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/release/prompt.md
+    line: 1023
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 2
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: "PLACEHOLDER \u2014 node"
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 67
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: PLACEHOLDER > > **The routed node (`node
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 73
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: node does not execute the phase. > > Everything in the **"Target design
+      (NOT YET IMPLEMENTED
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 90
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: placeholder) token is parsed only ``` > All flags are parsed by the
+      node
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 114
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: "placeholder; full migration is pending. ### Step 3 \u2014 Run the placeholder\
+      \ FSM `HandlerRelease` (`omnimarket/.../node"
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 166
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: node -> omnimarket/src/omnimarket/nodes/node_release/ (STRUCTURAL PLACEHOLDER
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/release/SKILL.md
+    line: 167
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node_release/contract.yaml ``` --- # Target design (NOT YET IMPLEMENTED'
+  class: stub_scaffold
+- name: resume_session
+  path: plugins/onex/skills/resume_session/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/resume_session/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: stub_scaffold
+- name: rewind
+  path: plugins/onex/skills/rewind/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/rewind/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: rolling_plan_governor
+  path: plugins/onex/skills/rolling_plan_governor/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/rolling_plan_governor/SKILL.md
+  - plugins/onex/skills/rolling_plan_governor/prompt.md
+  backing_nodes: []
+  findings: []
+  class: retired
+- name: rrh
+  path: plugins/onex/skills/rrh/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/rrh/SKILL.md
+  - plugins/onex/skills/rrh/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: runner
+  path: plugins/onex/skills/runner/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/runner/SKILL.md
+  - plugins/onex/skills/runner/topics.yaml
+  backing_nodes:
+  - name: node_version
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/runner/SKILL.md
+    line: 161
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh api
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/runner/SKILL.md
+    line: 179
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh api
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/runner/SKILL.md
+    line: 204
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh api
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/runner/SKILL.md
+    line: 1
+    message: Referenced backing node node_version is missing from nodes root.
+    evidence: node_version
+  class: dispatch
+- name: runtime_closeout
+  path: plugins/onex/skills/runtime_closeout/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/runtime_closeout/SKILL.md
+  - plugins/onex/skills/runtime_closeout/topics.yaml
+  backing_nodes:
+  - name: node_golden_chain_sweep
+    path: omnimarket/src/omnimarket/nodes/node_golden_chain_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_integration_sweep
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_integration_sweep_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_integration_sweep_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_integration_sweep_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_redeploy_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_redeploy_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_runtime_closeout_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_runtime_closeout_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_runtime_closeout_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/runtime_closeout/SKILL.md
+    line: 1
+    message: Referenced backing node node_integration_sweep is missing from nodes
+      root.
+    evidence: node_integration_sweep
+  class: dispatch
+- name: runtime_sweep
+  path: plugins/onex/skills/runtime_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/runtime_sweep/SKILL.md
+  - plugins/onex/skills/runtime_sweep/prompt.md
+  - plugins/onex/skills/runtime_sweep/topics.yaml
+  backing_nodes:
+  - name: node_foo_bar
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_name
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_runtime_sweep
+    path: omnimarket/src/omnimarket/nodes/node_runtime_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_runtime_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/runtime_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_foo_bar is missing from nodes root.
+    evidence: node_foo_bar
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/runtime_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_name is missing from nodes root.
+    evidence: node_name
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/runtime_sweep/SKILL.md
+    line: 56
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: "Node Descriptions** \u2014 REAL / PLACEHOLDER"
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/runtime_sweep/prompt.md
+    line: 43
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'placeholder if it: - Matches the auto-generated pattern `compute+{hash}`
+      or `Generated by generate_skill_node'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/runtime_sweep/prompt.md
+    line: 45
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: PLACEHOLDER", or "FIXME" (case-insensitive) - Is fewer than 10 characters
+      - Is identical to the node filename (e.g., `node
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/runtime_sweep/prompt.md
+    line: 50
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node: - `REAL`: meaningful description (>10 chars, not placeholder,
+      not filename) - `PLACEHOLDER`: matches any placeholder'
+  class: stub_scaffold
+- name: self_healing_dispatch
+  path: plugins/onex/skills/self_healing_dispatch/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/self_healing_dispatch/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: session
+  path: plugins/onex/skills/session/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/session/SKILL.md
+  - plugins/onex/skills/session/prompt.md
+  backing_nodes:
+  - name: node_session_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_session_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_session_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: set_session
+  path: plugins/onex/skills/set_session/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/set_session/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: shim_audit
+  path: plugins/onex/skills/shim_audit/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/shim_audit/SKILL.md
+  - plugins/onex/skills/shim_audit/prompt.md
+  backing_nodes:
+  - name: node_shim_scanner
+    path: omnimarket/src/omnimarket/nodes/node_shim_scanner
+    contract_path: omnimarket/src/omnimarket/nodes/node_shim_scanner/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: ship_dirty_canonical
+  path: plugins/onex/skills/ship_dirty_canonical/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ship_dirty_canonical/SKILL.md
+  backing_nodes:
+  - name: node_dirty_canonical_sweep
+    path: omnimarket/src/omnimarket/nodes/node_dirty_canonical_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_dirty_canonical_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/ship_dirty_canonical/SKILL.md
+    line: 81
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: python -m omnimarket.nodes.
+  class: dispatch
+- name: skill_functional_audit
+  path: plugins/onex/skills/skill_functional_audit/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/skill_functional_audit/SKILL.md
+  backing_nodes:
+  - name: node_aislop_sweep
+    path: omnimarket/src/omnimarket/nodes/node_aislop_sweep
+    contract_path: omnimarket/src/omnimarket/nodes/node_aislop_sweep/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_checkpoint_effect
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_checkpoint_validate_compute
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_path
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_pipeline_fill
+    path: omnimarket/src/omnimarket/nodes/node_pipeline_fill
+    contract_path: omnimarket/src/omnimarket/nodes/node_pipeline_fill/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_session_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_session_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_session_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_worker_stall_recovery
+    path: omnimarket/src/omnimarket/nodes/node_worker_stall_recovery
+    contract_path: omnimarket/src/omnimarket/nodes/node_worker_stall_recovery/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 1
+    message: Referenced backing node node_checkpoint_effect is missing from nodes
+      root.
+    evidence: node_checkpoint_effect
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 1
+    message: Referenced backing node node_checkpoint_validate_compute is missing from
+      nodes root.
+    evidence: node_checkpoint_validate_compute
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 1
+    message: Referenced backing node node_path is missing from nodes root.
+    evidence: node_path
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 2
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: "onex skills \u2014 classifies by risk tier, invokes read-only skills,\
+      \ greps write skills for stub"
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 35
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'STUB verdicts found" - name: exit_code description: "0=clean, 1=facade/stub
+      found without Linear ticket" --- # /onex'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 68
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: "onex skills \u2014 checking backing nodes, stub"
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 146
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node name (grep: `Backed by|backing node|node_`), verify that node
+      exists at the stated path. ### 3b. Stub'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 150
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node-backed skills, scan handler files for stub markers: ```bash grep
+      -rn "raise NotImplementedError\|pass # TODO\|# STUB'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 153
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: STUB:\|Phase.*STUB\|TODO.*Implement" \ <node
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 157
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'STUB if entire handle() is stubbed). ### 3c. Pure instruction check
+      If no backing node'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 194
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'onex:session" classification: INTERACTIVE backing_node: "node_session_orchestrator"
+      backing_node_exists: true stub'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 203
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: "dispatch) are explicit stubs.\" ``` **Verdict values:** - `WORKS` \u2014\
+      \ backing exists, no stub"
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 235
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'STUB: 0 BROKEN: 0 facade_skills: - "onex:pipeline_fill" partial_skills:
+      - "onex:session" - "onex'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 243
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'onex:aislop_sweep" classification: READ-ONLY backing_node: "node_aislop_sweep"
+      backing_node_exists: true stub'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 291
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'STUB: 0 BROKEN: 0 Audit artifact: ${ONEX'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/skill_functional_audit/SKILL.md
+    line: 316
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'dispatch (no deterministic backing anywhere; the omniclaude node is
+      a `maturity: stub'
+  class: stub_scaffold
+- name: start_environment
+  path: plugins/onex/skills/start_environment/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/start_environment/SKILL.md
+  backing_nodes:
+  - name: node_environment_health_scanner
+    path: omnimarket/src/omnimarket/nodes/node_environment_health_scanner
+    contract_path: omnimarket/src/omnimarket/nodes/node_environment_health_scanner/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/start_environment/SKILL.md
+    line: 41
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/start_environment/SKILL.md
+    line: 42
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/start_environment/SKILL.md
+    line: 100
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/start_environment/SKILL.md
+    line: 101
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  class: dispatch
+- name: status
+  path: plugins/onex/skills/status/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/status/SKILL.md
+  backing_nodes:
+  - name: node_pr_lifecycle_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: system_status
+  path: plugins/onex/skills/system_status/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/system_status/SKILL.md
+  - plugins/onex/skills/system_status/tests/README.md
+  - plugins/onex/skills/system_status/tests/run_tests.sh
+  - plugins/onex/skills/system_status/topics.yaml
+  backing_nodes:
+  - name: node_dispatch
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_dispatch_dimensions
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_platform_diagnostics
+    path: omnimarket/src/omnimarket/nodes/node_platform_diagnostics
+    contract_path: omnimarket/src/omnimarket/nodes/node_platform_diagnostics/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/system_status/SKILL.md
+    line: 1
+    message: Referenced backing node node_dispatch is missing from nodes root.
+    evidence: node_dispatch
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/system_status/SKILL.md
+    line: 1
+    message: Referenced backing node node_dispatch_dimensions is missing from nodes
+      root.
+    evidence: node_dispatch_dimensions
+  class: dispatch
+- name: system_status/check_agent_performance
+  path: plugins/onex/skills/system_status/check_agent_performance/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_agent_performance/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/check_database_health
+  path: plugins/onex/skills/system_status/check_database_health/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_database_health/SKILL.md
+  - plugins/onex/skills/system_status/check_database_health/_lib/__init__.py
+  - plugins/onex/skills/system_status/check_database_health/_lib/execute.py
+  backing_nodes: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/system_status/check_database_health/_lib/execute.py
+    line: 35
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: requests.get(
+  class: sub_skill
+- name: system_status/check_infrastructure
+  path: plugins/onex/skills/system_status/check_infrastructure/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_infrastructure/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/check_kafka_topics
+  path: plugins/onex/skills/system_status/check_kafka_topics/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_kafka_topics/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/check_pattern_discovery
+  path: plugins/onex/skills/system_status/check_pattern_discovery/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_pattern_discovery/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/check_recent_activity
+  path: plugins/onex/skills/system_status/check_recent_activity/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_recent_activity/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/check_service_status
+  path: plugins/onex/skills/system_status/check_service_status/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_service_status/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/check_system_health
+  path: plugins/onex/skills/system_status/check_system_health/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/check_system_health/SKILL.md
+  - plugins/onex/skills/system_status/check_system_health/_lib/execute.py
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/diagnose_issues
+  path: plugins/onex/skills/system_status/diagnose_issues/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/diagnose_issues/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: system_status/generate_status_report
+  path: plugins/onex/skills/system_status/generate_status_report/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: true
+  surface_files:
+  - plugins/onex/skills/system_status/generate_status_report/SKILL.md
+  backing_nodes: []
+  findings: []
+  class: sub_skill
+- name: systematic_debugging
+  path: plugins/onex/skills/systematic_debugging/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/systematic_debugging/SKILL.md
+  - plugins/onex/skills/systematic_debugging/find-polluter.sh
+  - plugins/onex/skills/systematic_debugging/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: tech_debt_sweep
+  path: plugins/onex/skills/tech_debt_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/tech_debt_sweep/SKILL.md
+  backing_nodes:
+  - name: node_skill_tech_debt_sweep_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/tech_debt_sweep/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_tech_debt_sweep_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_tech_debt_sweep_orchestrator
+  class: dispatch
+- name: ticket_pipeline
+  path: plugins/onex/skills/ticket_pipeline/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ticket_pipeline/SKILL.md
+  - plugins/onex/skills/ticket_pipeline/prompt.md
+  - plugins/onex/skills/ticket_pipeline/topics.yaml
+  backing_nodes:
+  - name: node_ticket_pipeline
+    path: omnimarket/src/omnimarket/nodes/node_ticket_pipeline
+    contract_path: omnimarket/src/omnimarket/nodes/node_ticket_pipeline/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: ticket_plan
+  path: plugins/onex/skills/ticket_plan/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ticket_plan/SKILL.md
+  - plugins/onex/skills/ticket_plan/prompt.md
+  - plugins/onex/skills/ticket_plan/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: ticket_work
+  path: plugins/onex/skills/ticket_work/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ticket_work/SKILL.md
+  - plugins/onex/skills/ticket_work/prompt.md
+  - plugins/onex/skills/ticket_work/topics.yaml
+  backing_nodes:
+  - name: node_ticket_research_enrichment_compute
+    path: omnimarket/src/omnimarket/nodes/node_ticket_research_enrichment_compute
+    contract_path: omnimarket/src/omnimarket/nodes/node_ticket_research_enrichment_compute/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_ticket_work
+    path: omnimarket/src/omnimarket/nodes/node_ticket_work
+    contract_path: omnimarket/src/omnimarket/nodes/node_ticket_work/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/ticket_work/SKILL.md
+    line: 132
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: node -> omnimarket/src/omnimarket/nodes/node_ticket_work/ (structural
+      placeholder
+  class: stub_scaffold
+- name: ticketing_epic_org
+  path: plugins/onex/skills/ticketing_epic_org/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ticketing_epic_org/SKILL.md
+  - plugins/onex/skills/ticketing_epic_org/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: ticketing_insights
+  path: plugins/onex/skills/ticketing_insights/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ticketing_insights/SKILL.md
+  - plugins/onex/skills/ticketing_insights/config.yaml
+  - plugins/onex/skills/ticketing_insights/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch
+- name: ticketing_triage
+  path: plugins/onex/skills/ticketing_triage/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/ticketing_triage/SKILL.md
+  - plugins/onex/skills/ticketing_triage/topics.yaml
+  backing_nodes:
+  - name: node_linear_triage
+    path: omnimarket/src/omnimarket/nodes/node_linear_triage
+    contract_path: omnimarket/src/omnimarket/nodes/node_linear_triage/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: two_strike_arbiter
+  path: plugins/onex/skills/two_strike_arbiter/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/two_strike_arbiter/SKILL.md
+  backing_nodes:
+  - name: node_two_strike_arbiter
+    path: omnimarket/src/omnimarket/nodes/node_two_strike_arbiter
+    contract_path: omnimarket/src/omnimarket/nodes/node_two_strike_arbiter/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: unstick_queue
+  path: plugins/onex/skills/unstick_queue/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/unstick_queue/SKILL.md
+  - plugins/onex/skills/unstick_queue/prompt.md
+  backing_nodes: []
+  findings: []
+  class: pure_skill
+- name: using_git_worktrees
+  path: plugins/onex/skills/using_git_worktrees/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/using_git_worktrees/SKILL.md
+  - plugins/onex/skills/using_git_worktrees/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: retired
+- name: verification_receipt_generator
+  path: plugins/onex/skills/verification_receipt_generator/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/verification_receipt_generator/SKILL.md
+  backing_nodes:
+  - name: node_verification_receipt_generator
+    path: omnimarket/src/omnimarket/nodes/node_verification_receipt_generator
+    contract_path: omnimarket/src/omnimarket/nodes/node_verification_receipt_generator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: verification_sweep
+  path: plugins/onex/skills/verification_sweep/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/verification_sweep/SKILL.md
+  - plugins/onex/skills/verification_sweep/topics.yaml
+  backing_nodes: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/verification_sweep/SKILL.md
+    line: 114
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: curl -s
+  class: stub_scaffold
+- name: verified_dispatch
+  path: plugins/onex/skills/verified_dispatch/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/verified_dispatch/SKILL.md
+  backing_nodes:
+  - name: node_verified_dispatch_orchestrator
+    path: omnimarket/src/omnimarket/nodes/node_verified_dispatch_orchestrator
+    contract_path: omnimarket/src/omnimarket/nodes/node_verified_dispatch_orchestrator/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: verify_plugin
+  path: plugins/onex/skills/verify_plugin/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/verify_plugin/SKILL.md
+  - plugins/onex/skills/verify_plugin/topics.yaml
+  - plugins/onex/skills/verify_plugin/verify-deploy.sh
+  backing_nodes:
+  - name: node_verify_effect
+    path: omnimarket/src/omnimarket/nodes/node_verify_effect
+    contract_path: omnimarket/src/omnimarket/nodes/node_verify_effect/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings: []
+  class: dispatch
+- name: wave_scheduler
+  path: plugins/onex/skills/wave_scheduler/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/wave_scheduler/SKILL.md
+  - plugins/onex/skills/wave_scheduler/topics.yaml
+  backing_nodes:
+  - name: node_skill_wave_scheduler_orchestrator
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  - name: node_wave_scheduler_compute
+    path: null
+    contract_path: null
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/wave_scheduler/SKILL.md
+    line: 1
+    message: Referenced backing node node_skill_wave_scheduler_orchestrator is missing
+      from nodes root.
+    evidence: node_skill_wave_scheduler_orchestrator
+  - kind: missing_node
+    severity: ERROR
+    path: plugins/onex/skills/wave_scheduler/SKILL.md
+    line: 1
+    message: Referenced backing node node_wave_scheduler_compute is missing from nodes
+      root.
+    evidence: node_wave_scheduler_compute
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/wave_scheduler/SKILL.md
+    line: 59
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node_skill_wave_scheduler_orchestrator`) is a Polly-passthrough (`maturity:
+      stub'
+  - kind: placeholder_dispatch
+    severity: WARNING
+    path: plugins/onex/skills/wave_scheduler/SKILL.md
+    line: 474
+    message: Skill surface describes placeholder dispatch or scaffold routing.
+    evidence: 'node_infra depends_on: [] - id: T-003 title: "Init frontend scaffold'
+  class: stub_scaffold
+- name: worktree
+  path: plugins/onex/skills/worktree/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/worktree/SKILL.md
+  backing_nodes:
+  - name: node_pr_lifecycle_worktree_prune_effect
+    path: omnimarket/src/omnimarket/nodes/node_pr_lifecycle_worktree_prune_effect
+    contract_path: omnimarket/src/omnimarket/nodes/node_pr_lifecycle_worktree_prune_effect/contract.yaml
+    node_not_implemented: false
+    handler_not_implemented_paths: []
+  findings:
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/worktree/SKILL.md
+    line: 212
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  - kind: direct_http_cli_api_bypass
+    severity: ERROR
+    path: plugins/onex/skills/worktree/SKILL.md
+    line: 382
+    message: Skill surface contains a direct HTTP/CLI/API bypass.
+    evidence: gh pr
+  class: dispatch
+- name: writing_skills
+  path: plugins/onex/skills/writing_skills/SKILL.md
+  source_root: plugins/onex/skills
+  is_sub_skill: false
+  surface_files:
+  - plugins/onex/skills/writing_skills/SKILL.md
+  - plugins/onex/skills/writing_skills/topics.yaml
+  backing_nodes: []
+  findings: []
+  class: dispatch

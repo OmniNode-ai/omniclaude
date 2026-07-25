@@ -1,0 +1,279 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Product Readiness — SHADOW workflow (OMN-14706 / OMN-14644 Phase 3, CI-01/CI-02).
+#
+# Phase 3 fan-out to omniclaude. This workflow adds an ADDITIVE, report-only
+# Product Readiness surface that runs the substantive product proof (lint,
+# typecheck, tests) *independently of* `occ-preflight`, then emits the typed
+# reason-graph so an `occ-preflight` cascade would project as ONE root cause
+# rather than N red/skipped checks. It mirrors the proven onex_change_control
+# (#4309) and omnimarket (#1796) shadows.
+#
+# WHY THIS IS NOT A POLLER (the original wiring bug it replaces):
+#   The first cut of this workflow was a single no-needs `evaluate` job that
+#   POLLED the head's leaf product check-runs via the Checks API. That can never
+#   yield an OCC-independent signal on omniclaude: EVERY product job in `ci.yml`
+#   carries `needs: occ-preflight` (+ `if: needs.occ-preflight.result ==
+#   'success'`), so whenever `occ-preflight` is red the leaves all SKIP. The
+#   poller therefore read only skipped/absent leaves and always emitted ROOT=
+#   RUNNER_INFRA under a generic `evaluate` context that was not the fleet's
+#   `reason-graph` surface. The fix is to RUN our own occ-independent subchecks,
+#   exactly like the sibling shadows.
+#
+# LOAD-BEARING INVARIANTS (do not weaken — see design §1.1 / §3):
+#   1. NO `occ-preflight` anywhere in this workflow's needs-chain. The product
+#      subcheck jobs below carry no `needs: occ-preflight`, so Product Readiness
+#      reports FIRST on the exact head SHA, independent of any OCC evidence.
+#   2. This workflow NEVER references or triggers `call-occ-preflight.yml` and so
+#      mints NO OCC request. The authoritative OCC path is untouched and still
+#      runs from its own workflow exactly as before.
+#   3. ENFORCING-ON-PRODUCT but NON-REQUIRED / STANDALONE (WS4, OMN-14709). This
+#      is a SEPARATE workflow and is deliberately NOT folded into `ci.yml`'s
+#      required `CI Summary` rollup — folding it in would make it authoritative
+#      and violate the shadow invariant. As of OMN-14709 the `reason-graph` job
+#      exits NON-ZERO when the elected root is a genuine PRODUCT defect
+#      (`PRODUCT_FAILED`: lint/typecheck/tests/coverage/security red), so its
+#      check conclusion is now MEANINGFUL red instead of always-green report-only.
+#      Non-product roots (RUNNER_INFRA / EVIDENCE_MISSING / GITHUB_API_OUTAGE /
+#      POLICY_HELD / DEPLOY_TRIGGER_FAILED) and a green head still exit 0.
+#      CRITICAL: the workflow is STILL NON-required. The branch-protection
+#      `required_status_checks` on `dev` are UNCHANGED — `product-readiness-shadow
+#      / reason-graph` (and the `lint (shadow)` / `typecheck (shadow)` /
+#      `tests+coverage (shadow)` / `security (shadow)` subcheck contexts) remain
+#      NON-required, so a red reason-graph REPORTS but CANNOT wedge a merge. This
+#      is exactly the red-side parity signal WS4 needs. Adding any context here to
+#      `required_status_checks` is a separate operator-gated step; do NOT do it
+#      here.
+#
+# WHY security-shadow exists (the OMN-14709 false-red fix): before this pass the
+# reason-graph facts carried NO `security` subcheck (there was no security job),
+# so the classifier saw `security` ABSENT -> `product_infra` -> a systematic
+# false `RUNNER_INFRA` root on every healthy PR. The `security-shadow` job below
+# supplies the missing dimension (bandit + detect-secrets, OCC-independent), so a
+# healthy head now classifies `product_green` and the enforcing flip is safe.
+
+name: product-readiness-shadow
+
+on:
+  pull_request:
+    branches: [main, dev]
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+
+permissions:
+  contents: read
+
+# Shadow surface: newer head supersedes an in-flight shadow run for the same ref.
+concurrency:
+  group: product-readiness-shadow-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Match ci.yml's dependency-transfer tolerance so heavy transitive wheels do
+  # not produce false-red on this report-only surface.
+  UV_HTTP_TIMEOUT: "900"
+  UV_CONCURRENT_DOWNLOADS: "4"
+  # ONEX state directory — required by hooks/lib/onex_state.py (OMN-5632).
+  ONEX_STATE_DIR: /tmp/onex-state
+
+jobs:
+  # --- Product subchecks — each INDEPENDENT of occ-preflight ---------------
+  lint-shadow:
+    name: lint (shadow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+      - name: Ruff format check
+        run: uv run ruff format --check src/ tests/
+      - name: Ruff lint
+        run: uv run ruff check src/ tests/
+
+  typecheck-shadow:
+    name: typecheck (shadow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+      - name: Mypy
+        run: uv run mypy src/ --config-file mypy.ini
+
+  tests-shadow:
+    # Fast, hermetic unit slice (no postgres/redis/kafka services). The coverage
+    # dimension is folded into this job for the shadow surface — its conclusion is
+    # passed as BOTH tests_conclusion and coverage_conclusion below.
+    name: tests+coverage (shadow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+      - name: Auto-generate skill nodes
+        run: uv run python scripts/generate_skill_node.py --all
+      - name: Unit tests (fast, hermetic slice)
+        run: uv run pytest tests/ -m "unit and not integration" -q --no-header
+
+  security-shadow:
+    # The SECURITY product dimension, run INDEPENDENTLY of occ-preflight. This
+    # closes the systematic false-RUNNER_INFRA (OMN-14709): before this job
+    # existed, the reason-graph never received a `security` subcheck fact, so the
+    # classifier saw it ABSENT -> product_infra -> RUNNER_INFRA on every healthy
+    # PR. Mirrors ci.yml's `Python Security Scan` (bandit) + `Secret Detection`
+    # (detect-secrets) leaves — the two members of the required Security Gate —
+    # but carries NO `needs: occ-preflight`, so it reports on the exact head SHA
+    # independent of any OCC evidence.
+    name: security (shadow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install security scanners
+        run: python -m pip install bandit detect-secrets
+      - name: Bandit security scan
+        run: |
+          bandit -r src/ \
+            --exclude .venv/,__pycache__/ \
+            --confidence-level medium --severity-level medium \
+            -f txt
+      - name: Secret Detection (new-findings vs baseline)
+        run: |
+          cp .secrets.baseline .secrets.baseline.bak
+          detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files '\.lock$' \
+            --exclude-files '\.env\.example$' \
+            --exclude-files 'bandit-report\.json$' \
+            --exclude-files '^tests/' \
+            --exclude-files 'security-report\.json$'
+          NEW_SECRETS=$(python3 -c "
+          import json
+          old = json.load(open('.secrets.baseline.bak'))
+          new = json.load(open('.secrets.baseline'))
+          old_set = {(f, s['hashed_secret'])
+                     for f, secrets in old.get('results', {}).items()
+                     for s in secrets}
+          new_set = {(f, s['hashed_secret'], s['line_number'])
+                     for f, secrets in new.get('results', {}).items()
+                     for s in secrets}
+          diff = [(f, line) for f, h, line in sorted(new_set)
+                  if (f, h) not in old_set]
+          for f, line in diff:
+              print(f'  {f}:{line}')
+          print(f'COUNT:{len(diff)}')
+          ")
+          COUNT=$(echo "$NEW_SECRETS" | grep '^COUNT:' | cut -d: -f2)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "$NEW_SECRETS" | grep -v '^COUNT:'
+            echo "::error::detect-secrets found $COUNT new potential secrets not in baseline"
+            exit 1
+          fi
+          echo "Secret detection completed - no new secrets found"
+
+  # --- Typed reason-graph (ENFORCING on PRODUCT roots; still NON-required) --
+  # NO occ-preflight in this needs-chain. Consumes the product subchecks'
+  # conclusions only and emits exactly one typed root. Surfaced NON-required
+  # context: `product-readiness-shadow / reason-graph`.
+  reason-graph:
+    name: reason-graph
+    needs: [lint-shadow, typecheck-shadow, tests-shadow, security-shadow]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Emit reason graph
+        env:
+          # Exact head SHA the graph is content-addressed to. For pull_request
+          # use the PR head (github.sha is the ephemeral merge commit); for
+          # merge_group use the queued head; else the pushed SHA.
+          HEAD_SHA: >-
+            ${{ github.event.pull_request.head.sha
+              || github.event.merge_group.head_sha
+              || github.sha }}
+          LINT_CONCLUSION: ${{ needs.lint-shadow.result }}
+          TYPECHECK_CONCLUSION: ${{ needs.typecheck-shadow.result }}
+          TESTS_CONCLUSION: ${{ needs.tests-shadow.result }}
+          SECURITY_CONCLUSION: ${{ needs.security-shadow.result }}
+        run: |
+          set -uo pipefail
+          facts="$(python - <<'PY'
+          import json, os
+          tests = os.environ.get("TESTS_CONCLUSION", "")
+          print(json.dumps({
+              "head_sha": os.environ.get("HEAD_SHA", ""),
+              "subchecks": {
+                  "change_detection": "success",
+                  "lint": os.environ.get("LINT_CONCLUSION", ""),
+                  "typecheck": os.environ.get("TYPECHECK_CONCLUSION", ""),
+                  "tests": tests,
+                  "coverage": tests,
+                  "security": os.environ.get("SECURITY_CONCLUSION", ""),
+              },
+          }))
+          PY
+          )"
+          # ENFORCING (WS4, OMN-14709): --enforce-product makes the graph exit
+          # non-zero ONLY when the elected root is a genuine PRODUCT defect
+          # (PRODUCT_FAILED). Non-product roots (RUNNER_INFRA / EVIDENCE_MISSING /
+          # GITHUB_API_OUTAGE / POLICY_HELD / DEPLOY_TRIGGER_FAILED) and a green
+          # head still exit 0. `if x=$(...)` guards so errexit does not abort the
+          # step before the summary is written (memory: ci_shell_errexit_bash_e).
+          if graph="$(python scripts/ci/product_reason_graph.py graph --facts-json "$facts" --enforce-product --summary 2> summary.md)"; then
+            rc=0
+          else
+            rc=$?
+          fi
+          echo "$graph"
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+          root_kind="$(printf '%s' "$graph" | python -c 'import json,sys; r=json.load(sys.stdin)["root"]; print(r["kind"] if r else "READY")')"
+          if [ "$root_kind" = "READY" ]; then
+            echo "::notice title=CI Reason Graph::READY — product dimension is green"
+          elif [ "$rc" -ne 0 ]; then
+            echo "::error title=CI Reason Graph::ROOT ${root_kind} — genuine product defect; failing this NON-required shadow (reports red, cannot block merge)"
+          else
+            echo "::warning title=CI Reason Graph::ROOT ${root_kind} (non-product root; report-only, not merge-blocking)"
+          fi
+          # NON-required context: a non-zero exit reports red but cannot wedge a
+          # merge (this workflow is NOT in required_status_checks — unchanged).
+          exit "$rc"

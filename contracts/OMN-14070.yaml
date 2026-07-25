@@ -1,0 +1,26 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14070"
+title: "Gate release publication on PyPI dependency-pin resolvability"
+summary: >-
+  The release workflow validates a built wheel in an isolated environment so
+  declared dependency pins resolve through the public PyPI index before publish.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused release pin resolvability tests pass."
+    command: "uv run pytest tests/ci/test_verify_pypi_pin_resolvability.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-release-pin-resolvability"
+    description: "The release gate is covered by focused tests for resolvable and unresolvable pins."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/ci/test_verify_pypi_pin_resolvability.py -q"

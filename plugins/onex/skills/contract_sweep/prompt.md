@@ -1,21 +1,26 @@
 # contract_sweep prompt
 
-You are executing the **contract-sweep** skill. This skill supports three modes:
+You are executing the **contract-sweep** skill. This skill supports two modes:
 - **drift** (default): static cross-repo contract drift detection
-- **runtime**: live runtime contract compliance verification
-- **full**: both drift and runtime sequentially
+- **compliance**: `node_contract_sweep` field/topic/node_type compliance sweep — a pure
+  filesystem check, NOT a live-runtime verification (an earlier revision of this skill
+  described a "runtime mode" that invoked `onex run-node node_contract_sweep` with a
+  `registration_only` field. That field never existed on the node's request model — which
+  is `extra="forbid"` and would reject the input outright — and no harness ever actually
+  ran it. It has been removed; do not resurrect it without first implementing a real
+  live-runtime probe.)
 
 ## Announce
 
-Say: "I'm using the contract-sweep skill to [perform drift detection / verify runtime compliance / run full contract sweep]."
+Say: "I'm using the contract-sweep skill to [perform drift detection / run the compliance sweep]."
 
 ## Parse arguments
 
 Extract from `$ARGUMENTS`:
 
 - `--drift` or `--mode drift` -- Run drift mode only (default if no mode specified)
-- `--runtime` or `--mode runtime` -- Run runtime mode only
-- `--full` or `--mode full` -- Run both drift and runtime modes sequentially
+- `--compliance` or `--mode compliance` -- Run the node_contract_sweep compliance check only
+- `--mode <value>` → mode = <value>
 
 Drift-mode-only args:
 - `--repos <comma-list>` -- Repos to scan (default: all 8)
@@ -24,15 +29,16 @@ Drift-mode-only args:
 - `--sensitivity <STRICT|STANDARD|LAX>` -- Drift sensitivity (default: STANDARD)
 - `--check-boundaries <true|false>` -- Validate Kafka boundary parity (default: true)
 
-Runtime-mode-only args:
-- `--all` -- Run full 52-contract verification (default: registration-only)
+Compliance-mode-only args:
+- `--repos <comma-list>` -- REQUIRED. Must be a real, harness-collected census (e.g. a
+  filesystem probe over the checked-out repo(s)) — never an operator-typed convenience
+  value. There is no "scan everything" default.
 
 **Mode resolution** (first match wins):
-1. `--full` → mode = full
-2. `--runtime` → mode = runtime
-3. `--drift` → mode = drift
-4. `--mode <value>` → mode = <value>
-5. No mode flag → mode = drift
+1. `--compliance` → mode = compliance
+2. `--drift` → mode = drift
+3. `--mode <value>` → mode = <value>
+4. No mode flag → mode = drift
 
 **Repo list** (hardcoded for drift mode, scan all unless `--repos` overrides):
 ```
@@ -340,48 +346,43 @@ Detected by contract-sweep skill run <run-id>.
 
 ---
 
-## RUNTIME MODE
+## COMPLIANCE MODE
 
-Run when mode is `runtime` or `full`.
+Run when mode is `compliance`.
 
-### Execute verification CLI
+### Execute the sweep CLI
+
+`--repos` is REQUIRED — the census must be a real, harness-collected filesystem probe
+(e.g. the set of repos actually checked out in this worktree), never an operator-typed
+convenience value:
 
 ```bash
-# Registration-only (default)
-onex run-node node_contract_sweep \
-  --input '{"registration_only": true, "dry_run": false, "output_path": "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"}' \
-  --timeout 300
-
-# Full 52-contract verification (when --all is passed)
-onex run-node node_contract_sweep \
-  --input '{"registration_only": false, "dry_run": false, "output_path": "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"}' \
-  --timeout 300
+python -m omnimarket.nodes.node_contract_sweep --repos <repo1,repo2,...>  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
 ```
 
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
-
-Where `<run_id>` is the current `ONEX_RUN_ID` or a timestamp-based fallback
-(`contract-sweep-<YYYYMMDD-HHMMSS>`).
+Prints a `ContractSweepResult` JSON to stdout: `violations`, `contracts_checked`,
+`scanned_count`, `summary`, `status` (`PASS`|`FAIL`|`ERROR`), `missing_repos`,
+`scope_error`.
 
 ### Handle exit code
 
-**Exit 0 (PASS):**
+**Exit 0, `status: PASS`:**
 
 Print summary:
 ```
-CONTRACT_VERIFY: PASS (N checks passed)
+CONTRACT_SWEEP: PASS (<scanned_count> contracts checked, 0 violations)
 ```
 
 No further action required. If this is the second consecutive PASS and there are
 open failure tickets from prior runs, trigger sustained-pass auto-close.
 
-**Exit 1 (FAIL):**
+**Exit 1, `status: FAIL`:**
 
 Print failure summary:
 ```
-CONTRACT_VERIFY: FAIL
-  - <contract_name>: <check_type> FAIL — <reason>
-  - <contract_name>: <check_type> FAIL — <reason>
+CONTRACT_SWEEP: FAIL (<scanned_count> contracts checked)
+  - <node_name>: <violation_type> — <message>
+  - <node_name>: <violation_type> — <message>
 ```
 
 Route to `auto_ticket_from_findings` with structured findings:
@@ -389,69 +390,45 @@ Route to `auto_ticket_from_findings` with structured findings:
 ```
 Agent(
   subagent_type="general-purpose",
-  description="Create tickets from contract-verify failures",
+  description="Create tickets from contract-sweep failures",
   prompt="Run auto_ticket_from_findings with the following findings: <findings_json>.
-    Source: contract-verify. Dedup on contract_name:check_type.
-    Do NOT create tickets for QUARANTINE results."
+    Source: contract-sweep. Dedup on node_name:violation_type."
 )
 ```
 
-Each failing check produces a finding:
+Each violation produces a finding:
 ```json
 {
-  "source": "contract-verify",
-  "contract_name": "<contract_name>",
-  "check_type": "<check_type>",
-  "severity": "major",
-  "title": "[contract-verify] <contract_name>: <check_type> FAIL",
-  "description": "<detailed failure reason from CLI output>",
-  "dedup_key": "<contract_name>:<check_type>"
+  "source": "contract-sweep",
+  "node_name": "<node_name>",
+  "check_type": "<violation_type>",
+  "severity": "<critical|major|minor|info>",
+  "title": "[contract-sweep] <node_name>: <violation_type>",
+  "description": "<message from CLI output>",
+  "dedup_key": "<node_name>:<violation_type>"
 }
 ```
 
 If `--dry-run` is set, print failures but skip ticket creation.
 
-**Exit 2 (QUARANTINE):**
+**Exit 1, `status: ERROR`:**
 
-Print quarantine warning:
+Print scope-error warning and STOP — do not create tickets, do not report a partial
+result as PASS:
 ```
-CONTRACT_VERIFY: QUARANTINE — <reason>
+CONTRACT_SWEEP: ERROR — <scope_error>
 ```
 
-Do NOT create tickets. Quarantine means verification infrastructure could not run
-(e.g., database unreachable, contract files missing). This is an operational issue,
-not a contract compliance failure.
+`ERROR` means the scope itself could not be trusted (missing `OMNI_HOME`, a requested
+repo absent on disk, or `scanned_count == 0`). This is an operational/harness issue,
+not a contract compliance failure — investigate the census, do not retry blindly.
 
 ### Sustained PASS auto-close
 
-When runtime produces PASS for 2 consecutive runs:
-- Query open tickets with label `contract-verify` matching the now-passing checks
+When compliance mode produces PASS for 2 consecutive runs:
+- Query open tickets with label `contract-sweep` matching the now-passing checks
 - Auto-close with comment: `Sustained PASS across 2 consecutive runs. Auto-closing.`
 - Track run history via report files in `$ONEX_STATE_DIR/contract-sweep/`
-
----
-
-## FULL MODE
-
-Run when mode is `full`.
-
-Execute drift mode (Phases 1-6) first, then runtime mode (Steps 1-3).
-
-Print a combined summary at the end:
-
-```
-=== contract-sweep: FULL MODE ===
-
-[DRIFT] Overall status: <clean|drifted|breaking>
-[RUNTIME] CONTRACT_VERIFY: <PASS|FAIL|QUARANTINE>
-
-Combined status: <CLEAN|WARNINGS|FAILURES>
-```
-
-Combined status:
-- `CLEAN` -- drift clean AND runtime PASS
-- `WARNINGS` -- drift drifted (no BREAKING) AND/OR runtime QUARANTINE
-- `FAILURES` -- any BREAKING drift OR runtime FAIL
 
 ---
 
@@ -462,7 +439,7 @@ Combined status:
 - If `kafka_boundaries.yaml` is not found: skip boundary checks, warn in output
 - If YAML parsing fails for a contract: record as an ERROR finding (unparseable contract)
 - If `uv` is not available: fall back to `python3` directly
-- If `omnibase_infra.verification.cli` is not found: abort runtime mode with error
+- If the compliance sweep CLI exits with `status: ERROR`: STOP, print the `scope_error`, do not create tickets (see COMPLIANCE MODE above)
 
 ## Examples
 
@@ -489,19 +466,14 @@ Overall status: clean
 Report: $ONEX_STATE_DIR/contract-sweep/20260326-143000/report.yaml
 ```
 
-### Runtime mode — PASS
+### Compliance mode — PASS
 
 ```
-CONTRACT_VERIFY: PASS (52 checks passed)
+CONTRACT_SWEEP: PASS (367 contracts checked, 0 violations)
 ```
 
-### Full mode — CLEAN
+### Compliance mode — ERROR (empty/unresolvable scope)
 
 ```
-=== contract-sweep: FULL MODE ===
-
-[DRIFT] Overall status: clean
-[RUNTIME] CONTRACT_VERIFY: PASS (52 checks passed)
-
-Combined status: CLEAN
+CONTRACT_SWEEP: ERROR — Scanned zero contract.yaml files across repos=['does_not_exist_repo'] (resolved dirs=[]). Refusing to report PASS over an empty scope.
 ```

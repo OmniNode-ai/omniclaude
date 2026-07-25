@@ -46,7 +46,7 @@ jobs:
       contents: read
       pull-requests: read
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@dev
     with:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
@@ -63,7 +63,7 @@ jobs:
   zone-filter:
     needs: occ-preflight
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@dev
     with:
       python-version: "3.12"
 
@@ -87,7 +87,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -203,12 +203,12 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Set up Node for Pyright
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
 
@@ -325,7 +325,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -344,6 +346,83 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
 
+  # Canonical handler-shape GROWTH RATCHET fan-out (OMN-14588, per OMN-14355/14368).
+  # compliance_sweep checks handler HYGIENE but is blind to handler SHAPE, so a
+  # non-canonical handler passes green CI. This classifies each omniclaude node's
+  # contract-declared handler (definition B: typed-payload handle(request) ->
+  # response, adapted by the shared runtime, no envelope in the core), WARNs the
+  # committed baseline's debt (scripts/ci/canonical_handler_shape_baseline.py,
+  # OMN-14588: 132 non-canonical / 132 scanned), and HARD-FAILS a NEW non-canonical
+  # node or baseline-count growth. Sourced from a sibling omnibase_core checkout
+  # (the classifier lives at omnibase_core's repo-root scripts/ci/, not the
+  # installed package). Runs --full (not the default --scope changed): the
+  # classifier's diff-scoped git-diff runs with cwd = the classifier's OWN repo,
+  # wrong for a fan-out invocation against this sibling checkout — --full is
+  # cheap here (~132 nodes, sub-second). --receipts-dir is mandatory (mirrors the
+  # OMN-14633 fix in the omnibase_infra fan-out): the classifier's default for a
+  # non-core --package is a directory NEXT TO ITS OWN __file__ (inside the
+  # ephemeral sibling checkout), which never contains this repo's committed
+  # receipts. No pre-commit mirror yet: same infeasibility already verified for
+  # the omnimarket/omnibase_infra fan-outs (OMN-14372/14587) — pre-commit's
+  # language:python remote-hook install only ships the installed
+  # src/omnibase_core/ package (classifier isn't importable that way) and
+  # language:script has no dependency isolation (the classifier needs the
+  # data-modeling/yaml-parsing libraries already vendored in this repo's own
+  # venv); real fix is OMN-14563 (relocate the classifier into an installed
+  # omnibase_core module). CI-only matches the omnimarket/omnibase_infra
+  # precedent.
+  canon-shape-ratchet:
+    needs: occ-preflight
+    name: Canonical Handler-Shape Ratchet
+    # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
+    # so required CI does not queue behind self-hosted fleet saturation.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Checkout omnibase_core validator source
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnibase_core
+          ref: dev
+          path: .ci/omnibase_core
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          attempt=1
+          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Canonical handler-shape ratchet (OMN-14355 fan-out, OMN-14588)
+        run: |
+          uv run python .ci/omnibase_core/scripts/ci/canonical_handler_shape.py \
+            --package omniclaude --src-root src \
+            --baseline scripts/ci/canonical_handler_shape_baseline.py \
+            --receipts-dir scripts/ci/adequacy_receipts \
+            --full
+
   enum-governance:
     needs: occ-preflight
     name: Enum Governance
@@ -351,7 +430,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -365,7 +446,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -404,7 +485,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -418,7 +501,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -461,7 +544,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -476,7 +561,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -499,7 +584,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -514,7 +601,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -560,7 +647,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -574,7 +663,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -676,7 +765,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -695,7 +784,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -714,7 +803,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -734,7 +823,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -753,7 +842,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -775,7 +864,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -794,7 +883,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -813,7 +902,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -832,7 +921,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -851,7 +940,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1026,7 +1115,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1045,7 +1134,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1065,7 +1154,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1094,7 +1183,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1145,7 +1234,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1171,7 +1260,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1196,7 +1287,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1271,7 +1362,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1296,7 +1389,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1330,7 +1423,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1352,7 +1447,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1398,7 +1493,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1525,7 +1620,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1568,7 +1663,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1633,7 +1728,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1657,7 +1754,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1722,7 +1819,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1790,7 +1889,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1884,7 +1983,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -1937,7 +2038,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2025,7 +2126,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2040,7 +2143,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2088,7 +2191,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2200,7 +2305,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2289,7 +2396,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2300,7 +2409,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2368,7 +2477,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2384,7 +2495,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2427,7 +2538,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2447,7 +2558,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2471,7 +2584,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2495,7 +2608,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2510,7 +2625,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2541,7 +2656,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2563,7 +2680,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2596,7 +2713,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -2657,7 +2774,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2666,7 +2785,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # OMN-14086: diff-scope the sweep on a PR (scan only changed files); every
@@ -2712,7 +2831,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2725,7 +2846,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -2749,7 +2870,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2768,7 +2891,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -2798,6 +2923,7 @@ jobs:
       - quality
       - pyright
       - check-handshake
+      - canon-shape-ratchet
       - enum-governance
       - exports-validation
       - env-var-registry
@@ -2857,6 +2983,7 @@ jobs:
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
+            "canon-shape-ratchet=${{ needs.canon-shape-ratchet.result }}" \
             "enum-governance=${{ needs.enum-governance.result }}" \
             "exports-validation=${{ needs.exports-validation.result }}" \
             "env-var-registry=${{ needs.env-var-registry.result }}" \
@@ -3011,7 +3138,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3057,7 +3186,7 @@ jobs:
           cache-dependency-glob: 'onex_change_control/uv.lock'
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -3076,6 +3205,34 @@ jobs:
           uv run validate-yaml $CONTRACTS
         env:
           GH_TOKEN: ${{ github.token }}
+
+  no-noncanonical-lifecycle-classes:
+    name: no-noncanonical-lifecycle-classes
+    # OMN-14350: non-canonical lifecycle-class ratchet — a CI Summary GATE_JOB
+    # (scripts/ci/ci_summary_gate.py GATE_JOBS). Unconditional (no needs/if) so CI
+    # Summary WAITS for it and requires a good conclusion — a red ratchet fails the
+    # required "CI Summary" check; the job never skips so it cannot be masked.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
+        run: |
+          uv run --no-project \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@63635097705d832e0ee9c4811093efb31349105c' \
+            python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
+            --check-stale \
+            --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
+            src/omniclaude
 
   ci-summary:
     name: CI Summary
@@ -3164,7 +3321,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3264,7 +3423,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3287,7 +3448,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3311,7 +3474,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
@@ -3320,7 +3485,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Compute changed Python/Markdown files vs PR base

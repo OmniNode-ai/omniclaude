@@ -29,15 +29,41 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
 
 1. Not a ``save_issue``/``update_issue`` call, or not a Done-class target state
    → ALLOW (nothing to verify).
-2. Carve-outs (encoded explicitly, never inferred — design §2):
-   - cancel-class target state (``canceled/duplicate/won't do``) → ALLOW;
-   - explicit exemption label / ``close-if-done`` frontmatter (covers
-     decision-only tickets and epic ALL_CHILDREN_DONE roll-ups, which carry the
-     label) → ALLOW.
-3. Durable evidence path A — merged PR: if the ticket description cites PRs and
-   every cited PR is ``MERGED`` → ALLOW. If any cited PR is open / unmerged →
-   BLOCK. (A "superseded-by-merged-sibling" close is a merged-PR citation and is
-   accepted here.)
+2. cancel-class target state (``canceled/duplicate/won't do``) → ALLOW.
+2b. Unchecked acceptance-criteria checkbox gate (OMN-15030): if the ticket's
+    current description contains any unchecked GFM task-list box (``- [ ]``)
+    → BLOCK, unconditionally — no later evidence path (merged PR, OCC receipt,
+    exempt label) waives this. Every later path proves *some* evidence exists;
+    none of them prove the ticket's own stated acceptance criteria were met.
+    OMN-13991 is the concrete incident this closes: a genuinely merged, cited,
+    implementing PR still under-delivered against the ticket's own DoD text,
+    and passed every existing presence-check because "merged" was treated as
+    sufficient. See :func:`find_unchecked_acceptance_boxes`.
+2a. Durable evidence path C — deploy-readback marker (OMN-14792): a
+    runtime-deploy ticket whose DoD is a live readback, not a merged product PR
+    (``node_dod_verify`` structurally skips such tickets —
+    ``reference_dod_verify_cannot_close_deploy_tickets`` — and they close via an
+    operator deliberate-Done). When a ``deploy-readback-proven: <probe + exit-0
+    receipt>`` marker with real evidence is present, the merge check is SCOPED to
+    DoD-*implementing* PRs (``verify_implementing``): full-URL / resolvable bare
+    ``#N`` citations, EXCLUDING scratch/throwaway/live-mint-annotated PRs and
+    unresolvable merge-chain-narrative ``#N`` refs. No unmerged implementing PR
+    → ALLOW; an unmerged implementing PR still BLOCKS (the marker is not a
+    blanket bypass — the OMN-14641 lesson). This closes the OMN-14437 false block
+    where the guard treated a closed scratch live-mint PR and bare narrative
+    numbers as blocking DoD evidence.
+3. Durable evidence path A — merged PR: if the ticket cites (or links via a
+   Linear attachment) any *product* PR and every one is ``MERGED`` → ALLOW. If
+   any is open / unmerged → BLOCK. (A "superseded-by-merged-sibling" close is a
+   merged-PR citation and is accepted here.) ``onex_change_control`` evidence /
+   OCC-receipt PRs are WEAK signals and are filtered out — they never gate a
+   product Done in either direction (OMN-14641, deliverable 3).
+3a. Exemption carve-out — an explicit ``close-if-done`` label / frontmatter
+    (covers decision-only tickets and epic ALL_CHILDREN_DONE roll-ups) → ALLOW,
+    but ONLY when no product PR is cited/linked. OMN-14641: the label was
+    previously a blanket merge-check bypass, so a ticket carrying it flipped Done
+    with its linked product PR still OPEN (the OMN-14582 false-Done). The label
+    can no longer waive an open cited/linked PR — that path BLOCKS at step 3.
 4. Durable evidence path B — OCC receipt on ``origin/dev``: a schema-valid
    ``status == PASS`` ``node_dod_verify`` receipt bound to the ticket under
    ``drift/dod_receipts/<TICKET>/`` on ``origin/dev`` of the local
@@ -84,16 +110,64 @@ from typing import Any
 # Sibling module (same lib/ dir). The shell wrapper runs this file directly, so
 # its directory is on sys.path[0] and the import resolves without packaging.
 from linear_done_verify import (
+    augment_description_with_attachments,
     fetch_pr_status,
     is_cancel_state,
     is_done_state,
     is_exempt,
+    parse_deploy_readback_marker,
     verify,
+    verify_implementing,
 )
 
 _LINEAR_TOOLS = frozenset(
     {"mcp__linear-server__save_issue", "mcp__linear-server__update_issue"}
 )
+
+# OMN-15030: unchecked markdown acceptance-criteria checkbox gate.
+#
+# Every evidence path above this check (merged-PR citation, OCC receipt,
+# exempt label) proves *something shipped* — none of them prove the shipped
+# thing satisfies what the ticket's own author wrote down as the acceptance
+# bar. OMN-13991 is the concrete incident: a genuinely MERGED, genuinely
+# CITED, genuinely implementing PR (omnimarket#1838) still under-delivered
+# against the ticket's own DoD text ("Staged: shadow -> measured ->
+# enforcing"), and every existing presence-check (this guard's merged-PR
+# path, node_linear_triage's close_evidence_gate, DurableEvidenceGate's
+# CONTRACT_CITES_MERGE_COMMIT) passes on a merged-but-incomplete PR by
+# design — "merged" is not "matches the ticket's stated DoD."
+#
+# A mechanical presence-check can never fully verify DoD-prose-vs-PR-content
+# match (that is a judgment call). What IS mechanically checkable, and today
+# checked nowhere, is whether the ticket's OWN description still carries
+# unchecked GFM task-list boxes (`- [ ]`) at the moment of the Done flip —
+# per feedback_specify_acceptance_tests_in_the_ticket, acceptance criteria
+# belong in the ticket as checkboxes, and an unchecked box at Done-flip time
+# is a plain, first-party admission that the ticket's own author does not
+# consider the work complete. This is additive to every other path below —
+# it can BLOCK even when a merged PR is cited (unlike the exempt-label and
+# deploy-readback carve-outs, which are about *what kind* of evidence is
+# owed, not whether that evidence's own text is self-consistent).
+_UNCHECKED_BOX_RE = re.compile(
+    r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[ \][ \t]+\S.*$", re.MULTILINE
+)
+_MAX_UNCHECKED_BOX_SNIPPET_CHARS = 240
+
+
+def find_unchecked_acceptance_boxes(description: str) -> list[str]:
+    """Return every unchecked GFM task-list line (`- [ ]  ...`) in ``description``.
+
+    Matches ``-``/``*``/``+`` bullets and ``1.``/``1)`` numbered items whose
+    checkbox is unchecked (``[ ]``) and followed by non-blank text — a bare
+    ``[ ]`` token elsewhere in prose (not a list-item checkbox) does not
+    match. Checked boxes (``[x]``/``[X]``) never match. Pure function — no
+    I/O, no network, no subprocess.
+    """
+    return [
+        line.strip()[:_MAX_UNCHECKED_BOX_SNIPPET_CHARS]
+        for line in _UNCHECKED_BOX_RE.findall(description or "")
+    ]
+
 
 # The OCC governance ref to read durable receipts from. OCC governance is
 # dev-targeted — receipts land on ``dev`` first (OMN-12593), so ``origin/dev``
@@ -342,24 +416,88 @@ def decide(
             description = str(issue.get("description") or "")
             if not labels:
                 labels = [str(x) for x in (issue.get("labels") or [])]
+            # Fold in the linked-PR attachment URLs (Linear GitHub integration
+            # links the PR as an attachment, not a `#N` body mention) so the
+            # merge check sees the *linked* PR even when it is uncited. This is
+            # the OMN-14582 false-Done shape — a label-driven close while the
+            # linked product PR was still OPEN (OMN-14641).
+            description = augment_description_with_attachments(
+                description, [str(x) for x in (issue.get("attachment_urls") or [])]
+            )
 
-    # (2) explicit exemption label / close-if-done frontmatter. Covers
-    # decision-only tickets and epic ALL_CHILDREN_DONE roll-ups (which carry the
-    # label). Encoded explicitly — never inferred from ticket shape.
-    if is_exempt(description, labels):
-        return Decision(True, "carve_out:exempt_label")
+    # (2b) unchecked acceptance-criteria checkbox gate (OMN-15030). Runs BEFORE
+    # every evidence path below and is not waivable by any of them — a merged
+    # PR, a PASS OCC receipt, or an exempt label all prove *some* evidence
+    # exists, none of them prove the ticket's own stated acceptance criteria
+    # were met. An unchecked `- [ ]` box in the ticket's current description
+    # is the ticket author's own admission of incompleteness; refusing here is
+    # the mechanical, judgment-free proxy for "does the shipped PR satisfy
+    # this ticket's DoD" that no presence-check below can express.
+    unchecked_boxes = find_unchecked_acceptance_boxes(description)
+    if unchecked_boxes:
+        preview = "; ".join(unchecked_boxes[:5])
+        more = (
+            f" (+{len(unchecked_boxes) - 5} more)" if len(unchecked_boxes) > 5 else ""
+        )
+        return Decision(
+            False,
+            f"unchecked_acceptance_criteria: {len(unchecked_boxes)} unchecked "
+            f"box(es) remain in the ticket description: {preview}{more}. Check "
+            "every acceptance-criteria box (or remove/rewrite the ones that no "
+            "longer apply) before flipping Done — a merged PR or OCC receipt "
+            "does not waive this (OMN-15030 / OMN-13991).",
+        )
 
-    # (3) durable evidence path A — merged PR citation.
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
+
+    # (3-pre) durable evidence path C — deploy-readback marker (OMN-14792). A
+    # runtime-deploy ticket's DoD is a live readback (effects image rebuilt to
+    # dev-tip + a clean probe read off the deployed bytes), NOT a merged product
+    # PR: node_dod_verify structurally skips such tickets
+    # (reference_dod_verify_cannot_close_deploy_tickets) and they close via an
+    # operator deliberate-Done. Before this carve-out the guard false-blocked
+    # them (the OMN-14437 shape) because it treated every PR string in the body
+    # — a scratch/throwaway live-mint readback PR, and bare merge-chain-narrative
+    # numbers — as blocking DoD evidence.
+    #
+    # When a `deploy-readback-proven:` marker with real evidence is present, the
+    # merge check is SCOPED to DoD-*implementing* PRs only (verify_implementing:
+    # full-URL / resolvable bare #N, excluding scratch-annotated and
+    # unresolvable-narrative refs). If any implementing PR is unmerged the flip
+    # still BLOCKS — the marker is not a blanket bypass (the OMN-14641 lesson).
+    # Otherwise the live-readback attestation stands in for a merged PR.
+    if parse_deploy_readback_marker(description) is not None:
+        impl_result = verify_implementing(
+            description, labels, default_repo=default_repo, fetcher=pr_fetcher
+        )
+        if not impl_result.allowed:
+            return Decision(False, f"pr_not_merged\n{impl_result.reason}")
+        return Decision(True, "durable_evidence:deploy_readback_proven")
+
+    # (3) durable evidence path A — merged product-PR citation. This runs BEFORE
+    # the close-if-done exemption carve-out (OMN-14641): the label was a blanket
+    # merge-check bypass, so a ticket carrying it could flip Done with its linked
+    # product PR still OPEN. verify() now blocks on any open cited product PR
+    # regardless of the label; the exemption is honored only below, when NO
+    # product PR is cited.
     pr_result = verify(
         description, labels, default_repo=default_repo, fetcher=pr_fetcher
     )
     if not pr_result.allowed:
         # A cited PR is open / unmerged / unresolvable — the classic OMN-8375
-        # "Done while PR still BLOCKED" shape. Block outright.
+        # "Done while PR still BLOCKED" shape (and the OMN-14582 label-bypass
+        # shape). Block outright — the close-if-done label does not waive this.
         return Decision(False, f"pr_not_merged\n{pr_result.reason}")
     if pr_result.reason == "all_prs_merged":
         return Decision(True, "durable_evidence:all_prs_merged")
+
+    # (2) explicit exemption label / close-if-done frontmatter. Covers
+    # decision-only tickets and epic ALL_CHILDREN_DONE roll-ups (which carry the
+    # label). Encoded explicitly — never inferred from ticket shape. Valid ONLY
+    # here, where no product PR is cited; an open cited PR already returned above
+    # (OMN-14641 — the label can no longer bypass an unmerged linked PR).
+    if is_exempt(description, labels):
+        return Decision(True, "carve_out:exempt_label")
 
     # pr_result.allowed with reason "no_pr_references" is NOT durable evidence on
     # its own — this is the incident shape (Done, no PR cited). Fall through to

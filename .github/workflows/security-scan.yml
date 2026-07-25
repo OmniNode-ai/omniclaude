@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -100,7 +100,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ${{ github.workspace }}
           base: ${{ github.event.before }}
@@ -109,7 +109,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (pull request diff)
         if: github.event_name == 'pull_request'
-        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha }}
@@ -118,7 +118,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (full scan)
         if: github.event_name != 'push' && github.event_name != 'pull_request'
-        uses: trufflesecurity/trufflehog@00155c9dc586f34d189adc83d3ac2698c2ec551f  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ${{ github.workspace }}
           extra_args: --only-verified

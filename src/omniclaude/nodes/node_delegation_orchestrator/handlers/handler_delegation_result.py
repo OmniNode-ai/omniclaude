@@ -192,8 +192,17 @@ def handle_delegation_result(
     )
 
 
+class HandlerDelegationResult:
+    """Canonical typed-payload wrapper for delegation results."""
+
+    def handle(self, payload: ModelLlmResponsePayload) -> ModelDelegationOutcome:
+        """Process a typed LLM response payload."""
+        return handle_delegation_result(payload)
+
+
 __all__ = [
     "EnumQualityGateResult",
+    "HandlerDelegationResult",
     "ModelLlmResponsePayload",
     "handle_delegation_result",
     "run_quality_gate",

@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Deterministic-Skill Routing Enforcement Gate (OMN-8749, wired under OMN-14808)
+#
+# Tier 1 counterpart to check-instructional-skills (OMN-8766). Verifies that
+# every Tier 1 deterministic skill SKILL.md contains a node dispatch
+# instruction, a `SkillRoutingError` reference (the live wire contract emitted
+# as the `error_type` envelope by both dispatch CLIs), and no prose-fallback
+# routing instruction. BLOCKING: the reconciled tree is green (0 violations),
+# so any NEW drift fails this gate.
+#
+# Required status check: "check-deterministic-skills"
+
+name: check-deterministic-skills
+
+on:
+  pull_request:
+    branches: [main, dev, develop]
+    paths:
+      - "plugins/onex/skills/**/SKILL.md"
+      - "scripts/validation/validate_deterministic_skill_routing.py"
+      - "tests/validation/test_validate_deterministic_skill_routing.py"
+      - ".github/workflows/check-deterministic-skills.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: check-deterministic-skills-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  check-deterministic-skills:
+    needs: occ-preflight
+    name: check-deterministic-skills
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run deterministic-skill routing enforcement validator (OMN-8749)
+        # BLOCKING (no --report): exits non-zero on any violation.
+        working-directory: ${{ github.workspace }}
+        run: |
+          python scripts/validation/validate_deterministic_skill_routing.py \
+            --skills-root plugins/onex/skills
+
+      - name: Gate summary
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "## Deterministic Skill Routing Enforcement (OMN-8749)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Every Tier 1 deterministic skill SKILL.md must:" >> $GITHUB_STEP_SUMMARY
+          echo "- Contain a node dispatch instruction (\`onex node\`/\`onex run-node\`," >> $GITHUB_STEP_SUMMARY
+          echo "  or a receipt-mode \`onex skill\` publish to an \`onex.cmd.*\` start topic)" >> $GITHUB_STEP_SUMMARY
+          echo "- Reference \`SkillRoutingError\` (the live wire contract) with" >> $GITHUB_STEP_SUMMARY
+          echo "  \`do not produce prose\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Not contain prose-fallback routing instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tier 1 counterpart to check-instructional-skills (OMN-8766)." >> $GITHUB_STEP_SUMMARY

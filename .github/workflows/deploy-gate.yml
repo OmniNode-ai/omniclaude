@@ -115,3 +115,7 @@ jobs:
           pr-number: ${{ steps.pr-number.outputs.pr_number }}
           github-token: ${{ github.token }}
           contracts-dir: _occ/contracts
+          # OMN-14505: composite actions cannot read `vars` directly, so the
+          # org variable is resolved here (job scope, where `vars` is valid)
+          # and threaded through as an input.
+          falsifiability-mode: ${{ vars.DEPLOY_GATE_FALSIFIABILITY || 'report' }}

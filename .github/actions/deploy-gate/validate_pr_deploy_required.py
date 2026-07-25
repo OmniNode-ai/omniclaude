@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -107,8 +109,393 @@ CLI_DEPLOY_SIGNAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Deploy evidence: a dod_evidence check whose check_value contains one of these.
-DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
+# ---------------------------------------------------------------------------
+# Deploy evidence falsifiability (OMN-14505).
+#
+# The legacy rule was a substring test:
+#
+#     DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
+#     if any(kw in check_value.lower() for kw in DEPLOY_KEYWORDS): return True
+#
+# Because the bare word "deploy" was a keyword, ANY check_value containing the
+# word "deploy" satisfied a REQUIRED merge gate — including one that verifies
+# nothing. Worse, the receipt paths are themselves named `dod-deploy-*`, so a
+# check_value passed on the *filename* alone. An audit of onex_change_control@dev
+# (6,944 contracts) found 1,123 of 1,268 satisfying checks were circular greps of
+# the receipt file the same OCC companion PR authored:
+#
+#     grep -q '^status: PASS$' drift/dod_receipts/OMN-X/dod-deploy-assessment/command.yaml
+#
+# — they grep their own receipt for text their own author wrote into it, so they
+# can never go RED.
+#
+# Tightening the word list does NOT fix this: 66 of those circular checks ALREADY
+# embed `docker exec` / `rpk topic produce` as *quoted text* inside the grep, so a
+# stricter list passes them unchanged. A substring test structurally cannot tell
+# "the probe executes" from "the probe's name appears as an argument to echo".
+#
+# The rule below is two-part, and the DENY runs first and unconditionally:
+#
+#   1. DENY self-reference — a check that reads back the receipt/contract tree the
+#      evidence author writes is circular by construction. This is what defeats
+#      embedding a probe keyword inside a quoted string.
+#   2. ALLOW only a live-surface probe in COMMAND POSITION — the check_value is
+#      shell-parsed (split on && || ; |, recursing into $(...) and `bash -c`), and
+#      at least one segment's *command* must be a probe binary. `echo 'docker exec'`
+#      does not qualify: shlex keeps "docker exec" as a single quoted argument to
+#      `echo`, so `docker` never reaches command position.
+#
+# The distinguishing property is where the check's exit status gets its information.
+# A real probe queries a live external surface whose state is NOT under the author's
+# control at authoring time; a vacuous check reads back artifacts the author wrote.
+#
+# Fails CLOSED: an empty, non-string, or unparseable check_value is REJECTED.
+# ---------------------------------------------------------------------------
+
+# Retained ONLY for the report-only rollout stage (see FALSIFIABILITY_MODE_ENV):
+# the legacy verdict is still computed so CI can log the old-vs-new delta before
+# the new rule becomes load-bearing.
+LEGACY_DEPLOY_KEYWORDS = ["docker exec", "rpk topic produce", "deploy"]
+
+# Commands that probe a LIVE runtime surface. Their exit status depends on the
+# state of a deployed system, not on the content of a file the author wrote.
+LIVE_PROBE_COMMANDS = frozenset(
+    {
+        # containers / orchestrators
+        "docker",
+        "docker-compose",
+        "podman",
+        "nerdctl",
+        "kubectl",
+        # message broker
+        "rpk",
+        "kcat",
+        "kafkacat",
+        # datastores
+        "psql",
+        "mysql",
+        "redis-cli",
+        "valkey-cli",
+        "mongosh",
+        # HTTP surfaces
+        "curl",
+        "wget",
+        "httpie",
+        # remote hosts
+        "ssh",
+        # ONEX node dispatch against the live runtime
+        "onex",
+        # GitHub REST API content reads — OMN-14443 backfill: reads the
+        # actual state of a *different* repo (the product repo whose deploy
+        # is being assessed) at a pinned commit SHA. This is the ONLY
+        # live-probe command that is simultaneously (a) reachable from every
+        # CI runner (github.com, not a LAN/.201 host — unlike
+        # docker/kubectl/rpk/psql, which need a live daemon or LAN route this
+        # classifier's own LIVE_PROBE_COMMANDS list otherwise assumes CI does
+        # not have) and (b) NOT flagged by onex_change_control's OMN-14051
+        # hermetic-command guard (contract_compliance_check.py's
+        # _REMOTE_SHELL_BINS / _DAEMON_BINS / _NET_FETCH_BINS deny lists do
+        # not include `gh`, and that guard's own rejection message recommends
+        # `gh api repos/OWNER/REPO/pulls/<pr> --jq .merged` as the canonical
+        # non-inert check). Deliberately scoped to the compound token
+        # "gh-api" (see ``_commands_in``), NOT bare "gh": `gh pr view/list/
+        # status` only report PR/issue metadata and are trivially true via
+        # almost every ticket's own generated self-bind check
+        # (`gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state`) —
+        # accepting bare `gh` would retroactively reclassify hundreds of
+        # pre-existing, non-substantive self-bind checks across the corpus as
+        # "falsifiable". Only `gh api ...` (a genuine content read) qualifies.
+        "gh-api",
+    }
+)
+
+# Transparent wrappers: they execute their argument, so the real command is the
+# next token. `env -u PYTHONPATH docker exec ...` must still resolve to `docker`.
+WRAPPER_COMMANDS = frozenset(
+    {
+        "env",
+        "sudo",
+        "time",
+        "timeout",
+        "nohup",
+        "stdbuf",
+        "nice",
+        "command",
+        "exec",
+        "xargs",
+        "then",
+        "do",
+    }
+)
+
+# Shells whose `-c <string>` argument is itself a script to parse.
+SHELL_COMMANDS = frozenset({"bash", "sh", "zsh", "dash"})
+
+# Artifact trees the evidence author writes in the SAME OCC companion PR. A
+# check_value that reads these back is self-referential: its verdict is decided by
+# text the author typed, not by the state of any deployed system.
+SELF_REFERENTIAL_PATTERNS: list[Pattern[str]] = [
+    # the DoD receipt tree — drift/dod_receipts/OMN-X/<item>/command.yaml
+    re.compile(r"dod_receipts", re.IGNORECASE),
+    # $CONTRACT_REPO_DIR / ${CONTRACT_REPO_DIR} — the OCC checkout root
+    re.compile(r"\$\{?CONTRACT_REPO_DIR\b", re.IGNORECASE),
+    # the ticket's own contract file
+    re.compile(r"contracts/OMN-\d+\.ya?ml", re.IGNORECASE),
+]
+
+# Rollout control (OMN-14505). "report" computes the falsifiability verdict and
+# logs it, but the gate's exit status stays on the legacy rule — zero merge risk
+# while the true failure population is measured across the 4 consuming repos.
+# "enforce" makes falsifiability load-bearing. The flip is an env change, not a
+# code change: the enforce path is fully implemented and tested.
+FALSIFIABILITY_MODE_ENV = "DEPLOY_GATE_FALSIFIABILITY"
+FALSIFIABILITY_MODE_DEFAULT = "report"
+
+# ---------------------------------------------------------------------------
+# OMN-14443: the falsifiability ratchet.
+#
+# OMN-14505 shipped classify_check_value() as a REAL classifier, but kept it
+# report-only because a blind global "enforce" flip would fail deploy-gate on
+# every one of the ~98% of the live onex_change_control corpus that only ever
+# declared vacuous evidence — wedging merges org-wide is not an acceptable
+# fix for a false-green.
+#
+# The ratchet closes the loophole PROSPECTIVELY without that blast radius:
+# tickets present in the frozen GRANDFATHER_FILE snapshot (weak evidence that
+# already existed at snapshot time) keep the legacy soft-pass; every ticket
+# NOT in that snapshot — i.e. every ticket newly authored after it — is held
+# to the real bar unconditionally: it must declare a falsifiable probe or the
+# gate FAILS, regardless of FALSIFIABILITY_MODE_ENV. This is fail-closed for
+# new tickets and a no-op for every ticket that was already passing.
+# ---------------------------------------------------------------------------
+GRANDFATHER_FILE = Path(__file__).parent / "deploy_gate_legacy_grandfather.yaml"
+
+# Author-facing guidance. It deliberately describes the PROPERTY required, not a
+# word to type — the whole defect was that the gate advertised a magic substring,
+# so authors supplied the substring instead of the evidence.
+DEPLOY_EVIDENCE_GUIDANCE = (
+    "Add a dod_evidence item to onex_change_control/contracts/OMN-XXXX.yaml whose "
+    "check_value is a FALSIFIABLE deploy probe: it must execute a command against a "
+    "live surface (docker/kubectl/rpk/psql/curl/ssh/onex/gh) so that its exit status "
+    "depends on the state of the deployed system. It must NOT read back the receipt "
+    "or contract your own PR authors (drift/dod_receipts/..., $CONTRACT_REPO_DIR) — "
+    "such a check greps text you wrote and can never go RED. "
+    "Good: docker exec ${RUNTIME_CONTAINER:-omninode-runtime} python -c 'import <changed_module>'. "
+    "Good (compute-only/no-live-deploy tickets, hermetic under onex_change_control's "
+    "OMN-14051 guard): gh api repos/OWNER/REPO/contents/<changed_path>?ref=<merge_sha> "
+    "--jq .content | base64 -d | grep -q '<symbol the fix introduces>'. "
+    "Rejected: grep -q '^status: PASS$' drift/dod_receipts/OMN-XXXX/dod-deploy/command.yaml."
+)
+
+_CMD_SUBST_RE = re.compile(r"\$\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+_BACKTICK_RE = re.compile(r"`([^`]*)`")
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+# Shell operators that terminate one command and begin the next. Split on these
+# only AFTER lexing — a `;` inside a quoted python -c string is data, not an
+# operator, and splitting the raw text on it corrupts the quoting.
+_OPERATOR_TOKENS = frozenset({"&&", "||", "|", ";", "&", "(", ")", "\n"})
+
+# Wrapper flags that consume the following token as their value, so the real
+# command is two tokens further on (`env -u PYTHONPATH docker exec ...`).
+_WRAPPER_FLAGS_WITH_ARG = frozenset(
+    {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
+)
+
+# `timeout 30`, `timeout 1m` — a bare duration argument to a wrapper.
+_DURATION_RE = re.compile(r"^\d+(\.\d+)?[smhd]?$")
+
+
+@dataclass(frozen=True)
+class CheckVerdict:
+    """Why one check_value was accepted or rejected as deploy evidence."""
+
+    falsifiable: bool
+    reason: str
+
+
+def _lex(script: str) -> list[str]:
+    """Lex a shell script into tokens, with operators kept as their own tokens.
+
+    ``punctuation_chars=True`` is what makes this correct: it groups ``&&`` / ``||``
+    as single tokens AND — critically — it lexes *after* quote handling, so a ``;``
+    inside ``python -c "a; b"`` stays inside the quoted token instead of being
+    mistaken for a command separator.
+
+    Quote-stripping is also what makes the whole rule work: ``echo 'docker exec x'``
+    lexes to ``['echo', 'docker exec x']``, so the probe name inside the quotes is a
+    single *argument* token and can never reach command position.
+
+    An unparseable script (unbalanced quotes) fails CLOSED — no tokens, no probe.
+    """
+    lexer = shlex.shlex(script, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        return list(lexer)
+    except ValueError:
+        return []
+
+
+def _command_of(tokens: list[str]) -> tuple[str | None, list[str]]:
+    """Return (command, remaining_args) for one pipeline segment.
+
+    Skips leading ``!`` negation, ``VAR=value`` assignments, and transparent
+    wrappers (``env -u PYTHONPATH docker exec ...`` must still resolve to
+    ``docker``; ``timeout 30 kubectl ...`` to ``kubectl``).
+
+    ``command -v``/``command -V`` is a POSIX PATH-lookup builtin, not
+    execution: ``command -v docker`` only tests that ``docker`` resolves to
+    an executable, so its exit status carries no information about whether
+    docker itself would succeed. Unwrapping it to ``docker`` (as with a real
+    wrapper like ``env``) would let a lookup-only check pass as a live probe
+    — the same vacuous-acceptance defect this file exists to close. Detected
+    before generic wrapper-flag consumption so it can short-circuit to "no
+    command" instead of falling through to the wrapped executable.
+    """
+    idx = 0
+    in_wrapper = False
+    while idx < len(tokens):
+        word = tokens[idx]
+        if word == "!" or _ASSIGNMENT_RE.match(word):
+            idx += 1
+            continue
+        if Path(word).name.lower() in WRAPPER_COMMANDS:
+            if (
+                Path(word).name.lower() == "command"
+                and idx + 1 < len(tokens)
+                and (tokens[idx + 1] in ("-v", "-V"))
+            ):
+                return None, []
+            in_wrapper = True
+            idx += 1
+            continue
+        if in_wrapper:
+            # Consume the wrapper's own flags/arguments until the real command.
+            if word in _WRAPPER_FLAGS_WITH_ARG:
+                idx += 2
+                continue
+            if word.startswith("-") or _DURATION_RE.match(word):
+                idx += 1
+                continue
+        break
+    if idx >= len(tokens):
+        return None, []
+    return Path(tokens[idx]).name.lower(), tokens[idx + 1 :]
+
+
+def _commands_in(script: str, depth: int = 0) -> set[str]:
+    """Return the commands appearing in COMMAND POSITION in a shell script.
+
+    Recurses into ``$(...)`` / backtick substitutions and ``bash -c '<script>'``,
+    because a probe genuinely executes in all three positions. Depth-bounded so
+    pathological nesting cannot spin.
+    """
+    if depth > 4 or not script.strip():
+        return set()
+
+    found: set[str] = set()
+
+    # Commands inside substitutions ARE executed — recurse before stripping them.
+    for match in _CMD_SUBST_RE.finditer(script):
+        found |= _commands_in(match.group(1), depth + 1)
+    for match in _BACKTICK_RE.finditer(script):
+        found |= _commands_in(match.group(1), depth + 1)
+
+    # Replace substitutions with a space so their inner text is not re-read as a
+    # top-level argument. Substituting a space (not "") keeps surrounding quotes
+    # balanced: `test "$(docker ...)" = x` -> `test " " = x`.
+    stripped = _BACKTICK_RE.sub(" ", _CMD_SUBST_RE.sub(" ", script))
+
+    # Split the LEXED token stream on operator tokens — never the raw text.
+    segment: list[str] = []
+    segments: list[list[str]] = []
+    for token in _lex(stripped):
+        if token in _OPERATOR_TOKENS:
+            segments.append(segment)
+            segment = []
+        else:
+            segment.append(token)
+    segments.append(segment)
+
+    for tokens in segments:
+        command, rest = _command_of(tokens)
+        if command is None:
+            continue
+
+        # `bash -c '<script>'` — the -c argument is a script, not an argument.
+        if command in SHELL_COMMANDS:
+            if "-c" in rest:
+                c_at = rest.index("-c")
+                if c_at + 1 < len(rest):
+                    found |= _commands_in(rest[c_at + 1], depth + 1)
+            continue
+
+        found.add(command)
+
+        # `gh api ...` specifically — NOT bare `gh`. `gh pr view/list/status`
+        # only report PR/issue metadata (state, existence) and are trivially
+        # true for almost every ticket via its own generated self-bind check
+        # (`gh pr view ${PR_NUMBER} --repo ${REPO} --json number,state`);
+        # accepting bare `gh` would retroactively reclassify hundreds of those
+        # pre-existing, non-substantive self-bind checks as "falsifiable"
+        # across the whole corpus. `gh api ...` reads actual repo CONTENT at a
+        # ref, which is the live, non-self-referential surface this ticket
+        # backfills against — see LIVE_PROBE_COMMANDS comment.
+        if command == "gh" and rest and rest[0] == "api":
+            found.add("gh-api")
+
+    return found
+
+
+def classify_check_value(value: object) -> CheckVerdict:
+    """Decide whether a check_value is a FALSIFIABLE deploy probe.
+
+    Falsifiable means: run it against un-deployed / unfixed code and it goes RED.
+    Fails CLOSED — anything not provably a live probe is rejected.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return CheckVerdict(False, "check_value is empty or not a string")
+
+    # (1) DENY self-reference FIRST and unconditionally. This is the rule that
+    # defeats embedding a probe keyword as quoted text beside a circular grep.
+    for pattern in SELF_REFERENTIAL_PATTERNS:
+        if pattern.search(value):
+            return CheckVerdict(
+                False,
+                "self-referential: reads back the receipt/contract tree the "
+                "evidence author writes in the same PR, so its verdict is decided "
+                "by text the author typed, not by the state of a deployed system "
+                f"(matched {pattern.pattern!r})",
+            )
+
+    # (2) ALLOW only a live-surface probe in COMMAND POSITION.
+    commands = _commands_in(value)
+    probes = commands & LIVE_PROBE_COMMANDS
+    if not probes:
+        return CheckVerdict(
+            False,
+            "no live-surface probe in command position — the check's exit status "
+            "cannot depend on the state of the deployed system (commands found: "
+            f"{sorted(commands) or 'none'}; expected one of: "
+            f"{sorted(LIVE_PROBE_COMMANDS)})",
+        )
+
+    return CheckVerdict(
+        True, f"live-surface probe in command position: {sorted(probes)}"
+    )
+
+
+def _legacy_has_deploy_keyword(value: object) -> bool:
+    """The pre-OMN-14505 substring rule. Retained only for report-mode delta logs."""
+    if not isinstance(value, str):
+        return False
+    return any(kw in value.lower() for kw in LEGACY_DEPLOY_KEYWORDS)
+
+
+def falsifiability_mode() -> str:
+    """Resolve the rollout mode: 'report' (default) or 'enforce'."""
+    mode = os.environ.get(FALSIFIABILITY_MODE_ENV, FALSIFIABILITY_MODE_DEFAULT)
+    return mode.strip().lower() or FALSIFIABILITY_MODE_DEFAULT
 
 
 def _glob_to_regex(pattern: str) -> Pattern[str]:
@@ -189,6 +576,94 @@ def _cli_file_has_deploy_signal(path: str) -> bool:
     return bool(CLI_DEPLOY_SIGNAL_PATTERN.search(text))
 
 
+# ---------------------------------------------------------------------------
+# Pure-COMPUTE node exemption (OMN-15065).
+#
+# RUNTIME_PATH_PATTERNS matches every file under src/*/nodes/<name>/
+# unconditionally (contract.yaml, handlers/**, models/**), which does not
+# distinguish a def-B COMPUTE node (rule 7a: handle(request) -> response, no
+# I/O, no event_bus, not a running service) from a node that genuinely
+# deploys onto the runtime (Kafka-wired EFFECT/ORCHESTRATOR/REDUCER, or a
+# COMPUTE node that IS bus-wired, e.g. node_advanced_features_resolve_compute).
+#
+# A pure-COMPUTE node deploys nothing, so there is no live surface for it to
+# probe (docker exec / rpk / kubectl / psql / ... all require a running
+# service). Before this fix the gate's only passing path for such a node was
+# a PR author hand-authoring a dod_evidence check_value that satisfies the
+# matcher without proving anything live — i.e. fabricated evidence. See
+# OMN-14232 (named this exact fix direction, closed without landing it).
+#
+# The exemption is derived from the node's OWN contract.yaml content — never
+# from a PR-author-supplied flag, which could be set to dodge the gate. A
+# node under nodes/<name>/ is exempt iff its contract simultaneously
+# declares a compute archetype AND no event_bus topics AND no external
+# transport. A compute-archetype node that keeps any bus/transport surface
+# (e.g. node_advanced_features_resolve_compute: node_type=compute but
+# Kafka-wired via event_bus) is NOT exempt — it deploys via the runtime and
+# stays gated on real deploy evidence. Unreadable/unparsable contract.yaml
+# fails CLOSED — treated as NOT exempt, still gated.
+# ---------------------------------------------------------------------------
+_COMPUTE_NODE_TYPES = frozenset({"compute", "compute_generic"})
+_NON_EXTERNAL_TRANSPORTS = frozenset({"", "inmemory", "in_memory", "in-memory"})
+_NODE_DIR_RE = re.compile(r"^(.*/nodes/[^/]+)/")
+
+
+def _node_dir_of(path: str) -> str | None:
+    """Return the `.../nodes/<name>` directory prefix of `path`, if any."""
+    match = _NODE_DIR_RE.match(path)
+    return match.group(1) if match else None
+
+
+def _node_contract_proves_non_deployable(node_dir: str) -> bool:
+    """Return True iff `<node_dir>/contract.yaml` proves the node is a pure,
+    non-bus-wired COMPUTE node with nothing to deploy.
+
+    Reads relative to the current working directory (CI runs this validator
+    from the checked-out caller-repo root). Fails CLOSED on any of: missing
+    file, unparsable YAML, non-mapping content, missing/ambiguous archetype
+    fields, or any declared bus/transport surface.
+    """
+    try:
+        text = Path(node_dir, "contract.yaml").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return False
+
+    import yaml
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    if not isinstance(data, dict):
+        return False
+
+    node_type = str(data.get("node_type") or "").strip().strip('"').lower()
+    descriptor = data.get("descriptor")
+    archetype = ""
+    if isinstance(descriptor, dict):
+        archetype = str(descriptor.get("node_archetype") or "").strip().lower()
+    if node_type not in _COMPUTE_NODE_TYPES and archetype not in _COMPUTE_NODE_TYPES:
+        return False
+
+    event_bus = data.get("event_bus")
+    if isinstance(event_bus, dict):
+        publish_topics = event_bus.get("publish_topics") or []
+        subscribe_topics = event_bus.get("subscribe_topics") or []
+        if publish_topics or subscribe_topics:
+            return False
+
+    metadata = data.get("metadata")
+    transport_type = ""
+    if isinstance(metadata, dict):
+        transport_type = str(metadata.get("transport_type") or "").strip().lower()
+    if transport_type not in _NON_EXTERNAL_TRANSPORTS:
+        return False
+
+    return True
+
+
 def find_runtime_paths(changed_files: list[str]) -> list[str]:
     """Return subset of changed_files that match runtime path patterns.
 
@@ -196,16 +671,33 @@ def find_runtime_paths(changed_files: list[str]) -> list[str]:
     unconditional RUNTIME_PATH_PATTERNS: they only count as a hit when their
     own content carries a deploy-relevant signal (see
     _cli_file_has_deploy_signal / OMN-14244).
+
+    A file under nodes/<name>/ is excluded from the result (OMN-15065) when
+    that node's own contract.yaml proves it is a pure, non-bus-wired COMPUTE
+    node — see _node_contract_proves_non_deployable. The per-node verdict is
+    memoized so a multi-file node diff only reads contract.yaml once.
     """
     hits: list[str] = []
+    node_exemptions: dict[str, bool] = {}
     for f in changed_files:
-        if any(regex.match(f) for regex in _COMPILED_RUNTIME_PATTERNS):
-            hits.append(f)
+        matched = any(regex.match(f) for regex in _COMPILED_RUNTIME_PATTERNS)
+        if not matched:
+            matched = any(
+                regex.match(f) for regex in _COMPILED_CLI_PATTERNS
+            ) and _cli_file_has_deploy_signal(f)
+        if not matched:
             continue
-        if any(regex.match(f) for regex in _COMPILED_CLI_PATTERNS) and (
-            _cli_file_has_deploy_signal(f)
-        ):
-            hits.append(f)
+
+        node_dir = _node_dir_of(f)
+        if node_dir is not None:
+            if node_dir not in node_exemptions:
+                node_exemptions[node_dir] = _node_contract_proves_non_deployable(
+                    node_dir
+                )
+            if node_exemptions[node_dir]:
+                continue
+
+        hits.append(f)
     return hits
 
 
@@ -385,26 +877,130 @@ def resolve_occ_evidence_source(
     )
 
 
-def has_deploy_evidence(contract_path: Path) -> bool:
-    """Return True if the ticket contract has at least one deploy DoD evidence item."""
+def iter_check_values(contract_path: Path) -> list[tuple[str, object]]:
+    """Yield (evidence_item_id, check_value) for every check in a ticket contract."""
     if not contract_path.exists():
-        return False
+        return []
     import yaml
 
     try:
         with contract_path.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     except (yaml.YAMLError, OSError):
-        return False
+        return []
 
     dod_evidence = data.get("dod_evidence", []) if isinstance(data, dict) else []
+    out: list[tuple[str, object]] = []
     for item in dod_evidence:
-        checks = item.get("checks", []) if isinstance(item, dict) else []
-        for check in checks:
-            value = check.get("check_value", "") if isinstance(check, dict) else ""
-            if isinstance(value, str):
-                if any(kw in value.lower() for kw in DEPLOY_KEYWORDS):
-                    return True
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or item.get("evidence_id") or "?")
+        for check in item.get("checks", []) or []:
+            if isinstance(check, dict):
+                out.append((item_id, check.get("check_value", "")))
+    return out
+
+
+def _load_grandfather_tickets(
+    grandfather_file: Path | None = None,
+) -> frozenset[str]:
+    """Load the frozen OMN-14443 ratchet snapshot of vacuous-only ticket IDs.
+
+    Missing or unparseable file fails CLOSED to an EMPTY set — i.e. every
+    ticket is then held to the real falsifiability bar. A broken/absent
+    snapshot must never silently grandfather everything.
+
+    ``grandfather_file`` defaults to the module-level ``GRANDFATHER_FILE``
+    global, resolved at CALL time (not bound as a function-definition-time
+    default) so that tests can ``monkeypatch`` the module global and have it
+    take effect.
+    """
+    if grandfather_file is None:
+        grandfather_file = GRANDFATHER_FILE
+    if not grandfather_file.exists():
+        return frozenset()
+    import yaml
+
+    try:
+        with grandfather_file.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+    except (yaml.YAMLError, OSError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    tickets = data.get("tickets", [])
+    if not isinstance(tickets, list):
+        return frozenset()
+    return frozenset(str(t).upper() for t in tickets if isinstance(t, str))
+
+
+def has_deploy_evidence(contract_path: Path, ticket_id: str | None = None) -> bool:
+    """Return True if the contract declares at least one FALSIFIABLE deploy probe.
+
+    OMN-14505: this used to be a substring test for the word "deploy", which any
+    string containing that word satisfied. It is now a falsifiability test — see
+    ``classify_check_value``. In "report" mode (the rollout default) the returned
+    verdict stays on the legacy rule so no repo's merges are wedged, but the
+    falsifiability verdict is computed and logged so the delta is measurable.
+
+    OMN-14443: report mode is no longer an unconditional soft-pass. A ticket
+    with ONLY vacuous evidence is soft-passed if and only if it is present in
+    the frozen ``GRANDFATHER_FILE`` snapshot. A ticket NOT in that snapshot —
+    every ticket authored after the snapshot was taken — is held to the real
+    bar unconditionally: vacuous-only evidence FAILS the gate, closing the
+    false-green prospectively without wedging any pre-existing ticket.
+    """
+    checks = iter_check_values(contract_path)
+    enforce = falsifiability_mode() == "enforce"
+
+    falsifiable = [(i, v) for i, v in checks if classify_check_value(v).falsifiable]
+    legacy = [(i, v) for i, v in checks if _legacy_has_deploy_keyword(v)]
+
+    if falsifiable:
+        return True
+    if not legacy:
+        return False
+
+    # Vacuous-only evidence from here down: legacy-passing, not falsifiable.
+    if enforce:
+        return False
+
+    grandfathered = (
+        ticket_id is not None and ticket_id.upper() in _load_grandfather_tickets()
+    )
+
+    if grandfathered:
+        print(
+            f"::warning::deploy-gate falsifiability (OMN-14505, grandfathered): "
+            f"{contract_path.name} passes the LEGACY substring rule but declares NO "
+            f"falsifiable deploy probe. It is soft-passed only because it is in the "
+            f"frozen OMN-14443 grandfather snapshot ({GRANDFATHER_FILE.name}). "
+            f"Vacuous checks: "
+            + "; ".join(
+                f"[{i}] {classify_check_value(v).reason}" for i, v in legacy[:3]
+            )
+        )
+        return True
+
+    if ticket_id is None:
+        # Back-compat path (no ticket_id supplied by the caller): behave as the
+        # pre-OMN-14443 report-mode soft-pass so existing direct callers of this
+        # function are not silently broken by the ratchet.
+        print(
+            f"::warning::deploy-gate falsifiability (OMN-14505, report-only, "
+            f"no ticket_id supplied): {contract_path.name} passes the LEGACY "
+            f"substring rule but declares NO falsifiable deploy probe."
+        )
+        return True
+
+    print(
+        f"::error::deploy-gate falsifiability ratchet (OMN-14443): {ticket_id} is "
+        f"NOT in the frozen grandfather snapshot ({GRANDFATHER_FILE.name}) and "
+        f"{contract_path.name} declares NO falsifiable deploy probe — only vacuous "
+        f"(self-referential or non-executing) evidence. New tickets must declare a "
+        f"real live-surface probe. Vacuous checks: "
+        + "; ".join(f"[{i}] {classify_check_value(v).reason}" for i, v in legacy[:3])
+    )
     return False
 
 
@@ -448,10 +1044,8 @@ def validate_pr_deploy_gate(
             message=(
                 "DEPLOY GATE FAILED: PR touches runtime paths but cites no OMN-XXXX ticket. "
                 f"Runtime paths: {runtime_hits}. "
-                "Add a dod_evidence item with check_value containing 'deploy', "
-                "'docker exec', or 'rpk topic produce' to the ticket contract in "
-                "onex_change_control/contracts/OMN-XXXX.yaml. "
-                "See OMN-8912, OMN-9685, and OMN-11423."
+                f"{DEPLOY_EVIDENCE_GUIDANCE} "
+                "See OMN-8912, OMN-9685, OMN-11423, and OMN-14505."
             ),
         )
 
@@ -460,7 +1054,7 @@ def validate_pr_deploy_gate(
     for ticket_id in ticket_ids:
         contract_path = contracts_dir / f"{ticket_id}.yaml"
         tickets_checked.append(ticket_id)
-        if has_deploy_evidence(contract_path):
+        if has_deploy_evidence(contract_path, ticket_id=ticket_id):
             return DeployGateResult(
                 passed=True,
                 runtime_paths_hit=runtime_hits,
@@ -477,7 +1071,7 @@ def validate_pr_deploy_gate(
         t
         for t in ticket_ids
         if (contracts_dir / f"{t}.yaml").exists()
-        and not has_deploy_evidence(contracts_dir / f"{t}.yaml")
+        and not has_deploy_evidence(contracts_dir / f"{t}.yaml", ticket_id=t)
     ]
 
     parts: list[str] = [
@@ -491,14 +1085,22 @@ def validate_pr_deploy_gate(
         )
     if no_deploy:
         parts.append(
-            f"Tickets found but missing deploy evidence (check_value must contain "
-            f"'docker exec', 'rpk topic produce', or 'deploy'): {no_deploy}."
+            f"Tickets found but declaring no falsifiable deploy probe: {no_deploy}."
         )
+        for ticket_id in no_deploy:
+            for item_id, value in iter_check_values(
+                contracts_dir / f"{ticket_id}.yaml"
+            ):
+                verdict = classify_check_value(value)
+                if not verdict.falsifiable and _legacy_has_deploy_keyword(value):
+                    parts.append(
+                        f"  {ticket_id} [{item_id}] REJECTED — {verdict.reason}"
+                    )
+    parts.append(DEPLOY_EVIDENCE_GUIDANCE)
     parts.append(
-        "Add a dod_evidence item with check_value containing 'deploy', 'docker exec', or "
-        "'rpk topic produce' to onex_change_control/contracts/OMN-XXXX.yaml. "
         "Root cause: OMN-8841 (deploy-agent inactive 2 days post-Dockerfile change). "
-        "Gate: OMN-8912. Contract source fix: OMN-11423."
+        "Gate: OMN-8912. Contract source fix: OMN-11423. "
+        "Falsifiability fix: OMN-14505."
     )
 
     return DeployGateResult(

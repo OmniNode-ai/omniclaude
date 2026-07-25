@@ -42,9 +42,10 @@ Then **verify the probeable claims against live surfaces** — the ledger is a
 report, not truth. Batch these:
 
 ```
-# PR states cited in the ledger (merged? open? red?)
-gh pr view <n> --repo OmniNode-ai/<repo> --json number,state,mergedAt,mergeStateStatus
-gh pr checks <n> --repo OmniNode-ai/<repo>
+# PR states cited in the ledger (merged? open? red?) — structured rows out,
+# never a raw gh JSON dump (a prior raw-gh probe burned ~127k tokens here).
+onex skill pr_state --operation pr_status --repo OmniNode-ai/<repo> --pr <n>
+onex skill pr_state --operation ci_checks --repo OmniNode-ai/<repo> --pr <n>
 
 # Ticket states (via the linear MCP tools, when a Done/Started flip is claimed)
 # Runtime/lane claims (only when §1 asserts lane health):
@@ -72,9 +73,23 @@ actually moved. **Do not reshuffle for cosmetics.** Confirm no change violates a
 hard-fail (churn without evidence, work dropped without evidence, §0 mutated,
 day-buckets, revision-log edit).
 
+### Phase 3.5 — Fable bounded-diff review
+
+Opus remains the foreground orchestrator. Give Fable the reconciled evidence,
+the exact sections identified in Phase 3, and the proposed change set. Request
+only a unified diff plus a hunk-to-evidence map. Do not ask Fable to rewrite,
+summarize, or re-author the plan.
+
+Reject a proposed hunk if it has no cited evidence, changes a stable section,
+mutates §0 without a direct operator directive, or removes unfinished work. If
+Fable is unavailable, record `FABLE_DIFF_REVIEW=NOT_RUN` and continue with the
+same minimal-diff checks; never widen the edit because the review is absent.
+
 ## Phase 4 — Update the plan (apply the minimal diff)
 
-Edit `$PLAN` in place with targeted edits — **never** a full rewrite:
+Opus applies only accepted Fable hunks (or its own equivalently bounded hunks
+when the review is unavailable). Edit `$PLAN` in place with targeted edits —
+**never** a full rewrite:
 
 1. **§1** — replace only the contradicted/stale lines with the corrected,
    source-tagged state (executed probe, or `[reported: <surface>]`, or
@@ -96,6 +111,8 @@ Edit `$PLAN` in place with targeted edits — **never** a full rewrite:
 1. Emit the governor report in the SKILL.md **Output Format** (Project Status →
    Ledger Summary → Required Plan Changes → Updated Work Queue → Risks →
    Recommended Next Actions → Assumptions).
+   State `FABLE_DIFF_REVIEW=RAN` or `FABLE_DIFF_REVIEW=NOT_RUN` and list any
+   rejected proposed hunks.
 2. Unless `--dry-run` or `--no-commit`: stage and commit.
    ```
    git -C "$OMNI_HOME" add docs/plans/ROLLING_SEVEN_DAY_PLAN.md   # local-path-ok: OMNI_HOME = canonical workspace repo root

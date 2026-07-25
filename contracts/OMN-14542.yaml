@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-14542"
+title: "contract_sweep: required full-corpus census + scanned_count>0 gate (class fix, parent OMN-14531)"
+summary: >
+  contract_sweep (omnimarket node_contract_sweep) reported PASS/clean over an unresolvable or
+  drastically narrowed scope: a prior receipt showed 9 contracts checked clean while 941 exist
+  in the corpus (~1% coverage). Root cause: ContractSweepRequest.repos defaulted to an empty
+  list, which the handler silently reinterpreted as "scan whatever top-level omni_home dirs
+  happen to have a src/", and OMNI_HOME fell back to a guessed Path(__file__).parents[6]. This
+  local mirror covers the companion docs fix in this repo: SKILL.md/prompt.md documented a
+  fictional "Runtime Mode" (a `registration_only` field and an `onex run-node node_contract_sweep`
+  invocation) that never existed on the node's actual request model (extra="forbid") and was
+  never wired to any harness. Full evidence and the product-repo class fix live in
+  onex_change_control contract OMN-14542 / OCC companion PR #4085, bound to omnimarket PR #1739
+  and this repo's PR #1897.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-verify-1897-runtime-mode-removed"
+    description: >-
+      Product-observing check against this repo's PR #1897 head. Asserts SKILL.md/prompt.md no
+      longer document the fictional "Runtime Mode" registration_only invocation, and instead
+      describe the real CLI (`python -m omnimarket.nodes.node_contract_sweep --repos <repo,...>`)
+      with --repos required. Full check_value and independent RED/GREEN reproduction is carried
+      by onex_change_control contract OMN-14542, dod_evidence item
+      dod-verify-1897-runtime-mode-removed.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q '^status: PASS$' drift/dod_receipts/OMN-14542/dod-verify-1739-red-green-reproduced/command.yaml"

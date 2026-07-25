@@ -1,6 +1,6 @@
 ---
-description: Unified contract health skill — drift mode (static cross-repo drift detection) and runtime mode (live compliance verification); supersedes the earlier contract_verify skill
-version: 3.0.0
+description: Unified contract health skill — drift mode (static cross-repo drift detection) and the node_contract_sweep field/topic compliance sweep; supersedes the earlier contract_verify skill
+version: 3.1.0
 mode: full
 level: advanced
 debug: false
@@ -11,25 +11,21 @@ tags:
   - boundaries
   - cross-repo
   - health-check
-  - runtime
   - verification
 author: OmniClaude Team
 composable: true
 args:
   - name: --mode
-    description: "Operation mode: drift (static drift detection), runtime (live runtime verification), full (both). Default: drift"
+    description: "Operation mode: drift (static drift detection), compliance (node_contract_sweep field/topic checks). Default: drift"
     required: false
   - name: --drift
     description: "Shorthand for --mode drift"
     required: false
-  - name: --runtime
-    description: "Shorthand for --mode runtime"
-    required: false
-  - name: --full
-    description: "Shorthand for --mode full (drift + runtime)"
+  - name: --compliance
+    description: "Shorthand for --mode compliance"
     required: false
   - name: --repos
-    description: "Comma-separated repo names (default: all 8 repos). Applies to drift mode only."
+    description: "Comma-separated repo names. REQUIRED for --compliance (harness-collected census — see Compliance Mode). Optional with --drift (default: all 8 repos)."
     required: false
   - name: --dry-run
     description: "Print findings only, no ticket creation"
@@ -43,14 +39,13 @@ args:
   - name: --check-boundaries
     description: "Also validate Kafka boundary parity (default: true). Applies to drift mode only."
     required: false
-  - name: --all
-    description: "Run full 52-contract runtime verification (default: registration-only). Applies to runtime mode only."
-    required: false
 ---
 
 # contract_sweep
 
 **Announce at start:** "I'm using the contract-sweep skill."
+
+If routing fails, surface `SkillRoutingError` directly; do not produce prose.
 
 Unified contract health skill combining two detection modes:
 
@@ -58,12 +53,15 @@ Unified contract health skill combining two detection modes:
    `check-drift` infrastructure from `onex_change_control` to scan all repos for contracts
    that have drifted from their pinned baselines and Kafka boundaries that have become stale.
 
-2. **Runtime mode** (`--runtime`) — Live runtime contract compliance verification. Reads
-   `contract.yaml` files from the `omnibase_infra` verification subsystem and verifies that
-   the running system matches the declarations: registered handlers, subscribed topics,
-   published events, and cross-contract references.
-
-3. **Full mode** (`--full`) — Runs both drift and runtime modes sequentially.
+2. **Compliance mode** (`--compliance`) — Static field/topic/node_type compliance sweep of
+   `contract.yaml` files via `node_contract_sweep` (`omnimarket`). Checks required fields,
+   `onex.{cmd|evt|intent}.producer.event.vN` topic naming, and declared `node_type` against
+   the canonical set. This is a pure filesystem check — it does NOT connect to a running
+   system, and it has no "registration_only" or live-runtime probe mode (an earlier
+   revision of this file documented a `registration_only` field and an
+   `onex run-node node_contract_sweep` invocation that never existed on the node's actual
+   request model, which is `extra="forbid"` and would reject that input outright — that
+   fictional Runtime Mode section has been removed).
 
 Default mode when no flag is specified: `--drift`.
 
@@ -71,14 +69,12 @@ Default mode when no flag is specified: `--drift`.
 
 ```
 /contract-sweep --drift
-/contract-sweep --runtime
-/contract-sweep --full
+/contract-sweep --compliance --repos omnimarket
 /contract-sweep --drift --dry-run
 /contract-sweep --drift --repos omnibase_infra,omnibase_core
 /contract-sweep --drift --severity-threshold ADDITIVE
 /contract-sweep --drift --sensitivity STRICT
 /contract-sweep --drift --check-boundaries false
-/contract-sweep --runtime --all
 ```
 
 ---
@@ -200,53 +196,46 @@ tickets_created: []
 
 ---
 
-## Runtime Mode
+## Compliance Mode
 
-Runtime contract compliance verification. Reads `contract.yaml` files from the
-`omnibase_infra` verification subsystem and verifies that the running system matches
-the declarations: registered handlers, subscribed topics, published events, and
-cross-contract references.
+Static field/topic/node_type compliance sweep via `node_contract_sweep` (`omnimarket`).
+This is a pure filesystem COMPUTE check — no live-runtime connection, no registration
+probe, no "registration_only" input. It reads `contract.yaml` files under the requested
+repos and checks: required fields (`name`, `contract_version`, `node_type`,
+`node_version`, `description`), `node_type` against the canonical set, and
+`event_bus.publish_topics` / `subscribe_topics` naming
+(`onex.{cmd|evt|intent}.producer.event.vN`).
 
-### Runtime Mode Execution
+### Compliance Mode Execution
+
+`--repos` is REQUIRED on the underlying CLI — there is no "scan everything"
+default. The census must come from a real filesystem probe run by the caller (a CI
+workflow step, `scripts/ci/run_contract_sweep_gate.py`, or an equivalent harness) — never
+an operator-typed convenience value and never prose in this file:
 
 ```bash
-# Registration-only (default)
-onex run-node node_contract_sweep \
-  --input '{"registration_only": true, "dry_run": false, "output_path": "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"}' \
-  --timeout 300
-
-# Full 52-contract verification (--all flag)
-onex run-node node_contract_sweep \
-  --input '{"registration_only": false, "dry_run": false, "output_path": "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"}' \
-  --timeout 300
+python -m omnimarket.nodes.node_contract_sweep --repos omnimarket  # local-path-ok: raw CLI script, not an onex-dispatchable node — this IS its real entrypoint
 ```
 
-On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
+If dispatch/routing fails, surface `SkillRoutingError` directly; do not produce prose.
 
-### Runtime Exit Codes
+Prints a `ContractSweepResult` JSON to stdout (`violations`, `contracts_checked`,
+`scanned_count`, `summary`, `status`, `missing_repos`, `scope_error`).
 
-| Code | Meaning | Action |
-|------|---------|--------|
-| 0 | PASS | All checks passed |
-| 1 | FAIL | One or more checks failed — route to failure-to-ticket |
-| 2 | QUARANTINE | Checks could not run (infra down, missing contracts) — warn only |
+### Compliance Exit Codes
 
-### Runtime Result Handling
+| Code | `status` | Meaning | Action |
+|------|----------|---------|--------|
+| 0 | `PASS` | Scope resolved (`scanned_count > 0`), zero violations | none |
+| 1 | `FAIL` | Scope resolved, violations found | route to failure-to-ticket |
+| 1 | `ERROR` | Scope could not be trusted — `OMNI_HOME` unset, a requested repo missing on disk, or `scanned_count == 0` | investigate the census/harness; never treat as a clean sweep |
 
-On PASS (exit 0): Print `CONTRACT_VERIFY: PASS (N checks passed)`.
-
-On FAIL (exit 1): Print failure summary and route to `auto_ticket_from_findings`.
-Do not create tickets for QUARANTINE results.
-
-### Sustained PASS Auto-Close
-
-When runtime verification produces PASS for 2 consecutive runs:
-- Query open tickets with label `contract-verify` matching the now-passing checks
-- Auto-close with comment: `Sustained PASS across 2 consecutive runs. Auto-closing.`
+`ERROR` and `FAIL` both exit 1 — a caller distinguishing them should read `status` in the
+JSON body, not just the exit code.
 
 ### Deduplication
 
-Runtime failure tickets are keyed by `contract_name:check_type`. Repeated failures do
+Compliance failure tickets are keyed by `node_name:violation_type`. Repeated failures do
 not create duplicate tickets — they update or comment on the existing open ticket.
 
 ---
@@ -256,8 +245,8 @@ Ticket Priority mapping:
 - ADDITIVE → Major
 - NON_BREAKING → Minor
 
-- **close-day**: Drift mode runs as end-of-day contract health check; runtime mode runs as Phase B6
-- **integration-sweep**: Complementary (integration-sweep validates DoD; contract-sweep validates drift + runtime compliance)
+- **close-day**: Drift mode runs as end-of-day contract health check
+- **integration-sweep**: Complementary (integration-sweep validates DoD; contract-sweep validates drift + field/topic compliance)
 - **ci-watch**: Drift mode can be triggered after CI passes to verify no contract drift was introduced
 
 ## Repo List (Drift Mode)
@@ -292,11 +281,11 @@ boundaries            -> onex_change_control/boundaries/kafka_boundaries.yaml
 ```
 
 The skill wraps:
-- `onex run node_contract_sweep` (required-field + topic-naming compliance sweep, runtime mode)
+- `python -m omnimarket.nodes.node_contract_sweep --repos <repo,...>` (required-field +
+  topic-naming compliance sweep, compliance mode — `--repos` is required, see above)
 - `onex_change_control/scripts/validation/check_contract_drift.py` (hash-based drift, drift mode)
 - `onex_change_control/handlers/handler_drift_analysis.py` (field-level analysis, drift mode)
 - `onex_change_control/boundaries/kafka_boundaries.yaml` (boundary manifest, drift mode)
-- `omnibase_infra.verification.cli` (registration verification, runtime mode)
 
 ## See Also
 

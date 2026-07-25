@@ -135,25 +135,89 @@ class TestVerify:
         assert result.allowed is True
         assert result.reason == "no_pr_references"
 
-    def test_allows_when_exempt_via_label(self) -> None:
+    def test_allows_when_exempt_via_label_and_no_pr_cited(self) -> None:
+        """close-if-done exempts a decision-only ticket with NO product PR."""
         result = verify(
-            description="Done. #202 is still open in GitHub but merged on disk.",
+            description="Decision-only ticket — no implementing PR.",
             labels=["close-if-done"],
             default_repo="OmniNode-ai/omniclaude",
-            fetcher=_blocked,
+            fetcher=_blocked,  # must never be called — no refs
         )
         assert result.allowed is True
         assert result.reason == "exempt"
 
-    def test_allows_when_exempt_via_frontmatter(self) -> None:
+    def test_allows_when_exempt_via_frontmatter_and_no_pr_cited(self) -> None:
         result = verify(
-            description="close-if-done: true\n\nDone. #202",
+            description="close-if-done: true\n\nRolled up; no PR of its own.",
             labels=[],
             default_repo="OmniNode-ai/omniclaude",
             fetcher=_blocked,
         )
         assert result.allowed is True
         assert result.reason == "exempt"
+
+    def test_close_if_done_label_does_NOT_waive_open_cited_pr(self) -> None:
+        """OMN-14641 core fix: the label was a blanket merge-check bypass.
+
+        A ticket carrying `close-if-done` with an OPEN cited product PR (the
+        OMN-14582 false-Done shape) must now BLOCK — the label no longer waives
+        an unmerged cited PR.
+        """
+        result = verify(
+            description="Done. PR: #1754",
+            labels=["close-if-done"],
+            default_repo="OmniNode-ai/omnimarket",
+            fetcher=_blocked,
+        )
+        assert result.allowed is False
+        assert "OmniNode-ai/omnimarket#1754" in result.reason
+        assert "close-if-done" in result.reason
+
+    def test_frontmatter_does_NOT_waive_open_cited_pr(self) -> None:
+        result = verify(
+            description="close-if-done: true\n\nDone. #202",
+            labels=[],
+            default_repo="OmniNode-ai/omniclaude",
+            fetcher=_blocked,
+        )
+        assert result.allowed is False
+        assert "#202" in result.reason
+
+    def test_occ_evidence_pr_is_weak_and_filtered(self) -> None:
+        """A cited onex_change_control (OCC) PR is a WEAK signal: it neither
+        satisfies nor blocks a product Done. With only an open OCC PR cited and
+        a close-if-done label, the transition is treated as no-product-PR and
+        the exemption applies (deliverable 3)."""
+        result = verify(
+            description=(
+                "Evidence: https://github.com/OmniNode-ai/onex_change_control/pull/4222"
+            ),
+            labels=["close-if-done"],
+            default_repo="OmniNode-ai/omnimarket",
+            fetcher=_blocked,  # would block if the OCC ref were treated as product
+        )
+        assert result.allowed is True
+        assert result.reason == "exempt"
+
+    def test_open_product_pr_blocks_even_with_merged_occ_pr(self) -> None:
+        """A merged OCC evidence PR does not satisfy Done while the product PR
+        is still open."""
+
+        def fetcher(ref: PRRef) -> PRStatus:
+            return _blocked(ref)  # product #1754 open
+
+        result = verify(
+            description=(
+                "Product: #1754\n"
+                "Evidence: https://github.com/OmniNode-ai/onex_change_control/pull/4222"
+            ),
+            labels=[],
+            default_repo="OmniNode-ai/omnimarket",
+            fetcher=fetcher,
+        )
+        assert result.allowed is False
+        assert "#1754" in result.reason
+        assert "onex_change_control" not in result.reason  # OCC filtered out
 
     def test_rejects_on_gh_timeout(self) -> None:
         result = verify(
@@ -258,7 +322,25 @@ class TestShellWrapper:
         )
         assert result.returncode == 0
 
-    def test_allows_done_with_exempt_label(self) -> None:
+    def test_allows_done_with_exempt_label_and_no_pr(self) -> None:
+        """close-if-done exempts a decision-only ticket with NO cited PR."""
+        result = _run_hook(
+            {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {
+                    "id": "OMN-1",
+                    "state": "Done",
+                    "description": "Decision-only cleanup — no implementing PR.",
+                    "labels": ["close-if-done"],
+                },
+            }
+        )
+        assert result.returncode == 0
+
+    def test_close_if_done_does_not_bypass_open_cited_pr(self) -> None:
+        """OMN-14641: the label must NOT waive an unmerged cited PR. A bare
+        `#202` has no resolvable repo → treated as unverifiable → BLOCK (exit 2),
+        even with the close-if-done label. Hermetic: no gh/network call."""
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
@@ -270,7 +352,7 @@ class TestShellWrapper:
                 },
             }
         )
-        assert result.returncode == 0
+        assert result.returncode == 2
 
 
 class TestClassification:
@@ -291,6 +373,125 @@ class TestClassification:
             ref=PRRef(number=1, repo="a/b"), state="MERGED", merge_state="CLEAN"
         )
         assert linear_done_verify.classify_blocking(status) is False
+
+
+class TestDeployReadback:
+    """OMN-14792: deploy-readback marker + scoped implementing-PR scan."""
+
+    def test_marker_returns_evidence_value(self) -> None:
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "deploy-readback-proven: rebuilt dev effects; probe exit 0"
+            )
+            == "rebuilt dev effects; probe exit 0"
+        )
+
+    def test_marker_case_insensitive_key_and_underscore_variant(self) -> None:
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "Deploy-Readback-Proven: evidence A"
+            )
+            == "evidence A"
+        )
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "deploy_readback_proven: evidence B"
+            )
+            == "evidence B"
+        )
+
+    def test_marker_tolerates_leading_markdown(self) -> None:
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "- deploy-readback-proven: bulleted evidence"
+            )
+            == "bulleted evidence"
+        )
+
+    def test_marker_absent_returns_none(self) -> None:
+        assert linear_done_verify.parse_deploy_readback_marker("no marker here") is None
+
+    def test_empty_marker_returns_none(self) -> None:
+        """A content-free marker is not accepted (no blanket bypass token)."""
+        assert (
+            linear_done_verify.parse_deploy_readback_marker("deploy-readback-proven:")
+            is None
+        )
+        assert (
+            linear_done_verify.parse_deploy_readback_marker(
+                "deploy-readback-proven:   "
+            )
+            is None
+        )
+
+    def test_scratch_annotation_detection(self) -> None:
+        assert linear_done_verify.line_is_scratch_annotated("scratch live-mint PR")
+        assert linear_done_verify.line_is_scratch_annotated("throwaway readback PR")
+        assert linear_done_verify.line_is_scratch_annotated("do-not-merge test PR")
+        # A normal implementing line mentioning "tests" is NOT scratch.
+        assert not linear_done_verify.line_is_scratch_annotated(
+            "added tests in https://github.com/OmniNode-ai/omniclaude/pull/1"
+        )
+
+    def test_implementing_refs_exclude_scratch_annotated_url(self) -> None:
+        desc = (
+            "Scratch live-mint PR (throwaway):\n"
+            "https://github.com/OmniNode-ai/omnimarket/pull/1817\n"
+        )
+        assert linear_done_verify.parse_implementing_pr_refs(desc) == []
+
+    def test_implementing_refs_exclude_unresolvable_bare_numbers(self) -> None:
+        desc = "Historical merge-chain: #1724 / #3990 / #3995 (context only)."
+        # No default_repo → bare numbers are narrative, not implementing refs.
+        assert linear_done_verify.parse_implementing_pr_refs(desc) == []
+
+    def test_implementing_refs_keep_full_url_on_normal_line(self) -> None:
+        desc = "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/2000"
+        refs = linear_done_verify.parse_implementing_pr_refs(desc)
+        assert len(refs) == 1
+        assert refs[0].repo == "OmniNode-ai/omnimarket"
+        assert refs[0].number == 2000
+
+    def test_implementing_refs_resolve_bare_number_with_default_repo(self) -> None:
+        refs = linear_done_verify.parse_implementing_pr_refs(
+            "Fixed in #2000", default_repo="OmniNode-ai/omnimarket"
+        )
+        assert len(refs) == 1
+        assert refs[0].number == 2000
+
+    def test_implementing_refs_filter_weak_signal_occ(self) -> None:
+        desc = "Evidence https://github.com/OmniNode-ai/onex_change_control/pull/4222"
+        assert linear_done_verify.parse_implementing_pr_refs(desc) == []
+
+    def test_verify_implementing_no_pr_allows(self) -> None:
+        result = linear_done_verify.verify_implementing(
+            description="deploy-readback-proven: probe exit 0\nScratch: "
+            "https://github.com/OmniNode-ai/omnimarket/pull/1817",
+            labels=[],
+            fetcher=_blocked,  # must never be called — scratch ref excluded
+        )
+        assert result.allowed is True
+        assert result.reason == "no_implementing_pr"
+
+    def test_verify_implementing_blocks_open_pr(self) -> None:
+        result = linear_done_verify.verify_implementing(
+            description="Implemented in "
+            "https://github.com/OmniNode-ai/omnimarket/pull/2000",
+            labels=[],
+            fetcher=_blocked,
+        )
+        assert result.allowed is False
+        assert "OmniNode-ai/omnimarket#2000" in result.reason
+
+    def test_verify_implementing_allows_merged_pr(self) -> None:
+        result = linear_done_verify.verify_implementing(
+            description="Implemented in "
+            "https://github.com/OmniNode-ai/omnimarket/pull/2000",
+            labels=[],
+            fetcher=_merged,
+        )
+        assert result.allowed is True
+        assert result.reason == "all_implementing_prs_merged"
 
 
 class TestMainFailClosed:
@@ -372,6 +573,13 @@ class TestFetchLinearIssue:
                         "description": "Fixed in #202",
                         "state": {"name": "Done"},
                         "labels": {"nodes": [{"name": "close-if-done"}]},
+                        "attachments": {
+                            "nodes": [
+                                {
+                                    "url": "https://github.com/OmniNode-ai/omnimarket/pull/1754"
+                                }
+                            ]
+                        },
                     }
                 }
             }
@@ -390,6 +598,9 @@ class TestFetchLinearIssue:
         assert result["id"] == "OMN-9454"
         assert result["description"] == "Fixed in #202"
         assert result["labels"] == ["close-if-done"]
+        assert result["attachment_urls"] == [
+            "https://github.com/OmniNode-ai/omnimarket/pull/1754"
+        ]
 
     def test_returns_none_on_network_error(
         self, monkeypatch: pytest.MonkeyPatch
