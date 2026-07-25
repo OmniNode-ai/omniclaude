@@ -39,6 +39,11 @@ Fails closed (non-zero exit, no `git add`) on:
   than "no HEAD yet" / "path did not exist at HEAD", both of which are
   treated as an empty prior baseline -- i.e. everything in a first-ever
   baseline commit is treated as new and must be audited)
+
+`load_json`, `result_keys`, and `load_baseline_at_ref` are the reusable public
+API. `scripts/detect_secrets_ci_diff.py` (OMN-15072) imports them to apply the
+same audited-vs-unaudited classification against the target-branch baseline
+in CI, rather than re-implementing the comparison logic a second time.
 """
 
 from __future__ import annotations
@@ -76,7 +81,11 @@ def _block(message: str) -> int:
     return 1
 
 
-def _load_json(text: str, label: str) -> dict | None:
+def load_json(text: str, label: str) -> dict | None:
+    """Parse `text` as a JSON object, or return None (log why) on failure.
+
+    Public: reused by `scripts/detect_secrets_ci_diff.py` (OMN-15072).
+    """
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -93,8 +102,11 @@ def _load_json(text: str, label: str) -> dict | None:
     return parsed
 
 
-def _result_keys(baseline: dict) -> set[tuple[str, str]]:
-    """(filename, hashed_secret) identity -- ignores line_number by design (OMN-2625)."""
+def result_keys(baseline: dict) -> set[tuple[str, str]]:
+    """(filename, hashed_secret) identity -- ignores line_number by design (OMN-2625).
+
+    Public: reused by `scripts/detect_secrets_ci_diff.py` (OMN-15072).
+    """
     keys: set[tuple[str, str]] = set()
     for filename, findings in baseline.get("results", {}).items():
         for finding in findings:
@@ -102,31 +114,49 @@ def _result_keys(baseline: dict) -> set[tuple[str, str]]:
     return keys
 
 
-def _load_committed_baseline() -> dict | None:
-    """Return the last-committed baseline, or an empty one if none exists yet.
+def load_baseline_at_ref(
+    ref: str, *, path: Path = BASELINE, treat_missing_as_empty: bool = True
+) -> dict | None:
+    """Return `<ref>:<path>` (default `.secrets.baseline`) as a parsed baseline.
 
-    Returns None (caller must fail closed) on any error that is NOT simply
-    "there is no prior committed baseline."
+    Public: reused by `scripts/detect_secrets_ci_diff.py` (OMN-15072) to load
+    the target-branch baseline (e.g. `ref="origin/dev"`), where a genuinely
+    missing baseline must fail closed rather than be treated as empty --
+    pass `treat_missing_as_empty=False` for that case.
+
+    Returns None (caller must fail closed) on any error other than the
+    tracked path simply not existing at `ref` when `treat_missing_as_empty`
+    is True.
     """
     proc = subprocess.run(
-        ["git", "show", f"HEAD:{BASELINE}"],
+        ["git", "show", f"{ref}:{path}"],
         capture_output=True,
         text=True,
         check=False,
     )
     if proc.returncode == 0:
-        return _load_json(proc.stdout, "committed .secrets.baseline (HEAD)")
+        return load_json(proc.stdout, f"baseline at {ref}:{path}")
 
-    stderr_lower = proc.stderr.lower()
-    if any(marker in stderr_lower for marker in _NO_PRIOR_BASELINE_MARKERS):
-        return {"results": {}}
+    if treat_missing_as_empty:
+        stderr_lower = proc.stderr.lower()
+        if any(marker in stderr_lower for marker in _NO_PRIOR_BASELINE_MARKERS):
+            return {"results": {}}
 
     print(
-        f"[detect-secrets-guard] could not read committed baseline via `git show`: "
+        f"[detect-secrets-guard] could not read baseline via `git show {ref}:{path}`: "
         f"{proc.stderr.strip()}",
         file=sys.stderr,
     )
     return None
+
+
+def _load_committed_baseline() -> dict | None:
+    """Return the last-committed (HEAD) baseline, or an empty one if none exists yet.
+
+    Thin wrapper over `load_baseline_at_ref` preserving the pre-commit guard's
+    original "no prior HEAD" == "empty baseline" semantics.
+    """
+    return load_baseline_at_ref("HEAD", treat_missing_as_empty=True)
 
 
 def main() -> int:
@@ -139,7 +169,7 @@ def main() -> int:
     old_baseline = _load_committed_baseline()
     if old_baseline is None:
         return _block("committed .secrets.baseline is unreadable or corrupt.")
-    old_keys = _result_keys(old_baseline)
+    old_keys = result_keys(old_baseline)
 
     # Regenerate the baseline in place. This absorbs pure line-number churn on
     # already-known findings exactly like the old hook did -- that half of the
@@ -159,7 +189,7 @@ def main() -> int:
     except OSError as exc:
         return _block(f"could not read regenerated {BASELINE}: {exc}")
 
-    new_baseline = _load_json(new_text, "regenerated .secrets.baseline")
+    new_baseline = load_json(new_text, "regenerated .secrets.baseline")
     if new_baseline is None:
         return _block("regenerated .secrets.baseline is corrupt.")
 

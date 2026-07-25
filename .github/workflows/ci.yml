@@ -1671,12 +1671,65 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python -m pip install detect-secrets
 
-      - name: Scan for secrets
+      # OMN-15072: resolve a ref the PR/push author does not control within
+      # their own commit, so the diff below cannot be defeated by a secret
+      # and its own baseline-laundering entry arriving together in one
+      # commit (the same-commit `.bak` copy this replaced was blind to
+      # exactly that -- see scripts/detect_secrets_ci_diff.py docstring).
+      # `set -euo pipefail` means a fetch failure here fails the job
+      # closed, per OMN-15072's "fail closed on inability to fetch the
+      # target-branch baseline" requirement.
+      - name: Resolve target-branch ref for baseline diff
+        id: target-ref
         working-directory: ${{ github.workspace }}
         run: |
-          # Copy baseline so we can detect new findings
-          cp .secrets.baseline .secrets.baseline.bak
-          # Scan updates the baseline in-place with any new secrets
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request)
+              BASE="${{ github.event.pull_request.base.ref }}"
+              git fetch --no-tags --depth=1 origin "$BASE:refs/remotes/origin/$BASE"
+              echo "ref=origin/$BASE" >> "$GITHUB_OUTPUT"
+              ;;
+            merge_group)
+              BASE_SHA="${{ github.event.merge_group.base_sha }}"
+              git fetch --no-tags --depth=1 origin "$BASE_SHA"
+              echo "ref=$BASE_SHA" >> "$GITHUB_OUTPUT"
+              ;;
+            push)
+              BEFORE="${{ github.event.before }}"
+              if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+                # First-ever push to this branch -- no target commit to diff
+                # against. Falls back to same-commit snapshot mode below.
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              else
+                git fetch --no-tags --depth=1 origin "$BEFORE"
+                echo "ref=$BEFORE" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              # workflow_dispatch and any other trigger: no meaningful target
+              # branch exists for a manual/non-gating run. Falls back to
+              # same-commit snapshot mode below (narrower by design; this
+              # trigger type is not part of the pre-merge gating path).
+              echo "ref=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Scan for secrets
+        working-directory: ${{ github.workspace }}
+        env:
+          TARGET_REF: ${{ steps.target-ref.outputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TARGET_REF" ]; then
+            # No target-branch ref available for this trigger type -- fall
+            # back to a same-commit pre-scan snapshot (the pre-OMN-15072
+            # shape). Narrower by design; see
+            # scripts/detect_secrets_ci_diff.py docstring.
+            cp .secrets.baseline .secrets.baseline.bak
+          fi
+
+          # Scan updates the baseline in-place with any new secrets.
           detect-secrets scan \
             --baseline .secrets.baseline \
             --exclude-files '\.lock$' \
@@ -1684,32 +1737,21 @@ jobs:
             --exclude-files 'bandit-report\.json$' \
             --exclude-files '^tests/' \
             --exclude-files 'security-report\.json$'
-          # Compare: detect genuinely new secrets (content-addressed, ignores line shifts).
-          # Using only (file, hashed_secret) as the key prevents false positives when
-          # new CI jobs shift line numbers of existing baseline entries (OMN-2625).
-          NEW_SECRETS=$(python3 -c "
-          import json
-          old = json.load(open('.secrets.baseline.bak'))
-          new = json.load(open('.secrets.baseline'))
-          old_set = {(f, s['hashed_secret'])
-                     for f, secrets in old.get('results', {}).items()
-                     for s in secrets}
-          new_set = {(f, s['hashed_secret'], s['line_number'])
-                     for f, secrets in new.get('results', {}).items()
-                     for s in secrets}
-          diff = [(f, line) for f, h, line in sorted(new_set)
-                  if (f, h) not in old_set]
-          for f, line in diff:
-              print(f'  {f}:{line}')
-          print(f'COUNT:{len(diff)}')
-          ")
-          COUNT=$(echo "$NEW_SECRETS" | grep '^COUNT:' | cut -d: -f2)
-          if [ "$COUNT" -gt 0 ]; then
-            echo "$NEW_SECRETS" | grep -v '^COUNT:'
-            echo "::error::detect-secrets found $COUNT new potential secrets not in baseline"
-            exit 1
+
+          # OMN-15072: diff against the target-branch baseline (a ref this
+          # PR/push cannot rewrite within its own commit) instead of a
+          # same-commit copy, so a secret arriving alongside its own
+          # baseline-laundering entry is caught. Reuses OMN-15068's
+          # audited-vs-unaudited classification
+          # (scripts/detect_secrets_guard.py) -- one canonical
+          # implementation, not a second copy of the same logic.
+          if [ -n "$TARGET_REF" ]; then
+            python3 scripts/detect_secrets_ci_diff.py --target-ref "$TARGET_REF"
+          else
+            python3 scripts/detect_secrets_ci_diff.py --fallback-baseline .secrets.baseline.bak
           fi
-          echo "Secret detection completed - no new secrets found"
+
+          echo "Secret detection completed - no new unaudited secrets found"
 
   # ============================================================================
   # TEST SUITES
