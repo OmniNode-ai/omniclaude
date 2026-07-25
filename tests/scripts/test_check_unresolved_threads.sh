@@ -2,7 +2,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 # Smoke test for check-unresolved-threads.sh jq filter logic.
-# Pipes synthetic GraphQL JSON through the filter; asserts expected counts.
+#
+# Sources the jq filter *definitions* directly out of the real script (the
+# portion before the live `gh api graphql` call) instead of hand-copying the
+# filter text, so a future edit to the script is exercised by this test
+# automatically rather than silently diverging from a stale copy.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,53 +14,18 @@ SCRIPT="${SCRIPT_DIR}/../../scripts/check-unresolved-threads.sh"
 
 grep -q "Usage: check-unresolved-threads.sh" "$SCRIPT" || { echo "FAIL: missing Usage comment"; exit 1; }
 
-# Human rebuttal = __typename != "Bot" and login != coderabbitai
-HUMAN_REBUTTAL_FILTER='select(
-  ((.author.__typename // "") != "Bot") and
-  ((.author.login // "") | test("coderabbitai"; "i") | not)
-)'
+# Extract everything before the live `gh api graphql` call (marked by `RAW=""`)
+# and source it with dummy positional args, so BLOCKING_JQ / SECRET_BLOCKING_JQ /
+# CONCESSION_JQ / SECRET_EVIDENCE_ACK_JQ are the script's real, current values.
+FILTER_EXTRACT="$(mktemp)"
+trap 'rm -f "$FILTER_EXTRACT"' EXIT
+awk '/^RAW=""/{exit} {print}' "$SCRIPT" > "$FILTER_EXTRACT"
+# shellcheck disable=SC1090
+source "$FILTER_EXTRACT" dummyowner dummyrepo 1
 
-BLOCKING_JQ='[
-  .[].data.repository.pullRequest.reviewThreads.nodes[]
-  | select(.isResolved == false)
-  | select((.isOutdated // false) == false)
-  | select(
-      .comments.nodes[0] != null and (
-        ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
-        ((.comments.nodes[0].body // "") | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
-      )
-    )
-  | select(
-      (.comments.totalCount > (.comments.nodes | length))
-      or
-      (
-        (
-          ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
-          and
-          ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
-        ) | not
-      )
-    )
-] | length'
-
-CONCESSION_JQ='[
-  .[].data.repository.pullRequest.reviewThreads.nodes[]
-  | select(.isResolved == false)
-  | select((.isOutdated // false) == false)
-  | select(
-      .comments.nodes[0] != null and (
-        ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
-        ((.comments.nodes[0].body // "") | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
-      )
-    )
-  | select(.comments.totalCount <= (.comments.nodes | length))
-  | select(
-      ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
-      and
-      ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
-    )
-  | "cr_concession_ack path=\(.comments.nodes[0].body[:40] // "unknown" | gsub("\\n";" ")) line=\([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | .[:80] | gsub("\\n";" "))"
-][]'
+for required_var in BLOCKING_JQ CONCESSION_JQ SECRET_BLOCKING_JQ SECRET_EVIDENCE_ACK_JQ; do
+  [ -n "${!required_var:-}" ] || { echo "FAIL: $required_var not defined by script extract"; exit 1; }
+done
 
 # gh api graphql --paginate outputs one JSON object per page (not an array).
 # jq -s collects them into [obj1, obj2, ...]. Mocks replicate that: one object per echo.
@@ -143,5 +112,66 @@ CASE_F='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
 ],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
 COUNT=$(echo "$CASE_F" | jq -s "$BLOCKING_JQ")
 [ "$COUNT" -eq 0 ] && echo "PASS: Case F blocking=0 for outdated CR thread" || { echo "FAIL Case F: expected 0 got $COUNT"; exit 1; }
+
+# --- OMN-15061 secret-class escalation cases ---------------------------------
+# Regression proof for the process hole documented in OMN-15061 / OMN-15058:
+# CodeRabbit PR #22 (omniclaude, 2025-11-06) flagged a real, hardcoded Slack
+# webhook URL as Critical. The thread auto-resolved (isResolved:true,
+# isOutdated:true) the moment the diff swapped the literal for an env-var
+# reference — coderabbitai[bot] itself resolved it, with zero human reply.
+# The webhook was never actually rotated and stayed live/public for ~260 days.
+# Fixture values below are SYNTHETIC (non-matching placeholders), never a real
+# credential.
+
+# Case G (RED-proof-of-fix / the incident shape): Critical, "hardcoded" +
+# webhook, bot-resolved, zero human comments -> secret-class BLOCKING=1.
+# Before the OMN-15061 fix, BLOCKING_JQ alone returns 0 for this exact shape
+# (isResolved==true short-circuits it) -- that blindness is the ticket.
+CASE_G='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"isResolved":true,"isOutdated":true,"comments":{"totalCount":1,"nodes":[
+    {"body":"_Potential issue_ | _Critical_ CRITICAL: Remove hardcoded Slack webhook URL immediately. This file contains a real credential.","author":{"login":"coderabbitai","__typename":"Bot"}}
+  ]}}
+],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
+LEGACY_COUNT=$(echo "$CASE_G" | jq -s "$BLOCKING_JQ")
+[ "$LEGACY_COUNT" -eq 0 ] && echo "PASS: Case G confirms BLOCKING_JQ alone is blind to bot-resolved secret-class threads (the OMN-15061 hole)" || { echo "FAIL Case G: expected legacy BLOCKING_JQ=0 got $LEGACY_COUNT"; exit 1; }
+SECRET_COUNT=$(echo "$CASE_G" | jq -s "$SECRET_BLOCKING_JQ")
+[ "$SECRET_COUNT" -eq 1 ] && echo "PASS: Case G SECRET_BLOCKING_JQ=1 -- bot-resolved CRITICAL hardcoded-webhook thread now blocks" || { echo "FAIL Case G: expected SECRET_BLOCKING_JQ=1 got $SECRET_COUNT"; exit 1; }
+
+# Case H: same finding, but a human posted a rotation-evidence marker after
+# actually revoking/rotating the credential -> secret-class BLOCKING=0
+# (correctly exempted), and an audit ack line is emitted.
+CASE_H='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"isResolved":true,"isOutdated":true,"comments":{"totalCount":2,"nodes":[
+    {"body":"_Potential issue_ | _Critical_ CRITICAL: Remove hardcoded Slack webhook URL immediately. This file contains a real credential.","author":{"login":"coderabbitai","__typename":"Bot"}},
+    {"body":"rotation-evidence: OMN-15061 webhook revoked+regenerated in Slack admin console 2026-07-25","author":{"login":"jonah","__typename":"User"}}
+  ]}}
+],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
+COUNT=$(echo "$CASE_H" | jq -s "$SECRET_BLOCKING_JQ")
+[ "$COUNT" -eq 0 ] && echo "PASS: Case H blocking=0 once a human rotation-evidence marker is present" || { echo "FAIL Case H: expected 0 got $COUNT"; exit 1; }
+ACK=$(echo "$CASE_H" | jq -rs "$SECRET_EVIDENCE_ACK_JQ")
+echo "$ACK" | grep -q "^secret_rotation_evidence_ack" && echo "PASS: Case H rotation-evidence ack emitted" || { echo "FAIL Case H: no secret_rotation_evidence_ack line; got: $ACK"; exit 1; }
+
+# Case I: CodeRabbit's own "Addressed in commit X" reply must NOT count as
+# rotation evidence -- that is exactly the mechanism that let PR #22 slip
+# through. Still BLOCKING=1.
+CASE_I='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"isResolved":true,"isOutdated":true,"comments":{"totalCount":2,"nodes":[
+    {"body":"_Potential issue_ | _Critical_ CRITICAL: Remove hardcoded Slack webhook URL immediately. This file contains a real credential.","author":{"login":"coderabbitai","__typename":"Bot"}},
+    {"body":"Addressed in commit 558ae72 (env-var indirection).","author":{"login":"coderabbitai","__typename":"Bot"}}
+  ]}}
+],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
+COUNT=$(echo "$CASE_I" | jq -s "$SECRET_BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case I blocking=1 -- bot's own 'Addressed in commit' reply does not satisfy rotation-evidence" || { echo "FAIL Case I: expected 1 got $COUNT"; exit 1; }
+
+# Case J: unrelated Critical finding (RCE/eval) with no "hardcoded" +
+# credential-type match must NOT be caught by the secret-class filter
+# (narrow-by-design; rotation doesn't apply to a code-fix-only vuln class).
+CASE_J='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"isResolved":true,"comments":{"totalCount":1,"nodes":[
+    {"body":"_Security  Privacy_ | _Critical_ eval() on YAML-derived if: strings is an RCE vector.","author":{"login":"coderabbitai","__typename":"Bot"}}
+  ]}}
+],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
+COUNT=$(echo "$CASE_J" | jq -s "$SECRET_BLOCKING_JQ")
+[ "$COUNT" -eq 0 ] && echo "PASS: Case J blocking=0 -- unrelated Critical (RCE/eval) finding is not misclassified as secret-class" || { echo "FAIL Case J: expected 0 got $COUNT"; exit 1; }
 
 echo "ALL TESTS PASSED"
