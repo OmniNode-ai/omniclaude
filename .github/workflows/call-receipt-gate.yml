@@ -34,8 +34,29 @@ jobs:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
 
+  # OMN-15117 (OMN-15057 vector-5 shape, missed by #1931 because `verify / verify`
+  # had no required-checks.yaml row for the guard to check): `needs: occ-preflight`
+  # with no `if:` override means GitHub's implicit job-level `if:` — `success()`
+  # evaluated over `needs:` — SKIPS this job on any occ-preflight failure/
+  # cancellation, and a skipped job satisfies branch protection (skipped counts
+  # as passing). `verify / verify` is live-required on `main` (the dev->main
+  # promotion boundary), so that was a silent-pass bypass on the load-bearing gate.
+  #
+  # `if: always()` makes `verify` run unconditionally so it can never silently
+  # skip-as-pass. This is a PARTIAL fix in isolation — a job whose body is
+  # `uses:` (calls a reusable workflow) cannot also declare `steps:`, so there
+  # is no way to insert an inline `needs.occ-preflight.result != 'success'` ->
+  # `exit 1` guard step ahead of the call (unlike Shape-A jobs with their own
+  # steps, e.g. main-target-guard.yml, url-authority-gate.yml). Real enforcement
+  # does not depend on this job's own result: `occ-preflight / eligibility`
+  # (produced unconditionally, no `needs`/`if`, by call-occ-preflight.yml) is
+  # independently required on this repo's dev+main branch protection, so an
+  # occ-preflight failure still blocks merge via that separate required context
+  # even though this job decouples. Same precedent/rationale as omnibase_core#1499
+  # applied to its own `deploy-gate`/`verify` jobs (identical `uses:`-only shape).
   verify:
     needs: occ-preflight
+    if: always()
     # self-gating-ok: intentional cross-repo caller — omniclaude does not host
     # receipt-gate.yml itself; the reusable workflow lives in omnibase_core.
     uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@main
