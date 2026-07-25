@@ -182,6 +182,40 @@ def test_explicitly_audited_new_finding_passes(mod, tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# RED: a finding audited as a CONFIRMED real secret (is_secret: true) still
+# blocks -- `detect-secrets audit` sets True for "yes, this is real" and
+# False for "false positive"; only False is an accept signal.
+# ---------------------------------------------------------------------------
+
+
+def test_audited_as_confirmed_real_secret_still_blocks(mod, tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path, baseline={"results": {}})
+    monkeypatch.chdir(repo)
+
+    new_baseline = {
+        "results": {
+            "app/leaked_aws.py": [
+                _finding(
+                    "deadbeef" * 5, line=3, is_secret=True
+                ),  # human-confirmed REAL
+            ],
+        }
+    }
+
+    exit_code = _run_guard_with_scan_result(mod, repo, new_baseline)
+
+    assert exit_code == 1
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert ".secrets.baseline" not in staged
+
+
+# ---------------------------------------------------------------------------
 # Fail-closed: missing tool, scan error, unreadable/corrupt baseline
 # ---------------------------------------------------------------------------
 
