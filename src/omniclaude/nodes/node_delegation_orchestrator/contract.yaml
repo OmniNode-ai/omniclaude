@@ -27,6 +27,7 @@ node_version:
   patch: 0
 
 node_type: ORCHESTRATOR_GENERIC
+runtime_profiles: [main]
 
 # Canonical-inference gate structural carve-out (OMN-13249). This orchestrator
 # invokes coding-agent CLIs (Codex / Gemini) as external I/O — a distinct
