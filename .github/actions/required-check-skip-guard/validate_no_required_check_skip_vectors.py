@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Required-Check Skip-Vector Guard (OMN-14854) — PR-time validator.
+# Required-Check Skip-Vector Guard (OMN-14854; vector 5 added OMN-15057) —
+# PR-time validator.
 #
-# Fails closed on any of the four skip vectors enumerated in the design spec
+# Fails closed on any of the five skip vectors enumerated in the design spec
 # (docs/design or ticket OMN-14854; grounded against
 # `gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks`,
 # 58 contexts, fetched 2026-07-20):
@@ -23,6 +24,15 @@
 #      PENDING, worse than vector 2).
 #   4. A required context's producing/caller workflow has no
 #      pull_request/pull_request_target/merge_group trigger at all.
+#   5. (OMN-15057) A producing/caller job with a non-empty `needs:` and no
+#      job-level `if:` that provably runs regardless of the needs result
+#      (e.g. `if: always()`). GitHub's *implicit* job-level `if:` is
+#      `success()` evaluated over `needs:`, not an unconditional true — an
+#      upstream failure/cancellation SKIPS the job, and a skipped job
+#      satisfies GitHub branch protection. Live proof: omnimarket#1880 — 18
+#      required gates (including this guard's own required check) went
+#      `skipped` when the same-file `needs: occ-preflight` poller job failed
+#      on first run, satisfying branch protection without ever executing.
 #
 # Runs identically under pre-commit (local) and CI (the reusable workflow) —
 # same script, same manifest, same verdict. Enforcement, not detection
@@ -149,6 +159,52 @@ def _check_job_if(
     ]
 
 
+def _check_needs_cascade(
+    context: str,
+    workflow,
+    job,
+    label: str,
+    vector: str,
+    *,
+    skip_semantics: str = "never",
+    rationale: str = "",
+) -> list[Finding]:
+    """Vector 5 (OMN-15057): a producing/caller job with a non-empty
+    `needs:` whose job-level `if:` does not provably run regardless of the
+    needs result. Deliberately orthogonal to `_check_job_if` (vector 2/3),
+    which only inspects `if:` and treats an absent `if:` as always-safe —
+    correct for a needs-less job, silently wrong for one with `needs:`,
+    since GitHub's implicit job-level `if:` is `success()` over `needs:`.
+    """
+    if not job.needs:
+        return []
+
+    if job.if_expr is not None:
+        verdict = classify(job.if_expr, _declared_events(workflow))
+        if verdict == ALWAYS_TRUE_FOR_PR:
+            return []
+
+    if skip_semantics == "neutral_ok" and rationale.strip():
+        return []
+
+    return [
+        Finding(
+            context=context,
+            vector=vector,
+            message=(
+                f"{label} '{job.job_id}' in {workflow.path.name} has "
+                f"`needs: {list(job.needs)}` with no `if:` that provably runs "
+                "regardless of the needs result (e.g. `if: always()`). "
+                "GitHub's implicit job-level `if:` is `success()` evaluated "
+                "over `needs:` — a failed/cancelled/skipped upstream "
+                "dependency SKIPS this job, and a skipped job satisfies "
+                "GitHub branch protection (skipped counts as passing). This "
+                "is a live silent-pass bypass, not merely a wedge."
+            ),
+        )
+    ]
+
+
 def validate_gate(context: str, gate: dict, workflows: dict) -> list[Finding]:
     findings: list[Finding] = []
     producer_kind = gate.get("producer_kind", "local")
@@ -192,6 +248,17 @@ def validate_gate(context: str, gate: dict, workflows: dict) -> list[Finding]:
                 rationale=rationale,
             )
         )
+        findings.extend(
+            _check_needs_cascade(
+                context,
+                caller_wf,
+                caller_job,
+                "caller job",
+                "vector-5-ungated-needs-cascade",
+                skip_semantics=skip_semantics,
+                rationale=rationale,
+            )
+        )
         if not caller_wf.triggers_on_pr_or_merge_group():
             findings.append(
                 Finding(
@@ -220,6 +287,17 @@ def validate_gate(context: str, gate: dict, workflows: dict) -> list[Finding]:
                 rationale=rationale,
             )
         )
+        findings.extend(
+            _check_needs_cascade(
+                context,
+                wf,
+                job,
+                "producing job",
+                "vector-5-ungated-needs-cascade",
+                skip_semantics=skip_semantics,
+                rationale=rationale,
+            )
+        )
         if not wf.triggers_on_pr_or_merge_group():
             findings.append(
                 Finding(
@@ -244,6 +322,17 @@ def validate_gate(context: str, gate: dict, workflows: dict) -> list[Finding]:
             caller_job,
             "caller job",
             "vector-3-ungated-caller-if",
+            skip_semantics=skip_semantics,
+            rationale=rationale,
+        )
+    )
+    findings.extend(
+        _check_needs_cascade(
+            context,
+            caller_wf,
+            caller_job,
+            "caller job",
+            "vector-5-ungated-needs-cascade",
             skip_semantics=skip_semantics,
             rationale=rationale,
         )

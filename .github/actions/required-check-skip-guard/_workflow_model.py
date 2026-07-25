@@ -65,6 +65,26 @@ class ParsedJob:
         uses = self.raw.get("uses")
         return str(uses) if uses is not None else None
 
+    @property
+    def needs(self) -> tuple[str, ...]:
+        """The job's `needs:` list, normalized to a tuple regardless of the
+        YAML source shape (`needs: foo`, `needs: [foo, bar]`). Empty tuple
+        when the job declares no `needs:` at all.
+
+        This exists for vector-5 (OMN-15057): GitHub's *implicit* job-level
+        `if:` is `success()` evaluated over the job's `needs:` list, not an
+        unconditional true. A job with `needs:` and no explicit `if:` is
+        NOT provably safe the way a needs-less job is.
+        """
+        raw_needs = self.raw.get("needs")
+        if raw_needs is None:
+            return ()
+        if isinstance(raw_needs, str):
+            return (raw_needs,)
+        if isinstance(raw_needs, list):
+            return tuple(str(n) for n in raw_needs)
+        return ()
+
 
 @dataclass
 class ParsedWorkflow:

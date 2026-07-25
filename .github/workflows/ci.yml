@@ -73,6 +73,7 @@ jobs:
 
   quality:
     needs: occ-preflight
+    if: always()
     name: Code Quality
     # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
     # so required CI does not queue behind self-hosted fleet saturation.
@@ -136,6 +137,7 @@ jobs:
 
   docs-links:
     needs: occ-preflight
+    if: always()
     name: Markdown Link Check
     # Lightweight external link check. Keep it hosted: the lychee binary can require
     # newer glibc than parts of the self-hosted fleet provide, and this job does
@@ -425,6 +427,7 @@ jobs:
 
   enum-governance:
     needs: occ-preflight
+    if: always()
     name: Enum Governance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -480,6 +483,7 @@ jobs:
 
   exports-validation:
     needs: occ-preflight
+    if: always()
     name: Exports Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -539,6 +543,7 @@ jobs:
 
   env-var-registry:
     needs: occ-preflight
+    if: always()
     name: "Env Var Registry (OMN-6263)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -579,6 +584,7 @@ jobs:
 
   cross-repo-validation:
     needs: occ-preflight
+    if: always()
     name: Kafka Import Guard
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -614,6 +620,7 @@ jobs:
 
   migration-freeze:
     needs: occ-preflight
+    if: always()
     name: Migration Freeze
     # Lightweight metadata gate: keep it hosted so branch protection cannot
     # wedge behind the self-hosted runner fleet.
@@ -642,6 +649,7 @@ jobs:
 
   onex-validation:
     needs: occ-preflight
+    if: always()
     name: ONEX Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -756,6 +764,7 @@ jobs:
 
   arch-no-db-in-orchestrator:
     needs: occ-preflight
+    if: always()
     name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -775,6 +784,7 @@ jobs:
 
   arch-no-git-outside-effects:
     needs: occ-preflight
+    if: always()
     name: "Arch: No git/gh calls outside effects (check 2)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -794,6 +804,7 @@ jobs:
 
   arch-no-linear-outside-effects:
     needs: occ-preflight
+    if: always()
     name: "Arch: No LinearClient outside effects (check 3)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -813,6 +824,7 @@ jobs:
 
   arch-no-repo-adapter-in-orchestrator:
     needs: occ-preflight
+    if: always()
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -833,6 +845,7 @@ jobs:
 
   arch-no-direct-adapter-in-business-logic:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct adapter imports in business logic (check 13)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -852,6 +865,7 @@ jobs:
 
   arch-no-direct-bus-instantiation:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct EventBus instantiation (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -874,6 +888,7 @@ jobs:
 
   arch-no-raw-sqlite3-in-handlers:
     needs: occ-preflight
+    if: always()
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -893,6 +908,7 @@ jobs:
 
   arch-no-env-fallbacks:
     needs: occ-preflight
+    if: always()
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -912,6 +928,7 @@ jobs:
 
   arch-cost-ledger-isolation:
     needs: occ-preflight
+    if: always()
     name: "Arch: ModelCostLedger confined to effects (check 5)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -931,6 +948,7 @@ jobs:
 
   arch-topic-naming:
     needs: occ-preflight
+    if: always()
     name: "Arch: onex.* topic naming convention (check 6)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -950,6 +968,7 @@ jobs:
 
   arch-omnidash-db-role:
     needs: occ-preflight
+    if: always()
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
     # Service-backed validation is lightweight; hosted avoids self-hosted queue cancellation.
     runs-on: ubuntu-latest
@@ -1106,6 +1125,7 @@ jobs:
 
   arch-cost-ledger-structure:
     needs: occ-preflight
+    if: always()
     name: "Arch: ModelCostLedger run_id field + index (check 9)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1125,6 +1145,7 @@ jobs:
 
   arch-no-direct-kafka-producer:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1144,6 +1165,7 @@ jobs:
 
   arch-no-utcnow:
     needs: occ-preflight
+    if: always()
     name: "Arch: No datetime.utcnow() (check 11)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -1169,6 +1191,7 @@ jobs:
 
   arch-no-hardcoded-ip:
     needs: occ-preflight
+    if: always()
     name: "Arch: No hardcoded internal IPs (check 12)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1221,6 +1244,7 @@ jobs:
 
   arch-no-compact-cmd-topic:
     needs: occ-preflight
+    if: always()
     name: F5.1 No compact cmd topic
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1255,6 +1279,7 @@ jobs:
 
   arch-invariants:
     needs: occ-preflight
+    if: always()
     name: Architecture Invariants
     # OMNINODE_SELF_HOSTED_RUNS_ON_V2
     runs-on: >-
@@ -1652,6 +1677,7 @@ jobs:
 
   detect-secrets:
     needs: occ-preflight
+    if: always()
     name: Secret Detection
     # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
     # scan (detect-secrets) with no self-hosted/LAN dependency, so it runs on the
@@ -1671,30 +1697,92 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python -m pip install detect-secrets
 
+      # OMN-15072: resolve a ref the PR/push author does not control within
+      # their own commit, so the diff below cannot be defeated by a secret
+      # and its own baseline-laundering entry arriving together in one
+      # commit (the same-commit `.bak` copy this replaced was blind to
+      # exactly that -- see scripts/detect_secrets_ci_diff.py docstring).
+      #
+      # Event fields are passed via `env:` rather than interpolated into the
+      # script body: a branch/ref name is attacker-influenceable (a crafted
+      # base branch name containing shell metacharacters would otherwise be
+      # template-expanded directly into the script before bash sees it --
+      # zizmor `template-injection`).
+      #
+      # `pull_request` is the actual pre-merge gating path, so an unfetchable
+      # base branch fails the job closed (OMN-15072's explicit "fail closed
+      # on inability to fetch the target-branch baseline" requirement).
+      # `merge_group`/`push` are not this repo's merge-gating trigger (no
+      # merge queue; `push` fires post-merge on main/hotfix) and a
+      # force-pushed branch can legitimately make `before` unreachable, so
+      # those fall back to same-commit snapshot mode on fetch failure rather
+      # than wedging the required Security Gate for a benign reason.
+      - name: Resolve target-branch ref for baseline diff
+        id: target-ref
+        working-directory: ${{ github.workspace }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              if ! git fetch --no-tags --depth=1 origin \
+                  "$PR_BASE_REF:refs/remotes/origin/$PR_BASE_REF"; then
+                echo "::error::could not fetch base branch '$PR_BASE_REF' for baseline diff -- failing closed"
+                exit 1
+              fi
+              echo "ref=origin/$PR_BASE_REF" >> "$GITHUB_OUTPUT"
+              ;;
+            merge_group)
+              if [ -n "$MERGE_GROUP_BASE_SHA" ] && \
+                  git fetch --no-tags --depth=1 origin "$MERGE_GROUP_BASE_SHA"; then
+                echo "ref=$MERGE_GROUP_BASE_SHA" >> "$GITHUB_OUTPUT"
+              else
+                echo "::warning::could not fetch merge_group base_sha -- falling back to same-commit snapshot mode"
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            push)
+              if [ -z "$PUSH_BEFORE_SHA" ] || [ "$PUSH_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+                # First-ever push to this branch -- no target commit to diff
+                # against. Falls back to same-commit snapshot mode below.
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              elif git fetch --no-tags --depth=1 origin "$PUSH_BEFORE_SHA"; then
+                echo "ref=$PUSH_BEFORE_SHA" >> "$GITHUB_OUTPUT"
+              else
+                # A force-pushed/rewritten history can make 'before'
+                # unreachable on the remote -- not a security-relevant
+                # failure for a post-merge push event.
+                echo "::warning::could not fetch push 'before' SHA ($PUSH_BEFORE_SHA) -- falling back to same-commit snapshot mode"
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              # workflow_dispatch and any other trigger: no meaningful target
+              # branch exists for a manual/non-gating run. Falls back to
+              # same-commit snapshot mode below (narrower by design; this
+              # trigger type is not part of the pre-merge gating path).
+              echo "ref=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Scan for secrets
         working-directory: ${{ github.workspace }}
         env:
-          GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          TARGET_REF: ${{ steps.target-ref.outputs.ref }}
         run: |
-          # Comparison anchor for the "genuinely new secret" diff below.
-          #
-          # CodeRabbit finding (OMN-15063 PR #1935): copying .secrets.baseline
-          # from the PR's own checked-out copy lets a contributor add a new
-          # secret AND a matching baseline entry for it in the SAME diff, so
-          # the scan counts it as "pre-existing" and the check never fires.
-          # For pull_request events, fetch the PROTECTED BASE commit's
-          # .secrets.baseline via the Contents API (not the PR workspace
-          # copy) so a PR cannot launder a new finding through its own
-          # baseline edit. push/merge_group/workflow_dispatch events have no
-          # PR base to compare against, so they fall back to the checked-out
-          # copy (pre-scan state of the branch being built).
-          if [ -n "${BASE_SHA:-}" ]; then
-            gh api "repos/${{ github.repository }}/contents/.secrets.baseline?ref=${BASE_SHA}" \
-              --jq '.content' | base64 -d > .secrets.baseline.bak
-          else
+          set -euo pipefail
+          if [ -z "$TARGET_REF" ]; then
+            # No target-branch ref available for this trigger type -- fall
+            # back to a same-commit pre-scan snapshot (the pre-OMN-15072
+            # shape). Narrower by design; see
+            # scripts/detect_secrets_ci_diff.py docstring.
             cp .secrets.baseline .secrets.baseline.bak
           fi
+
           # Scan updates the baseline in-place with any new secrets.
           #
           # --no-verify (OMN-15063): several plugins (SlackDetector,
@@ -1715,32 +1803,21 @@ jobs:
             --exclude-files 'bandit-report\.json$' \
             --exclude-files '^tests/' \
             --exclude-files 'security-report\.json$'
-          # Compare: detect genuinely new secrets (content-addressed, ignores line shifts).
-          # Using only (file, hashed_secret) as the key prevents false positives when
-          # new CI jobs shift line numbers of existing baseline entries (OMN-2625).
-          NEW_SECRETS=$(python3 -c "
-          import json
-          old = json.load(open('.secrets.baseline.bak'))
-          new = json.load(open('.secrets.baseline'))
-          old_set = {(f, s['hashed_secret'])
-                     for f, secrets in old.get('results', {}).items()
-                     for s in secrets}
-          new_set = {(f, s['hashed_secret'], s['line_number'])
-                     for f, secrets in new.get('results', {}).items()
-                     for s in secrets}
-          diff = [(f, line) for f, h, line in sorted(new_set)
-                  if (f, h) not in old_set]
-          for f, line in diff:
-              print(f'  {f}:{line}')
-          print(f'COUNT:{len(diff)}')
-          ")
-          COUNT=$(echo "$NEW_SECRETS" | grep '^COUNT:' | cut -d: -f2)
-          if [ "$COUNT" -gt 0 ]; then
-            echo "$NEW_SECRETS" | grep -v '^COUNT:'
-            echo "::error::detect-secrets found $COUNT new potential secrets not in baseline"
-            exit 1
+
+          # OMN-15072: diff against the target-branch baseline (a ref this
+          # PR/push cannot rewrite within its own commit) instead of a
+          # same-commit copy, so a secret arriving alongside its own
+          # baseline-laundering entry is caught. Reuses OMN-15068's
+          # audited-vs-unaudited classification
+          # (scripts/detect_secrets_guard.py) -- one canonical
+          # implementation, not a second copy of the same logic.
+          if [ -n "$TARGET_REF" ]; then
+            python3 scripts/detect_secrets_ci_diff.py --target-ref "$TARGET_REF"
+          else
+            python3 scripts/detect_secrets_ci_diff.py --fallback-baseline .secrets.baseline.bak
           fi
-          echo "Secret detection completed - no new secrets found"
+
+          echo "Secret detection completed - no new unaudited secrets found"
 
   # ============================================================================
   # TEST SUITES
@@ -2217,6 +2294,7 @@ jobs:
 
   database-validation:
     needs: occ-preflight
+    if: always()
     name: Database Schema Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2331,6 +2409,7 @@ jobs:
 
   dod-evidence-check:
     needs: occ-preflight
+    if: always()
     name: DoD Evidence Check
     # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
@@ -2503,6 +2582,7 @@ jobs:
   # ---------------------------------------------------------------------------
   mode-metadata-guard:
     needs: occ-preflight
+    if: always()
     name: Mode Metadata Integrity
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2547,6 +2627,7 @@ jobs:
 
   skill-hygiene:
     needs: occ-preflight
+    if: always()
     name: Skill Hygiene
     # Static validator with sparse OCC checkout; run hosted so fleet saturation
     # cannot cancel the required Quality Gate aggregate.
@@ -2584,6 +2665,7 @@ jobs:
   # version matrix defined in onex_change_control/standards/version-matrix.yaml.
   version-pin-check:
     needs: occ-preflight
+    if: always()
     name: Version Pin Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2634,6 +2716,7 @@ jobs:
   # Prevents Track B dispatch bugs (e.g., --skip-polish leaking into empty check).
   merge-sweep-contract:
     needs: occ-preflight
+    if: always()
     name: Merge-Sweep Contract
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2682,6 +2765,7 @@ jobs:
   # and spec-prompt predicate coverage across all skills.
   skill-contract-validation:
     needs: occ-preflight
+    if: always()
     name: Skill Contract Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2801,6 +2885,7 @@ jobs:
   # ============================================================================
   aislop-sweep:
     needs: occ-preflight
+    if: always()
     name: Aislop Sweep
     runs-on: >-
       ${{
@@ -2858,6 +2943,7 @@ jobs:
   # Agent YAML contract validation (OMN-8914)
   agent-contract-validation:
     needs: occ-preflight
+    if: always()
     name: Agent Contract Validation
     runs-on: >-
       ${{
@@ -2897,6 +2983,7 @@ jobs:
   # Land this PR last in the SD wave so the gate goes green on merge.
   skill-monorepo-ref-gate:
     needs: occ-preflight
+    if: always()
     name: Skill Monorepo-Ref Gate
     runs-on: >-
       ${{
@@ -2917,6 +3004,7 @@ jobs:
   # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
   no-polymorphic-agent:
     needs: occ-preflight
+    if: always()
     name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -3500,6 +3588,7 @@ jobs:
 
   ai-slop-check:
     needs: occ-preflight
+    if: always()
     name: AI-Slop Pattern Check (strict, PR diff)
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
