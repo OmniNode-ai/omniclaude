@@ -1673,9 +1673,28 @@ jobs:
 
       - name: Scan for secrets
         working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          # Copy baseline so we can detect new findings
-          cp .secrets.baseline .secrets.baseline.bak
+          # Comparison anchor for the "genuinely new secret" diff below.
+          #
+          # CodeRabbit finding (OMN-15063 PR #1935): copying .secrets.baseline
+          # from the PR's own checked-out copy lets a contributor add a new
+          # secret AND a matching baseline entry for it in the SAME diff, so
+          # the scan counts it as "pre-existing" and the check never fires.
+          # For pull_request events, fetch the PROTECTED BASE commit's
+          # .secrets.baseline via the Contents API (not the PR workspace
+          # copy) so a PR cannot launder a new finding through its own
+          # baseline edit. push/merge_group/workflow_dispatch events have no
+          # PR base to compare against, so they fall back to the checked-out
+          # copy (pre-scan state of the branch being built).
+          if [ -n "${BASE_SHA:-}" ]; then
+            gh api "repos/${{ github.repository }}/contents/.secrets.baseline?ref=${BASE_SHA}" \
+              --jq '.content' | base64 -d > .secrets.baseline.bak
+          else
+            cp .secrets.baseline .secrets.baseline.bak
+          fi
           # Scan updates the baseline in-place with any new secrets.
           #
           # --no-verify (OMN-15063): several plugins (SlackDetector,
