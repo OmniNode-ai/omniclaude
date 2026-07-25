@@ -1,37 +1,20 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for codex sandbox config in contract.yaml — OMN-10135 Task 13."""
+"""Regression: the deprecated delegation orchestrator must not own a contract."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
 
-
-def test_codex_config_in_contract_yaml() -> None:
-    contract = yaml.safe_load(
-        (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_delegation_orchestrator/contract.yaml"
-        ).read_text()
+def test_deprecated_delegation_orchestrator_contract_absent() -> None:
+    contract_path = (
+        Path(__file__).parents[3]
+        / "src/omniclaude/nodes/node_delegation_orchestrator/contract.yaml"
     )
-    assert "codex_config" in contract
-    assert "sandbox_modes" in contract["codex_config"]
-    modes = contract["codex_config"]["sandbox_modes"]
-    assert "read-only" in modes
-    assert "workspace-write" in modes
-    assert "danger-full-access" in modes
 
-
-def test_codex_sandbox_modes_have_use_for_and_description() -> None:
-    contract = yaml.safe_load(
-        (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_delegation_orchestrator/contract.yaml"
-        ).read_text()
+    assert not contract_path.exists(), (
+        "omniclaude must not ship a node_delegation_orchestrator contract. "
+        "OMN-14584 removed that duplicate node contract because omnimarket "
+        "owns the delegation orchestrator route and infra delegation topics."
     )
-    modes = contract["codex_config"]["sandbox_modes"]
-    for mode_name, mode_data in modes.items():
-        assert "use_for" in mode_data, f"mode {mode_name!r} missing use_for"
-        assert "description" in mode_data, f"mode {mode_name!r} missing description"
