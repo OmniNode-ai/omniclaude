@@ -1784,7 +1784,19 @@ jobs:
           fi
 
           # Scan updates the baseline in-place with any new secrets.
+          #
+          # --no-verify (OMN-15063): several plugins (SlackDetector,
+          # StripeDetector, ...) call the live vendor API to "verify" each
+          # regex-matched candidate, then silently drop anything that comes
+          # back VERIFIED_FALSE. RED-proven: a synthetic Slack incoming-
+          # webhook URL and a synthetic Slack bot token, both matching the
+          # dedicated SlackDetector regex, were silently absent from the
+          # report without this flag even though the regex matched. A
+          # negative/uncertain live-verification result must not silently
+          # remove a finding (fail-closed). Never remove this flag without
+          # re-proving the miss is fixed another way.
           detect-secrets scan \
+            --no-verify \
             --baseline .secrets.baseline \
             --exclude-files '\.lock$' \
             --exclude-files '\.env\.example$' \
