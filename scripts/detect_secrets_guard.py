@@ -25,10 +25,12 @@ This guard separates the two cases:
 
 - Case 1 findings are allowed through silently, exactly as before.
 - Case 2 findings BLOCK the commit (non-zero exit, baseline left unstaged)
-  unless they carry an explicit human audit marker (`is_secret` key present
-  in the JSON -- set only by a human running
-  `detect-secrets audit .secrets.baseline` and answering the interactive
-  y/n/skip prompt). There is no automatic escape hatch for a new finding.
+  unless they carry an explicit human audit marker of `is_secret: false`
+  (set only by a human running `detect-secrets audit .secrets.baseline` and
+  answering "n" -- confirmed false positive). `is_secret: true` (a human
+  confirmed it IS a real secret) still blocks -- an audit that confirms a
+  real credential must never be treated as an accept signal. There is no
+  automatic escape hatch for a new finding.
 
 Fails closed (non-zero exit, no `git add`) on:
 - `detect-secrets` missing / not on PATH
@@ -199,8 +201,11 @@ def main() -> int:
             key = (filename, finding.get("hashed_secret", ""))
             if key in old_keys:
                 continue  # already known -- pure line-number churn, allowed.
-            if finding.get("is_secret") is not None:
-                continue  # explicitly audited via `detect-secrets audit`, allowed.
+            if finding.get("is_secret") is False:
+                continue  # human-confirmed false positive via `detect-secrets audit`.
+                # NOTE: is_secret is True (human-confirmed REAL secret) falls
+                # through and still blocks -- audit confirmation of a real
+                # credential is never an accept signal.
             unaudited_new.append(
                 (filename, finding.get("line_number"), finding.get("type"))
             )
@@ -214,10 +219,13 @@ def main() -> int:
         for filename, line, finding_type in unaudited_new:
             print(f"  - {filename}:{line}  [{finding_type}]", file=sys.stderr)
         print(
-            "\nIf real: remove/rotate the credential, then re-commit.\n"
+            "\nEach finding above is either unaudited (no `is_secret` key) or\n"
+            "audited as a CONFIRMED real secret (`is_secret: true`) -- a\n"
+            "confirmed secret is never allowed through, audited or not.\n"
+            "If real: remove/rotate the credential, then re-commit.\n"
             "If a false positive: run `detect-secrets audit .secrets.baseline`,\n"
-            "mark each finding reviewed (y/n), stage `.secrets.baseline` yourself,\n"
-            "then retry the commit.\n",
+            "mark each finding reviewed (answer 'n'), stage `.secrets.baseline`\n"
+            "yourself, then retry the commit.\n",
             file=sys.stderr,
         )
         return 1

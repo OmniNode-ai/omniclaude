@@ -22,9 +22,12 @@ addition and is classified exactly like `scripts/detect_secrets_guard.py`
 `load_json`/`result_keys`/`load_baseline_at_ref` helpers rather than
 re-implementing the audited-vs-unaudited distinction a second time:
 
-- **New + audited** (`is_secret` key present -- set only by a human running
-  `detect-secrets audit .secrets.baseline`) -- allowed.
-- **New + unaudited** -- BLOCKS the job.
+- **New + audited false positive** (`is_secret: false` -- set only by a human
+  running `detect-secrets audit .secrets.baseline` and answering "n") --
+  allowed.
+- **New + unaudited, or audited as a CONFIRMED real secret** (`is_secret`
+  absent, or `is_secret: true`) -- BLOCKS the job. A human confirming a
+  finding IS a real secret is never an accept signal.
 
 Two comparison modes:
 
@@ -132,9 +135,12 @@ def main(argv: list[str] | None = None) -> int:
             key = (filename, finding.get("hashed_secret", ""))
             if key in target_keys:
                 continue  # already known on the target branch.
-            if finding.get("is_secret") is not None:
+            if finding.get("is_secret") is False:
                 audited_new.append((filename, finding.get("line_number")))
-                continue  # explicitly audited via `detect-secrets audit`.
+                continue  # human-confirmed false positive via `detect-secrets audit`.
+                # NOTE: is_secret is True (human-confirmed REAL secret) falls
+                # through to unaudited_new below and still blocks -- audit
+                # confirmation of a real credential is never an accept signal.
             unaudited_new.append(
                 (filename, finding.get("line_number"), finding.get("type"))
             )
@@ -149,10 +155,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {filename}:{line}  [{finding_type}]", file=sys.stderr)
         print(
             f"\n::error::detect-secrets found {len(unaudited_new)} new potential "
-            "secret(s) not in the target branch's baseline and not audited "
-            "(no `is_secret` key). If real: remove/rotate the credential. If a "
-            "false positive: run `detect-secrets audit .secrets.baseline` locally, "
-            "mark it reviewed, and include the audited baseline in this PR.",
+            "secret(s) not in the target branch's baseline that are either "
+            "unaudited (no `is_secret` key) or audited as a CONFIRMED real "
+            "secret (`is_secret: true`). If real: remove/rotate the "
+            "credential -- a confirmed secret is never allowed through, "
+            "audited or not. If a false positive: run "
+            "`detect-secrets audit .secrets.baseline` locally, mark it "
+            "reviewed (n), and include the audited baseline in this PR.",
             file=sys.stderr,
         )
         return 1

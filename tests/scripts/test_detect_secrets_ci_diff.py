@@ -167,6 +167,24 @@ def test_entry_already_on_target_passes_even_if_unaudited(mod, tmp_path, monkeyp
     assert mod.main(["--target-ref", "target"]) == 0
 
 
+def test_audited_as_confirmed_real_secret_still_blocks(mod, tmp_path, monkeypatch):
+    """`detect-secrets audit` sets `is_secret: true` for "yes, this is a real
+    secret" -- that must never be treated as an accept signal, only
+    `is_secret: false` (confirmed false positive) is."""
+    repo = _init_repo_with_target_branch(tmp_path, target_baseline={"results": {}})
+    monkeypatch.chdir(repo)
+    _write_pr_baseline(
+        repo,
+        {
+            "results": {
+                "app/leaked_aws.py": [_finding("deadbeef" * 5, line=3, is_secret=True)]
+            }
+        },
+    )
+
+    assert mod.main(["--target-ref", "target"]) == 1
+
+
 # ---------------------------------------------------------------------------
 # Fail-closed
 # ---------------------------------------------------------------------------
