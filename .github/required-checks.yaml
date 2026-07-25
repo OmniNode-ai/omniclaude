@@ -460,6 +460,23 @@ gates:
     skip_semantics: never
     rationale: "Central OCC eligibility gate (cross-repo reusable hosted in omnibase_core)."
 
+  - name: "verify / verify"
+    mode: REQUIRED
+    branch: main
+    producer_kind: cross_repo
+    caller_workflow: call-receipt-gate.yml
+    caller_job: verify
+    cross_repo_ref: "OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@main"
+    skip_semantics: never
+    rationale: "Receipt Gate — live required status check on omniclaude `main` branch protection
+      (dev→main promotion boundary), absent from `dev`'s required set. This manifest is otherwise
+      dev-scoped (see file header); this row is a deliberate main-only addition (OMN-15117) closing
+      a guard blind spot: `verify / verify` was live-required on main since OMN-10411 but had zero
+      row here, so validate_no_required_check_skip_vectors.py never had a context to check it
+      against and OMN-15057's remediation (#1931) never touched this file. `verify`'s `needs:
+      occ-preflight` had no `if:` at all (vector-5, OMN-15057 shape) until this ticket added
+      `if: always()`."
+
   - name: "call-reject-skip-token / scan / reject-skip-gate-token"
     mode: REQUIRED
     producer_kind: local
