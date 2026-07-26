@@ -51,8 +51,10 @@ jobs:
       receipts-dir: drift/dod_receipts
 
   canonical-inference-gate:
+    # SEEDED-PROOF (OMN-15178, throwaway): if: always() intentionally removed
+    # to reproduce the exact vector-5 skip-vector shape (OMN-15057) for a
+    # required-check-skip-guard RED proof. This branch is closed unmerged.
     needs: occ-preflight
-    if: always()
     name: Canonical Inference Gate
     runs-on: ubuntu-latest
     steps:
