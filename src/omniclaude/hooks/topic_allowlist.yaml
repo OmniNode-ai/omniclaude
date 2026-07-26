@@ -258,6 +258,33 @@ allowed_extras:
       not publish or consume this topic.
     ticket: OMN-12692
 
+  - topic: "onex.cmd.omnimarket.push-validation-requested.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain push-validation command owned by omnimarket. This TopicBase
+      member exists so omniclaude golden-chain metadata can reference the
+      canonical registry without hardcoded topic literals; omniclaude does not
+      publish or consume this topic.
+    ticket: OMN-15178
+
+  - topic: "onex.evt.omnimarket.push-validation-completed.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain push-validation completion event owned by omnimarket. This
+      TopicBase member exists so omniclaude golden-chain metadata can reference
+      the canonical registry without hardcoded topic literals; omniclaude does
+      not publish or consume this topic.
+    ticket: OMN-15178
+
+  - topic: "onex.evt.omnimarket.push-validation-failed.v1"
+    lifecycle: internal_control
+    reason: >
+      Cross-domain push-validation failure event owned by omnimarket. This
+      TopicBase member exists so omniclaude golden-chain metadata can reference
+      the canonical registry without hardcoded topic literals; omniclaude does
+      not publish or consume this topic.
+    ticket: OMN-15178
+
   - topic: "onex.evt.omniclaude.intent-commit-bound.v1"
     lifecycle: observability
     reason: Intent-to-commit binding (OMN-2492); predates contract governance.

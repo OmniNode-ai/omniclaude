@@ -6,18 +6,22 @@
 #
 # Produces required status check: "required-check-skip-guard / check-skip-vectors"
 #
-# NOT YET added to required_status_checks on this branch (see design spec
-# section 5 ordering + .github/required-checks.yaml, where this context's
-# manifest row is `mode: ADVISORY`). The branch-protection flip to REQUIRED
-# happens in a follow-up PR only after this workflow has posted green on `dev`
-# at least twice — never in the same PR that introduces the workflow, to avoid
-# a self-inflicted wedge (a PR blocked on a required check that has never
-# successfully run under real conditions).
+# FLIPPED TO REQUIRED (OMN-15178, operator ruling "Make it blocking"
+# 2026-07-26T07:25Z): this context is now in required_status_checks on `dev`
+# (gate met per plan: 2+ green runs of this workflow) — see
+# .github/required-checks.yaml, where this context's manifest row is now
+# `mode: REQUIRED`.
 #
 # IMPORTANT: this trigger MUST NOT carry a `paths:`/`paths-ignore:` filter
 # (design spec section 4c). This is the one required-check workflow that is
 # exempt from "narrow the trigger for efficiency" — a path filter here would
 # be the exact self-referential skip-vector this guard exists to catch.
+#
+# SCHEDULE (OMN-15178): a `schedule:` trigger runs the guard daily against
+# `dev` HEAD even absent new PR activity, so a required check does not go
+# silently stale between pull requests. Staggered against omnimarket's
+# schedule (04:30 UTC) to avoid both fan-out repos hitting the shared
+# omniclaude reusable-workflow fetch at the same instant.
 
 name: Required-Check Skip-Vector Guard
 
@@ -26,6 +30,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "0 4 * * *"
 
 permissions:
   contents: read
@@ -43,4 +49,13 @@ jobs:
 
   required-check-skip-guard:
     needs: occ-preflight
+    # if: always() (OMN-15178, vector-5 fix matching OMN-15112/OMN-15117
+    # precedent): a `uses:`-only job cannot mix in an explicit
+    # `needs.occ-preflight.result != success` exit-1 step (GHA forbids
+    # combining `uses:` and `steps:` in one job body), so this guard's own
+    # required check must run unconditionally rather than being silently
+    # SKIPPED (which branch protection counts as passing) whenever the
+    # schedule-triggered run's occ-preflight leg is anything other than a
+    # clean success.
+    if: always()
     uses: ./.github/workflows/required-check-skip-guard-reusable.yml

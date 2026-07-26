@@ -508,11 +508,11 @@ gates:
     rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. KNOWN FINDING (OMN-14854 guard build): same dependabot-actor vector-3 shape as 'gate / CodeRabbit Thread Check'. skip_semantics: neutral_ok pending triage in OMN-14856."
 
   - name: "required-check-skip-guard / check-skip-vectors"
-    mode: ADVISORY
+    mode: REQUIRED
     producer_kind: local
     caller_workflow: required-check-skip-guard-caller.yml
     caller_job: required-check-skip-guard
     reusable_workflow: required-check-skip-guard-reusable.yml
     reusable_job: check-skip-vectors
     skip_semantics: never
-    rationale: "OMN-14854: this guard's own required check. Runs on every PR but is NOT YET in required_status_checks — per design spec section 5 ordering, the branch-protection flip happens only after 2 independent green runs on dev, tracked as a follow-up. mode stays ADVISORY until that flip lands (same PR as the flip, per schema-v3 rule: mode changes and branch-protection changes land together)."
+    rationale: "OMN-14854/OMN-15178: this guard's own required check. FLIPPED to REQUIRED per operator ruling 2026-07-26T07:25Z (\"Make it blocking\") after 2 independent green runs of required-check-skip-guard-caller.yml on dev. Branch protection (gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks) already carries this context live (added additively, 57->58 contexts, 0 removed) — this manifest row now matches live state, per schema-v3 rule that mode and branch-protection stay in sync."

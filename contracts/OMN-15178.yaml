@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-15178"
+title: "Make required-check skip-vector guard blocking and scheduled"
+summary: >-
+  Repo-local contract for omniclaude PR #1946. The PR reconciles the required-check
+  manifest with the already-live branch protection rule, schedules the guard, keeps
+  the guard runnable through failed dependencies, and syncs golden-chain metadata
+  with the canonical omnimarket registry.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Golden-chain metadata validator passes against the canonical omnimarket registry."
+    command: "uv run python scripts/validation/validate_golden_chain_integrity.py --canonical-registry ${OMNIMARKET_GOLDEN_CHAIN_REGISTRY:-../omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml}"
+  - kind: "tests"
+    description: "Focused golden-chain payload and validator tests pass."
+    command: "uv run pytest tests/unit/scripts/test_validate_golden_chain_integrity.py tests/nodes/test_golden_chain_payload_compute.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-golden-chain-metadata-parity"
+    description: "Golden-chain metadata includes the canonical push_validation chain and validates against omnimarket."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/validation/validate_golden_chain_integrity.py --canonical-registry ${OMNIMARKET_GOLDEN_CHAIN_REGISTRY:-../omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/golden_chains.yaml}"
+  - id: "dod-focused-golden-chain-tests"
+    description: "Focused unit tests cover validator behavior and metadata registry names."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/scripts/test_validate_golden_chain_integrity.py tests/nodes/test_golden_chain_payload_compute.py -q"
