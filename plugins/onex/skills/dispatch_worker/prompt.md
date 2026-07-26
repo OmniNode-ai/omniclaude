@@ -130,7 +130,7 @@ with these rules regardless of role or spec contents:
 7. **Verifiable-handle reporting (worker-misreport ratchet).** Your final
    message MUST end with a fenced ```json-report``` block, and any claim of completion
    MUST carry its verifiable handle — claims without handles are BLOCKED at SubagentStop
-   by the receipt-honesty verifier (`subagent_claim_verifier.py`), re-probed against live
+   by the receipt-honesty verifier (EFFECT-based claims validator), re-probed against live
    GitHub BEFORE the orchestrator accepts your receipt:
    - A **merged** claim requires `kind: pr_ship` with `pr: {number, state: MERGED, merge_sha, repo}`.
      The verifier re-probes `gh pr view --json mergeCommit`; a missing or mismatched
