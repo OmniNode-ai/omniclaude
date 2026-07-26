@@ -63,8 +63,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from extract_last_assistant_message_utils import _extract_last_assistant_message
 from secret_redactor import redact_secrets_with_count
-from subagent_claim_verifier import _extract_last_assistant_message
 
 
 class EnumSecretGuardVerdict(StrEnum):
