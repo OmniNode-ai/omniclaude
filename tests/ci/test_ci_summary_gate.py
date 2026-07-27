@@ -175,7 +175,7 @@ class TestCiSummaryGate:
         assert code == EXIT_FAILURE
 
     def test_occ_companion_merged_gate_is_strict_and_fails_closed(self) -> None:
-        # OMN-15221 (OMN-15214 canary port): the companion-merged gate makes the
+        # OMN-15221/OMN-15224 (OMN-15214 canary port): the companion-merged gate makes the
         # 2026-07-26 hygiene-sweep trigger state (OPEN companion + MERGED product
         # PR) unreachable via the merge path. It must be a GATE_JOB (CI Summary
         # WAITS for it) AND strict-success (a skip/cancel fails closed) so a

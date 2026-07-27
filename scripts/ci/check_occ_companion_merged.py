@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OCC companion-merged gate (OMN-15214, ported to omniclaude per OMN-15221) — a
+"""OCC companion-merged gate (OMN-15214, ported to omniclaude per OMN-15221/OMN-15224) — a
 strict ``CI Summary`` gate.
 
 Why this exists
