@@ -23,7 +23,13 @@ OMN-13244 measurement baseline **with carve-outs** — every context-injection/m
 stays DISABLED; the only registered hooks are:
 
 - PreToolUse: `pre_tool_use_done_flip_guard.sh` (OMN-13856 Done-flip durable-evidence guard) and `pre_tool_use_worktree_guard.sh` (OMN-14330 worktree canonical-root guard)
-- SubagentStop: `subagent_stop_secret_leak_guard.sh` (OMN-15062)
+- SubagentStop: `subagent_stop_secret_leak_guard.sh` (OMN-15062) and `subagent_stop_report_contract_guard.sh` (OMN-15213 golden-chain report-contract guard — bare-Done-class final returns block the lane RED)
+
+A SubagentStop hook that emits output on its **pass** path becomes the end-of-turn
+notification the agent replies to, and that short reply is captured as the lane's final
+return, clobbering the real report 1-2 turns earlier (OMN-15213, reproduced 3/5 and 3/3).
+Non-blocking SubagentStop verdicts must therefore stay silent — never add a "clean"
+`additionalContext`.
 
 All other hook scripts (`plugins/onex/hooks/scripts/`) and handler modules
 (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change.

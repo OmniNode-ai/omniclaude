@@ -1,7 +1,7 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
-  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856, OMN-14330, and OMN-15062 carve-outs. Every context-injection/measurement hook stays DISABLED; the only re-registered hooks are the Done-flip durable-evidence guard (OMN-13856, operator-approved, no fake Done), the OMN-7018 worktree canonical-root guard (OMN-14330, blocks `git worktree add` outside $OMNI_HOME/omni_worktrees), and the SubagentStop secret-leak guard (OMN-15062, blocks a subagent's final report from completing when it matches a known secret pattern -- narrowly scoped security control, not a re-enable of the disabled context-injection/measurement hooks). All other scripts remain on disk and re-registration stays a pure config change.",
-  "version": "1.5.0",
+  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856, OMN-14330, OMN-15062, and OMN-15213 carve-outs. Every context-injection/measurement hook stays DISABLED; the only re-registered hooks are the Done-flip durable-evidence guard (OMN-13856, operator-approved, no fake Done), the OMN-7018 worktree canonical-root guard (OMN-14330, blocks `git worktree add` outside $OMNI_HOME/omni_worktrees), the SubagentStop secret-leak guard (OMN-15062, blocks a subagent's final report from completing when it matches a known secret pattern -- narrowly scoped security control), and the SubagentStop report-contract guard (OMN-15213, fails a lane RED when its final return is bare-Done-class instead of the report the golden-chain contract requires). Neither SubagentStop guard is a re-enable of the disabled context-injection/measurement hooks. All other scripts remain on disk and re-registration stays a pure config change.",
+  "version": "1.6.0",
   "hooks": {
     "PreToolUse": [
       {
@@ -29,6 +29,10 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_secret_leak_guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_report_contract_guard.sh"
           }
         ]
       }

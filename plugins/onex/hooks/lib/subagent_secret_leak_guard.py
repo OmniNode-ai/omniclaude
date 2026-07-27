@@ -145,25 +145,34 @@ def _hook_output(result: ModelSecretGuardResult) -> dict[str, Any]:
     the raw scanned message into additionalContext -- it becomes part of
     the transcript itself, which is exactly the surface this guard exists
     to protect.
+
+    OMN-15213: the ALLOW path no longer carries additionalContext. It used
+    to emit "secret-leak guard: clean (matches=0)" on EVERY ordinary
+    subagent turn, which put a hook-authored message at the end of the
+    turn for the agent to reply to -- and that short reply became the
+    captured final return, clobbering the real report 1-2 turns earlier
+    (reproduced 3/5 in wf_00bcb6a9-f0b, 3/3 in wf_1923e07f-b65, both on
+    2026-07-26, the day after this guard was registered). A guard that is
+    not blocking has nothing the agent needs to act on, so it says
+    nothing. The BLOCK path keeps its context: there a follow-up turn is
+    exactly the intent.
     """
 
-    context = (
-        f"SubagentStop secret-leak guard: {result.reason} "
-        f"(matches={result.redacted_count})"
-    )
-    if result.verdict is EnumSecretGuardVerdict.BLOCK:
-        context += (
-            ". Final message appears to contain a credential/secret. "
-            "Redact it (describe it, e.g. 'the Postgres password', never "
-            "quote the value) and finish again."
-        )
-    return {
+    envelope: dict[str, Any] = {
         "hookSpecificOutput": {
             "hookEventName": "SubagentStop",
             "decision": result.verdict.value,
-            "additionalContext": context,
         }
     }
+    if result.verdict is EnumSecretGuardVerdict.BLOCK:
+        envelope["hookSpecificOutput"]["additionalContext"] = (
+            f"SubagentStop secret-leak guard: {result.reason} "
+            f"(matches={result.redacted_count}). "
+            "Final message appears to contain a credential/secret. "
+            "Redact it (describe it, e.g. 'the Postgres password', never "
+            "quote the value) and finish again."
+        )
+    return envelope
 
 
 def _cli_main() -> int:
