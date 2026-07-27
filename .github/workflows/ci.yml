@@ -3355,7 +3355,7 @@ jobs:
 
   occ-companion-merged:
     name: OCC Companion Merged Gate (OMN-15214)
-    # OMN-15221 (port of the OMN-15214 canary, omnibase_infra #2486): makes the
+    # OMN-15221/OMN-15224 (port of the OMN-15214 canary, omnibase_infra #2486): makes the
     # 2026-07-26 OCC hygiene-sweep trigger state — an OPEN onex_change_control
     # evidence companion whose product PR already MERGED — unreachable via the
     # merge path on this repo. The sweep closed five open companions
