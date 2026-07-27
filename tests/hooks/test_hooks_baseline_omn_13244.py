@@ -22,13 +22,18 @@ blocks a subagent's final report from completing when it matches a known
 secret pattern -- a security control, not a re-enable of the disabled
 context-injection/measurement hooks (real incident: a 2026-07-24
 credential-investigation subagent's final report echoed a raw credential).
-Everything else stays disabled. These tests therefore lock in a *narrowed*
-baseline:
+OMN-15213 carves a fourth, likewise narrow exception: a ``SubagentStop``
+report-contract guard that fails a lane RED when its final return is
+bare-Done-class rather than the report the golden-chain contract requires
+(real incident: workflow runs ``wf_00bcb6a9-f0b`` 3/5 and
+``wf_1923e07f-b65`` 3/3 returned filler final text while their durable
+artifacts were real). Everything else stays disabled. These tests therefore
+lock in a *narrowed* baseline:
 
 1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard,
-   the worktree canonical-root guard, and the SubagentStop secret-leak guard,
-   and nothing else, while retaining the ``$schema`` / ``description`` /
-   ``version`` metadata keys.
+   the worktree canonical-root guard, the SubagentStop secret-leak guard, and
+   the SubagentStop report-contract guard, and nothing else, while retaining
+   the ``$schema`` / ``description`` / ``version`` metadata keys.
 2. The skill-substitution guard machinery (module, config YAML, wrapper
    script, tests) REMAINS on disk -- unregistered, so activating it later is
    a one-line config add and an explicit operator decision, not a code
@@ -56,8 +61,8 @@ _GUARD_FILES = (
 )
 
 
-# The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 carve-outs,
-# in hooks.json registration order.
+# The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 + OMN-15213
+# carve-outs, in hooks.json registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
@@ -66,6 +71,9 @@ _WORKTREE_GUARD_COMMAND = (
 )
 _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_secret_leak_guard.sh"
+)
+_SUBAGENT_STOP_REPORT_CONTRACT_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_report_contract_guard.sh"
 )
 
 
@@ -111,15 +119,20 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"worktree guard must match Bash. Found: {matchers!r}"
     )
 
-    # Exactly one SubagentStop command is wired: the secret-leak guard.
+    # Exactly two SubagentStop commands are wired: the secret-leak guard,
+    # then the report-contract guard.
     subagent_stop_commands = [
         hook.get("command", "")
         for group in hooks["SubagentStop"]
         for hook in group.get("hooks", [])
     ]
-    assert subagent_stop_commands == [_SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND], (
+    assert subagent_stop_commands == [
+        _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND,
+        _SUBAGENT_STOP_REPORT_CONTRACT_GUARD_COMMAND,
+    ], (
         "hooks.json SubagentStop must register EXACTLY the secret-leak guard "
-        f"(OMN-15062 carve-out). Found: {subagent_stop_commands!r}"
+        "(OMN-15062 carve-out) and the report-contract guard (OMN-15213 "
+        f"carve-out). Found: {subagent_stop_commands!r}"
     )
 
 
