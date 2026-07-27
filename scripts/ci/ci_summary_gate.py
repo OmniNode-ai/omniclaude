@@ -62,13 +62,19 @@ GATE_JOBS: tuple[str, ...] = (
     "Contract Compliance Check",
     "Contract Compliance",
     "no-noncanonical-lifecycle-classes",  # OMN-14350 non-canonical lifecycle-class ratchet
+    "OCC Companion Merged Gate (OMN-15214)",  # OMN-15224 port — cited OCC evidence must be MERGED before product merge
 )
 
 # OMN-14350: jobs that must be EXACTLY ``success`` — stricter than GATE_JOBS
 # membership (which accepts ``success``||``skipped`` via GOOD_CONCLUSIONS). A
 # SKIPPED or CANCELLED ratchet is un-enforced and MUST fail closed, matching the
 # strict-success posture of the other 7 repos' CI Summary verdicts.
-STRICT_SUCCESS_JOBS: frozenset[str] = frozenset({"no-noncanonical-lifecycle-classes"})
+STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
+    {
+        "no-noncanonical-lifecycle-classes",
+        "OCC Companion Merged Gate (OMN-15214)",  # OMN-15224 port — unconditional job, never legitimately skips
+    }
+)
 
 # Jobs that do NOT gate merge today (verified against ci.yml gate ``needs`` on
 # 2026-07-07). The default-deny sweep ignores these so it never newly-wedges a

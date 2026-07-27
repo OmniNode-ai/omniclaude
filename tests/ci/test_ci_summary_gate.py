@@ -25,6 +25,7 @@ from scripts.ci.ci_summary_gate import (  # noqa: E402
     EXIT_PENDING,
     EXIT_SUCCESS,
     GATE_JOBS,
+    STRICT_SUCCESS_JOBS,
     evaluate,
 )
 
@@ -170,6 +171,31 @@ class TestCiSummaryGate:
 
     def test_neutral_conclusion_is_fail_closed(self) -> None:
         jobs = _all_gates("success") + [_job("Some New Job", "neutral")]
+        code, _ = evaluate(jobs)
+        assert code == EXIT_FAILURE
+
+    def test_occ_companion_merged_gate_is_strict_and_fails_closed(self) -> None:
+        # OMN-15214/OMN-15224: the companion-merged gate makes the 2026-07-26
+        # hygiene-sweep trigger state (OPEN companion + MERGED product PR)
+        # unreachable via the merge path. It must be a GATE_JOB (completeness
+        # anchor) AND a STRICT_SUCCESS_JOBS member so a red/skipped/absent
+        # result fails the required "CI Summary" context — folding into the
+        # umbrella instead of adding a new top-level required context avoids
+        # the never-reports wedge.
+        gate = "OCC Companion Merged Gate (OMN-15214)"
+        assert gate in GATE_JOBS
+        assert gate in STRICT_SUCCESS_JOBS
+
+        jobs = [j for j in _all_gates("success") if j["name"] != gate]
+        jobs.append(_job(gate, "failure"))
+        code, report = evaluate(jobs)
+        assert code == EXIT_FAILURE
+        assert gate in report
+
+        # A skip must also fail closed — the job is unconditional in ci.yml,
+        # so 'skipped' (otherwise a GOOD_CONCLUSIONS member) must not pass.
+        jobs = [j for j in _all_gates("success") if j["name"] != gate]
+        jobs.append(_job(gate, "skipped"))
         code, _ = evaluate(jobs)
         assert code == EXIT_FAILURE
 
