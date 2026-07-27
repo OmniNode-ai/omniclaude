@@ -1760,14 +1760,6 @@ components:
   path: plugins/onex/hooks/scripts/subagent_skip_token_surface_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/subagent_stop_claim_verifier.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/subagent_stop_claim_verifier.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/subagent_stop_secret_leak_guard.sh
   kind: hook
   exposure: beta
