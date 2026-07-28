@@ -315,3 +315,419 @@ def classify(if_expr: str | None, declared_events: tuple[str, ...]) -> str:
             return UNGUARDED_CONDITIONAL
 
     return ALWAYS_TRUE_FOR_PR
+
+
+# ---------------------------------------------------------------------------
+# Result-triage analyzer (vector 6, OMN-15304)
+# ---------------------------------------------------------------------------
+#
+# Vector 5 asks "can this job be SKIPPED?". Vector 6 asks the layer-down
+# question vector 5 cannot see: "when this job DOES run, does it fail closed on
+# every non-`success` upstream result?".
+#
+# `needs.<job>.result` has exactly four values — success / failure / cancelled /
+# skipped. A gate job that blocks on only some of them renders its required
+# context GREEN for the rest. `if: always()` — the very construct that satisfies
+# vector 5 — is what guarantees that fail-open path is reached. Live instance:
+# omnimarket#1920, run 30298837182 — the `hostile-review` job was CANCELLED at
+# 04:13:14Z and `Hostile Review Gate` reported SUCCESS at 04:13:21Z, seven
+# seconds later, with no adversarial verdict in existence (OMN-15296, fixed in
+# omnimarket#1926; this analyzer hoists that single-workflow test into a
+# fleet-wide rule).
+#
+# The analyzer is deliberately STATIC and FAIL-CLOSED: it recognises a small set
+# of provably-hardened shapes and reports everything else. It never executes
+# workflow shell — a validator that runs under pre-commit must not run arbitrary
+# `run:` blocks.
+
+RESULT_VALUES = ("success", "failure", "cancelled", "skipped")
+
+TRIAGE_ABSENT = "TRIAGE_ABSENT"  # job never consumes a result token
+TRIAGE_HARDENED = "TRIAGE_HARDENED"  # provably fails closed on every non-success
+TRIAGE_FAIL_OPEN = "TRIAGE_FAIL_OPEN"  # positively recognised partial triage
+TRIAGE_UNVERIFIABLE = "TRIAGE_UNVERIFIABLE"  # consumes a result, shape unparseable
+
+# The GHA expression tokens whose value space is the four result values.
+_NEEDS_RESULT_RE = re.compile(r"needs\.(?P<job>[A-Za-z0-9_\-]+)\.(?:result|outcome)")
+_STEPS_OUTCOME_RE = re.compile(
+    r"steps\.(?P<step>[A-Za-z0-9_\-]+)\.(?:outcome|conclusion)"
+)
+_JOB_STATUS_RE = re.compile(r"job\.status")
+
+# Sentinel a result-bearing expression / shell variable is normalized to before
+# structural matching, so `${{ needs.x.result }}`, `$RESULT`, `"${RESULT}"` and
+# `${{ steps.y.outcome }}` all reduce to one token.
+_RESULT_SENTINEL = "\x00RESULT\x00"
+
+_GHA_EXPR_RE = re.compile(r"\$\{\{(?P<inner>[^}]*)\}\}")
+_ASSIGN_RE = re.compile(
+    r"(?m)^[ \t]*(?:export[ \t]+)?(?P<var>[A-Za-z_][A-Za-z0-9_]*)="
+    r"[\"']?" + re.escape(_RESULT_SENTINEL) + r"[\"']?[ \t]*$"
+)
+_EXIT_NONZERO_RE = re.compile(r"\bexit[ \t]+([1-9][0-9]*)\b")
+_NOT_SUCCESS_RE = re.compile(
+    re.escape(_RESULT_SENTINEL) + r"[ \t]*!=[ \t]*[\"']?success[\"']?"
+)
+_NOT_EQ_VALUE_RE = re.compile(
+    re.escape(_RESULT_SENTINEL) + r"[ \t]*!=[ \t]*[\"']?(?P<value>[a-z_]+)[\"']?"
+)
+_EQ_VALUE_RE = re.compile(
+    re.escape(_RESULT_SENTINEL) + r"[ \t]*==?[ \t]*[\"']?(?P<value>[a-z_]+)[\"']?"
+)
+# `if <cond over the result>; then <pass> else <fail> fi` — the positive-test
+# form. Hardened iff the condition admits ONLY `success`; a disjunction like
+# `== success || == skipped` is the fail-open shape (a skipped upstream is the
+# absence of a verdict exactly like a cancelled one).
+_IF_THEN_ELSE_RE = re.compile(
+    # The condition may span lines via backslash continuations — omnibase_core's
+    # `quality-gate` conjoins ~40 `[[ "$x" == "success" ]] && \` clauses that
+    # way, and a single-line cond pattern misread it as unhardened.
+    r"\bif\b(?P<cond>(?:[^\n]|\\\n)*?)(?:;[ \t]*)?\n?[ \t]*then\b"
+    r"(?P<body>.*?)\belse\b(?P<els>.*?)\bfi\b",
+    re.DOTALL,
+)
+_CASE_RE = re.compile(
+    r"\bcase[ \t]+[\"']?"
+    + re.escape(_RESULT_SENTINEL)
+    + r"[\"']?[ \t]+in\b(?P<body>.*?)\besac\b",
+    re.DOTALL,
+)
+
+
+@dataclass
+class ResultTriageVerdict:
+    """Verdict of the vector-6 analysis for one job.
+
+    `status` is one of the TRIAGE_* constants. `consumed_jobs` is every
+    `needs.<job>` whose `.result`/`.outcome` the job reads — the raw material
+    for the OMN-15304 §4 sibling-dependency observation. `uncovered_values` is
+    populated only for TRIAGE_FAIL_OPEN and names the result values that reach
+    the pass path.
+    """
+
+    status: str
+    consumed_jobs: tuple[str, ...] = ()
+    uncovered_values: tuple[str, ...] = ()
+    detail: str = ""
+
+
+def _is_result_expr(inner: str, soft_step_ids: frozenset[str] | None = None) -> bool:
+    if _NEEDS_RESULT_RE.search(inner) or _JOB_STATUS_RE.search(inner):
+        return True
+    for m in _STEPS_OUTCOME_RE.finditer(inner):
+        if soft_step_ids is None or m.group("step") in soft_step_ids:
+            return True
+    return False
+
+
+def _strip_sentinel_quotes(text: str) -> str:
+    return re.sub(
+        r"[\"']" + re.escape(_RESULT_SENTINEL) + r"[\"']", _RESULT_SENTINEL, text
+    )
+
+
+def _normalize_result_tokens(text: str) -> str:
+    """Replace every result-bearing token — `needs.<job>.result`,
+    `steps.<id>.outcome`, `job.status` — then every shell variable bound to one,
+    then the quotes around them, with `_RESULT_SENTINEL`.
+
+    Tokens are substituted GLOBALLY rather than only inside `${{ }}`: a step's
+    `if:` is a bare GHA expression with no `${{ }}` wrapper
+    (`if: needs.lint.result != 'success'`), and missing those was a live false
+    positive on omnibase_spi `detect-changes` / omnibase_core `receipt-honesty`.
+    Quote stripping matters for the same reason — `"${{ needs.test.result }}"`
+    normalizes to `"<SENT>"`, and the comparison matchers anchor on the bare
+    sentinel (live false positive on omnidash `ci-summary`).
+
+    Variable binding is a bounded fixpoint over `VAR=<SENT>` assignments, which
+    covers the `RESULT="${{ ... }}"` preamble every real gate script opens with.
+    A variable later rebound to something else is NOT unbound — deliberate:
+    over-normalizing can only make the analyzer see MORE result consumption,
+    never less, and the fail-closed default covers the rest.
+    """
+    normalized = _NEEDS_RESULT_RE.sub(_RESULT_SENTINEL, text)
+    normalized = _STEPS_OUTCOME_RE.sub(_RESULT_SENTINEL, normalized)
+    normalized = _JOB_STATUS_RE.sub(_RESULT_SENTINEL, normalized)
+    # Collapse a `${{ <SENT> }}` wrapper that now contains nothing else.
+    normalized = re.sub(
+        r"\$\{\{[ \t]*" + re.escape(_RESULT_SENTINEL) + r"[ \t]*\}\}",
+        _RESULT_SENTINEL,
+        normalized,
+    )
+    normalized = _strip_sentinel_quotes(normalized)
+    normalized = _rebind_aggregator_loop(normalized)
+    for _ in range(4):  # bounded fixpoint: VAR2="$VAR1" chains
+        bound = {m.group("var") for m in _ASSIGN_RE.finditer(normalized)}
+        if not bound:
+            break
+        before = normalized
+        for var in bound:
+            normalized = re.sub(
+                r"\$\{" + re.escape(var) + r"(?::-[^}]*)?\}"
+                r"|\$" + re.escape(var) + r"\b",
+                _RESULT_SENTINEL,
+                normalized,
+            )
+        normalized = _strip_sentinel_quotes(normalized)
+        if normalized == before:
+            break
+    return normalized
+
+
+_FOR_LOOP_RE = re.compile(
+    r"\bfor[ \t]+(?P<var>[A-Za-z_][A-Za-z0-9_]*)[ \t]+in\b(?P<list>(?:[^\n]|\\\n)*?)(?:;[ \t]*)?\n?[ \t]*do\b",
+    re.DOTALL,
+)
+
+
+def _rebind_aggregator_loop(text: str) -> str:
+    """Model the `for check in "<name>=<result>" ...; do ... "${check##*=}"` shape.
+
+    This is the dominant real aggregator idiom in the fleet (omniclaude
+    `quality-gate`/`tests-gate`/`omni-standards-gate`, omnimarket and omnidash
+    `omni-standards-gate`). The result reaches the triage through a loop
+    variable and a suffix expansion, so without this rebinding every one of
+    those jobs lands in TRIAGE_UNVERIFIABLE — correct as a fail-closed default,
+    but it cannot distinguish the ones that DO fail closed (omnidash) from the
+    ones that let `skipped` through (omniclaude, omnimarket).
+
+    Only `${var##*=}` / `${var#*=}` (value side) are rebound. `${var%%=*}` is
+    the label side and is deliberately left alone.
+    """
+    for m in _FOR_LOOP_RE.finditer(text):
+        if _RESULT_SENTINEL not in m.group("list"):
+            continue
+        var = m.group("var")
+        text = re.sub(
+            r"\$\{" + re.escape(var) + r"##?\*=\}",
+            _RESULT_SENTINEL,
+            text,
+        )
+    return text
+
+
+def _case_is_hardened(body: str) -> bool:
+    """True iff a `case` over the result sentinel fails closed on every
+    non-`success` branch AND carries a `*` catch-all that also fails closed.
+
+    Default-deny on the catch-all is required, not optional: GitHub may add a
+    fifth result value, and an unrecognised value must never open the merge
+    path (the OMN-15296 `*)` branch).
+    """
+    segments = body.split(";;")
+    saw_catch_all = False
+    for segment in segments:
+        if ")" not in segment:
+            continue
+        label_part, _, action = segment.partition(")")
+        labels = [
+            lbl.strip().strip("\"'")
+            for lbl in label_part.replace("(", "").split("|")
+            if lbl.strip()
+        ]
+        if not labels:
+            continue
+        fails_closed = bool(_EXIT_NONZERO_RE.search(action))
+        if "*" in labels:
+            saw_catch_all = True
+            if not fails_closed:
+                return False
+            continue
+        if labels == ["success"]:
+            continue
+        # Any branch naming a non-success value (alone or mixed with success)
+        # must fail closed.
+        if not fails_closed:
+            return False
+    return saw_catch_all
+
+
+def analyze_result_triage(job: ParsedJob) -> ResultTriageVerdict:
+    """Vector-6 analysis of one job's `steps:` (OMN-15304).
+
+    Returns TRIAGE_ABSENT when the job never reads a result token — vector 6
+    simply does not apply. Otherwise the job must PROVE it fails closed; an
+    inline `run:` this analyzer cannot interpret returns TRIAGE_UNVERIFIABLE,
+    which the validator treats as a finding (ticket scope item 2: unparseable
+    triage must not read as hardened).
+    """
+    steps = job.raw.get("steps")
+    steps = steps if isinstance(steps, list) else []
+
+    # A `steps.<id>.outcome` read is only a fail-open surface when step <id>
+    # can fail WITHOUT failing the job — i.e. it carries
+    # `continue-on-error: true`. Otherwise the step's own failure already
+    # fails the job before the reader runs, and reading `.outcome` is
+    # cosmetic (live false positive on omnibase_core `docs-validation`).
+    soft_step_ids = {
+        str(st["id"])
+        for st in steps
+        if isinstance(st, dict) and st.get("id") and st.get("continue-on-error") is True
+    }
+
+    consumed: list[str] = []
+    raw_blobs: list[str] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        for key in ("run", "if"):
+            val = step.get(key)
+            if isinstance(val, str):
+                raw_blobs.append(val)
+    # The JOB-level `if:` is deliberately out of scope. A result read there
+    # decides whether the job RUNS (vectors 2/3/5 own that: a skipped job
+    # satisfies branch protection); vector 6 is only about how a job that DID
+    # run triages the result. Including it double-reported every
+    # `if: needs.x.result == 'success'` job under the wrong vector.
+
+    for blob in raw_blobs:
+        for m in _NEEDS_RESULT_RE.finditer(blob):
+            if m.group("job") not in consumed:
+                consumed.append(m.group("job"))
+
+    soft = frozenset(soft_step_ids)
+    if not any(_is_result_expr(blob, soft) for blob in raw_blobs):
+        return ResultTriageVerdict(status=TRIAGE_ABSENT)
+
+    consumed_t = tuple(consumed)
+
+    # Shape 3 (pure-GHA): a step gated on `<result> != 'success'` whose body
+    # fails the job. Checked first — it needs no shell parsing at all.
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        step_if = step.get("if")
+        step_run = step.get("run")
+        if not isinstance(step_if, str) or not isinstance(step_run, str):
+            continue
+        if _NOT_SUCCESS_RE.search(_normalize_result_tokens(step_if)) and (
+            _EXIT_NONZERO_RE.search(step_run)
+        ):
+            return ResultTriageVerdict(
+                status=TRIAGE_HARDENED,
+                consumed_jobs=consumed_t,
+                detail="step-level `if: <result> != success` guarding a non-zero exit",
+            )
+
+    covered_values: set[str] = set()
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        run = step.get("run")
+        if not isinstance(run, str) or not _is_result_expr(run, soft):
+            continue
+        norm = _normalize_result_tokens(run)
+
+        # Shape 1: explicit `case` with default-deny catch-all.
+        for case_match in _CASE_RE.finditer(norm):
+            if _case_is_hardened(case_match.group("body")):
+                return ResultTriageVerdict(
+                    status=TRIAGE_HARDENED,
+                    consumed_jobs=consumed_t,
+                    detail="`case` over the result with default-deny `*` branch",
+                )
+
+        # Shape 2: `if [ <result> != success ]; then ... exit N`.
+        #
+        # Guarded against the conjunction weakening
+        # `[ $R != "success" ] && [ $R != "skipped" ]` — that shape reads as
+        # "!= success" locally while letting `skipped` through, so a single
+        # `!= <non-success>` anywhere in the script disqualifies Shape 2 and
+        # the job falls through to a finding. Fail-closed on ambiguity.
+        weakened = any(
+            m.group("value") != "success" for m in _NOT_EQ_VALUE_RE.finditer(norm)
+        )
+        if weakened and _NOT_SUCCESS_RE.search(norm):
+            leaked = tuple(
+                sorted(
+                    {
+                        m.group("value")
+                        for m in _NOT_EQ_VALUE_RE.finditer(norm)
+                        if m.group("value") != "success"
+                    }
+                )
+            )
+            return ResultTriageVerdict(
+                status=TRIAGE_FAIL_OPEN,
+                consumed_jobs=consumed_t,
+                uncovered_values=leaked,
+                detail=(
+                    "`!= success` is conjoined with `!= "
+                    + ", != ".join(leaked)
+                    + "`, so "
+                    + ", ".join(leaked)
+                    + " reaches the pass path — the absence of a verdict, not a passing one"
+                ),
+            )
+        for m in _NOT_SUCCESS_RE.finditer(norm) if not weakened else ():
+            if _EXIT_NONZERO_RE.search(norm[m.end() : m.end() + 400]):
+                return ResultTriageVerdict(
+                    status=TRIAGE_HARDENED,
+                    consumed_jobs=consumed_t,
+                    detail="`<result> != success` guarding a non-zero exit",
+                )
+
+        # Shape 4: `if <cond>; then ...pass... else ...exit N... fi`.
+        for m in _IF_THEN_ELSE_RE.finditer(norm):
+            cond = m.group("cond")
+            if _RESULT_SENTINEL not in cond:
+                continue
+            if not _EXIT_NONZERO_RE.search(m.group("els")):
+                continue
+            if _NOT_EQ_VALUE_RE.search(cond):
+                continue  # negative form — Shape 2's territory, not this one
+            cond_values = {mm.group("value") for mm in _EQ_VALUE_RE.finditer(cond)}
+            if not cond_values:
+                continue
+            if cond_values == {"success"}:
+                return ResultTriageVerdict(
+                    status=TRIAGE_HARDENED,
+                    consumed_jobs=consumed_t,
+                    detail="`if <result> = success ... else <non-zero exit>` positive test",
+                )
+            leaked = tuple(sorted(cond_values - {"success"}))
+            return ResultTriageVerdict(
+                status=TRIAGE_FAIL_OPEN,
+                consumed_jobs=consumed_t,
+                uncovered_values=leaked,
+                detail=(
+                    "the pass condition admits "
+                    + ", ".join(sorted(cond_values))
+                    + " — "
+                    + ", ".join(leaked)
+                    + " is the ABSENCE of a verdict, not a passing one"
+                ),
+            )
+
+        # Not hardened — record which specific values ARE blocked, so the
+        # finding can name the ones that fall through to the pass path.
+        for m in _EQ_VALUE_RE.finditer(norm):
+            if _EXIT_NONZERO_RE.search(norm[m.end() : m.end() + 400]):
+                covered_values.add(m.group("value"))
+
+    blocked = covered_values & set(RESULT_VALUES)
+    if blocked:
+        uncovered = tuple(
+            v for v in RESULT_VALUES if v != "success" and v not in blocked
+        )
+        return ResultTriageVerdict(
+            status=TRIAGE_FAIL_OPEN,
+            consumed_jobs=consumed_t,
+            uncovered_values=uncovered,
+            detail=(
+                "blocks only on "
+                + ", ".join(sorted(blocked))
+                + "; "
+                + ", ".join(uncovered)
+                + " (and any future result value) fall through to the pass path"
+            ),
+        )
+
+    return ResultTriageVerdict(
+        status=TRIAGE_UNVERIFIABLE,
+        consumed_jobs=consumed_t,
+        detail=(
+            "reads a `needs.*.result` / `steps.*.outcome` / `job.status` token but "
+            "no provably fail-closed triage shape was found"
+        ),
+    )
