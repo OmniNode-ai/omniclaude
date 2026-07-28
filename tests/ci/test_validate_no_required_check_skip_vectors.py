@@ -1325,3 +1325,206 @@ def test_steps_outcome_read_with_continue_on_error_is_red(tmp_path: Path) -> Non
     assert [f.vector for f in findings] == ["vector-6-result-triage-unverifiable"], (
         findings
     )
+
+
+# ---------------------------------------------------------------------------
+# Vector 6, per-UPSTREAM analysis (OMN-15304 remediation round 1)
+#
+# The first cut of this analyzer collapsed every `needs.<job>.result` to one
+# sentinel and returned on the FIRST hardened shape it found anywhere in the
+# job. A hardened guard on upstream A therefore certified the whole job while
+# upstream B's triage was fail-open. That masked omniclaude's OWN
+# `Hostile Review Gate` — a live REQUIRED context whose `occ-preflight` guard
+# hardened while `hostile-review` blocked only on `failure`: the pre-#1926
+# omnimarket shape verbatim, i.e. the exact incident this vector exists to
+# catch, on a repo with no sibling `Hostile Reviewer` required context to act
+# as the accidental backstop.
+#
+# The RED script below is the omniclaude `hostile-review-gate` `run:` block as
+# it stood before this remediation, extracted byte-for-byte.
+# ---------------------------------------------------------------------------
+
+_MASKED_GATE_RUN_PRE_FIX = """\
+                        echo "=== Hostile Review Gate ==="
+                        PREFLIGHT="${{ needs.occ-preflight.result }}"
+                        RESULT="${{ needs.hostile-review.result }}"
+                        echo "occ-preflight: $PREFLIGHT"
+                        echo "hostile-review: $RESULT"
+
+                        if [ "$PREFLIGHT" != "success" ]; then
+                          echo "::error::OCC preflight failed or did not complete (result: $PREFLIGHT)."
+                          exit 1
+                        fi
+                        if [ "$RESULT" = "failure" ]; then
+                          echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
+                          exit 1
+                        fi
+                        echo "Hostile Review Gate PASSED"
+"""
+
+_MASKED_GATE_RUN_POST_FIX = """\
+                        echo "=== Hostile Review Gate ==="
+                        PREFLIGHT="${{ needs.occ-preflight.result }}"
+                        RESULT="${{ needs.hostile-review.result }}"
+                        echo "occ-preflight: $PREFLIGHT"
+                        echo "hostile-review: $RESULT"
+
+                        if [ "$PREFLIGHT" != "success" ]; then
+                          echo "::error::OCC preflight failed or did not complete (result: $PREFLIGHT)."
+                          exit 1
+                        fi
+                        case "$RESULT" in
+                          success)
+                            ;;
+                          failure)
+                            echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
+                            exit 1
+                            ;;
+                          cancelled|skipped)
+                            echo "::error::Hostile reviewer produced no verdict (result: $RESULT) — the absence of a verdict is not a passing one."
+                            exit 1
+                            ;;
+                          *)
+                            echo "::error::Unrecognised hostile-review result '$RESULT' — failing closed."
+                            exit 1
+                            ;;
+                        esac
+                        echo "Hostile Review Gate PASSED"
+"""
+
+
+def _two_upstream_gate_workflow(run_script: str) -> str:
+    body = "\n".join(
+        "          " + line if line.strip() else ""
+        for line in run_script.rstrip("\n").split("\n")
+    )
+    return (
+        "name: Hostile Reviewer\n"
+        "on:\n"
+        "  pull_request:\n"
+        "jobs:\n"
+        "  occ-preflight:\n"
+        "    name: OCC Preflight\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - run: echo preflight\n"
+        "  hostile-review:\n"
+        "    name: Hostile Reviewer (adversarial gate)\n"
+        "    needs: [occ-preflight]\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - run: echo review\n"
+        "  hostile-review-gate:\n"
+        "    name: Hostile Review Gate\n"
+        "    needs: [occ-preflight, hostile-review]\n"
+        "    if: always()\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: Evaluate gate\n"
+        "        run: |\n" + body + "\n"
+    )
+
+
+def test_hardened_sibling_upstream_does_not_mask_a_fail_open_upstream(
+    tmp_path: Path,
+) -> None:
+    """RED: two upstreams, one hardened (`occ-preflight`), one fail-open
+    (`hostile-review` blocks only on `failure`). Per-JOB analysis called this
+    HARDENED and reported nothing; per-UPSTREAM analysis must report it and
+    must NAME the fail-open upstream, not the hardened one."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {"hostile-reviewer.yml": _two_upstream_gate_workflow(_MASKED_GATE_RUN_PRE_FIX)},
+        [_manifest_row("Hostile Review Gate")],
+    )
+    findings = run(manifest_path, wf_dir)
+    vectors = [f.vector for f in findings]
+    assert "vector-6-result-triage-fail-open" in vectors, findings
+    msg = next(
+        f.message for f in findings if f.vector == "vector-6-result-triage-fail-open"
+    )
+    # The finding must attribute the fail-open to hostile-review, and must NOT
+    # claim occ-preflight (which is genuinely hardened) is the problem.
+    assert "needs.hostile-review.result" in msg, msg
+    assert "for `needs.occ-preflight.result`" not in msg, msg
+    assert "cancelled" in msg and "skipped" in msg, msg
+    # Same claim as the omnimarket fixture: vectors 1-5 are silent on this shape.
+    assert [v for v in vectors if not v.startswith("vector-6")] == [], vectors
+
+
+def test_all_upstreams_hardened_is_green(tmp_path: Path) -> None:
+    """GREEN: the same two-upstream job once BOTH upstreams fail closed. Guards
+    the other direction — per-upstream analysis must not fire on a job that is
+    genuinely hardened on every result it reads."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {
+            "hostile-reviewer.yml": _two_upstream_gate_workflow(
+                _MASKED_GATE_RUN_POST_FIX
+            )
+        },
+        [_manifest_row("Hostile Review Gate")],
+    )
+    assert run(manifest_path, wf_dir) == []
+
+
+def test_masked_upstream_still_emits_the_sibling_dependency_observation(
+    tmp_path: Path,
+) -> None:
+    """The masking also suppressed the ticket's scope-item-4 observation, which
+    early-returns on TRIAGE_HARDENED. With per-upstream analysis the
+    observation fires again when the fail-open upstream is itself required."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {"hostile-reviewer.yml": _two_upstream_gate_workflow(_MASKED_GATE_RUN_PRE_FIX)},
+        [
+            _manifest_row("Hostile Review Gate"),
+            _manifest_row("Hostile Reviewer (adversarial gate)"),
+        ],
+    )
+    observations: list = []
+    run(manifest_path, wf_dir, observations=observations)
+    texts = [o.message for o in observations]
+    assert any(
+        "hostile-review -> 'Hostile Reviewer (adversarial gate)'" in t for t in texts
+    ), texts
+
+
+def test_continue_on_error_triage_step_cannot_harden(tmp_path: Path) -> None:
+    """RED: a triage step running `exit 1` under `continue-on-error: true` does
+    not fail the job, so it hardens nothing. The analyzer modelled
+    continue-on-error for the CONSUMED side only; the asymmetry certified this
+    shape TRIAGE_HARDENED."""
+    manifest_path, wf_dir = _write(
+        tmp_path,
+        {
+            "gate.yml": """\
+                name: X
+                on:
+                  pull_request:
+                jobs:
+                  upstream:
+                    name: Upstream
+                    runs-on: ubuntu-latest
+                    steps: [{run: "echo hi"}]
+                  gate:
+                    name: Required Gate
+                    needs: [upstream]
+                    if: always()
+                    runs-on: ubuntu-latest
+                    steps:
+                      - continue-on-error: true
+                        run: |
+                          RESULT="${{ needs.upstream.result }}"
+                          if [ "$RESULT" != "success" ]; then
+                            echo "::error::upstream did not succeed: $RESULT"
+                            exit 1
+                          fi
+                """
+        },
+        [_manifest_row("Required Gate")],
+    )
+    findings = run(manifest_path, wf_dir)
+    assert [f.vector for f in findings] == ["vector-6-result-triage-unverifiable"], (
+        findings
+    )
