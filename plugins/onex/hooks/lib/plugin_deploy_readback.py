@@ -447,9 +447,20 @@ class ModelReadback:
 # ---------------------------------------------------------------------------
 
 
-def _load_json(path: pathlib.Path) -> Any:
+def _load_json(path: pathlib.Path) -> dict[str, Any]:
+    """Parse a config file that must be a JSON **object**.
+
+    Every registry/manifest this module reads is object-shaped. A file that
+    parses but is a list, string or null is corruption, not an alternative
+    encoding, so it is raised as ``ValueError`` — the same class the callers
+    already handle — rather than being allowed to reach a ``.get()`` on a
+    non-dict and surface as an uncaught ``AttributeError`` mid-readback.
+    """
     with path.open(encoding="utf-8") as fh:
-        return json.load(fh)
+        data = json.load(fh)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a JSON object, got {type(data).__name__}")
+    return data
 
 
 def read_registry_entries(claude_home: pathlib.Path) -> tuple[ModelRegistryEntry, ...]:
@@ -465,7 +476,10 @@ def read_registry_entries(claude_home: pathlib.Path) -> tuple[ModelRegistryEntry
         return ()
 
     entries: list[ModelRegistryEntry] = []
-    for plugin_id, records in (data.get("plugins") or {}).items():
+    plugins_field = data.get("plugins")
+    if not isinstance(plugins_field, dict):
+        return ()
+    for plugin_id, records in plugins_field.items():
         if isinstance(records, dict):  # tolerate a non-list shape
             records = [records]
         for record in records or []:
@@ -548,7 +562,7 @@ def resolve_load_path(
             error=f"cannot read {known}: {exc}",
         )
 
-    record = (marketplaces or {}).get(marketplace)
+    record = marketplaces.get(marketplace)
     if not isinstance(record, dict):
         return ModelLoadPathResolution(
             plugin_id=plugin_id,
@@ -594,7 +608,8 @@ def resolve_load_path(
         )
 
     plugin_entry: dict[str, Any] | None = None
-    for candidate in (manifest_data or {}).get("plugins") or []:
+    manifest_plugins = manifest_data.get("plugins")
+    for candidate in manifest_plugins if isinstance(manifest_plugins, list) else []:
         if isinstance(candidate, dict) and candidate.get("name") == name:
             plugin_entry = candidate
             break
@@ -650,7 +665,8 @@ def read_hooks_config(root: pathlib.Path) -> ModelHooksConfig:
         return ModelHooksConfig(path=str(path), version=None, error=str(exc))
 
     registrations: list[ModelHookRegistration] = []
-    for event, blocks in ((data or {}).get("hooks") or {}).items():
+    hooks_field = data.get("hooks")
+    for event, blocks in (hooks_field if isinstance(hooks_field, dict) else {}).items():
         for block in blocks or []:
             if not isinstance(block, dict):
                 continue
@@ -673,7 +689,7 @@ def read_hooks_config(root: pathlib.Path) -> ModelHooksConfig:
                 )
     return ModelHooksConfig(
         path=str(path),
-        version=(str(data.get("version")) if (data or {}).get("version") else None),
+        version=(str(data["version"]) if data.get("version") else None),
         registrations=tuple(registrations),
     )
 
@@ -855,6 +871,24 @@ def _evaluate_tripwires(
     fired: list[ModelTripwire] = []
     resolved = rb.resolution.resolved_root
 
+    # 0. Registry hygiene, evaluated for EVERY plugin and independently of
+    # whether *this* plugin's load path resolved. A stale recorded path is a
+    # fact about the registry, not about the resolution, so it must still be
+    # surfaced on the unresolvable path — that is precisely the run where the
+    # reader is most likely to fall back to reading installed_plugins.json.
+    for entry in rb.registry_entries:
+        if entry.install_path and not entry.exists:
+            fired.append(
+                ModelTripwire(
+                    EnumReadbackTripwire.REGISTRY_PATH_MISSING,
+                    EnumSeverity.WARN,
+                    (
+                        f"{entry.plugin_id} records installPath {entry.install_path} "
+                        "which does not exist on this machine."
+                    ),
+                )
+            )
+
     if not rb.resolution.ok:
         fired.append(
             ModelTripwire(
@@ -916,19 +950,8 @@ def _evaluate_tripwires(
             )
         )
 
-    # 3. stale/non-existent recorded paths, all plugins (not just this one).
-    for entry in rb.registry_entries:
-        if entry.install_path and not entry.exists:
-            fired.append(
-                ModelTripwire(
-                    EnumReadbackTripwire.REGISTRY_PATH_MISSING,
-                    EnumSeverity.WARN,
-                    (
-                        f"{entry.plugin_id} records installPath {entry.install_path} "
-                        "which does not exist on this machine."
-                    ),
-                )
-            )
+    # (3. stale/non-existent recorded paths ran above as check 0, so that it
+    # also fires on the unresolvable-load-path path.)
 
     # 4. registered-but-not-executable hooks at the load path.
     for reg in rb.live_hooks.registrations if rb.live_hooks else ():

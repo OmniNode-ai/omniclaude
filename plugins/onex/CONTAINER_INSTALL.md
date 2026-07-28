@@ -44,11 +44,15 @@ Auto-repair couldn't create a venv. Either:
 Restart Claude Code to re-read `installed_plugins.json`. The plugin path
 in that file must match the actual filesystem path in the container.
 
-> Container profile only. On a workstation with a `directory`-source marketplace,
-> `installed_plugins.json` records a cache path that is **not** the load path, and the
-> recorded path can be years-stale without any symptom (OMN-15274). Before concluding
-> anything about which hooks run — in either profile — resolve it:
-> `python3 plugins/onex/hooks/lib/plugin_deploy_readback.py`.
+> The path in that file is a *recorded* path, not necessarily the resolved one. On a
+> workstation with a `directory`-source marketplace it records a cache path that is **not**
+> the load path, and it can stay stale for weeks with no symptom (OMN-15274). If this
+> container install has the omniclaude checkout available, resolve it rather than trusting
+> the record: `python3 plugins/onex/hooks/lib/plugin_deploy_readback.py`. That tool is scoped
+> to the `local_macos_claude_hooks` profile and is not part of the container install contract —
+> a container that ships only the plugin payload will not have it, and it may resolve
+> differently there. In that case, compare the recorded path against `known_marketplaces.json`
+> by hand before concluding anything about which hooks run.
 
 ### Bundled venv has wrong paths (macOS symlinks)
 

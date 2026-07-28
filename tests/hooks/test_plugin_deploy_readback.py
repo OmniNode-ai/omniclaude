@@ -490,6 +490,48 @@ def test_unresolvable_marketplace_alarms_rather_than_falling_back_to_the_registr
     assert _tripwires(rb, EnumReadbackTripwire.RESOLUTION_RULE_CHANGED)
     # The registry is still reported, but never promoted to truth.
     assert rb.naive_registry_path == str(dead_cache_workstation["cache_root"])
+    # Registry hygiene is a fact about the registry, not about the resolution,
+    # so it must survive the unresolvable path -- this is exactly the run where
+    # a reader is most tempted to fall back to installed_plugins.json.
+    assert any(
+        "code-review@claude-plugins-official" in t.detail
+        for t in _tripwires(rb, EnumReadbackTripwire.REGISTRY_PATH_MISSING)
+    )
+
+
+@pytest.mark.parametrize("name", ["known_marketplaces.json", "installed_plugins.json"])
+def test_non_object_json_root_degrades_instead_of_crashing(
+    dead_cache_workstation: dict[str, pathlib.Path], name: str
+) -> None:
+    """A registry that parses but is not an object is corruption, not a shape.
+
+    Without the object guard these reach ``.get()`` on a list and raise an
+    uncaught ``AttributeError`` mid-readback, which reads as a tool bug rather
+    than as "your registry is corrupt".
+    """
+    (dead_cache_workstation["claude_home"] / "plugins" / name).write_text(
+        '["not", "an", "object"]', encoding="utf-8"
+    )
+    rb = build_readback(dead_cache_workstation["claude_home"], fetch=False)
+    assert isinstance(rb.tripwires, list)
+    if name == "known_marketplaces.json":
+        assert rb.resolution.resolved_root is None
+        assert _tripwires(rb, EnumReadbackTripwire.RESOLUTION_RULE_CHANGED)
+    else:
+        assert rb.resolution.resolved_root == str(dead_cache_workstation["live_root"])
+        assert rb.naive_registry_path is None
+
+
+def test_non_object_hooks_json_reports_error_rather_than_crashing(
+    dead_cache_workstation: dict[str, pathlib.Path],
+) -> None:
+    (dead_cache_workstation["live_root"] / "hooks" / "hooks.json").write_text(
+        "[]", encoding="utf-8"
+    )
+    rb = build_readback(dead_cache_workstation["claude_home"], fetch=False)
+    assert rb.live_hooks is not None
+    assert rb.live_hooks.error is not None
+    assert _tripwires(rb, EnumReadbackTripwire.HOOK_SCRIPT_MISSING)
 
 
 def test_absent_registry_does_not_break_resolution(

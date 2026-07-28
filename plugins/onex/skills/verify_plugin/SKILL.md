@@ -44,12 +44,24 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
      `known_marketplaces.json` before reporting any verdict; do not report a result from the
      previous assumption.
 
-   Then bind the rest of the suite to the path it resolved:
+   Then bind the rest of the suite to the path it resolved — **fail closed**, because a suite
+   that runs against an empty or wrong `PLUGIN_ROOT` produces the confident-but-false verdict
+   this step exists to prevent:
    ```bash
-   PLUGIN_ROOT=$(python3 "$CLAUDE_PLUGIN_ROOT/hooks/lib/plugin_deploy_readback.py" --json --no-fetch \
-     | python3 -c 'import json,sys; print(json.load(sys.stdin)["resolved_load_path"])')
+   READBACK="$CLAUDE_PLUGIN_ROOT/hooks/lib/plugin_deploy_readback.py"
+   RB_JSON=$(python3 "$READBACK" --json --no-fetch); rb_rc=$?
+   if [ "$rb_rc" -eq 1 ]; then
+     echo "ABORT: load path unresolvable — report the readback output, run nothing else."; exit 1
+   fi
+   PLUGIN_ROOT=$(printf '%s' "$RB_JSON" \
+     | python3 -c 'import json,sys; print(json.load(sys.stdin).get("resolved_load_path") or "")')
+   if [ -z "$PLUGIN_ROOT" ] || [ ! -d "$PLUGIN_ROOT" ]; then
+     echo "ABORT: resolved_load_path empty or not a directory — do not fall back to the cache."; exit 1
+   fi
    echo "Verifying: $PLUGIN_ROOT"
    ```
+   Exit 3 (alarm-level tripwire) is **not** an abort — it is a finding to report alongside the
+   rest of the suite.
 
 2. **Run structural checks (Layer 1):**
    ```bash

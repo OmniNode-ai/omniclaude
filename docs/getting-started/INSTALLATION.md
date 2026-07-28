@@ -43,9 +43,9 @@ See [CLAUDE.md](../../CLAUDE.md) for the complete environment variable reference
 
 ## 3. Deploy the Plugin
 
-The plugin files live in `plugins/onex/` and must be deployed to Claude Code's
-plugin cache so that Claude Code can find the hook scripts and agent definitions
-at runtime.
+The plugin files live in `plugins/onex/`. Claude Code finds the hook scripts and agent
+definitions at whatever path the plugin's **marketplace source** resolves to — which is
+not necessarily a copy in the plugin cache.
 
 `CLAUDE_PLUGIN_ROOT` (injected by Claude Code) does **not** reliably point into
 `~/.claude/plugins/cache/`. Published Claude Code docs describe marketplace plugins as

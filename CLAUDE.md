@@ -190,8 +190,10 @@ It resolves `${CLAUDE_PLUGIN_ROOT}` through the marketplace source chain and rep
 class (main session / `Task()` subagent / Workflow `agent()` subagent), the loaded `hooks.json`
 version, every registration with an EXEC-OK check, and whether the load-path tree is behind its
 upstream — the merged-not-deployed signal. `MERGED_NOT_DEPLOYED` means a merged hook is not a
-live hook; where the load path is a working tree, `git pull` in that tree *is* the deploy.
-Scope: `local_macos_claude_hooks` profile. Background:
+live hook; where the load path is a working tree, `git pull` in that tree *is* the deploy — but
+it updates files, it does not reload a running session. The readback reports **config** state,
+not what an already-running process holds in memory; a **new session** is the only surface
+guaranteed to have re-read `hooks.json`. Scope: `local_macos_claude_hooks` profile. Background:
 `omni_home/docs/reference/hook-load-path-and-deploy-readback.md`.
 
 ### Automation surfaces

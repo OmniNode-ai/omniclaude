@@ -143,8 +143,14 @@ If the skill does not appear after deploying:
 2. Restart Claude Code to pick up the new plugin state.
 3. Check the tree Claude Code actually loads — not the plugin cache, which for a
    `directory`-source marketplace is never read (OMN-15274):
-   `python3 plugins/onex/hooks/lib/plugin_deploy_readback.py`, then
-   `ls "$(...--json | jq -r .resolved_load_path)/skills/"`.
+
+   ```bash
+   READBACK=plugins/onex/hooks/lib/plugin_deploy_readback.py
+   python3 "$READBACK"                                  # full readback + tripwires
+   LOAD_PATH=$(python3 "$READBACK" --json --no-fetch | jq -r '.resolved_load_path // empty')
+   [ -n "$LOAD_PATH" ] || { echo "load path unresolved — fix that first"; exit 1; }
+   ls "$LOAD_PATH/skills/"
+   ```
 
 ---
 
