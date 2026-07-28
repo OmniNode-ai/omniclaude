@@ -3039,6 +3039,10 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - occ-preflight
+      # OMN-15314: read for its `docs_only` OUTPUT only, never for its result.
+      # It is the declared precondition the per-upstream skip policy below
+      # re-evaluates, so this gate can tell an expected skip from a stranded one.
+      - zone-filter
       - quality
       - pyright
       - check-handshake
@@ -3095,10 +3099,42 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Quality Gate ==="
-          FAILED=false
 
+          # OMN-15314 (OMN-15304 vector 6 — result triage). The previous triage
+          # was `[ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]`, which
+          # reads as "!= success" locally while letting `skipped` reach the
+          # PASSED path. `skipped` is the ABSENCE of a verdict exactly like
+          # `cancelled`, and it is precisely the state vectors 2/3/5
+          # (conditional `if:`, needs-cascade) produce — so vector 5 and
+          # vector 6 composed into a bypass: strand an upstream, and the
+          # aggregator that was supposed to catch it reports green.
+          #
+          # The blanket `!= skipped` escape existed because three upstreams do
+          # skip legitimately. That is now an explicit PER-UPSTREAM SKIP POLICY:
+          # `skipped` passes only when this gate itself re-evaluates that
+          # upstream's own declared precondition and finds it false. Every other
+          # skip, every unlisted upstream that skipped, failure, cancelled, and
+          # any future result value GitHub might add fail closed.
+          #
+          # occ-preflight is checked first and on its own: every job below is
+          # gated on it succeeding, so if it did not, their results carry no
+          # information and no skip below can be assessed.
+          PREFLIGHT="${{ needs.occ-preflight.result }}"
+          echo "occ-preflight: $PREFLIGHT"
+          if [ "$PREFLIGHT" != "success" ]; then
+            echo "::error::occ-preflight did not succeed (result: $PREFLIGHT) — every check in this gate is gated on it."
+            exit 1
+          fi
+
+          # Declared-precondition inputs for the skip policy in the loop.
+          DOCS_ONLY="${{ needs.zone-filter.outputs.docs_only }}"
+          FORK_PR="${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}"
+          echo "skip-policy inputs: docs_only=${DOCS_ONLY:-(unset)} fork_pr=$FORK_PR"
+
+          # The gate stops at the first offending upstream rather than
+          # accumulating: nearly every upstream here is also an INDEPENDENTLY
+          # required status check, so its own red is already in the checks list.
           for check in \
-            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
@@ -3138,19 +3174,45 @@ jobs:
             "no-polymorphic-agent=${{ needs.no-polymorphic-agent.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
-            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
-              echo "::error::$NAME failed (result: $RESULT)"
-              FAILED=true
-            else
-              echo "$NAME: $RESULT"
-            fi
+
+            # Per-upstream skip policy. Each entry mirrors that job's own
+            # declared `if:` — keep the two in sync. An upstream that is NOT
+            # listed here may never skip: default-deny.
+            SKIP_OK=false
+            case "$NAME" in
+              pyright|golden-chain-integrity)
+                # Gated on the zone filter reporting a non-docs-only change.
+                if [ "$DOCS_ONLY" = "true" ]; then SKIP_OK=true; fi
+                ;;
+              check-handshake)
+                # Gated on the PR head branch living in this repository
+                # (fork PRs cannot reach the handshake credentials).
+                if [ "$FORK_PR" = "true" ]; then SKIP_OK=true; fi
+                ;;
+            esac
+
+            case "$RESULT" in
+              success)
+                echo "$NAME: success"
+                ;;
+              skipped)
+                if [ "$SKIP_OK" != "true" ]; then
+                  echo "::error::$NAME was SKIPPED with its declared precondition holding (docs_only=${DOCS_ONLY:-unset} fork_pr=$FORK_PR) — the absence of a verdict is not a passing one."
+                  exit 1
+                fi
+                echo "$NAME: skipped (declared precondition not met on this event)"
+                ;;
+              failure|cancelled)
+                echo "::error::$NAME did not pass (result: $RESULT)"
+                exit 1
+                ;;
+              *)
+                echo "::error::$NAME returned unrecognised result '$RESULT' — failing closed."
+                exit 1
+                ;;
+            esac
           done
 
-          if [ "$FAILED" = "true" ]; then
-            echo ""
-            echo "Quality Gate FAILED"
-            exit 1
-          fi
           echo ""
           echo "Quality Gate PASSED"
 
@@ -3163,6 +3225,9 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - occ-preflight
+      # OMN-15314: read for its `docs_only` OUTPUT only, never for its result —
+      # the declared precondition the per-upstream skip policy re-evaluates.
+      - zone-filter
       - test
       - hooks-tests
       - agent-framework-tests
@@ -3175,10 +3240,29 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Tests Gate ==="
-          FAILED=false
+
+          # OMN-15314 (OMN-15304 vector 6 — result triage). The previous triage
+          # was `[ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]`, which
+          # let a SKIPPED test job reach the PASSED path — a required Tests Gate
+          # reporting green with no test result in existence. `skipped` is the
+          # ABSENCE of a verdict exactly like `cancelled`, and it is precisely
+          # the state vectors 2/3/5 produce, so vector 5 and vector 6 composed
+          # into a bypass.
+          #
+          # occ-preflight is checked first and on its own: every job below is
+          # gated on it succeeding.
+          PREFLIGHT="${{ needs.occ-preflight.result }}"
+          echo "occ-preflight: $PREFLIGHT"
+          if [ "$PREFLIGHT" != "success" ]; then
+            echo "::error::occ-preflight did not succeed (result: $PREFLIGHT) — every check in this gate is gated on it."
+            exit 1
+          fi
+
+          # Declared-precondition input for the per-upstream skip policy below.
+          DOCS_ONLY="${{ needs.zone-filter.outputs.docs_only }}"
+          echo "skip-policy input: docs_only=${DOCS_ONLY:-(unset)}"
 
           for check in \
-            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
@@ -3187,19 +3271,46 @@ jobs:
             "registry-consistency=${{ needs.registry-consistency.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
-            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
-              echo "::error::$NAME failed (result: $RESULT)"
-              FAILED=true
-            else
-              echo "$NAME: $RESULT"
-            fi
+
+            # Per-upstream skip policy. Each entry mirrors that job's own
+            # declared `if:` — keep the two in sync. An upstream that is NOT
+            # listed here may never skip: default-deny. `database-validation`
+            # carries `if: always()` and is deliberately absent.
+            #
+            # `test` is additionally gated on the Quality Gate succeeding; that
+            # skip is NOT admitted here. Tests that never ran because quality
+            # failed are absent tests, and Quality Gate is itself an
+            # independently required context, so it is already red on that path.
+            SKIP_OK=false
+            case "$NAME" in
+              test|hooks-tests|agent-framework-tests|golden-chain-live|registry-consistency)
+                # Gated on the zone filter reporting a non-docs-only change.
+                if [ "$DOCS_ONLY" = "true" ]; then SKIP_OK=true; fi
+                ;;
+            esac
+
+            case "$RESULT" in
+              success)
+                echo "$NAME: success"
+                ;;
+              skipped)
+                if [ "$SKIP_OK" != "true" ]; then
+                  echo "::error::$NAME was SKIPPED with its declared precondition holding (docs_only=${DOCS_ONLY:-unset}) — the absence of a test result is not a passing one."
+                  exit 1
+                fi
+                echo "$NAME: skipped (docs-only change — declared precondition not met)"
+                ;;
+              failure|cancelled)
+                echo "::error::$NAME did not pass (result: $RESULT)"
+                exit 1
+                ;;
+              *)
+                echo "::error::$NAME returned unrecognised result '$RESULT' — failing closed."
+                exit 1
+                ;;
+            esac
           done
 
-          if [ "$FAILED" = "true" ]; then
-            echo ""
-            echo "Tests Gate FAILED"
-            exit 1
-          fi
           echo ""
           echo "Tests Gate PASSED"
 

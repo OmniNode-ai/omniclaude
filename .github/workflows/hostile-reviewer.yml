@@ -341,8 +341,28 @@ jobs:
             echo "::error::OCC preflight failed or did not complete (result: $PREFLIGHT)."
             exit 1
           fi
-          if [ "$RESULT" = "failure" ]; then
-            echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
-            exit 1
-          fi
+          # Four-way triage with a default-deny catch-all (OMN-15304 vector 6,
+          # the omnimarket#1926 shape). Blocking only on `failure` let a
+          # CANCELLED reviewer render this REQUIRED context green with no
+          # adversarial verdict in existence — exactly the omnimarket#1920
+          # incident (reviewer cancelled 04:13:14Z, gate SUCCESS 04:13:21Z),
+          # and `if: always()` above guarantees that path is reached. Anything
+          # that is not `success` is the ABSENCE of a verdict, not a passing
+          # one; an unrecognised future result value fails closed too.
+          case "$RESULT" in
+            success)
+              ;;
+            failure)
+              echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
+              exit 1
+              ;;
+            cancelled|skipped)
+              echo "::error::Hostile reviewer produced no verdict (result: $RESULT) — the absence of a verdict is not a passing one."
+              exit 1
+              ;;
+            *)
+              echo "::error::Unrecognised hostile-review result '$RESULT' — failing closed."
+              exit 1
+              ;;
+          esac
           echo "Hostile Review Gate PASSED"
