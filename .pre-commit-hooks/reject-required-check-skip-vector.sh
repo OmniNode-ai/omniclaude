@@ -8,8 +8,9 @@
 # (required-check-skip-guard-reusable.yml) both invoke the SAME Python
 # validator, so local and CI verdicts can never diverge.
 #
-# Fails closed on any of the four skip vectors described in
-# validate_no_required_check_skip_vectors.py's module docstring.
+# Fails closed on any of the six skip vectors described in
+# validate_no_required_check_skip_vectors.py's module docstring (vector 5 added
+# OMN-15057; vector 6, result-triage fail-open, added OMN-15304).
 
 set -euo pipefail
 

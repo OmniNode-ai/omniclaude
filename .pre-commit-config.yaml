@@ -156,7 +156,10 @@ repos:
       # OMN-14854: Required-Check Skip-Vector Guard. Fails closed if a staged
       # workflow file or the required-checks manifest introduces a path-scoped
       # trigger, an ungated job-level `if:`, an ungated reusable-caller `if:`,
-      # or a missing pull_request/merge_group trigger on any REQUIRED context.
+      # a missing pull_request/merge_group trigger, an ungated `needs:` cascade
+      # (vector 5, OMN-15057), or result triage that does not fail closed on
+      # every non-`success` upstream result (vector 6, OMN-15304) on any
+      # REQUIRED context.
       # Same validator runs in CI (required-check-skip-guard-reusable.yml) —
       # local and CI verdicts can never diverge.
       - id: reject-required-check-skip-vector
