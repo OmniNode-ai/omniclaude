@@ -60,7 +60,8 @@ USE_EVENT_ROUTING=true
 
 ## Deploy the Plugin (1 min)
 
-The plugin hooks are only active when deployed to Claude Code's plugin cache.
+The plugin hooks are active from whatever path Claude Code resolves the plugin to — for a
+`directory`-source marketplace that is the source checkout, not a copy in the plugin cache.
 From within a Claude Code session in this project:
 
 ```

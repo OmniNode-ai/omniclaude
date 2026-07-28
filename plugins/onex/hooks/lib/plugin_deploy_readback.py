@@ -61,9 +61,15 @@ Usage::
     python3 plugins/onex/hooks/lib/plugin_deploy_readback.py --json
     python3 plugins/onex/hooks/lib/plugin_deploy_readback.py --no-fetch --strict
 
+Requires Python >= 3.11 (``StrEnum``, ``datetime.UTC``). The macOS system
+``python3`` is often 3.9, so the module refuses to run below the floor with a
+named error rather than dying on an import three frames in — the callers here
+are shell scripts and docs, where a bare ``python3`` is easy to reach for.
+
 Exit codes: 0 = readback produced, no alarm-level tripwire; 3 = alarm-level
 tripwire (or any tripwire under ``--strict``); 1 = the load path could not be
-resolved at all, which is itself the loudest possible answer.
+resolved at all, which is itself the loudest possible answer, or the
+interpreter is below the supported floor.
 
 Refs: OMN-15274, OMN-15244, OMN-15273, OMN-15213, OMN-15062.
 See also: ``omni_home/docs/reference/hook-load-path-and-deploy-readback.md``.
@@ -1193,5 +1199,18 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+#: Minimum interpreter this module supports. ``StrEnum`` and ``datetime.UTC``
+#: are 3.11; the macOS system ``python3`` is frequently 3.9.
+MIN_PYTHON = (3, 11)
+
 if __name__ == "__main__":
+    if sys.version_info < MIN_PYTHON:
+        need = ".".join(str(n) for n in MIN_PYTHON)
+        have = ".".join(str(n) for n in sys.version_info[:3])
+        sys.stderr.write(
+            f"plugin_deploy_readback requires Python >= {need}; this interpreter is "
+            f"{have} ({sys.executable}). Re-run with a newer interpreter (e.g. "
+            "PLUGIN_PYTHON_BIN) rather than reading the plugin registry by hand.\n"
+        )
+        sys.exit(1)
     sys.exit(main())
