@@ -44,6 +44,12 @@ Auto-repair couldn't create a venv. Either:
 Restart Claude Code to re-read `installed_plugins.json`. The plugin path
 in that file must match the actual filesystem path in the container.
 
+> Container profile only. On a workstation with a `directory`-source marketplace,
+> `installed_plugins.json` records a cache path that is **not** the load path, and the
+> recorded path can be years-stale without any symptom (OMN-15274). Before concluding
+> anything about which hooks run — in either profile — resolve it:
+> `python3 plugins/onex/hooks/lib/plugin_deploy_readback.py`.
+
 ### Bundled venv has wrong paths (macOS symlinks)
 
 The venv was built on macOS. Delete it and let auto-repair rebuild:

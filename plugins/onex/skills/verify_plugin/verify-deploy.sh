@@ -24,19 +24,24 @@ check() {
   fi
 }
 
-# Portable symlink resolution using Python (avoids readlink -f on macOS).
-resolve_path() {
-  python3 -c "import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())" "$1" 2>/dev/null || true
-}
-
-# --- Resolve plugin root ---
+# --- Resolve plugin root -------------------------------------------------
+# The plugin CACHE is not the load path. This used to default to
+# ~/.claude/plugins/cache/<marketplace>/<plugin>/current, which for a
+# directory-source marketplace is a tree Claude Code never reads -- one observed
+# in the field was 24 days stale and carried a different hooks.json version than
+# the one executing. Verifying that tree proved nothing about what runs. Resolve
+# through the same chain Claude Code uses instead.
 PLUGIN_ROOT="${1:-}"
 if [[ -z "$PLUGIN_ROOT" ]]; then
-  SYMLINK="$HOME/.claude/plugins/cache/omninode-tools/onex/current"
-  PLUGIN_ROOT="$(resolve_path "$SYMLINK")"
+  _READBACK="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/hooks/lib/plugin_deploy_readback.py"
+  PLUGIN_ROOT="$(python3 "$_READBACK" --json --no-fetch 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("resolved_load_path") or "")' 2>/dev/null || true)"
 fi
 if [[ -z "$PLUGIN_ROOT" || ! -d "$PLUGIN_ROOT" ]]; then
-  echo -e "${red}ERROR: Cannot resolve plugin root. Pass PLUGIN_ROOT as first arg or ensure current/ symlink exists.${reset}"
+  echo -e "${red}ERROR: Cannot resolve plugin root.${reset}"
+  echo -e "Pass PLUGIN_ROOT explicitly, or run the readback to see why resolution failed:"
+  echo -e "  python3 plugins/onex/hooks/lib/plugin_deploy_readback.py"
+  echo -e "Do NOT substitute ~/.claude/plugins/cache/... -- that is not the load path."
   exit 1
 fi
 
@@ -56,20 +61,21 @@ check "file_exists: repo .venv" test -d "$REPO_ROOT/.venv"
 check "file_exists: installed_plugins.json" test -f "$HOME/.claude/plugins/installed_plugins.json"
 check "file_exists: known_marketplaces.json" test -f "$HOME/.claude/plugins/known_marketplaces.json"
 
-# CHECK: version consistency across 3 surfaces
-PLUGIN_VER=""
-INSTALLED_VER=""
-SYMLINK_TARGET=""
-
-PLUGIN_VER="$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
-INSTALLED_VER="$(jq -r '(.plugins["onex@omninode-tools"] | if type == "array" then .[0].version else .version end) // empty' \
-  "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null || true)"
-SYMLINK_TARGET="$(basename "$(resolve_path "$HOME/.claude/plugins/cache/omninode-tools/onex/current")" 2>/dev/null || true)"
-
-check "version_consistency: plugin.json == installed_plugins.json" \
-  test "$PLUGIN_VER" = "$INSTALLED_VER"
-check "version_consistency: plugin.json == current/ symlink" \
-  test "$PLUGIN_VER" = "$SYMLINK_TARGET"
+# CHECK: load-path truth
+#
+# This replaces the old "version consistency across 3 surfaces" check, which
+# compared plugin.json against installed_plugins.json and the cache current/
+# symlink. All three are registry bookkeeping; agreement among them says
+# nothing about which hooks execute, and on this box they agreed on 2.3.1
+# while the executing hooks.json was two minor versions ahead of the cache.
+# The readback below fails on alarm-level tripwires only: a resolution rule
+# that stopped holding, a registered-but-missing hook script, or a load-path
+# tree behind its upstream (merged-not-deployed).
+PLUGIN_VER="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
+READBACK="$PLUGIN_ROOT/hooks/lib/plugin_deploy_readback.py"
+check "load_path_readback: no alarm-level tripwire" \
+  python3 "$READBACK" --no-fetch
+python3 "$READBACK" --no-fetch 2>/dev/null | sed -n '/^TRIPWIRES/,/^VERDICT/p' || true
 
 # CHECK: JSON validity — key config files
 check "json_valid: plugin.json"             jq '.' "$PLUGIN_ROOT/.claude-plugin/plugin.json"

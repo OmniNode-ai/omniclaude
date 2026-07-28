@@ -15,11 +15,39 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
 
 > **IMPORTANT:** Run this skill only in a **fresh Claude Code session** opened after the deploy + restart cycle. Running it in a stale session may produce false positives from cached environment state.
 
+> **Do not resolve the plugin root from `~/.claude/plugins/`.** Neither
+> `installed_plugins.json` nor `plugins/cache/<marketplace>/<plugin>/current` is guaranteed to be
+> the load path. For a `directory`-source marketplace, `${CLAUDE_PLUGIN_ROOT}` resolves to the
+> marketplace's own `installLocation` — the source checkout — and the cache is never read. A cache
+> tree observed in the field was 24 days stale and carried a `hooks.json` two minor versions
+> behind the one executing. Verifying the cache verifies a tree that does not run.
+
 ## Instructions
 
-1. **Resolve plugin root (portable — no readlink -f):**
+1. **Read back the real load path (step 0 — everything else depends on it):**
    ```bash
-   PLUGIN_ROOT=$(python3 -c "import pathlib; print(pathlib.Path('$HOME/.claude/plugins/cache/omninode-tools/onex/current').resolve())")
+   python3 "$CLAUDE_PLUGIN_ROOT/hooks/lib/plugin_deploy_readback.py"
+   ```
+   This resolves the load path the way Claude Code does
+   (`known_marketplaces.json` → source type → `installLocation` → `marketplace.json` plugin
+   `source`) and prints, per agent class (main session / `Task()` subagent / Workflow `agent()`
+   subagent): the resolved root, the loaded `hooks.json` version, every registered hook with an
+   EXEC-OK check, and the behind/dirty state of the load-path tree vs its upstream.
+
+   Report its **VERDICT** line and every tripwire verbatim. In particular:
+   - `MERGED_NOT_DEPLOYED` — the tree is behind upstream. For a directory source there is no
+     install step, so `git -C <load path repo> pull --ff-only` *is* the deploy. A merged hook is
+     not a live hook.
+   - `LOAD_PATH_MISMATCH` — expected today; it means the registry is lying, not that the plugin
+     is broken.
+   - `RESOLUTION_RULE_CHANGED` — stop. The load path moved. Re-derive it from
+     `known_marketplaces.json` before reporting any verdict; do not report a result from the
+     previous assumption.
+
+   Then bind the rest of the suite to the path it resolved:
+   ```bash
+   PLUGIN_ROOT=$(python3 "$CLAUDE_PLUGIN_ROOT/hooks/lib/plugin_deploy_readback.py" --json --no-fetch \
+     | python3 -c 'import json,sys; print(json.load(sys.stdin)["resolved_load_path"])')
    echo "Verifying: $PLUGIN_ROOT"
    ```
 
@@ -85,7 +113,7 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
    | Check | Type | Status | Notes |
    |-------|------|--------|-------|
    | File structure | file_exists | ✓/✗ | |
-   | Version consistency | command_exit_0 | ✓/✗ | 3 surfaces |
+   | Load-path readback | command_exit_0 | ✓/✗ | resolved root + hooks.json version + tripwires |
    | JSON validity | command_exit_0 | ✓/✗ | |
    | Skill naming (snake_case) | command_exit_0 | ✓/✗ | |
    | Python venv imports | python_import | ✓/✗ | |
