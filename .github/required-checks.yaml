@@ -335,8 +335,7 @@ gates:
     workflow: ci.yml
     job_path: ["quality-gate"]
     skip_semantics: never
-    result_triage: waived
-    rationale: "Live required status check on omniclaude dev branch protection. result_triage waived pending OMN-15314: the aggregator loop triages with `[ != success ] && [ != skipped ]`, so a skipped upstream reaches the pass path (OMN-15304 vector 6). Several upstreams skip legitimately behind a conditional `if:`, so the fix is a per-upstream skip policy, not a blanket flip; waiver lifts with OMN-15314."
+    rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Secret Detection"
     mode: REQUIRED
@@ -376,8 +375,7 @@ gates:
     workflow: ci.yml
     job_path: ["tests-gate"]
     skip_semantics: never
-    result_triage: waived
-    rationale: "Live required status check on omniclaude dev branch protection. result_triage waived pending OMN-15314: the aggregator loop triages with `[ != success ] && [ != skipped ]`, so a skipped upstream reaches the pass path (OMN-15304 vector 6). Several upstreams skip legitimately behind a conditional `if:`, so the fix is a per-upstream skip policy, not a blanket flip; waiver lifts with OMN-15314."
+    rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Version Pin Compliance"
     mode: REQUIRED
@@ -401,8 +399,7 @@ gates:
     workflow: omni-standards-compliance.yml
     job_path: ["omni-standards-gate"]
     skip_semantics: never
-    result_triage: waived
-    rationale: "Live required status check on omniclaude dev branch protection. result_triage waived pending OMN-15314: the aggregator loop triages with `[ != success ] && [ != skipped ]`, so a skipped upstream reaches the pass path (OMN-15304 vector 6). Several upstreams skip legitimately behind a conditional `if:`, so the fix is a per-upstream skip policy, not a blanket flip; waiver lifts with OMN-15314."
+    rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Hostile Review Gate"
     mode: REQUIRED
