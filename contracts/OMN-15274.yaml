@@ -1,0 +1,37 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-15274"
+title: "Truthful plugin-deploy readback resolves the live load path"
+summary: >-
+  Repo-local contract for omniclaude PR #1955. The change adds a read-only plugin deploy readback that resolves the
+  executing plugin load path through the marketplace source chain, reports hook registrations and executable scripts
+  from that path, and updates verification/docs surfaces away from stale plugin-cache assumptions.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Hook deploy readback tests pass."
+    command: "uv run pytest tests/hooks/test_plugin_deploy_readback.py -q"
+  - kind: "ci"
+    description: "Changed Python and documentation surfaces pass repository pre-commit checks."
+    command: "pre-commit run --from-ref origin/dev --to-ref HEAD"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-plugin-deploy-readback-tests"
+    description: "Hermetic tests cover live load-path resolution, stale cache detection, tripwires, and CLI behavior."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/hooks/test_plugin_deploy_readback.py -q"
+  - id: "dod-plugin-deploy-readback-precommit"
+    description: "Repository pre-commit gates were run against the PR diff."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "pre-commit run --from-ref origin/dev --to-ref HEAD"
