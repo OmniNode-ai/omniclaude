@@ -45,9 +45,30 @@
 #      CANCELLED 04:13:14Z, `Hostile Review Gate` job 90177661758 SUCCESS
 #      04:13:21Z, seven seconds later, with no adversarial verdict in
 #      existence. Fixed for that one workflow in omnimarket#1926 (OMN-15296);
-#      this vector hoists that test into a fleet-wide rule. Fail-closed by
-#      construction: a triage shape the analyzer cannot interpret is a
-#      FINDING, not a pass.
+#      this vector hoists that test into a fleet-wide rule. An UNRECOGNISED
+#      triage shape is a FINDING, not a pass — but see the vector-6 soundness
+#      limitation below: unrecognised-is-a-finding is not the same claim as
+#      recognised-is-correct.
+#      The analysis is per-UPSTREAM: every result-bearing token the job reads
+#      must independently prove fail-closed. Analysing per-JOB let a hardened
+#      guard on one upstream certify a job that was fail-open on another —
+#      which masked omniclaude's own `Hostile Review Gate` (a live REQUIRED
+#      context hardened on `occ-preflight`, fail-open on `hostile-review`).
+#
+# KNOWN LIMITATION — vector-6 soundness is bounded, not total. Two recognised
+# shapes can still certify TRIAGE_HARDENED on a job that is not:
+#   (a) Shape 2 (`<result> != success` guarding a non-zero exit) confirms the
+#       exit with a 400-character PROXIMITY search, not scope analysis. An
+#       `if [ "$R" != "success" ]; then echo warn; fi` followed closely by an
+#       unrelated `if [ ! -f report.json ]; then exit 1; fi` reads as hardened.
+#       12 fleet gates ride this shape; the other 10 inspect as genuinely
+#       hardened, so no live false negative is known — but a PASS here is a
+#       bounded claim, not a proof.
+#   (b) The analyzer never executes workflow shell (deliberate: it runs under
+#       pre-commit), so control flow it cannot model — `set -e` interactions,
+#       functions, sourced scripts, `trap` — is outside its reach.
+# Do not read a vector-6 PASS as "this gate provably fails closed"; read it as
+# "no recognised fail-open shape, on the shapes this analyzer models".
 #
 # KNOWN LIMITATION — base-branch retarget (OMN-15304, the "stale green"
 # mirror). A `pull_request` trigger's default type list is [opened,
