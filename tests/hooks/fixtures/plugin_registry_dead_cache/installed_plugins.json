@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "plugins": {
+    "code-review@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/jonah/.claude/plugins/cache/claude-plugins-official/code-review/8deab8460a9d",
+        "version": "8deab8460a9d",
+        "installedAt": "2025-12-16T15:56:41.142Z",
+        "lastUpdated": "2026-02-19T14:20:06.791Z"
+      }
+    ],
+    "onex@omninode-tools": [
+      {
+        "scope": "user",
+        "installPath": "__CACHE_INSTALL_PATH__",
+        "version": "2.3.1",
+        "installedAt": "2026-04-14T21:19:03.611Z",
+        "lastUpdated": "2026-07-03T11:29:28.044Z",
+        "gitCommitSha": "e614e574211eedb3bb0d0b227b126a0ba659f62f"
+      }
+    ]
+  }
+}

@@ -177,8 +177,24 @@ PR verdicts (not `statusCheckRollup`). Full rules: `docs/standards/VERIFICATION_
 
 ### Hook development
 
-Hooks deploy via the plugin cache (`~/.claude/plugins/cache/`). Edit here → `pytest tests/ -m
-unit -v` → deploy plugin → verify in a live Claude Code session.
+Hooks do **not** necessarily deploy via the plugin cache — `~/.claude/plugins/cache/` and
+`installed_plugins.json` are recorded paths, not resolved ones, and reading either to answer
+"is this hook deployed?" is reasoning from a tree Claude Code may never open (OMN-15274).
+Edit here → `pytest tests/ -m unit -v` → **read back the load path** → verify in a live session:
+
+```bash
+python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
+```
+
+It resolves `${CLAUDE_PLUGIN_ROOT}` through the marketplace source chain and reports, per agent
+class (main session / `Task()` subagent / Workflow `agent()` subagent), the loaded `hooks.json`
+version, every registration with an EXEC-OK check, and whether the load-path tree is behind its
+upstream — the merged-not-deployed signal. `MERGED_NOT_DEPLOYED` means a merged hook is not a
+live hook; where the load path is a working tree, `git pull` in that tree *is* the deploy — but
+it updates files, it does not reload a running session. The readback reports **config** state,
+not what an already-running process holds in memory; a **new session** is the only surface
+guaranteed to have re-read `hooks.json`. Scope: `local_macos_claude_hooks` profile. Background:
+`omni_home/docs/reference/hook-load-path-and-deploy-readback.md`.
 
 ### Automation surfaces
 

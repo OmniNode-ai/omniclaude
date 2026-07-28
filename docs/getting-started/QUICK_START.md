@@ -60,15 +60,21 @@ USE_EVENT_ROUTING=true
 
 ## Deploy the Plugin (1 min)
 
-The plugin hooks are only active when deployed to Claude Code's plugin cache.
+The plugin hooks are active from whatever path Claude Code resolves the plugin to — for a
+`directory`-source marketplace that is the source checkout, not a copy in the plugin cache.
 From within a Claude Code session in this project:
 
 ```
 /deploy-local-plugin
 ```
 
-After deployment, `plugins/onex/` is copied to `~/.claude/plugins/cache/` and
-Claude Code will load it on the next session start.
+Where Claude Code loads the plugin from depends on the marketplace source type, and
+it is frequently **not** `~/.claude/plugins/cache/` (OMN-15274). Read it back rather
+than assuming:
+
+```bash
+python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
+```
 
 Verify the hook config is valid:
 

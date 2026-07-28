@@ -43,13 +43,21 @@ See [CLAUDE.md](../../CLAUDE.md) for the complete environment variable reference
 
 ## 3. Deploy the Plugin
 
-The plugin files live in `plugins/onex/` and must be deployed to Claude Code's
-plugin cache so that Claude Code can find the hook scripts and agent definitions
-at runtime.
+The plugin files live in `plugins/onex/`. Claude Code finds the hook scripts and agent
+definitions at whatever path the plugin's **marketplace source** resolves to — which is
+not necessarily a copy in the plugin cache.
 
-The canonical deploy path is `~/.claude/plugins/cache/`. After deployment, the
-`CLAUDE_PLUGIN_ROOT` environment variable (injected by Claude Code) points into
-that cache directory.
+`CLAUDE_PLUGIN_ROOT` (injected by Claude Code) does **not** reliably point into
+`~/.claude/plugins/cache/`. Published Claude Code docs describe marketplace plugins as
+being copied to that cache; observed behavior for a `directory`-source marketplace on
+a live workstation contradicts it — the resolved root is the marketplace's own
+`installLocation`, i.e. the source checkout, and the cache is never read
+(OMN-15274/OMN-15244). Treat the copy semantics as unverified and read the load path
+back instead of assuming either answer:
+
+```bash
+python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
+```
 
 Use the deploy skill from within an active Claude Code session:
 
