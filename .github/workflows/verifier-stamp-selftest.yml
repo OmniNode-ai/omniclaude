@@ -73,3 +73,48 @@ jobs:
         What it does NOT prove (OMN-15362 residuals, unchanged):
         - merge-path identity — OnexBot has `contents: read`, so `mergedBy` is still `jonahgabriel`
         - OCC PR-author identity on the `.201` bus path — no App key on that host
+
+  # -------------------------------------------------------------------------
+  # TEMPORARY RED DRIVE (OMN-15362 proof commit) — REMOVED in the next commit.
+  # These three jobs exercise the fail-closed paths through the REAL surface,
+  # not a surrogate. Expected outcome of this commit: red-bad-verdict FAILS at
+  # input validation, red-unmintable-repo FAILS at the token mint, and
+  # fail-verdict-stamp publishes a conclusion=failure check-run (proving the
+  # FAIL branch maps and reads back). See the OMN-15362 ticket comment for the
+  # captured run ids.
+  # -------------------------------------------------------------------------
+  red-bad-verdict:
+    name: RED drive — unmappable verdict must fail the job
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/verifier-stamp-reusable.yml
+    secrets: inherit  # pragma: allowlist secret
+    with:
+      repo: ${{ github.repository }}
+      sha: ${{ github.event.pull_request.head.sha }}
+      lane: red-bad-verdict
+      verdict: MAYBE
+      summary: 'RED drive: MAYBE is not PASS/FAIL and must be rejected, not softened to neutral.'
+
+  red-unmintable-repo:
+    name: RED drive — token mint failure must fail the job
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/verifier-stamp-reusable.yml
+    secrets: inherit  # pragma: allowlist secret
+    with:
+      repo: OmniNode-ai/omn-15362-no-such-repo
+      sha: ${{ github.event.pull_request.head.sha }}
+      lane: red-unmintable-repo
+      verdict: PASS
+      summary: 'RED drive: scoping the installation token to a repo outside the installation must fail loud.'
+
+  fail-verdict-stamp:
+    name: FAIL-verdict drive — publish a failing verdict as OnexBot
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/verifier-stamp-reusable.yml
+    secrets: inherit  # pragma: allowlist secret
+    with:
+      repo: ${{ github.repository }}
+      sha: ${{ github.event.pull_request.head.sha }}
+      lane: fail-verdict-drive
+      verdict: FAIL
+      summary: 'FAIL drive: a FAIL verdict must publish conclusion=failure under the OnexBot identity, not a soft neutral.'
