@@ -40,6 +40,7 @@ exists to detect is not a guard.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -57,8 +58,16 @@ MANUAL_REPLAY_WORKFLOWS: tuple[str, ...] = (
     "call-occ-companion-effect.yml",
 )
 
+#: The precheck must be invoked WITH its required PR-state argument. Matching
+#: the bare filename is not enough: `python3 .../occ_manual_replay_precheck.py`
+#: with no argument satisfies a filename-only check but exits 2 at runtime and
+#: breaks manual replay just as thoroughly as the missing script did
+#: (CodeRabbit, PR #1962).
+_PRECHECK_INVOCATION_RE = re.compile(r"occ_manual_replay_precheck\.py\s+\S+\.json\b")
+
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
 from occ_manual_replay_precheck import (  # noqa: E402
+    ManualReplayInputError,
     ManualReplayRefusedError,
     check_replay_eligible,
 )
@@ -100,6 +109,51 @@ def test_refusal_message_names_f17_guard_not_generic() -> None:
 @pytest.mark.unit
 def test_accepts_open_non_draft_pr() -> None:
     check_replay_eligible({"number": 5, "state": "OPEN", "isDraft": False})
+
+
+# --- fail-closed on unusable input (CodeRabbit, PR #1962) ------------------
+# An empty/partial/wrong-shaped pr_state.json must NOT read as "OPEN and
+# non-draft". Before this, `{}` returned exit 0 and published, and a JSON
+# array crashed with an AttributeError instead of a clean exit 2 -- the same
+# fail-open class this precheck exists to close.
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({}, id="empty-object"),
+        pytest.param({"number": 10}, id="no-state-field"),
+        pytest.param({"number": 11, "state": None}, id="null-state"),
+        pytest.param({"number": 12, "state": "", "isDraft": False}, id="empty-state"),
+        pytest.param(
+            {"number": 13, "state": "OPENED", "isDraft": False}, id="unknown-state"
+        ),
+        pytest.param({"number": 14, "state": "OPEN"}, id="no-isdraft-field"),
+        pytest.param(
+            {"number": 15, "state": "OPEN", "isDraft": "false"}, id="isdraft-string"
+        ),
+        pytest.param(
+            {"number": 16, "state": "OPEN", "isDraft": None}, id="isdraft-null"
+        ),
+    ],
+)
+def test_refuses_to_decide_on_malformed_payload(payload: dict[str, Any]) -> None:
+    with pytest.raises(ManualReplayInputError):
+        check_replay_eligible(payload)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "payload", [[], "OPEN", 42, None], ids=["list", "str", "int", "none"]
+)
+def test_non_object_payload_raises_input_error_not_attributeerror(
+    payload: Any,
+) -> None:
+    """A JSON array/scalar must produce the typed input error, not an
+    uncaught AttributeError from calling .get() on a non-dict."""
+    with pytest.raises(ManualReplayInputError):
+        check_replay_eligible(payload)
 
 
 @pytest.mark.unit
@@ -175,6 +229,40 @@ def test_cli_exits_two_on_bad_input(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 2
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("content", "case"),
+    [
+        ("{}", "empty-object"),
+        ("[]", "json-array"),
+        ('{"number": 20, "state": "OPEN"}', "missing-isDraft"),
+        ('{"number": 21, "isDraft": false}', "missing-state"),
+        ('""', "json-string"),
+    ],
+)
+def test_cli_exits_two_on_unusable_payload(
+    tmp_path: Path, content: str, case: str
+) -> None:
+    """`{}` must NOT exit 0 claiming the PR is open, and `[]` must not crash
+    with an AttributeError -- both are exit 2, "cannot decide" (CodeRabbit,
+    PR #1962). Exit 2 is what stops the job before the publish step."""
+    fixture = tmp_path / "pr_state.json"
+    fixture.write_text(content, encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(PRECHECK_SCRIPT), str(fixture)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, f"{case}: stdout={result.stdout!r}"
+    assert "eligible" not in result.stdout, (
+        f"{case}: an unusable payload must never report the PR replay-eligible"
+    )
+    assert "Traceback" not in result.stderr, (
+        f"{case}: expected a typed refusal, not an uncaught exception"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +345,7 @@ def test_workflow_dispatch_job_runs_precheck_before_publish(
         precheck_indices = [
             i
             for i, run in enumerate(step_run_blocks)
-            if "occ_manual_replay_precheck.py" in run
+            if _PRECHECK_INVOCATION_RE.search(run)
         ]
         assert precheck_indices, (
             f"{workflow_name}:{job_id} is gated on workflow_dispatch but "

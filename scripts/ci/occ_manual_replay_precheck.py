@@ -50,30 +50,85 @@ from typing import Any
 #: script introduces).
 _DOWNSTREAM_SUPPRESSED_STATES = frozenset({"closed", "merged"})
 
+#: The complete set of values `gh pr view --json state` can return, lowercased.
+#: Anything else (absent, empty, misspelled, a future GitHub addition) is
+#: treated as unusable input rather than silently assumed replay-eligible.
+_KNOWN_PR_STATES = frozenset({"open", "closed", "merged"})
+
 
 class ManualReplayRefusedError(Exception):
     """Raised when the target PR cannot be mint-replayed via this entrypoint."""
 
 
+class ManualReplayInputError(Exception):
+    """Raised when the PR-state payload is malformed or missing the fields
+    eligibility is decided from.
+
+    Distinct from :class:`ManualReplayRefusedError`: a refusal is a *decision*
+    about a well-described PR (exit 1), whereas this is "the input does not let
+    me decide at all" (exit 2, same code as an unreadable/unparseable file).
+    Collapsing the two would mean an empty or truncated `pr_state.json` reads
+    as OPEN and non-draft, and the request publishes -- the precise fail-open
+    this precheck exists to prevent.
+    """
+
+
 def check_replay_eligible(pr_state: dict[str, Any]) -> None:
-    """Raise :class:`ManualReplayRefusedError` if ``pr_state`` cannot be replayed.
+    """Raise if ``pr_state`` cannot be replayed through this entrypoint.
 
     ``pr_state`` is the parsed JSON of
     ``gh pr view <n> --json number,state,isDraft,headRefOid,headRefName,title``.
-    Refuses (does not silently pass) on:
+
+    Raises :class:`ManualReplayInputError` (exit 2 -- cannot decide) when the
+    payload is not an object, ``state`` is absent/unrecognised, or ``isDraft``
+    is absent/non-boolean.
+
+    Raises :class:`ManualReplayRefusedError` (exit 1 -- decided, refused) on:
 
     * ``state`` in ``{"closed", "merged"}`` (GitHub's `gh pr view --json state`
       returns exactly one of ``OPEN``/``CLOSED``/``MERGED``, compared
       case-insensitively here).
     * ``isDraft`` true.
 
-    Both mirror the F-17 guard in `handler_occ_companion_compute.py` so this
-    entrypoint refuses at the cheapest possible point (before publish) rather
-    than let the request silently no-op several hops downstream.
+    Both refusals mirror the F-17 guard in `handler_occ_companion_compute.py`
+    so this entrypoint refuses at the cheapest possible point (before publish)
+    rather than let the request silently no-op several hops downstream.
     """
+    if not isinstance(pr_state, dict):
+        raise ManualReplayInputError(
+            f"PR state payload is a {type(pr_state).__name__}, not a JSON "
+            f"object -- expected the output of `gh pr view --json "
+            f"number,state,isDraft,...`. Refusing to guess eligibility."
+        )
+
     number = pr_state.get("number")
-    state = str(pr_state.get("state", "")).strip().lower()
-    is_draft = bool(pr_state.get("isDraft", False))
+
+    raw_state = pr_state.get("state")
+    if raw_state is None:
+        raise ManualReplayInputError(
+            f"PR #{number} state payload has no 'state' field -- expected the "
+            f"output of `gh pr view --json number,state,isDraft,...`. Treating "
+            f"a missing state as OPEN would publish a mint request for a PR "
+            f"that may be closed/merged/draft, which the downstream F-17 guard "
+            f"would silently absorb. Refusing to guess."
+        )
+    state = str(raw_state).strip().lower()
+    if state not in _KNOWN_PR_STATES:
+        raise ManualReplayInputError(
+            f"PR #{number} has unrecognised state {raw_state!r} -- expected one "
+            f"of {sorted(_KNOWN_PR_STATES)}. Refusing to guess eligibility from "
+            f"a state this precheck does not understand."
+        )
+
+    is_draft = pr_state.get("isDraft")
+    if not isinstance(is_draft, bool):
+        raise ManualReplayInputError(
+            f"PR #{number} has a non-boolean 'isDraft' ({is_draft!r}) -- "
+            f"expected a JSON boolean from `gh pr view --json isDraft`. A "
+            f"missing or non-boolean value must not be coerced to False: that "
+            f"would let a draft PR through to publish, where the F-17 "
+            f"draft-suppression branch would silently absorb it."
+        )
 
     if state in _DOWNSTREAM_SUPPRESSED_STATES:
         raise ManualReplayRefusedError(
@@ -118,6 +173,11 @@ def main(argv: list[str]) -> int:
 
     try:
         check_replay_eligible(pr_state)
+    except ManualReplayInputError as exc:
+        # Exit 2, matching the unreadable/unparseable-file path above: this is
+        # "cannot decide", not "decided and refused".
+        print(f"UNUSABLE PR STATE: {exc}", file=sys.stderr)
+        return 2
     except ManualReplayRefusedError as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 1
