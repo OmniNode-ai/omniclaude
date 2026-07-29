@@ -41,8 +41,11 @@ def resolve_test_paths(
       - Source changes under src/omniclaude/<module>: include tests/unit/<module>/.
       - Test-only changes under tests/unit/: include the changed unit-test directory.
       - Test-only changes under tests/integration/: ignored (integration runs always).
-      - Files outside src/ and tests/unit/: no contribution; caller decides
-        whether to escalate to full suite.
+      - Files matching a configured `path_triggers` prefix: include that
+        trigger's test paths (OMN-15393 — covers non-src surfaces such as
+        workflows and CI scripts, which have no adjacency module).
+      - Files outside src/, tests/unit/, and every trigger prefix: no
+        contribution; caller decides whether to escalate to full suite.
     """
     config = load_adjacency_map(adjacency_path)
     return _resolve(changed_files, config)
@@ -61,6 +64,14 @@ def _resolve(changed_files: list[str], config: ModelAdjacencyMap) -> list[str]:
             parts = path.split("/")
             if len(parts) >= 3:
                 selected.add(f"{TEST_UNIT_PREFIX}{parts[2]}/")
+
+        # Non-src trigger prefixes are checked for EVERY changed path, not as
+        # an `elif` branch: a path can be both a src/ module change and a
+        # trigger match, and dropping either half would silently narrow the
+        # selection (OMN-15393).
+        for trigger in config.path_triggers:
+            if path.startswith(trigger.path_prefix):
+                selected.update(trigger.test_paths)
 
     expanded: set[str] = set(direct_modules)
     for module in direct_modules:

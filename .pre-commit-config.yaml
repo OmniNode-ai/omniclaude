@@ -170,6 +170,38 @@ repos:
         files: '^\.github/(workflows/.*\.ya?ml|required-checks\.yaml)$'
         stages: [pre-commit]
 
+      # OMN-15393: workflow `run:` script-path existence guard, shifted left.
+      # The guard itself is tests/workflows/test_workflow_run_script_paths_exist.py.
+      # It shipped in #1962 as a test that NOTHING selected on the change class it
+      # guards: the governed selector mapped `.github/workflows/**` to
+      # `tests/unit/` only, so a workflow fan-out that dropped its script stayed
+      # green until the dev->main promotion full suite — i.e. after the broken
+      # workflow was already on dev. Detection that is not wired as a gate on the
+      # path that produces the defect is advisory (CLAUDE.md rule 5), so this hook
+      # lands together with the selector adjacency trigger that makes the same
+      # module run in CI. Same module, same assertion, both surfaces — a local and
+      # a CI verdict can never disagree.
+      #
+      # ~1.5s (10 static tests, pure YAML parsing, no services, no network).
+      #
+      # KNOWN SCOPE LIMIT, stated rather than papered over: pre-commit hands
+      # hooks only ADDED/MODIFIED staged files, never DELETED ones, so `git rm`
+      # of a workflow-referenced script does not fire this hook. The CI half does
+      # cover it — the selector reads `git diff --name-only base...HEAD`, which
+      # includes deletions, and the `scripts/` + `plugins/` triggers select this
+      # module. Do not "fix" this by adding always_run: true; that taxes every
+      # commit in the repo for a check with two narrow inputs.
+      - id: workflow-run-script-paths-exist
+        name: Workflow `run:` script paths must exist in-tree (OMN-15393)
+        entry: >-
+          uv run pytest
+          tests/workflows/test_workflow_run_script_paths_exist.py
+          -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/.*\.ya?ml|scripts/.*\.(py|sh)|plugins/.*/scripts/.*\.(py|sh)|tests/workflows/test_workflow_run_script_paths_exist\.py)$'
+        stages: [pre-commit]
+
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
       # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
       # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero
