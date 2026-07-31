@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-15446"
+title: "Require exact GitHub repository identity for verification receipts"
+summary: >-
+  Repo-local contract for omniclaude PR #1964. The PR makes the verification
+  receipt generator require exactly one OWNER/REPO identity, reject bare
+  repository names and duplicated owners before dispatch, and preserve the
+  contract audit that proves the fail-closed boundary.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Contract audit covers exact OWNER/REPO receipt identity enforcement."
+    command: "uv run pytest tests/audit/test_omn_15446_verification_receipt_skill_contract.py -q"
+  - kind: "tests"
+    description: "Changed-file pre-commit verifies skill hygiene and generated baseline integrity."
+    command: "pre-commit run --files plugins/onex/skills/verification_receipt_generator/SKILL.md tests/audit/test_omn_15446_verification_receipt_skill_contract.py .secrets.baseline"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-verification-receipt-identity-contract-audit"
+    description: "Focused audit test preserves the exact OWNER/REPO identity boundary."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/audit/test_omn_15446_verification_receipt_skill_contract.py -q"
+  - id: "dod-verification-receipt-skill-hygiene"
+    description: "Changed-file pre-commit covers the skill contract, audit test, and secrets baseline."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "pre-commit run --files plugins/onex/skills/verification_receipt_generator/SKILL.md tests/audit/test_omn_15446_verification_receipt_skill_contract.py .secrets.baseline"
