@@ -1,0 +1,43 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-15545"
+title: "Preflight the status skill standalone CLI dependency"
+summary: >-
+  Repo-local contract for omniclaude#1966. The change makes the status skill
+  fail deterministically when the manifest-required standalone onex CLI is not
+  installed, rather than attempting a cwd-dependent uv fallback from the caller
+  workspace.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused status skill CLI preflight regression tests pass."
+    command: "uv run pytest tests/ -m unit -v"
+  - kind: "ci"
+    description: "Plugin compatibility and skill validation checks pass for the status skill change."
+    command: "uv run pytest tests/ci/ tests/unit/ tests/workflows/ -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-status-cli-preflight-regression"
+    description: >-
+      The focused regression covers missing standalone onex CLI behavior and
+      forbids the previous cwd-dependent uv fallback path.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/ -m unit -v"
+  - id: "dod-status-skill-operational-boundary"
+    description: >-
+      The PR body records that this is a source-only plugin fix and does not
+      install the CLI, mutate the plugin cache, deploy a runtime, or query
+      GitHub directly from the status agent.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'This is a source-only plugin fix' /tmp/pr_body.txt"
