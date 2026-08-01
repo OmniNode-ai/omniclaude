@@ -966,29 +966,24 @@ log() {
 # Requires: PYTHON_CMD, LOG_FILE (and BREW_PY where available).
 # Returns: 0 only when the probe ran and reported no failures.
 run_hook_health_probe() {
-    local probe_json="" probe_rc=0 failures="" channel="" rc=0 brew_var="BREW_PY"
+    local probe_json="" probe_rc=0 failures="" channel="" rc=0
 
     probe_json=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") \
         || probe_rc=$?
 
-    # Parse with a PYTHONPATH-clean interpreter so an inherited PYTHONPATH
-    # cannot shadow stdlib json. Do not fall back to PYTHON_CMD here: tests
-    # intentionally replace it with a fake probe executable.
-    if [[ -x "${!brew_var}" ]]; then
-        failures=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$BREW_PY" -c \
-            'import json,sys; print(int(json.load(sys.stdin)["failures"]))' \
-            2>>"$LOG_FILE") || failures=""
-        channel=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$BREW_PY" -c \
-            'import json,sys; print(json.load(sys.stdin)["alert_channel"]["status"])' \
-            2>>"$LOG_FILE") || channel=""
-    else
-        failures=$(printf '%s' "$probe_json" | env -u PYTHONPATH python3 -c \
-            'import json,sys; print(int(json.load(sys.stdin)["failures"]))' \
-            2>>"$LOG_FILE") || failures=""
-        channel=$(printf '%s' "$probe_json" | env -u PYTHONPATH python3 -c \
-            'import json,sys; print(json.load(sys.stdin)["alert_channel"]["status"])' \
-            2>>"$LOG_FILE") || channel=""
-    fi
+    # Parse with the resolved hook interpreter, PYTHONPATH stripped so an
+    # inherited PYTHONPATH cannot shadow stdlib json. PYTHON_CMD (not BREW_PY)
+    # is used deliberately: find_python hard-fails when it cannot resolve, so
+    # it always exists, whereas BREW_PY is a macOS-only literal that is absent
+    # on Linux CI — where the parse would fail and every probe outcome would
+    # collapse into "unreadable".
+
+    failures=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$PYTHON_CMD" -c \
+        'import json,sys; print(int(json.load(sys.stdin)["failures"]))' \
+        2>>"$LOG_FILE") || failures=""
+    channel=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$PYTHON_CMD" -c \
+        'import json,sys; print(json.load(sys.stdin)["alert_channel"]["status"])' \
+        2>>"$LOG_FILE") || channel=""
 
     if [[ -z "$failures" || -z "$channel" ]]; then
         # The probe did not produce a readable verdict, so nothing was checked.
@@ -1009,15 +1004,9 @@ run_hook_health_probe() {
             # still surfaced: it delivers nothing and wants cleaning up, and
             # if the live primary later lapses it is the only one left.
             local dead_channels=""
-            if [[ -x "${!brew_var}" ]]; then
-                dead_channels=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$BREW_PY" -c \
-                    'import json,sys; print(",".join(json.load(sys.stdin)["alert_channel"].get("dead_channels") or []))' \
-                    2>>"$LOG_FILE") || dead_channels=""
-            else
-                dead_channels=$(printf '%s' "$probe_json" | env -u PYTHONPATH python3 -c \
-                    'import json,sys; print(",".join(json.load(sys.stdin)["alert_channel"].get("dead_channels") or []))' \
-                    2>>"$LOG_FILE") || dead_channels=""
-            fi
+            dead_channels=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$PYTHON_CMD" -c \
+                'import json,sys; print(",".join(json.load(sys.stdin)["alert_channel"].get("dead_channels") or []))' \
+                2>>"$LOG_FILE") || dead_channels=""
             if [[ -n "$dead_channels" ]]; then
                 log "WARNING: alert channel degraded — ${dead_channels} dead, still delivering via another channel. See ${HOME}/.omnibase/alert_delivery_failures.log"
             fi

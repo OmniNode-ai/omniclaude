@@ -27,6 +27,7 @@ below failed with "command not found".
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -46,15 +47,28 @@ echo "rc=$?"
 
 
 def _fake_probe(tmp_path: Path, *, stdout: str, exit_code: int = 0) -> Path:
-    """A stand-in for ``$PYTHON_CMD -m ...`` that emits a controlled payload.
+    """A stand-in *interpreter* that scripts the ``-m`` probe outcome.
 
-    ``run_hook_health_probe`` invokes ``"$PYTHON_CMD" -m <module>``; pointing
-    PLUGIN_PYTHON_BIN at this script lets each probe outcome be driven exactly.
+    ``run_hook_health_probe`` uses ``$PYTHON_CMD`` twice: once as
+    ``-m <probe module>`` and again as ``-c <json expression>`` to read the
+    verdict out of the payload. This stand-in must therefore behave like an
+    interpreter for BOTH forms — ``-m`` emits the scripted payload, ``-c``
+    delegates to the real interpreter.
+
+    An earlier version answered every invocation with the payload. It passed on
+    macOS only because the JSON parse there ran on ``$BREW_PY`` rather than on
+    this stub, and failed on Linux CI where ``$BREW_PY`` does not exist — the
+    stub then "parsed" the payload with itself and every outcome collapsed into
+    ``unreadable``. A test fixture that is only faithful on one host produces
+    exactly the environment-dependent green this ticket is about.
     """
     script = tmp_path / "fake_probe.sh"
     script.write_text(
         "#!/bin/bash\n"
-        "# Ignore the -m <module> arguments; emit the scripted payload.\n"
+        "# Interpreter stand-in: -m is the scripted probe, -c is a real parse.\n"
+        'if [[ "$1" == "-c" ]]; then\n'
+        f'    exec {shlex.quote(sys.executable)} "$@"\n'
+        "fi\n"
         f"cat <<'PROBE_EOF'\n{stdout}\nPROBE_EOF\n"
         f"exit {exit_code}\n",
         encoding="utf-8",
