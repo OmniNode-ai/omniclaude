@@ -96,13 +96,32 @@ dod_evidence:
       `-m omniclaude.hooks.lib.hook_health_probe` actually resolves to. The
       tests read that module name out of the hook scripts, so deleting or
       renaming the implementation breaks them.
+
+      Check-vacuity note (OMN-15606 round 2). The second check below previously
+      read `returncode in (0, 1)`. `python -m <nonexistent module>` exits 1, so
+      it PASSED against the exact pre-fix tree this ticket was filed about —
+      the same vacuity the ticket forbade for greps, reached through
+      exit-code width instead of substring width. It now asserts the module
+      RESOLVES (find_spec is not None), that running it did not emit
+      "No module named", and that the status it prints is an EnumChannelStatus
+      member. All three fail at 3138c2f0e. TestInvokedModuleActuallyResolves
+      carries the same assertions as tests.
     source: "manual"
     status: "verified"
     checks:
       - check_type: "command"
-        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py::TestTheTwoProbesAgree tests/unit/hooks/test_probe_channel_fails_loud.py::TestSharedClassifier -q"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py::TestTheTwoProbesAgree tests/unit/hooks/test_probe_channel_fails_loud.py::TestSharedClassifier tests/unit/hooks/test_probe_channel_fails_loud.py::TestInvokedModuleActuallyResolves -q"
       - check_type: "command"
-        check_value: "uv run python -c \"import subprocess,sys; sys.exit(0 if subprocess.run([sys.executable,'-m','omniclaude.hooks.lib.hook_health_probe'],capture_output=True).returncode in (0,1) else 1)\""
+        check_value: >-
+          uv run python -c "import importlib.util, json, subprocess, sys;
+          from omniclaude.hooks.alert_channel import EnumChannelStatus;
+          m = 'omniclaude.hooks.lib.hook_health_probe';
+          assert importlib.util.find_spec(m) is not None, m + ' does not resolve';
+          r = subprocess.run([sys.executable, '-m', m], capture_output=True, text=True);
+          assert 'No module named' not in r.stderr, r.stderr;
+          assert r.returncode in (0, 1), r.returncode;
+          s = json.loads(r.stdout)['alert_channel']['status'];
+          assert s in {x.value for x in EnumChannelStatus}, s"
   - id: "dod-handler-list-is-real"
     description: >
       Residual surfaced by the repair: HOOK_HANDLERS listed
