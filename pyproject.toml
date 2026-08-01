@@ -543,6 +543,9 @@ ignore = [
 "src/omniclaude/hooks/handlers/audit_dispatch_validator.py" = ["T201"]
 "src/omniclaude/hooks/handlers/context_scope_auditor.py" = ["T201"]
 "src/omniclaude/hooks/lib/test_offloader.py" = ["T201"]
+# The hook-health probe's stdout JSON payload IS its interface: session-start
+# (common.sh :: run_hook_health_probe) parses it. Not diagnostic printing.
+"src/omniclaude/hooks/lib/hook_health_probe.py" = ["T201"]
 # CI output — print() is the output mechanism for GH Actions
 "src/omniclaude/quirks/ci/run_checks.py" = ["T201"]
 # Subscribers use print() for CLI __main__ output and JSON stdout
