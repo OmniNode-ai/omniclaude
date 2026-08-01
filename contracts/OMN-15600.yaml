@@ -76,3 +76,9 @@ dod_evidence:
         check_value: "grep -q probe_alert_channel src/omniclaude/hooks/hook_health_probe.py"
       - check_type: "command"
         check_value: "grep -q probe_channel plugins/onex/hooks/lib/hook_health_probe.py"
+      # Appended under OMN-15606. The two greps above are satisfiable by an
+      # implementation that fails OPEN — the shipped one was, and both greps
+      # passed against it. Retained for the historical record; this executing
+      # check is what actually proves the probe reports its own failure.
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py -q"

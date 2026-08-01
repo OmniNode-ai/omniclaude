@@ -946,3 +946,83 @@ redact_secrets() {
 log() {
     printf "[%s] %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*" >> "$LOG_FILE"
 }
+
+# =============================================================================
+# Hook health probe consumption [F32 / OMN-15600 / OMN-15606]
+# =============================================================================
+# Runs the session-start hook-health probe and reports its verdict on the local
+# log — the one surface guaranteed not to be the channel that is broken.
+#
+# This lives in common.sh, not inline in session-start.sh, so the consumption
+# logic can be driven directly by tests rather than through a re-implementation
+# of it (see tests/unit/hooks/scripts/test_session_start_probe_consumption.py).
+#
+# FAIL-CLOSED (OMN-15606). The previous inline block defaulted the channel
+# status to "unknown" on any parse failure and only logged on "dead", so
+# "probe crashed", "probe emitted malformed JSON", "probe never ran" and
+# "channel healthy" were one silent case. Every not-affirmatively-healthy
+# outcome now produces its own distinct, non-silent line.
+#
+# Requires: PYTHON_CMD, LOG_FILE (and BREW_PY where available).
+# Returns: 0 only when the probe ran and reported no failures.
+run_hook_health_probe() {
+    local probe_json="" probe_rc=0 failures="" channel="" json_py rc=0
+
+    probe_json=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") \
+        || probe_rc=$?
+
+    # Parse with a PYTHONPATH-clean interpreter so an inherited PYTHONPATH
+    # cannot shadow stdlib json. BREW_PY is the macOS hook interpreter; fall
+    # back to the resolved hook interpreter where it is not present.
+    json_py="$BREW_PY"
+    [[ -x "$json_py" ]] || json_py="$PYTHON_CMD"
+
+    failures=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$json_py" -c \
+        'import json,sys; print(int(json.load(sys.stdin)["failures"]))' \
+        2>>"$LOG_FILE") || failures=""
+    channel=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$json_py" -c \
+        'import json,sys; print(json.load(sys.stdin)["alert_channel"]["status"])' \
+        2>>"$LOG_FILE") || channel=""
+
+    if [[ -z "$failures" || -z "$channel" ]]; then
+        # The probe did not produce a readable verdict, so nothing was checked.
+        # That is a failure OF the check, and is reported as one.
+        log "ERROR: hook-health probe output unreadable (probe exit ${probe_rc}) — handler-import and alert-channel checks did NOT run this session. See hooks.log."
+        return 1
+    fi
+
+    if [[ "$failures" != "0" ]]; then
+        log "WARNING: $failures hook-health failure(s) (handler imports and/or alert channel). See hooks.log for details."
+        rc=1
+    fi
+
+    case "$channel" in
+        live|not_configured)
+            # Affirmatively established, or affirmatively absent — alerting
+            # works, so this is not a failure. A dead SECONDARY channel is
+            # still surfaced: it delivers nothing and wants cleaning up, and
+            # if the live primary later lapses it is the only one left.
+            local dead_channels=""
+            dead_channels=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$json_py" -c \
+                'import json,sys; print(",".join(json.load(sys.stdin)["alert_channel"].get("dead_channels") or []))' \
+                2>>"$LOG_FILE") || dead_channels=""
+            if [[ -n "$dead_channels" ]]; then
+                log "WARNING: alert channel degraded — ${dead_channels} dead, still delivering via another channel. See ${HOME}/.omnibase/alert_delivery_failures.log"
+            fi
+            ;;
+        dead)
+            log "ERROR: alert channel is DEAD — hook alerts are delivering to nothing. See ${HOME}/.omnibase/alert_delivery_failures.log"
+            rc=1
+            ;;
+        probe_error)
+            log "ERROR: alert-channel liveness probe FAILED to run — channel liveness is UNVERIFIED this session, which is not the same as healthy. See hooks.log."
+            rc=1
+            ;;
+        *)
+            log "ERROR: alert-channel status '${channel}' is not a declared EnumChannelStatus member — treating channel liveness as UNVERIFIED."
+            rc=1
+            ;;
+    esac
+
+    return "$rc"
+}

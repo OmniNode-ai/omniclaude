@@ -1,0 +1,119 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-15606"
+title: "Hook-health probe fails loud on its own failure, and there is one of it"
+summary: >
+  The OMN-15600 alert-channel liveness probe could not report its own failure.
+  Its wrapper caught every exception — including the import of
+  omniclaude.hooks.alert_channel itself — and returned the out-of-enum string
+  "unknown"; __main__ counted only "dead" so it exited 0, and session-start.sh
+  logged only on "dead" so it printed nothing. A probe that never executed was
+  indistinguishable from one that ran and found the channel healthy. Worse, the
+  module session-start invoked (-m omniclaude.hooks.lib.hook_health_probe) did
+  not exist: the implementation lived at plugins/onex/hooks/lib/, which the
+  wheel does not package, so the probe had never run at all. This collapses the
+  two divergent copies into ONE implementation on the invoked module path,
+  declares probe_error as an EnumChannelStatus member, and makes every
+  not-affirmatively-healthy outcome nonzero and non-silent.
+
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+
+evidence_requirements:
+  - kind: "tests"
+    description: >
+      A forced probe failure (blocked import, and a raising probe) makes the
+      module session-start invokes exit nonzero with an in-enum, non-healthy
+      status; an unconfigured channel still exits 0.
+    command: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py -q"
+  - kind: "tests"
+    description: >
+      The shell consumption path logs a distinct, non-silent line for each of
+      malformed-JSON, probe_error, dead, and unrecognised-status, and stays
+      quiet only for live / not_configured.
+    command: "uv run pytest tests/unit/hooks/scripts/test_session_start_probe_consumption.py -q"
+  - kind: "tests"
+    description: "The OMN-15600 suites still pass against the unified probe."
+    command: "uv run pytest tests/unit/hooks/ tests/unit/test_autopilot_hardening.py -q"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-probe-self-failure-exits-nonzero"
+    description: >
+      AC-1. EXECUTES the probe rather than grepping it. The test blocks the
+      import of omniclaude.hooks.alert_channel via a sitecustomize meta-path
+      finder, runs the module name read out of the shell that invokes it, and
+      asserts a nonzero exit plus a non-healthy status. RED at 3138c2f0e: the
+      invoked module did not exist (ModuleNotFoundError), and the
+      implementation it should have pointed at exited 0 on the same input.
+      Deliberately NOT a substring check — contracts/OMN-15600.yaml:76,78 used
+      `grep -q probe_channel ...`, which the fail-open implementation satisfied
+      (cf. OMN-14443 / OMN-14505).
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py::TestProbeSelfFailureIsNotHealthy -q"
+  - id: "dod-status-vocabulary-is-typed"
+    description: >
+      AC-2. probe_error is a declared EnumChannelStatus member, "unknown" is
+      not, and every status the probe emits — on success, on a raising probe,
+      and on a blocked import — is asserted to be in the enum. The import-free
+      fallback literal is pinned to the enum value by a test so it cannot
+      drift.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py::TestStatusVocabularyIsTyped -q"
+  - id: "dod-shell-consumer-distinguishes-every-case"
+    description: >
+      AC-3. The consumption logic moved into common.sh :: run_hook_health_probe
+      so the test drives the function session-start calls, not a surrogate.
+      Malformed JSON, empty output, probe_error, dead, and an unrecognised
+      status each produce their own verdict line and a nonzero return; live and
+      not_configured stay quiet. Distinctness is asserted pairwise on the
+      verdict lines with timestamps and tmp paths normalised out.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/scripts/test_session_start_probe_consumption.py -q"
+  - id: "dod-one-implementation-not-two"
+    description: >
+      AC-4/AC-5. Both hook-health surfaces route through
+      alert_channel.probe_channel_health, and a test asserts they classify a
+      raising probe identically. plugins/onex/hooks/lib/hook_health_probe.py is
+      a thin delegate whose executable lines are asserted to contain no
+      exception handling and no "unknown"; the canonical implementation is at
+      src/omniclaude/hooks/lib/hook_health_probe.py, the path
+      `-m omniclaude.hooks.lib.hook_health_probe` actually resolves to. The
+      tests read that module name out of the hook scripts, so deleting or
+      renaming the implementation breaks them.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py::TestTheTwoProbesAgree tests/unit/hooks/test_probe_channel_fails_loud.py::TestSharedClassifier -q"
+      - check_type: "command"
+        check_value: "uv run python -c \"import subprocess,sys; sys.exit(0 if subprocess.run([sys.executable,'-m','omniclaude.hooks.lib.hook_health_probe'],capture_output=True).returncode in (0,1) else 1)\""
+  - id: "dod-handler-list-is-real"
+    description: >
+      Residual surfaced by the repair: HOOK_HANDLERS listed
+      omniclaude.hooks.handlers.dod_completion_guard, which has never been
+      importable. It went unnoticed only because the probe had never run.
+      Repairing the invocation without this would have shipped a probe that
+      reports a permanent failure — the fastest way to train an operator to
+      ignore it. The phantom entry is removed and a test now asserts every
+      listed handler imports.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py::TestHandlerListIsReal -q"

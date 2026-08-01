@@ -51,15 +51,29 @@ _DEFAULT_TIMEOUT_SECONDS = 3.0
 
 
 class EnumChannelStatus(StrEnum):
-    """Alert-channel liveness. Three states, never two.
+    """Alert-channel liveness. Four declared states, never fewer.
 
     ``NOT_CONFIGURED`` and ``DEAD`` are deliberately distinct: collapsing them
     into "not usable" is what let a revoked webhook read as a healthy one.
+
+    ``PROBE_ERROR`` (OMN-15606) is the fourth: the probe itself could not run,
+    so liveness is UNVERIFIED. It is declared here rather than invented at a
+    call site — the original fix returned a bare ``"unknown"`` string that no
+    typed consumer covered, so every string-compare consumer silently took the
+    healthy branch. Four states is fine; an undeclared fourth is not.
     """
 
     LIVE = "live"
     DEAD = "dead"
     NOT_CONFIGURED = "not_configured"
+    PROBE_ERROR = "probe_error"
+
+
+#: Statuses under which a consumer is entitled to stay silent. Anything else —
+#: including a status a consumer does not recognise — must be reported.
+HEALTHY_CHANNEL_STATUSES: frozenset[str] = frozenset(
+    {EnumChannelStatus.LIVE.value, EnumChannelStatus.NOT_CONFIGURED.value}
+)
 
 
 class ModelAlertChannelHealth(BaseModel):
@@ -75,8 +89,13 @@ class ModelAlertChannelHealth(BaseModel):
 
     @property
     def healthy(self) -> bool:
-        """A channel that was never configured is not a failure; a dead one is."""
-        return self.status is not EnumChannelStatus.DEAD
+        """A channel that was never configured is not a failure; a dead one is.
+
+        A channel whose liveness could not be established (``PROBE_ERROR``) is
+        not healthy either: "the check did not run" is not evidence that the
+        channel delivers (OMN-15606).
+        """
+        return self.status.value in HEALTHY_CHANNEL_STATUSES
 
 
 def _failure_log_path() -> Path:
@@ -311,10 +330,38 @@ def probe_alert_channel(*, force: bool = False) -> ModelAlertChannelHealth:
         _write_cache(result)
         return result
     except Exception as exc:  # noqa: BLE001 — a health probe must never crash a hook
+        # NOT a fail-open: reporting NOT_CONFIGURED here (the pre-OMN-15606
+        # shape) claimed "nothing to check" when the truth is "could not
+        # check". PROBE_ERROR is not healthy, so the failure propagates.
         return ModelAlertChannelHealth(
-            status=EnumChannelStatus.NOT_CONFIGURED,
+            status=EnumChannelStatus.PROBE_ERROR,
             detail=f"probe_failed: {exc}",
         )
 
 
-__all__ = ["EnumChannelStatus", "ModelAlertChannelHealth", "probe_alert_channel"]
+def probe_channel_health(*, force: bool = False) -> ModelAlertChannelHealth:
+    """The single classifier every hook-health surface uses. NEVER raises.
+
+    ``probe_alert_channel`` already guards its own body, but this wrapper is
+    what makes the guarantee structural rather than incidental: every consumer
+    routes through one function, so a probe failure cannot be classified two
+    different ways by two different callers. That divergence — the plugin-lib
+    probe swallowing to ``"unknown"`` while the ``src`` sibling let the
+    exception escape — is the OMN-15606 defect.
+    """
+    try:
+        return probe_alert_channel(force=force)
+    except Exception as exc:  # noqa: BLE001 — classification, not suppression
+        return ModelAlertChannelHealth(
+            status=EnumChannelStatus.PROBE_ERROR,
+            detail=f"probe_failed: {exc}",
+        )
+
+
+__all__ = [
+    "HEALTHY_CHANNEL_STATUSES",
+    "EnumChannelStatus",
+    "ModelAlertChannelHealth",
+    "probe_alert_channel",
+    "probe_channel_health",
+]
