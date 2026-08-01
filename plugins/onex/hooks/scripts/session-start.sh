@@ -499,11 +499,17 @@ fi
 log "SessionStart hook triggered (plugin mode)"
 log "Using Python: $PYTHON_CMD"
 
-# Hook health probe [F32] — verify all Python hook handlers can import
+# Hook health probe [F32] — verify all Python hook handlers can import, and
+# (OMN-15600) that the alert channel can actually deliver.
 PROBE_RESULT=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") || true
 PROBE_FAILURES=$(echo "$PROBE_RESULT" | env -u PYTHONPATH "$BREW_PY" -c "import json,sys; print(json.load(sys.stdin).get('failures',0))" 2>/dev/null || echo "0")
+PROBE_CHANNEL=$(echo "$PROBE_RESULT" | env -u PYTHONPATH "$BREW_PY" -c "import json,sys; print(json.load(sys.stdin).get('alert_channel',{}).get('status','unknown'))" 2>/dev/null || echo "unknown")
 if [[ "$PROBE_FAILURES" != "0" ]]; then
-    log "WARNING: $PROBE_FAILURES hook handler(s) failed import check. See hooks.log for details."
+    log "WARNING: $PROBE_FAILURES hook-health failure(s) (handler imports and/or alert channel). See hooks.log for details."
+fi
+if [[ "$PROBE_CHANNEL" == "dead" ]]; then
+    # Loud on the only surface guaranteed not to be the broken one.
+    log "ERROR: alert channel is DEAD — hook alerts are delivering to nothing. See ${HOME}/.omnibase/alert_delivery_failures.log"
 fi
 
 # Extract session information
