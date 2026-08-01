@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -119,6 +120,22 @@ def _boom(*args, **kwargs):
 
 
 _ac.probe_alert_channel = _boom
+"""
+
+# Fails *inside* ``probe_alert_channel``'s own try body rather than replacing
+# the function. ``_write_cache`` is on the path of every uncached probe,
+# including the unconfigured one, so this needs no channel env to be reached —
+# and unconfigured is precisely the verdict the un-fixed handler collapsed it
+# into. See ``TestProbeAlertChannelOwnBodyFailsLoud``.
+_RAISING_INNER_WRITE = """\
+import omniclaude.hooks.alert_channel as _ac
+
+
+def _boom(*args, **kwargs):
+    raise OSError("forced: cache write failed inside probe body (OMN-15606 test)")
+
+
+_ac._write_cache = _boom
 """
 
 
@@ -375,3 +392,135 @@ class TestSharedClassifier:
             "the out-of-enum status this ticket removes reappeared in the "
             "delegate's executable code"
         )
+
+
+class TestProbeAlertChannelOwnBodyFailsLoud:
+    """The third fail-open: the guard inside ``probe_alert_channel`` itself.
+
+    Every other test in this file forces the failure *outside*
+    ``probe_alert_channel``. ``_BLOCK_IMPORT`` stops the module importing, which
+    lands in ``probe_channel``'s handler; ``_RAISING_PROBE`` and the
+    ``monkeypatch.setattr(..., "probe_alert_channel", _boom)`` fixtures replace
+    the function wholesale, which lands in ``probe_channel_health``'s. None of
+    them executes a single line of ``probe_alert_channel``'s own ``try`` body,
+    so its ``except`` was asserted by nothing.
+
+    Measured, not assumed: reverting that one line to ``NOT_CONFIGURED`` — the
+    exact pre-OMN-15606 shape — left all 33 tests green. The mutant is
+    behaviourally reachable (any exception escaping ``_probe_bot_token``,
+    ``_probe_webhook`` or ``_write_cache``: TLS, DNS, a read-only cache dir) and
+    material: ``not_configured`` is silent and exits 0, ``probe_error`` is loud
+    and exits 1. These tests bind that line.
+    """
+
+    def test_raising_bot_token_probe_is_probe_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A TLS/DNS failure while probing Slack is UNVERIFIED, not "unset"."""
+        import omniclaude.hooks.alert_channel as alert_channel
+
+        def _boom(_token: str) -> tuple[bool, str]:
+            raise OSError("forced: TLS handshake failed (OMN-15606 test)")
+
+        monkeypatch.setattr(alert_channel, "_probe_bot_token", _boom)
+        monkeypatch.setenv("ONEX_ALERT_LIVENESS_CACHE", str(tmp_path / "cache.json"))
+        # Non-secret placeholders: the probe only tests these for truthiness
+        # before entering the bot-token branch.
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "forced-test-value-not-a-credential")
+        monkeypatch.setenv("SLACK_CHANNEL_ID", "forced-test-channel")
+        monkeypatch.setenv("SLACK_WEBHOOK_URL", "")
+
+        health = alert_channel.probe_alert_channel(force=True)
+
+        assert health.status is EnumChannelStatus.PROBE_ERROR, (
+            "an exception raised inside probe_alert_channel's own body was "
+            f"reported as {health.status.value!r}; a probe that could not run "
+            "must never be indistinguishable from a healthy or unset channel"
+        )
+        assert health.healthy is False
+
+    def test_raising_cache_write_is_not_reported_as_unconfigured(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The collision case: the un-fixed handler returned the same verdict.
+
+        With no channel configured the probe legitimately returns
+        ``not_configured``. If the handler also returns ``not_configured`` when
+        it *crashed*, the two are byte-identical and the operator cannot tell
+        "nothing to check" from "could not check" — the whole defect class.
+        """
+        import omniclaude.hooks.alert_channel as alert_channel
+
+        def _boom(_result: object) -> None:
+            raise OSError("forced: cache write failed (OMN-15606 test)")
+
+        monkeypatch.setattr(alert_channel, "_write_cache", _boom)
+        monkeypatch.setenv("ONEX_ALERT_LIVENESS_CACHE", str(tmp_path / "cache.json"))
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "")
+        monkeypatch.setenv("SLACK_CHANNEL_ID", "")
+        monkeypatch.setenv("SLACK_WEBHOOK_URL", "")
+
+        health = alert_channel.probe_alert_channel(force=True)
+
+        assert health.status is not EnumChannelStatus.NOT_CONFIGURED, (
+            "a crashed probe reported not_configured — indistinguishable from "
+            "the legitimate unset verdict, which is silent and exits 0"
+        )
+        assert health.status is EnumChannelStatus.PROBE_ERROR
+        assert health.healthy is False
+
+    def test_inner_failure_exits_nonzero_through_the_invoked_module(
+        self, sandbox: Path, tmp_path: Path
+    ) -> None:
+        """End-to-end on the artifact that runs, not on an in-process import.
+
+        Same forcing, driven through ``-m <the module session-start invokes>``:
+        the observable the shell consumer branches on is the exit code, and an
+        unconfigured channel exits 0, so this fails if the handler collapses an
+        inner crash back into ``not_configured``.
+        """
+        run = _run_probe(
+            home=sandbox, tmp_path=tmp_path, sitecustomize=_RAISING_INNER_WRITE
+        )
+        assert run.channel_status == EnumChannelStatus.PROBE_ERROR.value, (
+            f"status={run.channel_status!r} stdout={run.stdout!r} stderr={run.stderr!r}"
+        )
+        assert run.returncode != 0, (
+            "a probe that crashed inside its own body exited 0 — the shell "
+            f"consumer stays silent on that; stdout={run.stdout!r}"
+        )
+        assert int(run.payload["failures"]) >= 1  # type: ignore[arg-type]
+
+
+class TestInvokedModuleActuallyResolves:
+    """Makes the contract's DoD check non-vacuous.
+
+    ``contracts/OMN-15606.yaml`` verified this ticket by running
+    ``python -m omniclaude.hooks.lib.hook_health_probe`` and accepting a
+    returncode in ``(0, 1)``. A missing module exits **1**, so the check passed
+    against the exact broken tree the ticket was filed about — the same vacuity
+    class as the grep the ticket explicitly forbade, reached through exit-code
+    width instead of substring width. The contract now runs these assertions.
+    """
+
+    def test_invoked_module_has_an_import_spec(self) -> None:
+        """RED at ``3138c2f0e``: the module did not exist at all."""
+        module = _invoked_probe_module()
+        assert importlib.util.find_spec(module) is not None, (
+            f"{module} is invoked by a hook script with -m but has no import "
+            "spec; `python -m` on it exits 1, which a returncode-width check "
+            "silently accepts as success"
+        )
+
+    def test_running_the_invoked_module_emits_an_in_enum_status(
+        self, sandbox: Path, tmp_path: Path
+    ) -> None:
+        """Executing it must yield a parseable payload, not a traceback."""
+        run = _run_probe(home=sandbox, tmp_path=tmp_path)
+        assert run.returncode in (0, 1), (
+            f"unexpected returncode {run.returncode}; stderr={run.stderr!r}"
+        )
+        assert "No module named" not in run.stderr, (
+            f"the invoked module did not resolve: {run.stderr!r}"
+        )
+        assert run.channel_status in {member.value for member in EnumChannelStatus}
