@@ -1104,6 +1104,14 @@ components:
   path: plugins/onex/skills/writing_skills/SKILL.md
   backing_nodes: []
   rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: hooks/scripts/alert-channel.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/alert-channel.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
 - id: hooks/scripts/common.sh
   kind: hook
   exposure: hidden

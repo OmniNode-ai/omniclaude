@@ -34,6 +34,10 @@ _OMNICLAUDE_HOOK_NAME="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
 # available before hook-specific behavior starts.
 source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 
+# Outcome-checked alert delivery (OMN-15600). Curl-only, no common.sh dependency.
+# shellcheck source=./alert-channel.sh
+source "$(dirname "${BASH_SOURCE[0]}")/alert-channel.sh" 2>/dev/null || true
+
 # Log directory for error-guard failures (created lazily on first error)
 _ERROR_GUARD_LOG_DIR="${_ERROR_GUARD_LOG_DIR:-${TMPDIR:-/tmp}/omniclaude-error-guard}"
 mkdir -p "$_ERROR_GUARD_LOG_DIR" 2>/dev/null || true
@@ -110,9 +114,14 @@ _omniclaude_error_guard_trap() {
     # Also log to per-hook file
     _log "ERROR" "exit code $exit_code${_ERROR_GUARD_LAST_ERR:+ at $_ERROR_GUARD_LAST_ERR}"
 
-    # --- 3. Send Slack alert (best-effort, no dependencies beyond curl) ---
-    local webhook_url="${SLACK_WEBHOOK_URL:-}"
-    if [[ -n "$webhook_url" ]] && command -v curl >/dev/null 2>&1; then
+    # --- 3. Send Slack alert (outcome-checked; a dead channel is recorded, not
+    #        discarded — OMN-15600). Never changes this trap's exit 0. ---
+    local _alert_configured=0
+    if [[ -n "${SLACK_WEBHOOK_URL:-}" ]] \
+        || { [[ -n "${SLACK_BOT_TOKEN:-}" ]] && [[ -n "${SLACK_CHANNEL_ID:-}" ]]; }; then
+        _alert_configured=1
+    fi
+    if [[ "$_alert_configured" -eq 1 ]] && command -v curl >/dev/null 2>&1; then
         # Rate limiting: one alert per hook per 5 minutes
         local rate_dir="${_ERROR_GUARD_LOG_DIR}/rate"
         mkdir -p "$rate_dir" 2>/dev/null || true
@@ -135,18 +144,21 @@ _omniclaude_error_guard_trap() {
         fi
 
         if [[ "$should_send" == "true" ]]; then
-            # Simple JSON payload without jq (manual escaping)
             local msg="[error-guard][${_ERROR_GUARD_HOST}] Hook '${_OMNICLAUDE_HOOK_NAME}' crashed with exit code ${exit_code}. Swallowed to protect Claude Code."
-            # Escape backslashes and double quotes for JSON
-            msg="${msg//\\/\\\\}"
-            msg="${msg//\"/\\\"}"
 
-            curl -s -S --connect-timeout 1 --max-time 2 \
-                -H 'Content-Type: application/json' \
-                -d "{\"text\": \"${msg}\"}" \
-                --url "$webhook_url" >/dev/null 2>&1 || true
-
+            # Record the attempt regardless of outcome so a dead channel does
+            # not cost a curl on every crash; alert_channel_send records the
+            # delivery failure durably and raises a local notification.
             date -u +%s > "$rate_file" 2>/dev/null || true
+
+            if ! declare -F alert_channel_send >/dev/null 2>&1; then
+                # alert-channel.sh failed to source — that is itself a broken
+                # alerting path and must not pass as a successful send.
+                _log "ERROR" "alert-channel.sh unavailable; hook-crash alert not delivered"
+            else
+                alert_channel_send "error_guard_${safe_name}" "$msg" || \
+                    _log "ERROR" "hook-crash alert delivery failed (see alert delivery log)"
+            fi
         fi
     fi
 
