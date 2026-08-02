@@ -1586,6 +1586,7 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/5b/0e/0ebf9e63def1f27fffc521ad8a2b49fb8d424f19d13c3319947603fcb3c9/omnibase_core-0.46.8.tar.gz", hash = "sha256:2151f37eef3ea40c2d66205bc76357d375ecfdc7fb3ffbc7762640147bdb365b", size = 9613131, upload-time = "2026-08-01T07:45:41.33Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/d3/ac0a9e291f002a09a714ffb4e9d95e8da3647e8665fd7e4e5fe99bf590ee/omnibase_core-0.46.8-py3-none-any.whl", hash = "sha256:63be9e7e9f15b41cb1c392b7dc76f5dc1cdd929711850cd512cf8494f0606699", size = 6667486, upload-time = "2026-08-01T00:02:16.598Z" },
 ]
