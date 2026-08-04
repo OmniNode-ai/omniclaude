@@ -48,7 +48,9 @@ concurrency:
 jobs:
   selftest:
     name: Self-test — stamp this PR head as OnexBot
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/verifier-stamp-reusable.yml
     # pragma: allowlist secret -- `secrets: inherit` is a GHA syntax keyword,
     # not a credential. Same suppression precedent as call-occ-autobind.yml:115.

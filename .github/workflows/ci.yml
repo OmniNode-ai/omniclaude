@@ -3427,7 +3427,7 @@ jobs:
       - name: Validate contract YAML files
         working-directory: onex_change_control
         run: |
-          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -name "OMN-*.yaml" 2>/dev/null)
+          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -maxdepth 1 -name "OMN-*.yaml" 2>/dev/null)
           if [ -z "$CONTRACTS" ]; then
             echo "No contract YAML files found — skipping validation"
             exit 0
