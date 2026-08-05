@@ -369,6 +369,17 @@ def occ_receipt_pass_on_dev(
 # zero receipts there is no contract data to reason about "cited" from, and
 # treating an uncited PR as non-blocking in that case would gut the merge
 # check for the common (non-OCC) ticket shape entirely.
+#
+# Regression fix (2026-08-05, verified live against OMN-15422 + omniclaude#1976
+# as a synthetic OPEN-PR probe): the carve-out is a *stale-attachment*
+# concept — it only makes sense for a PR that is CLOSED-unmerged, i.e. dead
+# and replaced. An OPEN PR is potentially load-bearing in-flight work no
+# matter what the OCC contract has or hasn't cited yet, so it is EXCLUDED
+# from this carve-out entirely and always blocks — the citation-state check
+# below only runs for CLOSED-unmerged refs (see the ``s.state == "OPEN"``
+# guard at the call site). Applying "uncited" to an OPEN ref would make any
+# ticket with >=1 OCC receipt non-blocking on any unmerged, unreceipted PR —
+# re-opening the exact OMN-8375/OMN-14582/OMN-14641 shape.
 # ---------------------------------------------------------------------------
 
 
@@ -647,10 +658,22 @@ def decide(
                     blocking = [
                         s for s in pr_result.pr_statuses if classify_blocking(s)
                     ]
+                    # OMN-15712 regression guard: the citation-awareness carve-out
+                    # is a supersession/leftover-attachment concept, NOT a general
+                    # "no receipt mentions it" bypass. An OPEN PR (or an
+                    # unresolvable probe, i.e. ``error`` set) is potentially
+                    # load-bearing in-flight work regardless of what the OCC
+                    # contract has or hasn't cited yet — it ALWAYS blocks, exactly
+                    # as the pre-OMN-15712 guard did. Only a CLOSED-unmerged ref
+                    # is eligible for the uncited/superseded carve-out, because
+                    # only a closed PR can be a *stale* attachment the contract
+                    # legitimately moved past.
                     still_blocking = [
                         s
                         for s in blocking
-                        if pr_citation_state(receipts, s.ref.number)
+                        if s.error
+                        or s.state == "OPEN"
+                        or pr_citation_state(receipts, s.ref.number)
                         not in ("uncited", "superseded")
                     ]
                     if not still_blocking:

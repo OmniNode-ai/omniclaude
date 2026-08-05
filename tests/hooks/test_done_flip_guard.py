@@ -857,6 +857,19 @@ def _closed_fetcher_for(number: int):
     return _fetch
 
 
+def _open_fetcher_for(number: int):
+    """PR ``number`` is genuinely OPEN (in-flight); any other number is MERGED."""
+
+    def _fetch(ref: Any) -> Any:
+        from linear_done_verify import PRStatus
+
+        if ref.number == number:
+            return PRStatus(ref=ref, state="OPEN", merge_state="CLEAN")
+        return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+    return _fetch
+
+
 def test_uncited_stale_attachment_is_allowed_omn_15539_shape() -> None:
     """OMN-15539 live shape: attached core#1533 is CLOSED-unmerged and never
     cited by any OCC receipt (the real DoD contract cites 1532 and 1996
@@ -953,6 +966,59 @@ def test_adversarial_active_unmerged_pr_still_blocks_despite_receipts() -> None:
     assert not d.allowed
     assert "pr_not_merged" in d.reason
     assert "9001" in d.reason
+
+
+def test_open_pr_in_description_must_block_omn_15712_regression() -> None:
+    """Adversarial-verifier repro (2026-08-05, wave-12): the exact production
+    default-path shape that leaked. Ticket carries real OCC receipts, none of
+    which reference the cited PR number (so ``pr_citation_state`` alone would
+    say "uncited") — but the PR is genuinely OPEN, not a stale closed
+    attachment. An OPEN PR is potentially load-bearing in-flight work and
+    MUST block regardless of what the OCC contract has or hasn't cited yet.
+    Pre-fix, this allowed — it re-opened the OMN-8375/OMN-14582/OMN-14641
+    "Done while the implementing PR is still open" shape for the ordinary
+    multi-PR flow (earlier PR merged+receipted, current PR open and not yet
+    receipted).
+    """
+    receipts = [
+        _receipt(1532, "dod-core1532-cloud-request-wire"),
+        _receipt(1996, "dod-OmniNode-ai-omnimarket-pr-1996"),
+    ]
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-15422", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_open_fetcher_for(1976),
+        linear_fetcher=lambda _t: {
+            "description": (
+                "Implementing work lands via "
+                "https://github.com/OmniNode-ai/omniclaude/pull/1976."
+            ),
+            "labels": [],
+            "attachment_urls": [
+                "https://github.com/OmniNode-ai/omniclaude/pull/1976",
+            ],
+        },
+        receipt_lister=lambda _t: receipts,
+    )
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+    assert "1976" in d.reason
+
+
+def test_open_pr_citation_state_uncited_but_still_blocks_via_state_check() -> None:
+    """Pure-function control: ``pr_citation_state`` itself still reports
+    "uncited" for an unreceipted PR number regardless of OPEN/CLOSED — the
+    OPEN carve-out lives at the ``decide()`` call site (``s.state == "OPEN"``
+    short-circuit), not inside this classifier. This pins that the classifier
+    is state-blind by design so a future edit doesn't "fix" the regression by
+    smuggling state into the pure function instead of the call site.
+    """
+    receipts = [_receipt(1532, "dod-core1532-cloud-request-wire")]
+    assert guard.pr_citation_state(receipts, 1976) == "uncited"
 
 
 def test_no_occ_receipts_at_all_is_unaffected_by_citation_filter() -> None:
