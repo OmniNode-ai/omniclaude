@@ -171,7 +171,14 @@ def test_close_if_done_label_does_not_bypass_open_cited_pr() -> None:
             "labels": ["close-if-done"],
         },
     }
-    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_open_fetcher)
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_open_fetcher,
+        # No OCC contract data for this shape (OMN-15712 citation-awareness is
+        # scoped to tickets that HAVE OCC receipts) — hermetic empty stub.
+        receipt_lister=lambda _t: [],
+    )
     assert not d.allowed
     assert "pr_not_merged" in d.reason
 
@@ -196,6 +203,8 @@ def test_close_if_done_label_does_not_bypass_open_linked_attachment_pr() -> None
             "labels": ["close-if-done"],
             "attachment_urls": ["https://github.com/OmniNode-ai/omnimarket/pull/1754"],
         },
+        # No OCC contract data for this shape — hermetic empty stub (see above).
+        receipt_lister=lambda _t: [],
     )
     assert not d.allowed
     assert "pr_not_merged" in d.reason
@@ -779,6 +788,213 @@ def test_occ_probe_end_to_end_allows_via_decide(tmp_path: Path) -> None:
     )
     assert d.allowed
     assert d.reason == "durable_evidence:occ_receipt_on_dev"
+
+
+# --------------------------------------------------------------------------- #
+# OMN-15712: attachment/citation supersession awareness.
+#
+# The merge-check treats every attached product PR as load-bearing regardless
+# of whether the ticket's own OCC DoD contract still cites it. These tests
+# reproduce the two live shapes found 2026-08-05 (OMN-15539: attachment never
+# cited by any receipt; OMN-15422: attachment cited but explicitly retired by
+# a PASS `-superseded` receipt) plus the adversarial case (a genuinely
+# load-bearing unmerged PR must still block) and the no-receipts-at-all
+# unaffected case.
+# --------------------------------------------------------------------------- #
+
+
+def _receipt(pr_number: int, evidence_item_id: str, status: str = "PASS") -> dict:
+    return {
+        "pr_number": str(pr_number),
+        "evidence_item_id": evidence_item_id,
+        "status": status,
+    }
+
+
+class TestPrCitationState:
+    def test_no_contract_when_zero_receipts(self) -> None:
+        assert guard.pr_citation_state([], 1533) == "no_contract"
+
+    def test_uncited_when_receipts_exist_but_none_reference_the_pr(self) -> None:
+        receipts = [
+            _receipt(1532, "dod-core1532-cloud-request-wire"),
+            _receipt(1996, "dod-OmniNode-ai-omnimarket-pr-1996"),
+        ]
+        assert guard.pr_citation_state(receipts, 1533) == "uncited"
+
+    def test_superseded_when_a_pass_superseded_receipt_cites_the_pr(self) -> None:
+        receipts = [
+            _receipt(2596, "dod-OmniNode-ai-omnibase_infra-pr-2596"),
+            _receipt(2596, "dod-OmniNode-ai-omnibase_infra-pr-2596-superseded"),
+            _receipt(2597, "dod-OmniNode-ai-omnibase_infra-pr-2597"),
+        ]
+        assert guard.pr_citation_state(receipts, 2596) == "superseded"
+
+    def test_active_when_cited_and_not_superseded(self) -> None:
+        receipts = [_receipt(2597, "dod-OmniNode-ai-omnibase_infra-pr-2597")]
+        assert guard.pr_citation_state(receipts, 2597) == "active"
+
+    def test_failed_superseded_receipt_does_not_count(self) -> None:
+        """A `-superseded` receipt must itself be PASS to retire a citation —
+        a FAIL supersession attempt leaves the original citation active."""
+        receipts = [
+            _receipt(2596, "dod-OmniNode-ai-omnibase_infra-pr-2596"),
+            _receipt(2596, "dod-...-pr-2596-superseded", status="FAIL"),
+        ]
+        assert guard.pr_citation_state(receipts, 2596) == "active"
+
+
+def _closed_fetcher_for(number: int):
+    """PR ``number`` is CLOSED-unmerged; any other number is MERGED."""
+
+    def _fetch(ref: Any) -> Any:
+        from linear_done_verify import PRStatus
+
+        if ref.number == number:
+            return PRStatus(ref=ref, state="CLOSED", merge_state="UNSTABLE")
+        return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+    return _fetch
+
+
+def test_uncited_stale_attachment_is_allowed_omn_15539_shape() -> None:
+    """OMN-15539 live shape: attached core#1533 is CLOSED-unmerged and never
+    cited by any OCC receipt (the real DoD contract cites 1532 and 1996
+    instead) → the Done-flip is ALLOWED, not blocked on the stale attachment.
+    """
+    receipts = [
+        _receipt(1532, "dod-core1532-cloud-request-wire"),
+        _receipt(1996, "dod-OmniNode-ai-omnimarket-pr-1996"),
+    ]
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-15539", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_closed_fetcher_for(1533),
+        linear_fetcher=lambda _t: {
+            "description": "Deterministic implementation contract shipped.",
+            "labels": [],
+            "attachment_urls": [
+                "https://github.com/OmniNode-ai/omnibase_core/pull/1533",
+                "https://github.com/OmniNode-ai/omnibase_core/pull/1532",
+                "https://github.com/OmniNode-ai/omnimarket/pull/1996",
+            ],
+        },
+        receipt_lister=lambda _t: receipts,
+    )
+    assert d.allowed
+    assert (
+        d.reason
+        == "durable_evidence:blocking_refs_uncited_or_superseded_by_occ_contract"
+    )
+
+
+def test_superseded_stale_attachment_is_allowed_omn_15422_shape() -> None:
+    """OMN-15422 live shape: attached infra#2596 is CLOSED-unmerged, but an
+    explicit PASS `-superseded` OCC receipt retires it in favor of merged
+    #2597 → ALLOWED.
+    """
+    receipts = [
+        _receipt(2596, "dod-OmniNode-ai-omnibase_infra-pr-2596"),
+        _receipt(2596, "dod-OmniNode-ai-omnibase_infra-pr-2596-superseded"),
+        _receipt(2597, "dod-OmniNode-ai-omnibase_infra-pr-2597"),
+    ]
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-15422", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_closed_fetcher_for(2596),
+        linear_fetcher=lambda _t: {
+            "description": "Fixture provenance and sanitization documented.",
+            "labels": [],
+            "attachment_urls": [
+                "https://github.com/OmniNode-ai/omnibase_infra/pull/2596",
+                "https://github.com/OmniNode-ai/omnibase_infra/pull/2597",
+            ],
+        },
+        receipt_lister=lambda _t: receipts,
+    )
+    assert d.allowed
+    assert (
+        d.reason
+        == "durable_evidence:blocking_refs_uncited_or_superseded_by_occ_contract"
+    )
+
+
+def test_adversarial_active_unmerged_pr_still_blocks_despite_receipts() -> None:
+    """A ticket WITH OCC receipts where the blocking PR IS actively (non-
+    superseded) cited and genuinely unmerged must STILL block — the
+    citation-awareness filter is not a blanket bypass for every attachment.
+    """
+    receipts = [_receipt(9001, "dod-OmniNode-ai-omnimarket-pr-9001")]
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-90000", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_closed_fetcher_for(9001),
+        linear_fetcher=lambda _t: {
+            "description": "Implementing work.",
+            "labels": [],
+            "attachment_urls": [
+                "https://github.com/OmniNode-ai/omnimarket/pull/9001",
+            ],
+        },
+        receipt_lister=lambda _t: receipts,
+    )
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+    assert "9001" in d.reason
+
+
+def test_no_occ_receipts_at_all_is_unaffected_by_citation_filter() -> None:
+    """A ticket with ZERO OCC receipts is completely unaffected — the ordinary
+    (pre-OMN-15712) blocking behavior applies to every unmerged citation."""
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-90001", "state": "Done"},
+    }
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_closed_fetcher_for(42),
+        linear_fetcher=lambda _t: {
+            "description": "Implementing work.",
+            "labels": [],
+            "attachment_urls": [
+                "https://github.com/OmniNode-ai/omnimarket/pull/42",
+            ],
+        },
+        receipt_lister=lambda _t: [],  # no OCC contract data at all
+    )
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+
+
+def test_list_ticket_receipt_fields_reads_origin_dev(tmp_path: Path) -> None:
+    """Real git-backed reader: parses every receipt YAML under the ticket's
+    drift/dod_receipts/ dir on origin/dev, mirroring the freshness guarantee
+    already proven for occ_receipt_pass_on_dev."""
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
+    fields = guard.list_ticket_receipt_fields(clone, "OMN-9999", fetch=True)
+    assert len(fields) == 1
+    assert fields[0]["ticket_id"] == "OMN-9999"
+    assert fields[0]["status"] == "PASS"
+
+
+def test_list_ticket_receipt_fields_empty_for_missing_clone(tmp_path: Path) -> None:
+    assert (
+        guard.list_ticket_receipt_fields(tmp_path / "nope", "OMN-9999", fetch=False)
+        == []
+    )
 
 
 # --------------------------------------------------------------------------- #

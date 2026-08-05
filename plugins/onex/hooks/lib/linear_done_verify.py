@@ -43,9 +43,22 @@ DONE_STATES = {"done", "complete", "completed", "closed"}
 # happen to contain `PR #N` strings inside markdown code blocks (OMN-10047).
 CANCEL_STATES = {"canceled", "cancelled", "duplicate", "won't do", "wont do"}
 
-# `#123` not preceded by a word char (skip things like `abc#1` inside code);
-# also `https://github.com/<owner>/<repo>/pull/<num>`.
-_PR_NUMBER_RE = re.compile(r"(?<![\w/])#(\d+)\b")
+# Bare PR shorthand — `PR #123` / `pull #123` / `pull request #123`
+# (case-insensitive, optional `:`/`-`/whitespace between the token and `#`).
+# OMN-15025: the prior pattern (`#123` not preceded by a word char) matched
+# ANY bare `#<digits>` in prose — "CLAUDE.md Rule #4", "cause #2 is always
+# mislabelled" — as an unresolvable PR reference and false-blocked the
+# Done-flip. Requiring an adjacent PR/pull token is option 1 from OMN-15025's
+# fix-direction list: it kills the prose false-positives while a description
+# that cites its real PR ONLY as an un-anchored bare number (never merged into
+# this pattern) still can't silently ALLOW — decide() only treats
+# `no_pr_references` as non-blocking when it *also* clears the OCC-receipt /
+# exempt-label paths below, so dropping a bare match falls through to that
+# fail-closed check rather than skipping verification.
+# Also matches `https://github.com/<owner>/<repo>/pull/<num>` via _PR_URL_RE.
+_PR_NUMBER_RE = re.compile(
+    r"\b(?:pr|pull(?:\s+request)?)\b[:\s-]*#(\d+)\b", re.IGNORECASE
+)
 _PR_URL_RE = re.compile(
     r"https?://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)",
     re.IGNORECASE,
