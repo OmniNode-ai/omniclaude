@@ -16,7 +16,7 @@
         "name": "OmniNode",
         "email": "dev@omninode.ai"
       },
-      "source": "../onex",
+      "source": "./onex",
       "category": "development"
     }
   ]
