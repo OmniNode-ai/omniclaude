@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# plugin-compat.yaml — onex-delegate (consumer-facing, delegate-only) plugin
+# compatibility matrix.
+#
+# This is the slim, consumer-distributed plugin's OWN compat surface — separate
+# from plugins/onex/plugin-compat.yaml, which remains the compat matrix for the
+# full internal/dev skill tree (plugins/onex, not marketplace-distributed as of
+# OMN-14688). Both are read independently; do not merge them.
+#
+# Read by: test_marketplace_cli_pin.py (this plugin's copy, under
+# plugins/onex-delegate/tests/) as the source of truth for the `onex` CLI pin
+# that plugin.json and marketplace.json must agree with.
+#
+# OMN-14688 (Phase 1 of epic OMN-14686): minimal stable package.
+
+plugin: onex
+plugin_version: "0.1.0"
+
+# Compatibility window: plugin works with runtimes in [min, max).
+min_runtime_version: "0.2.0"
+max_runtime_version: "1.0.0"
+
+# `onex` CLI pin (OMN-8799, SD-12) — must match plugin.json requires.onex_cli
+# and marketplace.json plugins[0].requires.onex_cli.
+onex_cli:
+  package: "omnibase-core"
+  min_version: "0.39.0"
+  install_hint: "pipx install 'omnibase-core>=0.39.0'"
+
+# delegate's only backing node. Topic/schema entries intentionally omitted:
+# node_delegate_skill_orchestrator dispatches via `onex delegate` (CLI ->
+# omnibase_infra cli_delegate.py -> node dispatch), not through the runtime
+# dispatch-engine topic matrix this file otherwise tracks for plugins/onex.
+nodes: []
