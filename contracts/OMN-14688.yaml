@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-14688
+title: "Phase 1: Build the minimal stable package (delegate-only consumer plugin surface)"
+summary: >
+  Reopens OMN-14688 (previously false-Done: zero PRs, startedAt=null).
+  Splits the consumer-facing marketplace to a slim plugins/onex-delegate
+  plugin (delegate skill only, zero hooks, zero agents) while preserving
+  the full plugins/onex internal dev tree via a separate, non-consumer
+  marketplace (plugins/onex-dev-marketplace). Reconciles the two drifted
+  marketplace.json copies to identical versions.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - plugin-manifest
+evidence_requirements:
+  - kind: tests
+    description: "Delegate-only surface + marketplace pin tests pass"
+    command: "uv run pytest plugins/onex-delegate/tests/ -q"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "gh pr checks --repo OmniNode-ai/omniclaude 1979"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Both marketplace.json copies source exactly one plugin (plugins/onex-delegate), reconciled versions"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py::TestConsumerMarketplaceIsDelegateOnly -q"
+  - id: dod-002
+    description: "onex-delegate ships exactly one skill (delegate), zero hooks, zero agents"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py::TestSlimPluginShipsDelegateOnly -q"
+  - id: dod-003
+    description: "Internal dev skill tree preserved on disk and reachable via a distinct, non-consumer marketplace"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py::TestInternalDevSurfacePreserved -q"
+  - id: dod-004
+    description: "onex delegate CLI local-tier smoke test after ~/.omnibase/.env repair (DELEGATION_ROUTING_TIERS_PATH, BIFROST_CONTRACT_PATH)"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run onex delegate 'reply with the single word: pong' --task-type reasoning --max-tokens 16"
