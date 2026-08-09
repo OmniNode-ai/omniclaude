@@ -5,12 +5,18 @@
 Verifies the plugin declares a pinned `onex` CLI version and that the pin is
 consistent across the three manifest surfaces that must agree:
 
-  1. plugins/onex/plugin-compat.yaml       → `min_runtime_version`
-  2. plugins/onex/.claude-plugin/plugin.json → `requires.onex_cli.min_version`
-  3. plugins/.claude-plugin/marketplace.json → `plugins[0].requires.onex_cli.min_version`
+  1. plugins/onex-delegate/plugin-compat.yaml       → `min_runtime_version`
+  2. plugins/onex-delegate/.claude-plugin/plugin.json → `requires.onex_cli.min_version`
+  3. plugins/.claude-plugin/marketplace.json          → `plugins[0].requires.onex_cli.min_version`
 
 This prevents the "plugin says 0.39.0, marketplace says 0.38.0, runtime says 0.40.0"
 drift class that the plan (§ 7) explicitly flags as a BF-5 risk.
+
+Relocated from plugins/onex/tests/ under OMN-14688: the consumer-facing
+marketplace entry now sources plugins/onex-delegate (delegate-only), not
+plugins/onex (the full internal dev tree), so the pin's source of truth moved
+with it. plugins/onex/plugin-compat.yaml remains the compat surface for the
+internal dev tree and is unaffected by this file.
 """
 
 from __future__ import annotations

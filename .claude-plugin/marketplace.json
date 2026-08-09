@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "omninode-tools",
-  "version": "1.0.0",
-  "description": "OmniNode ONEX plugin suite for intelligent agent routing, workflow automation, and observability",
+  "version": "2.0.0",
+  "description": "OmniNode ONEX delegate-only plugin — single-command local LLM delegation",
   "owner": {
     "name": "OmniNode",
     "email": "dev@omninode.ai"
@@ -10,14 +10,23 @@
   "plugins": [
     {
       "name": "onex",
-      "description": "Unified ONEX architecture plugin with intelligent agent routing, manifest injection, quality enforcement, polymorphic YAML agents, reusable skills, and custom slash commands for comprehensive workflow automation and observability",
-      "version": "2.1.6",
+      "description": "ONEX single-command local LLM delegation. Ships exactly one skill (delegate) — no hooks, no agents (OMN-14688).",
+      "version": "0.1.0",
       "author": {
         "name": "OmniNode",
         "email": "dev@omninode.ai"
       },
-      "source": "./plugins/onex",
-      "category": "development"
+      "source": "./plugins/onex-delegate",
+      "category": "development",
+      "requires": {
+        "onex_cli": {
+          "package": "omnibase-core",
+          "min_version": "0.39.0",
+          "install_hint": "pipx install 'omnibase-core>=0.39.0'",
+          "source_of_truth": "./plugins/onex-delegate/plugin-compat.yaml#min_runtime_version",
+          "notes": "The `onex` console_script ships with omnibase-core (>=0.39.0). Python 3.12+ required."
+        }
+      }
     }
   ]
 }
