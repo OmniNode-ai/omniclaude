@@ -12,7 +12,7 @@ summary: >
 is_seam_ticket: false
 interface_change: true
 interfaces_touched:
-  - plugin-manifest
+  - public_api
 evidence_requirements:
   - kind: tests
     description: "Delegate-only surface + marketplace pin tests pass"
