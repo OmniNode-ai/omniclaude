@@ -17,7 +17,16 @@
         "email": "dev@omninode.ai"
       },
       "source": "./plugins/onex-delegate",
-      "category": "development"
+      "category": "development",
+      "requires": {
+        "onex_cli": {
+          "package": "omnibase-core",
+          "min_version": "0.39.0",
+          "install_hint": "pipx install 'omnibase-core>=0.39.0'",
+          "source_of_truth": "./plugins/onex-delegate/plugin-compat.yaml#min_runtime_version",
+          "notes": "The `onex` console_script ships with omnibase-core (>=0.39.0). Python 3.12+ required."
+        }
+      }
     }
   ]
 }

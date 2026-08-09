@@ -84,6 +84,19 @@ class TestConsumerMarketplaceIsDelegateOnly:
         scoped = _load(SCOPED_MARKETPLACE)
         assert root["plugins"][0]["version"] == scoped["plugins"][0]["version"]
 
+    def test_root_marketplace_also_declares_requires_onex_cli(self) -> None:
+        """CodeRabbit (PR #1979): root marketplace.json previously omitted
+        `requires.onex_cli`, so a root-sourced install could drift from the
+        declared omnibase-core CLI pin unnoticed -- only the scoped copy had
+        it. Both copies must declare and agree on the pin.
+        """
+        root = _load(ROOT_MARKETPLACE)
+        scoped = _load(SCOPED_MARKETPLACE)
+        root_cli = root["plugins"][0]["requires"]["onex_cli"]
+        scoped_cli = scoped["plugins"][0]["requires"]["onex_cli"]
+        assert root_cli["min_version"] == scoped_cli["min_version"]
+        assert root_cli["package"] == scoped_cli["package"] == "omnibase-core"
+
 
 class TestSlimPluginShipsDelegateOnly:
     def test_plugin_json_exists(self) -> None:
