@@ -155,4 +155,17 @@ class TestInternalDevSurfacePreserved:
 
     def test_dev_marketplace_sources_full_onex_tree(self) -> None:
         dev = _load(DEV_MARKETPLACE)
-        assert dev["plugins"][0]["source"] == "../onex"
+        # "../onex" (parent-directory escape) is rejected by `claude plugin
+        # marketplace add` as invalid input -- source must be a forward-relative
+        # path within the marketplace's own directory. "./onex" is a tracked
+        # symlink (plugins/onex-dev-marketplace/onex -> ../onex) that resolves
+        # to the same physical files without a literal ".." in the manifest.
+        assert dev["plugins"][0]["source"] == "./onex"
+
+    def test_dev_marketplace_onex_symlink_resolves_to_full_tree(self) -> None:
+        symlink_path = PLUGINS_DIR / "onex-dev-marketplace" / "onex"
+        assert symlink_path.is_symlink(), f"expected a symlink at {symlink_path}"
+        resolved = symlink_path.resolve()
+        assert resolved == DEV_PLUGIN_DIR.resolve(), (
+            f"onex-dev-marketplace/onex must resolve to plugins/onex, got {resolved}"
+        )
