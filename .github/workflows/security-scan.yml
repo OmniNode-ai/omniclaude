@@ -153,16 +153,16 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.4
+        uses: github/codeql-action/init@v4.37.6
         with:
           languages: ${{ matrix.language }}
           queries: +security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4.37.4
+        uses: github/codeql-action/autobuild@v4.37.6
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.4
+        uses: github/codeql-action/analyze@v4.37.6
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -228,7 +228,7 @@ jobs:
 
       - name: Upload Trivy results
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v4.37.4
+        uses: github/codeql-action/upload-sarif@v4.37.6
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -310,7 +310,7 @@ jobs:
           echo "::add-matcher::checkov-problem-matcher-softfail.json"
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@9b70310bcd306d11740313070b940167d6b23085  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
@@ -353,7 +353,7 @@ jobs:
           EOF
 
       - name: Upload Checkov results
-        uses: github/codeql-action/upload-sarif@v4.37.4
+        uses: github/codeql-action/upload-sarif@v4.37.6
         if: always() && hashFiles('checkov-results/results_sarif.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: 'checkov-results/results_sarif.sarif'
