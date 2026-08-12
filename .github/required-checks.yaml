@@ -501,8 +501,8 @@ gates:
     caller_job: gate
     reusable_workflow: cr-thread-gate.yml
     reusable_job: gate
-    skip_semantics: neutral_ok
-    rationale: "CodeRabbit thread resolution gate (primary caller). KNOWN FINDING (OMN-14854 guard build): caller job 'gate' has an ungated `if:` (github.actor != 'dependabot[bot]') — vector-3. Believed to be an intentional dependabot exemption (github.actor is not spoofable), not an attacker-controlled bypass, but not yet human-ratified. skip_semantics: neutral_ok pending triage in OMN-14856."
+    skip_semantics: never
+    rationale: "CodeRabbit thread resolution gate (primary caller). FIXED (OMN-15120): removed top-level actor exclusion to materialize required check on dependabot PRs (vector-3 class per OMN-14854). Caller job now always invokes reusable; the reusable itself has no actor gate, so bot PRs are evaluated normally. Non-PR issue_comment logic moved to pr-number computation (resolves to 0 for bare-issue comments, which reusable treats as graceful no-op)."
 
   - name: "cr-thread-gate / CodeRabbit Thread Check"
     mode: REQUIRED
@@ -511,8 +511,8 @@ gates:
     caller_job: cr-thread-gate
     reusable_workflow: cr-thread-gate.yml
     reusable_job: gate
-    skip_semantics: neutral_ok
-    rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. KNOWN FINDING (OMN-14854 guard build): same dependabot-actor vector-3 shape as 'gate / CodeRabbit Thread Check'. skip_semantics: neutral_ok pending triage in OMN-14856."
+    skip_semantics: never
+    rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. FIXED (OMN-15120): removed dependabot-actor exclusion vector-3 alongside primary caller (cr-thread-gate-caller.yml). Non-PR issue_comment logic moved to pr-number."
 
   - name: "required-check-skip-guard / check-skip-vectors"
     mode: REQUIRED

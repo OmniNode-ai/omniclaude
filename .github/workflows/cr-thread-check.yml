@@ -24,12 +24,17 @@ jobs:
         run: echo "CR thread gate is enforced by cr-thread-gate-caller.yml on merge queue."
 
   cr-thread-gate:
+    # OMN-15120/OMN-14864: no CONDITIONAL top-level `if:` here — the caller
+    # job MUST always invoke the reusable, or GitHub never creates the
+    # composed check run at all (vector-3). This legacy duplicate caller had
+    # the same issue as cr-thread-gate-caller.yml.
+    #
+    # The former dependabot-actor exemption is dropped, and the non-PR
+    # `issue_comment` guard moves into the `pr-number` computation.
     if: >-
-      github.event_name != 'merge_group' &&
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
-      github.actor != 'dependabot[bot]'
+      github.event_name != 'merge_group'
     uses: ./.github/workflows/cr-thread-gate.yml
     with:
-      pr-number: ${{ github.event.pull_request.number || github.event.issue.number }}
+      pr-number: ${{ format('{0}', github.event.pull_request.number || (github.event.issue.pull_request && github.event.issue.number) || 0) }}
     secrets:
       CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
