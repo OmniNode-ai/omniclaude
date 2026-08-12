@@ -9,10 +9,12 @@ on an injected ``task_dispatcher`` matching the real contract::
 
 In production (``omniclaude.runtime.wiring_dispatchers``) that callable is a thin
 closure that forwards the constructed prompt to a *concrete* inference backend —
-either ``SubprocessClaudeCodeSessionBackend.session_query`` (claude_code) or
-``VllmInferenceBackend.infer`` (local_llm) — and returns the backend's raw output
-string. The ``task_dispatcher`` itself is therefore a *contract seam* one level
-ABOVE the inference client, NOT the HTTP inference boundary.
+either a caller-injected, duck-typed ``session_query`` backend (claude_code; no
+in-repo implementation ships since OMN-15960 deleted the duplicate,
+never-deployed ``node_claude_code_session_effect``) or ``VllmInferenceBackend.infer``
+(local_llm) — and returns the backend's raw output string. The ``task_dispatcher``
+itself is therefore a *contract seam* one level ABOVE the inference client, NOT the
+HTTP inference boundary.
 
 Why a typed fake here and NOT ``RecordedReplayInferenceTransport``
 -----------------------------------------------------------------
