@@ -32,7 +32,6 @@ the moment omnibase_core >= 0.25.0 is installed.
 
 Affected call sites (must be updated before omnibase_core bump):
   - ``handler_skill_requested.py`` (2 call sites)
-  - ``node_claude_code_session_effect/backends/backend_subprocess.py`` (7 call sites)
 
 A follow-up task must audit all ``ModelSkillResult(...)`` constructors and
 remove ``correlation_id`` from each before bumping the omnibase_core

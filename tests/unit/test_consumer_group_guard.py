@@ -192,7 +192,6 @@ class TestSkillNodeConsumerGroups:
 
     _EXPECTED_NODES = {
         "NodeGitEffect",
-        "NodeClaudeCodeSessionEffect",
         "NodeLocalLlmInferenceEffect",
         "NodeLinearEffect",
         "NodeTicketingEffect",
@@ -207,6 +206,9 @@ class TestSkillNodeConsumerGroups:
 
         Original set: 6 skill nodes from OMN-2593.
         OMN-2778 adds SkillExecutionLogSubscriber (7th entry).
+        OMN-15960 removes NodeClaudeCodeSessionEffect (duplicate,
+        never-deployed surface of the canonical omnibase_infra
+        coding-agent quartet) — no tombstone entry.
         """
         assert set(SKILL_NODE_CONSUMER_GROUPS.keys()) == self._EXPECTED_NODES
 
@@ -236,13 +238,6 @@ class TestSkillNodeConsumerGroups:
     @pytest.mark.unit
     def test_git_effect_group_id(self) -> None:
         assert SKILL_NODE_CONSUMER_GROUPS["NodeGitEffect"] == "omniclaude-git-effect.v1"
-
-    @pytest.mark.unit
-    def test_claude_code_session_group_id(self) -> None:
-        assert (
-            SKILL_NODE_CONSUMER_GROUPS["NodeClaudeCodeSessionEffect"]
-            == "omniclaude-claude-code-session-effect.v1"
-        )
 
     @pytest.mark.unit
     def test_local_llm_inference_group_id(self) -> None:
