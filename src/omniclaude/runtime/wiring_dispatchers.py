@@ -374,7 +374,11 @@ class SkillCommandDispatcher:
                     correlation_id=correlation_id,
                 )
                 return None
-            backend_detail = "claude_subprocess"
+            # Report the actual injected backend's type, not a fixed
+            # "claude_subprocess" label — since OMN-15960 removed the sole
+            # concrete implementation, this slot is duck-typed caller
+            # injection and may be any backend shape.
+            backend_detail = type(self._claude_code_backend).__name__
 
             async def task_dispatcher(prompt: str) -> str:
                 # Narrowing: parent scope returns None when backend is None
