@@ -24,12 +24,24 @@ jobs:
         run: echo "CR thread gate is enforced by cr-thread-gate-caller.yml on merge queue."
 
   cr-thread-gate:
-    if: >-
-      github.event_name != 'merge_group' &&
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
-      github.actor != 'dependabot[bot]'
+    # OMN-14856/OMN-15120 vector-3: no ACTOR-conditional top-level `if:`
+    # here -- the caller job MUST always invoke the reusable, or GitHub
+    # never creates the composed "cr-thread-gate / CodeRabbit Thread Check"
+    # check run at all (see cr-thread-gate-caller.yml for the full
+    # mechanism note; mirrors the landed fix in omnibase_core@470d326dc /
+    # PR #1549). `merge_group` is still excluded here because
+    # `merge-queue-compat` above is this file's dedicated merge_group
+    # producer for the same composed context.
+    #
+    # The former dependabot-actor exemption is dropped outright (the
+    # reusable has no actor gate of its own). The former non-PR
+    # `issue_comment` guard moves into the `pr-number` computation instead
+    # of the job-level `if:` -- a bare-issue comment now resolves
+    # pr-number to 0, which the reusable's own script already treats as a
+    # graceful no-op.
+    if: github.event_name != 'merge_group'
     uses: ./.github/workflows/cr-thread-gate.yml
     with:
-      pr-number: ${{ github.event.pull_request.number || github.event.issue.number }}
+      pr-number: ${{ format('{0}', github.event.pull_request.number || (github.event.issue.pull_request && github.event.issue.number) || 0) }}
     secrets:
       CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
