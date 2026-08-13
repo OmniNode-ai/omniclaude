@@ -5,8 +5,13 @@ JSON to stdout — the full LLM response and metrics, never truncated. RuntimeLo
 logs and intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex delegate "<prompt>" [--task-type <type>] [--max-tokens <n>]
+onex delegate "<prompt>" [--task-type <type>] [--max-tokens <n>]
 ```
+
+Call the bare `onex` on PATH — never `uv run onex`, which resolves the venv of
+the current directory's project and fails outside a repo that co-installs
+`omnibase-infra`. Install per SKILL.md's prerequisite section if
+`onex delegate --help` does not exit 0.
 
 - `<prompt>` — the task to delegate (required).
 - `--task-type` — `test | document | research | code_generation | refactor | reasoning | review`. Omit to auto-classify from the prompt.
