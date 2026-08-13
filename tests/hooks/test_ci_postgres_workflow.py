@@ -252,7 +252,16 @@ def test_ci_summary_checks_contract_compliance_result(
     assert "scripts/ci/ci_summary_gate.py" in run
     assert '--run-attempt "${RUN_ATTEMPT}"' in run
     assert "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" in run
-    assert "CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)" in run
+    # OMN-16000: message widened to cover the L4 external-context layer
+    # (commits/{sha}/check-runs), not just in-run gating jobs.
+    assert (
+        "CI Summary = FAILURE (fail-closed: a gating job or an asserted "
+        "external context failed/cancelled)" in run
+    )
+    # OMN-16000 L4 wiring: check-runs fetched for the PR head SHA and passed
+    # to the gate script on every poll iteration.
+    assert "repos/${GH_REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" in run
+    assert "--check-runs-file check_runs.json" in run
 
 
 def test_contract_compliance_pins_uv_python(ci_workflow: dict[str, Any]) -> None:
