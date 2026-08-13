@@ -238,7 +238,16 @@ def _create_emit_client(socket_path: str, timeout: float) -> _EmitClientProtocol
     dependency of omniclaude (tracked by OMN-7639).
     """
     try:
-        from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415
+        # OMN-15968: omnimarket#1246 deleted node_emit_daemon.client's public
+        # module path months ago; the pin bump for the R4 repoint (routing_
+        # recorder/evidence_writer -> node_event_emit_effect) makes that
+        # loss visible to mypy for the first time. This site is a
+        # genuinely-guarded optional import with a working fallback
+        # (_SocketEmitClient below) -- not the ticket's fail-open case --
+        # so it stays as-is; only the static-analysis suppression is new.
+        from omnimarket.nodes.node_emit_daemon.client import (  # type: ignore[import-not-found]  # noqa: PLC0415
+            EmitClient,
+        )
 
         return cast(
             "_EmitClientProtocol",
