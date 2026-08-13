@@ -9,11 +9,17 @@ fields and that Kafka emission is fail-open.
 from __future__ import annotations
 
 import json
+import logging
+import sys
 
 import pytest
 
 from omniclaude.routing.routing_recorder import ModelRoutingDecision, RoutingRecorder
 from tests.constants import MODEL_LOCAL_FAST
+
+_EMIT_EFFECT_HANDLER_MODULE = (
+    "omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect"
+)
 
 
 @pytest.mark.unit
@@ -113,3 +119,43 @@ class TestRoutingRecorder:
         )
         with pytest.raises(Exception):
             decision.task_id = "t2"  # type: ignore[misc]
+
+
+@pytest.mark.unit
+class TestEmitKafkaEventImportFailureIsLoud:
+    """OMN-15968: a broken node_event_emit_effect import must be loud.
+
+    Repoints the dead ``node_emit_daemon.client`` import to
+    ``node_event_emit_effect`` and removes the fail-open ImportError guard
+    that used to swallow this at debug (OMN-13213 D1 follow-through).
+    """
+
+    def test_import_failure_logs_at_error_not_debug(
+        self,
+        tmp_path: object,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # None in sys.modules is the standard way to force ImportError for
+        # a specific dotted module without needing the real package absent.
+        monkeypatch.setitem(sys.modules, _EMIT_EFFECT_HANDLER_MODULE, None)
+        recorder = RoutingRecorder(state_dir=str(tmp_path))
+
+        with caplog.at_level(
+            logging.ERROR, logger="omniclaude.routing.routing_recorder"
+        ):
+            recorder.record(
+                task_id="task-import-break",
+                dispatch_surface="local_llm",
+                agent_model=MODEL_LOCAL_FAST,
+                rationale="regression: import break must be loud",
+            )
+
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert error_records, "expected an ERROR-level log on import failure"
+        assert any("task-import-break" in r.getMessage() for r in error_records)
+
+        # Disk write is unaffected -- import failure only kills the Kafka emission.
+        decisions = recorder.read_all()
+        assert len(decisions) == 1
+        assert decisions[0].task_id == "task-import-break"
