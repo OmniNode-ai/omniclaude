@@ -49,9 +49,42 @@ Privacy Considerations:
     - The intelligence topic receives the full prompt for analysis
     - This separation allows different retention/access policies per topic
 
+Single-owner registry (OMN-15967 / OMN-13146):
+    ``EVENT_REGISTRY`` below is a **generated projection**, not a hand-maintained
+    second copy. omnimarket's ``topics.yaml``
+    (``src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml``) is the
+    single canonical source the emit daemon actually loads at runtime.
+    ``scripts/validation/generate_event_registry.py`` is the one place that
+    projects that file's event/fan-out/partition-key/required-field data into
+    the Python literal committed here, and the "Registry Consistency" CI job
+    (``.github/workflows/ci.yml``) re-runs it with ``--check`` against a fresh
+    ``omnimarket@dev`` checkout on every PR, failing the build on any
+    unbaselined drift. Do not hand-edit ``fan_out`` / ``partition_key_field`` /
+    ``required_fields`` below without also updating the daemon registry (or the
+    two documented exceptions in the generator) — the CI gate will reject a
+    drifted commit.
+
+    Two intentional, documented exceptions keep this from being a strict
+    mirror of the daemon registry:
+
+    1. ``daemon.health.probe`` and ``delegation.request`` are daemon-internal
+       event types — the daemon handles/emits them entirely internally, no
+       hook client ever constructs them, so there is no client-side
+       registration to project. See
+       ``generate_event_registry.DAEMON_INTERNAL_EVENT_TYPES``.
+    2. ``diagnostic.daemon.health`` fans out, daemon-side, to one extra topic
+       (``onex.evt.diagnostic.daemon-health.v1``) that is not ONEX-canonical
+       format and has no ``TopicBase`` member — the daemon is the runtime
+       routing authority and is allowed to fan out wider than the hook-side
+       registration (see ``tests/hooks/test_registry_consistency.py``). See
+       ``generate_event_registry.NON_CANONICAL_DAEMON_TOPICS``.
+
 Related Tickets:
     - OMN-1631: Emit daemon fan-out support
     - OMN-1632: Event registry for omniclaude hooks
+    - OMN-13146: omnimarket topics.yaml established as canonical source
+    - OMN-15967: single-owner registry — this file generated/CI-verified, not
+      hand-maintained
 
 .. versionadded:: 0.2.0
 """
@@ -275,7 +308,24 @@ class EventRegistration:
 # Event Registry
 # =============================================================================
 
-
+# GENERATED PROJECTION — DO NOT HAND-EDIT (OMN-15967 / OMN-13146).
+#
+# The event_type keys, fan_out topics/transforms, partition_key_field, and
+# required_fields below are mechanically projected from omnimarket's
+# topics.yaml (the daemon's actual runtime registry) by
+# scripts/validation/generate_event_registry.py. The "Registry Consistency"
+# CI job re-runs that script with --check against a fresh omnimarket@dev
+# checkout on every PR and fails the build on any drift — see the module
+# docstring above for the full single-owner-registry rationale and the two
+# documented daemon-internal/non-canonical exceptions.
+#
+# To pick up a daemon-side registry change: regenerate with
+#   uv run python scripts/validation/generate_event_registry.py \
+#       --daemon-registry <path/to/omnimarket/topics.yaml> --write
+# and splice the projected fields into the matching EventRegistration entries
+# below, then run `uv run python scripts/validation/generate_event_registry.py
+# --daemon-registry <path> --check` to confirm zero drift before committing.
+#
 # Registry mapping event types to their fan-out rules
 # This is the central configuration for the emit daemon's routing logic
 EVENT_REGISTRY: dict[str, EventRegistration] = {
