@@ -17,7 +17,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -74,25 +73,56 @@ class ModelEvidenceWrittenEvent(BaseModel):
 
 
 def emit_event(event: ModelEvidenceWrittenEvent) -> None:
-    """Emit an EvidenceWritten event to Kafka. Fail-open: logs on error."""
+    """Emit an EvidenceWritten event via the canonical emit-effect node.
+
+    Import failures are loud (error-level log): a broken emitter dependency
+    must never regress to a silently-swallowed debug log (OMN-15968 — this
+    is what OMN-13213's D1 repoint left undone). Runtime emission failures
+    (unregistered event type, spool/publish errors) stay fail-open at
+    warning, matching this writer's dual-write posture: disk is
+    authoritative, Kafka is best-effort.
+    """
     try:
-        from omnimarket.nodes.node_emit_daemon.client import (
-            EmitClient,  # noqa: I001
+        from omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect import (  # noqa: I001
+            HandlerEventEmitEffect,
         )
-
-        from omniclaude.hooks.topics import TopicBase, build_topic
-
-        socket_path = os.getenv("OMNICLAUDE_EMIT_SOCKET", "").strip()
-        if not socket_path:
-            logger.debug("No emit socket configured, skipping evidence emission")
-            return
-        topic = build_topic(TopicBase.EVIDENCE_WRITTEN)
-        client = EmitClient(socket_path=socket_path)
-        client.emit_sync(
-            event_type=topic,
-            payload=event.model_dump(mode="json"),
+        from omnimarket.nodes.node_event_emit_effect.models.model_emit_request import (
+            ModelEmitRequest,
         )
-    except (OSError, RuntimeError, ValueError, ImportError, AttributeError, TypeError):
+    except ImportError:
+        logger.error(
+            "node_event_emit_effect import failed; evidence event for "
+            "task %s not emitted",
+            event.task_id,
+            exc_info=True,
+        )
+        return
+
+    from omniclaude.hooks.topics import TopicBase, build_topic
+
+    topic = build_topic(TopicBase.EVIDENCE_WRITTEN)
+    try:
+        HandlerEventEmitEffect().handle(
+            ModelEmitRequest(
+                # `event_type` is looked up in omnimarket's topics.yaml only
+                # to resolve a durability tier -- the registry has no
+                # `evidence.written` entry (only `team.evidence.written`,
+                # a distinct event). `team.evidence.written`'s tier
+                # (telemetry) is borrowed as the closest existing
+                # registration; the explicit `topic` override below still
+                # routes to the correct evidence-written.v1 topic, so
+                # nothing on the wire references `team.evidence.written` --
+                # confirmed by reading handler_event_emit_effect.handle():
+                # event_type is never embedded in the published payload or
+                # headers. Registering a real `evidence.written` entry is
+                # single-owner-registry scope (OMN-15967), not this ticket.
+                event_type="team.evidence.written",
+                topic=topic,
+                payload=event.model_dump(mode="json"),
+                correlation_id=event.correlation_id or None,
+            )
+        )
+    except (RuntimeError, ValueError, AttributeError, TypeError, OSError):
         logger.warning(
             "Failed to emit EvidenceWritten event for task %s (fail-open)",
             event.task_id,

@@ -117,19 +117,37 @@ class RoutingRecorder:
             f.write(decision.model_dump_json() + "\n")
 
     def _emit_kafka_event(self, decision: ModelRoutingDecision) -> None:
-        """Emit routing decision as Kafka event. Fail-open: errors are logged."""
+        """Emit routing decision via the canonical emit-effect node.
+
+        Import failures are loud (error-level log): a broken emitter
+        dependency must never regress to a silently-swallowed debug log
+        (OMN-15968 — this is what OMN-13213's D1 repoint left undone).
+        Runtime emission failures (unregistered event type, spool/publish
+        errors) stay fail-open at debug, matching this recorder's posture:
+        disk is authoritative, Kafka is best-effort.
+        """
         try:
-            from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: I001
-
-            socket_path = os.getenv("OMNICLAUDE_EMIT_SOCKET", "")
-            if not socket_path:
-                logger.debug("No emit socket configured, skipping Kafka emission")
-                return
-
-            client = EmitClient(socket_path=socket_path)
-            client.emit_sync(
-                event_type="routing.decision.recorded",
-                payload=decision.model_dump(),
+            from omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect import (  # noqa: I001
+                HandlerEventEmitEffect,
             )
-        except (OSError, ImportError, KeyError, ValueError, TypeError):
+            from omnimarket.nodes.node_event_emit_effect.models.model_emit_request import (
+                ModelEmitRequest,
+            )
+        except ImportError:
+            logger.error(
+                "node_event_emit_effect import failed; routing decision "
+                "for task %s not emitted",
+                decision.task_id,
+                exc_info=True,
+            )
+            return
+
+        try:
+            HandlerEventEmitEffect().handle(
+                ModelEmitRequest(
+                    event_type="routing.decision",
+                    payload=decision.model_dump(),
+                )
+            )
+        except (OSError, KeyError, ValueError, TypeError):
             logger.debug("Kafka emission failed (fail-open)", exc_info=True)

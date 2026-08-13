@@ -248,6 +248,9 @@ override-dependencies = [
     "omnibase-spi>=0.23.1,<0.24.0",
     "omnibase-infra>=0.38.3,<0.39.0",
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
+    # OMN-15968: omninode-intelligence's own pin (v0.4.0) otherwise conflicts
+    # with our direct omnimarket rev below -- force our rev to win transitively.
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@63ea1c1ef770349bcb9e47144263869db8fbe13e",
 ]
 
 [tool.uv.sources]
@@ -259,7 +262,9 @@ onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_contro
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "v0.4.0" }
+# OMN-15968: pinned to merged omnimarket#2062 commit (adds node_event_emit_effect,
+# the R4 repoint target) until a tag carries it — never pin a branch head.
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "63ea1c1ef770349bcb9e47144263869db8fbe13e" }  # pragma: allowlist secret
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
