@@ -3370,7 +3370,17 @@ jobs:
   # ============================================================================
   # CROSS-REPO BOUNDARY PARITY (OMN-5771)
   # Validates Kafka topic boundaries against onex_change_control manifest.
-  # warn-only until all violations fixed (see OMN-5775).
+  # DIRECTLY REQUIRED on branch protection (live-verified 2026-08-13) and a CI
+  # Summary GATE_JOB (scripts/ci/ci_summary_gate.py). NOT warn-only despite the
+  # historical comment below this job used to carry -- see the OMN-16000 fix
+  # note: the previous `if:` used
+  # `contains(github.event.pull_request.changed_files || '0', '0') == false`,
+  # a SUBSTRING match against the changed-file COUNT, not an equality check.
+  # Any PR touching 10/20/100/... files (any count containing the digit '0')
+  # made `contains(...)` true, so `== false` was false and the job SKIPPED --
+  # and GitHub treats a skipped run of a required check as satisfying the
+  # requirement. Fixed to run unconditionally whenever occ-preflight succeeds;
+  # the job is cheap and the changed-files guard bought nothing real.
   # ============================================================================
 
   boundary-parity:
@@ -3385,12 +3395,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    # Only run when seam-relevant files change
-    if: >-
-      needs.occ-preflight.result == 'success' && (
-      github.event_name == 'merge_group' ||
-      github.event_name == 'push' ||
-      contains(github.event.pull_request.changed_files || '0', '0') == false)
+    if: needs.occ-preflight.result == 'success'
     steps:
       - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
         with:
@@ -3536,11 +3541,21 @@ jobs:
     # tests/ci/test_ci_summary_gate.py). Pure hosted GitHub-API polling: zero
     # self-hosted/LAN dependency. DO NOT rename — the job name IS the required
     # context; a rename re-wedges every PR.
+    # OMN-16000: also asserts an L4 EXPECTED_EXTERNAL_CONTEXTS layer against
+    # commits/{sha}/check-runs — every PR-triggered job living in a workflow
+    # file OTHER than ci.yml that this repo's branch protection also directly
+    # requires, so a future silent removal from branch protection is caught
+    # here too, not only by GitHub's required-checks UI. Includes an
+    # ALL-must-succeed assertion over every duplicate "occ-preflight /
+    # eligibility" producer (~52 caller workflows mint that same check-run
+    # name against one SHA; GitHub's own required-check semantics are
+    # ANY-not-ALL, generalizing the OMN-15112 gap).
     runs-on: ubuntu-latest
     if: always()
     permissions:
       actions: read
       contents: read
+      checks: read  # OMN-16000: L4 layer reads commits/{sha}/check-runs
     # Deadline (below) is comfortably under the observed ~167m run-cancellation
     # window so the required context ALWAYS posts a terminal state first. This
     # job timeout is only a hard backstop above the internal poll deadline.
@@ -3555,6 +3570,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          # HEAD_SHA drives the L4 external-context layer (OMN-16000):
+          # commits/{sha}/check-runs aggregates check-runs from EVERY workflow
+          # file that reported against this SHA, not just ci.yml's own run.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           # Bounded poll window (minutes) — kept under the run-cancel window so
           # the required context always reaches a terminal state first.
           DEADLINE_MINUTES: "90"
@@ -3580,17 +3599,29 @@ jobs:
               sleep "${POLL_INTERVAL_SECONDS}"
               continue
             fi
-            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}"
+            # L4: fetch check-runs for the PR head SHA (spans every workflow
+            # file, not just this run). A fetch failure here does NOT abort the
+            # poll — it writes a JSON `null`, which the gate script treats as
+            # "every external context unobserved" (PENDING, not skipped), and
+            # the next iteration retries the fetch.
+            if gh api --paginate \
+                "repos/${GH_REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+                --jq '.check_runs[]' > check_runs_raw.ndjson 2>/dev/null; then
+              jq -s '.' check_runs_raw.ndjson > check_runs.json
+            else
+              echo 'null' > check_runs.json
+            fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json
             rc=$?
             case "${rc}" in
               0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
-              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)"; exit 1 ;;
-              2) : ;;  # PENDING — gating jobs still running; keep polling
+              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job or an asserted external context failed/cancelled)"; exit 1 ;;
+              2) : ;;  # PENDING — gating jobs or external contexts still running; keep polling
               *) echo "::error::ci_summary_gate.py returned unexpected code ${rc}; failing closed"; exit 1 ;;
             esac
             if [ "$(date +%s)" -ge "${deadline}" ]; then
               echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
-              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --report-only || true
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --report-only || true
               exit 1
             fi
             sleep "${POLL_INTERVAL_SECONDS}"

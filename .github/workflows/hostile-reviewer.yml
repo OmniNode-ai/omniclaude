@@ -11,10 +11,15 @@
 # OAuth auth is confirmed on the omnibase-ci runner (OMN-8524).
 #
 # Gate semantics (pilot phase):
-#   blocked  — critical/error findings from at least one succeeded model → exit 1
-#   degraded — all models failed (infra unavailable) → exit 0 (informational, pilot)
-#   passed   — no critical/error findings → exit 0
+#   blocked     — critical/error findings from at least one succeeded model → exit 1
+#   degraded    — cli_review RAN but every model failed mid-review → exit 0 (informational, pilot)
+#   infra_error — cli_review could not run at all (dependency install failed, or the
+#                 CLI itself crashed) after one retry → exit 1 (fail closed, 2026-08-13)
+#   passed      — no critical/error findings → exit 0
 #
+# 2026-08-13: infra_error used to be folded into `degraded` and exit 0 — a
+# dependency-install failure or a CLI crash let this REQUIRED context ("Hostile
+# Review Gate") go green with zero adversarial review having actually run.
 # Reference: OMN-8524
 
 name: Hostile Reviewer
@@ -119,7 +124,13 @@ jobs:
 
       - name: Install omniintelligence dependencies
         id: install_deps
-        continue-on-error: true
+        # NOTE: no `continue-on-error` -- a manufactured degraded/exit-0
+        # verdict on install failure let this REQUIRED context self-report
+        # success with zero adversarial review having run (fixed 2026-08-13).
+        # A real dependency-install failure now fails this job outright and
+        # "Hostile Review Gate" (needs: [occ-preflight, hostile-review],
+        # if: always()) reads the resulting `failure` result and fails
+        # closed via its existing default-deny case statement.
         working-directory: ../omniintelligence
         env:
           UV_CONCURRENT_DOWNLOADS: "1"
@@ -150,40 +161,47 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          INSTALL_DEPS_OUTCOME: ${{ steps.install_deps.outcome }}
           # LLM_DEEPSEEK_URL is read directly from the runner's environment (Infisical-injected
           # or set in the runner's shell profile on .201) — no GitHub secret needed
         working-directory: ../omniintelligence
         run: |
           set -euo pipefail
 
-          if [ "$INSTALL_DEPS_OUTCOME" != "success" ]; then
-            echo "verdict=degraded" >> "$GITHUB_OUTPUT"
-            echo "blocking_count=0" >> "$GITHUB_OUTPUT"
-            echo "total_findings=0" >> "$GITHUB_OUTPUT"
-            echo "models_succeeded=" >> "$GITHUB_OUTPUT"
-            echo "error=omniintelligence dependency install failed" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          # Run cli_review; stdout = ModelMultiReviewResult JSON, stderr = human summary.
+          # 2026-08-13: previously a CLI crash (any nonzero exit) reported
+          # verdict=degraded and exited 0, letting this REQUIRED context go
+          # green with zero adversarial review having actually run. Retry
+          # once (transient infra), then FAIL CLOSED — an infra outage on a
+          # required gate must show up as a red PR, not a silent pass. If the
+          # operator wants a model-outage escape it needs to be a
+          # MEASURED_NOT_ENFORCED exemption backed by a measured outage rate
+          # and a ticket, not a self-reported exit 0 inside this step.
+          REVIEW_EXIT=1
+          for attempt in 1 2; do
+            if REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
+              --pr "$PR_NUMBER" \
+              --repo "$REPO" \
+              --model deepseek-r1 \
+              2>/dev/null); then
+              REVIEW_EXIT=0
+              break
+            fi
+            REVIEW_EXIT=$?
+            echo "::warning::cli_review attempt ${attempt}/2 failed (exit ${REVIEW_EXIT})"
+            if [ "$attempt" -eq 1 ]; then
+              sleep 15
+            fi
+          done
 
-          # Run cli_review; stdout = ModelMultiReviewResult JSON, stderr = human summary
-          REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
-            --pr "$PR_NUMBER" \
-            --repo "$REPO" \
-            --model deepseek-r1 \
-            2>/dev/null) || REVIEW_EXIT=$?
-
-          # If the CLI itself failed (not model degraded — actual crash), report and exit 0
-          # to avoid blocking PRs due to infrastructure issues during pilot phase.
-          if [ "${REVIEW_EXIT:-0}" -ne 0 ]; then
+          if [ "$REVIEW_EXIT" -ne 0 ]; then
             {
-              echo "verdict=degraded"
+              echo "verdict=infra_error"
               echo "blocking_count=0"
               echo "total_findings=0"
               echo "models_succeeded="
-              echo "error=cli_review exited non-zero (all models failed or binary error)"
+              echo "error=cli_review failed after 2 attempts (exit ${REVIEW_EXIT}) — infra unavailable or crash"
             } >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           # Parse verdict from JSON using Python inline. Pass the JSON through
@@ -251,12 +269,14 @@ jobs:
               passed: '✅',
               blocked: '🚫',
               degraded: '⚠️',
+              infra_error: '🚫',
             }[verdict] || '❓';
 
             const label = {
               passed: 'PASSED',
               blocked: 'BLOCKED',
               degraded: 'DEGRADED (informational)',
+              infra_error: 'INFRA ERROR (blocking)',
             }[verdict] || verdict.toUpperCase();
 
             let note = '';
@@ -266,6 +286,11 @@ jobs:
               if (error) note += ` Error: \`${error}\``;
             } else if (verdict === 'blocked') {
               note = '\n\n> **Action required**: Resolve CRITICAL/ERROR findings before merge.';
+            } else if (verdict === 'infra_error') {
+              note = '\n\n> **Action required**: the reviewer CLI failed after 2 attempts (dependency install or crash) — ' +
+                'this now fails the required gate closed instead of silently passing. Re-run the job; if infra is ' +
+                'genuinely down, escalate rather than bypassing.';
+              if (error) note += ` Error: \`${error}\``;
             }
 
             const body = [
@@ -284,7 +309,8 @@ jobs:
               '|---------|---------|---------------|',
               '| `passed` | No critical/error findings | No |',
               '| `blocked` | CRITICAL or ERROR findings found | **Yes** |',
-              '| `degraded` | All models unavailable (infra) | No (pilot) |',
+              '| `degraded` | Reviewer ran but every model failed mid-run | No (pilot) |',
+              '| `infra_error` | cli_review failed to run at all (install/crash) after 2 attempts | **Yes** |',
               '',
               '_Powered by [omniintelligence.review_pairing.cli_review](https://github.com/OmniNode-ai/omniintelligence) — node-based adversarial review via HandlerLlmCliSubprocess (OMN-8524)_',
             ].join('\n');
@@ -353,7 +379,7 @@ jobs:
             success)
               ;;
             failure)
-              echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
+              echo "::error::Hostile reviewer job failed — either CRITICAL/ERROR findings were reported (resolve them) or cli_review could not run at all after 2 attempts (infra_error — check the job log/PR comment for which). See the 'Post review summary as PR comment' output for the verdict."
               exit 1
               ;;
             cancelled|skipped)
