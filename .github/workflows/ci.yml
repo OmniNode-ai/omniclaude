@@ -1494,6 +1494,17 @@ jobs:
           --daemon-registry
           "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
 
+      # OMN-15967: EVENT_REGISTRY in src/omniclaude/hooks/event_registry.py is
+      # a generated projection of the daemon registry, not a hand-maintained
+      # copy — fail the build if it has drifted from omnimarket@dev.
+      - name: Run event registry projection drift check
+        working-directory: ${{ github.workspace }}
+        run: >-
+          uv run python scripts/validation/generate_event_registry.py
+          --daemon-registry
+          "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
+          --check
+
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
     name: Golden Chain Live
