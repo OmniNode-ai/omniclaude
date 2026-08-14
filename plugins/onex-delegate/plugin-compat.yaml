@@ -24,10 +24,53 @@ max_runtime_version: "1.0.0"
 
 # `onex` CLI pin (OMN-8799, SD-12) — must match plugin.json requires.onex_cli
 # and marketplace.json plugins[0].requires.onex_cli.
+#
+# OMN-16041 CORRECTION. This block previously declared
+# `package: omnibase-core, min_version: 0.39.0` with the hint
+# `pipx install 'omnibase-core>=0.39.0'`. That was factually wrong and it made
+# the plugin's ONLY command un-runnable on a clean machine:
+#
+#   * `omnibase-core` ships the `onex` CONSOLE SCRIPT
+#     (omnibase_core/pyproject.toml [project.scripts] onex = ...cli_commands:cli)
+#     and the loader that discovers the `onex.cli` entry-point group.
+#   * `omnibase-infra` ships the `delegate` SUBCOMMAND
+#     (omnibase_infra/pyproject.toml [project.entry-points."onex.cli"]
+#      delegate = omnibase_infra.cli.cli_delegate:delegate_command).
+#
+#   Installing only omnibase-core therefore yields, verbatim:
+#     Error: No such command 'delegate'. Did you mean 'gate'?   (exit 2)
+#
+# Both packages must be present IN THE SAME environment. `package` names the
+# package that provides this plugin's only command; `console_script_package`
+# names the package that provides the `onex` executable itself. The keys are
+# flat (never nested) because session_start_onex_cli_pin_check.sh parses this
+# block with an awk state machine, not a YAML parser.
 onex_cli:
-  package: "omnibase-core"
-  min_version: "0.39.0"
-  install_hint: "pipx install 'omnibase-core>=0.39.0'"
+  package: "omnibase-infra"
+  min_version: "0.38.4"
+  console_script_package: "omnibase-core"
+  console_script_min_version: "0.46.8"
+  # Proven 2026-08-13 (OMN-16041): both forms produce an `onex` on PATH whose
+  # `onex delegate --help` exits 0 from an arbitrary working directory.
+  # Do NOT document `uv run onex delegate` — `uv run` resolves the venv of
+  # whatever project the CURRENT directory belongs to, so it only works inside
+  # a repo that happens to co-install omnibase-infra (see cwd_independent below).
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'"
+  cwd_independent: true
+  # HONEST GAP (OMN-16041). The pins above are correct but NOT yet installable
+  # from PyPI: the newest published omnibase-infra is 0.36.1 (2026-05-21), whose
+  # `omnibase-spi>=0.21,<0.22` pin is unsatisfiable against the published spi
+  # 0.23.1 -> ResolutionImpossible; and an unpinned `pip install omnibase-infra`
+  # silently backtracks to 0.32.0, which predates the delegate entry point.
+  # omnibase_infra@main is already at 0.38.4 with correct pins (core==0.46.8,
+  # spi==0.23.1, compat==0.5.6) and its wheel installs + runs clean; the only
+  # missing step is cutting the v0.38.4 PyPI release. Flip this to true in the
+  # same PR that lands the release, and delete the xfail marker in
+  # tests/test_install_works.py (it is strict, so it will fail loudly the moment
+  # the install starts working).
+  installable_from_pypi: false
+  installable_blocker_ticket: "OMN-16041"
 
 # delegate's only backing node. Topic/schema entries intentionally omitted:
 # node_delegate_skill_orchestrator dispatches via `onex delegate` (CLI ->
