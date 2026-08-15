@@ -23,15 +23,27 @@ class TestOnboardingSkill:
         / "onboarding"
     )
 
+    # All 9 policies shipped in omnibase_infra/onboarding/policies/.
     EXPECTED_POLICIES = {
         "setup",
-        "new_employee",
         "standalone_quickstart",
+        "new_employee",
         "contributor_local",
+        "contributor_cloud",
+        "contributor_hybrid",
+        "omnimarket_quickstart",
         "full_platform",
+        "interactive_onboarding",
     }
 
-    EXPECTED_ARGS = {"--policy", "--skip", "--continue-on-failure", "--dry-run"}
+    EXPECTED_ARGS = {
+        "--policy",
+        "--skip",
+        "--continue-on-failure",
+        "--dry-run",
+        "--env-output-path",
+        "--overlay-output-path",
+    }
 
     def test_skill_md_exists(self) -> None:
         assert (self.SKILL_DIR / "SKILL.md").is_file()
@@ -73,6 +85,37 @@ class TestOnboardingSkill:
         assert "omnibase_infra" in body, (
             "SKILL.md must reference the omnibase_infra onboarding engine it wraps"
         )
+
+    def test_invocation_snippet_is_executable_as_written(self) -> None:
+        """The documented snippet must be runnable, not pseudocode (OMN-16040).
+
+        Each assertion pins a defect that made the previous snippet fail at
+        runtime: a literal placeholder used as a dict key, a hard dependency on
+        a source checkout, and direct handler invocation instead of dispatch.
+        """
+        body = self._load_body()
+        assert "onex" in body and "node node_onboarding" in body, (
+            "the skill must dispatch node_onboarding, not import its handler"
+        )
+        assert "HandlerOnboarding" not in body, (
+            "direct handler invocation is rejected by the OMN-12237 gate"
+        )
+        assert "<markdown-output-field>" not in body, (
+            "placeholder left in an executable snippet"
+        )
+        assert "rendered_output" in body, "the skill must name the real output key"
+        assert "cd $OMNI" not in body, (
+            "the snippet must run from the plugin venv, not a source checkout"
+        )
+        assert "CLAUDE_PLUGIN_DATA" in body, (
+            "the snippet must resolve the plugin venv interpreter"
+        )
+
+    def test_body_states_the_real_canonical_graph_size(self) -> None:
+        """canonical.yaml has 17 steps; the doc claimed 10 (OMN-16040)."""
+        body = self._load_body()
+        assert "17-step DAG" in body
+        assert "10-step DAG" not in body
 
     def _load_frontmatter(self) -> dict:
         content = (self.SKILL_DIR / "SKILL.md").read_text()

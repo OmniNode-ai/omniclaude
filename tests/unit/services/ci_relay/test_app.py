@@ -67,9 +67,16 @@ class TestCIRelayAuth:
     """Tests for bearer token authentication."""
 
     def test_missing_auth_header(self, client: TestClient) -> None:
-        """Test that missing auth header returns 403."""
+        """Test that missing auth header returns 401.
+
+        fastapi>=0.136 changed HTTPBearer's default auto_error path from 403
+        to 401 for a missing/malformed Authorization header (RFC 6750:
+        401 = unauthenticated, 403 = authenticated but forbidden). The app's
+        own explicit 401 for an invalid-but-present token (test_invalid_token
+        below) is unaffected -- that's app code, not framework default.
+        """
         response = client.post("/callback", json=_make_payload())
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_invalid_token(self, client: TestClient) -> None:
         """Test that invalid bearer token returns 401."""
