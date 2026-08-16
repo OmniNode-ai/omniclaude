@@ -10,6 +10,12 @@
 # When this fails:
 #   - YAML absent: add plugins/onex/plugin-compat.yaml with full R-class node declarations.
 #   - Schema test failure: fix plugin-compat.yaml schema — see test_plugin_compat_yaml.py.
+#
+# OMN-14688 addendum: also asserts plugins/onex-delegate/plugin-compat.yaml
+# (the consumer-facing delegate-only plugin's own compat surface) and runs
+# the delegate-only-surface + marketplace-pin tests in plugins/onex-delegate/tests/
+# so the two marketplace.json copies cannot drift again (root vs plugins/ scoped
+# copy had diverged to 1.0.0/1.1.0 before this ticket).
 
 name: Plugin Compat Gate
 
@@ -18,11 +24,19 @@ on:
     branches: [main, develop, 'hotfix/**']
     paths:
       - 'plugins/onex/**'
+      - 'plugins/onex-delegate/**'
+      - 'plugins/onex-dev-marketplace/**'
+      - '.claude-plugin/marketplace.json'
+      - 'plugins/.claude-plugin/marketplace.json'
       - '.github/workflows/plugin-compat-gate.yml'
   pull_request:
     branches: [main, dev, develop]
     paths:
       - 'plugins/onex/**'
+      - 'plugins/onex-delegate/**'
+      - 'plugins/onex-dev-marketplace/**'
+      - '.claude-plugin/marketplace.json'
+      - 'plugins/.claude-plugin/marketplace.json'
       - '.github/workflows/plugin-compat-gate.yml'
   workflow_dispatch:
 
@@ -64,15 +78,15 @@ jobs:
       - name: Assert plugin-compat.yaml exists
         working-directory: ${{ github.workspace }}
         run: |
-          COMPAT_PATH="plugins/onex/plugin-compat.yaml"
-          if [ ! -f "$COMPAT_PATH" ]; then
-            echo "::error file=${COMPAT_PATH}::plugin-compat.yaml is required but not found."
-            echo "Every plugin release must ship with plugins/onex/plugin-compat.yaml"
-            echo "declaring all R-class node topics and the runtime compatibility window."
-            echo "See OMN-8789 for the schema specification."
-            exit 1
-          fi
-          echo "OK: $COMPAT_PATH found"
+          for COMPAT_PATH in "plugins/onex/plugin-compat.yaml" "plugins/onex-delegate/plugin-compat.yaml"; do
+            if [ ! -f "$COMPAT_PATH" ]; then
+              echo "::error file=${COMPAT_PATH}::plugin-compat.yaml is required but not found."
+              echo "Every plugin release must ship with its own plugin-compat.yaml"
+              echo "declaring the runtime compatibility window (OMN-8789; OMN-14688 for onex-delegate)."
+              exit 1
+            fi
+            echo "OK: $COMPAT_PATH found"
+          done
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -114,5 +128,12 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           uv run pytest plugins/onex/tests/test_plugin_compat_yaml.py -v \
+            --tb=short \
+            -p no:warnings
+
+      - name: Run delegate-only consumer surface + marketplace pin tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run pytest plugins/onex-delegate/tests/ -v \
             --tb=short \
             -p no:warnings

@@ -131,7 +131,6 @@ node_channel_reply_dispatcher = "omniclaude.nodes.node_channel_reply_dispatcher"
 node_channel_slack_adapter = "omniclaude.nodes.node_channel_slack_adapter"
 node_channel_sms_adapter = "omniclaude.nodes.node_channel_sms_adapter"
 node_channel_telegram_adapter = "omniclaude.nodes.node_channel_telegram_adapter"
-node_claude_code_session_effect = "omniclaude.nodes.node_claude_code_session_effect"
 node_friction_observer_compute = "omniclaude.nodes.node_friction_observer_compute"
 node_git_effect = "omniclaude.nodes.node_git_effect"
 node_github_pr_watcher_effect = "omniclaude.nodes.node_github_pr_watcher_effect"
@@ -249,18 +248,27 @@ override-dependencies = [
     "omnibase-spi>=0.23.1,<0.24.0",
     "omnibase-infra>=0.38.3,<0.39.0",
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
+    # OMN-15968: omninode-intelligence's own pin (v0.4.0) otherwise conflicts
+    # with our direct omnimarket rev below -- force our rev to win transitively.
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@63ea1c1ef770349bcb9e47144263869db8fbe13e",
 ]
 
 [tool.uv.sources]
 # Release v0.25.1: pin to paired release PR heads until tags are published.
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
 # gate passes; the version constraint above governs core resolution.
-omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.3" }  # pragma: allowlist secret
+# OMN-15968: bumped from v0.38.3 -- omnimarket's dev tip (pinned above, for
+# node_event_emit_effect) transitively imports omnibase_infra.event_bus.kafka_auth
+# (OMN-12986 MSK IAM auth), added after v0.38.3 with no newer tag yet cut.
+# Still 0.38.4, inside the override-dependencies range below -- no range change.
+omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "a6d52de2c98ca06cbbb25c4d73a38f79e8aeb79e" }  # pragma: allowlist secret
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "v0.4.0" }
+# OMN-15968: pinned to merged omnimarket#2062 commit (adds node_event_emit_effect,
+# the R4 repoint target) until a tag carries it — never pin a branch head.
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "63ea1c1ef770349bcb9e47144263869db8fbe13e" }  # pragma: allowlist secret
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]

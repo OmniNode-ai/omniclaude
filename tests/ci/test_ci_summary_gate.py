@@ -21,13 +21,20 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.ci.ci_summary_gate import (  # noqa: E402
+    ALL_MUST_SUCCEED_EXTERNAL_NAMES,
     EXIT_FAILURE,
     EXIT_PENDING,
     EXIT_SUCCESS,
+    EXPECTED_EXTERNAL_CONTEXTS,
     GATE_JOBS,
+    SOFT_ALLOWLIST,
     STRICT_SUCCESS_JOBS,
+    combine_verdicts,
     evaluate,
+    evaluate_external,
 )
+
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 def _job(
@@ -248,3 +255,338 @@ class TestCiSummaryGateCli:
         jobs.extend(_job(g, "success", attempt=2) for g in GATE_JOBS)
         result = self._run(jobs, "--run-attempt", "2")
         assert result.returncode == EXIT_SUCCESS, result.stdout + result.stderr
+
+
+@pytest.mark.unit
+class TestBoundaryParityRegressionPin:
+    """OMN-16000: 'Cross-Repo Boundary Parity' is DIRECTLY branch-protection
+    required, but its `if:` clause used a substring `contains(changed_files,
+    '0')` check instead of an equality check, so any PR touching a
+    changed-file count containing the digit '0' (10, 20, 100, ...) silently
+    SKIPPED it -- and GitHub treats a skipped required check as satisfying
+    the requirement. Fixed by making the job unconditional (besides the
+    occ-preflight dependency) and promoting it into GATE_JOBS so CI Summary
+    also independently waits for + requires it."""
+
+    def test_boundary_parity_is_a_gate_job(self) -> None:
+        assert "Cross-Repo Boundary Parity" in GATE_JOBS
+
+    def test_boundary_parity_no_longer_soft_allowlisted(self) -> None:
+        # It used to be marked "warn-only (OMN-5775); not required" in
+        # SOFT_ALLOWLIST -- false against live branch protection. A gate job
+        # and a soft-allowlist entry are mutually exclusive; both would be an
+        # internally-contradictory config (present+good required, but also
+        # explicitly ignored by the default-deny sweep).
+        assert "Cross-Repo Boundary Parity" not in SOFT_ALLOWLIST
+
+    def test_boundary_parity_failure_fails_closed(self) -> None:
+        jobs = [
+            j
+            for j in _all_gates("success")
+            if j["name"] != "Cross-Repo Boundary Parity"
+        ]
+        jobs.append(_job("Cross-Repo Boundary Parity", "failure"))
+        code, report = evaluate(jobs)
+        assert code == EXIT_FAILURE
+        assert "Cross-Repo Boundary Parity" in report
+
+    def test_boundary_parity_absent_is_pending_not_vacuous_success(self) -> None:
+        jobs = [
+            j
+            for j in _all_gates("success")
+            if j["name"] != "Cross-Repo Boundary Parity"
+        ]
+        code, _ = evaluate(jobs)
+        assert code == EXIT_PENDING
+
+    def test_ci_yml_boundary_parity_if_no_longer_substring_matches_changed_files(
+        self,
+    ) -> None:
+        # Source-level regression pin: the buggy pattern must never reappear
+        # in ci.yml's boundary-parity job. Parsed at the YAML-text level
+        # (not executed) because GitHub Actions expression syntax is not
+        # evaluable in-process.
+        ci_yml = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        lines = ci_yml.splitlines()
+        start = next(
+            i for i, line in enumerate(lines) if line.strip() == "boundary-parity:"
+        )
+        end = next(
+            i
+            for i in range(start + 1, len(lines))
+            if lines[i].strip().endswith(":") and not lines[i].startswith(" " * 6)
+        )
+        block = "\n".join(lines[start:end])
+        assert "changed_files" not in block, (
+            "boundary-parity's job block references changed_files again -- "
+            "verify the substring-match bug (contains(changed_files, '0')) "
+            "has not been reintroduced"
+        )
+
+
+@pytest.mark.unit
+class TestExternalContextLayer:
+    """OMN-16000 L4: contexts living in workflow files OTHER than ci.yml,
+    asserted against commits/{sha}/check-runs (never actions/runs/{id}/jobs,
+    which is scoped to ci.yml's own run and cannot see them)."""
+
+    def _check_run(
+        self, name: str, conclusion: str | None, *, status: str = "completed"
+    ) -> dict:
+        return {"name": name, "status": status, "conclusion": conclusion}
+
+    def _all_external_success(self) -> list[dict]:
+        rows = [self._check_run(name, "success") for name in EXPECTED_EXTERNAL_CONTEXTS]
+        rows.extend(
+            self._check_run(name, "success")
+            for name in sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
+        )
+        return rows
+
+    def test_all_present_and_success_is_success(self) -> None:
+        verdict, failures, pending = evaluate_external(self._all_external_success())
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_check_runs_none_is_pending_never_success(self) -> None:
+        # A fetch failure must never manufacture a green.
+        verdict, failures, pending = evaluate_external(None)
+        assert verdict == "PENDING"
+        assert failures == []
+        assert (
+            set(pending)
+            == set(EXPECTED_EXTERNAL_CONTEXTS) | ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        )
+
+    def test_absent_expected_context_is_pending_not_success(self) -> None:
+        rows = [
+            r
+            for r in self._all_external_success()
+            if r["name"] != EXPECTED_EXTERNAL_CONTEXTS[0]
+        ]
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "PENDING"
+        assert EXPECTED_EXTERNAL_CONTEXTS[0] in pending
+
+    def test_skipped_expected_context_fails_closed(self) -> None:
+        # EXTERNAL_GOOD_CONCLUSIONS is {"success"} only -- unlike the in-run
+        # GATE_JOBS layer, skipped is NOT tolerated here: these contexts are
+        # directly branch-protection required with no documented legal skip
+        # precondition.
+        rows = self._all_external_success()
+        rows[0] = self._check_run(EXPECTED_EXTERNAL_CONTEXTS[0], "skipped")
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert EXPECTED_EXTERNAL_CONTEXTS[0] in failures
+
+    def test_cancelled_expected_context_fails_closed(self) -> None:
+        rows = self._all_external_success()
+        rows[0] = self._check_run(EXPECTED_EXTERNAL_CONTEXTS[0], "cancelled")
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert EXPECTED_EXTERNAL_CONTEXTS[0] in failures
+
+    def test_still_running_expected_context_is_pending(self) -> None:
+        rows = self._all_external_success()
+        rows[0] = self._check_run(
+            EXPECTED_EXTERNAL_CONTEXTS[0], None, status="in_progress"
+        )
+        verdict, _, pending = evaluate_external(rows)
+        assert verdict == "PENDING"
+        assert EXPECTED_EXTERNAL_CONTEXTS[0] in pending
+
+    def test_falsification_control_every_expected_entry_is_load_bearing(self) -> None:
+        # Deleting any one EXPECTED_EXTERNAL_CONTEXTS entry from the fixture
+        # must flip the verdict from PENDING/FAILURE to SUCCESS when that
+        # entry is genuinely missing from the observed check-runs -- proving
+        # each entry actually gates something (pins against a member being
+        # silently vestigial/dead).
+        for name in EXPECTED_EXTERNAL_CONTEXTS:
+            rows = [r for r in self._all_external_success() if r["name"] != name]
+            verdict, _, pending = evaluate_external(rows)
+            assert verdict == "PENDING", (
+                f"{name} is not load-bearing in evaluate_external"
+            )
+            assert name in pending
+
+    def test_occ_preflight_all_producers_must_succeed_not_any(self) -> None:
+        # OMN-15112 generalization: ~52 caller workflows mint
+        # "occ-preflight / eligibility" against the same head SHA. GitHub's
+        # required-check semantics are ANY-of-name == success. Prove this
+        # layer is ALL-of-name instead: one cancelled duplicate among two
+        # producers must fail closed even though another producer succeeded.
+        assert "occ-preflight / eligibility" in ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        rows = self._all_external_success()
+        rows = [r for r in rows if r["name"] != "occ-preflight / eligibility"]
+        rows.append(self._check_run("occ-preflight / eligibility", "success"))
+        rows.append(self._check_run("occ-preflight / eligibility", "cancelled"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert any("occ-preflight / eligibility" in f for f in failures)
+
+    def test_occ_preflight_all_producers_success_is_success(self) -> None:
+        rows = self._all_external_success()
+        rows = [r for r in rows if r["name"] != "occ-preflight / eligibility"]
+        rows.append(self._check_run("occ-preflight / eligibility", "success"))
+        rows.append(self._check_run("occ-preflight / eligibility", "success"))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+
+@pytest.mark.unit
+class TestCombineVerdicts:
+    def test_in_run_success_and_external_success_is_success(self) -> None:
+        code, _ = combine_verdicts((EXIT_SUCCESS, "in-run report"), "SUCCESS", [], [])
+        assert code == EXIT_SUCCESS
+
+    def test_in_run_success_but_external_failure_is_failure(self) -> None:
+        code, report = combine_verdicts(
+            (EXIT_SUCCESS, "in-run report"), "FAILURE", ["Some External Gate"], []
+        )
+        assert code == EXIT_FAILURE
+        assert "Some External Gate" in report
+
+    def test_in_run_failure_but_external_success_is_failure(self) -> None:
+        # In-run failure must dominate even when every external context is
+        # green -- neither layer can rescue the other.
+        code, _ = combine_verdicts((EXIT_FAILURE, "in-run report"), "SUCCESS", [], [])
+        assert code == EXIT_FAILURE
+
+    def test_external_pending_holds_overall_pending_even_if_in_run_success(
+        self,
+    ) -> None:
+        code, report = combine_verdicts(
+            (EXIT_SUCCESS, "in-run report"), "PENDING", [], ["Some External Gate"]
+        )
+        assert code == EXIT_PENDING
+        assert "Some External Gate" in report
+
+
+@pytest.mark.unit
+class TestExternalContextCliWiring:
+    def _run(
+        self, jobs: object, check_runs: object
+    ) -> subprocess.CompletedProcess[str]:
+        jobs_path = REPO_ROOT / "tests" / "ci" / "_tmp_jobs.json"
+        check_runs_path = REPO_ROOT / "tests" / "ci" / "_tmp_check_runs.json"
+        jobs_path.write_text(json.dumps(jobs), encoding="utf-8")
+        check_runs_path.write_text(json.dumps(check_runs), encoding="utf-8")
+        try:
+            return subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/ci/ci_summary_gate.py",
+                    "--jobs-file",
+                    str(jobs_path),
+                    "--check-runs-file",
+                    str(check_runs_path),
+                ],
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+                check=False,
+            )
+        finally:
+            jobs_path.unlink(missing_ok=True)
+            check_runs_path.unlink(missing_ok=True)
+
+    def test_cli_external_success_plus_in_run_success_is_success(self) -> None:
+        external_rows = [
+            {"name": n, "status": "completed", "conclusion": "success"}
+            for n in EXPECTED_EXTERNAL_CONTEXTS
+        ]
+        external_rows.extend(
+            {"name": n, "status": "completed", "conclusion": "success"}
+            for n in sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
+        )
+        result = self._run(_all_gates("success"), external_rows)
+        assert result.returncode == EXIT_SUCCESS, result.stdout + result.stderr
+
+    def test_cli_external_null_check_runs_is_pending_not_skipped(self) -> None:
+        # `null` in the check-runs file is the documented "fetch failed"
+        # contract, not "no L4 layer requested".
+        result = self._run(_all_gates("success"), None)
+        assert result.returncode == EXIT_PENDING, result.stdout + result.stderr
+
+    def test_cli_external_failure_fails_even_when_in_run_is_green(self) -> None:
+        external_rows = [
+            {"name": n, "status": "completed", "conclusion": "success"}
+            for n in EXPECTED_EXTERNAL_CONTEXTS
+        ]
+        external_rows.extend(
+            {"name": n, "status": "completed", "conclusion": "success"}
+            for n in sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
+        )
+        external_rows[0]["conclusion"] = "failure"
+        result = self._run(_all_gates("success"), external_rows)
+        assert result.returncode == EXIT_FAILURE, result.stdout + result.stderr
+
+
+@pytest.mark.unit
+class TestExternalContextCompleteness:
+    """Data-driven completeness pin against a committed snapshot of dev's
+    live required-status-check contexts (captured 2026-08-13 via
+    `gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/
+    required_status_checks --jq '.contexts[]'`) and ci.yml's own job names
+    at the same commit. Every required context that does NOT correspond to a
+    ci.yml job name must be classified into EXPECTED_EXTERNAL_CONTEXTS,
+    ALL_MUST_SUCCEED_EXTERNAL_NAMES, or the documented single exemption
+    (Hostile Review Gate, fixed at the source instead of duplicated here).
+    This is a SNAPSHOT pin, not a live check -- it goes red when the snapshot
+    and the classification tuples drift apart, not when branch protection
+    changes without a snapshot refresh; re-capture the fixture file (and
+    review the diff) when branch protection legitimately changes."""
+
+    _EXEMPT_EXTERNAL_CONTEXTS = frozenset({"Hostile Review Gate"})
+
+    def test_every_snapshot_external_context_is_classified(self) -> None:
+        required = {
+            line.strip()
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-13.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        }
+        ci_yml_job_names = {
+            line.strip()
+            for line in (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-08-13.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        }
+        external_required = required - ci_yml_job_names
+        classified = (
+            set(EXPECTED_EXTERNAL_CONTEXTS)
+            | set(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
+            | self._EXEMPT_EXTERNAL_CONTEXTS
+        )
+        unclassified = external_required - classified
+        assert not unclassified, (
+            f"required context(s) outside ci.yml with no L4 classification: {sorted(unclassified)}"
+        )
+
+    def test_no_classified_entry_is_a_phantom(self) -> None:
+        # The inverse direction: every classified L4 entry must correspond to
+        # a real snapshot-required context, or the tuple carries a name that
+        # never gates anything live.
+        required = {
+            line.strip()
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-13.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        }
+        classified = (
+            set(EXPECTED_EXTERNAL_CONTEXTS)
+            | set(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
+            | self._EXEMPT_EXTERNAL_CONTEXTS
+        )
+        phantoms = classified - required
+        assert not phantoms, (
+            f"L4-classified name(s) absent from live required contexts: {sorted(phantoms)}"
+        )

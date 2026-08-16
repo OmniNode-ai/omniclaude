@@ -41,8 +41,10 @@ _spec.loader.exec_module(linear_done_verify)
 
 PRRef = linear_done_verify.PRRef
 PRStatus = linear_done_verify.PRStatus
+VerificationResult = linear_done_verify.VerificationResult
 parse_pr_refs = linear_done_verify.parse_pr_refs
 verify = linear_done_verify.verify
+is_weak_signal_ref = linear_done_verify.is_weak_signal_ref
 is_done_state = linear_done_verify.is_done_state
 is_cancel_state = linear_done_verify.is_cancel_state
 
@@ -294,6 +296,138 @@ class TestVerify:
         assert result.allowed is False
         assert "#202" in result.reason
         assert "#100" not in result.reason  # merged one not listed as blocker
+
+
+class TestSpellingInvariance:
+    """OMN-15782: is_weak_signal_ref()/verify() must classify the same PR
+    identically whether cited bare `#N` or fully-qualified `owner/repo#N` /
+    full URL. Live-incident repro (OMN-15722): the ticket body cited real
+    onex_change_control PRs #6155/#6161/#6122 as bare `#N`; the guard
+    misclassified them as unresolved/blocking product-PR dependencies while
+    the identical PRs spelled `onex_change_control#N` correctly classified
+    weak and were filtered out.
+    """
+
+    def test_qualified_occ_ref_classifies_weak_no_prober_needed(self) -> None:
+        """Baseline: the already-correct spelling needs no prober at all."""
+        ref = PRRef(number=6155, repo="OmniNode-ai/onex_change_control")
+        assert is_weak_signal_ref(ref) is True
+
+    def test_bare_ref_no_default_repo_classifies_weak_via_prober(self) -> None:
+        """The literal OMN-15722 shape: default_repo entirely unset, so the
+        bare ref resolves to repo=None. Same PR as the qualified case above
+        must classify identically once a prober can confirm OCC membership."""
+        bare = PRRef(number=6155, repo=None, bare=True)
+        assert is_weak_signal_ref(bare, prober=lambda n: n == 6155) is True
+
+    def test_bare_ref_mismatched_default_repo_classifies_weak_via_prober(
+        self,
+    ) -> None:
+        """default_repo resolves to a DIFFERENT product repo while the bare
+        number is actually an onex_change_control PR — the mismatched-repo
+        shape called out in OMN-15782's second bullet. parse_pr_refs() blindly
+        assigns default_repo to every bare match, so ref.repo here is only a
+        guess, not authoritative."""
+        refs = parse_pr_refs(
+            "Blast radius: PR #6161", default_repo="OmniNode-ai/omniclaude"
+        )
+        assert len(refs) == 1
+        ref = refs[0]
+        assert ref.repo == "OmniNode-ai/omniclaude"
+        assert ref.bare is True
+        assert is_weak_signal_ref(ref, prober=lambda n: n == 6161) is True
+
+    def test_bare_ref_genuinely_own_repo_stays_non_weak(self) -> None:
+        """Preserve current behavior for refs that genuinely belong to the
+        ticket's own product repo — the prober reports "not OCC" and the ref
+        stays non-weak (the normal merge-check path still applies)."""
+        refs = parse_pr_refs("Fixed in PR #202", default_repo="OmniNode-ai/omniclaude")
+        ref = refs[0]
+        assert is_weak_signal_ref(ref, prober=lambda n: False) is False
+
+    def test_bare_ref_without_prober_preserves_prior_fallback_behavior(
+        self,
+    ) -> None:
+        """No prober supplied (prober=None, the pure-function default) →
+        unchanged prior behavior: a bare ref never classifies weak on its
+        own. This is what makes the fix backward compatible / opt-in."""
+        bare = PRRef(number=6155, repo=None, bare=True)
+        assert is_weak_signal_ref(bare) is False
+
+    def test_qualified_occ_ref_never_probed(self) -> None:
+        """An explicitly-qualified owner/repo#N or full-URL OCC citation is
+        trusted directly — the prober must never be consulted for it."""
+
+        def _must_not_be_called(_: int) -> bool:
+            raise AssertionError(
+                "prober must not be called for an explicitly qualified ref"
+            )
+
+        ref = PRRef(number=4222, repo="OmniNode-ai/onex_change_control")
+        assert is_weak_signal_ref(ref, prober=_must_not_be_called) is True
+
+    def test_verify_end_to_end_omn_15722_repro_bare_occ_refs_filtered(
+        self,
+    ) -> None:
+        """Full verify() repro of the live incident: a ticket body citing
+        bare #6155/#6161/#6122 (all real onex_change_control PRs) plus a bare
+        product-repo PR reference. With the live-shaped prober wired in, the
+        bare OCC refs are filtered as weak (never reach the fetcher) and only
+        the genuine product PR is checked."""
+        occ_numbers = {6155, 6161, 6122}
+
+        def prober(number: int) -> bool:
+            return number in occ_numbers
+
+        def fetcher(ref: PRRef) -> PRStatus:
+            assert ref.number not in occ_numbers, (
+                f"OCC PR #{ref.number} reached the fetcher — weak-signal "
+                "filter failed to classify it (spelling-dependent bug live)"
+            )
+            return _merged(ref)
+
+        description = (
+            "Blast radius: onex_change_control PRs #6155, #6161, #6122.\n"
+            "Product fix: PR #9001."
+        )
+        result = verify(
+            description=description,
+            labels=[],
+            default_repo="OmniNode-ai/omniclaude",
+            fetcher=fetcher,
+            prober=prober,
+        )
+        assert result.allowed is True
+        assert result.reason == "all_prs_merged"
+
+    def test_main_wires_live_occ_prober_into_verify(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OMN-15782: main() (the live Done-flip path) must actually pass the
+        real live prober into verify() — the fix must be active in production,
+        not just reachable under test with an injected fake."""
+        captured: dict[str, Any] = {}
+
+        def _capture_verify(*_args: Any, **kwargs: Any) -> VerificationResult:
+            captured.update(kwargs)
+            return VerificationResult(allowed=True, reason="stub")
+
+        monkeypatch.setattr(linear_done_verify, "verify", _capture_verify)
+        monkeypatch.setattr(
+            linear_done_verify,
+            "_load_stdin_tool_call",
+            lambda: {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {
+                    "id": "OMN-1",
+                    "state": "Done",
+                    "description": "Bare #6155 cited.",
+                },
+            },
+        )
+        rc = linear_done_verify.main()
+        assert rc == 0
+        assert captured.get("prober") is linear_done_verify.probe_occ_membership
 
 
 HOOK_SCRIPT = (
@@ -822,6 +956,7 @@ class TestCancelBucketBypass:
             description: str,
             labels: list[str] | None,
             default_repo: str | None = None,
+            **_kwargs: Any,
         ) -> linear_done_verify.VerificationResult:
             verify_calls.append((description, labels, default_repo))
             return verify(

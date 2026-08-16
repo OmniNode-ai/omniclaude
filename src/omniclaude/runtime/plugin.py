@@ -210,6 +210,15 @@ class PluginClaude:
                 config.container,
                 config.dispatch_engine,
                 config.correlation_id,
+                # claude_code_backend intentionally omitted: OMN-15960 deleted
+                # the sole in-repo implementation (node_claude_code_session_effect)
+                # as a duplicate, never-deployed surface of the canonical
+                # omnibase_infra coding-agent quartet, and removed the
+                # container-auto-discovery fallback that used to resolve it.
+                # LifecycleState carries no claude_code_backend field (only
+                # vllm_backend) — every claude_code contract dispatched on
+                # this path reports BACKEND_UNAVAILABLE until/unless a real
+                # caller-injected backend is wired here explicitly.
                 vllm_backend=self._state.vllm_backend,
             )
 

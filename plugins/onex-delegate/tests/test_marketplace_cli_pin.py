@@ -5,12 +5,26 @@
 Verifies the plugin declares a pinned `onex` CLI version and that the pin is
 consistent across the three manifest surfaces that must agree:
 
-  1. plugins/onex/plugin-compat.yaml       → `min_runtime_version`
-  2. plugins/onex/.claude-plugin/plugin.json → `requires.onex_cli.min_version`
-  3. plugins/.claude-plugin/marketplace.json → `plugins[0].requires.onex_cli.min_version`
+  1. plugins/onex-delegate/plugin-compat.yaml       → `min_runtime_version`
+  2. plugins/onex-delegate/.claude-plugin/plugin.json → `requires.onex_cli.min_version`
+  3. plugins/.claude-plugin/marketplace.json          → `plugins[0].requires.onex_cli.min_version`
 
 This prevents the "plugin says 0.39.0, marketplace says 0.38.0, runtime says 0.40.0"
 drift class that the plan (§ 7) explicitly flags as a BF-5 risk.
+
+SCOPE WARNING (OMN-16041). These are MANIFEST-CONSISTENCY tests: they prove the
+three surfaces agree with each other, and nothing more. They passed for months
+against a pin that named the wrong package and could not install a runnable
+`onex delegate` on any combination of published wheels. Consistency is not
+installability -- test_install_works.py is the test that proves the declared
+pins actually produce a working command, and it must never be deleted in favour
+of these.
+
+Relocated from plugins/onex/tests/ under OMN-14688: the consumer-facing
+marketplace entry now sources plugins/onex-delegate (delegate-only), not
+plugins/onex (the full internal dev tree), so the pin's source of truth moved
+with it. plugins/onex/plugin-compat.yaml remains the compat surface for the
+internal dev tree and is unaffected by this file.
 """
 
 from __future__ import annotations
@@ -25,6 +39,12 @@ pytestmark = pytest.mark.unit
 
 PLUGIN_DIR = Path(__file__).parent.parent
 REPO_PLUGINS_DIR = PLUGIN_DIR.parent
+
+#: The package that registers the `delegate` subcommand into the `onex.cli`
+#: entry-point group. NOT the package that ships the `onex` executable.
+DELEGATE_PROVIDER = "omnibase-infra"
+#: The package whose [project.scripts] ships the `onex` executable itself.
+CONSOLE_SCRIPT_PROVIDER = "omnibase-core"
 
 COMPAT_YAML = PLUGIN_DIR / "plugin-compat.yaml"
 PLUGIN_JSON = PLUGIN_DIR / ".claude-plugin" / "plugin.json"
@@ -62,19 +82,60 @@ class TestPluginRequiresOnexCli:
 
     def test_onex_cli_has_package_pin(self, plugin_manifest: dict) -> None:
         onex_cli = plugin_manifest["requires"]["onex_cli"]
-        assert onex_cli.get("package") == "omnibase-core", (
-            "onex CLI ships with `omnibase-core` per plan § 4.4"
+        assert onex_cli.get("package") == DELEGATE_PROVIDER, (
+            "`package` must name the package that provides the `delegate` "
+            "SUBCOMMAND. That is omnibase-infra "
+            '([project.entry-points."onex.cli"] delegate = '
+            "omnibase_infra.cli.cli_delegate:delegate_command), NOT omnibase-core "
+            "-- omnibase-core alone yields `Error: No such command 'delegate'` "
+            "(OMN-16041)."
         )
         assert isinstance(onex_cli.get("min_version"), str)
         assert onex_cli["min_version"], "min_version must be non-empty"
 
-    def test_onex_cli_has_install_hint(self, plugin_manifest: dict) -> None:
-        hint = plugin_manifest["requires"]["onex_cli"].get("install_hint", "")
-        assert "pipx" in hint, (
-            "install_hint should point at `pipx install omnibase-core` "
-            "(MVP path per plan § 4.4)"
-        )
-        assert "omnibase-core" in hint
+    def test_onex_cli_names_the_console_script_provider(
+        self, plugin_manifest: dict
+    ) -> None:
+        """Both packages are required, and each must be named separately.
+
+        omnibase-core ships the `onex` executable; omnibase-infra ships the
+        subcommand. Declaring only one of them is the OMN-16041 defect.
+        """
+        onex_cli = plugin_manifest["requires"]["onex_cli"]
+        assert onex_cli.get("console_script_package") == CONSOLE_SCRIPT_PROVIDER
+        assert onex_cli.get("console_script_min_version")
+
+    def test_install_hint_installs_both_packages(self, plugin_manifest: dict) -> None:
+        """An install hint naming only one package cannot produce a working CLI.
+
+        This is the assertion the pre-OMN-16041 suite lacked: it checked that
+        three manifests agreed with each other, which they did -- on a hint that
+        could never install a runnable `onex delegate`.
+        """
+        onex_cli = plugin_manifest["requires"]["onex_cli"]
+        for key in ("install_hint", "install_hint_pipx"):
+            hint = onex_cli.get(key, "")
+            assert DELEGATE_PROVIDER in hint, (
+                f"{key} must install {DELEGATE_PROVIDER} (provides `delegate`)"
+            )
+            assert CONSOLE_SCRIPT_PROVIDER in hint, (
+                f"{key} must install {CONSOLE_SCRIPT_PROVIDER} (provides `onex`)"
+            )
+        assert "pipx" in onex_cli["install_hint_pipx"]
+
+    def test_install_hint_is_not_cwd_dependent(self, plugin_manifest: dict) -> None:
+        """`uv run onex` resolves the CURRENT directory's project venv.
+
+        It therefore only works inside a repo that co-installs omnibase-infra and
+        fails from anywhere else -- so it may never appear in an install hint
+        (OMN-16041 F3).
+        """
+        onex_cli = plugin_manifest["requires"]["onex_cli"]
+        for key in ("install_hint", "install_hint_pipx"):
+            assert "uv run" not in onex_cli.get(key, ""), (
+                f"{key} must not use `uv run` -- it is cwd-dependent"
+            )
+        assert onex_cli.get("cwd_independent") is True
 
 
 class TestMarketplaceRequiresOnexCli:
@@ -90,12 +151,18 @@ class TestMarketplaceRequiresOnexCli:
         )
         assert "onex_cli" in onex_entry["requires"]
 
-    def test_install_hint_uses_pipx(self, marketplace_manifest: dict) -> None:
+    def test_install_hint_installs_both_packages(
+        self, marketplace_manifest: dict
+    ) -> None:
         onex_entry = next(
             p for p in marketplace_manifest["plugins"] if p["name"] == "onex"
         )
-        hint = onex_entry["requires"]["onex_cli"].get("install_hint", "")
-        assert "pipx" in hint and "omnibase-core" in hint
+        onex_cli = onex_entry["requires"]["onex_cli"]
+        for key in ("install_hint", "install_hint_pipx"):
+            hint = onex_cli.get(key, "")
+            assert DELEGATE_PROVIDER in hint and CONSOLE_SCRIPT_PROVIDER in hint
+            assert "uv run" not in hint
+        assert "pipx" in onex_cli["install_hint_pipx"]
 
 
 class TestCrossManifestConsistency:
@@ -108,9 +175,22 @@ class TestCrossManifestConsistency:
             "and marketplace.json."
         )
         onex_cli = compat["onex_cli"]
-        assert onex_cli.get("package") == "omnibase-core"
+        assert onex_cli.get("package") == DELEGATE_PROVIDER
+        assert onex_cli.get("console_script_package") == CONSOLE_SCRIPT_PROVIDER
         assert isinstance(onex_cli.get("min_version"), str)
         assert onex_cli["min_version"], "onex_cli.min_version must be non-empty"
+
+    def test_compat_yaml_keys_are_flat(self, compat: dict) -> None:
+        """session_start_onex_cli_pin_check.sh parses this block with awk.
+
+        A nested mapping under onex_cli would make that state machine read the
+        wrong `min_version`, so every value here must be a scalar.
+        """
+        for key, value in compat["onex_cli"].items():
+            assert not isinstance(value, (dict, list)), (
+                f"onex_cli.{key} must be a scalar -- the SessionStart hook parses "
+                f"this block with awk, not a YAML parser"
+            )
 
     def test_plugin_pin_matches_compat_yaml(
         self, compat: dict, plugin_manifest: dict

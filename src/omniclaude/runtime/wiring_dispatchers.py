@@ -11,8 +11,11 @@ Canonical pattern: ``omnibase_infra/nodes/node_registration_orchestrator/plugin.
 Sequence:
     1. Load contracts from ``OMNICLAUDE_CONTRACTS_ROOT`` via glob.
     2. Validate parse rate against the 80% threshold.
-    3. Resolve backend instances from the plugin (SubprocessClaudeCodeSessionBackend,
-       VllmInferenceBackend).
+    3. Resolve backend instances from the plugin (VllmInferenceBackend; the
+       ``claude_code`` backend slot accepts a caller-injected object — no
+       concrete implementation ships in-repo since OMN-15960 deleted
+       ``node_claude_code_session_effect`` as a duplicate, never-deployed
+       surface of the canonical omnibase_infra coding-agent quartet).
     4. Build a ``SkillCommandDispatcher`` that extracts ``skill_id`` from the
        inbound topic, looks up the contract, selects the backend, wraps it into
        a ``task_dispatcher`` adapter, calls ``handle_skill_requested``, and emits
@@ -54,9 +57,6 @@ if TYPE_CHECKING:
     from omnibase_core.models.events.model_event_envelope import ModelEventEnvelope
     from omnibase_infra.runtime import MessageDispatchEngine
 
-    from omniclaude.nodes.node_claude_code_session_effect.backends.backend_subprocess import (
-        SubprocessClaudeCodeSessionBackend,
-    )
     from omniclaude.nodes.node_local_llm_inference_effect.backends.backend_vllm import (
         VllmInferenceBackend,
     )
@@ -241,7 +241,10 @@ class SkillCommandDispatcher:
     def __init__(
         self,
         contracts: dict[str, ModelSkillNodeContract],
-        claude_code_backend: SubprocessClaudeCodeSessionBackend | None,
+        claude_code_backend: Any  # ONEX_EXCLUDE: any_type - no concrete impl ships
+        # in-repo since OMN-15960 (node_claude_code_session_effect deleted);
+        # duck-typed caller injection only, must expose async session_query(...)
+        | None,
         vllm_backend: VllmInferenceBackend | None,
         event_bus: Any  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         | None = None,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
@@ -366,18 +369,18 @@ class SkillCommandDispatcher:
                     backend_detail="unavailable",
                     duration_ms=int((time.perf_counter() - t0) * 1000),
                     error_code="BACKEND_UNAVAILABLE",
-                    error_message="SubprocessClaudeCodeSessionBackend is not available",
+                    error_message="claude_code backend is not available (no in-repo"
+                    " implementation since OMN-15960; caller must inject one)",
                     correlation_id=correlation_id,
                 )
                 return None
-            backend_detail = "claude_subprocess"
+            # Report the actual injected backend's type, not a fixed
+            # "claude_subprocess" label — since OMN-15960 removed the sole
+            # concrete implementation, this slot is duck-typed caller
+            # injection and may be any backend shape.
+            backend_detail = type(self._claude_code_backend).__name__
 
             async def task_dispatcher(prompt: str) -> str:
-                from omniclaude.nodes.node_claude_code_session_effect.models import (
-                    ClaudeCodeSessionOperation,
-                    ModelClaudeCodeSessionRequest,
-                )
-
                 # Narrowing: parent scope returns None when backend is None
                 cc_backend = self._claude_code_backend
                 if (
@@ -386,15 +389,17 @@ class SkillCommandDispatcher:
                     raise RuntimeError(
                         "claude_code backend disappeared after null check"
                     )
-                cc_request = ModelClaudeCodeSessionRequest(
-                    operation=ClaudeCodeSessionOperation.SESSION_QUERY,
+                # Duck-typed request: no concrete request model ships in-repo
+                # since OMN-15960 deleted node_claude_code_session_effect. Any
+                # caller-injected backend must accept these plain kwargs on
+                # its own async session_query(...) — see class docstring.
+                nonlocal backend_prompt, backend_result
+                backend_prompt = prompt
+                result = await cc_backend.session_query(
                     skill_name=skill_id,
                     prompt=prompt,
                     correlation_id=correlation_id,
                 )
-                nonlocal backend_prompt, backend_result
-                backend_prompt = prompt
-                result = await cc_backend.session_query(cc_request)
                 backend_result = result
                 return _skill_result_output(result)
 
@@ -877,7 +882,9 @@ async def wire_skill_dispatchers(
     dispatch_engine: MessageDispatchEngine,
     correlation_id: uuid.UUID | None = None,
     *,
-    claude_code_backend: SubprocessClaudeCodeSessionBackend | None = None,
+    claude_code_backend: Any  # ONEX_EXCLUDE: any_type - no concrete impl ships
+    # in-repo since OMN-15960; duck-typed caller injection only
+    | None = None,
     vllm_backend: VllmInferenceBackend | None = None,
     contracts_root: Path | None = None,
     event_bus: Any  # ONEX_EXCLUDE: any_type - external/untyped API boundary
@@ -937,28 +944,16 @@ async def wire_skill_dispatchers(
         cid,
     )
 
-    # Resolve backends from container if not explicitly provided
+    # Resolve backends from container if not explicitly provided.
+    #
+    # No container auto-discovery exists for claude_code: its sole in-repo
+    # implementation (node_claude_code_session_effect) was deleted under
+    # OMN-15960 as a duplicate, never-deployed surface of the canonical
+    # omnibase_infra coding-agent quartet (node_coding_agent_invoke_effect).
+    # A caller may still inject a duck-typed backend explicitly via the
+    # claude_code_backend= parameter above.
     resolved_cc = claude_code_backend
     resolved_vllm = vllm_backend
-
-    if resolved_cc is None:
-        try:
-            # Try to get from container's service registry
-            if (
-                hasattr(container, "service_registry")
-                and container.service_registry is not None
-            ):
-                from omniclaude.nodes.node_claude_code_session_effect.backends.backend_subprocess import (
-                    SubprocessClaudeCodeSessionBackend as _CCBackend,
-                )
-
-                svc = container.service_registry.get(_CCBackend)
-                if isinstance(svc, _CCBackend):
-                    resolved_cc = svc
-        except Exception:  # noqa: BLE001 — boundary: optional backend resolution
-            logger.debug(
-                "Could not resolve SubprocessClaudeCodeSessionBackend from container"
-            )
 
     if resolved_vllm is None:
         try:
@@ -1003,7 +998,7 @@ async def wire_skill_dispatchers(
 
     backends_available: dict[str, str] = {}
     if resolved_cc is not None:
-        backends_available["claude_code"] = "SubprocessClaudeCodeSessionBackend"
+        backends_available["claude_code"] = type(resolved_cc).__name__
     if resolved_vllm is not None:
         backends_available["local_llm"] = "VllmInferenceBackend"
 

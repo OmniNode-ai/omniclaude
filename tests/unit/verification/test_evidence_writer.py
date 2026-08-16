@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -19,6 +21,10 @@ from omniclaude.verification.evidence_writer import (
     ModelSelfCheckResult,
     ModelVerifierCheckResult,
     emit_event,
+)
+
+_EMIT_EFFECT_HANDLER_MODULE = (
+    "omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect"
 )
 
 
@@ -140,38 +146,33 @@ class TestEvidenceWriterKafka:
 
 
 @pytest.mark.unit
-class TestEmitEventSocketGuard:
-    """emit_event skips EmitClient construction when no socket path is configured."""
+class TestEmitEventImportFailureIsLoud:
+    """OMN-15968: a broken node_event_emit_effect import must be loud.
 
-    def test_no_socket_env_skips_emission(
-        self, monkeypatch: pytest.MonkeyPatch
+    Repoints the dead ``node_emit_daemon.client`` import to
+    ``node_event_emit_effect`` and removes the fail-open ImportError guard
+    that used to swallow this at debug (OMN-13213 D1 follow-through).
+    """
+
+    def test_import_failure_logs_at_error_not_debug(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        monkeypatch.delenv("OMNICLAUDE_EMIT_SOCKET", raising=False)
+        # None in sys.modules is the standard way to force ImportError for
+        # a specific dotted module without needing the real package absent.
+        monkeypatch.setitem(sys.modules, _EMIT_EFFECT_HANDLER_MODULE, None)
         event = ModelEvidenceWrittenEvent(
-            task_id="task-x",
+            task_id="task-import-break",
             evidence_type="self_check",
-            evidence_path="/tmp/x",
+            evidence_path="/tmp/z",
             passed=True,
             emitted_at=datetime.now(UTC),
         )
-        # Why: assert the pre-guard invariant — emit_event must short-circuit
-        # before topic resolution, which proves no EmitClient (primary or
-        # fallback path) was constructed regardless of which import resolved.
-        with patch("omniclaude.hooks.topics.build_topic") as mock_build_topic:
-            emit_event(event)
-        mock_build_topic.assert_not_called()
 
-    def test_empty_socket_env_skips_emission(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("OMNICLAUDE_EMIT_SOCKET", "  ")
-        event = ModelEvidenceWrittenEvent(
-            task_id="task-y",
-            evidence_type="verifier",
-            evidence_path="/tmp/y",
-            passed=False,
-            emitted_at=datetime.now(UTC),
-        )
-        with patch("omniclaude.hooks.topics.build_topic") as mock_build_topic:
+        with caplog.at_level(
+            logging.ERROR, logger="omniclaude.verification.evidence_writer"
+        ):
             emit_event(event)
-        mock_build_topic.assert_not_called()
+
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert error_records, "expected an ERROR-level log on import failure"
+        assert any("task-import-break" in r.getMessage() for r in error_records)

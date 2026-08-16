@@ -63,6 +63,7 @@ GATE_JOBS: tuple[str, ...] = (
     "Contract Compliance",
     "no-noncanonical-lifecycle-classes",  # OMN-14350 non-canonical lifecycle-class ratchet
     "OCC Companion Merged Gate (OMN-15214)",  # occ-companion-merged — cited OCC evidence must be MERGED before product merge (OMN-15221/OMN-15224 port)
+    "Cross-Repo Boundary Parity",  # boundary-parity (OMN-16000) — DIRECTLY REQUIRED live; was previously mis-marked SOFT_ALLOWLIST "warn-only" while a `contains()` substring bug in its `if:` silently skipped it on any PR whose changed-file count contained the digit '0' (10/20/100/...). Fixed 2026-08-13: `if:` no longer branches on changed_files, and the job is now a completeness-anchor member so CI Summary WAITS for it and only accepts success/skipped (occ-preflight's own legitimate skip carve-out), never a false green from the old bug.
 )
 
 # OMN-14350: jobs that must be EXACTLY ``success`` — stricter than GATE_JOBS
@@ -89,9 +90,18 @@ SOFT_ALLOWLIST: frozenset[str] = frozenset(
         "Deploy to Staging",  # downstream deploy (push-only)
         "Deploy to Production",  # downstream deploy (push-only)
         "Merge Test Coverage",  # Codecov upload; no gate
-        "Markdown Link Check",  # docs link check; informational
-        "Cross-Repo Boundary Parity",  # warn-only (OMN-5775); not required
-        "DoD Evidence Check",  # advisory
+        # NOTE (2026-08-13): "Markdown Link Check" and "DoD Evidence Check" are
+        # non-gating *within this ci.yml default-deny sweep* (they are
+        # SOFT_ALLOWLIST here so a red run of either does not fail the
+        # in-run poller), but BOTH are directly required by branch protection
+        # live (verified via `gh api .../branches/dev/protection/required_status_checks`,
+        # 2026-08-13 — both present in the 58-context set). Do not read
+        # "SOFT_ALLOWLIST" here as "not required" -- that reading was exactly
+        # the stale-comment failure mode that let the boundary-parity bug
+        # below hide for as long as it did. Reconciled per the fleet-wide
+        # "correct false enforcement claims" directive (OMN-16000).
+        "Markdown Link Check",  # not a ci.yml GATE_JOB; informational within THIS sweep, but directly required by branch protection separately.
+        "DoD Evidence Check",  # not a ci.yml GATE_JOB; advisory within THIS sweep, but directly required by branch protection separately.
         "AI-Slop Pattern Check (strict, PR diff)",  # not in any gate; aislop-sweep gates the tree
     }
 )
@@ -102,6 +112,66 @@ GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success", "skipped"})
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
 EXIT_PENDING = 2
+
+# ---------------------------------------------------------------------------
+# L4: cross-workflow external-context assertion (OMN-16000).
+#
+# Everything above this point is scoped to `actions/runs/{run_id}/jobs` --
+# i.e. ci.yml's OWN run. A job that lives in a *different* workflow file gets
+# its own run/run_id and is structurally invisible to that endpoint. Today
+# those jobs are enforced ONLY by being individually listed in GitHub branch
+# protection's required_status_checks -- a second, hand-maintained source of
+# truth that has silently lost entries fleet-wide with no ticket (see the
+# OCC/omnimarket 2026-07-25 incidents cited in omni_home/CLAUDE.md). This
+# layer asserts the same contexts independently, against
+# `commits/{sha}/check-runs`, so a future silent branch-protection drop is
+# ALSO caught by "CI Summary" itself, not only by GitHub's required-checks UI.
+#
+# Every name below is a job living in a workflow file OTHER than ci.yml that
+# is ALSO a live branch-protection required context on `dev`
+# (`gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks`,
+# verified 2026-08-13 against the then-58-context set). "Hostile Review Gate"
+# and "occ-preflight / eligibility" are deliberately NOT plain members here --
+# see the notes below each.
+EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
+    "Canonical Inference Gate",  # canonical-inference-gate.yml
+    "No Faked Boundary Gate",  # no-faked-boundary.yml
+    "Omni Standards Gate",  # omni-standards-compliance.yml
+    "URL Authority Gate",  # url-authority-gate.yml
+    "call-reject-skip-token / scan / reject-skip-gate-token",  # call-reject-skip.yml
+    "cr-thread-gate / CodeRabbit Thread Check",  # cr-thread-gate-caller.yml
+    "gate / CodeRabbit Thread Check",  # cr-thread-check.yml
+    "main-target-guard",  # main-target-guard.yml
+    "non-dev-base-guard",  # non-dev-base-guard.yml
+    "pr-title / check-title",  # pr-title-check.yml
+    "reason-graph",  # product-readiness-shadow.yml -- LIVE-REQUIRED despite that
+    # file's header prose asserting (as of this PR) it is "STILL NON-required";
+    # doctrine corrected in the same PR, not fixed here (would be a larger,
+    # separately-reviewed rename/removal decision -- see PR body).
+    "required-check-skip-guard / check-skip-vectors",  # required-check-skip-guard-caller.yml
+)
+# NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
+# from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
+# protection and is fixed at the source (hostile-reviewer.yml, 2026-08-13:
+# removed the continue-on-error + manufactured degraded/exit-0 verdict on
+# install failure or CLI crash -- both now fail the job, and the job's own
+# `if: always()` default-deny gate already reads that closed). Duplicating it
+# here would add nothing; the fix lives where the false-green was produced.
+
+EXTERNAL_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
+
+# occ-preflight / eligibility is minted by the reusable
+# `occ-preflight.yml@{main,dev}` workflow, called from ~52 separate caller
+# workflow files against the same PR head SHA (generalizes OMN-15112's open
+# ANY-vs-ALL question). GitHub's required-status-check semantics are
+# ANY-check-run-with-this-name == success -> requirement satisfied: one
+# cancelled/failed duplicate producer among 52 does not block merge today,
+# provided at least one producer went green. Assert ALL of them independently
+# here so a single red/cancelled occ-preflight duplicate fails CI Summary
+# regardless of what any other duplicate producer reported.
+ALL_MUST_SUCCEED_EXTERNAL_NAMES: frozenset[str] = frozenset(
+    {"occ-preflight / eligibility"}
+)
 
 
 @dataclass(frozen=True)
@@ -184,6 +254,119 @@ def dedup_latest(
     for state in _job_states(jobs, run_attempt=run_attempt):
         latest[state.name] = state
     return latest
+
+
+@dataclass(frozen=True)
+class CheckRunState:
+    """The state of a single GitHub check-run, as returned by the
+    ``commits/{sha}/check-runs`` endpoint (used for the L4 external layer)."""
+
+    name: str
+    status: str  # queued | in_progress | completed | ...
+    conclusion: str | None  # success | failure | cancelled | skipped | ... | None
+
+
+def _check_run_states(check_runs: list[dict]) -> list[CheckRunState]:
+    states: list[CheckRunState] = []
+    for raw in check_runs:
+        name = str(raw.get("name") or "")
+        if not name:
+            continue
+        conclusion = raw.get("conclusion")
+        states.append(
+            CheckRunState(
+                name=name,
+                status=str(raw.get("status") or ""),
+                conclusion=None if conclusion is None else str(conclusion),
+            )
+        )
+    return states
+
+
+def evaluate_external(
+    check_runs: list[dict] | None,
+    *,
+    expected: tuple[str, ...] = EXPECTED_EXTERNAL_CONTEXTS,
+    all_must_succeed: frozenset[str] = ALL_MUST_SUCCEED_EXTERNAL_NAMES,
+) -> tuple[str, list[str], list[str]]:
+    """Return ``(verdict, failures, pending)`` for the L4 external-context layer.
+
+    ``verdict`` is one of ``"SUCCESS"``, ``"FAILURE"``, ``"PENDING"``.
+
+    ``check_runs is None`` means the fetch itself failed (or was never
+    attempted) -- every expected/tracked context is treated as unobserved
+    (PENDING), never as silently satisfied. This is what the caller's
+    poll-then-deadline-converts-to-FAILURE loop expects: a fetch hiccup keeps
+    polling, it does not manufacture a green.
+    """
+
+    if check_runs is None:
+        return "PENDING", [], list(expected) + sorted(all_must_succeed)
+
+    states = _check_run_states(check_runs)
+    by_name: dict[str, list[CheckRunState]] = {}
+    for state in states:
+        by_name.setdefault(state.name, []).append(state)
+
+    failures: list[str] = []
+    pending: list[str] = []
+
+    for name in expected:
+        rows = by_name.get(name)
+        if not rows:
+            pending.append(name)
+            continue
+        row = rows[-1]  # single-producer name: last observed row is authoritative
+        if row.status != "completed":
+            pending.append(name)
+        elif row.conclusion not in EXTERNAL_GOOD_CONCLUSIONS:
+            failures.append(name)
+
+    for name in sorted(all_must_succeed):
+        rows = by_name.get(name)
+        if not rows:
+            pending.append(name)
+            continue
+        if any(row.status != "completed" for row in rows):
+            pending.append(name)
+            continue
+        bad = [row for row in rows if row.conclusion not in EXTERNAL_GOOD_CONCLUSIONS]
+        if bad:
+            failures.append(f"{name} ({len(bad)}/{len(rows)} producer(s) not success)")
+
+    if failures:
+        return "FAILURE", failures, pending
+    if pending:
+        return "PENDING", failures, pending
+    return "SUCCESS", failures, pending
+
+
+def combine_verdicts(
+    in_run: tuple[int, str],
+    external_verdict: str,
+    external_failures: list[str],
+    external_pending: list[str],
+) -> tuple[int, str]:
+    """Fold the L4 external-context verdict into the in-run verdict.
+
+    FAILURE dominates PENDING dominates SUCCESS across both layers -- the
+    combined verdict can only ever be as good as the worse of the two.
+    """
+
+    in_run_code, in_run_report = in_run
+    lines = [in_run_report, "  external contexts (L4):"]
+    if external_failures:
+        lines.append(f"    - FAILURE: {', '.join(external_failures)}")
+    if external_pending:
+        lines.append(f"    - PENDING/absent: {', '.join(external_pending)}")
+    if not external_failures and not external_pending:
+        lines.append("    - all present + success")
+
+    if in_run_code == EXIT_FAILURE or external_verdict == "FAILURE":
+        return EXIT_FAILURE, "\n".join(lines)
+    if in_run_code == EXIT_PENDING or external_verdict == "PENDING":
+        return EXIT_PENDING, "\n".join(lines)
+    return EXIT_SUCCESS, "\n".join(lines)
 
 
 def evaluate(
@@ -291,6 +474,33 @@ def _load_jobs(path: str | None) -> list[dict]:
     return jobs
 
 
+def _load_check_runs(path: str) -> list[dict] | None:
+    """Load the L4 check-runs payload.
+
+    A JSON literal ``null`` means the fetch failed upstream (the caller
+    writes ``null`` when its ``gh api commits/{sha}/check-runs`` call did not
+    succeed) -- this is the "unfetchable -> treat as unobserved" contract, not
+    a missing-file error. Accepts the raw endpoint object
+    (``{"check_runs": [...]}) or a bare array as well.
+    """
+
+    with open(path, encoding="utf-8") as handle:
+        raw = handle.read()
+    data = json.loads(raw)
+    if data is None:
+        return None
+    if isinstance(data, dict):
+        check_runs = data.get("check_runs", [])
+    else:
+        check_runs = data
+    if not isinstance(check_runs, list):
+        raise ValueError(
+            "check-runs payload must be a list, an object with a 'check_runs' "
+            "array, or null"
+        )
+    return check_runs
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -298,6 +508,15 @@ def main(argv: list[str] | None = None) -> int:
         default="-",
         help="Path to the GitHub Actions jobs JSON (default: stdin). Accepts the "
         "raw endpoint object or a bare array of job objects.",
+    )
+    parser.add_argument(
+        "--check-runs-file",
+        default=None,
+        help="Path to the commits/{sha}/check-runs JSON (L4 external-context "
+        "assertion, OMN-16000). A JSON `null` in this file means the fetch "
+        "failed (evaluated as PENDING, not skipped). Omitting this flag "
+        "entirely skips the L4 layer (in-run verdict only) -- used only by "
+        "pre-L4 callers/tests; production wiring always passes this flag.",
     )
     parser.add_argument(
         "--report-only",
@@ -314,6 +533,14 @@ def main(argv: list[str] | None = None) -> int:
 
     jobs = _load_jobs(args.jobs_file)
     code, report = evaluate(jobs, run_attempt=args.run_attempt)
+
+    if args.check_runs_file is not None:
+        check_runs = _load_check_runs(args.check_runs_file)
+        ext_verdict, ext_failures, ext_pending = evaluate_external(check_runs)
+        code, report = combine_verdicts(
+            (code, report), ext_verdict, ext_failures, ext_pending
+        )
+
     print(report)
     if args.report_only:
         return EXIT_SUCCESS

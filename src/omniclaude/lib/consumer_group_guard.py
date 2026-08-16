@@ -41,10 +41,12 @@ import re
 # Example: omniclaude-git-effect.v1
 _VERSION_SUFFIX_PATTERN = re.compile(r"\.v\d+$")
 
-# F5.4 — Consumer group IDs for the 6 skill node consumers from OMN-2593
+# F5.4 — Consumer group IDs for the skill node consumers from OMN-2593.
+# NodeClaudeCodeSessionEffect removed under OMN-15960 (duplicate,
+# never-deployed surface of the canonical omnibase_infra coding-agent
+# quartet) — no tombstone entry per feedback_noncanonical_nodes_get_deleted.
 SKILL_NODE_CONSUMER_GROUPS: dict[str, str] = {
     "NodeGitEffect": "omniclaude-git-effect.v1",
-    "NodeClaudeCodeSessionEffect": "omniclaude-claude-code-session-effect.v1",
     "NodeLocalLlmInferenceEffect": "omniclaude-local-llm-inference-effect.v1",
     "NodeLinearEffect": "omniclaude-linear-effect.v1",
     "NodeTicketingEffect": "omniclaude-ticketing-effect.v1",

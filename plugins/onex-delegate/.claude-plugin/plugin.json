@@ -1,0 +1,34 @@
+{
+  "name": "onex",
+  "description": "ONEX single-command local LLM delegation. Ships exactly one skill (delegate) \u2014 no hooks, no agents. The full ONEX dev skill surface (108+ skills, hooks, agents) is internal tooling and is not part of this consumer-facing package as of OMN-14688.",
+  "version": "0.1.0",
+  "author": {
+    "name": "OmniNode",
+    "email": "dev@omninode.ai"
+  },
+  "repository": "https://github.com/OmniNode-ai/omniclaude",
+  "license": "MIT",
+  "requires": {
+    "onex_cli": {
+      "package": "omnibase-infra",
+      "min_version": "0.38.4",
+      "console_script_package": "omnibase-core",
+      "console_script_min_version": "0.46.8",
+      "install_hint": "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'",
+      "install_hint_pipx": "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'",
+      "cwd_independent": true,
+      "installable_from_pypi": false,
+      "installable_blocker_ticket": "OMN-16041",
+      "notes": "OMN-16041: `omnibase-core` ships the `onex` console script; the `delegate` SUBCOMMAND is registered by `omnibase-infra` via the `onex.cli` entry-point group. Installing omnibase-core alone yields `Error: No such command 'delegate'` (exit 2). Both packages must be installed into the SAME environment. Not yet installable from PyPI: newest published omnibase-infra is 0.36.1, whose omnibase-spi>=0.21,<0.22 pin is unsatisfiable against published spi 0.23.1. Python 3.12+ required.",
+      "source_of_truth": "plugin-compat.yaml#onex_cli"
+    },
+    "python": ">=3.12"
+  },
+  "keywords": [
+    "onex",
+    "delegate",
+    "delegation",
+    "local-llm",
+    "dispatch"
+  ]
+}

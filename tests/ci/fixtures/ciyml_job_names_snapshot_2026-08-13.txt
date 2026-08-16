@@ -1,0 +1,64 @@
+AI-Slop Pattern Check (strict, PR diff)
+Agent Contract Validation
+Agent Framework Tests
+Aislop Sweep
+Arch: ModelCostLedger confined to effects (check 5)
+Arch: ModelCostLedger run_id field + index (check 9)
+Arch: No DB access in orchestrator/compute (checks 1 & 8)
+Arch: No LinearClient outside effects (check 3)
+Arch: No datetime.utcnow() (check 11)
+Arch: No direct EventBus instantiation (OMN-10725)
+Arch: No direct Kafka producer outside publisher (check 10)
+Arch: No direct adapter imports in business logic (check 13)
+Arch: No git/gh calls outside effects (check 2)
+Arch: No hardcoded internal IPs (check 12)
+Arch: No localhost/default env fallbacks (OMN-10658)
+Arch: No polymorphic-agent in enforcement paths (OMN-9143)
+Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)
+Arch: No repository adapter imports in orchestrator/compute (check 4)
+Arch: omnidash_readonly role provisioning + CI (check 7)
+Arch: onex.* topic naming convention (check 6)
+Architecture Handshake
+Architecture Invariants
+Build Docker Image
+CI Summary
+Canonical Handler-Shape Ratchet
+Code Quality
+Contract Compliance
+Contract Compliance Check
+Cross-Repo Boundary Parity
+Database Schema Validation
+Deploy to Production
+Deploy to Staging
+Detect Changes
+DoD Evidence Check
+Enum Governance
+Env Var Registry (OMN-6263)
+Exports Validation
+F5.1 No compact cmd topic
+Golden Chain Integrity
+Golden Chain Live
+Hooks System Tests
+Kafka Import Guard
+Markdown Link Check
+Merge Test Coverage
+Merge-Sweep Contract
+Migration Freeze
+Mode Metadata Integrity
+OCC Companion Merged Gate (OMN-15214)
+ONEX Compliance
+Pyright Type Checking
+Python Security Scan
+Quality Gate
+Registry Consistency
+Secret Detection
+Security Gate
+Skill Contract Validation
+Skill Hygiene
+Skill Monorepo-Ref Gate
+Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
+Tests Gate
+Version Pin Compliance
+no-noncanonical-lifecycle-classes
+occ-preflight
+zone-filter
