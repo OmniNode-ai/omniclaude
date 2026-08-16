@@ -84,45 +84,48 @@ jobs:
   secret-scan:
     needs: occ-preflight
     name: Secret Scanning
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        github.event_name == 'pull_request'
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMN-16045: this job deliberately does NOT use OMNI_RUNNER_SELECTOR_V1.
+    # The trufflehog action is a composite whose final step is:
+    #     docker run --rm -v .:/tmp -w /tmp <image> git file:///tmp/ ...
+    # On the self-hosted omnibase-ci fleet the runner is itself a container
+    # sharing the host docker socket, so that bind-mount source is resolved by
+    # the HOST daemon, where the runner's workspace path does not exist. Docker
+    # then creates an empty directory and mounts it, and trufflehog fails with
+    # "failed to clone file Git repo (file:///tmp) ... '/tmp' does not appear to
+    # be a git repository". That is structural: no combination of the action's
+    # inputs can fix it, because `path` only sets the composite step's
+    # working-directory, not the mount source. omnimarket and omnibase_compat
+    # run this same action with the same args on ubuntu-latest and are green.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
+        # OMN-16045: full history, unconditionally. The scheduled "full scan"
+        # runs with BASE and HEAD empty, i.e. trufflehog walks the whole git
+        # history; a depth-1 checkout would have made that scan see a single
+        # commit and report green having inspected almost nothing.
         uses: actions/checkout@v7
         with:
-          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
         uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.93.7 (pinned 2026-03-04)
         with:
-          path: ${{ github.workspace }}
+          path: ./
           base: ${{ github.event.before }}
           head: ${{ github.event.after }}
           # --exclude-detectors=lob (OMN-16045): Lob detector regex (v3.95.9+) mass-verifies test_-prefixed pytest identifiers as live keys; zero Lob usage in this repo. Remove when a released trufflehog tag carries upstream PR 5188.
           extra_args: --only-verified --exclude-detectors=lob
 
-      - name: TruffleHog Secret Scanning (pull request diff)
-        if: github.event_name == 'pull_request'
+      # OMN-16045: the "pull request diff" step that used to sit here was dead
+      # code -- this workflow's triggers are schedule / workflow_dispatch /
+      # push, so `github.event_name == 'pull_request'` was never true.
+      - name: TruffleHog Secret Scanning (full scan)
+        if: github.event_name != 'push'
         uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
-          # --exclude-detectors=lob (OMN-16045): Lob detector regex (v3.95.9+) mass-verifies test_-prefixed pytest identifiers as live keys; zero Lob usage in this repo. Remove when a released trufflehog tag carries upstream PR 5188.
-          extra_args: --only-verified --exclude-detectors=lob
-
-      - name: TruffleHog Secret Scanning (full scan)
-        if: github.event_name != 'push' && github.event_name != 'pull_request'
-        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.93.7 (pinned 2026-03-04)
-        with:
-          path: ${{ github.workspace }}
           # --exclude-detectors=lob (OMN-16045): Lob detector regex (v3.95.9+) mass-verifies test_-prefixed pytest identifiers as live keys; zero Lob usage in this repo. Remove when a released trufflehog tag carries upstream PR 5188.
           extra_args: --only-verified --exclude-detectors=lob
 
