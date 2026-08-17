@@ -25,12 +25,12 @@ Each event is a frozen Pydantic model with correlation IDs, causation chains, an
 2. **`KAFKA_BOOTSTRAP_SERVERS`** set in the repository `.env` file
 3. **Python environment** ready:
    ```bash
-   cd /Volumes/PRO-G40/Code/omniclaude3
+   cd $OMNI_HOME/omniclaude
    uv sync --group dev
    ```
 4. **`OMNICLAUDE_PROJECT_ROOT`** set to the repo root (for dev-mode Python venv resolution):
    ```bash
-   export OMNICLAUDE_PROJECT_ROOT=/Volumes/PRO-G40/Code/omniclaude3
+   export OMNICLAUDE_PROJECT_ROOT=$OMNI_HOME/omniclaude
    ```
 
 ### Related Components (Full Cross-Repo Demo)
@@ -75,7 +75,7 @@ If any check fails, see the Troubleshooting section below.
 Open a terminal and start Claude Code in this repository:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude3
+cd $OMNI_HOME/omniclaude
 claude
 ```
 
@@ -175,7 +175,7 @@ Expected output:
 Checking recent events (last 60 seconds)...
 
 onex.evt.omniclaude.session-started.v1:
-  [12:05:01] session_id=abc12345... hook_source=startup working_dir=/Volumes/PRO-G40/Code/omniclaude3
+  [12:05:01] session_id=abc12345... hook_source=startup working_dir=$OMNI_HOME/omniclaude
 
 onex.evt.omniclaude.prompt-submitted.v1:
   [12:05:15] session_id=abc12345... preview="What files are in the..." length=42
@@ -271,7 +271,7 @@ Every event carries explicit `emitted_at` timestamps (never `datetime.now()` def
 **Fix**:
 1. Set `OMNICLAUDE_PROJECT_ROOT` to the repository root:
    ```bash
-   export OMNICLAUDE_PROJECT_ROOT=/Volumes/PRO-G40/Code/omniclaude3
+   export OMNICLAUDE_PROJECT_ROOT=$OMNI_HOME/omniclaude
    ```
 2. Ensure the venv exists:
    ```bash
