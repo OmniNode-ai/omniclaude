@@ -1,113 +1,108 @@
 # OmniClaude Quickstart
 
-OmniClaude supports three integration tiers. **No tier selection is required** — the plugin
-detects available services automatically at every SessionStart and injects a banner:
-
-```
-─── OmniClaude: STANDALONE (109 skills) (probe: 4s ago) ───
-─── OmniClaude: EVENT_BUS (routing + telemetry) (probe: 12s ago) ───
-─── OmniClaude: FULL_ONEX (enrichment + memory) (probe: 8s ago) ───
-```
-
-Pick the tier that matches your setup:
+OmniClaude ships as a single Claude Code plugin, **`onex@omninode-tools`**. As of OMN-14688
+it is **delegate-only**: one skill (`/onex:delegate`), no hooks, no agents. It does **not**
+inject a SessionStart capability banner or auto-load 100+ skills — that described an older,
+larger plugin (`plugins/onex`, now `NO_AUTOLOAD`/dead source) that this file used to document.
+If you're looking for that plugin's hooks/agents/routing architecture, see
+[CLAUDE.md](CLAUDE.md) — it is internal OmniNode tooling, not part of the public plugin below.
 
 ---
 
-## Tier 0 — Standalone (5 min, zero config)
+## Install (5 min)
 
-No backend services required. Skills, agents, and hooks work immediately; events are
-silently dropped when no Kafka is reachable.
+Requires the [Claude Code CLI](https://claude.com/claude-code) and Python 3.12+.
 
 ```bash
-git clone https://github.com/OmniNode-ai/omniclaude && cd omniclaude
-uv sync
-# From a terminal: claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools
+# 1. Register the marketplace (one-time; reads directly from GitHub, no local clone needed)
+claude plugin marketplace add OmniNode-ai/omniclaude
+
+# 2. Install the plugin
+claude plugin install onex@omninode-tools
+
+# 3. Restart your Claude Code session to load the skill
 ```
 
-**What you get:** 109 skills, 53 agents, all hooks fire, Kafka events silently dropped.
-
-> **Seeing STANDALONE but expected EVENT\_BUS?**
-> Set `KAFKA_BOOTSTRAP_SERVERS` in `.env` and restart your Claude Code session.
-> The probe runs at every SessionStart — no plugin reload needed.
+Verify: `claude plugin list` shows `onex@omninode-tools` with status `enabled`.
 
 ---
 
-## Tier 1 — Event Bus (15 min, host-only local dev)
+## Configure — install the `onex` CLI
 
-Start a local Redpanda instance to enable routing telemetry and Kafka event emission.
+The `/onex:delegate` skill shells out to the `onex` CLI. The CLI is **not** bundled with the
+plugin and must be installed separately into an environment on `PATH`:
 
 ```bash
-docker run -d --name redpanda -p 29092:29092 \
-  docker.redpanda.com/redpandadata/redpanda:v23.3.5 \
-  redpanda start \
-  --kafka-addr PLAINTEXT://0.0.0.0:29092 \
-  --advertise-kafka-addr PLAINTEXT://localhost:29092 \
-  --smp 1 --memory 512M --overprovisioned
-
-echo "KAFKA_BOOTSTRAP_SERVERS=localhost:29092" >> .env
-# Restart Claude Code session — tier banner shows EVENT_BUS
+uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'
+# or:
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'
 ```
 
-**What you get:** Everything in Standalone, plus agent routing events, session telemetry,
-and Kafka-backed observability.
+`omnibase-core` provides the `onex` console script; `omnibase-infra` provides the `delegate`
+subcommand — both are required in the same environment, or `onex delegate` exits 2 with
+`Error: No such command 'delegate'`. Pins above are the current values from
+[`plugins/onex-delegate/plugin-compat.yaml`](plugins/onex-delegate/plugin-compat.yaml), the
+source of truth — check that file if these look stale.
 
-> **Host-only local dev.** For Docker network deployments (where Claude Code runs inside
-> a container) replace `localhost:29092` with the container-accessible address and set
-> `--advertise-kafka-addr` accordingly. See the project CLAUDE.md for deployment details.
+Verify: `onex delegate --help` exits 0 from any directory.
+
+**Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever project the
+current directory belongs to, so it only works by coincidence inside a repo that happens to
+co-install `omnibase-infra`. Install the CLI as a tool (above) and call the bare `onex` on
+`PATH`.
 
 ---
 
-## Tier 2 — Full ONEX (30 min)
+## Run
 
-Bring up the complete intelligence stack to enable enrichment, memory retrieval, and
-compliance enforcement.
-
-> `omnibase_core` and `omnibase_spi` are pulled automatically by `uv sync` — no manual
-> clone required.
-
-```bash
-git clone https://github.com/OmniNode-ai/omniclaude
-git clone https://github.com/OmniNode-ai/omnibase_infra
-git clone https://github.com/OmniNode-ai/omnimemory
-git clone https://github.com/OmniNode-ai/omniintelligence
-
-# Start core infra (Postgres, Redpanda, Valkey)
-docker compose -f omnibase_infra/docker/docker-compose.infra.yml up -d
-
-# Start memory service
-docker compose -f omnimemory/docker-compose.yml up -d
-
-# Start intelligence service
-cd omniintelligence && uv sync --group all
-# (see omniintelligence README for service startup)
-
-# Deploy the plugin
-cd omniclaude && uv sync
-claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools
-# Banner shows FULL_ONEX
+```
+/onex:delegate explain what a calendar app needs
 ```
 
-**What you get:** Everything in Event Bus, plus context enrichment from Qdrant, semantic
-memory retrieval via OmniMemory, and ONEX pattern compliance enforcement.
+which runs `onex delegate "<prompt>"` under the hood. This is local-first by default: with
+zero Kafka/Postgres configuration, delegation runs the orchestrator in-process against an
+in-memory event bus, with SQLite as the evidence fallback — no external services required to
+try it.
+
+> **Known gap (tracked in OMN-16191, open as of 2026-08-18).** On a byte-for-byte clean
+> install following only the steps above, `onex delegate` currently fails with
+> `Error: Unknown node 'node_delegate_skill_orchestrator'` — the CLI resolves its backing node
+> from OmniNode's internal `omnimarket` workspace convention (`--omni-home` / `$OMNI_HOME`),
+> which this install path never sets up. Check OMN-16191 for current status before assuming
+> this note is stale.
+
+> **Delegation model/backend selection.** There is currently no documented, public way to
+> declare which model(s) `onex delegate` routes to — `onex delegate --help` has no
+> `--model`/`--backend` flag, and backend resolution today comes from a repo-committed default
+> configuration, not a public per-user setting. Treat this as an unimplemented feature, not a
+> missing doc; tracked under OMN-16194.
+
+---
+
+## Tier 1 (self-hosted) / Tier 2 (cloud)
+
+The intended composable architecture lets `onex delegate` point at a self-hosted or cloud
+backend via a contract overlay. **As of this writing there is no public documentation of that
+mechanism** — tracked in OMN-16194. (This section previously described a different, older
+full-ONEX Docker Compose stack — Redpanda + omnimemory + omniintelligence — bundled with the
+`plugins/onex` hooks plugin above. That stack is unrelated to the plugin this file now
+describes; the old instructions were removed rather than left stale.)
 
 ---
 
 ## Troubleshooting
 
-| Banner | Likely cause | Fix |
-|--------|-------------|-----|
-| `UNKNOWN (re-probing...)` | First SessionStart or stale probe | Wait for next prompt — probe runs in background |
-| `STANDALONE` (unexpected) | `KAFKA_BOOTSTRAP_SERVERS` not set or unreachable | Set env var and restart Claude Code session |
-| `EVENT_BUS` instead of `FULL_ONEX` | Intelligence service not reachable | Check `INTELLIGENCE_SERVICE_URL` and service health |
-
-Probe results are cached at `~/.claude/.onex_capabilities` with a 5-minute TTL.
-Delete the file to force an immediate re-probe on the next SessionStart.
+| Symptom | Likely cause |
+|---------|-------------|
+| `onex: command not found` | The `uv tool install`/`pipx` step above hasn't run, or its install bin dir isn't on `PATH`. |
+| `Error: No such command 'delegate'. Did you mean 'gate'?` | Only `omnibase-core` is installed — `omnibase-infra` provides the `delegate` subcommand; both must be in the same environment (see Configure above). |
+| `Error: Unknown node 'node_delegate_skill_orchestrator'` | See the known gap above (OMN-16191). |
+| `claude plugin install` can't find `onex@omninode-tools` | Marketplace not registered — re-run the `marketplace add` step above; `claude plugin marketplace list` should show `omninode-tools`. |
 
 ---
 
 ## Next Steps
 
-- [CLAUDE.md](CLAUDE.md) — development guide and architecture reference
-- [plugins/onex/agents/configs/](plugins/onex/agents/configs/) — 53 agent YAML definitions
-- [plugins/onex/skills/](plugins/onex/skills/) — 109 skill definitions
-- [docs/](docs/) — architecture decision records and proposals
+- [CLAUDE.md](CLAUDE.md) — development/architecture reference for OmniNode's internal tooling (insider-oriented; assumes an OmniNode canonical-clone workspace)
+- [plugins/onex-delegate/skills/delegate/SKILL.md](plugins/onex-delegate/skills/delegate/SKILL.md) — the delegate skill's full usage reference
+- [plugins/onex-delegate/plugin-compat.yaml](plugins/onex-delegate/plugin-compat.yaml) — source of truth for the `onex` CLI version pins above

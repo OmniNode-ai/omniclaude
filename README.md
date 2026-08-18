@@ -6,6 +6,11 @@ Claude Code integration layer for the ONEX (OmniNode eXecution) platform — hoo
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **`dev` is the live, default branch** — a plain `git clone` and the GitHub web UI both land
+> here. `main` is the promotion target and lags behind by design (it is not kept current
+> commit-for-commit); do not treat `main` as this repo's "stable" branch or clone it expecting
+> parity with what's documented here.
+
 ---
 
 ## What This Repo Is
@@ -65,17 +70,31 @@ See [Skill Lifecycle](docs/architecture/skill-lifecycle.md) for the decision rul
 
 ### Plugin Install
 
-```bash
-# Pull latest in the canonical clone
-git -C "$OMNI_HOME/omniclaude" pull --ff-only
+First-time install (registers the marketplace directly from GitHub — no local clone needed):
 
-# Refresh marketplace and reinstall
+```bash
+claude plugin marketplace add OmniNode-ai/omniclaude
+claude plugin install onex@omninode-tools
+
+# Restart the Claude Code session to pick up the skill
+```
+
+See [QUICKSTART.md](QUICKSTART.md) for the full walkthrough, including installing the `onex`
+CLI the plugin depends on and known gaps.
+
+To refresh an already-registered marketplace (e.g. after a plugin update):
+
+```bash
 claude plugin marketplace update omninode-tools
 claude plugin uninstall onex@omninode-tools
 claude plugin install onex@omninode-tools
-
-# Restart the Claude Code session to pick up hooks and skills
 ```
+
+> **OmniNode-internal canonical clone.** If you're on OmniNode's internal `$OMNI_HOME`
+> canonical-clone registry, run `git -C "$OMNI_HOME/omniclaude" pull --ff-only` before the
+> refresh above so the marketplace re-reads your latest local commits. External users
+> installing from the public GitHub repo can ignore this — `marketplace add` above reads
+> directly from GitHub and needs no local clone.
 
 For the daemon venv (required for LAN access on macOS), use:
 
@@ -170,7 +189,8 @@ belongs in an omnimarket node, not in this repo.
 
 | I want to... | Go to |
 |---|---|
-| Install the plugin and configure hooks | [docs/getting-started/INSTALLATION.md](docs/getting-started/INSTALLATION.md) |
+| Install the delegate-only plugin (`onex@omninode-tools`, what actually ships today) | [QUICKSTART.md](QUICKSTART.md) |
+| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | [docs/getting-started/INSTALLATION.md](docs/getting-started/INSTALLATION.md) |
 | Understand the hook data flow | [docs/architecture/HOOK_DATA_FLOW.md](docs/architecture/HOOK_DATA_FLOW.md) |
 | Understand agent routing | [docs/architecture/AGENT_ROUTING_ARCHITECTURE.md](docs/architecture/AGENT_ROUTING_ARCHITECTURE.md) |
 | Know when a skill moves to omnimarket | [docs/architecture/skill-lifecycle.md](docs/architecture/skill-lifecycle.md) |
