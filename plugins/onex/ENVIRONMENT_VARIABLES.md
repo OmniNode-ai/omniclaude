@@ -18,7 +18,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **Changes**:
 - Added comprehensive environment variables documentation
 - Replaced hardcoded venv path `~/Code/omniclaude/claude/lib/.venv` with `${PROJECT_ROOT}/claude/lib/.venv`
-- Replaced repository documentation path `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` with `${PROJECT_ROOT}/CLAUDE.md`  <!-- local-path-ok -->
+- Replaced repository documentation path `$OMNI_HOME/omniclaude/CLAUDE.md` with `${PROJECT_ROOT}/CLAUDE.md`
 - Added example .env configurations for each OmniNode repository
 - Updated troubleshooting section with environment variable verification commands
 - Updated Resources section with variable-based paths
@@ -36,7 +36,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 - `plugins/onex/skills/routing/request-agent-routing/execute_direct.py`
 
 **Changes**:
-- Replaced hardcoded default `/Volumes/PRO-G40/Code/omniclaude` with environment variable detection  <!-- local-path-ok -->
+- Replaced hardcoded default `$OMNI_HOME/omniclaude` with environment variable detection
 - Added priority-based path resolution:
   1. `OMNICLAUDE_PATH` environment variable (highest priority)
   2. Auto-detection from common locations
@@ -64,7 +64,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **File**: `plugins/onex/skills/trace-correlation-id/trace-correlation-id`
 
 **Changes**:
-- Replaced hardcoded path `/Volumes/PRO-G40/Code/omniclaude` with environment variable detection  <!-- local-path-ok -->
+- Replaced hardcoded path `$OMNI_HOME/omniclaude` with environment variable detection
 - Added priority-based resolution: OMNICLAUDE_PATH → PROJECT_ROOT → auto-detection
 - Added validation and helpful error messages
 - Supports cross-platform paths with fallback list

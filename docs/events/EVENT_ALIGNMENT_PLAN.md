@@ -38,8 +38,8 @@
 
 | Document | Location | Purpose |
 |----------|----------|---------|
-| **EVENT_BUS_INTEGRATION_GUIDE** | `/Volumes/PRO-G40/Code/omninode/docs/EVENT_BUS_INTEGRATION_GUIDE.md` | Event standards, envelope structure, partition keys |
-| **MVP_EVENT_CATALOG** | `/Volumes/PRO-G40/Code/omninode/docs/MVP_EVENT_CATALOG.md` | Complete catalog of 123 events (91 MVP + 32 planned) |
+| **EVENT_BUS_INTEGRATION_GUIDE** | `$OMNI_HOME/omninode/docs/EVENT_BUS_INTEGRATION_GUIDE.md` | Event standards, envelope structure, partition keys |
+| **MVP_EVENT_CATALOG** | `$OMNI_HOME/omninode/docs/MVP_EVENT_CATALOG.md` | Complete catalog of 123 events (91 MVP + 32 planned) |
 | **omnibase_infra DLQ** | `omnibase_infra/src/omnibase_infra/services/kafka_client.py` | Production DLQ with error taxonomy |
 | **omniintelligence DLQ** | `omniintelligence/src/omniintelligence/events/dlq/dlq_handler.py` | DLQ handler with reprocessing |
 
@@ -529,7 +529,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 ### Task 5.3: Update CLAUDE.md ⏳
 - **Status**: Not Started
 - **Purpose**: Reflect alignment completion
-- **Location**: Update `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md`
+- **Location**: Update `$OMNI_HOME/omniclaude/CLAUDE.md`
 - **Changes**:
   - Add event alignment status section
   - Document new utilities (partition key policy, event validation)
