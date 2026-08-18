@@ -68,15 +68,6 @@ Installing `omnibase-core` alone is not enough — `onex` will load, but
 `onex delegate` exits 2 with `Error: No such command 'delegate'. Did you mean
 'gate'?`.
 
-> **Known gap (OMN-16041):** the pins above are not yet satisfiable from PyPI.
-> The newest published `omnibase-infra` is 0.36.1, whose `omnibase-spi>=0.21,<0.22`
-> pin cannot resolve against the published `omnibase-spi` 0.23.1, and an unpinned
-> install silently backtracks to 0.32.0, which predates the `delegate` entry point.
-> `omnibase_infra@main` is already at 0.38.4 with correct pins; the outstanding
-> step is cutting the `v0.38.4` PyPI release. Until then, install from a built
-> `omnibase_infra` wheel:
-> `uv tool install --with ./omnibase_infra-0.38.4-py3-none-any.whl 'omnibase-core==0.46.8'`.
-
 ## Task Types
 
 | Task Type | When to use |

@@ -68,20 +68,6 @@ def _declared_requirements(cli: dict) -> list[str]:
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "OMN-16041: the declared pins are CORRECT but not yet satisfiable from "
-        "PyPI -- omnibase-infra 0.38.4 is unpublished (newest published is "
-        "0.36.1, whose omnibase-spi>=0.21,<0.22 pin is unsatisfiable against "
-        "published spi 0.23.1). omnibase_infra@main already carries 0.38.4 with "
-        "correct pins and its wheel installs + runs clean; the outstanding step "
-        "is cutting the v0.38.4 PyPI release. strict=True on purpose: the "
-        "moment that release lands this test XPASSes, which FAILS the suite and "
-        "forces this marker (and plugin-compat.yaml's "
-        "installable_from_pypi: false) to be removed in the same change."
-    ),
-)
 def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
     """Resolve exactly what the manifests declare, then run `onex delegate --help`.
 
