@@ -129,9 +129,9 @@ Python process exits (cache lost)
 
 **Code Example** (from general-purpose agent instructions):
 ```python
-cd /Volumes/PRO-G40/Code/omniclaude/agents && python3 << 'EOF'
+cd $OMNI_HOME/omniclaude/agents && python3 << 'EOF'
 import sys
-sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude/agents/lib')
+sys.path.insert(0, '$OMNI_HOME/omniclaude/agents/lib')
 from agent_router import AgentRouter
 
 router = AgentRouter()

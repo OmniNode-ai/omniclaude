@@ -9,7 +9,7 @@ Bandit is a security linter for Python that scans code for common security issue
 ### 1. `.bandit` (INI format)
 Primary configuration file in the project root.
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/.bandit`
+**Location**: `$OMNI_HOME/omniclaude/.bandit`
 
 **Purpose**:
 - Define excluded directories
@@ -19,7 +19,7 @@ Primary configuration file in the project root.
 ### 2. `pyproject.toml` ([tool.bandit] section)
 Secondary configuration for Poetry projects.
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/pyproject.toml`
+**Location**: `$OMNI_HOME/omniclaude/pyproject.toml`
 
 **Purpose**:
 - Mirror `.bandit` configuration for consistency
