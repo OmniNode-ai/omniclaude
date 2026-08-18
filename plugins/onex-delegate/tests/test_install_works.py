@@ -24,6 +24,25 @@ Manifest consistency can never again stand in for installability: this module
 resolves the pins the manifests actually declare, in a scratch venv with no
 project config reachable, and then runs the plugin's only command.
 
+Why `--help` was not enough (OMN-16191)
+---------------------------------------
+The first version of this file asserted `onex delegate --help` exits 0. That
+gate stayed green while the command was still unusable end-to-end: `--help` is
+answered by click before any dispatch happens, so it never resolves the node the
+subcommand exists to run. On a clean install of exactly the pins declared here,
+the real invocation failed with
+
+    Error: Unknown node 'node_delegate_skill_orchestrator'
+
+because that node ships in `omnimarket`, which the declared pins did not name.
+The lesson is narrow and worth keeping: a `--help` probe proves the subcommand is
+*registered*, never that it is *runnable*. So the install proof below now also
+resolves the backing node through the same code path the failure came from
+(`omnibase_core.cli.cli_node._resolve_packaged_contract`), which reads
+`onex.nodes` entry points from installed distributions. That resolver call is
+deterministic and offline — it does not dispatch, so it needs no model config,
+no bus, and no network beyond the install itself.
+
 Marked ``integration`` (network + a real resolver run), not ``unit``.
 """
 
@@ -47,6 +66,10 @@ COMPAT_YAML = PLUGIN_DIR / "plugin-compat.yaml"
 _INSTALL_TIMEOUT_SECONDS = 600
 _RUN_TIMEOUT_SECONDS = 120
 
+#: The node `onex delegate` dispatches. Named here rather than derived so a
+#: rename shows up as a failing assertion instead of a silently vacuous probe.
+_BACKING_NODE = "node_delegate_skill_orchestrator"
+
 
 def _compat() -> dict:
     return yaml.safe_load(COMPAT_YAML.read_text())["onex_cli"]
@@ -60,22 +83,29 @@ def _uv() -> str:
 
 
 def _declared_requirements(cli: dict) -> list[str]:
-    """The exact requirement strings a user following the manifests would type."""
+    """The exact requirement strings a user following the manifests would type.
+
+    All three packages, because all three are load-bearing: the console script,
+    the subcommand, and the node the subcommand dispatches (OMN-16191).
+    """
     return [
         f"{cli['console_script_package']}>={cli['console_script_min_version']}",
         f"{cli['package']}>={cli['min_version']}",
+        f"{cli['node_package']}>={cli['node_package_min_version']}",
     ]
 
 
 @pytest.mark.integration
 def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
-    """Resolve exactly what the manifests declare, then run `onex delegate --help`.
+    """Resolve exactly what the manifests declare, then prove the command can run.
 
-    Two failure classes this catches that manifest-consistency cannot:
+    Three failure classes this catches that manifest-consistency cannot:
       * the declared pins do not resolve at all (ResolutionImpossible);
       * the declared pins resolve, but the resulting `onex` has no `delegate`
         subcommand (wrong package named, or a silent backtrack to a version
-        that predates the entry point).
+        that predates the entry point);
+      * the subcommand exists but its backing node does not resolve, so every
+        real invocation dies on `Unknown node` (OMN-16191).
     """
     cli = _compat()
     uv = _uv()
@@ -136,6 +166,42 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
         f"pins {requirements}.\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}"
     )
     assert "delegate" in run.stdout
+
+    # --help proves the subcommand is registered; it does not prove it can run,
+    # because click answers --help before any dispatch. Resolve the backing node
+    # through the resolver the real invocation uses, so a missing node_package
+    # fails here instead of in a stranger's terminal (OMN-16191).
+    probe = (
+        "from omnibase_core.cli.cli_node import _resolve_packaged_contract;"
+        f"print(_resolve_packaged_contract({_BACKING_NODE!r}))"
+    )
+    resolved = subprocess.run(  # nosec B603
+        [str(venv / "bin" / "python"), "-c", probe],
+        cwd=scratch,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=_RUN_TIMEOUT_SECONDS,
+    )
+    assert resolved.returncode == 0, (
+        f"`onex delegate` cannot dispatch: node {_BACKING_NODE!r} does not "
+        f"resolve from the declared pins {requirements}. This is the OMN-16191 "
+        "failure — `onex delegate --help` exits 0 while the only real "
+        f"invocation fails.\nstdout:\n{resolved.stdout}\nstderr:\n{resolved.stderr}"
+    )
+    contract = Path(resolved.stdout.strip())
+    assert contract.is_file(), (
+        f"{_BACKING_NODE} resolved to {contract}, which is not a file"
+    )
+    # Resolution must come from the installed distribution, not from a developer
+    # workspace that happens to be on this machine. That distinction IS the bug:
+    # the tool was built assuming a canonical $OMNI_HOME/omnimarket clone.
+    assert venv in contract.parents, (
+        f"{_BACKING_NODE} resolved to {contract}, outside the scratch venv "
+        f"{venv} — the node is being picked up from a local workspace rather "
+        "than the installed package, so this proves nothing about a clean install"
+    )
 
 
 @pytest.mark.unit
