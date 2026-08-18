@@ -33,18 +33,34 @@ The `/onex:delegate` skill shells out to the `onex` CLI. The CLI is **not** bund
 plugin and must be installed separately into an environment on `PATH`:
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'
+uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.7' 'omnibase-core>=0.46.8'
 # or:
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.7'
 ```
 
 `omnibase-core` provides the `onex` console script; `omnibase-infra` provides the `delegate`
-subcommand — both are required in the same environment, or `onex delegate` exits 2 with
-`Error: No such command 'delegate'`. Pins above are the current values from
+subcommand; `omnimarket` provides `node_delegate_skill_orchestrator`, the node the command
+actually dispatches to — all three are required in the same environment (OMN-16191). Node
+lookup resolves via `onex.nodes` entry points over installed distributions, so installing the
+package is sufficient — there is **no** `$OMNI_HOME`/local-clone requirement despite what an
+earlier revision of this file said.
+
+> **Unpublished pin, as of 2026-08-18.** `omnimarket>=0.4.7` does not exist on PyPI yet. The pin
+> is correct for when it ships, but publishing is blocked on cutting `omnimarket`'s runtime
+> dependency on `onex_change_control` first (operator ruling, in progress). Until a qualifying
+> `omnimarket` release is published, `uv tool install` with the line above will fail to resolve
+> — check PyPI or OMN-16191 before assuming this note is stale.
+
+Pins above are the current values from
 [`plugins/onex-delegate/plugin-compat.yaml`](plugins/onex-delegate/plugin-compat.yaml), the
 source of truth — check that file if these look stale.
 
 Verify: `onex delegate --help` exits 0 from any directory.
+
+**`--help` exiting 0 does not mean the command works.** Click answers `--help` before any
+dispatch happens, so `--help` succeeds even with `omnimarket` missing entirely. The first real
+failure only shows up on an actual invocation (see the known gaps below) — don't treat a clean
+`--help` as proof of a working install.
 
 **Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever project the
 current directory belongs to, so it only works by coincidence inside a repo that happens to
@@ -64,18 +80,27 @@ zero Kafka/Postgres configuration, delegation runs the orchestrator in-process a
 in-memory event bus, with SQLite as the evidence fallback — no external services required to
 try it.
 
-> **Known gap (tracked in OMN-16191, open as of 2026-08-18).** On a byte-for-byte clean
-> install following only the steps above, `onex delegate` currently fails with
-> `Error: Unknown node 'node_delegate_skill_orchestrator'` — the CLI resolves its backing node
-> from OmniNode's internal `omnimarket` workspace convention (`--omni-home` / `$OMNI_HOME`),
-> which this install path never sets up. Check OMN-16191 for current status before assuming
-> this note is stale.
+> **Known gap 1 (tracked in OMN-16191, open as of 2026-08-18).** Until the `omnimarket` pin
+> above is published (see the callout in Configure), a clean install following only the steps
+> in this file omits `omnimarket` and `onex delegate` fails with
+> `Error: Unknown node 'node_delegate_skill_orchestrator'`. Earlier text here attributed this to
+> a missing `$OMNI_HOME`/workspace setup — that was wrong; it's simply a missing package, and
+> installing `omnimarket` (once published) resolves it with no workspace convention needed.
+
+> **Known gap 2 (tracked in OMN-16200, open as of 2026-08-18).** Even with all three packages
+> installed, `onex delegate` currently fails at startup with
+> `[ONEX_CORE_041_INVALID_CONFIGURATION] DELEGATION_ROUTING_TIERS_PATH is not bound` — there is
+> no packaged template for this config value and no doc explaining what it should point to.
+> Together with the next gap, this means the delegation route is not yet stranger-usable
+> end-to-end even once OMN-16191 lands.
 
 > **Delegation model/backend selection.** There is currently no documented, public way to
 > declare which model(s) `onex delegate` routes to — `onex delegate --help` has no
-> `--model`/`--backend` flag, and backend resolution today comes from a repo-committed default
-> configuration, not a public per-user setting. Treat this as an unimplemented feature, not a
-> missing doc; tracked under OMN-16194.
+> `--model`/`--backend` flag, `ModelDelegateSkillRequest.backend_id` exists on the wire model
+> but the CLI never populates it, and backend resolution today comes from a secret-store key
+> with no public self-serve onboarding (the file-based fallback is explicitly dev-only and on
+> its way out — don't treat it as a supported config surface). Treat this as an unimplemented
+> feature, not a missing doc; tracked under OMN-16200 and OMN-16194.
 
 ---
 
@@ -96,7 +121,8 @@ describes; the old instructions were removed rather than left stale.)
 |---------|-------------|
 | `onex: command not found` | The `uv tool install`/`pipx` step above hasn't run, or its install bin dir isn't on `PATH`. |
 | `Error: No such command 'delegate'. Did you mean 'gate'?` | Only `omnibase-core` is installed — `omnibase-infra` provides the `delegate` subcommand; both must be in the same environment (see Configure above). |
-| `Error: Unknown node 'node_delegate_skill_orchestrator'` | See the known gap above (OMN-16191). |
+| `Error: Unknown node 'node_delegate_skill_orchestrator'` | `omnimarket` isn't installed, or its qualifying version isn't published yet. See Known gap 1 (OMN-16191) above. |
+| `[ONEX_CORE_041_INVALID_CONFIGURATION] DELEGATION_ROUTING_TIERS_PATH is not bound` | See Known gap 2 (OMN-16200) above — no packaged template exists yet. |
 | `claude plugin install` can't find `onex@omninode-tools` | Marketplace not registered — re-run the `marketplace add` step above; `claude plugin marketplace list` should show `omninode-tools`. |
 
 ---
