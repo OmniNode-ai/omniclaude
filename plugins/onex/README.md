@@ -444,7 +444,7 @@ Skills are invoked automatically by the agent framework when domain expertise is
 1. Create shell script in `hooks/scripts/`
 2. Add Python libraries to `hooks/lib/` as needed
 3. Update `hooks/hooks.json` configuration
-4. Deploy with `/deploy-local-plugin`
+4. Deploy via the marketplace: `claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`
 
 See `docs/guides/ADDING_A_HOOK_HANDLER.md` for the step-by-step guide.
 
@@ -453,7 +453,7 @@ See `docs/guides/ADDING_A_HOOK_HANDLER.md` for the step-by-step guide.
 1. Create YAML definition in `agents/configs/`
 2. Define activation patterns (explicit and context triggers)
 3. Test with routing framework: `python hooks/lib/route_via_events_wrapper.py "test prompt"`
-4. Deploy with `/deploy-local-plugin`
+4. Deploy via the marketplace: `claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`
 
 See `docs/guides/ADDING_AN_AGENT.md` for the step-by-step guide.
 
@@ -462,7 +462,7 @@ See `docs/guides/ADDING_AN_AGENT.md` for the step-by-step guide.
 1. Create skill directory in `skills/my-skill/`
 2. Add `SKILL.md` with Overview, Quick Start, and Methodology sections
 3. Optionally add `prompt.md` for orchestration logic and scripts
-4. Deploy with `/deploy-local-plugin`; invoke with `/my-skill`
+4. Deploy via the marketplace (`claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`); invoke with `/my-skill`
 
 See `docs/guides/ADDING_A_SKILL.md` for the step-by-step guide.
 
