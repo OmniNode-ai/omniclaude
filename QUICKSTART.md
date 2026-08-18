@@ -45,22 +45,25 @@ lookup resolves via `onex.nodes` entry points over installed distributions, so i
 package is sufficient — there is **no** `$OMNI_HOME`/local-clone requirement despite what an
 earlier revision of this file said.
 
-> **Unpublished pin, as of 2026-08-18.** `omnimarket>=0.4.7` does not exist on PyPI yet. The pin
-> is correct for when it ships, but publishing is blocked on cutting `omnimarket`'s runtime
-> dependency on `onex_change_control` first (operator ruling, in progress). Until a qualifying
-> `omnimarket` release is published, `uv tool install` with the line above will fail to resolve
-> — check PyPI or OMN-16191 before assuming this note is stale.
+> **Unpublished pin, as of 2026-08-18.** `omnimarket>=0.4.7` does not exist on PyPI yet.
+> `omnimarket` had a runtime dependency on `onex_change_control` (an internal governance repo,
+> never published to PyPI) blocking any publish; the operator ruled to cut that dependency
+> rather than publish `onex_change_control` ("omnimarket shouldn't rely on OCC — nothing
+> should"). That decoupling is written but not yet merged as of this writing. The pin number is
+> correct for when it ships; the timing is not — check PyPI or OMN-16191 before assuming this
+> note is stale.
 
 Pins above are the current values from
 [`plugins/onex-delegate/plugin-compat.yaml`](plugins/onex-delegate/plugin-compat.yaml), the
 source of truth — check that file if these look stale.
 
-Verify: `onex delegate --help` exits 0 from any directory.
+Package presence check: `onex delegate --help` exits 0 from any directory. **This is not proof
+the install works** — see the callout below.
 
 **`--help` exiting 0 does not mean the command works.** Click answers `--help` before any
 dispatch happens, so `--help` succeeds even with `omnimarket` missing entirely. The first real
-failure only shows up on an actual invocation (see the known gaps below) — don't treat a clean
-`--help` as proof of a working install.
+failure only shows up on an actual invocation (see the known gaps below). The real verification
+step is running a real delegation — `onex delegate "say hello in one word"` — not `--help`.
 
 **Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever project the
 current directory belongs to, so it only works by coincidence inside a repo that happens to
