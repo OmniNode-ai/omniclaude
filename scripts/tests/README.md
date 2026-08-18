@@ -147,10 +147,10 @@ fi
 
 ## Related Documentation
 
-- **Intelligence Infrastructure**: `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md#intelligence-infrastructure`  <!-- local-path-ok -->
+- **Intelligence Infrastructure**: `$OMNI_HOME/omniclaude/CLAUDE.md#intelligence-infrastructure`
 - **Qdrant Configuration**: `~/.claude/CLAUDE.md#qdrant-configuration`
-- **Manifest Injection**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/manifest_injector.py`  <!-- local-path-ok -->
-- **Health Check Script**: `/Volumes/PRO-G40/Code/omniclaude/scripts/health_check.sh`  <!-- local-path-ok -->
+- **Manifest Injection**: `$OMNI_HOME/omniclaude/agents/lib/manifest_injector.py`
+- **Health Check Script**: `$OMNI_HOME/omniclaude/scripts/health_check.sh`
 
 ---
 

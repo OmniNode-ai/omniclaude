@@ -110,7 +110,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.before }}
@@ -123,7 +123,7 @@ jobs:
       # push, so `github.event_name == 'pull_request'` was never true.
       - name: TruffleHog Secret Scanning (full scan)
         if: github.event_name != 'push'
-        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           # --exclude-detectors=lob (OMN-16045): Lob detector regex (v3.95.9+) mass-verifies test_-prefixed pytest identifiers as live keys; zero Lob usage in this repo. Remove when a released trufflehog tag carries upstream PR 5188.
@@ -159,16 +159,16 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.6
+        uses: github/codeql-action/init@v4.37.7
         with:
           languages: ${{ matrix.language }}
           queries: +security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4.37.6
+        uses: github/codeql-action/autobuild@v4.37.7
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.6
+        uses: github/codeql-action/analyze@v4.37.7
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -234,7 +234,7 @@ jobs:
 
       - name: Upload Trivy results
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v4.37.6
+        uses: github/codeql-action/upload-sarif@v4.37.7
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -316,7 +316,7 @@ jobs:
           echo "::add-matcher::checkov-problem-matcher-softfail.json"
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@9b70310bcd306d11740313070b940167d6b23085  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@1246d92f57abae29d5db5f9aeeed2a9813e52d7d  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
@@ -359,7 +359,7 @@ jobs:
           EOF
 
       - name: Upload Checkov results
-        uses: github/codeql-action/upload-sarif@v4.37.6
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always() && hashFiles('checkov-results/results_sarif.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: 'checkov-results/results_sarif.sarif'
