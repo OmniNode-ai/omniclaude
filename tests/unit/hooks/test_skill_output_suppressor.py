@@ -509,35 +509,86 @@ def test_hook_script_exists_and_is_executable() -> None:
 
 @pytest.mark.unit
 def test_hook_registered_in_hooks_json() -> None:
+    """This no longer skips just because *some* PostToolUse hook exists.
+
+    OMN-16277 legitimately registered a second PostToolUse Bash-matcher
+    hook (the secret-redaction guard) while the suppressor itself remains
+    dormant/unregistered (OMN-13244 baseline) -- a non-empty PostToolUse
+    list no longer implies the suppressor is in it. Skip precisely when
+    the suppressor itself is absent; assert its shape only when present.
+    """
     hooks_json = _REPO_ROOT / "plugins/onex/hooks/hooks.json"
     data = json.loads(hooks_json.read_text())
-    if not data["hooks"].get("PostToolUse"):
-        pytest.skip(
-            "No PostToolUse hooks registered (hooks disabled for the OMN-13244 "
-            "measurement baseline). Re-enable this assertion when hooks are "
-            "re-registered."
-        )
+    post_tool_use = data["hooks"].get("PostToolUse", [])
     found = any(
         "post_tool_use_output_suppressor.sh" in h["hooks"][0]["command"]
-        for h in data["hooks"]["PostToolUse"]
+        for h in post_tool_use
     )
+    if not found:
+        pytest.skip(
+            "post_tool_use_output_suppressor.sh not registered (hooks disabled "
+            "for the OMN-13244 measurement baseline, or not yet re-enabled). "
+            "Re-enable this assertion when the suppressor is re-registered."
+        )
     assert found, (
         "post_tool_use_output_suppressor.sh not registered in hooks.json PostToolUse"
     )
 
 
 @pytest.mark.unit
-def test_suppressor_is_the_only_updated_tool_output_emitter() -> None:
-    """Probe OMN-13090: LAST registered updatedToolOutput emitter wins.
+def test_suppressor_and_secret_guard_never_co_registered_on_bash_matcher() -> None:
+    """Probe OMN-13090: LAST registered updatedToolOutput emitter on a given
+    matcher wins (the runtime does not merge sequential hooks' emissions).
 
-    If any other hook on the Bash matcher ever emits the field after the
-    suppressor in registration order, it silently overwrites the
-    suppression. Guard: the string appears nowhere in the hooks tree except
-    the suppressor module and its wrapper script.
+    Two updatedToolOutput emitters now legitimately exist on disk: the
+    (dormant) verbose-output suppressor (OMN-13089/13095) and the
+    (live) secret-redaction guard (OMN-16277). That is safe exactly as
+    long as at most one of them is ever registered on the SAME matcher at
+    the same time -- if both were ever registered together, whichever
+    runs last would silently discard the other's replacement, and if that
+    were the redaction guard's output being discarded, a credential could
+    reach the transcript unmasked. This test pins the actual runtime
+    hazard (co-registration), not "which files exist on disk" -- unlike
+    the file-scan guard this superseded, adding a third emitter file for
+    an unrelated matcher (e.g. a future non-Bash PostToolUse hook) does
+    not trip it.
+    """
+    hooks_json = _REPO_ROOT / "plugins/onex/hooks/hooks.json"
+    data = json.loads(hooks_json.read_text())
+    bash_commands: list[str] = [
+        hook["command"]
+        for block in data["hooks"].get("PostToolUse", [])
+        if block.get("matcher") == "Bash"
+        for hook in block.get("hooks", [])
+    ]
+    emitters_present = {
+        name
+        for name in (
+            "post_tool_use_output_suppressor.sh",
+            "post_tool_use_secret_redact_guard.sh",
+        )
+        if any(name in cmd for cmd in bash_commands)
+    }
+    assert len(emitters_present) <= 1, (
+        f"multiple updatedToolOutput emitters registered on the Bash PostToolUse "
+        f"matcher at once: {sorted(emitters_present)} -- the runtime does not "
+        "merge them, the last one registered silently wins, and if that isn't "
+        "the secret-redaction guard a credential could reach the transcript "
+        "unmasked (OMN-13090 probe, OMN-16277)."
+    )
+
+
+@pytest.mark.unit
+def test_no_unknown_updated_tool_output_emitters() -> None:
+    """Inventory guard: every file that emits updatedToolOutput must be a
+    known, accounted-for hook -- catches an accidental new emitter that
+    nobody added to the co-registration check above.
     """
     allowed = {
         "skill_output_suppressor.py",
         "post_tool_use_output_suppressor.sh",
+        "post_tool_use_secret_redact_guard.py",
+        "post_tool_use_secret_redact_guard.sh",
     }
     hooks_root = _REPO_ROOT / "plugins/onex/hooks"
     offenders = [
@@ -549,6 +600,7 @@ def test_suppressor_is_the_only_updated_tool_output_emitter() -> None:
         and path.name not in allowed
     ]
     assert offenders == [], (
-        f"unexpected updatedToolOutput emitters: {offenders} — the suppressor "
-        "must remain the only emitter on the Bash matcher (OMN-13090 probe)"
+        f"unexpected updatedToolOutput emitters: {offenders} -- add them to "
+        "the `allowed` set here AND to the co-registration check above "
+        "(test_suppressor_and_secret_guard_never_co_registered_on_bash_matcher)."
     )
