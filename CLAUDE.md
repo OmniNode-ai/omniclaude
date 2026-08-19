@@ -23,13 +23,17 @@ OMN-13244 measurement baseline **with carve-outs** — every context-injection/m
 stays DISABLED; the only registered hooks are:
 
 - PreToolUse: `pre_tool_use_done_flip_guard.sh` (OMN-13856 Done-flip durable-evidence guard) and `pre_tool_use_worktree_guard.sh` (OMN-14330 worktree canonical-root guard)
+- PostToolUse (matcher `Bash`): `post_tool_use_secret_redact_guard.sh` (OMN-16277 — masks secret-shaped patterns in raw Bash `tool_response` text via `hookSpecificOutput.updatedToolOutput` before it lands in the transcript; two-strike fix for the 2026-08-19 kubectl-jsonpath `clientSecret` leak + `env|grep`-sed-gap Postgres-URL leak. Runs on every Bash call unconditionally — no size/command-type/exit-code gate, unlike the on-disk-but-unregistered token-budget backstop `post_tool_use_output_suppressor.sh`/OMN-13089, which this hook's wire protocol was modeled on)
 - SubagentStop: `subagent_stop_secret_leak_guard.sh` (OMN-15062) and `subagent_stop_report_contract_guard.sh` (OMN-15213 golden-chain report-contract guard — bare-Done-class final returns block the lane RED)
 
 A SubagentStop hook that emits output on its **pass** path becomes the end-of-turn
 notification the agent replies to, and that short reply is captured as the lane's final
 return, clobbering the real report 1-2 turns earlier (OMN-15213, reproduced 3/5 and 3/3).
 Non-blocking SubagentStop verdicts must therefore stay silent — never add a "clean"
-`additionalContext`.
+`additionalContext`. The PostToolUse guard above follows the same silence-on-pass
+discipline for a different reason: plain PostToolUse stdout is debug-log-only and a
+non-empty emission there is schema-rejected as `updatedToolOutput` unless it matches the
+exact envelope shape (OMN-13090 probe), so a "clean" emission would be worse than useless.
 
 All other hook scripts (`plugins/onex/hooks/scripts/`) and handler modules
 (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change.
@@ -44,9 +48,14 @@ Two kill-switch spellings exist in the codebase — they are **not** interchange
 - `OMNICLAUDE_HOOKS_DISABLE=1` (or marker file: `touch ~/.claude/omniclaude-hooks-disabled`) — honored by the hook runtime daemon (`src/omniclaude/hook_runtime/server.py`) and the delegation counter/enforcer + skill-substitution-guard scripts, before any threshold logic runs. This is the escape hatch if the DELEGATION ENFORCER recursively blocks a session — no uninstall, no restart. Re-enable: `unset OMNICLAUDE_HOOKS_DISABLE; rm -f ~/.claude/omniclaude-hooks-disabled`.
 - `OMNICLAUDE_HOOKS_DISABLED=1` (trailing D) — honored by most other standalone hook wrappers (ci-reminder, ruff, cost-accounting, trajectory, scope-gate, ...).
 
-**Neither env switch covers the three currently-registered guards**: the worktree guard is
-gated only by the `ONEX_HOOKS_MASK` `WORKTREE_GUARD` bit; the done-flip and secret-leak
-guards short-circuit only on lite mode / non-OmniNode repo. Read the specific script's header
+**Neither env switch covers the currently-registered security-carve-out guards**: the
+worktree guard is gated only by the `ONEX_HOOKS_MASK` `WORKTREE_GUARD` bit; the done-flip,
+both secret-leak guards (SubagentStop + the OMN-16277 PostToolUse Bash-output guard), and
+the report-contract guard short-circuit only on lite mode / non-OmniNode repo (or, for the
+PostToolUse guard, lite mode only — it is deliberately applicable to every repo, not gated
+by `is_omninode_repo`, since a credential can leak in any tool's output). None of the
+security-class guards participate in `ONEX_HOOKS_MASK` at all — a stale saved mask literal
+must never silently disable a leak-prevention control. Read the specific script's header
 before assuming a switch applies. Task()-spawned sub-agents are independently exempt from
 delegation thresholds via per-session markers under `$ONEX_STATE_DIR/hooks/subagent-sessions/`
 (written by `subagent-start.sh`).
