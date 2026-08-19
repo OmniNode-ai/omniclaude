@@ -335,10 +335,11 @@ tests/unit/hooks/lib/test_my_tool_observer.py::TestObserveToolExecution::test_lo
 
 ### Deploy
 
-From within a Claude Code session in this project:
+From a terminal:
 
-```
-/deploy-local-plugin
+```bash
+claude plugin marketplace update omninode-tools
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
 ```
 
 Do not assume this copies `plugins/onex/` into `~/.claude/plugins/cache/` — for a

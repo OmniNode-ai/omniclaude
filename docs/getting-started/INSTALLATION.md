@@ -59,16 +59,12 @@ back instead of assuming either answer:
 python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
 ```
 
-Use the deploy skill from within an active Claude Code session:
-
-```
-/deploy-local-plugin
-```
-
-Or check whether a deploy script exists in the repo root:
+Deploy via the Claude Code plugin marketplace, from a terminal:
 
 ```bash
-ls scripts/deploy*.sh 2>/dev/null || echo "No deploy script found — use /deploy-local-plugin"
+claude plugin marketplace update omninode-tools
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
+# restart the Claude Code session to pick up hooks/skills
 ```
 
 ## 4. Verify Hook Configuration
