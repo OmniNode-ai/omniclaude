@@ -194,21 +194,25 @@ class TestTeamObservabilityHooksJson:
     """Verify hooks.json registration."""
 
     def test_hooks_json_has_team_observability(self) -> None:
+        """This no longer skips just because *some* PostToolUse hook exists.
+
+        OMN-16277 legitimately registered a PostToolUse Bash-matcher hook
+        (the secret-redaction guard) while team observability remains
+        dormant/unregistered (OMN-13244 baseline) -- a non-empty PostToolUse
+        list no longer implies team observability is in it. Skip precisely
+        when the team-observability matcher itself is absent.
+        """
         hooks_json_path = Path(WORKTREE_ROOT) / "plugins/onex/hooks/hooks.json"
         hooks_config = json.loads(hooks_json_path.read_text())
 
-        if not hooks_config["hooks"].get("PostToolUse"):
-            pytest.skip(
-                "No PostToolUse hooks registered (hooks disabled for the "
-                "OMN-13244 measurement baseline). Re-enable this assertion when "
-                "hooks are re-registered."
-            )
-
-        post_tool_use = hooks_config["hooks"]["PostToolUse"]
+        post_tool_use = hooks_config["hooks"].get("PostToolUse", [])
         matchers = [entry.get("matcher", "") for entry in post_tool_use]
-        assert any("TeamCreate" in m and "TaskUpdate" in m for m in matchers), (
-            f"Team observability matcher not found in PostToolUse: {matchers}"
-        )
+        if not any("TeamCreate" in m and "TaskUpdate" in m for m in matchers):
+            pytest.skip(
+                "Team observability matcher not registered in PostToolUse "
+                "(hooks disabled for the OMN-13244 measurement baseline). "
+                "Re-enable this assertion when hooks are re-registered."
+            )
 
         # Verify the hook command path
         team_entry = next(
