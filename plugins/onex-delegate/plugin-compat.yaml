@@ -58,19 +58,13 @@ onex_cli:
   install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'"
   install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'"
   cwd_independent: true
-  # HONEST GAP (OMN-16041). The pins above are correct but NOT yet installable
-  # from PyPI: the newest published omnibase-infra is 0.36.1 (2026-05-21), whose
-  # `omnibase-spi>=0.21,<0.22` pin is unsatisfiable against the published spi
-  # 0.23.1 -> ResolutionImpossible; and an unpinned `pip install omnibase-infra`
-  # silently backtracks to 0.32.0, which predates the delegate entry point.
-  # omnibase_infra@main is already at 0.38.4 with correct pins (core==0.46.8,
-  # spi==0.23.1, compat==0.5.6) and its wheel installs + runs clean; the only
-  # missing step is cutting the v0.38.4 PyPI release. Flip this to true in the
-  # same PR that lands the release, and delete the xfail marker in
-  # tests/test_install_works.py (it is strict, so it will fail loudly the moment
-  # the install starts working).
-  installable_from_pypi: false
-  installable_blocker_ticket: "OMN-16041"
+  # GAP CLOSED 2026-08-16 (OMN-16041). The release this flag was waiting on has
+  # landed: omnibase-infra 0.38.6 was published to PyPI 2026-08-15T17:23:39Z
+  # (>= the 0.38.4 declared above), so the declared pins now resolve from the
+  # live index and `onex delegate --help` exits 0 in a clean venv. The strict
+  # xfail in tests/test_install_works.py is removed in this same change, per the
+  # ratchet the marker itself described.
+  installable_from_pypi: true
 
 # delegate's only backing node. Topic/schema entries intentionally omitted:
 # node_delegate_skill_orchestrator dispatches via `onex delegate` (CLI ->

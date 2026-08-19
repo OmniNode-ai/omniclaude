@@ -17,9 +17,8 @@
       "install_hint": "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'",
       "install_hint_pipx": "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'",
       "cwd_independent": true,
-      "installable_from_pypi": false,
-      "installable_blocker_ticket": "OMN-16041",
-      "notes": "OMN-16041: `omnibase-core` ships the `onex` console script; the `delegate` SUBCOMMAND is registered by `omnibase-infra` via the `onex.cli` entry-point group. Installing omnibase-core alone yields `Error: No such command 'delegate'` (exit 2). Both packages must be installed into the SAME environment. Not yet installable from PyPI: newest published omnibase-infra is 0.36.1, whose omnibase-spi>=0.21,<0.22 pin is unsatisfiable against published spi 0.23.1. Python 3.12+ required.",
+      "installable_from_pypi": true,
+      "notes": "OMN-16041: `omnibase-core` ships the `onex` console script; the `delegate` SUBCOMMAND is registered by `omnibase-infra` via the `onex.cli` entry-point group. Installing omnibase-core alone yields `Error: No such command 'delegate'` (exit 2). Both packages must be installed into the SAME environment. Installable from PyPI as of 2026-08-15: omnibase-infra 0.38.6 is published, so the declared pins resolve against the live index. Python 3.12+ required.",
       "source_of_truth": "plugin-compat.yaml#onex_cli"
     },
     "python": ">=3.12"
