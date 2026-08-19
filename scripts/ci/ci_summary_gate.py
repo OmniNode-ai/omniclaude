@@ -264,6 +264,8 @@ class CheckRunState:
     name: str
     status: str  # queued | in_progress | completed | ...
     conclusion: str | None  # success | failure | cancelled | skipped | ... | None
+    id: int | None = None  # GitHub check-run id -- monotonically increasing
+    started_at: str | None = None  # ISO8601; sorts chronologically as a string
 
 
 def _check_run_states(check_runs: list[dict]) -> list[CheckRunState]:
@@ -273,14 +275,58 @@ def _check_run_states(check_runs: list[dict]) -> list[CheckRunState]:
         if not name:
             continue
         conclusion = raw.get("conclusion")
+        raw_id = raw.get("id")
+        try:
+            run_id = int(raw_id) if raw_id is not None else None
+        except (TypeError, ValueError):
+            run_id = None
+        started_at = raw.get("started_at")
         states.append(
             CheckRunState(
                 name=name,
                 status=str(raw.get("status") or ""),
                 conclusion=None if conclusion is None else str(conclusion),
+                id=run_id,
+                started_at=str(started_at) if started_at else None,
             )
         )
     return states
+
+
+def _select_latest(rows: list[CheckRunState]) -> CheckRunState | None:
+    """Return the single most-recent row among ``rows``, or ``None`` when
+    recency is not determinable (OMN-16236).
+
+    A single row is trivially its own latest. For multiple rows, recency is
+    determinable only when EVERY row carries the same comparable signal --
+    GitHub check-run ``id`` (monotonically increasing) preferred, falling
+    back to ``started_at`` (ISO8601 sorts chronologically as a string) only
+    when no row carries an id. If even one row lacks both signals, this
+    returns ``None`` -- the caller must then treat every row as still live
+    (fail-closed on ambiguous/missing recency data) rather than guess which
+    one is "latest" from list position, which is exactly the bug this fixes:
+    the check-runs endpoint's row order is not guaranteed to be chronological.
+    """
+
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    if all(row.id is not None for row in rows):
+        return max(rows, key=lambda row: row.id)  # type: ignore[arg-type,return-value]
+    if all(row.started_at for row in rows):
+        return max(rows, key=lambda row: row.started_at)  # type: ignore[arg-type,return-value]
+    return None
+
+
+def _effective_rows(rows: list[CheckRunState]) -> list[CheckRunState]:
+    """Collapse ``rows`` for one context NAME to the single latest row when
+    recency is determinable across all of them; otherwise return every row
+    unchanged so ambiguous/missing recency data stays conservative (all must
+    be good) rather than silently narrowing to a guess (OMN-16236)."""
+
+    latest = _select_latest(rows)
+    return [latest] if latest is not None else rows
 
 
 def evaluate_external(
@@ -298,6 +344,17 @@ def evaluate_external(
     (PENDING), never as silently satisfied. This is what the caller's
     poll-then-deadline-converts-to-FAILURE loop expects: a fetch hiccup keeps
     polling, it does not manufacture a green.
+
+    OMN-16236: each context name's rows collapse to the single latest row
+    (via :func:`_effective_rows`) whenever recency is determinable across
+    all of them, so a stale FAILURE/CANCELLED row from an earlier attempt
+    can never permanently wedge the gate once a provably later row for the
+    same name is good. When recency is NOT determinable (missing/mixed id
+    and started_at), every observed row stays in play and all must be good
+    -- this is what preserves the OMN-15112 ALL-must-succeed protection for
+    genuinely-concurrent duplicate producers (e.g. ~52 callers all minting
+    "occ-preflight / eligibility") when no timestamp distinguishes them from
+    a rerun history.
     """
 
     if check_runs is None:
@@ -316,10 +373,11 @@ def evaluate_external(
         if not rows:
             pending.append(name)
             continue
-        row = rows[-1]  # single-producer name: last observed row is authoritative
-        if row.status != "completed":
+        active = _effective_rows(rows)
+        if any(row.status != "completed" for row in active):
             pending.append(name)
-        elif row.conclusion not in EXTERNAL_GOOD_CONCLUSIONS:
+            continue
+        if any(row.conclusion not in EXTERNAL_GOOD_CONCLUSIONS for row in active):
             failures.append(name)
 
     for name in sorted(all_must_succeed):
@@ -327,12 +385,15 @@ def evaluate_external(
         if not rows:
             pending.append(name)
             continue
-        if any(row.status != "completed" for row in rows):
+        active = _effective_rows(rows)
+        if any(row.status != "completed" for row in active):
             pending.append(name)
             continue
-        bad = [row for row in rows if row.conclusion not in EXTERNAL_GOOD_CONCLUSIONS]
+        bad = [row for row in active if row.conclusion not in EXTERNAL_GOOD_CONCLUSIONS]
         if bad:
-            failures.append(f"{name} ({len(bad)}/{len(rows)} producer(s) not success)")
+            failures.append(
+                f"{name} ({len(bad)}/{len(active)} producer(s) not success)"
+            )
 
     if failures:
         return "FAILURE", failures, pending
