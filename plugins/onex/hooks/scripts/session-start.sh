@@ -142,7 +142,7 @@ if [[ "$OMNICLAUDE_MODE" == "lite" ]]; then
     # 3. Exit code 0
     #
     # NOT initialized: Kafka emit daemon, intelligence context, ticket metadata
-    echo '{"hookSpecificOutput":{"additionalContext":"omniclaude lite mode active — generic development tooling only"}}'
+    echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"omniclaude lite mode active — generic development tooling only"}}'
     exit 0
 fi
 
