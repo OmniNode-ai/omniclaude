@@ -2,15 +2,29 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# ensure-plugin-venv.sh — Build plugin venv in CLAUDE_PLUGIN_DATA on first session
+# ensure-plugin-venv.sh — Build plugin venv in CLAUDE_PLUGIN_DATA
 #
-# Runs as a SessionStart hook. Builds a Python venv in the persistent
-# CLAUDE_PLUGIN_DATA directory (survives plugin updates). Skips if the venv
-# already exists and the marker matches current plugin version + lockfile hash.
+# Invoked manually, NOT registered in hooks.json: scripts/repair-plugin-venv.sh
+# delegates here, and the onboarding skill documents running it by hand
+# (plugins/onex/skills/onboarding/SKILL.md). Builds a Python venv in the
+# persistent CLAUDE_PLUGIN_DATA directory (survives plugin updates). Skips if
+# the venv already exists and the marker matches current plugin version +
+# lockfile hash.
 #
 # [OMN-10500]
 
 set -euo pipefail
+
+# Load ~/.omnibase/.env so OMNI_HOME and other platform vars are available
+# even when not exported by the parent shell.
+_GLOBAL_ENV="${HOME}/.omnibase/.env"
+if [[ -f "$_GLOBAL_ENV" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$_GLOBAL_ENV" 2>/dev/null || true
+    set +a
+fi
+unset _GLOBAL_ENV
 
 VENV_DIR="${CLAUDE_PLUGIN_DATA:?CLAUDE_PLUGIN_DATA must be set}/.venv"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT must be set}"
