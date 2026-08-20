@@ -560,6 +560,59 @@ class TestExternalContextLatestPerName:
         assert verdict == "FAILURE"
         assert name in failures
 
+    def test_tied_started_at_is_not_a_latest_row(self) -> None:
+        # A tie is not recency. `max` would break it by list position -- the
+        # exact non-signal this fix exists to reject -- so a same-instant
+        # SUCCESS must never suppress a concurrent FAILURE. `started_at` is
+        # only second-granular, so ties among concurrent producers are
+        # expected, not hypothetical.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:45:45Z"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert name in failures
+
+    def test_tied_started_at_success_first_in_list_order_still_fails(self) -> None:
+        # Same tie, opposite list order: the verdict must not depend on which
+        # tied row the endpoint happened to return first.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:45:45Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert name in failures
+
+    def test_tied_latest_does_not_mask_an_older_distinct_failure(self) -> None:
+        # A tie at the maximum keeps EVERY row in play, not just the tied
+        # ones -- so an unambiguously older failure still blocks too.
+        name = "occ-preflight / eligibility"
+        assert name in ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:40:00Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        # The ALL-must-succeed path annotates the name with its producer
+        # tally; all 3 rows stayed in play, so 1 of 3 is reported red.
+        assert any(entry.startswith(name) for entry in failures)
+        assert "1/3 producer(s) not success" in " ".join(failures)
+
+    def test_untied_latest_still_collapses_when_ids_are_distinct(self) -> None:
+        # The tie guard must not regress the fix itself: distinct ids are
+        # still a determinable recency signal and still collapse to one row.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", id=5001))
+        rows.append(self._check_run(name, "success", id=5002))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
     def test_all_must_succeed_stale_failure_then_fresh_success_is_success(self) -> None:
         # Same fix applied to the ALL_MUST_SUCCEED_EXTERNAL_NAMES path
         # (occ-preflight / eligibility in production): a stale FAILURE from

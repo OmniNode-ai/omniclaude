@@ -298,14 +298,25 @@ def _select_latest(rows: list[CheckRunState]) -> CheckRunState | None:
     recency is not determinable (OMN-16236).
 
     A single row is trivially its own latest. For multiple rows, recency is
-    determinable only when EVERY row carries the same comparable signal --
-    GitHub check-run ``id`` (monotonically increasing) preferred, falling
-    back to ``started_at`` (ISO8601 sorts chronologically as a string) only
-    when no row carries an id. If even one row lacks both signals, this
-    returns ``None`` -- the caller must then treat every row as still live
-    (fail-closed on ambiguous/missing recency data) rather than guess which
-    one is "latest" from list position, which is exactly the bug this fixes:
-    the check-runs endpoint's row order is not guaranteed to be chronological.
+    determinable only when EVERY row carries one comparable signal: GitHub
+    check-run ``id`` (monotonically increasing) is used when every row has
+    one, otherwise ``started_at`` (ISO8601 sorts chronologically as a string)
+    is used when every row has one -- so the timestamp path also covers a
+    partial id signal, not only a wholly absent one. If even one row lacks
+    both signals, this returns ``None`` -- the caller must then treat every
+    row as still live (fail-closed on ambiguous/missing recency data) rather
+    than guess which one is "latest" from list position, which is exactly the
+    bug this fixes: the check-runs endpoint's row order is not guaranteed to
+    be chronological.
+
+    A TIED maximum is likewise not a latest row and also returns ``None``.
+    ``max`` breaks a tie by list position -- the very non-signal this
+    function exists to reject -- so a tie between genuinely concurrent
+    producers could otherwise return a SUCCESS row and silently suppress a
+    same-instant FAILURE, which is precisely the OMN-15112 protection this
+    change must preserve. ``started_at`` is only second-granular, so ties
+    among the ~52 concurrent "occ-preflight / eligibility" producers are
+    expected rather than hypothetical.
     """
 
     if not rows:
@@ -313,9 +324,13 @@ def _select_latest(rows: list[CheckRunState]) -> CheckRunState | None:
     if len(rows) == 1:
         return rows[0]
     if all(row.id is not None for row in rows):
-        return max(rows, key=lambda row: row.id)  # type: ignore[arg-type,return-value]
+        top_id = max(row.id for row in rows if row.id is not None)
+        winners = [row for row in rows if row.id == top_id]
+        return winners[0] if len(winners) == 1 else None
     if all(row.started_at for row in rows):
-        return max(rows, key=lambda row: row.started_at)  # type: ignore[arg-type,return-value]
+        top_started = max(row.started_at for row in rows if row.started_at)
+        winners = [row for row in rows if row.started_at == top_started]
+        return winners[0] if len(winners) == 1 else None
     return None
 
 
@@ -349,12 +364,13 @@ def evaluate_external(
     (via :func:`_effective_rows`) whenever recency is determinable across
     all of them, so a stale FAILURE/CANCELLED row from an earlier attempt
     can never permanently wedge the gate once a provably later row for the
-    same name is good. When recency is NOT determinable (missing/mixed id
-    and started_at), every observed row stays in play and all must be good
-    -- this is what preserves the OMN-15112 ALL-must-succeed protection for
+    same name is good. When recency is NOT determinable -- some row carries
+    neither an id nor a started_at, or the latest is TIED between two or more
+    rows -- every observed row stays in play and all must be good. That is
+    what preserves the OMN-15112 ALL-must-succeed protection for
     genuinely-concurrent duplicate producers (e.g. ~52 callers all minting
-    "occ-preflight / eligibility") when no timestamp distinguishes them from
-    a rerun history.
+    "occ-preflight / eligibility") when nothing distinguishes them from a
+    rerun history.
     """
 
     if check_runs is None:
