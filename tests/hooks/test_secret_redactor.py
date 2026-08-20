@@ -212,6 +212,97 @@ class TestSecretPatterns:
             assert hasattr(pattern, "sub")  # Compiled regex has sub method
 
 
+class TestOMN16277BoundedUrlCredentialPattern:
+    """OMN-16277 (fixing OMN-15462): the URL-userinfo pattern's char classes
+    must be bounded to a URL authority (no whitespace/slash/newline), not
+    "any later colon, any later @". Real single-line connection strings must
+    still redact; a legitimate multi-line Bash output containing an
+    unrelated URL, a later colon, and a later @ must NOT be mass-redacted.
+    """
+
+    def test_real_connection_string_still_redacted(self) -> None:
+        """GREEN-preserve: a genuine single-line connection string redacts."""
+        text = "DATABASE_URL=postgresql://appuser:Sup3rSecr3tPW9@db.internal:5432/appdb"
+        result = redact_secrets(text)
+        assert "Sup3rSecr3tPW9" not in result
+        assert "REDACTED" in result
+
+    def test_mysql_and_mongodb_schemes_still_redacted(self) -> None:
+        text = "mysql://root:hunter2pw@127.0.0.1:3306/app mongodb://u:p4ssHunter@cluster0/db"
+        result = redact_secrets(text)
+        assert "hunter2pw" not in result
+        assert "p4ssHunter" not in result
+
+    def test_legitimate_multiline_report_not_mass_redacted(self) -> None:
+        """OMN-15462 reproduction: two ordinary lines (a Linear URL, then
+        prose containing a later colon and a later @dev ref-pin) must not
+        be treated as one giant userinfo match spanning the newline.
+        """
+        text = (
+            "ticketed as [OMN-15460](https://linear.app/omninode/issue/OMN-15460)"
+            " (High, bug).\nRoot cause: contracts exist on OCC @dev but 404 on"
+            " omnimarket@dev.\n"
+        )
+        result = redact_secrets(text)
+        assert result == text, (
+            "unbounded char classes matched across the newline and redacted "
+            "ordinary report prose that contains no credential"
+        )
+
+    def test_git_log_output_with_author_emails_not_mass_redacted(self) -> None:
+        """Realistic Bash tool output: git log with an https remote URL early
+        and unrelated author `<email@host>` lines later must survive intact.
+        """
+        text = (
+            "remote: https://github.com/OmniNode-ai/omniclaude.git\n"
+            "commit 4ac599abbf00\n"
+            "Author: Jane Doe <jane.doe@example.com>\n"
+            "Date:   Wed Aug 19 10:00:00 2026 -0700\n\n"
+            "    docs: fix broken links\n"
+        )
+        result = redact_secrets(text)
+        assert result == text
+
+
+class TestOMN16277CompoundKeySecretPattern:
+    """OMN-16277: catches secret-bearing key NAMES with no word boundary
+    before the label root -- e.g. JSON/map key `clientSecret`, where \\b
+    never fires between "client" and "Secret" (both are word characters).
+    This is the exact shape from the 2026-08-19 morning incident (an
+    over-broad `kubectl -o json`/jsonpath dump of an Infisical
+    machine-identity Secret object).
+    """
+
+    def test_redacts_json_clientsecret_key(self) -> None:
+        text = '{"clientId":"machine-id-abc123","clientSecret":"zQ8mNc2VbTf6RkP1xYh4LwEj9Dst0Auo"}'
+        result = redact_secrets(text)
+        assert "zQ8mNc2VbTf6RkP1xYh4LwEj9Dst0Auo" not in result
+        assert "REDACTED" in result
+        # The non-secret sibling field must survive.
+        assert "machine-id-abc123" in result
+
+    def test_redacts_snake_case_client_secret_key(self) -> None:
+        text = 'client_secret: "9fT2kLpQmZx7VbHn4RcE8sYd1WgAj0Ou"'
+        result = redact_secrets(text)
+        assert "9fT2kLpQmZx7VbHn4RcE8sYd1WgAj0Ou" not in result
+        assert "REDACTED" in result
+
+    def test_redacts_camelcase_apikey_key(self) -> None:
+        text = '"dbApiKey": "AKzX9mQ2Lc8VpT4nRe1WbHd6YsFj0Ou"'
+        result = redact_secrets(text)
+        assert "AKzX9mQ2Lc8VpT4nRe1WbHd6YsFj0Ou" not in result
+        assert "REDACTED" in result
+
+    def test_non_secret_sibling_keys_preserved(self) -> None:
+        """Only the secret-shaped key's value is touched; a short numeric
+        field with "secret" as a substring root but a short/non-token value
+        is left alone (below the 8-char value floor)."""
+        text = '{"clientSecretTtlSeconds": 3600, "clientId": "abc"}'
+        result = redact_secrets(text)
+        assert "3600" in result
+        assert "abc" in result
+
+
 class TestRedactionResult:
     """Test RedactionResult namedtuple."""
 

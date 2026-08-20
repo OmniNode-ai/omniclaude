@@ -1368,6 +1368,14 @@ components:
   path: plugins/onex/hooks/scripts/post_tool_use_return_path_auditor.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_secret_redact_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_secret_redact_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-16277). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); narrowly-scoped security control (same class as the SubagentStop secret-leak guard, OMN-15062) that masks secret-shaped patterns in raw Bash tool_response text before it reaches the transcript, registered in hooks.json alongside the other live PreToolUse/PostToolUse/SubagentStop hooks.
 - id: hooks/scripts/post_tool_use_state_verify.sh
   kind: hook
   exposure: beta

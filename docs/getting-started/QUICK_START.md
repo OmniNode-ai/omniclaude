@@ -62,10 +62,11 @@ USE_EVENT_ROUTING=true
 
 The plugin hooks are active from whatever path Claude Code resolves the plugin to — for a
 `directory`-source marketplace that is the source checkout, not a copy in the plugin cache.
-From within a Claude Code session in this project:
+From a terminal:
 
-```
-/deploy-local-plugin
+```bash
+claude plugin marketplace update omninode-tools
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
 ```
 
 Where Claude Code loads the plugin from depends on the marketplace source type, and

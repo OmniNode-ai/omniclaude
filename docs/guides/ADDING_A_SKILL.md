@@ -129,7 +129,7 @@ chmod +x plugins/onex/skills/my-skill/scripts/run.sh
 
 ## Invoke the Skill
 
-After deploying (`/deploy-local-plugin`), invoke the skill in Claude Code:
+After deploying (`claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`), invoke the skill in Claude Code:
 
 ```
 /my-skill

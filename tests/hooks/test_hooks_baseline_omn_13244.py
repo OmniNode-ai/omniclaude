@@ -27,13 +27,22 @@ report-contract guard that fails a lane RED when its final return is
 bare-Done-class rather than the report the golden-chain contract requires
 (real incident: workflow runs ``wf_00bcb6a9-f0b`` 3/5 and
 ``wf_1923e07f-b65`` 3/3 returned filler final text while their durable
-artifacts were real). Everything else stays disabled. These tests therefore
-lock in a *narrowed* baseline:
+artifacts were real). OMN-16277 carves a fifth, likewise narrow exception: a
+``PostToolUse`` Bash-matcher secret-redaction guard that masks secret-shaped
+patterns in raw Bash ``tool_response`` text via
+``hookSpecificOutput.updatedToolOutput`` before it lands in the transcript --
+a security control, not a re-enable of the disabled context-injection/
+measurement hooks (real incident: two credential leaks on 2026-08-19, an
+over-broad kubectl jsonpath dump of an Infisical machine-identity
+``clientSecret``, and an ``env | grep`` output whose password lived
+mid-URL rather than in a matched key). Everything else stays disabled.
+These tests therefore lock in a *narrowed* baseline:
 
 1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard,
-   the worktree canonical-root guard, the SubagentStop secret-leak guard, and
-   the SubagentStop report-contract guard, and nothing else, while retaining
-   the ``$schema`` / ``description`` / ``version`` metadata keys.
+   the worktree canonical-root guard, the PostToolUse secret-redaction
+   guard, the SubagentStop secret-leak guard, and the SubagentStop
+   report-contract guard, and nothing else, while retaining the ``$schema``
+   / ``description`` / ``version`` metadata keys.
 2. The skill-substitution guard machinery (module, config YAML, wrapper
    script, tests) REMAINS on disk -- unregistered, so activating it later is
    a one-line config add and an explicit operator decision, not a code
@@ -61,13 +70,16 @@ _GUARD_FILES = (
 )
 
 
-# The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 + OMN-15213
-# carve-outs, in hooks.json registration order.
+# The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 +
+# OMN-15213 + OMN-16277 carve-outs, in hooks.json registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
 _WORKTREE_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_worktree_guard.sh"
+)
+_POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
 )
 _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_secret_leak_guard.sh"
@@ -91,11 +103,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     data = json.loads(_HOOKS_JSON.read_text())
     hooks = data.get("hooks", {})
 
-    # Exactly two event classes, PreToolUse and SubagentStop, are registered.
-    assert set(hooks.keys()) == {"PreToolUse", "SubagentStop"}, (
-        "hooks.json must register ONLY PreToolUse and SubagentStop for the "
-        "OMN-13856/OMN-14330/OMN-15062 carve-outs (measurement baseline otherwise "
-        f"intact). Found event classes: {sorted(hooks.keys())!r}"
+    # Exactly three event classes -- PreToolUse, PostToolUse, and
+    # SubagentStop -- are registered.
+    assert set(hooks.keys()) == {"PreToolUse", "PostToolUse", "SubagentStop"}, (
+        "hooks.json must register ONLY PreToolUse, PostToolUse, and SubagentStop "
+        "for the OMN-13856/OMN-14330/OMN-15062/OMN-16277 carve-outs (measurement "
+        f"baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
     # Exactly two PreToolUse commands are wired: Done-flip guard, then worktree guard.
@@ -117,6 +130,25 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert matchers == ["^mcp__linear-server__(save_issue|update_issue)$", "Bash"], (
         f"Done-flip guard must match Linear save_issue/update_issue and the "
         f"worktree guard must match Bash. Found: {matchers!r}"
+    )
+
+    # Exactly one PostToolUse command is wired: the secret-redaction guard,
+    # matching Bash only (OMN-16277 carve-out).
+    post_tool_use_commands = [
+        hook.get("command", "")
+        for group in hooks["PostToolUse"]
+        for hook in group.get("hooks", [])
+    ]
+    assert post_tool_use_commands == [_POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND], (
+        "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
+        f"(OMN-16277 carve-out) and nothing else. Found: {post_tool_use_commands!r}"
+    )
+    post_tool_use_matchers = [
+        group.get("matcher", "") for group in hooks["PostToolUse"]
+    ]
+    assert post_tool_use_matchers == ["Bash"], (
+        "PostToolUse secret-redaction guard must match Bash only. Found: "
+        f"{post_tool_use_matchers!r}"
     )
 
     # Exactly two SubagentStop commands are wired: the secret-leak guard,
