@@ -42,21 +42,30 @@ internal. See `prompt.md` for the one command and how to present the typed resul
 
 ## Prerequisite: install the `onex` CLI *with* the delegate subcommand
 
-Two packages, one environment (see `plugin-compat.yaml` → `onex_cli`, the pin's
+Three packages, one environment (see `plugin-compat.yaml` → `onex_cli`, the pin's
 source of truth):
 
 | Package | Provides |
 |---|---|
 | `omnibase-core >= 0.46.8` | the `onex` console script and the `onex.cli` entry-point loader |
 | `omnibase-infra >= 0.38.4` | the `delegate` subcommand, registered into the `onex.cli` group |
+| `omnimarket >= 0.4.7` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'
+uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.7' 'omnibase-core>=0.46.8'
 # or:
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.7'
 ```
 
 Verify: `onex delegate --help` must exit 0 **from any directory**.
+
+`--help` alone is not proof the command works — click answers it before any
+dispatch. If `omnimarket` is missing, `--help` still exits 0 and the first real
+invocation fails with `Error: Unknown node 'node_delegate_skill_orchestrator'`,
+listing ~130 unrelated nodes as "known". The node is found through the
+`onex.nodes` entry-point group over **installed distributions**, so no
+`$OMNI_HOME` and no local `omnimarket` checkout is needed — the package alone is
+enough.
 
 **Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever
 project the *current directory* belongs to, so the command only works inside a

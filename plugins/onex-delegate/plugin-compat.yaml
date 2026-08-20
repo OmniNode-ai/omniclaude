@@ -50,13 +50,27 @@ onex_cli:
   min_version: "0.38.4"
   console_script_package: "omnibase-core"
   console_script_min_version: "0.46.8"
+  # The package that ships the BACKING NODE (OMN-16191). `package` and
+  # `console_script_package` between them produce an `onex` with a `delegate`
+  # subcommand, but the subcommand dispatches node_delegate_skill_orchestrator,
+  # which lives in neither of them. Node lookup is `onex.nodes` entry-point
+  # resolution over INSTALLED distributions (omnibase_core cli_node.py
+  # _resolve_packaged_contract), so the node is reachable only when omnimarket
+  # is installed into the SAME environment. Omitting it produced, verbatim:
+  #   Error: Unknown node 'node_delegate_skill_orchestrator'
+  # on a byte-for-byte-as-documented clean install — with ~130 other nodes
+  # listed as "known", which made it read like a registry bug rather than a
+  # missing package. There is no workspace/$OMNI_HOME requirement here: the
+  # entry point resolves out of site-packages.
+  node_package: "omnimarket"
+  node_package_min_version: "0.4.7"
   # Proven 2026-08-13 (OMN-16041): both forms produce an `onex` on PATH whose
   # `onex delegate --help` exits 0 from an arbitrary working directory.
   # Do NOT document `uv run onex delegate` — `uv run` resolves the venv of
   # whatever project the CURRENT directory belongs to, so it only works inside
   # a repo that happens to co-install omnibase-infra (see cwd_independent below).
-  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'"
-  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'"
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.7' 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.7'"
   cwd_independent: true
   # GAP CLOSED 2026-08-16 (OMN-16041). The release this flag was waiting on has
   # landed: omnibase-infra 0.38.6 was published to PyPI 2026-08-15T17:23:39Z
@@ -64,6 +78,15 @@ onex_cli:
   # live index and `onex delegate --help` exits 0 in a clean venv. The strict
   # xfail in tests/test_install_works.py is removed in this same change, per the
   # ratchet the marker itself described.
+  #
+  # RE-QUALIFIED 2026-08-18 (OMN-16191). The flag stayed true through a change
+  # that widened what "installable" has to mean: the gate it is paired with now
+  # resolves the backing node, not just `onex delegate --help`. Publishing
+  # omnimarket 0.4.7 required unblocking two upstream pins that were never
+  # publishable and were masked in-workspace by [tool.uv.sources] git overrides
+  # (onex-change-control had never been published at all; omninode-memory's
+  # spi-range fix was on dev but never released). Those are live on the index
+  # before this flag was allowed to stay true.
   installable_from_pypi: true
 
 # delegate's only backing node. Topic/schema entries intentionally omitted:
