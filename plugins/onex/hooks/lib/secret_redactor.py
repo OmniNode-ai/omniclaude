@@ -78,12 +78,41 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE),
         r"\1***REDACTED***",
     ),
-    # Password in URLs
-    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    # Password in URLs. Bounded to a URL authority -- no whitespace, `/`, or
+    # `@` inside the userinfo (OMN-15462 fix). The prior unbounded classes
+    # (`[^:]+` / `[^@]+`) matched "any later colon, any later @" across
+    # whitespace and newlines, so two ordinary lines of prose containing a
+    # URL, a later colon, and a later @dev/@main ref-pin were treated as one
+    # giant userinfo match. Bounding the classes to authority characters
+    # (no `/`, whitespace, or `@`) keeps real single-line connection
+    # strings (postgres://user:pass@host, mysql://..., mongodb://...)  # pragma: allowlist secret
+    # redacted while leaving multi-line report/log text alone.
+    (re.compile(r"(://[^:/\s@]+:)[^@/\s]+(@)"), r"\1***REDACTED***\2"),
     # Generic secret patterns in key=value format
     (
         re.compile(
             r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Secret-bearing key NAMES with no word boundary before the label root
+    # (OMN-16277): JSON/map/env keys like "clientSecret", "client_secret",
+    # "dbApiKey" are not caught by the \b-anchored pattern above -- \b never
+    # fires between "client" and "Secret" in camelCase (both are word
+    # characters), so a `kubectl -o json`/jsonpath dump of a k8s Secret
+    # object (2026-08-19 morning incident) passed through untouched. This
+    # pattern anchors on KEY SHAPE instead: an identifier ending in one of
+    # the label roots, immediately followed (optionally quoted) by `:`/`=`
+    # and a token-shaped value with no embedded whitespace. Deliberately
+    # broader than a word-boundary match -- false positives here only
+    # over-redact a non-secret value (safe failure mode for a masking
+    # control, not a blocking one); false negatives are the costly failure.
+    (
+        re.compile(
+            r'(["\']?[A-Za-z][A-Za-z0-9_]*(?:secret|token|passwd|password|'
+            r'apikey|api_key|credential)[A-Za-z0-9_]*["\']?\s*[:=]\s*)'
+            r"""["']?[A-Za-z0-9+/=_.\-]{8,}""",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",

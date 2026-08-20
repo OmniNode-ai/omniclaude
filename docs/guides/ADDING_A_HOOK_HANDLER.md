@@ -137,10 +137,11 @@ uv run pytest tests/unit/hooks/lib/test_handler_my_feature.py -v
 
 ## Deploy and Verify
 
-Deploy the plugin to the Claude Code plugin cache:
+Deploy via the Claude Code plugin marketplace:
 
-```
-/deploy-local-plugin
+```bash
+claude plugin marketplace update omninode-tools
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
 ```
 
 Start a new Claude Code session. The hook will fire on the next matching

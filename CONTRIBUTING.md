@@ -54,7 +54,9 @@ Never use a uv-managed interpreter as the base for the plugin daemon venv. See `
 
 ```bash
 # From omni_home/omniclaude/
-deploy_local_plugin --execute
+git -C "$OMNI_HOME/omniclaude" pull --ff-only
+claude plugin marketplace update omninode-tools
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
 ```
 
 After deploy, verify with the plugin verification skill inside an active Claude Code session:
