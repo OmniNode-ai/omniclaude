@@ -439,6 +439,214 @@ class TestExternalContextLayer:
 
 
 @pytest.mark.unit
+class TestExternalContextLatestPerName:
+    """OMN-16236: the L4 layer previously required EVERY historical check-run
+    row for a context NAME to be good -- including stale rows from earlier
+    reruns that can never retroactively flip. omniclaude#1999 wedged at
+    130 SUCCESS / 1 FAILURE with 9 stale non-success rows out of 36 total for
+    two context names, even though the freshest run of each was green.
+
+    Fix: when a context name's rows carry a determinable recency signal
+    (GitHub check-run ``id`` -- monotonically increasing -- or, failing that,
+    ``started_at``) for EVERY row, only the single most-recent row is
+    authoritative. When recency is NOT determinable for at least one row
+    (mixed/missing signal), the fallback stays the pre-fix conservative
+    behavior -- require every observed row good -- so ambiguous history can
+    never silently narrow to a guessed "latest" and the OMN-15112
+    concurrent-duplicate-producer protection (asserted below) is preserved
+    when a fixture carries no timestamps."""
+
+    def _check_run(
+        self,
+        name: str,
+        conclusion: str | None,
+        *,
+        status: str = "completed",
+        id: int | None = None,  # noqa: A002 - mirrors the GitHub payload field name
+        started_at: str | None = None,
+    ) -> dict:
+        row: dict = {"name": name, "status": status, "conclusion": conclusion}
+        if id is not None:
+            row["id"] = id
+        if started_at is not None:
+            row["started_at"] = started_at
+        return row
+
+    def _all_external_success(self) -> list[dict]:
+        rows = [self._check_run(name, "success") for name in EXPECTED_EXTERNAL_CONTEXTS]
+        rows.extend(
+            self._check_run(name, "success")
+            for name in sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
+        )
+        return rows
+
+    def test_stale_failure_then_fresh_success_same_name_is_success(self) -> None:
+        # Single-producer (EXPECTED_EXTERNAL_CONTEXTS) name: an old rerun
+        # failed, a later rerun on the same head SHA succeeded. The stale
+        # FAILURE must not block the gate once id proves it is superseded.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", id=1001))
+        rows.append(self._check_run(name, "success", id=1002))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_stale_success_then_fresh_failure_same_name_is_failure(self) -> None:
+        # Inverse: the LATEST row is the bad one -- a stale success must
+        # never rescue a fresh failure.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "success", id=2001))
+        rows.append(self._check_run(name, "failure", id=2002))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert name in failures
+
+    def test_list_position_is_not_recency_fresh_row_appears_first(self) -> None:
+        # The pre-fix bug for EXPECTED_EXTERNAL_CONTEXTS took `rows[-1]` as
+        # authoritative -- i.e. LIST POSITION, not chronology. GitHub's
+        # commits/{sha}/check-runs response order is not guaranteed to put
+        # the newest row last (this is exactly what wedged omniclaude#1999:
+        # a fresh green existed but a stale row happened to sort last).
+        # Put the fresh SUCCESS (higher id) FIRST and the stale FAILURE
+        # (lower id) LAST to prove id -- not append/list order -- decides.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "success", id=5002))
+        rows.append(self._check_run(name, "failure", id=5001))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_recency_by_started_at_when_id_absent(self) -> None:
+        # Falls back to started_at (ISO8601 sorts chronologically) when id
+        # is not present on any row for the name.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", started_at="2026-08-17T10:00:00Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-18T10:00:00Z"))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_three_stale_failures_collapse_behind_one_fresh_success(self) -> None:
+        # Mirrors the real incident shape: many stale non-success rows, one
+        # fresh green -- proves this isn't just a pairwise special case.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", id=1))
+        rows.append(self._check_run(name, "cancelled", id=2))
+        rows.append(self._check_run(name, "failure", id=3))
+        rows.append(self._check_run(name, "success", id=4))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_partial_recency_signal_falls_back_to_conservative_all(self) -> None:
+        # One row carries an id, the other does not -- recency is NOT
+        # determinable for every row, so the fix must not guess: both rows
+        # stay in play and the observed failure still blocks (fail-closed on
+        # ambiguous/missing signal, per the OMN-16236 deliverable).
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "success", id=3001))
+        rows.append(self._check_run(name, "failure"))  # no id, no started_at
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert name in failures
+
+    def test_tied_started_at_is_not_a_latest_row(self) -> None:
+        # A tie is not recency. `max` would break it by list position -- the
+        # exact non-signal this fix exists to reject -- so a same-instant
+        # SUCCESS must never suppress a concurrent FAILURE. `started_at` is
+        # only second-granular, so ties among concurrent producers are
+        # expected, not hypothetical.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:45:45Z"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert name in failures
+
+    def test_tied_started_at_success_first_in_list_order_still_fails(self) -> None:
+        # Same tie, opposite list order: the verdict must not depend on which
+        # tied row the endpoint happened to return first.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:45:45Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert name in failures
+
+    def test_tied_latest_does_not_mask_an_older_distinct_failure(self) -> None:
+        # A tie at the maximum keeps EVERY row in play, not just the tied
+        # ones -- so an unambiguously older failure still blocks too.
+        name = "occ-preflight / eligibility"
+        assert name in ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:40:00Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        # The ALL-must-succeed path annotates the name with its producer
+        # tally; all 3 rows stayed in play, so 1 of 3 is reported red.
+        assert any(entry.startswith(name) for entry in failures)
+        assert "1/3 producer(s) not success" in " ".join(failures)
+
+    def test_untied_latest_still_collapses_when_ids_are_distinct(self) -> None:
+        # The tie guard must not regress the fix itself: distinct ids are
+        # still a determinable recency signal and still collapse to one row.
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", id=5001))
+        rows.append(self._check_run(name, "success", id=5002))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_all_must_succeed_stale_failure_then_fresh_success_is_success(self) -> None:
+        # Same fix applied to the ALL_MUST_SUCCEED_EXTERNAL_NAMES path
+        # (occ-preflight / eligibility in production): a stale FAILURE from
+        # an earlier attempt must not permanently wedge the gate once a
+        # fresh SUCCESS for the same name is provably later.
+        name = "occ-preflight / eligibility"
+        assert name in ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "failure", id=4001))
+        rows.append(self._check_run(name, "success", id=4002))
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS"
+        assert failures == []
+        assert pending == []
+
+    def test_all_must_succeed_concurrent_duplicates_without_recency_still_all_required(
+        self,
+    ) -> None:
+        # OMN-15112 regression pin, re-affirmed under the OMN-16236 fix: with
+        # NO recency signal on either row (the historic concurrent-duplicate-
+        # producer shape -- genuinely different callers reporting around the
+        # same time, not a rerun history), the ALL-must-succeed behavior is
+        # unchanged -- one cancelled duplicate among two producers still
+        # fails closed even though the other succeeded.
+        name = "occ-preflight / eligibility"
+        rows = [r for r in self._all_external_success() if r["name"] != name]
+        rows.append(self._check_run(name, "success"))
+        rows.append(self._check_run(name, "cancelled"))
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert any(name in f for f in failures)
+
+
+@pytest.mark.unit
 class TestCombineVerdicts:
     def test_in_run_success_and_external_success_is_success(self) -> None:
         code, _ = combine_verdicts((EXIT_SUCCESS, "in-run report"), "SUCCESS", [], [])

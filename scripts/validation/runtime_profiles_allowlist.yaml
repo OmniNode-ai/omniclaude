@@ -126,9 +126,6 @@ allowlist:
   - node_id: node_skill_dispatch_worker_orchestrator
     reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
       runtime-exempt)
-  - node_id: node_skill_doc_freshness_sweep_orchestrator
-    reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
-      runtime-exempt)
   - node_id: node_skill_dod_sweep_orchestrator
     reason: OMN-13288 baseline freeze; remediate via OMN-12982 (assign correct runtime lane or document
       runtime-exempt)
