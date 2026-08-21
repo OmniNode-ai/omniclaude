@@ -77,8 +77,8 @@ PUBLISHED_ACCEPT_STATUSES = ("published", "completed")
 # resolve_api_base_url. (Rule 8, omni_home/CLAUDE.md: fail-fast on missing
 # env, not silent fallback.)
 ENV_API_BASE_URL = "ONEX_API_BASE_URL"
-ENV_API_KEY = "ONEX_GATEWAY_API_KEY"  # pragma: allowlist secret -- env var NAME, not a secret value
-ENV_API_KEY_FILE = "ONEX_GATEWAY_API_KEY_FILE"  # pragma: allowlist secret -- env var NAME, not a secret value
+ENV_API_KEY = "ONEX_GATEWAY_API_KEY"  # pragma: allowlist secret; secret-ok: env var NAME constant, not a secret value
+ENV_API_KEY_FILE = "ONEX_GATEWAY_API_KEY_FILE"  # pragma: allowlist secret; secret-ok: env var NAME constant, not a secret value
 ENV_STATE_DIR = "ONEX_STATE_DIR"
 
 
