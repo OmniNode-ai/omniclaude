@@ -167,7 +167,6 @@ node_skill_dep_cascade_dedup_orchestrator = "omniclaude.nodes.node_skill_dep_cas
 node_skill_design_to_plan_orchestrator = "omniclaude.nodes.node_skill_design_to_plan_orchestrator"
 node_skill_dispatch_watchdog_orchestrator = "omniclaude.nodes.node_skill_dispatch_watchdog_orchestrator"
 node_skill_dispatch_worker_orchestrator = "omniclaude.nodes.node_skill_dispatch_worker_orchestrator"
-node_skill_doc_freshness_sweep_orchestrator = "omniclaude.nodes.node_skill_doc_freshness_sweep_orchestrator"
 node_skill_dod_sweep_orchestrator = "omniclaude.nodes.node_skill_dod_sweep_orchestrator"
 node_skill_dod_verify_orchestrator = "omniclaude.nodes.node_skill_dod_verify_orchestrator"
 node_skill_duplication_sweep_orchestrator = "omniclaude.nodes.node_skill_duplication_sweep_orchestrator"

@@ -340,15 +340,6 @@ components:
   - node_dispatch_worker
   - node_redeploy_orchestrator
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
-- id: doc_freshness_sweep
-  kind: skill
-  exposure: beta
-  owning_package: onex-skills-beta
-  surface_class: dispatch
-  path: plugins/onex/skills/doc_freshness_sweep/SKILL.md
-  backing_nodes:
-  - node_doc_freshness_sweep
-  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_doc_freshness_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
 - id: docs_dirty_alert
   kind: skill
   exposure: beta
