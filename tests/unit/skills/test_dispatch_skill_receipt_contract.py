@@ -49,7 +49,6 @@ ONEX_SKILL_SHIMS = (
     "create_ticket",
     "database_sweep",
     "design_to_plan",
-    "doc_freshness_sweep",
     "dod_verify",
     "duplication_sweep",
     "hostile_reviewer",

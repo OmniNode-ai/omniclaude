@@ -69,7 +69,6 @@ NON_CANONICAL: tuple[str, ...] = (
     "omniclaude.nodes.node_skill_dispatch_queue_drainer_orchestrator",
     "omniclaude.nodes.node_skill_dispatch_watchdog_orchestrator",
     "omniclaude.nodes.node_skill_dispatch_worker_orchestrator",
-    "omniclaude.nodes.node_skill_doc_freshness_sweep_orchestrator",
     "omniclaude.nodes.node_skill_docs_dirty_alert_orchestrator",
     "omniclaude.nodes.node_skill_dod_sweep_orchestrator",
     "omniclaude.nodes.node_skill_dod_verify_orchestrator",
