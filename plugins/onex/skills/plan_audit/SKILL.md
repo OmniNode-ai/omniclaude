@@ -104,7 +104,7 @@ Acceptable linkage patterns:
 - `ticket: OMN-XXXX` in a milestone block
 - `OMN-XXXX` reference anywhere in a milestone heading or body
 
-Check via `tracker.get_issue` for each referenced ticket ID.
+Verify via `tracker.get_issue` that each referenced ticket ID exists.
 Milestones with no ticket reference are flagged as coverage gaps.
 Referenced tickets that do not exist in Linear fail this check.
 
