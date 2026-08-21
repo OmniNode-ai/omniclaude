@@ -38,6 +38,7 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TypeVar
 from uuid import UUID, uuid4
 
@@ -69,6 +70,15 @@ from omniclaude.hooks.handler_event_emitter import (
 )
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import HookSource, SessionEndReason
+from omniclaude.hooks.spool_drain import (
+    DrainConfig,
+    SpoolDrainError,
+    drain_spool,
+    key_fingerprint,
+    resolve_api_base_url,
+    resolve_api_key,
+    resolve_spool_dir,
+)
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 # Configure logging for hook context
@@ -812,6 +822,144 @@ def cmd_tool_content(
 
     # Always exit 0 - observability must never break Claude Code
     sys.exit(0)
+
+
+# =============================================================================
+# Spool Drain / Shipper (OMN-16090)
+# =============================================================================
+# Drains the local hook-event spool (written by omnibase_infra's receipt-mode
+# CLI on emit-daemon failure) to the cloud gateway. This is a separate,
+# explicitly-invoked command — never run inline from a hook path, so it can
+# never block or slow Claude Code. See src/omniclaude/hooks/spool_drain.py
+# for the durability contract (never deletes, only moves after a confirmed
+# terminal status; retries transient failures with backoff; 4xx is poison).
+# =============================================================================
+
+
+@cli.command("drain")
+@click.option(
+    "--spool-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Spool directory. Default: $ONEX_STATE_DIR/emit_spool (fails fast if unset).",
+)
+@click.option(
+    "--base-url",
+    default=None,
+    help="Gateway base URL. Default: $ONEX_API_BASE_URL (fails fast if unset).",
+)
+@click.option(
+    "--source",
+    default="local_macos_claude_hooks",
+    help="Producer runtime profile stamped on every batch.",
+)
+@click.option(
+    "--batch-size", type=int, default=250, help="Events per batch (contract cap: 250)."
+)
+@click.option(
+    "--limit", type=int, default=0, help="Max spool files to consider (0 = all)."
+)
+@click.option(
+    "--max-batches", type=int, default=0, help="Stop after N batches (0 = no cap)."
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Frame and report; no network, no file moves."
+)
+@click.option(
+    "--require-status",
+    type=click.Choice(["completed", "published"]),
+    default="completed",
+    help="Status a workflow must reach before its files are moved to shipped/.",
+)
+@click.option("--poll-attempts", type=int, default=20)
+@click.option("--poll-interval", type=float, default=3.0)
+@click.option("--timeout", type=float, default=30.0)
+@click.option(
+    "--retry-attempts",
+    type=int,
+    default=3,
+    help="Retries for transient (5xx/connection) submit failures.",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, help="Print the drain summary as JSON."
+)
+def cmd_drain(
+    spool_dir: Path | None,
+    base_url: str | None,
+    source: str,
+    batch_size: int,
+    limit: int,
+    max_batches: int,
+    dry_run: bool,
+    require_status: str,
+    poll_attempts: int,
+    poll_interval: float,
+    timeout: float,
+    retry_attempts: int,
+    as_json: bool,
+) -> None:
+    """Drain the local hook-event spool to the gateway (POST /v1/workflows).
+
+    Never invoked from a hook — this is an explicit operator/cron command.
+    Credentials are resolved by name from ONEX_GATEWAY_API_KEY or
+    ONEX_GATEWAY_API_KEY_FILE; fails fast if neither is set.
+    """
+    try:
+        resolved_spool_dir = resolve_spool_dir(spool_dir)
+        resolved_base_url = resolve_api_base_url(base_url)
+        # Dry-run needs no credential — it makes no network call.
+        api_key = "" if dry_run else resolve_api_key()
+        if not dry_run:
+            click.echo(
+                f"credential: len={len(api_key)} fp={key_fingerprint(api_key)}",
+                err=True,
+            )
+
+        config = DrainConfig(
+            spool_dir=resolved_spool_dir,
+            base_url=resolved_base_url,
+            api_key=api_key,
+            source=source,
+            batch_size=batch_size,
+            limit=limit,
+            max_batches=max_batches,
+            dry_run=dry_run,
+            require_status=require_status,
+            poll_attempts=poll_attempts,
+            poll_interval=poll_interval,
+            timeout=timeout,
+            retry_attempts=retry_attempts,
+        )
+        summary = drain_spool(config)
+    except SpoolDrainError as e:
+        click.echo(f"ERROR: {e}", err=True)
+        sys.exit(2)
+
+    if as_json:
+        click.echo(summary.model_dump_json(indent=2))
+    else:
+        click.echo(f"spool             : {resolved_spool_dir}")
+        click.echo(f"mode              : {'DRY-RUN' if summary.dry_run else 'LIVE'}")
+        click.echo(f"files present     : {summary.files_present}")
+        click.echo(f"files considered  : {summary.files_considered}")
+        click.echo(
+            f"unique events     : {summary.unique_events} "
+            f"({summary.duplicate_files_collapsed} duplicate file(s) collapsed)"
+        )
+        if summary.skipped:
+            click.echo(f"skipped (malformed, left in spool): {len(summary.skipped)}")
+            for s in summary.skipped[:10]:
+                click.echo(f"  - {s.path}: {s.reason}")
+        click.echo(f"batches           : {len(summary.batches)}")
+        for b in summary.batches:
+            click.echo(
+                f"  {b.batch_sha[:12]}… events={b.event_count} confirmed={b.confirmed} "
+                f"status={b.status} http={b.http_status} moved={b.files_moved}"
+            )
+        click.echo(f"events shipped    : {summary.events_shipped}")
+        click.echo(f"remaining in spool: {summary.remaining_in_spool}")
+
+    sys.exit(1 if summary.had_failures else 0)
 
 
 # =============================================================================
