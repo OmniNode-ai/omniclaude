@@ -44,9 +44,11 @@ jobs:
 
       - name: Validate tag matches pyproject.toml version
         working-directory: ${{ github.workspace }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+            TAG="$RELEASE_TAG"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
@@ -112,9 +114,19 @@ jobs:
       - name: Set release tag
         id: tag
         working-directory: ${{ github.workspace }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+            # A newline in the dispatch input would forge extra GITHUB_OUTPUT
+            # entries, so constrain it to the tag charset before writing it.
+            case "$RELEASE_TAG" in
+              ''|*[!A-Za-z0-9.+_-]*)
+                echo "::error::release tag contains unsupported characters"
+                exit 1
+                ;;
+            esac
+            echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           else
             echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
           fi
@@ -153,9 +165,19 @@ jobs:
       - name: Set version
         id: ver
         working-directory: ${{ github.workspace }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.tag }}" | sed 's/version=v/version=/' >> $GITHUB_OUTPUT
+            # A newline in the dispatch input would forge extra GITHUB_OUTPUT
+            # entries, so constrain it to the tag charset before writing it.
+            case "$RELEASE_TAG" in
+              ''|*[!A-Za-z0-9.+_-]*)
+                echo "::error::release tag contains unsupported characters"
+                exit 1
+                ;;
+            esac
+            echo "version=${RELEASE_TAG#v}" >> $GITHUB_OUTPUT
           else
             echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
           fi
