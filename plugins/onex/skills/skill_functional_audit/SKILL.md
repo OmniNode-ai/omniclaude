@@ -120,7 +120,7 @@ Skills that read and report state without writes:
 ```
 aislop_sweep, agent_healthcheck, baseline, bus_audit, ci_watch,
 compliance_sweep, contract_sweep, coverage_sweep, data_flow_sweep,
-database_sweep, decision_store, dispatch_watchdog, doc_freshness_sweep,
+database_sweep, decision_store, dispatch_watchdog,
 dod_verify, duplication_sweep, env_parity, feature_dashboard, gap,
 golden_chain_sweep, hook_health_alert, ticketing_insights, ticketing_triage,
 observability, pipeline_audit, plan_audit, platform_readiness, pr_watch,

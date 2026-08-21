@@ -214,12 +214,6 @@ nodes:
         schema_version: v1
         role: subscribe
 
-  - node: node_doc_freshness_sweep
-    topics:
-      - name: onex.cmd.omnimarket.doc-freshness-sweep-start.v1
-        schema_version: v1
-        role: subscribe
-
   - node: node_dod_verify
     topics:
       - name: onex.cmd.omnimarket.dod-verify-start.v1

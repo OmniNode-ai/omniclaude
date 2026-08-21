@@ -166,5 +166,4 @@ PASS plans:
 ## See Also
 
 - `onex:dod_sweep` — DoD evidence verification across tickets
-- `onex:doc_freshness_sweep` — Broken references in docs
 - `onex:contract_sweep` — Contract YAML health
