@@ -335,15 +335,24 @@ tests/unit/hooks/lib/test_my_tool_observer.py::TestObserveToolExecution::test_lo
 
 ### Deploy
 
-From within a Claude Code session in this project:
+From a terminal:
 
-```
-/deploy-local-plugin
+```bash
+claude plugin marketplace update omninode-tools
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
 ```
 
-This copies `plugins/onex/` into `~/.claude/plugins/cache/`. No restart of
-Claude Code is required — the updated hook scripts take effect on the next
-tool call.
+Do not assume this copies `plugins/onex/` into `~/.claude/plugins/cache/` — for a
+`directory`-source marketplace it does not, and the cache is not the load path
+(OMN-15274). Read back where your hook actually loads from:
+
+```bash
+python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
+```
+
+Whatever it prints under **RESOLVED LOAD PATH** is the tree that executes. If that
+path is a git working tree, editing it changes enforcement immediately; a restart of
+Claude Code is the only guaranteed re-read.
 
 ### Trigger the hook
 
@@ -409,12 +418,19 @@ Work through this checklist in order:
    reason to exit 1 is if no valid Python interpreter is found. Set
    `PLUGIN_PYTHON_BIN` to an absolute path to override interpreter resolution.
 
-5. **Confirm the plugin cache was updated.** After `/deploy-local-plugin`,
-   check that the new script exists in the cache:
+5. **Confirm the hook is registered and executable at the resolved load path.**
+   Do not `ls` the plugin cache — a hit there proves nothing about what runs
+   (OMN-15274). The readback resolves the load path and EXEC-checks every
+   registered command:
 
    ```bash
-   ls ~/.claude/plugins/cache/hooks/scripts/my-tool-observer.sh
+   python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
    ```
+
+   Your hook must appear under each agent class that should run it, marked
+   `EXEC-OK`. A `HOOK_SCRIPT_MISSING` tripwire means it is registered but cannot
+   fire; a `MERGED_NOT_DEPLOYED` tripwire means your commit is upstream but not
+   in the tree that executes.
 
 6. **Confirm PYTHONPATH includes the lib directory.** In the shell script,
    `PYTHONPATH` must include `${HOOKS_LIB}` so `import my_tool_observer`

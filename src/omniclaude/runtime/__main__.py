@@ -99,14 +99,12 @@ def _check_backends() -> tuple[str, str]:
     Returns:
         (claude_code_status, vllm_status) tuple.
     """
-    # Check claude_code backend
-    claude_code_status = "OK"
-    try:
-        from omniclaude.nodes.node_claude_code_session_effect import (  # noqa: F401
-            node as _cc_node,
-        )
-    except Exception as exc:  # noqa: BLE001 — boundary: import check must not crash dry-run
-        claude_code_status = f"WARN ({exc})"
+    # claude_code backend: no concrete in-repo implementation ships since
+    # OMN-15960 deleted node_claude_code_session_effect as a duplicate,
+    # never-deployed surface of the canonical omnibase_infra coding-agent
+    # quartet (node_coding_agent_invoke_effect). A caller may still inject
+    # a duck-typed backend explicitly (see wiring_dispatchers.py).
+    claude_code_status = "REMOVED (OMN-15960; caller-injected only)"
 
     # Check vllm backend (local LLM inference effect)
     vllm_status = "OK"

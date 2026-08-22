@@ -21,7 +21,7 @@ silently dropped when no Kafka is reachable.
 ```bash
 git clone https://github.com/OmniNode-ai/omniclaude && cd omniclaude
 uv sync
-# In Claude Code: /deploy-local-plugin
+# From a terminal: claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools
 ```
 
 **What you get:** 109 skills, 53 agents, all hooks fire, Kafka events silently dropped.
@@ -83,7 +83,7 @@ cd omniintelligence && uv sync --group all
 
 # Deploy the plugin
 cd omniclaude && uv sync
-# In Claude Code: /deploy-local-plugin
+claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools
 # Banner shows FULL_ONEX
 ```
 

@@ -1,0 +1,84 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-15600"
+title: "Alert delivery fails loudly on a dead channel"
+summary: >
+  Every shell alert path branched only on whether SLACK_WEBHOOK_URL was
+  non-empty and discarded the curl outcome, so a revoked webhook (live HTTP 404
+  no_service) was indistinguishable from a healthy one and hook-health alerting
+  delivered to nothing, silently. Adds one outcome-checked sender
+  (plugins/onex/hooks/scripts/alert-channel.sh) that prefers the
+  webhook-independent bot token, records a delivery failure on a durable log
+  plus a local notification, and folds channel liveness into the existing
+  session-start hook-health probe rather than adding a parallel checker.
+
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+
+evidence_requirements:
+  - kind: "tests"
+    description: >
+      A dead (HTTP 404) channel is distinguishable from a healthy one at the
+      alert-channel library and at all three call sites, and unset remains a
+      distinct third state.
+    command: "uv run pytest tests/unit/hooks/scripts/test_alert_channel_failloud.py tests/unit/hooks/scripts/test_alert_call_sites_fail_loudly.py -q"
+  - kind: "tests"
+    description: >
+      The liveness probe reports a dead channel, emits on the fallback path,
+      and makes the existing hook-health probe unhealthy.
+    command: "uv run pytest tests/unit/hooks/test_alert_channel_liveness.py -q"
+  - kind: "ci"
+    description: "omniclaude PR #1967 CI green across required gates"
+    command: "gh pr checks 1967 --repo OmniNode-ai/omniclaude"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-dead-channel-fails-loudly"
+    description: >
+      Against a server returning Slack's dead-webhook response (404
+      no_service), the sender returns 1, writes a durable delivery-failure log
+      entry carrying the HTTP status, and fires the local fallback
+      notification. RED before the change: all three call-site assertions
+      failed at origin/dev 8c1e3d96.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/scripts/test_alert_channel_failloud.py tests/unit/hooks/scripts/test_alert_call_sites_fail_loudly.py -q"
+  - id: "dod-three-distinct-states"
+    description: >
+      Configured-but-dead (1) is distinct from not-configured (2) and from
+      delivered (0), at both the shell sender and the Python liveness probe. A
+      config value that is present but non-functional is the failure class this
+      ticket exists to close.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_alert_channel_liveness.py -q"
+  - id: "dod-liveness-on-existing-health-surface"
+    description: >
+      Liveness rides the existing session-start hook-health probe, not a new
+      opt-in checker; a dead channel makes hook health unhealthy and the probe
+      exits nonzero.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "test -f src/omniclaude/hooks/alert_channel.py"
+      - check_type: "command"
+        check_value: "grep -q probe_alert_channel src/omniclaude/hooks/hook_health_probe.py"
+      - check_type: "command"
+        check_value: "grep -q probe_channel plugins/onex/hooks/lib/hook_health_probe.py"
+      # Appended under OMN-15606. The two greps above are satisfiable by an
+      # implementation that fails OPEN — the shipped one was, and both greps
+      # passed against it. Retained for the historical record; this executing
+      # check is what actually proves the probe reports its own failure.
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/hooks/test_probe_channel_fails_loud.py -q"

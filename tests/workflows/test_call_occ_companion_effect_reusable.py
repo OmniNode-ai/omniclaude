@@ -177,13 +177,35 @@ def test_trusted_runner_bifurcation_and_fail_loud_threading() -> None:
     assert job.get("timeout-minutes") == 5
 
 
-def test_bot_and_omn_ticket_gate() -> None:
+def test_bot_and_omn_ticket_gate_materializes_the_required_context() -> None:
     job = _publish_job(_load_workflow())
-    condition = job.get("if")
-    assert isinstance(condition, str)
-    assert "dependabot[bot]" in condition
-    assert "renovate[bot]" in condition
-    assert "OMN-" in condition
+    assert "if" not in job, (
+        "a job-level eligibility guard suppresses the required check run; "
+        "the producer must execute and no-op ineligible PRs"
+    )
+
+    eligibility = _step(job, "Classify OCC companion-effect eligibility")
+    assert eligibility.get("id") == "eligibility"
+    run = eligibility.get("run")
+    assert isinstance(run, str)
+    assert "dependabot[bot]" in run
+    assert "renovate[bot]" in run
+    assert "OMN-" in run
+    assert "eligible=$eligible" in run
+
+    steps = job.get("steps")
+    assert isinstance(steps, list)
+    publisher_steps = [
+        step
+        for step in steps
+        if isinstance(step, dict)
+        and step.get("name") != "Classify OCC companion-effect eligibility"
+    ]
+    assert publisher_steps
+    assert all(
+        step.get("if") == "steps.eligibility.outputs.eligible == 'true'"
+        for step in publisher_steps
+    ), "every expensive publisher step must no-op when eligibility is false"
 
 
 def test_publish_step_runs_canonical_script_with_lane() -> None:

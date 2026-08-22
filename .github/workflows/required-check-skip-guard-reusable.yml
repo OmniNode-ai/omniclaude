@@ -6,12 +6,18 @@
 # own copy of validate_no_required_check_skip_vectors.py (mirrors
 # deploy-gate-reusable.yml@main's single-source-of-validator pattern).
 #
-# Fails closed on any of four skip vectors against a REQUIRED-status-check
+# Fails closed on any of six skip vectors against a REQUIRED-status-check
 # manifest (.github/required-checks.yaml schema v3):
 #   1. path-scoped pull_request/pull_request_target/merge_group trigger
 #   2. ungated job-level `if:` on the job that IS the required context
 #   3. ungated caller-job `if:` on a reusable-workflow call
 #   4. missing pull_request/pull_request_target/merge_group trigger entirely
+#   5. ungated `needs:` cascade — no `if:` that provably runs regardless of the
+#      needs result, so a dead upstream SKIPS the job (OMN-15057)
+#   6. result triage that does not fail closed on every non-`success` value of
+#      the `needs.<job>.result` the job reads — the layer-down question vector 5
+#      cannot see, since `if: always()` SATISFIES vector 5 while guaranteeing the
+#      fail-open path is reached (OMN-15304)
 #
 # Usage in caller repos:
 #   jobs:

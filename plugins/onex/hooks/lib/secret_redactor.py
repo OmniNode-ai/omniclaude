@@ -2,12 +2,31 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Secret redaction for hook event payloads.
+"""Secret redaction for hook event payloads and agent-produced text.
 
 Uses re.search() (not match) for pattern detection to find secrets
 anywhere in the text, not just at the start.
 
 Part of OMN-1889: Emit injection metrics + utilization signal.
+Extended under OMN-15062 (prose-form credential mentions in agent report
+text) — see subagent_secret_leak_guard.py for the SubagentStop hook that
+applies these patterns to a subagent's final message.
+
+KNOWN COVERAGE LIMIT (OMN-15062): a bare, unlabeled high-entropy string
+(e.g. a raw Postgres password quoted with no "password:"/"password="/
+"password is" context and no connection-string prefix) is NOT reliably
+distinguishable from a hash, a UUID, a git SHA, or a correlation ID by
+pattern matching alone -- this codebase's own logs are full of legitimate
+high-entropy strings. Adding a blanket entropy/length heuristic to this
+SHARED module would mass-false-positive on those and break every other
+consumer of SECRET_PATTERNS. This module therefore only catches credentials
+that are prefixed (sk-, AKIA, ghp_, AIza, ...), embedded in a connection
+string, or mentioned in prose near a label word (password/secret/token/
+credential/api_key). An agent that pastes a bare secret with zero
+surrounding label text will not be caught here -- that gap is a detection
+limit, not a bug, and needs a different control (e.g. do not put agents in
+a position where they read a raw secret and then narrate it back at all;
+see the OMN-15062 PR body for the read-vs-emit boundary discussion).
 """
 
 from __future__ import annotations
@@ -59,12 +78,58 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE),
         r"\1***REDACTED***",
     ),
-    # Password in URLs
-    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    # Password in URLs. Bounded to a URL authority -- no whitespace, `/`, or
+    # `@` inside the userinfo (OMN-15462 fix). The prior unbounded classes
+    # (`[^:]+` / `[^@]+`) matched "any later colon, any later @" across
+    # whitespace and newlines, so two ordinary lines of prose containing a
+    # URL, a later colon, and a later @dev/@main ref-pin were treated as one
+    # giant userinfo match. Bounding the classes to authority characters
+    # (no `/`, whitespace, or `@`) keeps real single-line connection
+    # strings (postgres://user:pass@host, mysql://..., mongodb://...)  # pragma: allowlist secret
+    # redacted while leaving multi-line report/log text alone.
+    (re.compile(r"(://[^:/\s@]+:)[^@/\s]+(@)"), r"\1***REDACTED***\2"),
     # Generic secret patterns in key=value format
     (
         re.compile(
             r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Secret-bearing key NAMES with no word boundary before the label root
+    # (OMN-16277): JSON/map/env keys like "clientSecret", "client_secret",
+    # "dbApiKey" are not caught by the \b-anchored pattern above -- \b never
+    # fires between "client" and "Secret" in camelCase (both are word
+    # characters), so a `kubectl -o json`/jsonpath dump of a k8s Secret
+    # object (2026-08-19 morning incident) passed through untouched. This
+    # pattern anchors on KEY SHAPE instead: an identifier ending in one of
+    # the label roots, immediately followed (optionally quoted) by `:`/`=`
+    # and a token-shaped value with no embedded whitespace. Deliberately
+    # broader than a word-boundary match -- false positives here only
+    # over-redact a non-secret value (safe failure mode for a masking
+    # control, not a blocking one); false negatives are the costly failure.
+    (
+        re.compile(
+            r'(["\']?[A-Za-z][A-Za-z0-9_]*(?:secret|token|passwd|password|'
+            r'apikey|api_key|credential)[A-Za-z0-9_]*["\']?\s*[:=]\s*)'
+            r"""["']?[A-Za-z0-9+/=_.\-]{8,}""",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Prose-form credential mentions (OMN-15062): catches free-text agent
+    # report language like "the Postgres password is <token>" or
+    # "credential: `<token>`" that the strict key=value pattern above misses
+    # because there is no literal "=" or ":" immediately before the value in
+    # some phrasings, or the value is wrapped in backticks/quotes with
+    # intervening words ("password for the db is"). Still requires a label
+    # word within a few tokens of the value -- see the module docstring for
+    # what this cannot catch (bare unlabeled high-entropy strings).
+    (
+        re.compile(
+            r"(\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
+            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*[`'\"]?)"
+            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",

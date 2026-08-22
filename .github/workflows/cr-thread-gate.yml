@@ -6,11 +6,22 @@ name: CR Thread Gate
 on:
   workflow_call:
     secrets:
+      # OMN-16373: CROSS_REPO_PAT retiring. CROSS_REPO_PAT and github-token
+      # stay declared (not removed — deletion deferred) so callers that
+      # have not yet migrated their `secrets:` block keep working; the job
+      # below now prefers a minted onexbot-occ-writer App token and falls
+      # back to these only if the caller still passes them.
       CROSS_REPO_PAT:
-        description: "GitHub PAT with read:discussion scope for CR thread queries"
+        description: "Deprecated (OMN-16373): GitHub PAT with read:discussion scope for CR thread queries. Prefer onexbot-occ-app-id/onexbot-occ-private-key."
         required: false
       github-token:
-        description: "Deprecated: pass CROSS_REPO_PAT instead"
+        description: "Deprecated: pass onexbot-occ-app-id/onexbot-occ-private-key instead"
+        required: false
+      onexbot-occ-app-id:
+        description: "onexbot-occ-writer GitHub App id (org secret ONEXBOT_OCC_APP_ID)"
+        required: false
+      onexbot-occ-private-key:
+        description: "onexbot-occ-writer GitHub App private key (org secret ONEXBOT_OCC_PRIVATE_KEY)"
         required: false
     inputs:
       repo:
@@ -66,9 +77,25 @@ jobs:
           fi
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token when the caller passes
+      # App credentials. continue-on-error because older callers that
+      # haven't migrated their `secrets:` block yet pass empty app-id/key,
+      # which would otherwise hard-fail this step; the token-chain fallback
+      # below covers that case (old CROSS_REPO_PAT caller, or plain
+      # GITHUB_TOKEN for a same-repo read).
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.onexbot-occ-app-id }}
+          private-key: ${{ secrets.onexbot-occ-private-key }}
+          owner: OmniNode-ai
+
       - name: Check unresolved CodeRabbit threads
         env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || secrets.github-token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.CROSS_REPO_PAT || secrets.github-token || secrets.GITHUB_TOKEN }}
         working-directory: ${{ github.workspace }}
         run: |
           PR="${{ steps.resolve-pr.outputs.pr }}"

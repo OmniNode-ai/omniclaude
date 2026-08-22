@@ -58,13 +58,28 @@ def fetch_live_contexts(repo: str, branch: str) -> list[str]:
 
 
 def reconcile(
-    manifest_path: Path, live_contexts: list[str]
+    manifest_path: Path, live_contexts: list[str], branch: str | None = None
 ) -> tuple[set[str], set[str]]:
+    """Compare manifest REQUIRED rows against a branch's live required contexts.
+
+    OMN-15117: the manifest is otherwise single-branch (dev-scoped, see the
+    file header), but a REQUIRED row may carry an optional `branch:` field to
+    mark it as applying to one specific branch only (e.g. `verify / verify`,
+    live-required on `main` and absent from `dev`'s required set). A row
+    without `branch:` is treated as applicable regardless of which branch is
+    being reconciled (legacy/default behavior, unchanged). A row WITH
+    `branch:` is only counted toward `manifest_required` when it matches the
+    `branch` argument — this prevents a main-only addition from surfacing as
+    a false `stale_in_manifest` when reconciling against `dev` (and vice
+    versa). When `branch` is None (no branch context given), every REQUIRED
+    row counts, matching pre-OMN-15117 behavior.
+    """
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     manifest_required = {
         gate["name"]
         for gate in manifest.get("gates", [])
         if gate.get("mode") == "REQUIRED"
+        and (branch is None or gate.get("branch", branch) == branch)
     }
     live_set = set(live_contexts)
 
@@ -81,7 +96,9 @@ def main() -> int:
     args = parser.parse_args()
 
     live_contexts = fetch_live_contexts(args.repo, args.branch)
-    missing_from_manifest, stale_in_manifest = reconcile(args.manifest, live_contexts)
+    missing_from_manifest, stale_in_manifest = reconcile(
+        args.manifest, live_contexts, branch=args.branch
+    )
 
     if missing_from_manifest or stale_in_manifest:
         if missing_from_manifest:

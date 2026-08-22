@@ -3,7 +3,8 @@
 """Unit tests for wiring_dispatchers.py (OMN-2802).
 
 Covers:
-    - claude_code contract routes to SubprocessClaudeCodeSessionBackend
+    - claude_code contract routes to a caller-injected duck-typed backend
+      (no in-repo implementation ships since OMN-15960)
     - local_llm/CODE_ANALYSIS contract routes to VllmInferenceBackend
     - Missing dispatch engine returns skipped
     - Missing service registry returns skipped
@@ -178,7 +179,8 @@ def _mock_claude_code_backend(
     output: str = "RESULT:\nstatus: success\nerror:\n",
     extra: dict[str, Any] | None = None,
 ) -> Any:
-    """Create a mock SubprocessClaudeCodeSessionBackend."""
+    """Create a mock duck-typed claude_code backend (no concrete class ships
+    in-repo since OMN-15960 deleted node_claude_code_session_effect)."""
     backend = MagicMock()
     backend.handler_key = "subprocess"
 
@@ -465,7 +467,7 @@ class TestSkillCommandDispatcher:
 
     @pytest.mark.asyncio
     async def test_claude_code_routes_to_subprocess_backend(self) -> None:
-        """claude_code contract routes to SubprocessClaudeCodeSessionBackend."""
+        """claude_code contract routes to a caller-injected duck-typed backend."""
         cc_backend = _mock_claude_code_backend()
         contracts = {
             "local-review": _make_contract(

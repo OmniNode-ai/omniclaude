@@ -340,15 +340,6 @@ components:
   - node_dispatch_worker
   - node_redeploy_orchestrator
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
-- id: doc_freshness_sweep
-  kind: skill
-  exposure: beta
-  owning_package: onex-skills-beta
-  surface_class: dispatch
-  path: plugins/onex/skills/doc_freshness_sweep/SKILL.md
-  backing_nodes:
-  - node_doc_freshness_sweep
-  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_doc_freshness_sweep'']. Beta-CANDIDATE pending Phase 2 admission proof.'
 - id: docs_dirty_alert
   kind: skill
   exposure: beta
@@ -1104,6 +1095,14 @@ components:
   path: plugins/onex/skills/writing_skills/SKILL.md
   backing_nodes: []
   rationale: class=dispatch (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: hooks/scripts/alert-channel.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/alert-channel.sh
+  backing_nodes: []
+  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
 - id: hooks/scripts/common.sh
   kind: hook
   exposure: hidden
@@ -1360,6 +1359,14 @@ components:
   path: plugins/onex/hooks/scripts/post_tool_use_return_path_auditor.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_secret_redact_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_secret_redact_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-16277). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); narrowly-scoped security control (same class as the SubagentStop secret-leak guard, OMN-15062) that masks secret-shaped patterns in raw Bash tool_response text before it reaches the transcript, registered in hooks.json alongside the other live PreToolUse/PostToolUse/SubagentStop hooks.
 - id: hooks/scripts/post_tool_use_state_verify.sh
   kind: hook
   exposure: beta
@@ -1760,14 +1767,22 @@ components:
   path: plugins/onex/hooks/scripts/subagent_skip_token_surface_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/subagent_stop_claim_verifier.sh
+- id: hooks/scripts/subagent_stop_report_contract_guard.sh
   kind: hook
   exposure: beta
   owning_package: onex-automation-beta
   surface_class: hook_script
-  path: plugins/onex/hooks/scripts/subagent_stop_claim_verifier.sh
+  path: plugins/onex/hooks/scripts/subagent_stop_report_contract_guard.sh
   backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+  rationale: behavior-changing Claude event hook (OMN-15213). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); fails a subagent lane RED when its final return is bare-Done-class instead of the report the golden-chain contract requires, registered in hooks.json alongside the other live SubagentStop/PreToolUse hooks.
+- id: hooks/scripts/subagent_stop_secret_leak_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/subagent_stop_secret_leak_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-15062). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); narrowly-scoped security control, registered in hooks.json alongside the other two live SubagentStop/PreToolUse hooks.
 - id: hooks/scripts/test-hooks.sh
   kind: hook
   exposure: hidden

@@ -28,23 +28,31 @@
 #   2. This workflow NEVER references or triggers `call-occ-preflight.yml` and so
 #      mints NO OCC request. The authoritative OCC path is untouched and still
 #      runs from its own workflow exactly as before.
-#   3. ENFORCING-ON-PRODUCT but NON-REQUIRED / STANDALONE (WS4, OMN-14709). This
-#      is a SEPARATE workflow and is deliberately NOT folded into `ci.yml`'s
-#      required `CI Summary` rollup — folding it in would make it authoritative
-#      and violate the shadow invariant. As of OMN-14709 the `reason-graph` job
-#      exits NON-ZERO when the elected root is a genuine PRODUCT defect
+#   3. ENFORCING-ON-PRODUCT, and (CORRECTION 2026-08-13, OMN-16000) `reason-graph`
+#      itself IS branch-protection-required on `dev` today — a prior version of
+#      this comment claimed the opposite ("STILL NON-required" / "CANNOT wedge a
+#      merge"), which was FALSE against live state at the time this correction
+#      was made (`gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/
+#      required_status_checks --jq '.contexts[]'` includes the bare context name
+#      `reason-graph`). This workflow is a SEPARATE workflow, deliberately NOT
+#      folded into `ci.yml`'s `CI Summary` rollup (folding it in would make it
+#      authoritative and violate the shadow invariant) — but "not folded into CI
+#      Summary" and "not required by branch protection" are NOT the same claim,
+#      and only the first one is still true. As of OMN-14709 the `reason-graph`
+#      job exits NON-ZERO when the elected root is a genuine PRODUCT defect
 #      (`PRODUCT_FAILED`: lint/typecheck/tests/coverage/security red), so its
-#      check conclusion is now MEANINGFUL red instead of always-green report-only.
-#      Non-product roots (RUNNER_INFRA / EVIDENCE_MISSING / GITHUB_API_OUTAGE /
-#      POLICY_HELD / DEPLOY_TRIGGER_FAILED) and a green head still exit 0.
-#      CRITICAL: the workflow is STILL NON-required. The branch-protection
-#      `required_status_checks` on `dev` are UNCHANGED — `product-readiness-shadow
-#      / reason-graph` (and the `lint (shadow)` / `typecheck (shadow)` /
-#      `tests+coverage (shadow)` / `security (shadow)` subcheck contexts) remain
-#      NON-required, so a red reason-graph REPORTS but CANNOT wedge a merge. This
-#      is exactly the red-side parity signal WS4 needs. Adding any context here to
-#      `required_status_checks` is a separate operator-gated step; do NOT do it
-#      here.
+#      check conclusion is MEANINGFUL red — and because it IS required, that red
+#      DOES block merge today. Non-product roots (RUNNER_INFRA / EVIDENCE_MISSING
+#      / GITHUB_API_OUTAGE / POLICY_HELD / DEPLOY_TRIGGER_FAILED) and a green head
+#      still exit 0. The `lint (shadow)` / `typecheck (shadow)` / `tests+coverage
+#      (shadow)` / `security (shadow)` subcheck contexts remain genuinely
+#      NON-required (verified absent from the same live listing) — do not extend
+#      this correction to them. Whether `reason-graph` SHOULD be required, given
+#      its authors originally intended pure shadow status, is an open operator
+#      question tracked on OMN-16000 — not resolved by this comment fix. Any
+#      FUTURE branch-protection mutation (adding the shadow
+#      subchecks, or removing `reason-graph`) is a separate operator-gated step;
+#      do NOT do it here.
 #
 # WHY security-shadow exists (the OMN-14709 false-red fix): before this pass the
 # reason-graph facts carried NO `security` subcheck (there was no security job),
@@ -204,10 +212,11 @@ jobs:
           fi
           echo "Secret detection completed - no new secrets found"
 
-  # --- Typed reason-graph (ENFORCING on PRODUCT roots; still NON-required) --
+  # --- Typed reason-graph (ENFORCING on PRODUCT roots) --
   # NO occ-preflight in this needs-chain. Consumes the product subchecks'
-  # conclusions only and emits exactly one typed root. Surfaced NON-required
-  # context: `product-readiness-shadow / reason-graph`.
+  # conclusions only and emits exactly one typed root. Surfaced context:
+  # `reason-graph` — LIVE-REQUIRED on branch protection (corrected 2026-08-13,
+  # see the header note above; do not restate "NON-required" for this job).
   reason-graph:
     name: reason-graph
     needs: [lint-shadow, typecheck-shadow, tests-shadow, security-shadow]
@@ -270,7 +279,7 @@ jobs:
           if [ "$root_kind" = "READY" ]; then
             echo "::notice title=CI Reason Graph::READY — product dimension is green"
           elif [ "$rc" -ne 0 ]; then
-            echo "::error title=CI Reason Graph::ROOT ${root_kind} — genuine product defect; failing this NON-required shadow (reports red, cannot block merge)"
+            echo "::error title=CI Reason Graph::ROOT ${root_kind} — genuine product defect; this context IS branch-protection-required, so this failure blocks merge"
           else
             echo "::warning title=CI Reason Graph::ROOT ${root_kind} (non-product root; report-only, not merge-blocking)"
           fi

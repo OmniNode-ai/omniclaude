@@ -303,6 +303,15 @@ class TopicBase(StrEnum):
     TOOL_OUTPUT_CAPTURED = "onex.evt.omnimarket.tool-output-captured.v1"
     """Tool output captured with artifact refs and suppression decision; partition key is correlation_id."""
 
+    PUSH_VALIDATION_REQUESTED = "onex.cmd.omnimarket.push-validation-requested.v1"
+    """Push validation command consumed by omnimarket; partition key is correlation_id."""
+
+    PUSH_VALIDATION_COMPLETED = "onex.evt.omnimarket.push-validation-completed.v1"
+    """Push validation terminal success event emitted by omnimarket."""
+
+    PUSH_VALIDATION_FAILED = "onex.evt.omnimarket.push-validation-failed.v1"
+    """Push validation terminal failure event emitted by omnimarket."""
+
     # ==========================================================================
     # Friction observation topics (OMN-5747)
     # ==========================================================================

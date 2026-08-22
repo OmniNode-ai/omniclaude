@@ -20,6 +20,13 @@
 # `job_path` len 1 = Shape A (direct job); len 2 = Shape B/C
 # ([caller_job_id, reusable_job_id]) per the design spec's context->job
 # resolution algorithm (OMN-14854 ticket, spec section 1).
+#
+# `result_triage` (OMN-15304, optional; default `enforced`) — vector 6. A job
+# rendering a REQUIRED context that reads `needs.<job>.result` must fail closed
+# on every non-`success` value. `result_triage: waived` is the only opt-out and
+# is honored ONLY when the row's `rationale` cites a tracking ticket
+# (`OMN-xxxxx`); an unratified waiver is treated as enforced. It suppresses
+# vector-6 findings only — never vectors 1-5.
 
 schema_version: 3
 classification: toolchain
@@ -328,7 +335,7 @@ gates:
     workflow: ci.yml
     job_path: ["quality-gate"]
     skip_semantics: never
-    rationale: "Live required status check on omniclaude dev branch protection."
+    rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Secret Detection"
     mode: REQUIRED
@@ -368,7 +375,7 @@ gates:
     workflow: ci.yml
     job_path: ["tests-gate"]
     skip_semantics: never
-    rationale: "Live required status check on omniclaude dev branch protection."
+    rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Version Pin Compliance"
     mode: REQUIRED
@@ -392,7 +399,7 @@ gates:
     workflow: omni-standards-compliance.yml
     job_path: ["omni-standards-gate"]
     skip_semantics: never
-    rationale: "Live required status check on omniclaude dev branch protection."
+    rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Hostile Review Gate"
     mode: REQUIRED
@@ -460,6 +467,23 @@ gates:
     skip_semantics: never
     rationale: "Central OCC eligibility gate (cross-repo reusable hosted in omnibase_core)."
 
+  - name: "verify / verify"
+    mode: REQUIRED
+    branch: main
+    producer_kind: cross_repo
+    caller_workflow: call-receipt-gate.yml
+    caller_job: verify
+    cross_repo_ref: "OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@main"
+    skip_semantics: never
+    rationale: "Receipt Gate — live required status check on omniclaude `main` branch protection
+      (dev→main promotion boundary), absent from `dev`'s required set. This manifest is otherwise
+      dev-scoped (see file header); this row is a deliberate main-only addition (OMN-15117) closing
+      a guard blind spot: `verify / verify` was live-required on main since OMN-10411 but had zero
+      row here, so validate_no_required_check_skip_vectors.py never had a context to check it
+      against and OMN-15057's remediation (#1931) never touched this file. `verify`'s `needs:
+      occ-preflight` had no `if:` at all (vector-5, OMN-15057 shape) until this ticket added
+      `if: always()`."
+
   - name: "call-reject-skip-token / scan / reject-skip-gate-token"
     mode: REQUIRED
     producer_kind: local
@@ -477,8 +501,8 @@ gates:
     caller_job: gate
     reusable_workflow: cr-thread-gate.yml
     reusable_job: gate
-    skip_semantics: neutral_ok
-    rationale: "CodeRabbit thread resolution gate (primary caller). KNOWN FINDING (OMN-14854 guard build): caller job 'gate' has an ungated `if:` (github.actor != 'dependabot[bot]') — vector-3. Believed to be an intentional dependabot exemption (github.actor is not spoofable), not an attacker-controlled bypass, but not yet human-ratified. skip_semantics: neutral_ok pending triage in OMN-14856."
+    skip_semantics: never
+    rationale: "CodeRabbit thread resolution gate (primary caller). OMN-14856/OMN-15120 repair (mirrors omnibase_core@470d326dc / PR #1549): caller job 'gate' previously had an ungated `if:` (github.actor != 'dependabot[bot]', among other clauses) — vector-3, a skipped caller job produces NO check run at all, which permanently wedged this required context on Dependabot PRs (live cases: omniclaude#1981, #1982). The `if:` is now `always()`; the caller always invokes the reusable, and the former non-PR issue_comment guard moved into the pr-number input (resolves to 0, which the reusable already no-ops on). The reusable (cr-thread-gate.yml) carries no job-level `if:` of its own, so this context now always completes success/failure — never skipped — hence skip_semantics: never."
 
   - name: "cr-thread-gate / CodeRabbit Thread Check"
     mode: REQUIRED
@@ -488,14 +512,14 @@ gates:
     reusable_workflow: cr-thread-gate.yml
     reusable_job: gate
     skip_semantics: neutral_ok
-    rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. KNOWN FINDING (OMN-14854 guard build): same dependabot-actor vector-3 shape as 'gate / CodeRabbit Thread Check'. skip_semantics: neutral_ok pending triage in OMN-14856."
+    rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. OMN-14856/OMN-15120 repair (mirrors omnibase_core@470d326dc / PR #1549): caller job 'cr-thread-gate' previously had an ungated `if:` including the dependabot-actor exemption — same vector-3 shape as 'gate / CodeRabbit Thread Check'. The dependabot-actor clause is now dropped and the issue_comment guard moved into the pr-number input; unlike the primary caller, this job still legitimately skips on `merge_group` (the sibling `merge-queue-compat` job is the dedicated merge_group producer for this composed context), which still posts a real check run with conclusion=skipped that branch protection accepts — hence skip_semantics stays neutral_ok, not never."
 
   - name: "required-check-skip-guard / check-skip-vectors"
-    mode: ADVISORY
+    mode: REQUIRED
     producer_kind: local
     caller_workflow: required-check-skip-guard-caller.yml
     caller_job: required-check-skip-guard
     reusable_workflow: required-check-skip-guard-reusable.yml
     reusable_job: check-skip-vectors
     skip_semantics: never
-    rationale: "OMN-14854: this guard's own required check. Runs on every PR but is NOT YET in required_status_checks — per design spec section 5 ordering, the branch-protection flip happens only after 2 independent green runs on dev, tracked as a follow-up. mode stays ADVISORY until that flip lands (same PR as the flip, per schema-v3 rule: mode changes and branch-protection changes land together)."
+    rationale: "OMN-14854/OMN-15178: this guard's own required check. FLIPPED to REQUIRED per operator ruling 2026-07-26T07:25Z (\"Make it blocking\") after 2 independent green runs of required-check-skip-guard-caller.yml on dev. Branch protection (gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks) already carries this context live (added additively, 57->58 contexts, 0 removed) — this manifest row now matches live state, per schema-v3 rule that mode and branch-protection stay in sync."

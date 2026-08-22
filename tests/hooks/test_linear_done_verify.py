@@ -41,8 +41,10 @@ _spec.loader.exec_module(linear_done_verify)
 
 PRRef = linear_done_verify.PRRef
 PRStatus = linear_done_verify.PRStatus
+VerificationResult = linear_done_verify.VerificationResult
 parse_pr_refs = linear_done_verify.parse_pr_refs
 verify = linear_done_verify.verify
+is_weak_signal_ref = linear_done_verify.is_weak_signal_ref
 is_done_state = linear_done_verify.is_done_state
 is_cancel_state = linear_done_verify.is_cancel_state
 
@@ -67,12 +69,39 @@ def _timeout(ref: PRRef) -> PRStatus:
 class TestParsing:
     def test_extracts_bare_pr_number_with_default_repo(self) -> None:
         refs = parse_pr_refs(
-            "fixed by #202 and also #15",
+            "fixed by PR #202 and also pull #15",
             default_repo="OmniNode-ai/omniclaude",
         )
         nums = sorted(r.number for r in refs)
         assert nums == [15, 202]
         assert all(r.repo == "OmniNode-ai/omniclaude" for r in refs)
+
+    def test_extracts_pull_request_phrase(self) -> None:
+        refs = parse_pr_refs(
+            "See pull request #4321", default_repo="OmniNode-ai/omniclaude"
+        )
+        assert [r.number for r in refs] == [4321]
+
+    # OMN-15025: bare `#N` with no adjacent PR/pull token is prose, not a PR
+    # shorthand — "CLAUDE.md Rule #4" and "cause #2 is always mislabelled"
+    # are the two live repro shapes. This is the RED->GREEN proof for the
+    # matcher fix itself (verify()-level fail-closed-fallthrough behavior is
+    # covered separately in TestVerify below).
+    def test_bare_hash_number_without_pr_token_is_not_matched(self) -> None:
+        refs = parse_pr_refs(
+            "See CLAUDE.md Rule #4 for the policy.",
+            default_repo="OmniNode-ai/omniclaude",
+        )
+        assert refs == []
+
+    def test_prose_ordinal_hash_numbers_are_not_matched(self) -> None:
+        """The exact OMN-15464 repro shape: 'cause #2'/'cause #3' in prose."""
+        refs = parse_pr_refs(
+            "There is no branch for this, so cause #2 is always mislabelled "
+            "as cause #3. The failed criteria are appended as a suffix.",
+            default_repo="OmniNode-ai/omnimarket",
+        )
+        assert refs == []
 
     def test_extracts_full_github_url(self) -> None:
         refs = parse_pr_refs(
@@ -91,11 +120,11 @@ class TestParsing:
         assert refs[0].number == 202
 
     def test_same_number_different_repos_both_preserved(self) -> None:
-        """A bare `#202` against default_repo X should not be swallowed by a
-        full URL `.../Y/pull/202` from repo Y — they are different PRs."""
+        """A bare `PR #202` against default_repo X should not be swallowed by
+        a full URL `.../Y/pull/202` from repo Y — they are different PRs."""
         refs = parse_pr_refs(
             "Depends on https://github.com/OmniNode-ai/omnibase_core/pull/202 "
-            "and closes #202",
+            "and closes PR #202",
             default_repo="OmniNode-ai/omniclaude",
         )
         assert len(refs) == 2
@@ -106,7 +135,7 @@ class TestParsing:
 class TestVerify:
     def test_allows_when_all_prs_merged(self) -> None:
         result = verify(
-            description="Done. Fixed in #202.",
+            description="Done. Fixed in PR #202.",
             labels=[],
             default_repo="OmniNode-ai/omniclaude",
             fetcher=_merged,
@@ -134,6 +163,31 @@ class TestVerify:
         )
         assert result.allowed is True
         assert result.reason == "no_pr_references"
+
+    def test_prose_hash_number_does_not_block_and_is_not_treated_as_a_pr(
+        self,
+    ) -> None:
+        """OMN-15025 regression at the verify() level: a description whose
+        only `#N`-shaped text is prose ("CLAUDE.md Rule #4") — with a real PR
+        cited via full URL and MERGED — is allowed, and the fetcher is never
+        asked about a nonexistent PR #4.
+        """
+
+        def _fetcher_rejects_pr_4(ref: PRRef) -> PRStatus:
+            assert ref.number != 4, "prose 'Rule #4' must not resolve as a PR ref"
+            return _merged(ref)
+
+        result = verify(
+            description=(
+                "Implemented per CLAUDE.md Rule #4. "
+                "See https://github.com/OmniNode-ai/omniclaude/pull/9"
+            ),
+            labels=[],
+            default_repo="OmniNode-ai/omniclaude",
+            fetcher=_fetcher_rejects_pr_4,
+        )
+        assert result.allowed is True
+        assert result.reason == "all_prs_merged"
 
     def test_allows_when_exempt_via_label_and_no_pr_cited(self) -> None:
         """close-if-done exempts a decision-only ticket with NO product PR."""
@@ -175,7 +229,7 @@ class TestVerify:
 
     def test_frontmatter_does_NOT_waive_open_cited_pr(self) -> None:
         result = verify(
-            description="close-if-done: true\n\nDone. #202",
+            description="close-if-done: true\n\nDone. PR #202",
             labels=[],
             default_repo="OmniNode-ai/omniclaude",
             fetcher=_blocked,
@@ -208,7 +262,7 @@ class TestVerify:
 
         result = verify(
             description=(
-                "Product: #1754\n"
+                "Product: PR #1754\n"
                 "Evidence: https://github.com/OmniNode-ai/onex_change_control/pull/4222"
             ),
             labels=[],
@@ -221,7 +275,7 @@ class TestVerify:
 
     def test_rejects_on_gh_timeout(self) -> None:
         result = verify(
-            description="Done. #202",
+            description="Done. PR #202",
             labels=[],
             default_repo="OmniNode-ai/omniclaude",
             fetcher=_timeout,
@@ -234,7 +288,7 @@ class TestVerify:
             return _merged(ref) if ref.number == 100 else _blocked(ref)
 
         result = verify(
-            description="Done. #100 and #202 both needed.",
+            description="Done. PR #100 and PR #202 both needed.",
             labels=[],
             default_repo="OmniNode-ai/omniclaude",
             fetcher=fetcher,
@@ -242,6 +296,138 @@ class TestVerify:
         assert result.allowed is False
         assert "#202" in result.reason
         assert "#100" not in result.reason  # merged one not listed as blocker
+
+
+class TestSpellingInvariance:
+    """OMN-15782: is_weak_signal_ref()/verify() must classify the same PR
+    identically whether cited bare `#N` or fully-qualified `owner/repo#N` /
+    full URL. Live-incident repro (OMN-15722): the ticket body cited real
+    onex_change_control PRs #6155/#6161/#6122 as bare `#N`; the guard
+    misclassified them as unresolved/blocking product-PR dependencies while
+    the identical PRs spelled `onex_change_control#N` correctly classified
+    weak and were filtered out.
+    """
+
+    def test_qualified_occ_ref_classifies_weak_no_prober_needed(self) -> None:
+        """Baseline: the already-correct spelling needs no prober at all."""
+        ref = PRRef(number=6155, repo="OmniNode-ai/onex_change_control")
+        assert is_weak_signal_ref(ref) is True
+
+    def test_bare_ref_no_default_repo_classifies_weak_via_prober(self) -> None:
+        """The literal OMN-15722 shape: default_repo entirely unset, so the
+        bare ref resolves to repo=None. Same PR as the qualified case above
+        must classify identically once a prober can confirm OCC membership."""
+        bare = PRRef(number=6155, repo=None, bare=True)
+        assert is_weak_signal_ref(bare, prober=lambda n: n == 6155) is True
+
+    def test_bare_ref_mismatched_default_repo_classifies_weak_via_prober(
+        self,
+    ) -> None:
+        """default_repo resolves to a DIFFERENT product repo while the bare
+        number is actually an onex_change_control PR — the mismatched-repo
+        shape called out in OMN-15782's second bullet. parse_pr_refs() blindly
+        assigns default_repo to every bare match, so ref.repo here is only a
+        guess, not authoritative."""
+        refs = parse_pr_refs(
+            "Blast radius: PR #6161", default_repo="OmniNode-ai/omniclaude"
+        )
+        assert len(refs) == 1
+        ref = refs[0]
+        assert ref.repo == "OmniNode-ai/omniclaude"
+        assert ref.bare is True
+        assert is_weak_signal_ref(ref, prober=lambda n: n == 6161) is True
+
+    def test_bare_ref_genuinely_own_repo_stays_non_weak(self) -> None:
+        """Preserve current behavior for refs that genuinely belong to the
+        ticket's own product repo — the prober reports "not OCC" and the ref
+        stays non-weak (the normal merge-check path still applies)."""
+        refs = parse_pr_refs("Fixed in PR #202", default_repo="OmniNode-ai/omniclaude")
+        ref = refs[0]
+        assert is_weak_signal_ref(ref, prober=lambda n: False) is False
+
+    def test_bare_ref_without_prober_preserves_prior_fallback_behavior(
+        self,
+    ) -> None:
+        """No prober supplied (prober=None, the pure-function default) →
+        unchanged prior behavior: a bare ref never classifies weak on its
+        own. This is what makes the fix backward compatible / opt-in."""
+        bare = PRRef(number=6155, repo=None, bare=True)
+        assert is_weak_signal_ref(bare) is False
+
+    def test_qualified_occ_ref_never_probed(self) -> None:
+        """An explicitly-qualified owner/repo#N or full-URL OCC citation is
+        trusted directly — the prober must never be consulted for it."""
+
+        def _must_not_be_called(_: int) -> bool:
+            raise AssertionError(
+                "prober must not be called for an explicitly qualified ref"
+            )
+
+        ref = PRRef(number=4222, repo="OmniNode-ai/onex_change_control")
+        assert is_weak_signal_ref(ref, prober=_must_not_be_called) is True
+
+    def test_verify_end_to_end_omn_15722_repro_bare_occ_refs_filtered(
+        self,
+    ) -> None:
+        """Full verify() repro of the live incident: a ticket body citing
+        bare #6155/#6161/#6122 (all real onex_change_control PRs) plus a bare
+        product-repo PR reference. With the live-shaped prober wired in, the
+        bare OCC refs are filtered as weak (never reach the fetcher) and only
+        the genuine product PR is checked."""
+        occ_numbers = {6155, 6161, 6122}
+
+        def prober(number: int) -> bool:
+            return number in occ_numbers
+
+        def fetcher(ref: PRRef) -> PRStatus:
+            assert ref.number not in occ_numbers, (
+                f"OCC PR #{ref.number} reached the fetcher — weak-signal "
+                "filter failed to classify it (spelling-dependent bug live)"
+            )
+            return _merged(ref)
+
+        description = (
+            "Blast radius: onex_change_control PRs #6155, #6161, #6122.\n"
+            "Product fix: PR #9001."
+        )
+        result = verify(
+            description=description,
+            labels=[],
+            default_repo="OmniNode-ai/omniclaude",
+            fetcher=fetcher,
+            prober=prober,
+        )
+        assert result.allowed is True
+        assert result.reason == "all_prs_merged"
+
+    def test_main_wires_live_occ_prober_into_verify(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OMN-15782: main() (the live Done-flip path) must actually pass the
+        real live prober into verify() — the fix must be active in production,
+        not just reachable under test with an injected fake."""
+        captured: dict[str, Any] = {}
+
+        def _capture_verify(*_args: Any, **kwargs: Any) -> VerificationResult:
+            captured.update(kwargs)
+            return VerificationResult(allowed=True, reason="stub")
+
+        monkeypatch.setattr(linear_done_verify, "verify", _capture_verify)
+        monkeypatch.setattr(
+            linear_done_verify,
+            "_load_stdin_tool_call",
+            lambda: {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {
+                    "id": "OMN-1",
+                    "state": "Done",
+                    "description": "Bare #6155 cited.",
+                },
+            },
+        )
+        rc = linear_done_verify.main()
+        assert rc == 0
+        assert captured.get("prober") is linear_done_verify.probe_occ_membership
 
 
 HOOK_SCRIPT = (
@@ -338,16 +524,20 @@ class TestShellWrapper:
         assert result.returncode == 0
 
     def test_close_if_done_does_not_bypass_open_cited_pr(self) -> None:
-        """OMN-14641: the label must NOT waive an unmerged cited PR. A bare
-        `#202` has no resolvable repo → treated as unverifiable → BLOCK (exit 2),
-        even with the close-if-done label. Hermetic: no gh/network call."""
+        """OMN-14641: the label must NOT waive an unmerged cited PR. `PR #202`
+        has no resolvable repo (no ``LINEAR_DONE_VERIFY_DEFAULT_REPO``) →
+        treated as unverifiable → BLOCK (exit 2), even with the close-if-done
+        label. Hermetic: no gh/network call. Uses the phrase-anchored `PR #N`
+        form (OMN-15025) — a context-free bare `#202` is no longer parsed as a
+        PR reference at all, so it would (correctly) fall through to the
+        no-product-PR exemption path instead of this unresolvable-repo path."""
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {
                     "id": "OMN-1",
                     "state": "Done",
-                    "description": "Fixed in #202",
+                    "description": "Fixed in PR #202",
                     "labels": ["close-if-done"],
                 },
             }
@@ -454,7 +644,7 @@ class TestDeployReadback:
 
     def test_implementing_refs_resolve_bare_number_with_default_repo(self) -> None:
         refs = linear_done_verify.parse_implementing_pr_refs(
-            "Fixed in #2000", default_repo="OmniNode-ai/omnimarket"
+            "Fixed in PR #2000", default_repo="OmniNode-ai/omnimarket"
         )
         assert len(refs) == 1
         assert refs[0].number == 2000
@@ -753,7 +943,7 @@ class TestCancelBucketBypass:
                 "tool_input": {
                     "id": "OMN-9817",
                     "state": "Done",
-                    "description": "Done. Fixed in #202.",
+                    "description": "Done. Fixed in PR #202.",
                 },
             },
         )
@@ -766,6 +956,7 @@ class TestCancelBucketBypass:
             description: str,
             labels: list[str] | None,
             default_repo: str | None = None,
+            **_kwargs: Any,
         ) -> linear_done_verify.VerificationResult:
             verify_calls.append((description, labels, default_repo))
             return verify(
@@ -781,7 +972,7 @@ class TestCancelBucketBypass:
         captured = capsys.readouterr()
 
         assert rc == 2
-        assert verify_calls == [("Done. Fixed in #202.", [], None)]
+        assert verify_calls == [("Done. Fixed in PR #202.", [], None)]
         assert "Cannot mark Done" in captured.err
         assert "#202: state=OPEN mergeState=BLOCKED" in captured.err
 

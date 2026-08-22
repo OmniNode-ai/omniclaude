@@ -1,0 +1,47 @@
+{
+  "$schema": "https://claude.ai/schemas/hooks.json",
+  "description": "LIVE LOAD PATH fixture [OMN-15274]. What the resolved ${CLAUDE_PLUGIN_ROOT} actually carries: a newer version and a different hook set than the cache. Note what is NOT here -- subagent_stop_report_contract_guard.sh, which the dead cache registers. The truthful readback must report that guard as absent for every agent class.",
+  "version": "1.6.0",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__linear-server__(save_issue|update_issue)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_worktree_guard.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop_session_marker.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_secret_leak_guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

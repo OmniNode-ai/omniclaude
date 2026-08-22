@@ -11,11 +11,16 @@ LEGACY_PUBLISHER_SRC = REPO_ROOT / "src" / "omniclaude" / "publisher"
 LEGACY_PUBLISHER_TESTS = REPO_ROOT / "tests" / "publisher"
 
 
-def test_emit_client_imports_use_omnimarket_daemon_client() -> None:
+def test_emit_client_imports_use_omnimarket_emit_effect_node() -> None:
+    """OMN-15968: routing_recorder/evidence_writer must import the canonical
+    node_event_emit_effect node, not the dead node_emit_daemon.client that
+    omnimarket#1246 deleted (OMN-13213 D1 follow-through)."""
     for path in (ROUTING_RECORDER, EVIDENCE_WRITER):
         text = path.read_text()
-        assert "omnimarket.nodes.node_emit_daemon.client" in text
-        assert "EmitClient" in text
+        assert "omnimarket.nodes.node_event_emit_effect" in text
+        assert "HandlerEventEmitEffect" in text
+        assert "omnimarket.nodes.node_emit_daemon.client" not in text
+        assert "EmitClient" not in text
         assert "omniclaude" + ".publisher.emit_client" not in text
 
 

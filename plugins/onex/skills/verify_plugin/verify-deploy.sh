@@ -3,8 +3,9 @@
 # Usage: bash verify-deploy.sh [PLUGIN_ROOT]
 # Exit 0 = all checks pass. Exit 1 = one or more checks failed.
 #
-# Portability: requires Python 3 (any version on PATH) for path resolution.
-# Does NOT require coreutils readlink -f or platform-specific nc variants.
+# Portability: requires Python >= 3.11 (see PY_BIN below) for path resolution and
+# the load-path readback. Does NOT require coreutils readlink -f or platform-specific
+# nc variants.
 
 pass_count=0
 fail_count=0
@@ -24,19 +25,47 @@ check() {
   fi
 }
 
-# Portable symlink resolution using Python (avoids readlink -f on macOS).
-resolve_path() {
-  python3 -c "import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())" "$1" 2>/dev/null || true
-}
+# --- Resolve a Python >= 3.11 interpreter --------------------------------
+# Bare `python3` on macOS is frequently the 3.9 system interpreter, which cannot
+# import StrEnum or datetime.UTC and would fail the readback before verification
+# ever starts. Pick the first candidate that clears the floor; the readback
+# enforces the same floor itself, so a mistake here fails loudly rather than
+# silently degrading.
+# Version-named binaries are looked up on PATH rather than hardcoded, so this
+# stays portable; set PLUGIN_PYTHON_BIN when the interpreter is off PATH.
+PY_BIN=""
+for _cand in "${PLUGIN_PYTHON_BIN:-}" python3.13 python3.12 python3.11 python3; do
+  [[ -n "$_cand" ]] || continue
+  if command -v "$_cand" >/dev/null 2>&1 &&
+     "$_cand" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    PY_BIN="$_cand"; break
+  fi
+done
+if [[ -z "$PY_BIN" ]]; then
+  echo -e "${red}ERROR: no Python >= 3.11 found. Set PLUGIN_PYTHON_BIN to one.${reset}"
+  exit 1
+fi
 
-# --- Resolve plugin root ---
+# --- Resolve plugin root -------------------------------------------------
+# The plugin CACHE is not the load path. This used to default to
+# ~/.claude/plugins/cache/<marketplace>/<plugin>/current, which for a
+# directory-source marketplace is a tree Claude Code never reads -- one observed
+# in the field was 24 days stale and carried a different hooks.json version than
+# the one executing. Verifying that tree proved nothing about what runs. Resolve
+# through the same chain Claude Code uses instead.
 PLUGIN_ROOT="${1:-}"
 if [[ -z "$PLUGIN_ROOT" ]]; then
-  SYMLINK="$HOME/.claude/plugins/cache/omninode-tools/onex/current"
-  PLUGIN_ROOT="$(resolve_path "$SYMLINK")"
+  _READBACK="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/hooks/lib/plugin_deploy_readback.py"
+  # --no-fetch here on purpose: this hop only needs the resolved path, and the
+  # bootstrap must not block on the network. The freshness check below fetches.
+  PLUGIN_ROOT="$("$PY_BIN" "$_READBACK" --json --no-fetch 2>/dev/null \
+    | "$PY_BIN" -c 'import json,sys; print(json.load(sys.stdin).get("resolved_load_path") or "")' 2>/dev/null || true)"
 fi
 if [[ -z "$PLUGIN_ROOT" || ! -d "$PLUGIN_ROOT" ]]; then
-  echo -e "${red}ERROR: Cannot resolve plugin root. Pass PLUGIN_ROOT as first arg or ensure current/ symlink exists.${reset}"
+  echo -e "${red}ERROR: Cannot resolve plugin root.${reset}"
+  echo -e "Pass PLUGIN_ROOT explicitly, or run the readback to see why resolution failed:"
+  echo -e "  $PY_BIN plugins/onex/hooks/lib/plugin_deploy_readback.py"
+  echo -e "Do NOT substitute ~/.claude/plugins/cache/... -- that is not the load path."
   exit 1
 fi
 
@@ -56,20 +85,24 @@ check "file_exists: repo .venv" test -d "$REPO_ROOT/.venv"
 check "file_exists: installed_plugins.json" test -f "$HOME/.claude/plugins/installed_plugins.json"
 check "file_exists: known_marketplaces.json" test -f "$HOME/.claude/plugins/known_marketplaces.json"
 
-# CHECK: version consistency across 3 surfaces
-PLUGIN_VER=""
-INSTALLED_VER=""
-SYMLINK_TARGET=""
-
-PLUGIN_VER="$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
-INSTALLED_VER="$(jq -r '(.plugins["onex@omninode-tools"] | if type == "array" then .[0].version else .version end) // empty' \
-  "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null || true)"
-SYMLINK_TARGET="$(basename "$(resolve_path "$HOME/.claude/plugins/cache/omninode-tools/onex/current")" 2>/dev/null || true)"
-
-check "version_consistency: plugin.json == installed_plugins.json" \
-  test "$PLUGIN_VER" = "$INSTALLED_VER"
-check "version_consistency: plugin.json == current/ symlink" \
-  test "$PLUGIN_VER" = "$SYMLINK_TARGET"
+# CHECK: load-path truth
+#
+# This replaces the old "version consistency across 3 surfaces" check, which
+# compared plugin.json against installed_plugins.json and the cache current/
+# symlink. All three are registry bookkeeping; agreement among them says
+# nothing about which hooks execute, and on this box they agreed on 2.3.1
+# while the executing hooks.json was two minor versions ahead of the cache.
+# The readback below fails on alarm-level tripwires only: a resolution rule
+# that stopped holding, a registered-but-missing hook script, or a load-path
+# tree behind its upstream (merged-not-deployed).
+PLUGIN_VER="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
+READBACK="$PLUGIN_ROOT/hooks/lib/plugin_deploy_readback.py"
+# Fetches on purpose: MERGED_NOT_DEPLOYED is only truthful against refreshed
+# remote refs, and a stale-ref pass here is exactly the false green this check
+# exists to prevent. UPSTREAM_UNVERIFIED fires if the fetch does not succeed.
+READBACK_OUT="$("$PY_BIN" "$READBACK" 2>/dev/null || true)"
+check "load_path_readback: no alarm-level tripwire" "$PY_BIN" "$READBACK"
+printf '%s\n' "$READBACK_OUT" | sed -n '/^TRIPWIRES/,/^VERDICT/p' || true
 
 # CHECK: JSON validity — key config files
 check "json_valid: plugin.json"             jq '.' "$PLUGIN_ROOT/.claude-plugin/plugin.json"

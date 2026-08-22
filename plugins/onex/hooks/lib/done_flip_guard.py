@@ -110,7 +110,9 @@ from typing import Any
 # Sibling module (same lib/ dir). The shell wrapper runs this file directly, so
 # its directory is on sys.path[0] and the import resolves without packaging.
 from linear_done_verify import (
+    PRStatus,
     augment_description_with_attachments,
+    classify_blocking,
     fetch_pr_status,
     is_cancel_state,
     is_done_state,
@@ -347,6 +349,144 @@ def occ_receipt_pass_on_dev(
 
 
 # ---------------------------------------------------------------------------
+# Attachment/citation supersession awareness (OMN-15712).
+#
+# The merge-check (path A) treats every product PR referenced in the
+# description *or* folded in from a Linear GitHub-integration attachment
+# (``augment_description_with_attachments``) as load-bearing: if it isn't
+# MERGED, the Done-flip BLOCKS. That has no concept of supersession — a
+# ticket that legitimately replaced a stale, closed-unmerged PR with a later
+# merged one (recorded durably as a PASS ``dod-...-pr-<N>-superseded`` OCC
+# receipt, per the OMN-14623 append-only supersede convention) or that simply
+# carries a leftover attachment its DoD contract never cited, still gets
+# hard-blocked on that stale PR's live state.
+#
+# This reads the SAME git-backed ``origin/dev`` OCC receipt surface used by
+# path B (``occ_receipt_pass_on_dev``) — no new I/O boundary — and answers,
+# per blocking PR number, whether the ticket's own receipt set ever cited it
+# and, if so, whether every citation was later marked superseded. It is
+# deliberately scoped to tickets that HAVE at least one OCC receipt: with
+# zero receipts there is no contract data to reason about "cited" from, and
+# treating an uncited PR as non-blocking in that case would gut the merge
+# check for the common (non-OCC) ticket shape entirely.
+#
+# Regression fix (2026-08-05, verified live against OMN-15422 + omniclaude#1976
+# as a synthetic OPEN-PR probe): the carve-out is a *stale-attachment*
+# concept — it only makes sense for a PR that is CLOSED-unmerged, i.e. dead
+# and replaced. An OPEN PR is potentially load-bearing in-flight work no
+# matter what the OCC contract has or hasn't cited yet, so it is EXCLUDED
+# from this carve-out entirely and always blocks — the citation-state check
+# below only runs for CLOSED-unmerged refs (see the ``s.state == "OPEN"``
+# guard at the call site). Applying "uncited" to an OPEN ref would make any
+# ticket with >=1 OCC receipt non-blocking on any unmerged, unreceipted PR —
+# re-opening the exact OMN-8375/OMN-14582/OMN-14641 shape.
+# ---------------------------------------------------------------------------
+
+
+def list_ticket_receipt_fields(
+    occ_repo: Path,
+    ticket_id: str,
+    *,
+    ref: str = _OCC_REF,
+    fetch: bool = True,
+) -> list[dict[str, str]]:
+    """Return parsed top-level fields for every receipt YAML under
+    ``drift/dod_receipts/<ticket_id>/`` on ``ref``.
+
+    Fail-closed EMPTY list on any git failure (missing clone, unreadable ref,
+    no receipts) — callers must treat an empty result as "no OCC contract data
+    available for this ticket", never as "every citation is superseded".
+    """
+    if not occ_repo.is_dir():
+        return []
+
+    if fetch:
+        _run_git(
+            ["fetch", "--quiet", "origin", "dev"],
+            cwd=occ_repo,
+            timeout=_GIT_FETCH_TIMEOUT_SECONDS,
+        )
+
+    receipt_dir = f"{_RECEIPT_DIR_PREFIX}/{ticket_id}"
+    listing = _run_git(
+        ["ls-tree", "-r", "--name-only", ref, "--", receipt_dir],
+        cwd=occ_repo,
+        timeout=_GIT_READ_TIMEOUT_SECONDS,
+    )
+    if listing is None or listing.returncode != 0 or not listing.stdout.strip():
+        return []
+
+    fields_list: list[dict[str, str]] = []
+    for rel_path in listing.stdout.splitlines():
+        rel_path = rel_path.strip()
+        if not rel_path.endswith(".yaml"):
+            continue
+        shown = _run_git(
+            ["show", f"{ref}:{rel_path}"],
+            cwd=occ_repo,
+            timeout=_GIT_READ_TIMEOUT_SECONDS,
+        )
+        if shown is None or shown.returncode != 0:
+            continue
+        fields_list.append(parse_receipt_fields(shown.stdout))
+    return fields_list
+
+
+def _receipt_pr_number(fields: dict[str, str]) -> int | None:
+    """Return the receipt's top-level ``pr_number`` field as an int, or None."""
+    raw = fields.get("pr_number", "").strip()
+    if not raw or not raw.lstrip("-").isdigit():
+        return None
+    return int(raw)
+
+
+def pr_citation_state(receipts: list[dict[str, str]], pr_number: int) -> str:
+    """Classify ``pr_number``'s citation state within a ticket's OCC receipts.
+
+    Returns one of:
+      * ``"no_contract"`` — the ticket has ZERO receipts at all. Callers MUST
+        NOT filter on this — behave exactly as if this feature didn't exist.
+      * ``"uncited"`` — the ticket HAS receipts, but none reference this PR
+        number. The DoD contract never cited it — not load-bearing.
+      * ``"superseded"`` — at least one PASS receipt whose
+        ``evidence_item_id`` ends in ``-superseded`` cites this PR number — a
+        later append-only receipt explicitly retired the citation (the
+        OMN-14623 / OMN-15422 convention). Not load-bearing.
+      * ``"active"`` — the ticket's receipts cite this PR number and it is
+        not (fully) superseded. Still load-bearing — normal blocking rules
+        apply.
+
+    Pure function — no I/O.
+    """
+    if not receipts:
+        return "no_contract"
+    matches = [r for r in receipts if _receipt_pr_number(r) == pr_number]
+    if not matches:
+        return "uncited"
+    if any(
+        r.get("evidence_item_id", "").strip().endswith("-superseded")
+        and r.get("status", "").strip().upper() == "PASS"
+        for r in matches
+    ):
+        return "superseded"
+    return "active"
+
+
+def _format_blocking_lines(blocking: list[PRStatus]) -> str:
+    lines = ["Cannot mark Done — referenced PRs are not merged:"]
+    for status in blocking:
+        repo = status.ref.repo or "?"
+        if status.error:
+            lines.append(f"  - {repo}#{status.ref.number}: {status.error}")
+        else:
+            lines.append(
+                f"  - {repo}#{status.ref.number}: state={status.state} "
+                f"mergeState={status.merge_state}"
+            )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Live Linear read (for status-only updates that omit the description)
 # ---------------------------------------------------------------------------
 
@@ -375,6 +515,7 @@ def decide(
     occ_probe: Callable[[str], bool] | None = None,
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
+    receipt_lister: Callable[[str], list[dict[str, str]]] | None = None,
 ) -> Decision:
     """Return the guard decision for a PreToolUse tool call.
 
@@ -383,6 +524,10 @@ def decide(
         defaults to :func:`occ_receipt_pass_on_dev` bound to the resolved OCC clone.
       * ``pr_fetcher(PRRef) -> PRStatus`` — GitHub PR state (default: ``gh``).
       * ``linear_fetcher(ticket_id) -> issue|{}|None`` — live Linear read.
+      * ``receipt_lister(ticket_id) -> list[fields]`` — every OCC receipt's
+        parsed fields for the ticket (OMN-15712 supersession/citation check);
+        defaults to :func:`list_ticket_receipt_fields` bound to the resolved
+        OCC clone.
     """
     tool_name = call.get("tool_name", "")
     if tool_name not in _LINEAR_TOOLS:
@@ -487,6 +632,60 @@ def decide(
         # A cited PR is open / unmerged / unresolvable — the classic OMN-8375
         # "Done while PR still BLOCKED" shape (and the OMN-14582 label-bypass
         # shape). Block outright — the close-if-done label does not waive this.
+        #
+        # OMN-15712: before blocking, check whether the ticket's own OCC DoD
+        # contract still considers each blocking PR load-bearing. A ticket
+        # that HAS OCC receipts (a real dod_verify contract instance) may have
+        # legitimately superseded a stale attachment (an explicit PASS
+        # `-superseded` receipt) or never cited it at all (a leftover
+        # attachment, e.g. an old release PR replaced by a later one) — in
+        # either case the stale PR's live state is not this ticket's evidence
+        # and must not block. A ticket with ZERO OCC receipts is unaffected —
+        # there is no contract data to reason "cited" from, so every blocking
+        # ref is treated exactly as before this feature existed.
+        if ticket_id:
+            lister = receipt_lister
+            if lister is None:
+                omni_home = resolve_omni_home()
+                if omni_home is not None:
+                    _repo = occ_repo_path(omni_home)
+                    lister = lambda tid: list_ticket_receipt_fields(_repo, tid)  # noqa: E731
+            if lister is not None:
+                receipts = lister(ticket_id)
+                if (
+                    receipts
+                ):  # ticket HAS an OCC contract — citation-aware filtering applies
+                    blocking = [
+                        s for s in pr_result.pr_statuses if classify_blocking(s)
+                    ]
+                    # OMN-15712 regression guard: the citation-awareness carve-out
+                    # is a supersession/leftover-attachment concept, NOT a general
+                    # "no receipt mentions it" bypass. An OPEN PR (or an
+                    # unresolvable probe, i.e. ``error`` set) is potentially
+                    # load-bearing in-flight work regardless of what the OCC
+                    # contract has or hasn't cited yet — it ALWAYS blocks, exactly
+                    # as the pre-OMN-15712 guard did. Only a CLOSED-unmerged ref
+                    # is eligible for the uncited/superseded carve-out, because
+                    # only a closed PR can be a *stale* attachment the contract
+                    # legitimately moved past.
+                    still_blocking = [
+                        s
+                        for s in blocking
+                        if s.error
+                        or s.state == "OPEN"
+                        or pr_citation_state(receipts, s.ref.number)
+                        not in ("uncited", "superseded")
+                    ]
+                    if not still_blocking:
+                        return Decision(
+                            True,
+                            "durable_evidence:blocking_refs_uncited_or_superseded_"
+                            "by_occ_contract",
+                        )
+                    return Decision(
+                        False,
+                        f"pr_not_merged\n{_format_blocking_lines(still_blocking)}",
+                    )
         return Decision(False, f"pr_not_merged\n{pr_result.reason}")
     if pr_result.reason == "all_prs_merged":
         return Decision(True, "durable_evidence:all_prs_merged")

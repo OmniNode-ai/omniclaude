@@ -60,16 +60,25 @@ class TestInProcessDelegationRunnerRoutingAndGate:
     @patch(
         "omniclaude.delegation.inprocess_runner._call_llm",
     )
-    def test_run_returns_result_on_quality_pass(
+    def test_run_reports_task_mismatch_for_uncontracted_task_type(
         self,
         mock_call_llm: MagicMock,
         mock_routing_delta: MagicMock,
     ) -> None:
-        """Successful pipeline returns a quality-passing ModelDelegationResult."""
+        """A clean, non-refusal response cannot self-certify quality_passed=True
+        for a task_type with no contract-declared deterministic acceptance
+        criteria or judge (OMN-13370, landed upstream in omnimarket's quality
+        gate reducer between the pre-OMN-15968 pin and the current one:
+        heuristic/length/no-refusal checks are reject-only authority, not
+        pass authority). "research" has no task_class_contracts.v1.yaml
+        entry, so the gate correctly returns TASK_MISMATCH rather than a
+        false positive from length alone -- this replaces this test's
+        pre-OMN-13370 assumption that "long enough + no refusal" was
+        sufficient to pass.
+        """
         corr_id = uuid.uuid4()
         mock_routing_delta.return_value = self._make_routing_decision(corr_id)
 
-        # Response long enough to pass quality gate for "research" (≥60 chars)
         long_content = "This is a detailed research response. " * 5
         mock_call_llm.return_value = (
             long_content,
@@ -83,14 +92,14 @@ class TestInProcessDelegationRunnerRoutingAndGate:
             task_type="research", prompt="Explain the code architecture."
         )
 
-        assert result.quality_passed is True
+        assert result.quality_passed is False
+        assert "TASK_MISMATCH" in result.failure_reason
         assert result.content == long_content
         assert result.task_type == "research"
         assert result.model_used == "test-model"
         assert result.prompt_tokens == 10
         assert result.completion_tokens == 50
         assert result.total_tokens == 60
-        assert result.failure_reason == ""
 
     @patch(
         "omniclaude.delegation.inprocess_runner.routing_delta",

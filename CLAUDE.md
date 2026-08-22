@@ -1,921 +1,379 @@
 # CLAUDE.md
 
-> **Python**: 3.12+ | **Plugin**: Claude Code hooks/agents | **Shared Standards**: See **`~/.claude/CLAUDE.md`** for shared development standards (Python, uv, Git, testing, architecture principles) and infrastructure configuration (PostgreSQL, Kafka/Redpanda, Docker networking, environment variables).
+> **Python**: 3.12+ | **Plugin**: Claude Code hooks/agents | **Shared standards**: `~/.claude/CLAUDE.md` (Python, uv, Git, testing, infra config). Workspace-wide rules — worktrees, PR CI requirements, merge policy, repo layering, `.200` push rule — live in `omni_home/CLAUDE.md` and are not repeated here.
 
 ---
 
 ## First time on a new Mac / after a session reset
 
-To restore session crons (merge-sweep, dispatch-engine, overseer-verify):
+Restore session crons (merge-sweep, dispatch-engine, overseer-verify):
+
 ```bash
 bash omniclaude/scripts/setup-session-crons.sh
 ```
-Then paste the printed one-liner into the Claude Code session. The automated path is tracked separately.
+
+Then paste the printed one-liner into the Claude Code session.
+
+---
+
+## Hook registration state (read before assuming hooks fire)
+
+`plugins/onex/hooks/hooks.json` is the single registration surface. Current state is the
+OMN-13244 measurement baseline **with carve-outs** — every context-injection/measurement hook
+stays DISABLED; the only registered hooks are:
+
+- PreToolUse: `pre_tool_use_done_flip_guard.sh` (OMN-13856 Done-flip durable-evidence guard) and `pre_tool_use_worktree_guard.sh` (OMN-14330 worktree canonical-root guard)
+- PostToolUse (matcher `Bash`): `post_tool_use_secret_redact_guard.sh` (OMN-16277 — masks secret-shaped patterns in raw Bash `tool_response` text via `hookSpecificOutput.updatedToolOutput` before it lands in the transcript; two-strike fix for the 2026-08-19 kubectl-jsonpath `clientSecret` leak + `env|grep`-sed-gap Postgres-URL leak. Runs on every Bash call unconditionally — no size/command-type/exit-code gate, unlike the on-disk-but-unregistered token-budget backstop `post_tool_use_output_suppressor.sh`/OMN-13089, which this hook's wire protocol was modeled on)
+- SubagentStop: `subagent_stop_secret_leak_guard.sh` (OMN-15062) and `subagent_stop_report_contract_guard.sh` (OMN-15213 golden-chain report-contract guard — bare-Done-class final returns block the lane RED)
+
+A SubagentStop hook that emits output on its **pass** path becomes the end-of-turn
+notification the agent replies to, and that short reply is captured as the lane's final
+return, clobbering the real report 1-2 turns earlier (OMN-15213, reproduced 3/5 and 3/3).
+Non-blocking SubagentStop verdicts must therefore stay silent — never add a "clean"
+`additionalContext`. The PostToolUse guard above follows the same silence-on-pass
+discipline for a different reason: plain PostToolUse stdout is debug-log-only and a
+non-empty emission there is schema-rejected as `updatedToolOutput` unless it matches the
+exact envelope shape (OMN-13090 probe), so a "clean" emission would be worse than useless.
+
+All other hook scripts (`plugins/onex/hooks/scripts/`) and handler modules
+(`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change.
+Verify live: `jq '.hooks' plugins/onex/hooks/hooks.json`.
 
 ---
 
 ## Emergency: disable omniclaude hooks (kill-switch)
 
-If the DELEGATION ENFORCER (or any omniclaude hook) recursively blocks a
-session, disable it immediately — no plugin uninstall, no restart required:
+Two kill-switch spellings exist in the codebase — they are **not** interchangeable:
 
-```bash
-# Option 1 — export for the current shell / Claude Code session:
-export OMNICLAUDE_HOOKS_DISABLE=1
+- `OMNICLAUDE_HOOKS_DISABLE=1` (or marker file: `touch ~/.claude/omniclaude-hooks-disabled`) — honored by the hook runtime daemon (`src/omniclaude/hook_runtime/server.py`) and the delegation counter/enforcer + skill-substitution-guard scripts, before any threshold logic runs. This is the escape hatch if the DELEGATION ENFORCER recursively blocks a session — no uninstall, no restart. Re-enable: `unset OMNICLAUDE_HOOKS_DISABLE; rm -f ~/.claude/omniclaude-hooks-disabled`.
+- `OMNICLAUDE_HOOKS_DISABLED=1` (trailing D) — honored by most other standalone hook wrappers (ci-reminder, ruff, cost-accounting, trajectory, scope-gate, ...).
 
-# Option 2 — persistent file marker (clears on delete):
-touch ~/.claude/omniclaude-hooks-disabled
-
-# To re-enable:
-unset OMNICLAUDE_HOOKS_DISABLE
-rm -f ~/.claude/omniclaude-hooks-disabled
-```
-
-Both the shell hook scripts (`post-tool-delegation-counter.sh`,
-`post-skill-delegation-enforcer.sh`) and the hook runtime daemon
-(`src/omniclaude/hook_runtime/server.py`) short-circuit `pass` on either
-signal BEFORE any threshold logic runs. The sub-agent exemption
-(`subagent-start.sh` writes a per-session marker under
-`$ONEX_STATE_DIR/hooks/subagent-sessions/`) protects Task()-spawned sub-agents
-independently — they never hit thresholds.
+**Neither env switch covers the currently-registered security-carve-out guards**: the
+worktree guard is gated only by the `ONEX_HOOKS_MASK` `WORKTREE_GUARD` bit; the done-flip,
+both secret-leak guards (SubagentStop + the OMN-16277 PostToolUse Bash-output guard), and
+the report-contract guard short-circuit only on lite mode / non-OmniNode repo (or, for the
+PostToolUse guard, lite mode only — it is deliberately applicable to every repo, not gated
+by `is_omninode_repo`, since a credential can leak in any tool's output). None of the
+security-class guards participate in `ONEX_HOOKS_MASK` at all — a stale saved mask literal
+must never silently disable a leak-prevention control. Read the specific script's header
+before assuming a switch applies. Task()-spawned sub-agents are independently exempt from
+delegation thresholds via per-session markers under `$ONEX_STATE_DIR/hooks/subagent-sessions/`
+(written by `subagent-start.sh`).
 
 ---
 
 ## Per-hook gating: ONEX_HOOKS_MASK
 
-Every omniclaude hook wrapper reads `ONEX_HOOKS_MASK` and exits silently
-(exit 0, no side effect) when its bit is cleared. This behavioral cutover
-merged in an earlier pass (commit f0325f0be). Default is `(1 << N) - 1` where
-`N = len(EnumHookBit)` — i.e. all bits on, width-matched to the enum,
-current behavior preserved. The bit positions are defined by `EnumHookBit` in
-`omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`.
+Hook wrappers read `ONEX_HOOKS_MASK` and exit silently (exit 0, no side effect) when their bit
+is cleared. Bit positions: `EnumHookBit` in
+`omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`; name → ordinal inventory:
+`docs/hook-bit-inventory.md`. Default is all bits on, recomputed from the current enum width.
 
-**Important:** when `ONEX_HOOKS_MASK` is absent or unset, the default is
-recomputed from the current enum width — all new hooks are on by default.
-However, once a hex literal is saved to `~/.omnibase/.env`, it is fixed.
-If you add new hooks after saving a mask, run `onex hooks enable <NEW_NAME>`
-or delete the `ONEX_HOOKS_MASK` line from `.env` to restore all-on default.
+- **Trap:** once a hex literal is saved to `~/.omnibase/.env` it is fixed — hooks added later are OFF for you. Run `onex hooks enable <NAME>` or delete the `ONEX_HOOKS_MASK` line to restore the all-on default.
+- CLI: `onex hooks list | mask [--format dec|bin] | enable <NAME> | disable <NAME>` — reads/writes `~/.omnibase/.env` (or `OMNIBASE_ENV_FILE`). `disable` persists; `export ONEX_HOOKS_MASK=0x...` is session-only.
+- **Append-only forever.** Never insert a bit mid-enum; removed hooks keep tombstone entries; renamed hooks append a new bit. Full policy: `omni_home/docs/plans/2026-04-24-hook-bitmask-enum.md` § Bit Governance Rules.
+- Legacy `OMNICLAUDE_HOOK_<NAME>=0/1` per-hook env vars are a **no-op** (superseded by the mask). Do not add new ones.
+- A malformed mask fails OPEN to the contract default — deliberate (hook continuity over broken config).
 
-Set the mask in `~/.omnibase/.env` or export it for the current shell:
-
-```bash
-# Persistent (survives shell restart):
-onex hooks disable CI_REMINDER    # writes ONEX_HOOKS_MASK=0x... to ~/.omnibase/.env
-
-# Session-only:
-export ONEX_HOOKS_MASK=0x...      # overrides .env for current shell only
-```
-
-### `onex hooks` CLI surface
-
-```text
-onex hooks list              # every hook and its current on/off state
-onex hooks mask              # current mask value (default: hex)
-onex hooks mask --format dec # decimal form
-onex hooks mask --format bin # binary form
-onex hooks disable CI_REMINDER
-onex hooks enable  CI_REMINDER
-```
-
-The CLI reads `~/.omnibase/.env` (or the env var `OMNIBASE_ENV_FILE` if set)
-and writes `ONEX_HOOKS_MASK=0x<value>` in-place. New shells pick up the
-updated value on session start via the standard `.env` source.
-
-Note: the `onex hooks` CLI may not be
-available until that ticket lands. If absent, set `ONEX_HOOKS_MASK`
-manually using the hex literal reported by
-`python3 -c 'from omnibase_core.enums.enum_hook_bit import EnumHookBit; print(hex((1 << len(EnumHookBit)) - 1))'`.
-
-### Relationship to the global kill-switch
-
-`OMNICLAUDE_HOOKS_DISABLE=1` (see "Emergency: disable omniclaude hooks"
-above) short-circuits **every** hook before any bitmask logic runs. Use
-`ONEX_HOOKS_MASK` for targeted, per-hook disablement; use the kill-switch
-for emergency full-off of all hooks.
-
-```text
-OMNICLAUDE_HOOKS_DISABLE=1      ← global kill-switch (highest priority, all hooks off)
-        ↓ (only reached when kill-switch is unset)
-ONEX_HOOKS_MASK bit cleared     ← per-hook disable (bitmask gate)
-        ↓ (only reached when bit is set)
-hook logic runs
-```
-
-### Append-only bit governance
-
-Bit positions are **append-only forever**. The authoritative mapping of hook
-name → bit ordinal lives in:
-
-```text
-omniclaude/docs/hook-bit-inventory.md     ← canonical source
-omnibase_core/src/omnibase_core/enums/enum_hook_bit.py
-```
-
-Never insert a new bit mid-enum. Removed hooks keep tombstone entries;
-renamed hooks append a new bit. See plan
-`omni_home/docs/plans/2026-04-24-hook-bitmask-enum.md` § "Bit Governance
-Rules" and § "Migration and Long-Term Semantics Truth Boundary" for the
-full policy.
-
-### Migration note
-
-**Bitmask migration (commit f0325f0be):** The legacy `OMNICLAUDE_HOOK_<NAME>=0/1`
-per-hook env vars have been removed from every GATE hook wrapper and
-superseded by `ONEX_HOOKS_MASK`. Any reference to `OMNICLAUDE_HOOK_<NAME>`
-in shells or scripts is now a **no-op**. Use `onex hooks disable <NAME>`
-to disable individual hooks. Do not add new per-hook env vars of the legacy form.
-
----
-
-## Skill Usage Policy
-
-- Before any task, check if a matching skill exists. If it does, use it.
-- Announce skill usage: "I'm using [Skill Name] to [what you're doing]."
-- If a skill has a checklist, create TodoWrite todos for each item.
-
----
-
-## Workflow Dispatch Rules
-
-- When executing plans or tasks, ALWAYS use the correct skill/workflow (hostile-reviewer, design-to-plan, epic-team, merge-sweep, ticket-pipeline) rather than ad-hoc implementation. Never replicate a skill's logic inline — dispatch to the skill.
-- When dispatching work to sub-agents or general-purpose agents, verify: (1) correct handoff file is referenced, (2) parent epic is set on tickets, (3) agent uses polymorphic dispatch. Do not blindly dispatch without understanding the situation first.
-- When working with Linear tickets in bulk, use rate-limit-aware batching (max 5-10 per batch with delays). Always set parent epic when creating tickets in bulk.
-
----
-
-## Scope Boundaries
-
-- Never over-scope changes. When asked to disable or fix one thing, do NOT touch adjacent systems.
-- If unsure about scope boundaries, list what you WILL and WILL NOT touch before proceeding.
-- Prefer atomic, minimal changes. A fix for X should not also refactor Y.
-
----
-
-## Debugging Protocol
-
-- When diagnosing issues, verify assumptions with actual system state (logs, `docker ps -a`, process checks, API calls) before concluding a service is down or a fix is correct.
-- Do not guess at root causes. Run the diagnostic command first.
-- Follow the Two-Strike Diagnosis Protocol (already in ~/.claude/CLAUDE.md).
-
----
-
-## Naming Conventions (Enforcement)
-
-- All models: `Model` prefix, Pydantic `BaseModel`, `ConfigDict(frozen=True, extra="forbid")`
-- All enums: `Enum` prefix, `StrEnum` base (Python 3.11+)
-- No `@dataclass`. No `str` literal fields for finite sets — use enums.
-- Check existing code for conventions before creating new files or classes.
-
----
-
-## Session Discipline
-
-- For bulk operations (>10 Linear tickets, >5 PRs, >3 repos), pre-chunk into batches of 5-10 with explicit checkpoints between batches.
-- Before starting a long-running operation, estimate the number of API calls and compare against known rate limits (Linear: ~100/min, GitHub: ~30/min).
-- If a session will run >1 hour unattended, ensure auto-checkpoints are enabled.
+Precedence: kill-switch (where the script honors one) → mask bit → hook logic.
 
 ---
 
 ## Repo Boundaries
 
-| This repo owns | Another repo owns |
-|----------------|-------------------|
-| **Repo Charter** | See [`docs/architecture/charter.md`](docs/architecture/charter.md) for full scope boundary declaration |
-| Claude Code hooks (SessionStart, UserPromptSubmit, PostToolUse, SessionEnd) | **omniintelligence** -- intelligence processing, code analysis |
-| Agent YAML definitions (`plugins/onex/agents/configs/`) | **omniintelligence** -- intelligence processing, code analysis |
-| Skill-driven workflows (`plugins/onex/skills/`) | **omnibase_core** -- ONEX runtime, node framework, contracts |
-| Event emission via Unix socket daemon | **omnibase_infra** -- Kubernetes, deployment |
-| Context injection (learned patterns into prompts) | |
-| Agent routing (prompt-to-agent matching) | |
+This repo owns Claude Code hooks, agent YAML definitions (`plugins/onex/agents/configs/`),
+skills (`plugins/onex/skills/`), event emission via the Unix-socket daemon, context injection,
+and agent routing. Intelligence processing → omniintelligence; ONEX runtime/contracts →
+omnibase_core; deploy/infra → omnibase_infra. Full charter: `docs/architecture/charter.md`.
 
 ---
 
 ## Repository Invariants
 
-These rules are non-negotiable. Violations will cause production issues.
-
-**No backwards compatibility**: This repository has no external consumers. Schemas, APIs, and interfaces may change without deprecation periods. If something needs to change, change it.
+**No backwards compatibility**: this repo has no external consumers. Schemas, APIs, and
+interfaces change without deprecation periods.
 
 | Invariant | Rationale |
 |-----------|-----------|
 | Hook scripts must **never block** on Kafka | Blocking hooks freeze Claude Code UI |
 | Only preview-safe data goes to `onex.evt.*` topics | Observability topics have broad access |
 | Full prompts go **only** to `onex.cmd.omniintelligence.*` | Intelligence topics are access-restricted |
-| All event schemas are **frozen** (`frozen=True`) | Events are immutable after emission |
-| `emitted_at` timestamps must be **explicitly injected** | No `datetime.now()` defaults for deterministic testing |
+| All event schemas are **frozen** (`frozen=True`, `extra="ignore"`, `from_attributes=True`) | Events are immutable after emission |
+| `emitted_at` timestamps **explicitly injected** — no `datetime.now()` defaults | Deterministic testing |
 | SessionStart must be **idempotent** | May be called multiple times on reconnect |
-| Hooks must exit 0 unless blocking is intentional | Non-zero exit blocks the tool/prompt |
-| **Migration freeze is marker-driven** (`.migration_freeze`) | If the marker exists, no new schema migrations are allowed until the freeze is lifted |
+| Hooks exit 0 unless blocking is intentional | Non-zero exit blocks the tool/prompt |
+| Migration freeze is marker-driven (`.migration_freeze`, checked by `scripts/check_migration_freeze.sh --ci`) | No new schema migrations while the marker exists |
 
----
+`prompt_preview` auto-redacts secrets (OpenAI/AWS/GitHub/Slack keys, PEM, Bearer tokens,
+passwords in URLs) and caps at 100 chars.
 
-## Agent Behavioral Rules
+### Naming conventions
 
-Rules extracted from 186 wrong-approach friction events. Applicable to all agents
-operating in this repo.
+Models: `Model` prefix, Pydantic `BaseModel`, `ConfigDict(frozen=True, extra="forbid")`
+(event schemas use `extra="ignore"` per the invariant above). Enums: `Enum` prefix, `StrEnum`.
+No `@dataclass`; no `str` literals for finite sets.
 
-### Autonomous mode safety rails
+### Autonomous-mode rails (repo-specific)
 
-When operating autonomously (autopilot, epic-team, ticket-pipeline):
-- Never disable safety guardrails (pre-commit hooks, CI checks, type checkers)
-  to make code pass. Fix the code instead.
-- Never write state, logs, or output to `~/.claude/` -- use `omni_home/.onex_state/`
-  or the project-local equivalent.
-- Write friction logs and diagnostic output to `omni_home/.onex_state/friction/`
-  so they are externally observable by monitoring tools.
-
-### Contract-first topic definitions
-
-Kafka topics, event schemas, and subscription declarations belong in contract YAML
-files, not hardcoded in application code. When adding a new topic:
-1. Declare it in the node's contract YAML (`event_bus.publish_topics` / `subscribe_topics`)
-2. Reference the contract-declared topic name in application code via the contract loader
-3. Never hardcode topic strings like `"onex.evt.foo.bar.v1"` directly in Python
+- Never write state/logs to `~/.claude/` — use `omni_home/.onex_state/` (friction logs to `omni_home/.onex_state/friction/` so monitoring can see them).
+- Kafka topics, event schemas, and subscriptions belong in contract YAML (`event_bus.publish_topics` / `subscribe_topics`), loaded via the contract loader. Never hardcode topic strings like `"onex.evt.foo.bar.v1"` in Python.
 
 ---
 
 ## Failure Modes
 
-What happens when infrastructure is unavailable:
+**Design principle: hooks never block Claude Code.** On infrastructure failure (emit daemon
+down, Kafka unavailable, Postgres down, routing/injection timeout, malformed stdin) hooks exit
+0 and degrade — data loss is acceptable, UI freeze is not. Failures log to `~/.claude/hooks.log`
+when `LOG_FILE` is set.
 
-| Failure | Behavior | Exit Code | Data Loss |
-|---------|----------|-----------|-----------|
-| **Emit daemon down** | Events dropped, hook continues | 0 | Yes (events) |
-| **Kafka unavailable** | Daemon buffers briefly, then drops | 0 | Yes (events) |
-| **PostgreSQL down** | Logging skipped if `ENABLE_POSTGRES=true` | 0 | Yes (logs) |
-| **Routing timeout (5s)** | Returns no match (fail-fast, no fallback) | 0 | No |
-| **Malformed stdin JSON** | Hook logs error, passes through empty | 0 | No |
-| **Agent YAML not found** | Uses default agent, logs warning | 0 | No |
-| **Context injection fails** | Proceeds without patterns | 0 | No |
-| **Agent loader timeout (1s)** | Falls back to empty YAML, hook continues | 0 | No |
-| **Context injection timeout (1s)** | Proceeds without patterns, hook continues | 0 | No |
-| **No valid Python found** | Hook exits with actionable error | 1 | No |
-
-**Design principle**: Hooks never block Claude Code. Data loss is acceptable; UI freeze is not.
-
-**Exception**: `find_python()` hard-fails (exit 1) if no valid Python interpreter is found. This is intentional — running hooks against the wrong Python produces non-reproducible bugs. The error message tells the user exactly how to fix it (deploy the plugin or set `PLUGIN_PYTHON_BIN`).
-
-**Logging**: Failures are logged to `~/.claude/hooks.log` when `LOG_FILE` is set.
+**Exception — Python resolution** (`find_python()` in `plugins/onex/hooks/scripts/common.sh`):
+strict priority chain (`PLUGIN_PYTHON_BIN` → `CLAUDE_PLUGIN_DATA/.venv` → repo `.venv` →
+`ONEX_REGISTRY_ROOT/omniclaude/.venv` → `OMNICLAUDE_PROJECT_ROOT/.venv` → lite-mode system
+python). If nothing resolves, **critical hooks hard-fail (exit 1)** with an actionable message —
+running against the wrong interpreter produces non-reproducible bugs. Advisory hooks
+(session-end, stop, pre-compact, post-tool-use-quality with `OMNICLAUDE_HOOK_CRITICALITY=advisory`)
+exit 0 gracefully instead.
 
 ---
 
 ## Performance Budgets
 
-Targets for **synchronous path only** (excludes backgrounded processes):
+Synchronous path only (Kafka emit / Postgres log are backgrounded): SessionStart and SessionEnd
+<50ms; PostToolUse <100ms; UserPromptSubmit <500ms typical (timeout safety nets push the
+worst case to seconds — see the timeout constants in `plugins/onex/hooks/lib/` and
+`src/omniclaude/hooks/`).
 
-| Hook | Budget | What Blocks | What's Backgrounded |
-|------|--------|-------------|---------------------|
-| SessionStart | <50ms | Daemon check, stdin read | Kafka emit, Postgres log |
-| SessionEnd | <50ms | stdin read | Kafka emit, Postgres log |
-| UserPromptSubmit | <500ms typical (~15s worst-case with delegation) | Routing, candidate formatting, context injection, pattern advisory, local delegation | Kafka emit, intelligence requests |
-| PostToolUse | <100ms | stdin read, quality check | Kafka emit, content capture |
-
-> **Note**: UserPromptSubmit's 500ms target is for typical runs. Worst-case with all timeout
-> paths (routing 5s + injection 1s + advisory 1s + delegation 8s) is ~15s. Without delegation
-> enabled, worst-case is ~7s. Agent YAML loading was removed from the sync path in an earlier refactor —
-> Claude loads the selected agent's YAML on-demand. These timeouts are safety nets; normal
-> execution stays well under 500ms.
->
-> **Tuning `api_timeout_ms`**: The context injection step has a 1s wall-clock budget. The
-> internal HTTP request timeout (`api_timeout_ms`, default 900ms) must stay well below that
-> limit — the ~100ms gap covers executor scheduling overhead and result processing. Do not raise
-> `api_timeout_ms` to 1000ms or higher; doing so will cause the injection step to regularly
-> breach its budget even when the API responds exactly at the timeout boundary.
-
-If hooks exceed budget, check:
-1. Network latency to routing service
-2. Context injection database queries
+**Tuning trap — `api_timeout_ms`**: context injection has a 1s wall-clock budget; the internal
+HTTP timeout (`api_timeout_ms`, default 900ms, range 100–10000) must stay well below it — the
+~100ms gap covers executor scheduling and result processing. Do **not** raise it to 1000ms or
+higher; the injection step will breach its budget whenever the API responds at the boundary.
 
 ---
 
 ## Git/CI Standards
 
-### Branch Naming
+Commit format `type(scope): description` (`feat`, `fix`, `chore`, `refactor`, `docs`).
+Workspace-wide PR requirements (title ticket ref, Receipt Gate, CodeRabbit, deploy-gate,
+merge policy) are in `omni_home/CLAUDE.md`.
 
-Linear generates branch names: `jonahgabriel/omn-XXXX-description`
+Do **not** trust any hand-maintained CI job list — the consolidated workflow
+(`.github/workflows/ci.yml`) plus standalone gate workflows change frequently. Read live state
+instead:
 
-### Commit Format
-
+```bash
+# Required status checks on a branch:
+gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks --jq '.contexts'
+# Jobs in the consolidated workflow:
+python3 -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.yml'))['jobs']))"
 ```
-type(scope): description
-```
 
-Types: `feat`, `fix`, `chore`, `refactor`, `docs`
-
-### CI Pipeline
-
-Single consolidated workflow in `.github/workflows/ci.yml`:
-
-| Job | What it does | Gate |
-|-----|-------------|------|
-| **quality** | ruff format + ruff lint + mypy | Quality Gate |
-| **pyright** | Pyright type checking on `src/omniclaude/` | Quality Gate |
-| **check-handshake** | Architecture handshake vs omnibase_core | Quality Gate |
-| **enum-governance** | ONEX enum casing, literal-vs-enum, duplicates | Quality Gate |
-| **exports-validation** | `__all__` exports match actual definitions | Quality Gate |
-| **cross-repo-validation** | Kafka import guard (ARCH-002) | Quality Gate |
-| **migration-freeze** | Blocks new migrations when `.migration_freeze` exists | Quality Gate |
-| **onex-validation** | ONEX naming, contracts, method signatures | Quality Gate |
-| **security-python** | Bandit security linter (Medium+ severity) | Security Gate |
-| **detect-secrets** | Secret detection scan | Security Gate |
-| **test** | pytest with 5-way parallel split (`pytest-split`) | Tests Gate |
-| **hooks-tests** | Hook scripts and handler modules | Tests Gate |
-| **agent-framework-tests** | Agent YAML loading and framework validation | Tests Gate |
-| **database-validation** | DB schema consistency checks | Tests Gate |
-| **merge-coverage** | Combines coverage from 5 test shards, uploads to Codecov | (none) |
-| **build** | Docker image build + Trivy vulnerability scan | (downstream) |
-| **deploy** | Staging (develop) / Production (main) | (downstream) |
-
-### Branch Protection
-
-Three gate aggregators per CI/CD Standards v2 (`required-checks.yaml`):
-- **"Quality Gate"** -- aggregates all code quality checks
-- **"Tests Gate"** -- aggregates all test suites
-- **"Security Gate"** -- aggregates security scanning
-
-Gate names are API-stable. Do not rename without following the Branch Protection Migration Safety procedure in `CI_CD_STANDARDS.md`.
-
-### CI/Tooling Safety
-
-- CI uv version: read from `.github/workflows/ci.yml` pinned version before making
-  lock file changes. Do not hardcode the version. Ruff behavior may differ between
-  local and CI.
-- Prefer auto-merge over immediate merge when multiple PRs target the same branch.
-- When modifying branch protection rules, never remove them after adding them.
-  If temporary rules were needed, flag them to the user rather than auto-removing.
-
-### Standalone Lint Gates
-
-Required status checks outside `ci.yml`:
-
-| Workflow | Gate | What it rejects |
-|----------|------|-----------------|
-| `hook-log-path-lint.yml` | Hook Log Path Lint | Hook scripts deriving state paths from `PLUGIN_ROOT`/`HOOKS_DIR`/`SCRIPT_DIR` . |
-| `skill-mcp-ref-lint.yml` | Skill MCP Reference Lint | Hardcoded `mcp__linear-server__*` tool names in `plugins/onex/skills/**/*.md` . Skills must route ticketing through `ProtocolProjectTracker` / `uv run onex run node_*`. |
-| `verification-evidence-lint.yml` | Verification Evidence Lint | Worker prompts / receipts / handoff & evidence docs that cite a local-clone path, ticket text, or a `statusCheckRollup` verdict **as proof of state**  Verify against `origin/dev` (existence), the live materialized projection (state), and `gh pr checks` (PR verdict) — see [Verification Doctrine](docs/standards/VERIFICATION_DOCTRINE.md). |
-| `plan-verified-state-gate.yml` | Plan Verified State Gate | `plan_to_tickets` plans under `docs/plans/` or `docs/tracking/` that lack a fresh `## Current Verified State` section with a `verified: <date> via <command>` line dated within the freshness window . Grandfather allowlist: `.onex_ratchets/plan_verified_state_allowlist.yaml` (burn-down only). |
-
-Both gates also run as pre-commit hooks and must exit non-zero on violation.
+- Branch protection aggregates through gate jobs (**Quality Gate**, **Tests Gate**, **Security Gate**, CI Summary) declared in `.github/required-checks.yaml`. Gate names are API-stable — do not rename without the Branch Protection Migration Safety procedure in `docs/standards/CI_CD_STANDARDS.md`.
+- Standalone lint gates (hook log paths, skill MCP references, verification evidence, plan verified-state) live in their own workflows AND run as pre-commit hooks; if one fires, fix the underlying issue, never bypass.
+- CI uv version: read the pin from `.github/workflows/ci.yml` before lock-file changes; ruff behavior may differ local vs CI.
+- Never remove branch-protection rules after adding them; flag temporary rules to the user.
 
 ### Verification Doctrine
 
-When proving a claim about system state, verify against a **live truth surface**, never a convenient-but-stale one: `origin/dev` for existence (not a local clone), the live materialized projection for runtime/data state (not ticket prose), and `gh pr checks` for PR verdicts (not `statusCheckRollup`). Full rules, commands, and rationale: [`docs/standards/VERIFICATION_DOCTRINE.md`](docs/standards/VERIFICATION_DOCTRINE.md)  The `verification-evidence-lint` gate above enforces it mechanically.
-
----
-
-## Code Quality
-
-Principles specific to this repo (see **Repository Invariants** for the complete list):
-
-- **Frozen event schemas**: All Pydantic event models use `frozen=True`, `extra="ignore"`, `from_attributes=True`
-- **Explicit timestamp injection**: No `datetime.now()` defaults -- timestamps are injected by callers for deterministic testing
-- **Automatic secret redaction**: `prompt_preview` redacts API keys (OpenAI, AWS, GitHub, Slack), PEM keys, Bearer tokens, passwords in URLs
-- **Privacy-aware dual emission**: Preview-safe data (100 chars) goes to `onex.evt.*` topics; full prompts go only to `onex.cmd.omniintelligence.*`
+Prove claims against a **live truth surface**: `origin/dev` for existence (not a local clone),
+the live materialized projection for runtime/data state (not ticket prose), `gh pr checks` for
+PR verdicts (not `statusCheckRollup`). Full rules: `docs/standards/VERIFICATION_DOCTRINE.md`
+(mechanically enforced by the verification-evidence lint).
 
 ---
 
 ## Workflow Principles
 
-### Hook Development
+### Hook development
 
-Hook changes deploy via the plugin cache (`~/.claude/plugins/cache/`). Test locally before deploying:
-
-1. Edit code in this repo
-2. Run unit tests (`pytest tests/ -m unit -v`)
-3. Deploy plugin to cache
-4. Verify hooks work in a live Claude Code session
-
-### Automated Workflows
-
-For parallel background work, use Agent Teams (TeamCreate + Agent with team_name).
-For overnight/cron work, use headless `claude -p` with checkpoint-resume.
-For verification and simple tasks, delegate to local LLMs.
-
-See `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md` and
-`docs/reference/AGENT_YAML_SCHEMA.md` for the routing model and agent config schema.
+Hooks do **not** necessarily deploy via the plugin cache — `~/.claude/plugins/cache/` and
+`installed_plugins.json` are recorded paths, not resolved ones, and reading either to answer
+"is this hook deployed?" is reasoning from a tree Claude Code may never open (OMN-15274).
+Edit here → `pytest tests/ -m unit -v` → **read back the load path** → verify in a live session:
 
 ```bash
-# Human developers running CLI tools directly (not agent workflows):
-pytest tests/ -v
-ruff check src/
-mypy src/omniclaude/
+python3 plugins/onex/hooks/lib/plugin_deploy_readback.py
 ```
 
-### Headless Mode
+It resolves `${CLAUDE_PLUGIN_ROOT}` through the marketplace source chain and reports, per agent
+class (main session / `Task()` subagent / Workflow `agent()` subagent), the loaded `hooks.json`
+version, every registration with an EXEC-OK check, and whether the load-path tree is behind its
+upstream — the merged-not-deployed signal. `MERGED_NOT_DEPLOYED` means a merged hook is not a
+live hook; where the load path is a working tree, `git pull` in that tree *is* the deploy — but
+it updates files, it does not reload a running session. The readback reports **config** state,
+not what an already-running process holds in memory; a **new session** is the only surface
+guaranteed to have re-read `hooks.json`. Scope: `local_macos_claude_hooks` profile. Background:
+`omni_home/docs/reference/hook-load-path-and-deploy-readback.md`.
 
-The plugin is designed to run without an interactive Claude Code session using `claude -p`
-(print mode). This is the primary trigger surface for CLI automation, Slack bots, and webhooks.
+### Automation surfaces
 
-#### Basic invocation
+For parallel background work use the **Workflow tool** (multi-agent fan-out) per
+`omni_home/CLAUDE.md` — the async named-teammate `Agent(name=...)`/TeamCreate surface referenced
+in older docs is **not available** in this harness. For overnight/cron work use headless
+`claude -p` with checkpoint-resume. For verification and simple tasks, delegate to local LLMs.
+Routing model and agent config schema: `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md`,
+`docs/reference/AGENT_YAML_SCHEMA.md`.
 
-```bash
-claude -p "Run ticket-pipeline for <TICKET-ID>" \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
-```
+### Headless mode (`claude -p`)
 
-#### Required environment variables
+Full env tables, invocation examples, resume-after-rate-limit, and trigger surfaces:
+`docs/runbooks/headless-mode.md`. The two things people get wrong:
 
-| Variable | Purpose | Notes |
-|----------|---------|-------|
-| `ONEX_RUN_ID` | Unique run identifier for correlation | **Mandatory** — pipeline will not start without this |
-| `ONEX_UNSAFE_ALLOW_EDITS` | Permit file edits in headless mode | Set to `1` to allow Write/Edit tools |
-| `GITHUB_TOKEN` | GitHub CLI auth | Required for PR creation and CI polling |
-| `SLACK_BOT_TOKEN` | Slack API token | Required for gate notifications |
-| `LINEAR_API_KEY` | Linear API key | Required for ticket updates |
+- `ONEX_RUN_ID` is **mandatory** — it is the correlation key for pipeline state and duplicate prevention; the pipeline refuses to start without it.
+- `ANTHROPIC_API_KEY` is **NOT required** — Claude Code sessions (including `claude -p`) authenticate via OAuth. Do not add it as a required env var or preflight check.
 
-> **Note**: `ANTHROPIC_API_KEY` is **NOT required**. Claude Code sessions (including `claude -p`) authenticate via OAuth, not API keys. Do not add ANTHROPIC_API_KEY as a required env var.
+### Anti-patterns (recurring, from session analysis)
 
-```bash
-export ONEX_RUN_ID="pipeline-$(date +%s)-<TICKET-ID>"
-export ONEX_UNSAFE_ALLOW_EDITS=1
-export GITHUB_TOKEN="..."
-export SLACK_BOT_TOKEN="..."
-export LINEAR_API_KEY="..."
-
-claude -p "Run ticket-pipeline for <TICKET-ID>" \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
-```
-
-#### How auth works in headless mode
-
-`ONEX_RUN_ID` is mandatory. It is the correlation key written to:
-- `~/.claude/pipelines/ledger.json` (run tracking / duplicate prevention)
-- `~/.claude/pipelines/{ticket_id}/state.yaml` (phase state machine)
-- `~/.claude/rrh-artifacts/{ticket_id}/` (RRH audit artifacts, if RRH is enabled)
-
-Without `ONEX_RUN_ID` the pipeline cannot distinguish runs and will refuse to start.
-
-MCP server credentials are sourced from the environment at startup:
-- **Linear**: `LINEAR_API_KEY` (or `~/.claude/claude_desktop_config.json`)
-- **Slack**: `SLACK_BOT_TOKEN`
-- **GitHub**: `GITHUB_TOKEN` (used by the `gh` CLI)
-
-Hook scripts (`plugins/onex/hooks/scripts/`) run in the same subprocess environment.
-If `KAFKA_BOOTSTRAP_SERVERS` is set, the emit daemon will attempt to connect; if not set,
-events are silently dropped (hooks still exit 0).
-
-#### Resume after rate limits
-
-Checkpoints are written to `~/.claude/pipelines/{ticket_id}/state.yaml` after every phase
-transition. If the `claude -p` process is interrupted (rate limit, network drop, process
-kill), resume from the last completed phase:
-
-```bash
-# Resume from where the pipeline stopped
-claude -p "Run ticket-pipeline for <TICKET-ID> --skip-to ci_watch" \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
-```
-
-Auto-detection will also pick up the correct phase automatically when no
-`--skip-to` flag is provided and a state file already exists.
-
-#### Trigger surfaces
-
-| Surface | How |
-|---------|-----|
-| **CLI (direct)** | `claude -p "Run ticket-pipeline for <TICKET-ID>" --allowedTools "..."` |
-| **Slack bot** | Webhook handler constructs the `claude -p` call and spawns it as a subprocess |
-| **Webhook** | HTTP handler receives ticket ID, sets env vars, invokes `claude -p` |
-| **Cron / CI** | Shell script iterates tickets and calls `claude -p` per ticket |
-
-### Common Anti-Patterns (DO NOT DO THESE)
-
-Recurring wrong-approach mistakes surfaced from session analysis (875 sessions, 75 `wrong_approach` instances):
-
-| Anti-Pattern | Correct Approach |
+| Anti-pattern | Correct approach |
 |---|---|
-| Treating skills as separate from the node system | Skills are orchestration instructions that drive node execution and event emission. They are not an alternative architecture. |
-| Reimplementing CI merge branches | Use GitHub Merge Queue (`gh pr merge --auto`). Never re-implement CI merge coordination. |
-| plan-to-tickets: stalling on formatting | Attempt ticketization immediately; if it fails due to formatting, fix the minimum formatting and retry. |
-| Making `consumer.run()` block the Kafka event loop | Kafka consumers must not block the event loop. Use async patterns or background threads. |
-| Removing branch protection rules after adding them | Never remove branch protection rules. If temporary rules were added, flag them to the user. |
-| Routing a ticket to a repo based on title alone | Always verify the target repo from the Linear ticket metadata (`repo` field in TicketContract) before starting work. |
-| Iterating plans beyond adversarial review cap | Adversarial review uses a 3-round severity-graded convergence loop. After round 3, present remaining CRITICAL/MAJOR findings to user. Do not continue internally. |
-| Inventing raw Kafka topic strings outside contract.yaml | All topic names must come from a `ContractConfig` or event contract YAML. Never hardcode topic strings. |
-| Writing "call helper X()" in a skill without a real implementation | If logic is needed, it must be a tool, node, or handler — not a phantom callable referenced in markdown. |
-| Adding hooks to `settings.json` | Never add a `hooks` block to `~/.claude/settings.json`. Hook registration lives exclusively in `plugins/onex/hooks/hooks.json`. The plugin manifest loads it automatically. Duplicate entries in `settings.json` cause every event to fire twice (doubled log entries, doubled Kafka emissions, find_python() crashes). `plugins/onex/hooks/scripts/deploy.sh` removes stale manual entries during hook deployment. |
-
-### Behavioral Directives
-
-| Directive | Enforcement Surface |
-|-----------|-------------------|
-| **Stop when done**: When the user says done/stop/enough, stop immediately. No further investigation or polishing. | All skills |
-| **Verify symptom before declaring fix**: Check the user-facing symptom, not just the code change. Schema mismatches, stale state, and type errors may persist after the initial fix. | ticket-work, ticket-pipeline |
-| **Run tests before PRs**: Always run local tests and verify env vars before creating PRs. | ticket-pipeline Phase 3, pre-push hook |
-| **No over-investigation**: Once the primary objective is achieved, stop. No prevention plans, no refactoring unrelated code. | All skills |
-
-### Stop Signal Recognition
-
-These phrases mean "stop working on this immediately":
-- "done", "that's done", "that's enough", "stop", "move on"
-- "I think it's done already", "let's not", "skip that"
-- Any redirect to a different topic
-
-On receiving a stop signal: acknowledge briefly, summarize what was completed, stop.
-
-### Fail-Fast Design
-
-Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is not. See **Failure Modes** for the complete table of degraded behaviors.
-
-### Epic Orchestration
-
-- When orchestrating epics with subagents, if a subagent hits a context or rate limit,
-  log the failure clearly and continue with remaining tasks. After all other tasks
-  complete, report failed tasks with enough context for the user to resume them.
-- Ticket routing policy lives in the Decision Store. Query before dispatching.
-
----
-
-## Workspace Tooling
-
-### prune-worktrees.sh
-
-Detects and removes stale git worktrees under `$OMNI_HOME/omni_worktrees/` (override with `--worktrees-root`).
-A worktree is considered stale when its branch's PR has been merged (queried via `gh pr list --state merged`,
-batched to one call per repo) or its remote branch no longer exists.
-
-```bash
-# Dry-run (default): report stale worktrees without removing them
-scripts/prune-worktrees.sh
-
-# Execute: remove all stale worktrees
-scripts/prune-worktrees.sh --execute
-
-# Custom worktrees root
-scripts/prune-worktrees.sh --worktrees-root /path/to/worktrees
-
-# Verbose output (show active and skipped worktrees)
-scripts/prune-worktrees.sh --verbose
-```
-
-Run periodically after batch releases or PR merge sweeps to keep the worktree directory clean.
-Requires `gh` (GitHub CLI) authenticated and `git`.
+| Treating skills as separate from the node system | Skills are orchestration instructions that drive node execution and event emission — not an alternative architecture. |
+| Making `consumer.run()` block the Kafka event loop | Async patterns or background threads. |
+| Routing a ticket to a repo based on title alone | Verify the `repo` field in the Linear ticket metadata before starting. |
+| Inventing raw Kafka topic strings outside contract YAML | Topic names come from `ContractConfig` / event contract YAML only. |
+| Writing "call helper X()" in a skill without a real implementation | Logic must be a tool, node, or handler — never a phantom callable in markdown. |
+| Manually adding onex plugin hooks to `~/.claude/settings.json` | Plugin hook registration lives exclusively in `plugins/onex/hooks/hooks.json` (loaded by the plugin manifest). Duplicate entries fire every event twice (doubled logs, doubled Kafka emissions). Sole sanctioned exception: `scripts/install-delegation.sh` (OMN-10626) merges its own delegation hooks block for customer installs. |
+| Iterating plans beyond the adversarial review cap | 3-round severity-graded convergence, then present remaining CRITICAL/MAJOR findings to the user. |
 
 ---
 
 ## Debugging
 
-### Log Files
-
-- **Hook logs**: `~/.claude/hooks.log` (when `LOG_FILE` is set)
-
-### Diagnostic Commands
-
 ```bash
 python plugins/onex/hooks/lib/emit_client_wrapper.py status --json  # Daemon status
 jq . plugins/onex/hooks/hooks.json                                  # Validate hook config
-ls -la plugins/onex/hooks/scripts/*.sh                              # Check script permissions
+ls -la plugins/onex/hooks/scripts/*.sh                              # Script permissions
 ```
 
-### Common Issues
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| Events not emitting | Daemon not started — SessionStart hook starts it |
+| Hook fails exit 1 | Wrong Python — see `find_python()`; set `PLUGIN_PYTHON_BIN` |
+| Routing returns no match | Routing service timeout (fail-fast, no fallback) |
+| Context injection empty | No `INTELLIGENCE_SERVICE_URL`/`OMNICLAUDE_CONTEXT_API_URL` configured (API auto-disables), or timeout |
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| Events not emitting | Daemon not started | SessionStart hook must run first to start the daemon |
-| Hook fails with exit 1 | Wrong Python interpreter | Check `find_python()` logic; set `PLUGIN_PYTHON_BIN` |
-| Routing returns no match | Routing service timeout | Check network connectivity to routing service (5s timeout) |
-| Context injection empty | Database unreachable | Check `POSTGRES_HOST`/`POSTGRES_PORT` in `.env`; injection has 1s timeout |
+### Workspace tooling
+
+`scripts/prune-worktrees.sh` removes worktrees whose PR merged or remote branch is gone
+(dry-run by default; `--execute` to remove; `--worktrees-root` to override). Run after batch
+merge sweeps.
 
 ---
 
 ## Where to Change Things
 
-| Change | Location | Notes |
-|--------|----------|-------|
-| Event schemas | `src/omniclaude/hooks/schemas.py` | Frozen Pydantic models |
-| Kafka topics | `src/omniclaude/hooks/topics.py` | TopicBase enum |
-| Hook configuration | `plugins/onex/hooks/hooks.json` | Tool matchers, script paths |
-| Hook scripts | `plugins/onex/hooks/scripts/*.sh` | Shell handlers |
-| Handler modules | `plugins/onex/hooks/lib/*.py` | Python business logic |
-| Agent definitions | `plugins/onex/agents/configs/*.yaml` | Agent capabilities, triggers |
-| Skills | `plugins/onex/skills/*/SKILL.md` | Reusable methodologies |
+| Change | Location |
+|--------|----------|
+| Event schemas | `src/omniclaude/hooks/schemas.py` (frozen Pydantic models) |
+| Kafka topics | `src/omniclaude/hooks/topics.py` (TopicBase enum) |
+| Hook configuration | `plugins/onex/hooks/hooks.json` |
+| Hook scripts | `plugins/onex/hooks/scripts/*.sh` |
+| Handler modules | `plugins/onex/hooks/lib/*.py` |
+| Agent definitions | `plugins/onex/agents/configs/*.yaml` |
+| Skills | `plugins/onex/skills/*/SKILL.md` |
 
-### Public Entrypoints (stable API)
-
-These modules are intended for external use:
-
-| Module | Purpose |
-|--------|---------|
-| `emit_client_wrapper.py` | Event emission via daemon |
-| `context_injection_wrapper.py` | Inject learned patterns |
-| `route_via_events_wrapper.py` | Agent routing |
-| `correlation_manager.py` | Correlation ID persistence |
-
-**All other modules in `plugins/onex/hooks/lib/` are internal implementation details.**
+**Public entrypoints** (stable API) in `plugins/onex/hooks/lib/`: `emit_client_wrapper.py`,
+`context_injection_wrapper.py`, `route_via_events_wrapper.py`, `correlation_manager.py`.
+Everything else in that directory is internal.
 
 ---
 
 ## Environment Variables
 
-### Canonical Variables
+| Variable | Purpose |
+|----------|---------|
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection (required for events) |
+| `KAFKA_ENVIRONMENT` | Label for logging/observability only — NOT topic prefixing |
+| `POSTGRES_HOST/PORT/DATABASE/USER/PASSWORD`, `ENABLE_POSTGRES` | DB logging (default off) |
+| `USE_EVENT_ROUTING` | Agent routing via Kafka (default off) |
+| `ENFORCEMENT_MODE` | Quality enforcement: `warn` (default), `block`, `silent` |
+| `PLUGIN_PYTHON_BIN` | Explicit hook interpreter override (escape hatch) |
+| `OMNICLAUDE_PROJECT_ROOT` | Dev-mode venv resolution only (`find_python()` priority chain). **No longer used for hook path/root resolution** — `CLAUDE_PLUGIN_ROOT` is set exclusively by Claude Code's plugin system (the old root-resolution use caused hooks to resolve through the bare clone instead of the plugin cache). |
+| `INTELLIGENCE_SERVICE_URL` / `OMNICLAUDE_CONTEXT_API_URL` | Context-injection API base URL. **No localhost fallback** (OMN-7227) — when neither is set, the API pattern source auto-disables. |
+| `OMNICLAUDE_CONTEXT_API_ENABLED` | Explicit enable/disable of the API pattern source (default: inferred from URL presence) |
+| `OMNICLAUDE_CONTEXT_API_TIMEOUT_MS` | API timeout, default 900 — see the `api_timeout_ms` trap above |
+| `OMNICLAUDE_INTENT_<CLASS>_{MODEL,TEMPERATURE,VALIDATORS,SANDBOX}` | Per-intent-class overrides (`plugins/onex/hooks/lib/intent_model_hints.py`) |
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection string | Yes (for events) |
-| `KAFKA_ENVIRONMENT` | Environment label for logging/observability (not used for topic prefixing) | No |
-| `POSTGRES_HOST/PORT/DATABASE/USER/PASSWORD` | Database connection | No |
-| `ENABLE_POSTGRES` | Enable database logging | No (default: false) |
-| `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
-| `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
-| `OMNICLAUDE_PROJECT_ROOT` | **REMOVED (2026-03-30)** — caused hooks to resolve through bare clone instead of plugin cache. `CLAUDE_PLUGIN_ROOT` is now set exclusively by Claude Code's native plugin system. Stale `settings.json` entries are removed by `plugins/onex/hooks/scripts/deploy.sh`. | No |
-| `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
-| `INTELLIGENCE_SERVICE_URL` | Overrides default context injection API URL (http://localhost:8053); ignored if `OMNICLAUDE_CONTEXT_API_URL` is explicitly set | No |
-| `OMNICLAUDE_CONTEXT_API_URL` | Overrides the omniintelligence HTTP API base URL used for context injection (default: `INTELLIGENCE_SERVICE_URL` or http://localhost:8053) | No |
-| `OMNICLAUDE_CONTEXT_API_ENABLED` | Enable (`true`) or disable (`false`) the omniintelligence HTTP API as a context injection pattern source (default: true) | No |
-| `OMNICLAUDE_CONTEXT_API_TIMEOUT_MS` | Timeout in milliseconds for omniintelligence API calls during context injection (default: 900, range: 100–10000) | No |
-| `OMNICLAUDE_INTENT_API_URL` | **REMOVED** -- the HTTP classify endpoint never existed. Intent classification flows through the Kafka event bus. | No |
-| `OMNICLAUDE_STATE_DIR` | Override the correlation state directory used by intent_classifier CLI (default: `$ONEX_STATE_DIR/hooks/.state`) | No (dev/test only) |
-| `OMNICLAUDE_INTENT_<CLASS>_MODEL` | Override recommended model for a given intent class (e.g. `OMNICLAUDE_INTENT_SECURITY_MODEL=claude-opus-4-6`) | No |
-| `OMNICLAUDE_INTENT_<CLASS>_TEMPERATURE` | Override temperature hint for a given intent class | No |
-| `OMNICLAUDE_INTENT_<CLASS>_VALIDATORS` | Override validator list for a given intent class (comma-separated) | No |
-| `OMNICLAUDE_INTENT_<CLASS>_SANDBOX` | Override sandbox setting for a given intent class (`none`, `standard`, `enforced`) | No |
+Tombstone: `OMNICLAUDE_INTENT_API_URL` never worked — the HTTP classify endpoint never existed;
+intent classification flows through the Kafka event bus.
 
----
+### ONEX state directory
 
-## ONEX State Directory
-
-All ONEX runtime state (pipelines, epics, skill results, logs, artifacts) lives under `ONEX_STATE_DIR`. This env var MUST be set — there is no default.
-
-- Configured automatically on first plugin install
-- Persisted in `~/.omnibase/.env`
-- Python resolver: `from plugins.onex.hooks.lib.onex_state import state_path, ensure_state_dir`
-- Shell resolver: `source onex-paths.sh` (provides `$ONEX_LOG_DIR`, `$ONEX_PIPELINES_DIR`, etc.)
-
-### Path Discipline
-- `state_path()` / `$ONEX_STATE_DIR/...` for read-only path calculation (no side effects)
-- `ensure_state_dir()` / `ensure_state_path()` / `mkdir -p` only where writes are expected
-- Never create directories at import time or module level
+All ONEX runtime state lives under `ONEX_STATE_DIR`. **The env var MUST be set — there is no
+default** (set on first plugin install, persisted in `~/.omnibase/.env`). Python:
+`from plugins.onex.hooks.lib.onex_state import state_path, ensure_state_dir`; shell:
+`source onex-paths.sh`. Use `state_path()` for read-only path calculation; `ensure_state_dir()`
+only where writes are expected; never create directories at import time.
 
 ---
 
-## Project Structure
+## Hook Data Flow (when hooks are registered)
 
-```
-omniclaude/
-├── src/omniclaude/              # Main Python package
-│   ├── hooks/                   # Core hooks module
-│   │   ├── schemas.py           # ONEX event schemas
-│   │   ├── topics.py            # Kafka topic definitions
-│   │   ├── handler_context_injection.py
-│   │   ├── handler_event_emitter.py
-│   │   └── contracts/           # YAML contracts + Python models
-│   ├── aggregators/             # Session aggregation
-│   ├── cli/                     # CLI entry points
-│   ├── config/                  # Pydantic Settings
-│   ├── contracts/               # Cross-cutting contract models
-│   ├── handlers/                # Business logic
-│   ├── lib/                     # Shared utilities
-│   ├── nodes/                   # ONEX nodes
-│   ├── publisher/               # Event publisher
-│   └── runtime/                 # Runtime support
-├── plugins/onex/                # Claude Code plugin
-│   ├── hooks/                   # Hook scripts and library
-│   │   ├── hooks.json           # Hook configuration
-│   │   ├── scripts/             # Shell handlers
-│   │   └── lib/                 # Python handler modules
-│   ├── agents/configs/          # Agent YAML definitions
-│   ├── commands/                # Slash command definitions
-│   └── skills/                  # Skill definitions
-└── tests/                       # Test suite
-```
+Hooks receive JSON on stdin (`sessionId` + event-specific fields) and return JSON
+(`hookSpecificOutput.additionalContext` for UserPromptSubmit). UserPromptSubmit sync path:
+agent detection → routing candidates (`route_via_events_wrapper.py`) → context injection
+(`context_injection_wrapper.py`); Kafka dual-emission is async (preview → `onex.evt.*`, full
+prompt → `onex.cmd.omniintelligence.*`). Agent YAML loading is NOT on the sync path — Claude
+loads the selected agent's YAML on demand.
+
+Emit daemon: hook → `emit_via_daemon()` → Unix socket `~/.claude/emit.sock` → daemon → Kafka.
+Started by SessionStart if not running; buffers briefly; drops events (with log) if Kafka is
+unavailable.
 
 ---
 
-## Hook Data Flow
+## Kafka Topics & Event Schemas
 
-> **Current state (verified against code on this refresh):** every hook registration
-> in `plugins/onex/hooks/hooks.json` is removed — the `hooks` block is `{}` — for the
-> a measurement baseline. Claude Code therefore invokes no onex hooks today.
-> The scripts (`plugins/onex/hooks/scripts/`) and handler modules
-> (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change
-> Re-enabling is a pure config change. The flow below describes wired behavior when hooks are registered.
+Naming: `onex.{kind}.{producer}.{event-name}.v{n}` — `kind` is `evt` (observability, broad
+access) or `cmd` (commands, restricted). Authoritative list: `src/omniclaude/hooks/topics.py`.
+The privacy split is the invariant to protect: previews/metrics on `onex.evt.omniclaude.*`;
+full prompts and file contents ONLY on `onex.cmd.omniintelligence.*`. Access control is
+currently honor-system (no Kafka ACLs configured).
 
-### Input Format
-
-All hooks receive JSON via stdin from Claude Code:
-
-```json
-// SessionStart
-{"sessionId": "uuid", "projectPath": "/path", "cwd": "/path"}
-
-// UserPromptSubmit
-{"sessionId": "uuid", "prompt": "user text"}
-
-// PostToolUse
-{"sessionId": "uuid", "tool_name": "Read", "tool_input": {...}, "tool_response": {...}}
-```
-
-### UserPromptSubmit Flow (most complex)
-
-```
-stdin JSON
-    │
-    ├─► [ASYNC] Emit to Kafka (dual-emission)
-    │       ├─► onex.evt.omniclaude.prompt-submitted.v1 (100-char preview)
-    │       └─► onex.cmd.omniintelligence.claude-hook-event.v1 (full prompt)
-    │
-    ▼ [SYNC - counts toward 500ms budget]
-agent_detector.py → detect automated workflow
-    │
-    ▼
-route_via_events_wrapper.py → get agent candidates + fuzzy best
-    │
-    ▼ (agent YAML loading removed from sync path in an earlier refactor)
-    │  Claude loads the selected agent's YAML on-demand after seeing candidates
-    │
-    ▼
-context_injection_wrapper.py → load learned patterns
-    │
-    ▼
-Output: JSON with hookSpecificOutput.additionalContext
-        (includes candidate list for Claude to select from)
-```
-
-### Emit Daemon Architecture
-
-```
-Hook Script → emit_via_daemon() → Unix Socket → Emit Daemon → Kafka
-                                  /tmp/omniclaude-emit.sock
-```
-
-The daemon:
-- Started by SessionStart hook if not running
-- Persists across hook invocations
-- Buffers events briefly if Kafka slow
-- Drops events (with log) if Kafka unavailable
+Event payload models (`ModelHook*Payload`): `src/omniclaude/hooks/schemas.py`. Treat
+`working_directory`, `git_branch`, and `summary` fields as privacy-sensitive in analytics.
 
 ---
 
-## Kafka Topics
+## Agents & Skills
 
-### Topic Naming Convention
-
-```
-onex.{kind}.{producer}.{event-name}.v{n}
-
-kind: evt (observability, broad access) | cmd (commands, restricted access)
-producer: omniclaude | omninode | omniintelligence
-```
-
-### Core Topics
-
-| Topic | Kind | Access | Purpose |
-|-------|------|--------|---------|
-| `onex.evt.omniclaude.session-started.v1` | evt | Broad | Session observability |
-| `onex.evt.omniclaude.prompt-submitted.v1` | evt | Broad | 100-char preview only |
-| `onex.evt.omniclaude.tool-executed.v1` | evt | Broad | Tool metrics |
-| `onex.cmd.omniintelligence.claude-hook-event.v1` | cmd | Restricted | Full prompts |
-| `onex.cmd.omniintelligence.tool-content.v1` | cmd | Restricted | File contents |
-
-### Access Control
-
-**Current state**: Honor system. No Kafka ACLs configured.
-
-**Intended state**:
-- `evt.*` topics: Any consumer may subscribe
-- `cmd.omniintelligence.*` topics: Only OmniIntelligence service
-- ACL policy: Managed via Redpanda Console (`$REDPANDA_CONSOLE_URL`, see `~/.omnibase/.env`)
+Agents: `plugins/onex/agents/configs/*.yaml` — selected by matching `activation_patterns`
+against prompts (schema: `docs/reference/AGENT_YAML_SCHEMA.md`). Skills:
+`plugins/onex/skills/*/SKILL.md`.
 
 ---
 
-## Event Schemas
-
-**Location**: `src/omniclaude/hooks/schemas.py`
-
-| Schema | Purpose |
-|--------|---------|
-| `ModelHookSessionStartedPayload` | Session initialization |
-| `ModelHookSessionEndedPayload` | Session termination |
-| `ModelHookPromptSubmittedPayload` | User prompt (preview + length) |
-| `ModelHookToolExecutedPayload` | Tool completion |
-| `ModelHookContextInjectedPayload` | Context injection tracking |
-
-### Privacy-Sensitive Fields
-
-| Field | Risk | Mitigation |
-|-------|------|------------|
-| `prompt_preview` | User input | Auto-sanitized, 100 chars max |
-| `working_directory` | Usernames | Anonymize in analytics |
-| `git_branch` | Ticket IDs | Treat as PII |
-| `summary` | Code snippets | 500 char limit |
-
-### Automatic Secret Redaction
-
-`prompt_preview` redacts: OpenAI keys (`sk-*`), AWS keys (`AKIA*`), GitHub tokens (`ghp_*`), Slack tokens (`xox*`), PEM keys, Bearer tokens, passwords in URLs.
-
----
-
-## Declarative Node Types
-
-### Agents (YAML)
-
-**Location**: `plugins/onex/agents/configs/*.yaml`
-
-```yaml
-schema_version: "1.0.0"
-agent_type: "api_architect"
-
-agent_identity:
-  name: "agent-api-architect"
-  description: "Designs RESTful APIs"
-  color: "blue"
-
-activation_patterns:
-  explicit_triggers: ["api design", "openapi"]
-  context_triggers: ["designing HTTP endpoints"]
-```
-
-Agents are selected by matching `activation_patterns` against user prompts.
-
-### Skills (SKILL.md)
-
-**Location**: `plugins/onex/skills/*/SKILL.md`
-
-Reusable methodologies and executable scripts. Referenced by agents and commands.
-
----
-
-## Dependencies
-
-**File**: `pyproject.toml`
-
-
-### Installation
+## Install / Test / Lint
 
 ```bash
-uv sync              # Install dependencies
-uv sync --group dev  # Include dev tools
+uv sync --group dev                                 # deps
+pytest tests/ -m unit -v                            # unit (no services; Kafka mocked)
+KAFKA_INTEGRATION_TESTS=1 pytest -m integration     # integration (needs Kafka)
+ruff check src/ tests/ && ruff format src/ tests/
+mypy src/omniclaude/ && bandit -r src/omniclaude/
 ```
 
-### Plugin Installation
-
-The onex plugin is installed via Claude Code's marketplace system:
+Plugin install (marketplace reads the canonical clone):
 
 ```bash
-# 1. Pull latest in the canonical clone (marketplace reads from it)
 git -C "$OMNI_HOME/omniclaude" pull --ff-only
-
-# 2. Refresh the marketplace index
 claude plugin marketplace update omninode-tools
-
-# 3. Force a fresh copy: uninstall then reinstall
-claude plugin uninstall onex@omninode-tools
-claude plugin install onex@omninode-tools
-
-# 4. Restart the Claude Code session to pick up hooks/skills
+claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools
+# restart the Claude Code session to pick up hooks/skills
 ```
 
-The marketplace config lives at `plugins/.claude-plugin/marketplace.json`.
+Marketplace config: `plugins/.claude-plugin/marketplace.json`.
 
----
-
-## Testing
-
-```bash
-pytest tests/ -v                                    # All tests
-pytest tests/ -m unit -v                            # Unit only (no services)
-pytest tests/ --cov=src/omniclaude --cov-report=html  # Coverage
-KAFKA_INTEGRATION_TESTS=1 pytest -m integration     # Integration (needs Kafka)
-```
-
-**Kafka is mocked** in unit tests via `conftest.py`.
-
----
-
-## Python/Linting
-
-```bash
-ruff check src/ tests/
-ruff format src/ tests/
-mypy src/omniclaude/
-bandit -r src/omniclaude/
-```
-
----
-
-## Completion Criteria
-
-What "done" means for changes to this repo:
-
-- All unit tests pass (`pytest tests/ -m unit -v`)
-- Hooks don't block Claude Code (respect performance budgets)
-- CI pipeline passes (all 13 jobs green)
-- Events emit correctly (if touching event schemas or emission)
-- No secrets in `evt.*` topics
-- Hook scripts exit 0 on infrastructure failure
-
----
+**Done means**: unit tests pass, hooks respect performance budgets and exit 0 on infra
+failure, CI green (verify via `gh pr checks`, not a memorized job count), no secrets on
+`evt.*` topics.
 
 ## SPDX Headers
 
-All source files in `src/`, `tests/`, `scripts/`, `examples/` require MIT SPDX headers.
-Canonical spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`
-
-- Stamp missing headers: `onex spdx fix src tests scripts examples`
-- Check without writing: `onex spdx fix --check src tests scripts examples`
-- Bypass a file: add `# spdx-skip: <reason>` in the first 10 lines
+All source files in `src/`, `tests/`, `scripts/`, `examples/` require MIT SPDX headers
+(spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`). Stamp: `onex spdx fix src tests
+scripts examples` (`--check` to verify); bypass per-file with `# spdx-skip: <reason>` in the
+first 10 lines.
 
 ---
 
-**Last Updated**: 2026-06-21
-**Version**: 0.25.1
+**Last Updated**: 2026-07-26 (OMN-15200 slim pass; stale facts corrected against live source)

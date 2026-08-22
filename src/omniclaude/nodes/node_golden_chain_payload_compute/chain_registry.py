@@ -250,6 +250,34 @@ GOLDEN_CHAIN_METADATA: tuple[ModelChainMetadata, ...] = (
         ),
     ),
     ModelChainMetadata(
+        name="push_validation",
+        head_topic=TopicBase.PUSH_VALIDATION_REQUESTED,
+        tail_table="gateway_workflows",
+        expected_fields=("correlation_id", "workflow_type", "status"),
+        proof_classification="diagnostic",
+        replay_status="replay-not-applicable",
+        stages=(
+            {
+                "name": "push_validation_requested",
+                "topic": TopicBase.PUSH_VALIDATION_REQUESTED,
+            },
+            {
+                "name": "push_validation_completed",
+                "handler": "node_push_validation_effect.HandlerPushValidationEffect",
+                "topic": TopicBase.PUSH_VALIDATION_COMPLETED,
+            },
+            {
+                "name": "push_validation_failed",
+                "handler": "node_push_validation_effect.HandlerPushValidationEffect",
+                "topic": TopicBase.PUSH_VALIDATION_FAILED,
+            },
+            {
+                "name": "terminal_projection",
+                "table": "gateway_workflows",
+            },
+        ),
+    ),
+    ModelChainMetadata(
         name="delegation_projection_materialization",
         head_topic=TopicBase.DELEGATION_INFRA_COMPLETED,
         tail_table="delegation_events",

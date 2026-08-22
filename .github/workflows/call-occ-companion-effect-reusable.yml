@@ -92,18 +92,12 @@ permissions:
 jobs:
   publish-occ-companion-effect:
     name: Publish occ-companion-effect command
-    # Defensive gate (identical to the autobind reusable, OMN-13990 H4): skip
-    # dependency bots (exempt from occ-preflight too) and PRs with no OMN
-    # ticket token in the title or branch. Any caller invoking this reusable
-    # inherits the gate for free; a ticketless PR is fixed by the pr-title
-    # gate, not papered over with a mechanical companion. Callers may ALSO
-    # gate their `uses:` job so the reusable is not even invoked for non-OMN
-    # PRs.
-    if: >-
-      github.actor != 'dependabot[bot]' &&
-      github.actor != 'renovate[bot]' &&
-      (contains(github.event.pull_request.title, 'OMN-') ||
-       contains(github.event.pull_request.head.ref, 'OMN-'))
+    # This job is a live required context in caller repositories. It must
+    # always materialize, including for dependency bots and ticketless PRs.
+    # Eligibility is therefore classified by the first executed step; the
+    # expensive publisher steps no-op while the job itself terminates green.
+    # A job-level `if:` suppresses the check run entirely and leaves branch
+    # protection waiting for a context that can never exist (OMN-14864).
     # OMNI_RUNNER_SELECTOR_V1 — trusted (non-fork) PRs run on the self-hosted
     # omnibase-ci runner so the publisher reaches the local lane broker; fork
     # PRs fall back to ubuntu-latest (publisher skips gracefully, no broker).
@@ -128,12 +122,32 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Classify OCC companion-effect eligibility
+        id: eligibility
+        shell: bash
+        env:
+          PR_ACTOR: ${{ github.actor }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          eligible=false
+          if [[ "$PR_ACTOR" != "dependabot[bot]" &&
+                "$PR_ACTOR" != "renovate[bot]" ]] &&
+             [[ "$PR_TITLE" == *OMN-* || "$PR_HEAD_REF" == *OMN-* ]]; then
+            eligible=true
+          fi
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          if [[ "$eligible" == false ]]; then
+            echo "OCC companion publication is not applicable; required context materialized as a no-op."
+          fi
+
       # The publish LOGIC is owned by omnimarket. Pull ONLY the four files the
       # thin publisher needs (script + file-path-loaded sibling + lane overlay
       # + topic registry) from omnimarket@<ref> into a side path so nothing
       # from the caller checkout is touched. persist-credentials: false — this
       # job never pushes to git.
       - name: Fetch canonical occ-companion-effect publisher (omnimarket)
+        if: steps.eligibility.outputs.eligible == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omnimarket
@@ -148,11 +162,13 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
+        if: steps.eligibility.outputs.eligible == 'true'
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install dependencies
+        if: steps.eligibility.outputs.eligible == 'true'
         run: |
           # Kept deliberately thin — the publisher loads the topic registry and
           # its sibling script by file path and never imports the omnimarket
@@ -163,6 +179,7 @@ jobs:
           pip install --quiet confluent-kafka click pyyaml
 
       - name: Publish onex.cmd.omnimarket.occ-companion-effect-requested.v1
+        if: steps.eligibility.outputs.eligible == 'true'
         # All potentially attacker-controlled inputs (PR body) are passed
         # through environment variables — never interpolated into the script
         # text — to prevent shell injection. PR_BODY powers the publisher-side

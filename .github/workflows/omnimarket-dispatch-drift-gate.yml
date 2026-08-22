@@ -71,7 +71,13 @@ jobs:
       - name: Resolve expected omnimarket dispatch SHA
         id: expected
         run: |
-          SHA="597fc11af2ad49ca8c780fcd8cb99b8895765398"
+          # OMN-15968: bumped from v0.4.0 (597fc11a) to the merged omnimarket#2062
+          # commit -- adds node_event_emit_effect, the R4 repoint target
+          # (OMN-13213 D1 follow-through, epic OMN-15964). Not yet promoted to
+          # omnimarket main; this baseline is the sanctioned "approved
+          # release-lane baseline while a broader dependency cascade is
+          # pending" override this gate's own docstring describes.
+          SHA="63ea1c1ef770349bcb9e47144263869db8fbe13e"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Expected omnimarket dispatch SHA: $SHA"
 

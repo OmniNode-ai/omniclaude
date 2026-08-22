@@ -38,7 +38,7 @@ class TestChainRegistry:
 
     def test_canonical_metadata_includes_convergence_chains(self) -> None:
         names = {c.name for c in GOLDEN_CHAIN_METADATA}
-        assert len(names) == 13
+        assert len(names) == 14
         assert {
             "registration",
             "pattern_learning",
@@ -52,6 +52,7 @@ class TestChainRegistry:
             "d9_wheel_module",
             "f1_publish_loop",
             "delegation_inference_round_trip",
+            "push_validation",
             "delegation_projection_materialization",
         } == names
 

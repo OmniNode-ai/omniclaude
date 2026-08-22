@@ -17,6 +17,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from omniclaude.hooks.alert_channel import (
+    HEALTHY_CHANNEL_STATUSES,
+    EnumChannelStatus,
+    probe_channel_health,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,10 +35,29 @@ class ModelHookHealthResult(BaseModel):
     healthy_hooks: int = Field(default=0, ge=0)
     unhealthy_hooks: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    alert_channel_status: str = Field(
+        default="not_configured",
+        description=(
+            "Liveness of the alert delivery channel (OMN-15600/OMN-15606): a "
+            "member of EnumChannelStatus — live / dead / not_configured / "
+            "probe_error. 'dead' means hook-health alerts are being raised into "
+            "a channel that discards them; 'probe_error' means liveness could "
+            "not be established at all, which is not evidence of health."
+        ),
+    )
 
     @property
     def healthy(self) -> bool:
-        return len(self.unhealthy_hooks) == 0
+        """Healthy requires an affirmatively-established channel.
+
+        Fail-closed on any status outside the healthy set, including one this
+        model does not recognise: an unverified channel is not a working one
+        (OMN-15606).
+        """
+        return (
+            len(self.unhealthy_hooks) == 0
+            and self.alert_channel_status in HEALTHY_CHANNEL_STATUSES
+        )
 
     @property
     def degraded(self) -> bool:
@@ -102,22 +127,54 @@ def probe_hook_health() -> ModelHookHealthResult:
     This function NEVER raises. All errors are caught and converted
     to warnings in the result.
     """
+    # Routed through the shared classifier so this probe and the plugin-lib
+    # probe cannot classify the same failure differently (OMN-15606).
+    channel = probe_channel_health()
+    channel_warnings: list[str] = []
+    if channel.status is EnumChannelStatus.DEAD:
+        # A dead alert channel is a hook-health failure in its own right: the
+        # warnings below are delivered through it (OMN-15600).
+        channel_warnings.append(
+            f"[hook-health] ALERT CHANNEL DEAD ({channel.detail}) — hook-health "
+            f"alerts are delivering to nothing"
+        )
+    elif channel.status is EnumChannelStatus.PROBE_ERROR:
+        # The check did not run. Saying nothing here would restate the probe's
+        # own failure as a clean bill of health (OMN-15606).
+        channel_warnings.append(
+            f"[hook-health] ALERT CHANNEL LIVENESS UNVERIFIED ({channel.detail}) "
+            f"— the liveness probe could not run; alert delivery is UNPROVEN"
+        )
+    elif channel.dead_channels:
+        channel_warnings.append(
+            f"[hook-health] alert channel degraded: {', '.join(channel.dead_channels)} "
+            f"dead, delivering via {', '.join(channel.live_channels)}"
+        )
+
     try:
         hooks_json = _find_hooks_json()
         if hooks_json is None:
             return ModelHookHealthResult(
-                warnings=["[hook-health] hooks.json not found — cannot probe hooks"],
+                warnings=[
+                    *channel_warnings,
+                    "[hook-health] hooks.json not found — cannot probe hooks",
+                ],
+                alert_channel_status=channel.status.value,
             )
 
         scripts = _extract_hook_scripts(hooks_json)
         if not scripts:
             return ModelHookHealthResult(
-                warnings=["[hook-health] No hook scripts found in hooks.json"],
+                warnings=[
+                    *channel_warnings,
+                    "[hook-health] No hook scripts found in hooks.json",
+                ],
+                alert_channel_status=channel.status.value,
             )
 
         total = len(scripts)
         unhealthy: list[str] = []
-        warnings: list[str] = []
+        warnings: list[str] = list(channel_warnings)
 
         for script in scripts:
             error = _check_script_reachable(script)
@@ -139,10 +196,12 @@ def probe_hook_health() -> ModelHookHealthResult:
             healthy_hooks=healthy,
             unhealthy_hooks=unhealthy,
             warnings=warnings,
+            alert_channel_status=channel.status.value,
         )
     except Exception as exc:  # noqa: BLE001 — health probe must never crash
         return ModelHookHealthResult(
-            warnings=[f"[hook-health] Probe failed: {exc}"],
+            warnings=[*channel_warnings, f"[hook-health] Probe failed: {exc}"],
+            alert_channel_status=channel.status.value,
         )
 
 

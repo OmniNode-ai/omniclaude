@@ -499,12 +499,13 @@ fi
 log "SessionStart hook triggered (plugin mode)"
 log "Using Python: $PYTHON_CMD"
 
-# Hook health probe [F32] — verify all Python hook handlers can import
-PROBE_RESULT=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") || true
-PROBE_FAILURES=$(echo "$PROBE_RESULT" | env -u PYTHONPATH "$BREW_PY" -c "import json,sys; print(json.load(sys.stdin).get('failures',0))" 2>/dev/null || echo "0")
-if [[ "$PROBE_FAILURES" != "0" ]]; then
-    log "WARNING: $PROBE_FAILURES hook handler(s) failed import check. See hooks.log for details."
-fi
+# Hook health probe [F32] — verify all Python hook handlers can import, and
+# (OMN-15600) that the alert channel can actually deliver. The verdict logic
+# lives in common.sh :: run_hook_health_probe so it is directly testable
+# (OMN-15606); it is fail-closed and logs every non-healthy outcome distinctly.
+# Its nonzero return is absorbed here because session start must never block —
+# the failure has already been reported on the local log by that point.
+run_hook_health_probe || true
 
 # Extract session information
 # Claude Code API (2026-02+): snake_case field names (session_id, cwd, etc.)

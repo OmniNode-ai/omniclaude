@@ -1,0 +1,355 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# verifier-stamp-reusable.yml
+#
+# OMN-15362 FIRST SLICE — independent-verifier verdicts published as
+# OnexBot-authored CHECK-RUNS.
+#
+# WHAT THIS IS
+#   A verifier lane (hostile_reviewer, verified_dispatch, adversarial verify,
+#   any independent re-check) calls this reusable with its verdict. The verdict
+#   lands on the verified commit as a GitHub check-run whose author is the
+#   OnexBot GitHub App (`onexbot[bot]`, app id 3342522), NOT the human PAT that
+#   every other machine action in this org currently resolves to. That is the
+#   whole point: an "independent verification" signal that is indistinguishable
+#   from the implementer's own identity is not independent.
+#
+# CHECK-RUN NAME CONVENTION (stable — downstream branch protection keys on it)
+#       verified/onexbot: <lane>
+#   e.g. `verified/onexbot: hostile-reviewer`. The `verified/onexbot:` prefix is
+#   reserved for App-authored independent verdicts. Nothing else may publish a
+#   check-run under it. Because it is a check-run name it CAN later be added to
+#   required_status_checks.contexts verbatim — that is deliberate (CLAUDE.md
+#   rule 5: detection that cannot become a gate is advisory and gets ignored).
+#   This slice does NOT add it to branch protection; wiring it as required is a
+#   separate, operator-visible step once a real verifier lane emits it.
+#
+# WHY A CHECK-RUN AND NOT A COMMIT STATUS
+#   OnexBot holds `checks: write` (verified live 2026-07-29 at BOTH app level —
+#   `gh api /apps/onexbot` — and installation level on installation 123040063,
+#   repository_selection=all). It deliberately does NOT hold `statuses: write`,
+#   and that is not a gap to close: the check-runs API covers verifier stamping
+#   in full and a check-run name is directly requirable. Do not re-request
+#   commit-statuses.
+#
+# WHAT THIS SLICE DOES NOT SOLVE (honest residuals — OMN-15362 stays open)
+#   1. MERGE-PATH IDENTITY. OnexBot holds `contents: read`, and
+#      `PUT /repos/{owner}/{repo}/pulls/{n}/merge` needs contents:write +
+#      pull_requests:write. So OnexBot still cannot be the merge identity;
+#      `mergedBy` stays `jonahgabriel` on every PR (OMN-14204 / OMN-15053).
+#      This workflow does not touch, and cannot touch, the merge axis.
+#   2. OCC PR-AUTHOR IDENTITY ON THE BUS PATH. `node_occ_companion_effect` /
+#      `OccCompanionEmitter` run in the `omninode-runtime-effects` container on
+#      .201 and resolve their credential from `GITHUB_TOKEN` in the secret store
+#      — the shared human PAT. Neither App's private key exists on .201/.200
+#      (name-only readback 2026-07-29: `.201` has GITHUB_TOKEN+GH_PAT, `.200`
+#      has GH_PAT+RUNNER_GITHUB_TOKEN, no `ONEXBOT_*`, no `.pem`). App identity
+#      on runtime paths needs the key placed on the host — OMN-15362 blocker 3.
+#      NOT attempted here. The split is hard: in-Actions paths (this workflow)
+#      CAN mint App tokens today because the org secrets are injected into the
+#      runner; host/runtime paths CANNOT.
+#   3. GIT COMMIT AUTHORSHIP. This publishes a check-run, not a commit. Commit
+#      author attribution on companion branches is still the synthetic unmapped
+#      `node-occ-companion-effect <occ-companion-effect@omninode.ai>`.
+#
+# SEAM (input fields, field-by-field — CLAUDE.md "define and match seams")
+#   repo          string  required  "OWNER/NAME" of the repo whose commit is
+#                                   stamped. Validated against
+#                                   ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ and split
+#                                   into the App-token mint scope
+#                                   (owner=OWNER, repositories=NAME).
+#   sha           string  required  40-hex commit SHA the check-run attaches to
+#                                   (`head_sha`). Validated ^[0-9a-f]{40}$.
+#   lane          string  required  Verifier lane id; becomes the check-run name
+#                                   suffix. 1..64 chars of [A-Za-z0-9._/ -].
+#   verdict       string  required  Exactly `PASS` or `FAIL`, carried VERBATIM
+#                                   into output.title. PASS -> conclusion
+#                                   success; FAIL -> conclusion failure. Any
+#                                   other value FAILS the job (no NEUTRAL
+#                                   escape hatch — an unmappable verdict is a
+#                                   caller bug, not a soft signal).
+#   summary       string  required  Carried VERBATIM into output.summary and
+#                                   asserted byte-equal on readback.
+#   details-url   string  optional  check-run `details_url`. Default: the
+#                                   calling workflow run's URL.
+#   details-text  string  optional  Markdown body -> output.text (the verdict
+#                                   rationale). Default: "".
+#   SECRETS       ONEXBOT_APP_ID + ONEXBOT_APP_PRIVATE_KEY, both required:true.
+#                 Org Actions secrets, visibility=all, so `secrets: inherit`
+#                 from any OmniNode-ai repo satisfies them.
+#   OUTPUTS       check-run-id (numeric id), check-run-url (html_url).
+#
+# FAIL-CLOSED / NO-SILENT-SKIP (do NOT weaken)
+#   Every failure mode is a red job, never a skip and never a soft pass:
+#     * malformed repo/sha/lane/verdict/summary -> validation step exits 1
+#     * absent App secrets                      -> explicit ::error:: + exit 1
+#       (checked BEFORE the mint so an unprovisioned App is actionable, not an
+#       opaque create-github-app-token failure) — same idiom as
+#       omnimarket/.github/workflows/call-occ-attestation-observe.yml
+#     * mint failure / empty token              -> exit 1
+#     * check-run POST failure                  -> exit 1 (set -o pipefail)
+#     * readback mismatch on app.slug/name/conclusion/head_sha/output.summary
+#                                               -> exit 1
+#   There is no `continue-on-error:` and no `if: always()` swallow anywhere in
+#   this file. Adding one would turn "verified" into "maybe verified".
+#
+#   The readback is the load-bearing assertion: it re-reads the created
+#   check-run and requires `.app.slug == "onexbot"`. If the token ever silently
+#   degrades to the ambient GITHUB_TOKEN (which would author as
+#   `github-actions[bot]`), this job goes RED rather than publishing a stamp
+#   that lies about who verified.
+#
+# TOKEN HYGIENE
+#   The installation token is minted per-run via
+#   actions/create-github-app-token pinned by SHA (the pattern already in
+#   call-occ-attestation-observe.yml), scoped with owner/repositories to the
+#   SINGLE target repo, lives ~1h, and is never echoed — it moves only through
+#   `env: GH_TOKEN`. `permissions:` stays read-only on purpose: the ambient
+#   per-run GITHUB_TOKEN is not the credential doing the write and raising it
+#   would be a pure over-grant.
+#
+# USAGE
+#   jobs:
+#     stamp-verdict:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/verifier-stamp-reusable.yml@dev
+#       secrets: inherit
+#       with:
+#         repo: ${{ github.repository }}
+#         sha: ${{ github.event.pull_request.head.sha }}
+#         lane: hostile-reviewer
+#         verdict: PASS
+#         summary: "3 findings, 0 blocking; re-checked against live gh + CI."
+#         details-text: |
+#           - finding 1 ...
+#
+# Ticket: OMN-15362 (blocker 2 — cleared by the operator granting checks:write
+# 2026-07-29T14:58Z). Lineage: OMN-15053, OMN-14204, OMN-14893, OMN-14955.
+
+name: Verifier Stamp (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        description: 'OWNER/NAME of the repository whose commit is stamped.'
+        type: string
+        required: true
+      sha:
+        description: '40-hex commit SHA the check-run attaches to.'
+        type: string
+        required: true
+      lane:
+        description: "Verifier lane id; check-run is named 'verified/onexbot: <lane>'."
+        type: string
+        required: true
+      verdict:
+        description: 'PASS or FAIL, verbatim. Anything else fails the job.'
+        type: string
+        required: true
+      summary:
+        description: 'Verdict summary, published verbatim as check-run output.summary.'
+        type: string
+        required: true
+      details-url:
+        description: 'check-run details_url. Defaults to the calling run URL.'
+        type: string
+        required: false
+        default: ''
+      details-text:
+        description: 'Markdown rationale published as check-run output.text.'
+        type: string
+        required: false
+        default: ''
+    secrets:
+      ONEXBOT_APP_ID:
+        description: 'OnexBot GitHub App id (org Actions secret, visibility=all).'
+        required: true
+      ONEXBOT_APP_PRIVATE_KEY:
+        description: 'OnexBot GitHub App private key (org Actions secret, visibility=all).'
+        required: true
+    outputs:
+      check-run-id:
+        description: 'Numeric id of the published check-run.'
+        value: ${{ jobs.stamp.outputs.check-run-id }}
+      check-run-url:
+        description: 'html_url of the published check-run.'
+        value: ${{ jobs.stamp.outputs.check-run-url }}
+
+# Read-only on purpose — see TOKEN HYGIENE above. The write is done by the
+# minted OnexBot installation token, not by this ambient token.
+permissions:
+  contents: read
+
+jobs:
+  stamp:
+    name: Publish OnexBot verifier check-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      check-run-id: ${{ steps.publish.outputs.check-run-id }}
+      check-run-url: ${{ steps.publish.outputs.check-run-url }}
+    steps:
+      - name: Validate inputs (fail-closed)
+        id: validate
+        env:
+          IN_REPO: ${{ inputs.repo }}
+          IN_SHA: ${{ inputs.sha }}
+          IN_LANE: ${{ inputs.lane }}
+          IN_VERDICT: ${{ inputs.verdict }}
+          IN_SUMMARY: ${{ inputs.summary }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::verifier-stamp input rejected: $1"; exit 1; }
+
+          [[ "$IN_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] \
+            || fail "repo='$IN_REPO' is not OWNER/NAME"
+          [[ "$IN_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            || fail "sha='$IN_SHA' is not a 40-hex commit sha"
+          LANE_RE='^[A-Za-z0-9._/ -]{1,64}$'
+          [[ "$IN_LANE" =~ $LANE_RE ]] \
+            || fail "lane='$IN_LANE' must be 1-64 chars of [A-Za-z0-9._/ -]"
+          case "$IN_VERDICT" in
+            PASS) CONCLUSION=success ;;
+            FAIL) CONCLUSION=failure ;;
+            *) fail "verdict='$IN_VERDICT' must be exactly PASS or FAIL (no NEUTRAL escape hatch)" ;;
+          esac
+          [ -n "$IN_SUMMARY" ] || fail "summary must be non-empty"
+
+          OWNER="${IN_REPO%%/*}"
+          NAME="${IN_REPO##*/}"
+          CHECK_NAME="verified/onexbot: ${IN_LANE}"
+
+          {
+            echo "owner=$OWNER"
+            echo "name=$NAME"
+            echo "conclusion=$CONCLUSION"
+            echo "check-name=$CHECK_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "repo=$IN_REPO sha=$IN_SHA verdict=$IN_VERDICT -> conclusion=$CONCLUSION"
+          echo "check-run name: $CHECK_NAME"
+
+      - name: Assert OnexBot App credentials are present (fail loud, never skip)
+        env:
+          ONEXBOT_APP_ID: ${{ secrets.ONEXBOT_APP_ID }}
+          ONEXBOT_APP_PRIVATE_KEY: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ONEXBOT_APP_ID:-}" ] || [ -z "${ONEXBOT_APP_PRIVATE_KEY:-}" ]; then
+            echo "::error::verifier-stamp requires org Actions secrets ONEXBOT_APP_ID + ONEXBOT_APP_PRIVATE_KEY (OnexBot GitHub App 3342522, checks:write on installation 123040063). Pass them with 'secrets: inherit'. Refusing to fall back to the ambient GITHUB_TOKEN: a check-run authored by github-actions[bot] is NOT independent verification. See OMN-15362."
+            exit 1
+          fi
+
+      - name: Mint OnexBot installation token (scoped to the target repo only)
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ steps.validate.outputs.owner }}
+          repositories: ${{ steps.validate.outputs.name }}
+
+      - name: Assert token mint produced a token
+        env:
+          MINTED: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINTED:-}" ]; then
+            echo "::error::OnexBot installation-token mint produced an empty token. Failing closed — a verifier stamp is never published on a degraded credential."
+            exit 1
+          fi
+          echo "OnexBot installation token minted (value never printed)."
+
+      - name: Publish check-run as OnexBot and read it back
+        id: publish
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ inputs.repo }}
+          TARGET_SHA: ${{ inputs.sha }}
+          CHECK_NAME: ${{ steps.validate.outputs.check-name }}
+          CONCLUSION: ${{ steps.validate.outputs.conclusion }}
+          IN_VERDICT: ${{ inputs.verdict }}
+          IN_LANE: ${{ inputs.lane }}
+          IN_SUMMARY: ${{ inputs.summary }}
+          IN_TEXT: ${{ inputs.details-text }}
+          IN_DETAILS_URL: ${{ inputs.details-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          DETAILS_URL="${IN_DETAILS_URL:-}"
+          [ -n "$DETAILS_URL" ] || DETAILS_URL="$RUN_URL"
+
+          # Verdict travels VERBATIM: `$IN_VERDICT` into output.title, `$IN_SUMMARY`
+          # byte-for-byte into output.summary (asserted on readback below).
+          jq -n \
+            --arg name "$CHECK_NAME" \
+            --arg head_sha "$TARGET_SHA" \
+            --arg conclusion "$CONCLUSION" \
+            --arg details_url "$DETAILS_URL" \
+            --arg external_id "onexbot-verifier-stamp:${IN_LANE}:${TARGET_SHA}:${RUN_ATTEMPT}" \
+            --arg title "$IN_VERDICT" \
+            --arg summary "$IN_SUMMARY" \
+            --arg text "$IN_TEXT" \
+            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{name: $name, head_sha: $head_sha, status: "completed",
+              conclusion: $conclusion, details_url: $details_url,
+              external_id: $external_id, completed_at: $completed_at,
+              output: {title: $title, summary: $summary, text: $text}}' \
+            > check_run_payload.json
+
+          gh api --method POST "repos/${TARGET_REPO}/check-runs" \
+            --input check_run_payload.json > check_run_created.json
+
+          CHECK_ID="$(jq -r '.id' check_run_created.json)"
+          [ -n "$CHECK_ID" ] && [ "$CHECK_ID" != "null" ] \
+            || { echo "::error::check-run POST returned no id"; cat check_run_created.json; exit 1; }
+
+          # READBACK — the load-bearing assertion. Re-read the check-run and prove
+          # WHO authored it. A silent degrade to the ambient token would author as
+          # github-actions[bot] and MUST go red here rather than publish a stamp
+          # that misattributes the verification.
+          gh api "repos/${TARGET_REPO}/check-runs/${CHECK_ID}" > check_run_readback.json
+
+          ACTUAL_APP="$(jq -r '.app.slug // "null"' check_run_readback.json)"
+          ACTUAL_NAME="$(jq -r '.name' check_run_readback.json)"
+          ACTUAL_CONCL="$(jq -r '.conclusion' check_run_readback.json)"
+          ACTUAL_SHA="$(jq -r '.head_sha' check_run_readback.json)"
+          ACTUAL_TITLE="$(jq -r '.output.title // ""' check_run_readback.json)"
+          ACTUAL_SUMMARY="$(jq -r '.output.summary // ""' check_run_readback.json)"
+          CHECK_URL="$(jq -r '.html_url' check_run_readback.json)"
+
+          RC=0
+          [ "$ACTUAL_APP" = "onexbot" ] || { echo "::error::check-run author app.slug='$ACTUAL_APP', expected 'onexbot' — the stamp is NOT independently attributable"; RC=1; }
+          [ "$ACTUAL_NAME" = "$CHECK_NAME" ] || { echo "::error::check-run name='$ACTUAL_NAME', expected '$CHECK_NAME'"; RC=1; }
+          [ "$ACTUAL_CONCL" = "$CONCLUSION" ] || { echo "::error::check-run conclusion='$ACTUAL_CONCL', expected '$CONCLUSION'"; RC=1; }
+          [ "$ACTUAL_SHA" = "$TARGET_SHA" ] || { echo "::error::check-run head_sha='$ACTUAL_SHA', expected '$TARGET_SHA'"; RC=1; }
+          [ "$ACTUAL_TITLE" = "$IN_VERDICT" ] || { echo "::error::check-run output.title='$ACTUAL_TITLE', expected verdict verbatim '$IN_VERDICT'"; RC=1; }
+          [ "$ACTUAL_SUMMARY" = "$IN_SUMMARY" ] || { echo "::error::check-run output.summary is not byte-equal to the supplied summary"; RC=1; }
+          [ "$RC" -eq 0 ] || exit 1
+
+          {
+            echo "check-run-id=$CHECK_ID"
+            echo "check-run-url=$CHECK_URL"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Verifier stamp published"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| check-run | \`$ACTUAL_NAME\` |"
+            echo "| author app | \`$ACTUAL_APP\` (OnexBot GitHub App 3342522) |"
+            echo "| repo | \`$TARGET_REPO\` |"
+            echo "| head_sha | \`$ACTUAL_SHA\` |"
+            echo "| verdict | \`$ACTUAL_TITLE\` -> conclusion \`$ACTUAL_CONCL\` |"
+            echo "| check-run | $CHECK_URL |"
+            echo
+            echo "Summary (verbatim, byte-equality asserted on readback):"
+            echo
+            echo '```'
+            echo "$ACTUAL_SUMMARY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

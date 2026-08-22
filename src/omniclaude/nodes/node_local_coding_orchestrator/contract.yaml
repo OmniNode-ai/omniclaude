@@ -12,7 +12,6 @@
 # INVARIANT: This node must never contain subprocess calls or API client imports.
 # All external I/O is delegated to effect nodes:
 #   - NodeGitEffect: git operations
-#   - NodeClaudeCodeSessionEffect: Claude Code session management
 #   - NodeLocalLlmInferenceEffect: local LLM inference
 #   - NodeLinearEffect: Linear ticket operations
 
@@ -52,10 +51,6 @@ downstream_effects:
   - node: NodeGitEffect
     capability: git.operations
     description: All git/gh operations (branch, commit, push, PR lifecycle)
-
-  - node: NodeClaudeCodeSessionEffect
-    capability: claude_code.session
-    description: Claude Code session management, emits ModelSkillResult
 
   - node: NodeLocalLlmInferenceEffect
     capability: local_llm.inference

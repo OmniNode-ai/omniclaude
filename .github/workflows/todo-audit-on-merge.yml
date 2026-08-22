@@ -13,7 +13,10 @@
 # Requires: LINEAR_API_KEY as an org/repo secret.
 # Graceful degradation: if LINEAR_API_KEY is unset, the audit is skipped.
 #
-# Branch name conventions (reuses linear-close-on-merge.yml extraction):
+# Branch name conventions (extraction is self-contained in the step below;
+# it formerly shared its shape with linear-close-on-merge.yml, deleted under
+# OMN-15523 as an ungated Linear Done writer — this workflow only CREATES a
+# follow-up ticket and never writes a completed-type state):
 #   jonahgabriel/omn-XXXX-description
 #   jonah/omn-XXXX-description
 #   epic/OMN-XXXX/OMN-YYYY/run-id

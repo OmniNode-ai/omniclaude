@@ -9,15 +9,21 @@
 # branch protection needs a token scope (administration:read) that must not be
 # granted to a PR-triggered workflow (read/exfil risk from a malicious PR).
 #
-# SCOPE NOTE (OMN-14854): `main`'s required_status_checks set is verifiably
-# NOT identical to `dev`'s (confirmed live 2026-07-20 — e.g. main additionally
-# requires "Security Gate" and "verify / verify"; dev additionally requires
-# "Cross-Repo Boundary Parity" and "no-noncanonical-lifecycle-classes"). The
-# manifest schema in this PR is single-branch (dev). A `main`-scoped manifest
-# section is an explicit open follow-up, not resolved here — do not add a
-# `main` reconcile step until the manifest schema grows a per-branch gates
-# list; a naive main-vs-this-manifest comparison would fail on every run by
-# construction, which is worse than no signal.
+# SCOPE NOTE (OMN-14854, updated OMN-15117): `main`'s required_status_checks
+# set is verifiably NOT identical to `dev`'s (confirmed live 2026-07-20 — e.g.
+# main additionally requires "Security Gate" and "verify / verify"; dev
+# additionally requires "Cross-Repo Boundary Parity" and
+# "no-noncanonical-lifecycle-classes"). The manifest is still single-branch
+# (dev) in the sense that this job only ever reconciles against `dev` — no
+# `main` reconcile step exists here, and adding one against the current
+# manifest would still fail on every run by construction (most rows have no
+# `branch:` field, i.e. dev-only in practice). OMN-15117 added an optional
+# per-row `branch:` field (`reconcile()` in reconcile_manifest_vs_live.py) so
+# a specific main-only-required context (`verify / verify`) can be represented
+# without corrupting this dev-only reconcile — reconcile() excludes any row
+# whose `branch:` doesn't match the branch being checked. This is NOT a full
+# `main`-scoped manifest section (the remaining main-only gap, "Security
+# Gate", still has no row) — that remains an open follow-up.
 #
 # This job is NOT itself a required status check (push/schedule cannot be
 # gated by required_status_checks anyway). Its failure surfaces as a
@@ -57,7 +63,13 @@ jobs:
       # exposed via the `permissions:` block at all (this is a hard GitHub
       # platform limitation, not a configuration gap). BRANCH_PROTECTION_PAT
       # is a fine-grained PAT (Administration: Read) scoped to this repo,
-      # provisioned the same way CROSS_REPO_PAT is for cr-thread-gate.yml.
+      # provisioned as its own repo secret the same way ONEXBOT_OCC_APP_ID /
+      # ONEXBOT_OCC_PRIVATE_KEY are for cr-thread-gate.yml (OMN-16373:
+      # CROSS_REPO_PAT retired there). NOTE: the onexbot-occ-writer App's
+      # permission set (contents:write, metadata:read, pull-requests:write)
+      # does NOT include Administration:read, and extending it is an operator
+      # decision out of scope for OMN-16373 — BRANCH_PROTECTION_PAT stays a
+      # separate, narrower-scoped PAT rather than folding into the App.
       # Until BRANCH_PROTECTION_PAT is provisioned as a repo secret, this step
       # fails with a clear diagnostic rather than a silent no-op or a
       # misleading GITHUB_TOKEN 403 stack trace.

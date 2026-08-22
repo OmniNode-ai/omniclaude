@@ -85,7 +85,7 @@ jobs:
           if command -v cc >/dev/null 2>&1; then
             exit 0
           fi
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             sudo apt-get update
             sudo apt-get install -y build-essential
             exit 0
