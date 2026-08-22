@@ -63,7 +63,13 @@ jobs:
       # exposed via the `permissions:` block at all (this is a hard GitHub
       # platform limitation, not a configuration gap). BRANCH_PROTECTION_PAT
       # is a fine-grained PAT (Administration: Read) scoped to this repo,
-      # provisioned the same way CROSS_REPO_PAT is for cr-thread-gate.yml.
+      # provisioned as its own repo secret the same way ONEXBOT_OCC_APP_ID /
+      # ONEXBOT_OCC_PRIVATE_KEY are for cr-thread-gate.yml (OMN-16373:
+      # CROSS_REPO_PAT retired there). NOTE: the onexbot-occ-writer App's
+      # permission set (contents:write, metadata:read, pull-requests:write)
+      # does NOT include Administration:read, and extending it is an operator
+      # decision out of scope for OMN-16373 — BRANCH_PROTECTION_PAT stays a
+      # separate, narrower-scoped PAT rather than folding into the App.
       # Until BRANCH_PROTECTION_PAT is provisioned as a repo secret, this step
       # fails with a clear diagnostic rather than a silent no-op or a
       # misleading GITHUB_TOKEN 403 stack trace.

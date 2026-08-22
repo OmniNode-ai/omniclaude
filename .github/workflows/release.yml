@@ -220,9 +220,11 @@ jobs:
   # When omniclaude is released, notify omnibase_infra so its
   # plugin-pin-cascade workflow can bump Dockerfile.runtime pins automatically.
   #
-  # REQUIREMENT: CROSS_REPO_PAT secret must be a GitHub PAT with `repo` scope
-  # on OmniNode-ai/omnibase_infra (same pattern as omnibase_infra's
-  # trigger-runtime-rebuild job).
+  # OMN-16373: CROSS_REPO_PAT retired. repository_dispatch is gated on
+  # Contents:write on the target repo, which the onexbot-occ-writer GitHub
+  # App (org secrets ONEXBOT_OCC_APP_ID / ONEXBOT_OCC_PRIVATE_KEY) already
+  # grants org-wide (same pattern as omnibase_infra's trigger-runtime-rebuild
+  # job).
   notify-plugin-pin-cascade:
     name: Notify Plugin Pin Cascade
     needs: release
@@ -235,26 +237,37 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - name: Check CROSS_REPO_PAT is configured
+      - name: Check onexbot-occ-writer App credentials are configured
         id: token_check
         env:
-          CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
+          APP_ID: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
         working-directory: ${{ github.workspace }}
         run: |
-          if [ -z "$CROSS_REPO_PAT" ]; then
-            echo "::warning::CROSS_REPO_PAT secret is not set. Skipping cross-repo dispatch." \
-              "Set a PAT with 'repo' scope on OmniNode-ai/omnibase_infra" \
-              "as the CROSS_REPO_PAT repository secret to enable plugin pin cascade."
+          if [ -z "$APP_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
+            echo "::warning::ONEXBOT_OCC_APP_ID / ONEXBOT_OCC_PRIVATE_KEY are not configured. Skipping cross-repo dispatch." \
+              "Provision the onexbot-occ-writer App org secrets to enable plugin pin cascade."
             echo "has_token=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_token=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        if: steps.token_check.outputs.has_token == 'true'
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: omnibase_infra
+          permission-contents: write
+
       - name: Dispatch plugin-release to omnibase_infra
         if: steps.token_check.outputs.has_token == 'true'
         uses: peter-evans/repository-dispatch@v4
         with:
-          token: ${{ secrets.CROSS_REPO_PAT }}
+          token: ${{ steps.app-token.outputs.token }}
           repository: OmniNode-ai/omnibase_infra
           event-type: plugin-release
           client-payload: >-

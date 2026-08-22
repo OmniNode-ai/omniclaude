@@ -44,4 +44,7 @@ jobs:
     with:
       pr-number: ${{ format('{0}', github.event.pull_request.number || (github.event.issue.pull_request && github.event.issue.number) || 0) }}
     secrets:
-      CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
+      # OMN-16373: CROSS_REPO_PAT retired — pass the onexbot-occ-writer App
+      # credentials through instead.
+      onexbot-occ-app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+      onexbot-occ-private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
