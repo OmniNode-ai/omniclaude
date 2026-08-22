@@ -2440,7 +2440,12 @@ jobs:
       # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
       # onexbot-occ-writer App installation token, reused below for both
       # the own-repo PR-body read and the onex_change_control checkout.
-      # No `repositories:` filter: this job needs both.
+      # No `repositories:` filter: this job needs both. permission-pull-requests
+      # is required — the "Resolve DoD evidence source" step below reads this
+      # job's OWN PR body live via the GitHub API (autobind PATCHes
+      # Evidence-Source in after the triggering event, so the stale
+      # $GITHUB_EVENT_PATH body cannot be trusted); an under-scoped App
+      # token here silently 403s that read and falls back to the stale body.
       - name: Mint onexbot-occ-writer app token
         id: app-token
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
@@ -2449,6 +2454,7 @@ jobs:
           private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
           owner: OmniNode-ai
           permission-contents: write
+          permission-pull-requests: read
 
       - name: Resolve DoD evidence source
         id: dod-evidence
