@@ -1,5 +1,11 @@
 # Installation Guide
 
+> **This guide describes the legacy internal `plugins/onex` hooks/agents plugin, not the
+> `onex@omninode-tools` plugin distributed via the marketplace today.** That plugin is
+> delegate-only (no hooks, no agents) as of OMN-14688 and is `NO_AUTOLOAD` — see
+> [QUICKSTART.md](../../QUICKSTART.md) for the current install path. This document is kept for
+> OmniNode-internal development on the legacy hooks tree.
+
 ## Prerequisites
 
 - Python 3.12+
