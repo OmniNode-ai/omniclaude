@@ -248,6 +248,11 @@ override-dependencies = [
     "omnibase-core>=0.46.5,<0.47.0",
     "omnibase-spi>=0.23.1,<0.24.0",
     "omnibase-infra>=0.38.3,<0.39.0",
+    # OMN-15604: omnimarket@v0.4.0's own [tool.uv.sources] pins omnibase-compat to
+    # git tag v0.5.0, which conflicts with omnibase-infra 0.38.9's exact
+    # omnibase-compat==0.5.6 requirement. Force the transitive pin so ours wins
+    # (registry resolution, no git source — matches the omnibase-core pattern above).
+    "omnibase-compat==0.5.6",
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
 ]
 
@@ -255,7 +260,7 @@ override-dependencies = [
 # Release v0.25.1: pin to paired release PR heads until tags are published.
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
 # gate passes; the version constraint above governs core resolution.
-omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.3" }  # pragma: allowlist secret
+omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.9" }  # pragma: allowlist secret
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
