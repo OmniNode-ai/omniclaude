@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "omninode-tools-dev",
+  "version": "1.0.0",
+  "description": "INTERNAL DEV ONLY — full ONEX skill/hook/agent tree (plugins/onex). Not published to consumers; the public `omninode-tools` marketplace (repo root / plugins/.claude-plugin) ships delegate only as of OMN-14688. Add this marketplace explicitly (`claude plugin marketplace add plugins/onex-dev-marketplace`) for local dev sessions that need the full skill surface.",
+  "owner": {
+    "name": "OmniNode",
+    "email": "dev@omninode.ai"
+  },
+  "plugins": [
+    {
+      "name": "onex",
+      "description": "Full ONEX architecture plugin — intelligent agent routing, manifest injection, quality enforcement, polymorphic YAML agents, reusable skills, and custom slash commands. Internal dev tooling only; distinct MARKETPLACE (omninode-tools-dev) so `onex@omninode-tools-dev` never collides with the consumer-facing `onex@omninode-tools` install — the plugin name matches plugins/onex/.claude-plugin/plugin.json's own `name` field, uniqueness comes from marketplace scoping.",
+      "version": "2.3.1",
+      "author": {
+        "name": "OmniNode",
+        "email": "dev@omninode.ai"
+      },
+      "source": "./onex",
+      "category": "development"
+    }
+  ]
+}

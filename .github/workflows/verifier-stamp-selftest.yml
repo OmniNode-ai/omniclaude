@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# verifier-stamp-selftest.yml
+#
+# OMN-15362 — the executable proof for verifier-stamp-reusable.yml.
+#
+# A reusable workflow can only run through a caller, so this is that caller: a
+# path-scoped self-test that fires ONLY when the verifier-stamp surface itself
+# changes, and stamps THIS PR's own head sha with a real OnexBot check-run.
+# That makes every change to the stamping surface prove itself by execution —
+# no surrogate script, no "the YAML looks right" (memory:
+# feedback_test_the_artifact_that_runs).
+#
+# It is deliberately narrow:
+#   * `paths:` limits it to the two verifier-stamp files, so it adds ZERO cost
+#     to normal omniclaude PRs.
+#   * fork PRs are excluded (they cannot receive the App secrets under
+#     `pull_request`; the reusable's credential assert would fail them loud,
+#     which is correct but noisy for an outside contributor).
+#   * it is NOT a required status check and must not become one — it verifies
+#     the stamping mechanism, not the PR's content.
+#
+# The check-run it publishes is named `verified/onexbot: verifier-stamp-selftest`
+# and is authored by the OnexBot GitHub App. Read it back with:
+#   gh api repos/OmniNode-ai/omniclaude/commits/<sha>/check-runs \
+#     --jq '.check_runs[] | select(.name|startswith("verified/onexbot")) | {name,conclusion,app:.app.slug,output:.output.title}'
+#
+# Ticket: OMN-15362.
+
+name: Verifier Stamp Self-Test
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/verifier-stamp-reusable.yml'
+      - '.github/workflows/verifier-stamp-selftest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verifier-stamp-selftest-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    name: Self-test — stamp this PR head as OnexBot
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/verifier-stamp-reusable.yml
+    # pragma: allowlist secret -- `secrets: inherit` is a GHA syntax keyword,
+    # not a credential. Same suppression precedent as call-occ-autobind.yml:115.
+    secrets: inherit  # pragma: allowlist secret
+    with:
+      repo: ${{ github.repository }}
+      sha: ${{ github.event.pull_request.head.sha }}
+      lane: verifier-stamp-selftest
+      verdict: PASS
+      summary: 'Self-test: verifier-stamp-reusable published this check-run as the OnexBot App and asserted app.slug=onexbot on readback.'
+      details-text: |
+        This check-run is the executable GREEN proof for OMN-15362's first slice.
+
+        It exists because `verifier-stamp-reusable.yml` ran on this PR's head sha,
+        minted a per-run installation token for the OnexBot GitHub App (id 3342522,
+        installation 123040063, `checks: write`), POSTed a check-run, then re-read it
+        and required `app.slug == "onexbot"` before allowing the job to go green.
+
+        What this proves: an independent verifier verdict can be published under an
+        identity that is NOT the implementer's and NOT the shared human PAT.
+
+        What it does NOT prove (OMN-15362 residuals, unchanged):
+        - merge-path identity — OnexBot has `contents: read`, so `mergedBy` is still `jonahgabriel`
+        - OCC PR-author identity on the `.201` bus path — no App key on that host

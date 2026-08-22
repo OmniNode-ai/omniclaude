@@ -36,10 +36,23 @@ max_runtime_version: "1.0.0"
 # Bumping the pin: update `min_version` here, then run
 # `uv run pytest plugins/onex/tests/test_marketplace_cli_pin.py` and update
 # the two JSON manifests until it passes.
+# OMN-16041 CORRECTION: `omnibase-core` ships the `onex` console script, but the
+# subcommands this plugin's skills actually call -- delegate, skill, run, node,
+# occ, kafka -- are ALL registered by `omnibase-infra` through the `onex.cli`
+# entry-point group. `pipx install omnibase-core` alone produces an `onex` that
+# has none of them. Both packages must live in the same environment. Keys stay
+# flat: session_start_onex_cli_pin_check.sh parses this block with awk.
 onex_cli:
-  package: "omnibase-core"
-  min_version: "0.39.0"
-  install_hint: "pipx install 'omnibase-core>=0.39.0'"
+  package: "omnibase-infra"
+  min_version: "0.38.4"
+  console_script_package: "omnibase-core"
+  console_script_min_version: "0.46.8"
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'"
+  # See plugins/onex-delegate/plugin-compat.yaml for the full blocker note:
+  # omnibase-infra 0.38.4 is not yet published to PyPI (OMN-16041).
+  installable_from_pypi: false
+  installable_blocker_ticket: "OMN-16041"
 
 # Per-node topic and schema_version declarations for all R-class nodes.
 # schema_version tracks the Kafka message schema version for each topic.
@@ -198,12 +211,6 @@ nodes:
   - node: node_dispatch_worker
     topics:
       - name: onex.cmd.omnimarket.dispatch-worker-compile.v1
-        schema_version: v1
-        role: subscribe
-
-  - node: node_doc_freshness_sweep
-    topics:
-      - name: onex.cmd.omnimarket.doc-freshness-sweep-start.v1
         schema_version: v1
         role: subscribe
 

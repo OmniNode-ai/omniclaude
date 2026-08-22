@@ -20,6 +20,32 @@ class ModelThresholds(BaseModel):
     modules_changed_for_full_suite: int = Field(..., ge=1)
 
 
+class ModelPathTrigger(BaseModel):
+    """Map a changed-path prefix outside ``src/`` to test paths to select.
+
+    The adjacency map only understands ``src/omniclaude/<module>``; every other
+    path (workflows, CI scripts) resolved to nothing and fell through to the
+    ``tests/unit/`` fallback. That made guards living outside ``tests/unit/``
+    unreachable on the everyday dev path (OMN-15393).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path_prefix: str = Field(..., min_length=1)
+    test_paths: list[str] = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def validate_test_paths_are_directories(self) -> ModelPathTrigger:
+        for test_path in self.test_paths:
+            if not test_path.endswith("/"):
+                raise ValueError(
+                    f"path_trigger test_path '{test_path}' must end with '/' "
+                    f"(pytest is invoked with these as directory arguments)"
+                )
+        return self
+
+
 class ModelAdjacencyMap(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -28,6 +54,7 @@ class ModelAdjacencyMap(BaseModel):
     thresholds: ModelThresholds
     test_infrastructure_paths: list[str]
     adjacency: dict[str, ModelAdjacencyEntry]
+    path_triggers: list[ModelPathTrigger] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_shared_modules_in_adjacency(self) -> ModelAdjacencyMap:

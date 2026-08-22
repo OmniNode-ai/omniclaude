@@ -22,11 +22,79 @@ thresholds:
   modules_changed_for_full_suite: 5
 
 # Test infrastructure — any change forces the full suite.
+#
+# The selection machinery itself is test infrastructure (OMN-15393): it decides
+# what runs, so an edit to it must not be validated by the very selection it is
+# editing. Escalating here means a change that narrows selection is proven
+# against the FULL suite before it can narrow anything — the fail-closed
+# posture CLAUDE.md rule 4 requires of the governed selector.
 test_infrastructure_paths:
   - tests/conftest.py
   - tests/fixtures/
   - pytest.ini
   - pyproject.toml
+  - scripts/ci/detect_test_paths.py
+  - scripts/ci/test_selection_adjacency.yaml
+  - scripts/ci/test_selection_loader.py
+  - scripts/ci/test_selection_models.py
+
+# Non-source path triggers (OMN-15393).
+#
+# The adjacency map below is keyed by `src/omniclaude/<module>`. Anything
+# outside src/ resolved to NOTHING and fell through to the conservative
+# `tests/unit/` fallback — so a test guarding a non-src surface could never be
+# selected on the everyday dev path, no matter what changed. A workflow-only
+# fan-out (the exact shape that produces the OMN-15393 defect class) selected
+# `tests/unit/` and the guard stayed silent; the only backstop was the
+# dev→main promotion full suite, i.e. AFTER the broken workflow reached dev.
+#
+# Each trigger names the changed-path prefix and the test paths it must select.
+# Keep this list keyed to the GUARD'S ACTUAL INPUTS: if a test reads a file,
+# changing that file must select the test.
+#
+# STRICTLY ADDITIVE, deliberately. Every trigger that fires on a path which
+# previously fell through to the `tests/unit/` fallback KEEPS `tests/unit/` in
+# its selection. Nothing this file does can reduce what a given change class
+# runs today; it only adds the guards that class was missing. A narrowing
+# bundled into a wiring change is exactly what CLAUDE.md rule 4 forbids of the
+# governed selector, and "no unit test reads .github/workflows/ today" is a
+# claim about today's tree that would rot silently the first time someone wrote
+# one. Pinned by test_workflow_trigger_is_additive_and_does_not_narrow.
+path_triggers:
+  - path_prefix: .github/workflows/
+    test_paths: [tests/workflows/, tests/ci/, tests/unit/]
+    reason: >-
+      tests/workflows/ and tests/ci/ statically parse every workflow (run:
+      script paths, manual-replay entrypoint wiring, required-check skip
+      vectors); a workflow edit is a direct input to both, and before this
+      trigger a workflow-only PR selected tests/unit/ ONLY — 5162 tests that
+      cannot observe a workflow edit, and zero of the guards that can.
+      tests/unit/ is retained so this trigger is purely additive.
+  - path_prefix: scripts/
+    test_paths: [tests/workflows/, tests/ci/, tests/unit/]
+    reason: >-
+      the run:-script-path guard asserts workflow-referenced scripts/** files
+      exist; DELETING or renaming a referenced script is the failure it catches,
+      and that edit lands under scripts/, not .github/workflows/. tests/unit/ is
+      retained because tests/unit/scripts/ and tests/unit/test_smart_test_selection.py
+      genuinely cover scripts/ — dropping it would NARROW today's coverage.
+  - path_prefix: plugins/
+    test_paths: [tests/workflows/, tests/ci/, tests/unit/]
+    reason: >-
+      the same guard covers this repo's NESTED script roots
+      (plugins/onex/scripts/, plugins/onex/hooks/scripts/), which ci.yml invokes
+      from the repo root; deleting one of those is the identical failure and the
+      edit lands under plugins/. tests/unit/ retained (additive).
+  - path_prefix: tests/workflows/
+    test_paths: [tests/workflows/, tests/unit/]
+    reason: >-
+      editing the guard must run the guard — without this the module could not
+      even select itself. tests/unit/ retained (additive).
+  - path_prefix: tests/ci/
+    test_paths: [tests/ci/, tests/unit/]
+    reason: >-
+      same self-selection property for the tests/ci/ workflow guards.
+      tests/unit/ retained (additive).
 
 # Reverse dependency edges. Key = changed module; value = modules that import it.
 # When `hooks` changes, also run tests for everything in `hooks.reverse_deps`.

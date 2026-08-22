@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,12 +13,17 @@ from pathlib import Path
 class TestGoldenChainIntegrityScript:
     """Tests that the validation script runs and passes."""
 
-    def test_script_exits_zero(self) -> None:
+    def test_script_exits_zero(self, tmp_path: Path) -> None:
+        canonical = _write_canonical_registry_from_metadata(tmp_path)
         result = subprocess.run(
             [sys.executable, "scripts/validation/validate_golden_chain_integrity.py"],
             capture_output=True,
             text=True,
             check=False,
+            env={
+                **os.environ,
+                "OMNIMARKET_GOLDEN_CHAIN_REGISTRY": str(canonical),
+            },
         )
         assert result.returncode == 0, (
             f"Script failed:\n{result.stdout}\n{result.stderr}"
@@ -52,6 +58,7 @@ class TestGoldenChainIntegrityValidation:
             "d9_wheel_module",
             "f1_publish_loop",
             "delegation_inference_round_trip",
+            "push_validation",
             "delegation_projection_materialization",
         }
 

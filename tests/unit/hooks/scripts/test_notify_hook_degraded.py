@@ -7,6 +7,17 @@ Verifies:
 - Second call within 15 minutes is suppressed
 - Call after debounce window expires fires again
 - Different errors from the same hook get separate debounce keys
+
+OMN-15600 changed two contracts these tests encode:
+
+1. Delivery outcome is no longer discarded. A configured-but-dead channel now
+   returns 1 (and records the failure durably); "not configured" returns 2.
+2. The debounce file is written on ATTEMPT, not only on success — otherwise a
+   dead channel costs a curl on every single hook invocation.
+
+The harness is also now hermetic. ``common.sh`` sources ``${HOME}/.omnibase/.env``
+under ``set -a``, so without a test-owned HOME these tests picked up the
+developer's real Slack credentials and posted to the real workspace.
 """
 
 import os
@@ -22,12 +33,20 @@ _REPO_ROOT = Path(__file__).parents[4]
 # Uses a fake webhook URL (won't actually send) — we check the rate file instead.
 _TEST_SCRIPT = """\
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
+# Hermetic: a test-owned HOME means common.sh cannot source the developer's
+# real ~/.omnibase/.env over these values (OMN-15600).
+export HOME="{fake_home}"
 export PLUGIN_ROOT="{plugin_root}"
 export PROJECT_ROOT=""
 export LOG_FILE="{log_file}"
 export SLACK_WEBHOOK_URL="{webhook_url}"
+export SLACK_BOT_TOKEN=""
+export SLACK_CHANNEL_ID=""
+export ONEX_ALERT_DELIVERY_LOG="{failure_log}"
+export ONEX_ALERT_LOCAL_NOTIFY_CMD="/usr/bin/true"
+export ONEX_ALERT_LOCAL_NOTIFY_RATE_DIR="{notify_rate_dir}"
 
 # Source common.sh to get notify_hook_degraded
 HOOKS_DIR="${{PLUGIN_ROOT}}/hooks"
@@ -53,6 +72,18 @@ def log_file(tmp_path: Path) -> Path:
     return lf
 
 
+def _hermetic(log_file: Path) -> dict[str, str]:
+    """Test-owned HOME / durable-log / notifier paths for the bash harness."""
+    root = log_file.parent
+    fake_home = root / "home"
+    (fake_home / ".omnibase").mkdir(parents=True, exist_ok=True)
+    return {
+        "fake_home": str(fake_home),
+        "failure_log": str(root / "alert_delivery_failures.log"),
+        "notify_rate_dir": str(root / "notify-rate"),
+    }
+
+
 def _run_notify(
     hook_name: str,
     error_msg: str,
@@ -66,6 +97,7 @@ def _run_notify(
         plugin_root=plugin_root,
         log_file=str(log_file),
         webhook_url=webhook_url,
+        **_hermetic(log_file),
     )
     env = {
         **os.environ,
@@ -83,6 +115,23 @@ def _run_notify(
         timeout=10,
         check=False,
     )
+
+
+def _debounce_hash(error: str) -> str:
+    """Compute the same debounce hash common.sh does.
+
+    The error message is passed as argv, never interpolated into the shell
+    string: messages contain single quotes (``no module 'tiktoken'``), and
+    interpolating them produced a hash that did not match the one the function
+    computes. That mismatch went unnoticed while notify_hook_degraded returned
+    0 on every path — the debounce assertions could not fail (OMN-15600).
+    """
+    return subprocess.run(
+        ["bash", "-c", 'printf "%s" "$1" | shasum -a 256 | cut -c1-16', "--", error],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
 
 
 def _rate_files(hook_name: str) -> list[Path]:
@@ -108,24 +157,25 @@ class TestNotifyHookDegraded:
     """Tests for the notify_hook_degraded function."""
 
     def test_rate_file_created_on_first_call(self, log_file: Path) -> None:
-        """First call should create a debounce rate file."""
+        """First call creates the debounce file and reports the dead endpoint."""
         hook = "test_degraded_create"
         result = _run_notify(
             hook, "ModuleNotFoundError: no module 'tiktoken'", Path("/tmp"), log_file
         )
-        # The function may fail on curl (no server), but the rate file
-        # is only written on curl SUCCESS. Since there's no server, the rate
-        # file won't be created. What we CAN verify is that the function
-        # runs without error (exit 0).
-        assert result.returncode == 0, f"stderr: {result.stderr}"
+        # OMN-15600: the debounce file is written on ATTEMPT (a dead channel
+        # must not cost a curl per invocation), and the unreachable endpoint is
+        # reported as a delivery failure instead of being swallowed.
+        assert result.returncode == 1, f"stderr: {result.stderr}"
+        assert _rate_files(hook), "debounce file not written on attempt"
 
-    def test_function_exits_zero_without_webhook(self, log_file: Path) -> None:
-        """When SLACK_WEBHOOK_URL is empty, function should no-op and exit 0."""
+    def test_no_channel_configured_returns_two(self, log_file: Path) -> None:
+        """Unset is its own state (2), distinct from configured-but-dead (1)."""
         plugin_root = str(_REPO_ROOT / "plugins" / "onex")
         script = _TEST_SCRIPT.format(
             plugin_root=plugin_root,
             log_file=str(log_file),
-            webhook_url="",  # Empty webhook
+            webhook_url="",  # Empty webhook, and no bot token either
+            **_hermetic(log_file),
         )
         result = subprocess.run(
             ["bash", "-c", script, "--", "test_degraded_noop", "some error"],
@@ -135,7 +185,7 @@ class TestNotifyHookDegraded:
             timeout=10,
             check=False,
         )
-        assert result.returncode == 0
+        assert result.returncode == 2
 
     def test_debounce_suppresses_second_call(self, log_file: Path) -> None:
         """Second call within 15 minutes should be suppressed via rate file check."""
@@ -146,14 +196,7 @@ class TestNotifyHookDegraded:
         rate_dir = Path("/tmp/omniclaude-slack-rate")
         rate_dir.mkdir(exist_ok=True)
 
-        # Compute the same hash the function would compute
-        result = subprocess.run(
-            ["bash", "-c", f"printf '%s' '{error}' | shasum -a 256 | cut -c1-16"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        error_hash = result.stdout.strip()
+        error_hash = _debounce_hash(error)
         rate_file = rate_dir / f"degraded-{hook}_{error_hash}.last"
 
         # Write current timestamp to simulate recent send
@@ -176,25 +219,17 @@ class TestNotifyHookDegraded:
         rate_dir = Path("/tmp/omniclaude-slack-rate")
         rate_dir.mkdir(exist_ok=True)
 
-        # Compute hash
-        result = subprocess.run(
-            ["bash", "-c", f"printf '%s' '{error}' | shasum -a 256 | cut -c1-16"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        error_hash = result.stdout.strip()
+        error_hash = _debounce_hash(error)
         rate_file = rate_dir / f"degraded-{hook}_{error_hash}.last"
 
         # Write timestamp from 16 minutes ago (past the 15-min window)
         old_ts = int(time.time()) - 960
         rate_file.write_text(str(old_ts))
 
-        # Run the function — it should attempt to fire (curl will fail
-        # since there's no server, so rate file won't be updated, but
-        # the function should still exit 0)
+        # It should attempt to fire. There is no server, so delivery fails and
+        # the function now says so (1) instead of returning a silent 0.
         run_result = _run_notify(hook, error, Path("/tmp"), log_file)
-        assert run_result.returncode == 0
+        assert run_result.returncode == 1
 
     def test_different_errors_separate_keys(self, log_file: Path) -> None:
         """Different error messages from the same hook use different debounce keys."""
@@ -205,19 +240,8 @@ class TestNotifyHookDegraded:
         rate_dir = Path("/tmp/omniclaude-slack-rate")
         rate_dir.mkdir(exist_ok=True)
 
-        # Compute hashes for both errors
-        hash_a = subprocess.run(
-            ["bash", "-c", f"printf '%s' '{error_a}' | shasum -a 256 | cut -c1-16"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        hash_b = subprocess.run(
-            ["bash", "-c", f"printf '%s' '{error_b}' | shasum -a 256 | cut -c1-16"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        hash_a = _debounce_hash(error_a)
+        hash_b = _debounce_hash(error_b)
 
         # Verify the hashes are different
         assert hash_a != hash_b, "Different errors should produce different hashes"
@@ -230,6 +254,7 @@ class TestNotifyHookDegraded:
         rate_file_b = rate_dir / f"degraded-{hook}_{hash_b}.last"
         assert not rate_file_b.exists()
 
-        # Calling with error_b should proceed (not be blocked by error_a's rate file)
+        # Calling with error_b should proceed (not be blocked by error_a's rate
+        # file) and report the unreachable endpoint rather than swallowing it.
         run_result = _run_notify(hook, error_b, Path("/tmp"), log_file)
-        assert run_result.returncode == 0
+        assert run_result.returncode == 1

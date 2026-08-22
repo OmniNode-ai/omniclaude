@@ -444,8 +444,28 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Omni Standards Gate ==="
-          FAILED=false
 
+          # OMN-15314 (OMN-15304 vector 6 — result triage). The previous triage
+          # was `[ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]`, which
+          # reads as "!= success" locally while letting `skipped` reach the
+          # PASSED path. `skipped` is the ABSENCE of a verdict exactly like
+          # `cancelled`, and it is precisely the state vectors 2/3/5
+          # (conditional `if:`, needs-cascade) produce — so vector 5 and
+          # vector 6 composed into a bypass: strand an upstream, and the
+          # aggregator that was supposed to catch it reports green.
+          #
+          # PER-UPSTREAM SKIP POLICY: every upstream of this gate carries no
+          # job-level `if:` and depends only on `occ-preflight`, so the ONLY way
+          # any of them skips is a non-success `occ-preflight` — which this same
+          # loop already fails on (it is the first entry). There is therefore no
+          # legitimate skip here: the policy table is empty and every
+          # non-`success` value fails closed, including an unrecognised future
+          # result value (`*`).
+          #
+          # The gate stops at the first offending upstream rather than
+          # accumulating: each upstream is also reported as its own job in the
+          # run, and the ones that are independently required contexts show
+          # their own red in the checks list.
           for check in \
             "occ-preflight=${{ needs.occ-preflight.result }}" \
             "structure-validation=${{ needs.structure-validation.result }}" \
@@ -455,19 +475,25 @@ jobs:
             "pr-safety-enforcement=${{ needs.pr-safety-enforcement.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
-            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
-              echo "::error::$NAME failed (result: $RESULT)"
-              FAILED=true
-            else
-              echo "$NAME: $RESULT"
-            fi
+            case "$RESULT" in
+              success)
+                echo "$NAME: success"
+                ;;
+              failure)
+                echo "::error::$NAME failed (result: $RESULT)"
+                exit 1
+                ;;
+              cancelled|skipped)
+                echo "::error::$NAME produced no verdict (result: $RESULT) — the absence of a verdict is not a passing one; this upstream has no legitimate skip."
+                exit 1
+                ;;
+              *)
+                echo "::error::$NAME returned unrecognised result '$RESULT' — failing closed."
+                exit 1
+                ;;
+            esac
           done
 
-          if [ "$FAILED" = "true" ]; then
-            echo ""
-            echo "Omni Standards Gate FAILED"
-            exit 1
-          fi
           echo ""
           echo "Omni Standards Gate PASSED"
 

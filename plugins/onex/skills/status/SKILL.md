@@ -1,7 +1,7 @@
 ---
 description: Foreground status snapshot — routes to merge-sweep-lead teammate if present, otherwise spawns a one-shot snapshot agent. Avoids inline repository polling from foreground.
 mode: full
-version: 1.0.0
+version: 1.0.1
 level: intermediate
 debug: false
 category: observability
@@ -18,7 +18,7 @@ boundary_exempt: true
 # /onex:status — Foreground Status Routing
 
 **Skill ID**: `onex:status`
-**Version**: 1.0.0
+**Version**: 1.0.1
 
 **Announce at start:** "I'm using the status skill."
 
@@ -65,18 +65,30 @@ else:
 When no `merge-sweep-lead` is running, spawn a minimal snapshot agent with this
 prompt (inline, no separate file):
 
-```
+````text
 You are a one-shot status snapshot agent. Your only job:
 
-1. Run: uv run onex run-node node_pr_lifecycle_orchestrator --input '{"dry_run": true, "inventory_only": true}'
-2. Parse the returned ModelPrLifecycleResult JSON.
-3. Emit a concise snapshot: open PRs, merge-queue state, CI failures, blocked tickets.
-4. Send the snapshot text to "team-lead" via SendMessage.
-5. Stop immediately after sending.
+1. Run this exact standalone-CLI preflight and dispatch from the current directory:
+
+<!-- status-snapshot-command:start -->
+```sh
+if ! command -v onex >/dev/null 2>&1; then
+  printf '%s\n' "ERROR: Required standalone ONEX CLI was not found on PATH. Install it with: pipx install 'omnibase-core>=0.39.0'" >&2
+  exit 127
+fi
+exec onex run-node node_pr_lifecycle_orchestrator --input '{"dry_run": true, "inventory_only": true}'
+```
+<!-- status-snapshot-command:end -->
+
+2. If the command exits nonzero, send its error output verbatim to "team-lead" and stop. Do not install anything, search repository virtualenvs, or query GitHub directly.
+3. On success, parse the returned ModelPrLifecycleResult JSON.
+4. Emit a concise snapshot: open PRs, merge-queue state, CI failures, blocked tickets.
+5. Send the snapshot text to "team-lead" via SendMessage.
+6. Stop immediately after sending.
 
 Never query repository state directly. Never open PRs or push code. Read-only
 snapshot only.
-```
+````
 
 Use `model="claude-haiku-4-5-20251001"` for the snapshot agent — this is a
 read-only reporting task, not a reasoning task.
@@ -87,6 +99,7 @@ read-only reporting task, not a reasoning task.
 |-----------|----------|
 | `TaskList` unavailable | Surface error; do not fall through to direct polling |
 | `merge-sweep-lead` does not reply within 30 seconds | Surface timeout; suggest running `/onex:merge_sweep` to restart the lead |
+| Standalone `onex` CLI missing from `PATH` | Surface the manifest-pinned install guidance from the preflight; do not auto-install or search repository virtualenvs |
 | `node_pr_lifecycle_orchestrator` unavailable | Surface the node error verbatim; do not guess state |
 | Agent tool unavailable in current context | Surface "Status routing requires Agent tool — run from a foreground session" |
 

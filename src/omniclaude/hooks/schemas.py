@@ -246,14 +246,49 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         r"\1***REDACTED***",
     ),
     # Password in URLs (postgres://user:password@host, mysql://user:password@host, mongodb://...)  # pragma: allowlist secret
-    # This pattern intentionally covers all database connection string formats
-    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    # This pattern intentionally covers all database connection string formats.
+    # Bounded to a URL authority -- no whitespace/slash/@ inside the userinfo
+    # (OMN-15462/OMN-16277 fix). MUST stay in sync with
+    # plugins/onex/hooks/lib/secret_redactor.py -- the prior unbounded
+    # classes (`[^:]+`/`[^@]+`) matched "any later colon, any later @"
+    # across whitespace and newlines, mass-redacting ordinary multi-line
+    # text that merely contained a URL followed eventually by a colon and
+    # an @ref-pin.
+    (re.compile(r"(://[^:/\s@]+:)[^@/\s]+(@)"), r"\1***REDACTED***\2"),
     # Generic secret patterns in key=value format
     # Note: Requires 8+ char values to reduce false positives like "password=true"
     # Word boundary \b ensures we don't match "reset_password" when looking for "password"
     (
         re.compile(
             r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Secret-bearing key NAMES with no word boundary before the label root
+    # (OMN-16277). MUST stay in sync with
+    # plugins/onex/hooks/lib/secret_redactor.py -- see that module's
+    # comment for the full rationale (JSON/map keys like "clientSecret"
+    # have no \b between "client" and "Secret", both word characters).
+    (
+        re.compile(
+            r'(["\']?[A-Za-z][A-Za-z0-9_]*(?:secret|token|passwd|password|'
+            r'apikey|api_key|credential)[A-Za-z0-9_]*["\']?\s*[:=]\s*)'
+            r"""["']?[A-Za-z0-9+/=_.\-]{8,}""",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Prose-form credential mentions (OMN-15062). MUST stay in sync with
+    # plugins/onex/hooks/lib/secret_redactor.py's SECRET_PATTERNS -- see
+    # that module's docstring for the coverage-limit rationale (bare
+    # unlabeled high-entropy strings are NOT caught by this or any pattern
+    # here; a labeled mention like "the password is <token>" is).
+    (
+        re.compile(
+            r"(\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
+            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*[`'\"]?)"
+            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",

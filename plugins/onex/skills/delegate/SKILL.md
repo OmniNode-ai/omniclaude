@@ -58,10 +58,10 @@ keyword table above; routing is owned by the node contract's `allowed_task_types
 ## Usage
 
 ```
-/delegate explain what a calendar app needs
-/delegate --task-type code_generation write a Python HTTP server
-/delegate --max-tokens 4096 analyze the routing architecture
-/delegate --task-type test write unit tests for verify_registration.py
+/onex:delegate explain what a calendar app needs
+/onex:delegate --task-type code_generation write a Python HTTP server
+/onex:delegate --max-tokens 4096 analyze the routing architecture
+/onex:delegate --task-type test write unit tests for verify_registration.py
 ```
 
 ## What This Skill Does NOT Do

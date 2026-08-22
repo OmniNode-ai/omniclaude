@@ -452,17 +452,27 @@ fi
 export KAFKA_ENABLED
 
 # =============================================================================
-# Slack Webhook Alerting
+# Slack Alerting
 # =============================================================================
 # Send a Slack notification for hook/daemon failures.
 # Self-protecting: curl timeouts guarantee max 2s delay even on DNS hangs.
 # Rate-limited per category (5-min window) to prevent alert spam.
 # Always call from a backgrounded subshell: ( slack_notify "cat" "msg" ) &
 #
-# Requires:
-#   - SLACK_WEBHOOK_URL: Webhook URL (no-op if unset)
+# Delivery itself lives in alert-channel.sh (OMN-15600): bot token preferred,
+# webhook as fallback, and a non-2xx outcome is recorded on a durable log plus
+# a local notification instead of being discarded.
+#
+# Channels (no-op only when NONE is configured):
+#   - SLACK_BOT_TOKEN + SLACK_CHANNEL_ID: Slack Web API (preferred)
+#   - SLACK_WEBHOOK_URL: incoming webhook (fallback)
+#
+# Returns: 0 delivered, 1 configured-but-dead, 2 not configured.
 #
 # Usage: ( slack_notify "daemon_startup" "Emit daemon failed to start..." ) &
+
+# shellcheck source=./alert-channel.sh
+source "$(dirname "${BASH_SOURCE[0]}")/alert-channel.sh" 2>/dev/null || true
 
 # Cache hostname once at source time
 _SLACK_HOST="${HOSTNAME:-$(hostname -s 2>/dev/null || echo unknown)}"
@@ -470,10 +480,13 @@ _SLACK_HOST="${HOSTNAME:-$(hostname -s 2>/dev/null || echo unknown)}"
 slack_notify() {
     local category="$1"
     local message="$2"
-    local webhook_url="${SLACK_WEBHOOK_URL:-}"
 
-    # No-op if webhook not configured
-    [[ -z "$webhook_url" ]] && return 0
+    # No-op only when no channel at all is configured. A channel that is
+    # configured but dead is NOT a no-op — see alert_channel_send (OMN-15600).
+    if [[ -z "${SLACK_WEBHOOK_URL:-}" ]] \
+        && { [[ -z "${SLACK_BOT_TOKEN:-}" ]] || [[ -z "${SLACK_CHANNEL_ID:-}" ]]; }; then
+        return 2
+    fi
 
     # Rate limiting: 5-minute window per category
     local rate_dir="/tmp/omniclaude-slack-rate"
@@ -495,24 +508,14 @@ slack_notify() {
         fi
     fi
 
-    # JSON-escape the message: backslashes first, then quotes, then control chars
-    local escaped
-    escaped=$(printf '%s' "$message" \
-        | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
-        | tr '\n' ' ' | tr '\r' ' ' | tr '\t' ' ')
+    # Record the attempt for rate limiting regardless of outcome — a dead
+    # channel must not cost a 2s curl on every hook invocation. The delivery
+    # failure itself is recorded durably by alert_channel_send.
+    date -u +%s > "$rate_file" 2>/dev/null || true
 
-    # Send with strict timeouts (connect 1s, total 2s).
-    # Use --url flag instead of positional argument so the webhook URL does not
-    # appear in process list output (ps aux) on multi-user systems.
-    if curl -s -S --connect-timeout 1 --max-time 2 \
-        -H 'Content-Type: application/json' \
-        -d "{\"text\": \"${escaped}\"}" \
-        --url "$webhook_url" >/dev/null 2>&1; then
-        # Record send time for rate limiting
-        date -u +%s > "$rate_file" 2>/dev/null || true
-    fi
-
-    return 0
+    local rc=0
+    alert_channel_send "$category" "$message" || rc=$?
+    return $rc
 }
 
 # =============================================================================
@@ -536,10 +539,12 @@ slack_notify() {
 notify_hook_degraded() {
     local hook_name="$1"
     local error_message="$2"
-    local webhook_url="${SLACK_WEBHOOK_URL:-}"
 
-    # No-op if webhook not configured
-    [[ -z "$webhook_url" ]] && return 0
+    # No-op only when no channel at all is configured (OMN-15600).
+    if [[ -z "${SLACK_WEBHOOK_URL:-}" ]] \
+        && { [[ -z "${SLACK_BOT_TOKEN:-}" ]] || [[ -z "${SLACK_CHANNEL_ID:-}" ]]; }; then
+        return 2
+    fi
 
     # Build debounce key: hook_name:sha256(first_line_of_error)
     # Use shasum (macOS) or sha256sum (Linux) for the hash
@@ -577,22 +582,13 @@ notify_hook_degraded() {
         fi
     fi
 
-    # JSON-escape the message: backslashes first, then quotes, then control chars
-    local escaped
-    escaped=$(printf '%s' "[hook-degraded][${_SLACK_HOST}] Hook '${hook_name}' running degraded: ${error_message}" \
-        | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
-        | tr '\n' ' ' | tr '\r' ' ' | tr '\t' ' ')
+    # Record the attempt for rate limiting regardless of outcome (see slack_notify).
+    date -u +%s > "$rate_file" 2>/dev/null || true
 
-    # Send with strict timeouts (connect 1s, total 2s).
-    if curl -s -S --connect-timeout 1 --max-time 2 \
-        -H 'Content-Type: application/json' \
-        -d "{\"text\": \"${escaped}\"}" \
-        --url "$webhook_url" >/dev/null 2>&1; then
-        # Record send time for rate limiting
-        date -u +%s > "$rate_file" 2>/dev/null || true
-    fi
-
-    return 0
+    local rc=0
+    alert_channel_send "hook_degraded_${safe_hook}" \
+        "[hook-degraded][${_SLACK_HOST}] Hook '${hook_name}' running degraded: ${error_message}" || rc=$?
+    return $rc
 }
 
 # =============================================================================
@@ -949,4 +945,85 @@ redact_secrets() {
 
 log() {
     printf "[%s] %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*" >> "$LOG_FILE"
+}
+
+# =============================================================================
+# Hook health probe consumption [F32 / OMN-15600 / OMN-15606]
+# =============================================================================
+# Runs the session-start hook-health probe and reports its verdict on the local
+# log — the one surface guaranteed not to be the channel that is broken.
+#
+# This lives in common.sh, not inline in session-start.sh, so the consumption
+# logic can be driven directly by tests rather than through a re-implementation
+# of it (see tests/unit/hooks/scripts/test_session_start_probe_consumption.py).
+#
+# FAIL-CLOSED (OMN-15606). The previous inline block defaulted the channel
+# status to "unknown" on any parse failure and only logged on "dead", so
+# "probe crashed", "probe emitted malformed JSON", "probe never ran" and
+# "channel healthy" were one silent case. Every not-affirmatively-healthy
+# outcome now produces its own distinct, non-silent line.
+#
+# Requires: PYTHON_CMD, LOG_FILE (and BREW_PY where available).
+# Returns: 0 only when the probe ran and reported no failures.
+run_hook_health_probe() {
+    local probe_json="" probe_rc=0 failures="" channel="" rc=0
+
+    probe_json=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") \
+        || probe_rc=$?
+
+    # Parse with the resolved hook interpreter, PYTHONPATH stripped so an
+    # inherited PYTHONPATH cannot shadow stdlib json. PYTHON_CMD (not BREW_PY)
+    # is used deliberately: find_python hard-fails when it cannot resolve, so
+    # it always exists, whereas BREW_PY is a macOS-only literal that is absent
+    # on Linux CI — where the parse would fail and every probe outcome would
+    # collapse into "unreadable".
+
+    failures=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$PYTHON_CMD" -c \
+        'import json,sys; print(int(json.load(sys.stdin)["failures"]))' \
+        2>>"$LOG_FILE") || failures=""
+    channel=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$PYTHON_CMD" -c \
+        'import json,sys; print(json.load(sys.stdin)["alert_channel"]["status"])' \
+        2>>"$LOG_FILE") || channel=""
+
+    if [[ -z "$failures" || -z "$channel" ]]; then
+        # The probe did not produce a readable verdict, so nothing was checked.
+        # That is a failure OF the check, and is reported as one.
+        log "ERROR: hook-health probe output unreadable (probe exit ${probe_rc}) — handler-import and alert-channel checks did NOT run this session. See hooks.log."
+        return 1
+    fi
+
+    if [[ "$failures" != "0" ]]; then
+        log "WARNING: $failures hook-health failure(s) (handler imports and/or alert channel). See hooks.log for details."
+        rc=1
+    fi
+
+    case "$channel" in
+        live|not_configured)
+            # Affirmatively established, or affirmatively absent — alerting
+            # works, so this is not a failure. A dead SECONDARY channel is
+            # still surfaced: it delivers nothing and wants cleaning up, and
+            # if the live primary later lapses it is the only one left.
+            local dead_channels=""
+            dead_channels=$(printf '%s' "$probe_json" | env -u PYTHONPATH "$PYTHON_CMD" -c \
+                'import json,sys; print(",".join(json.load(sys.stdin)["alert_channel"].get("dead_channels") or []))' \
+                2>>"$LOG_FILE") || dead_channels=""
+            if [[ -n "$dead_channels" ]]; then
+                log "WARNING: alert channel degraded — ${dead_channels} dead, still delivering via another channel. See ${HOME}/.omnibase/alert_delivery_failures.log"
+            fi
+            ;;
+        dead)
+            log "ERROR: alert channel is DEAD — hook alerts are delivering to nothing. See ${HOME}/.omnibase/alert_delivery_failures.log"
+            rc=1
+            ;;
+        probe_error)
+            log "ERROR: alert-channel liveness probe FAILED to run — channel liveness is UNVERIFIED this session, which is not the same as healthy. See hooks.log."
+            rc=1
+            ;;
+        *)
+            log "ERROR: alert-channel status '${channel}' is not a declared EnumChannelStatus member — treating channel liveness as UNVERIFIED."
+            rc=1
+            ;;
+    esac
+
+    return "$rc"
 }

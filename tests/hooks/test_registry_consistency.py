@@ -7,9 +7,11 @@ Three registries describe the same emit surface and can drift independently:
 1. The hook-side frozenset ``SUPPORTED_EVENT_TYPES`` in
    ``plugins/onex/hooks/lib/emit_client_wrapper.py`` (client-side allowlist).
 2. omniclaude's ``EVENT_REGISTRY`` in ``src/omniclaude/hooks/event_registry.py``
-   (fan-out rules, the source the daemon YAML is generated from).
+   (fan-out rules — a generated projection of the daemon YAML below, per
+   OMN-13146 / OMN-15967, not the source it is generated from).
 3. The omnimarket emit daemon YAML registry
-   ``node_emit_daemon/registries/topics.yaml`` (runtime routing authority).
+   ``node_emit_daemon/registries/topics.yaml`` (runtime routing authority and
+   canonical source; see ``scripts/validation/generate_event_registry.py``).
 
 Before this gate existed, three event types (``delegate.task``,
 ``agent.action``, ``llm.cost.completed``) were silently emittable by hooks but

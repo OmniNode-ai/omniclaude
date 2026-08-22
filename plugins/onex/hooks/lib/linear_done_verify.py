@@ -29,6 +29,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -43,9 +44,22 @@ DONE_STATES = {"done", "complete", "completed", "closed"}
 # happen to contain `PR #N` strings inside markdown code blocks (OMN-10047).
 CANCEL_STATES = {"canceled", "cancelled", "duplicate", "won't do", "wont do"}
 
-# `#123` not preceded by a word char (skip things like `abc#1` inside code);
-# also `https://github.com/<owner>/<repo>/pull/<num>`.
-_PR_NUMBER_RE = re.compile(r"(?<![\w/])#(\d+)\b")
+# Bare PR shorthand — `PR #123` / `pull #123` / `pull request #123`
+# (case-insensitive, optional `:`/`-`/whitespace between the token and `#`).
+# OMN-15025: the prior pattern (`#123` not preceded by a word char) matched
+# ANY bare `#<digits>` in prose — "CLAUDE.md Rule #4", "cause #2 is always
+# mislabelled" — as an unresolvable PR reference and false-blocked the
+# Done-flip. Requiring an adjacent PR/pull token is option 1 from OMN-15025's
+# fix-direction list: it kills the prose false-positives while a description
+# that cites its real PR ONLY as an un-anchored bare number (never merged into
+# this pattern) still can't silently ALLOW — decide() only treats
+# `no_pr_references` as non-blocking when it *also* clears the OCC-receipt /
+# exempt-label paths below, so dropping a bare match falls through to that
+# fail-closed check rather than skipping verification.
+# Also matches `https://github.com/<owner>/<repo>/pull/<num>` via _PR_URL_RE.
+_PR_NUMBER_RE = re.compile(
+    r"\b(?:pr|pull(?:\s+request)?)\b[:\s-]*#(\d+)\b", re.IGNORECASE
+)
 _PR_URL_RE = re.compile(
     r"https?://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)",
     re.IGNORECASE,
@@ -94,6 +108,12 @@ DEPLOY_READBACK_MARKER_KEYS = frozenset(
 class PRRef:
     number: int
     repo: str | None = None  # "owner/repo" when known; else None
+    # True when `repo` came from a bare `#N` + `default_repo` fallback rather
+    # than an explicit `owner/repo#N` shorthand or full GitHub URL citation
+    # (OMN-15782). An explicit citation is authoritative about its repo; a
+    # bare-number fallback is only a guess and must not be trusted the same
+    # way when classifying weak-signal (onex_change_control) refs.
+    bare: bool = False
 
 
 @dataclass
@@ -145,21 +165,72 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
         key = (repo_key, num)
         if key in refs:
             continue
-        refs[key] = PRRef(number=num, repo=default_repo)
+        refs[key] = PRRef(number=num, repo=default_repo, bare=True)
 
     return list(refs.values())
 
 
-def is_weak_signal_ref(ref: PRRef) -> bool:
+def is_weak_signal_ref(
+    ref: PRRef,
+    prober: Callable[[int], bool] | None = None,
+) -> bool:
     """Return True if a PR reference is a WEAK close-signal (OMN-14641).
 
     Currently: any ``onex_change_control`` PR — OCC receipts / evidence
     companions. These never gate a product ticket's Done in either direction.
-    A bare ``#N`` reference (repo resolved from the product ticket's default
-    repo) is a product PR and is never weak.
+
+    OMN-15782 (spelling invariance): an explicitly-qualified reference
+    (``owner/repo#N`` or a full GitHub URL) is authoritative about its own
+    repo and is classified directly. A *bare* ``#N`` reference (``ref.bare``)
+    resolves its ``repo`` from the ticket's ``default_repo`` fallback — which
+    may be unset (``None``) or set to a *different* product repo than the PR
+    actually lives in. Previously that fallback repo string was trusted
+    as-is, so the identical ``onex_change_control`` PR classified weak when
+    spelled ``owner/repo#N`` but non-weak (an unresolvable/blocking product
+    dependency) when spelled bare ``#N`` — a drafting-choice-dependent
+    verdict, not a property of the PR (live incident: OMN-15722). When the
+    direct repo string doesn't already resolve weak and the ref is bare,
+    ``prober`` — when supplied — is consulted with the PR number to check
+    onex_change_control membership directly before falling back to
+    "not weak". ``prober`` defaults to ``None`` (no live lookup, preserving
+    the prior fallback behavior and function purity) — callers on a live
+    path must pass a real prober (see :func:`probe_occ_membership`) to get
+    the fix; :func:`verify` is wired to it from :func:`main`.
     """
     repo = (ref.repo or "").rsplit("/", 1)[-1].strip().lower()
-    return repo in _WEAK_SIGNAL_REPOS
+    if repo in _WEAK_SIGNAL_REPOS:
+        return True
+    if ref.bare and prober is not None:
+        return prober(ref.number)
+    return False
+
+
+def probe_occ_membership(number: int, timeout: float = 15.0) -> bool:
+    """Live check: does PR ``number`` exist in ``onex_change_control``?
+
+    Production prober for :func:`is_weak_signal_ref` (OMN-15782) — resolves
+    the spelling-dependent gap for *bare* refs whose repo did not already
+    resolve directly to a weak-signal repo (see ``PRRef.bare``). One extra
+    ``gh pr view`` call per unresolved bare ref; explicitly-qualified refs
+    never reach this (repo already known, no probe needed). Any error (gh
+    unavailable, timeout, PR not found) is treated as "not a member" —
+    fail-closed toward "not weak" so this can never *waive* a genuine
+    blocking product PR, only correctly filter a genuine OCC one.
+    """
+    occ_repo = next(iter(_WEAK_SIGNAL_REPOS))
+    repo = f"{DEFAULT_OWNER}/{occ_repo}"
+    cmd = ["gh", "pr", "view", str(number), "--repo", repo, "--json", "number"]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+    return proc.returncode == 0
 
 
 def is_exempt(description: str, labels: list[str] | None) -> bool:
@@ -293,6 +364,7 @@ def verify(
     labels: list[str] | None,
     default_repo: str | None = None,
     fetcher: Any = fetch_pr_status,
+    prober: Callable[[int], bool] | None = None,
 ) -> VerificationResult:
     """Run the full verification against a ticket description.
 
@@ -305,13 +377,19 @@ def verify(
     OMN-14582 false-Done). The exemption now applies *only* when no product PR
     is cited (decision-only tickets, epic roll-ups); it can never waive an
     open/unmerged cited PR.
+
+    ``prober`` (OMN-15782) is forwarded to :func:`is_weak_signal_ref` so a
+    bare ``#N`` reference to a genuine ``onex_change_control`` PR classifies
+    weak the same as the fully-qualified spelling. Defaults to ``None`` (no
+    live lookup) for test/pure-function callers; :func:`main` passes the real
+    :func:`probe_occ_membership` on the live path.
     """
     # Product PR references only — weak-signal (onex_change_control) refs are
     # filtered out so an OCC evidence companion never gates a product Done.
     refs = [
         ref
         for ref in parse_pr_refs(description, default_repo=default_repo)
-        if not is_weak_signal_ref(ref)
+        if not is_weak_signal_ref(ref, prober=prober)
     ]
 
     if refs:
@@ -390,7 +468,9 @@ def _split_paragraphs(text: str) -> list[list[str]]:
 
 
 def parse_implementing_pr_refs(
-    description: str, default_repo: str | None = None
+    description: str,
+    default_repo: str | None = None,
+    prober: Callable[[int], bool] | None = None,
 ) -> list[PRRef]:
     """Extract only the *DoD-implementing* product PR references.
 
@@ -414,7 +494,9 @@ def parse_implementing_pr_refs(
     implementing citation. Scratch annotation is scoped to the blank-line-
     delimited paragraph the reference sits in, so a label line followed by the
     URL on the next line (the common Linear layout) is correctly excluded.
-    Pure function (no I/O).
+    Pure function when ``prober`` is left at its default (``None``) — passing
+    a live prober (OMN-15782, see :func:`is_weak_signal_ref`) makes this
+    impure (one ``gh`` call per unresolved bare weak-signal candidate).
     """
     refs: dict[tuple[str, int], PRRef] = {}
 
@@ -440,9 +522,9 @@ def parse_implementing_pr_refs(
                 num = int(num_match.group(1))
                 key = (default_repo, num)
                 if key not in refs:
-                    refs[key] = PRRef(number=num, repo=default_repo)
+                    refs[key] = PRRef(number=num, repo=default_repo, bare=True)
 
-    return [ref for ref in refs.values() if not is_weak_signal_ref(ref)]
+    return [ref for ref in refs.values() if not is_weak_signal_ref(ref, prober=prober)]
 
 
 def verify_implementing(
@@ -450,6 +532,7 @@ def verify_implementing(
     labels: list[str] | None,
     default_repo: str | None = None,
     fetcher: Any = fetch_pr_status,
+    prober: Callable[[int], bool] | None = None,
 ) -> VerificationResult:
     """Scoped merge check for the deploy-readback path (OMN-14792).
 
@@ -467,7 +550,9 @@ def verify_implementing(
     """
     del labels  # signature parity with verify(); not consulted on this path.
 
-    refs = parse_implementing_pr_refs(description, default_repo=default_repo)
+    refs = parse_implementing_pr_refs(
+        description, default_repo=default_repo, prober=prober
+    )
     if not refs:
         return VerificationResult(allowed=True, reason="no_implementing_pr")
 
@@ -686,7 +771,12 @@ def main() -> int:
 
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
 
-    result = verify(description, labels, default_repo=default_repo)
+    # OMN-15782: wire the live onex_change_control membership prober so a
+    # bare `#N` reference to a genuine OCC PR classifies weak the same as
+    # `owner/repo#N` — see is_weak_signal_ref()/probe_occ_membership().
+    result = verify(
+        description, labels, default_repo=default_repo, prober=probe_occ_membership
+    )
     if result.allowed:
         return 0
 

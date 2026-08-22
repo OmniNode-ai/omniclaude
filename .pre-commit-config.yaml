@@ -54,7 +54,7 @@ repos:
       - id: no-hardcoded-topics
         stages: [pre-commit]
         # Pre-existing violations excluded pending migration to canonical constants
-        exclude: '^(src/omniclaude/hooks/(topic_allowlist|topic_registry)\.yaml|src/omniclaude/hooks/contracts/(contract_hook_.*|wire/.*)\.yaml|src/omniclaude/lib/(config/intelligence_config|core/intelligence_event_client)\.py|src/omniclaude/nodes/(contracts|.*/contracts)/.*\.yaml|src/omniclaude/nodes/node_agent_inbox_effect/handler_kafka_inbox\.py|src/omniclaude/runtime/(__main__|wiring_dispatchers)\.py|src/omniclaude/services/linear_relay/publisher\.py|plugins/onex/(hooks/lib/pattern_cache\.py|skills/_lib/contract_generator/generate_contract\.py)|schemas/quirks/.*\.yaml|scripts/(bus_audit|demo_runner|validation/validate_golden_chain_integrity)\.py|tests/validate_event_integration\.py|tests/(integration|unit)/skills/aislop_sweep/fixtures/.*)$'
+        exclude: '^(src/omniclaude/hooks/(topic_allowlist|topic_registry)\.yaml|src/omniclaude/hooks/contracts/(contract_hook_.*|wire/.*)\.yaml|src/omniclaude/lib/(config/intelligence_config|core/intelligence_event_client)\.py|src/omniclaude/nodes/(contracts|.*/contracts)/.*\.yaml|src/omniclaude/nodes/node_agent_inbox_effect/handler_kafka_inbox\.py|src/omniclaude/runtime/(__main__|wiring_dispatchers)\.py|src/omniclaude/services/linear_relay/publisher\.py|plugins/onex/(hooks/lib/pattern_cache\.py|skills/_lib/contract_generator/generate_contract\.py)|schemas/quirks/.*\.yaml|scripts/(bus_audit|demo_runner|validation/validate_golden_chain_integrity|validation/generate_event_registry)\.py|tests/validate_event_integration\.py|tests/(integration|unit)/skills/aislop_sweep/fixtures/.*)$'
       - id: no-bare-feature-flags
         stages: [pre-commit]
       - id: no-untracked-todos
@@ -156,7 +156,10 @@ repos:
       # OMN-14854: Required-Check Skip-Vector Guard. Fails closed if a staged
       # workflow file or the required-checks manifest introduces a path-scoped
       # trigger, an ungated job-level `if:`, an ungated reusable-caller `if:`,
-      # or a missing pull_request/merge_group trigger on any REQUIRED context.
+      # a missing pull_request/merge_group trigger, an ungated `needs:` cascade
+      # (vector 5, OMN-15057), or result triage that does not fail closed on
+      # every non-`success` upstream result (vector 6, OMN-15304) on any
+      # REQUIRED context.
       # Same validator runs in CI (required-check-skip-guard-reusable.yml) —
       # local and CI verdicts can never diverge.
       - id: reject-required-check-skip-vector
@@ -165,6 +168,38 @@ repos:
         language: script
         pass_filenames: false
         files: '^\.github/(workflows/.*\.ya?ml|required-checks\.yaml)$'
+        stages: [pre-commit]
+
+      # OMN-15393: workflow `run:` script-path existence guard, shifted left.
+      # The guard itself is tests/workflows/test_workflow_run_script_paths_exist.py.
+      # It shipped in #1962 as a test that NOTHING selected on the change class it
+      # guards: the governed selector mapped `.github/workflows/**` to
+      # `tests/unit/` only, so a workflow fan-out that dropped its script stayed
+      # green until the dev->main promotion full suite — i.e. after the broken
+      # workflow was already on dev. Detection that is not wired as a gate on the
+      # path that produces the defect is advisory (CLAUDE.md rule 5), so this hook
+      # lands together with the selector adjacency trigger that makes the same
+      # module run in CI. Same module, same assertion, both surfaces — a local and
+      # a CI verdict can never disagree.
+      #
+      # ~1.5s (10 static tests, pure YAML parsing, no services, no network).
+      #
+      # KNOWN SCOPE LIMIT, stated rather than papered over: pre-commit hands
+      # hooks only ADDED/MODIFIED staged files, never DELETED ones, so `git rm`
+      # of a workflow-referenced script does not fire this hook. The CI half does
+      # cover it — the selector reads `git diff --name-only base...HEAD`, which
+      # includes deletions, and the `scripts/` + `plugins/` triggers select this
+      # module. Do not "fix" this by adding always_run: true; that taxes every
+      # commit in the repo for a check with two narrow inputs.
+      - id: workflow-run-script-paths-exist
+        name: Workflow `run:` script paths must exist in-tree (OMN-15393)
+        entry: >-
+          uv run pytest
+          tests/workflows/test_workflow_run_script_paths_exist.py
+          -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/.*\.ya?ml|scripts/.*\.(py|sh)|plugins/.*/scripts/.*\.(py|sh)|tests/workflows/test_workflow_run_script_paths_exist\.py)$'
         stages: [pre-commit]
 
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):

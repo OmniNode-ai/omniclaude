@@ -187,10 +187,22 @@ def test_dependency_clones_track_dev_and_review_install_excludes_rl(
     )
 
 
-def test_dependency_install_failure_degrades_instead_of_blocking(
+def test_dependency_install_failure_fails_closed(
     workflow: dict[object, object],
 ) -> None:
-    """Dependency setup failures are infrastructure degradation, not findings."""
+    """OMN-16000: dependency install / CLI-crash failures must fail the REQUIRED
+    'Hostile Review Gate' closed, not manufacture a self-reported degraded/exit-0
+    verdict.
+
+    Prior contract (now retired — see git history for the pinned-bug version):
+    the install step carried `continue-on-error: true` and the review step
+    branched on `$INSTALL_DEPS_OUTCOME` to emit `verdict=degraded` + `exit 0`
+    on install failure. That let the required context go green with zero
+    adversarial review having actually run. Fixed 2026-08-13: no
+    continue-on-error (a real install failure now fails the step, and the
+    step's own default `if:` skips the rest of the job); a CLI crash retries
+    once then reports `verdict=infra_error` and exits 1.
+    """
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
@@ -209,11 +221,9 @@ def test_dependency_install_failure_degrades_instead_of_blocking(
         None,
     )
     assert isinstance(install_step, dict), "dependency install step must exist"
-    assert install_step.get("id") == "install_deps", (
-        "dependency install step must expose an outcome to the review step"
-    )
-    assert install_step.get("continue-on-error") is True, (
-        "dependency install failures must reach the review step as degraded output"
+    assert "continue-on-error" not in install_step, (
+        "dependency install failures must fail this REQUIRED job closed, not "
+        "be swallowed into a manufactured degraded/exit-0 verdict (OMN-16000)"
     )
 
     review_step = next(
@@ -225,16 +235,21 @@ def test_dependency_install_failure_degrades_instead_of_blocking(
         None,
     )
     assert isinstance(review_step, dict), "review step must exist"
-    env = review_step.get("env")
-    assert isinstance(env, dict)
-    assert env.get("INSTALL_DEPS_OUTCOME") == "${{ steps.install_deps.outcome }}"
+    env = review_step.get("env") or {}
+    assert "INSTALL_DEPS_OUTCOME" not in env, (
+        "review step must no longer branch on a manually-read install outcome "
+        "-- an install failure now fails the step itself (no continue-on-error)"
+    )
 
     run_text = review_step.get("run")
     assert isinstance(run_text, str)
-    assert 'if [ "$INSTALL_DEPS_OUTCOME" != "success" ]; then' in run_text
-    assert "verdict=degraded" in run_text
-    assert "omniintelligence dependency install failed" in run_text
-    assert "exit 0" in run_text
+    assert 'if [ "$INSTALL_DEPS_OUTCOME" != "success" ]; then' not in run_text
+    assert "verdict=infra_error" in run_text
+    assert "cli_review failed after 2 attempts" in run_text
+    # A crash must fail the step (exit 1), not report success.
+    assert "exit 1" in run_text
+    # The retired fail-open verdict string must not reappear.
+    assert "omniintelligence dependency install failed" not in run_text
 
 
 def test_summary_comment_step_present(workflow: dict[object, object]) -> None:

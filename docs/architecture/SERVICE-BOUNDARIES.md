@@ -955,7 +955,7 @@ python3 agents/lib/agent_history_browser.py --limit 20
 ## Related Documentation
 
 - **Shared Infrastructure**: `~/.claude/CLAUDE.md` (PostgreSQL, Kafka, remote server topology)
-- **omniclaude Architecture**: `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` (agents, routing, manifest injection)
+- **omniclaude Architecture**: `$OMNI_HOME/omniclaude/CLAUDE.md` (agents, routing, manifest injection)
 - **Event-Driven Routing**: `docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md`
 - **Manifest Intelligence**: `docs/architecture/MANIFEST_INTELLIGENCE_EVENT_ARCHITECTURE.md`
 - **Agent Traceability**: `docs/observability/AGENT_TRACEABILITY.md`

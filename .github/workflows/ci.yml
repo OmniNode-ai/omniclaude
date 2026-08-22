@@ -73,6 +73,7 @@ jobs:
 
   quality:
     needs: occ-preflight
+    if: always()
     name: Code Quality
     # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
     # so required CI does not queue behind self-hosted fleet saturation.
@@ -136,6 +137,7 @@ jobs:
 
   docs-links:
     needs: occ-preflight
+    if: always()
     name: Markdown Link Check
     # Lightweight external link check. Keep it hosted: the lychee binary can require
     # newer glibc than parts of the self-hosted fleet provide, and this job does
@@ -229,7 +231,7 @@ jobs:
             exit 0
           fi
           SUDO=""
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             SUDO="sudo"
           elif [ "$(id -u)" -ne 0 ]; then
             lib_dir="${RUNNER_TEMP:-/tmp}/pyright-libatomic"
@@ -302,7 +304,7 @@ jobs:
           if ldconfig -p 2>/dev/null | grep -q 'libatomic.so.1'; then
             exit 0
           fi
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             sudo apt-get update
             sudo apt-get install -y libatomic1
             exit 0
@@ -394,7 +396,7 @@ jobs:
           version: "0.6.1"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -425,6 +427,7 @@ jobs:
 
   enum-governance:
     needs: occ-preflight
+    if: always()
     name: Enum Governance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -480,6 +483,7 @@ jobs:
 
   exports-validation:
     needs: occ-preflight
+    if: always()
     name: Exports Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -510,7 +514,7 @@ jobs:
           if command -v cc >/dev/null 2>&1; then
             exit 0
           fi
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             sudo apt-get update
             sudo apt-get install -y build-essential
             exit 0
@@ -539,6 +543,7 @@ jobs:
 
   env-var-registry:
     needs: occ-preflight
+    if: always()
     name: "Env Var Registry (OMN-6263)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -579,6 +584,7 @@ jobs:
 
   cross-repo-validation:
     needs: occ-preflight
+    if: always()
     name: Kafka Import Guard
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -614,6 +620,7 @@ jobs:
 
   migration-freeze:
     needs: occ-preflight
+    if: always()
     name: Migration Freeze
     # Lightweight metadata gate: keep it hosted so branch protection cannot
     # wedge behind the self-hosted runner fleet.
@@ -642,6 +649,7 @@ jobs:
 
   onex-validation:
     needs: occ-preflight
+    if: always()
     name: ONEX Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -756,6 +764,7 @@ jobs:
 
   arch-no-db-in-orchestrator:
     needs: occ-preflight
+    if: always()
     name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -775,6 +784,7 @@ jobs:
 
   arch-no-git-outside-effects:
     needs: occ-preflight
+    if: always()
     name: "Arch: No git/gh calls outside effects (check 2)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -794,6 +804,7 @@ jobs:
 
   arch-no-linear-outside-effects:
     needs: occ-preflight
+    if: always()
     name: "Arch: No LinearClient outside effects (check 3)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -813,6 +824,7 @@ jobs:
 
   arch-no-repo-adapter-in-orchestrator:
     needs: occ-preflight
+    if: always()
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -833,6 +845,7 @@ jobs:
 
   arch-no-direct-adapter-in-business-logic:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct adapter imports in business logic (check 13)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -852,6 +865,7 @@ jobs:
 
   arch-no-direct-bus-instantiation:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct EventBus instantiation (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -874,6 +888,7 @@ jobs:
 
   arch-no-raw-sqlite3-in-handlers:
     needs: occ-preflight
+    if: always()
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -893,6 +908,7 @@ jobs:
 
   arch-no-env-fallbacks:
     needs: occ-preflight
+    if: always()
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -912,6 +928,7 @@ jobs:
 
   arch-cost-ledger-isolation:
     needs: occ-preflight
+    if: always()
     name: "Arch: ModelCostLedger confined to effects (check 5)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -931,6 +948,7 @@ jobs:
 
   arch-topic-naming:
     needs: occ-preflight
+    if: always()
     name: "Arch: onex.* topic naming convention (check 6)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -950,6 +968,7 @@ jobs:
 
   arch-omnidash-db-role:
     needs: occ-preflight
+    if: always()
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
     # Service-backed validation is lightweight; hosted avoids self-hosted queue cancellation.
     runs-on: ubuntu-latest
@@ -978,7 +997,7 @@ jobs:
           if command -v psql >/dev/null 2>&1; then
             exit 0
           fi
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y postgresql-client
             exit 0
@@ -1106,6 +1125,7 @@ jobs:
 
   arch-cost-ledger-structure:
     needs: occ-preflight
+    if: always()
     name: "Arch: ModelCostLedger run_id field + index (check 9)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1125,6 +1145,7 @@ jobs:
 
   arch-no-direct-kafka-producer:
     needs: occ-preflight
+    if: always()
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1144,6 +1165,7 @@ jobs:
 
   arch-no-utcnow:
     needs: occ-preflight
+    if: always()
     name: "Arch: No datetime.utcnow() (check 11)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
@@ -1169,6 +1191,7 @@ jobs:
 
   arch-no-hardcoded-ip:
     needs: occ-preflight
+    if: always()
     name: "Arch: No hardcoded internal IPs (check 12)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1221,6 +1244,7 @@ jobs:
 
   arch-no-compact-cmd-topic:
     needs: occ-preflight
+    if: always()
     name: F5.1 No compact cmd topic
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1255,6 +1279,7 @@ jobs:
 
   arch-invariants:
     needs: occ-preflight
+    if: always()
     name: Architecture Invariants
     # OMNINODE_SELF_HOSTED_RUNS_ON_V2
     runs-on: >-
@@ -1469,6 +1494,17 @@ jobs:
           --daemon-registry
           "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
 
+      # OMN-15967: EVENT_REGISTRY in src/omniclaude/hooks/event_registry.py is
+      # a generated projection of the daemon registry, not a hand-maintained
+      # copy — fail the build if it has drifted from omnimarket@dev.
+      - name: Run event registry projection drift check
+        working-directory: ${{ github.workspace }}
+        run: >-
+          uv run python scripts/validation/generate_event_registry.py
+          --daemon-registry
+          "${{ github.workspace }}/_registry/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml"
+          --check
+
   # Live golden-chain gate (OMN-12690)
   golden-chain-live:
     name: Golden Chain Live
@@ -1652,6 +1688,7 @@ jobs:
 
   detect-secrets:
     needs: occ-preflight
+    if: always()
     name: Secret Detection
     # OMN-14127: leaf of the required "Security Gate" context. It is a pure static
     # scan (detect-secrets) with no self-hosted/LAN dependency, so it runs on the
@@ -1671,45 +1708,127 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python -m pip install detect-secrets
 
+      # OMN-15072: resolve a ref the PR/push author does not control within
+      # their own commit, so the diff below cannot be defeated by a secret
+      # and its own baseline-laundering entry arriving together in one
+      # commit (the same-commit `.bak` copy this replaced was blind to
+      # exactly that -- see scripts/detect_secrets_ci_diff.py docstring).
+      #
+      # Event fields are passed via `env:` rather than interpolated into the
+      # script body: a branch/ref name is attacker-influenceable (a crafted
+      # base branch name containing shell metacharacters would otherwise be
+      # template-expanded directly into the script before bash sees it --
+      # zizmor `template-injection`).
+      #
+      # `pull_request` is the actual pre-merge gating path, so an unfetchable
+      # base branch fails the job closed (OMN-15072's explicit "fail closed
+      # on inability to fetch the target-branch baseline" requirement).
+      # `merge_group`/`push` are not this repo's merge-gating trigger (no
+      # merge queue; `push` fires post-merge on main/hotfix) and a
+      # force-pushed branch can legitimately make `before` unreachable, so
+      # those fall back to same-commit snapshot mode on fetch failure rather
+      # than wedging the required Security Gate for a benign reason.
+      - name: Resolve target-branch ref for baseline diff
+        id: target-ref
+        working-directory: ${{ github.workspace }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              if ! git fetch --no-tags --depth=1 origin \
+                  "$PR_BASE_REF:refs/remotes/origin/$PR_BASE_REF"; then
+                echo "::error::could not fetch base branch '$PR_BASE_REF' for baseline diff -- failing closed"
+                exit 1
+              fi
+              echo "ref=origin/$PR_BASE_REF" >> "$GITHUB_OUTPUT"
+              ;;
+            merge_group)
+              if [ -n "$MERGE_GROUP_BASE_SHA" ] && \
+                  git fetch --no-tags --depth=1 origin "$MERGE_GROUP_BASE_SHA"; then
+                echo "ref=$MERGE_GROUP_BASE_SHA" >> "$GITHUB_OUTPUT"
+              else
+                echo "::warning::could not fetch merge_group base_sha -- falling back to same-commit snapshot mode"
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            push)
+              if [ -z "$PUSH_BEFORE_SHA" ] || [ "$PUSH_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+                # First-ever push to this branch -- no target commit to diff
+                # against. Falls back to same-commit snapshot mode below.
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              elif git fetch --no-tags --depth=1 origin "$PUSH_BEFORE_SHA"; then
+                echo "ref=$PUSH_BEFORE_SHA" >> "$GITHUB_OUTPUT"
+              else
+                # A force-pushed/rewritten history can make 'before'
+                # unreachable on the remote -- not a security-relevant
+                # failure for a post-merge push event.
+                echo "::warning::could not fetch push 'before' SHA ($PUSH_BEFORE_SHA) -- falling back to same-commit snapshot mode"
+                echo "ref=" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              # workflow_dispatch and any other trigger: no meaningful target
+              # branch exists for a manual/non-gating run. Falls back to
+              # same-commit snapshot mode below (narrower by design; this
+              # trigger type is not part of the pre-merge gating path).
+              echo "ref=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Scan for secrets
         working-directory: ${{ github.workspace }}
+        env:
+          TARGET_REF: ${{ steps.target-ref.outputs.ref }}
         run: |
-          # Copy baseline so we can detect new findings
-          cp .secrets.baseline .secrets.baseline.bak
-          # Scan updates the baseline in-place with any new secrets
+          set -euo pipefail
+          if [ -z "$TARGET_REF" ]; then
+            # No target-branch ref available for this trigger type -- fall
+            # back to a same-commit pre-scan snapshot (the pre-OMN-15072
+            # shape). Narrower by design; see
+            # scripts/detect_secrets_ci_diff.py docstring.
+            cp .secrets.baseline .secrets.baseline.bak
+          fi
+
+          # Scan updates the baseline in-place with any new secrets.
+          #
+          # --no-verify (OMN-15063): several plugins (SlackDetector,
+          # StripeDetector, ...) call the live vendor API to "verify" each
+          # regex-matched candidate, then silently drop anything that comes
+          # back VERIFIED_FALSE. RED-proven: a synthetic Slack incoming-
+          # webhook URL and a synthetic Slack bot token, both matching the
+          # dedicated SlackDetector regex, were silently absent from the
+          # report without this flag even though the regex matched. A
+          # negative/uncertain live-verification result must not silently
+          # remove a finding (fail-closed). Never remove this flag without
+          # re-proving the miss is fixed another way.
           detect-secrets scan \
+            --no-verify \
             --baseline .secrets.baseline \
             --exclude-files '\.lock$' \
             --exclude-files '\.env\.example$' \
             --exclude-files 'bandit-report\.json$' \
             --exclude-files '^tests/' \
             --exclude-files 'security-report\.json$'
-          # Compare: detect genuinely new secrets (content-addressed, ignores line shifts).
-          # Using only (file, hashed_secret) as the key prevents false positives when
-          # new CI jobs shift line numbers of existing baseline entries (OMN-2625).
-          NEW_SECRETS=$(python3 -c "
-          import json
-          old = json.load(open('.secrets.baseline.bak'))
-          new = json.load(open('.secrets.baseline'))
-          old_set = {(f, s['hashed_secret'])
-                     for f, secrets in old.get('results', {}).items()
-                     for s in secrets}
-          new_set = {(f, s['hashed_secret'], s['line_number'])
-                     for f, secrets in new.get('results', {}).items()
-                     for s in secrets}
-          diff = [(f, line) for f, h, line in sorted(new_set)
-                  if (f, h) not in old_set]
-          for f, line in diff:
-              print(f'  {f}:{line}')
-          print(f'COUNT:{len(diff)}')
-          ")
-          COUNT=$(echo "$NEW_SECRETS" | grep '^COUNT:' | cut -d: -f2)
-          if [ "$COUNT" -gt 0 ]; then
-            echo "$NEW_SECRETS" | grep -v '^COUNT:'
-            echo "::error::detect-secrets found $COUNT new potential secrets not in baseline"
-            exit 1
+
+          # OMN-15072: diff against the target-branch baseline (a ref this
+          # PR/push cannot rewrite within its own commit) instead of a
+          # same-commit copy, so a secret arriving alongside its own
+          # baseline-laundering entry is caught. Reuses OMN-15068's
+          # audited-vs-unaudited classification
+          # (scripts/detect_secrets_guard.py) -- one canonical
+          # implementation, not a second copy of the same logic.
+          if [ -n "$TARGET_REF" ]; then
+            python3 scripts/detect_secrets_ci_diff.py --target-ref "$TARGET_REF"
+          else
+            python3 scripts/detect_secrets_ci_diff.py --fallback-baseline .secrets.baseline.bak
           fi
-          echo "Secret detection completed - no new secrets found"
+
+          echo "Secret detection completed - no new unaudited secrets found"
 
   # ============================================================================
   # TEST SUITES
@@ -2059,7 +2178,7 @@ jobs:
           if command -v psql >/dev/null 2>&1; then
             exit 0
           fi
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y postgresql-client
             exit 0
@@ -2186,6 +2305,7 @@ jobs:
 
   database-validation:
     needs: occ-preflight
+    if: always()
     name: Database Schema Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2242,7 +2362,7 @@ jobs:
           if command -v psql >/dev/null 2>&1; then
             exit 0
           fi
-          if command -v sudo >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y postgresql-client
             exit 0
@@ -2300,6 +2420,7 @@ jobs:
 
   dod-evidence-check:
     needs: occ-preflight
+    if: always()
     name: DoD Evidence Check
     # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
@@ -2316,11 +2437,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, reused below for both
+      # the own-repo PR-body read and the onex_change_control checkout.
+      # No `repositories:` filter: this job needs both. permission-pull-requests
+      # is required — the "Resolve DoD evidence source" step below reads this
+      # job's OWN PR body live via the GitHub API (autobind PATCHes
+      # Evidence-Source in after the triggering event, so the stale
+      # $GITHUB_EVENT_PATH body cannot be trusted); an under-scoped App
+      # token here silently 403s that read and falls back to the stale body.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          permission-contents: write
+          permission-pull-requests: read
+
       - name: Resolve DoD evidence source
         id: dod-evidence
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
           PR_NUMBER="$(jq -r '.pull_request.number // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
@@ -2370,7 +2510,7 @@ jobs:
           repository: OmniNode-ai/onex_change_control
           ref: ${{ steps.dod-evidence.outputs.source }}
           path: .onex_change_control_evidence
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Materialize central DoD evidence receipt
         if: steps.dod-evidence.outputs.source != ''
@@ -2472,6 +2612,7 @@ jobs:
   # ---------------------------------------------------------------------------
   mode-metadata-guard:
     needs: occ-preflight
+    if: always()
     name: Mode Metadata Integrity
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2516,6 +2657,7 @@ jobs:
 
   skill-hygiene:
     needs: occ-preflight
+    if: always()
     name: Skill Hygiene
     # Static validator with sparse OCC checkout; run hosted so fleet saturation
     # cannot cancel the required Quality Gate aggregate.
@@ -2526,12 +2668,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, scoped to the one
+      # sibling repo this job reads.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: onex_change_control
+          permission-contents: write
+
       - name: Checkout onex_change_control validator
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
             scripts/validation/
@@ -2553,6 +2708,7 @@ jobs:
   # version matrix defined in onex_change_control/standards/version-matrix.yaml.
   version-pin-check:
     needs: occ-preflight
+    if: always()
     name: Version Pin Compliance
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2572,12 +2728,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, scoped to the one
+      # sibling repo this job reads.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: onex_change_control
+          permission-contents: write
+
       - name: Checkout onex_change_control standards
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
             standards/
@@ -2603,6 +2772,7 @@ jobs:
   # Prevents Track B dispatch bugs (e.g., --skip-polish leaking into empty check).
   merge-sweep-contract:
     needs: occ-preflight
+    if: always()
     name: Merge-Sweep Contract
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2651,6 +2821,7 @@ jobs:
   # and spec-prompt predicate coverage across all skills.
   skill-contract-validation:
     needs: occ-preflight
+    if: always()
     name: Skill Contract Validation
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2668,12 +2839,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, scoped to the one
+      # sibling repo this job reads.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: onex_change_control
+          permission-contents: write
+
       - name: Checkout onex_change_control validator
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: main
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
             scripts/validation/
@@ -2770,6 +2954,7 @@ jobs:
   # ============================================================================
   aislop-sweep:
     needs: occ-preflight
+    if: always()
     name: Aislop Sweep
     runs-on: >-
       ${{
@@ -2827,6 +3012,7 @@ jobs:
   # Agent YAML contract validation (OMN-8914)
   agent-contract-validation:
     needs: occ-preflight
+    if: always()
     name: Agent Contract Validation
     runs-on: >-
       ${{
@@ -2866,6 +3052,7 @@ jobs:
   # Land this PR last in the SD wave so the gate goes green on merge.
   skill-monorepo-ref-gate:
     needs: occ-preflight
+    if: always()
     name: Skill Monorepo-Ref Gate
     runs-on: >-
       ${{
@@ -2886,6 +3073,7 @@ jobs:
   # `polymorphic-agent` dispatch target in the omniclaude enforcement surface.
   no-polymorphic-agent:
     needs: occ-preflight
+    if: always()
     name: "Arch: No polymorphic-agent in enforcement paths (OMN-9143)"
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
@@ -2920,6 +3108,10 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - occ-preflight
+      # OMN-15314: read for its `docs_only` OUTPUT only, never for its result.
+      # It is the declared precondition the per-upstream skip policy below
+      # re-evaluates, so this gate can tell an expected skip from a stranded one.
+      - zone-filter
       - quality
       - pyright
       - check-handshake
@@ -2976,10 +3168,42 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Quality Gate ==="
-          FAILED=false
 
+          # OMN-15314 (OMN-15304 vector 6 — result triage). The previous triage
+          # was `[ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]`, which
+          # reads as "!= success" locally while letting `skipped` reach the
+          # PASSED path. `skipped` is the ABSENCE of a verdict exactly like
+          # `cancelled`, and it is precisely the state vectors 2/3/5
+          # (conditional `if:`, needs-cascade) produce — so vector 5 and
+          # vector 6 composed into a bypass: strand an upstream, and the
+          # aggregator that was supposed to catch it reports green.
+          #
+          # The blanket `!= skipped` escape existed because three upstreams do
+          # skip legitimately. That is now an explicit PER-UPSTREAM SKIP POLICY:
+          # `skipped` passes only when this gate itself re-evaluates that
+          # upstream's own declared precondition and finds it false. Every other
+          # skip, every unlisted upstream that skipped, failure, cancelled, and
+          # any future result value GitHub might add fail closed.
+          #
+          # occ-preflight is checked first and on its own: every job below is
+          # gated on it succeeding, so if it did not, their results carry no
+          # information and no skip below can be assessed.
+          PREFLIGHT="${{ needs.occ-preflight.result }}"
+          echo "occ-preflight: $PREFLIGHT"
+          if [ "$PREFLIGHT" != "success" ]; then
+            echo "::error::occ-preflight did not succeed (result: $PREFLIGHT) — every check in this gate is gated on it."
+            exit 1
+          fi
+
+          # Declared-precondition inputs for the skip policy in the loop.
+          DOCS_ONLY="${{ needs.zone-filter.outputs.docs_only }}"
+          FORK_PR="${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}"
+          echo "skip-policy inputs: docs_only=${DOCS_ONLY:-(unset)} fork_pr=$FORK_PR"
+
+          # The gate stops at the first offending upstream rather than
+          # accumulating: nearly every upstream here is also an INDEPENDENTLY
+          # required status check, so its own red is already in the checks list.
           for check in \
-            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "quality=${{ needs.quality.result }}" \
             "pyright=${{ needs.pyright.result }}" \
             "check-handshake=${{ needs.check-handshake.result }}" \
@@ -3019,19 +3243,45 @@ jobs:
             "no-polymorphic-agent=${{ needs.no-polymorphic-agent.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
-            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
-              echo "::error::$NAME failed (result: $RESULT)"
-              FAILED=true
-            else
-              echo "$NAME: $RESULT"
-            fi
+
+            # Per-upstream skip policy. Each entry mirrors that job's own
+            # declared `if:` — keep the two in sync. An upstream that is NOT
+            # listed here may never skip: default-deny.
+            SKIP_OK=false
+            case "$NAME" in
+              pyright|golden-chain-integrity)
+                # Gated on the zone filter reporting a non-docs-only change.
+                if [ "$DOCS_ONLY" = "true" ]; then SKIP_OK=true; fi
+                ;;
+              check-handshake)
+                # Gated on the PR head branch living in this repository
+                # (fork PRs cannot reach the handshake credentials).
+                if [ "$FORK_PR" = "true" ]; then SKIP_OK=true; fi
+                ;;
+            esac
+
+            case "$RESULT" in
+              success)
+                echo "$NAME: success"
+                ;;
+              skipped)
+                if [ "$SKIP_OK" != "true" ]; then
+                  echo "::error::$NAME was SKIPPED with its declared precondition holding (docs_only=${DOCS_ONLY:-unset} fork_pr=$FORK_PR) — the absence of a verdict is not a passing one."
+                  exit 1
+                fi
+                echo "$NAME: skipped (declared precondition not met on this event)"
+                ;;
+              failure|cancelled)
+                echo "::error::$NAME did not pass (result: $RESULT)"
+                exit 1
+                ;;
+              *)
+                echo "::error::$NAME returned unrecognised result '$RESULT' — failing closed."
+                exit 1
+                ;;
+            esac
           done
 
-          if [ "$FAILED" = "true" ]; then
-            echo ""
-            echo "Quality Gate FAILED"
-            exit 1
-          fi
           echo ""
           echo "Quality Gate PASSED"
 
@@ -3044,6 +3294,9 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - occ-preflight
+      # OMN-15314: read for its `docs_only` OUTPUT only, never for its result —
+      # the declared precondition the per-upstream skip policy re-evaluates.
+      - zone-filter
       - test
       - hooks-tests
       - agent-framework-tests
@@ -3056,10 +3309,29 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Tests Gate ==="
-          FAILED=false
+
+          # OMN-15314 (OMN-15304 vector 6 — result triage). The previous triage
+          # was `[ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]`, which
+          # let a SKIPPED test job reach the PASSED path — a required Tests Gate
+          # reporting green with no test result in existence. `skipped` is the
+          # ABSENCE of a verdict exactly like `cancelled`, and it is precisely
+          # the state vectors 2/3/5 produce, so vector 5 and vector 6 composed
+          # into a bypass.
+          #
+          # occ-preflight is checked first and on its own: every job below is
+          # gated on it succeeding.
+          PREFLIGHT="${{ needs.occ-preflight.result }}"
+          echo "occ-preflight: $PREFLIGHT"
+          if [ "$PREFLIGHT" != "success" ]; then
+            echo "::error::occ-preflight did not succeed (result: $PREFLIGHT) — every check in this gate is gated on it."
+            exit 1
+          fi
+
+          # Declared-precondition input for the per-upstream skip policy below.
+          DOCS_ONLY="${{ needs.zone-filter.outputs.docs_only }}"
+          echo "skip-policy input: docs_only=${DOCS_ONLY:-(unset)}"
 
           for check in \
-            "occ-preflight=${{ needs.occ-preflight.result }}" \
             "test=${{ needs.test.result }}" \
             "hooks-tests=${{ needs.hooks-tests.result }}" \
             "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
@@ -3068,19 +3340,46 @@ jobs:
             "registry-consistency=${{ needs.registry-consistency.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
-            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
-              echo "::error::$NAME failed (result: $RESULT)"
-              FAILED=true
-            else
-              echo "$NAME: $RESULT"
-            fi
+
+            # Per-upstream skip policy. Each entry mirrors that job's own
+            # declared `if:` — keep the two in sync. An upstream that is NOT
+            # listed here may never skip: default-deny. `database-validation`
+            # carries `if: always()` and is deliberately absent.
+            #
+            # `test` is additionally gated on the Quality Gate succeeding; that
+            # skip is NOT admitted here. Tests that never ran because quality
+            # failed are absent tests, and Quality Gate is itself an
+            # independently required context, so it is already red on that path.
+            SKIP_OK=false
+            case "$NAME" in
+              test|hooks-tests|agent-framework-tests|golden-chain-live|registry-consistency)
+                # Gated on the zone filter reporting a non-docs-only change.
+                if [ "$DOCS_ONLY" = "true" ]; then SKIP_OK=true; fi
+                ;;
+            esac
+
+            case "$RESULT" in
+              success)
+                echo "$NAME: success"
+                ;;
+              skipped)
+                if [ "$SKIP_OK" != "true" ]; then
+                  echo "::error::$NAME was SKIPPED with its declared precondition holding (docs_only=${DOCS_ONLY:-unset}) — the absence of a test result is not a passing one."
+                  exit 1
+                fi
+                echo "$NAME: skipped (docs-only change — declared precondition not met)"
+                ;;
+              failure|cancelled)
+                echo "::error::$NAME did not pass (result: $RESULT)"
+                exit 1
+                ;;
+              *)
+                echo "::error::$NAME returned unrecognised result '$RESULT' — failing closed."
+                exit 1
+                ;;
+            esac
           done
 
-          if [ "$FAILED" = "true" ]; then
-            echo ""
-            echo "Tests Gate FAILED"
-            exit 1
-          fi
           echo ""
           echo "Tests Gate PASSED"
 
@@ -3129,7 +3428,17 @@ jobs:
   # ============================================================================
   # CROSS-REPO BOUNDARY PARITY (OMN-5771)
   # Validates Kafka topic boundaries against onex_change_control manifest.
-  # warn-only until all violations fixed (see OMN-5775).
+  # DIRECTLY REQUIRED on branch protection (live-verified 2026-08-13) and a CI
+  # Summary GATE_JOB (scripts/ci/ci_summary_gate.py). NOT warn-only despite the
+  # historical comment below this job used to carry -- see the OMN-16000 fix
+  # note: the previous `if:` used
+  # `contains(github.event.pull_request.changed_files || '0', '0') == false`,
+  # a SUBSTRING match against the changed-file COUNT, not an equality check.
+  # Any PR touching 10/20/100/... files (any count containing the digit '0')
+  # made `contains(...)` true, so `== false` was false and the job SKIPPED --
+  # and GitHub treats a skipped run of a required check as satisfying the
+  # requirement. Fixed to run unconditionally whenever occ-preflight succeeds;
+  # the job is cheap and the changed-files guard bought nothing real.
   # ============================================================================
 
   boundary-parity:
@@ -3144,12 +3453,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    # Only run when seam-relevant files change
-    if: >-
-      needs.occ-preflight.result == 'success' && (
-      github.event_name == 'merge_group' ||
-      github.event_name == 'push' ||
-      contains(github.event.pull_request.changed_files || '0', '0') == false)
+    if: needs.occ-preflight.result == 'success'
     steps:
       - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
         with:
@@ -3197,7 +3501,7 @@ jobs:
       - name: Validate contract YAML files
         working-directory: onex_change_control
         run: |
-          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -name "OMN-*.yaml" 2>/dev/null)
+          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -maxdepth 1 -name "OMN-*.yaml" 2>/dev/null)
           if [ -z "$CONTRACTS" ]; then
             echo "No contract YAML files found — skipping validation"
             exit 0
@@ -3234,6 +3538,65 @@ jobs:
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
             src/omniclaude
 
+  occ-companion-merged:
+    name: OCC Companion Merged Gate (OMN-15214)
+    # OMN-15221/OMN-15224 (port of the OMN-15214 canary, omnibase_infra #2486): makes the
+    # 2026-07-26 OCC hygiene-sweep trigger state — an OPEN onex_change_control
+    # evidence companion whose product PR already MERGED — unreachable via the
+    # merge path on this repo. The sweep closed five open companions
+    # (OCC#5012–#5016) whose product PRs had merged, destroying three evidence
+    # chains — one of them THIS repo's (omniclaude#1948 / OMN-15200, companions
+    # OCC#5014 + OCC#5015). The durable fix is ordering: the companion must
+    # MERGE BEFORE the product PR can. This job polls the PR's live
+    # Evidence-Source (live body, not event payload — occ-autobind PATCHes it in
+    # after open) and greens ONLY when the cited OCC companion PR is MERGED or
+    # the cited OCC commit SHA is an ancestor of onex_change_control dev/main.
+    # A companion CLOSED without merging fails immediately (that IS the
+    # incident state).
+    #
+    # CI Summary GATE_JOB + STRICT_SUCCESS_JOB (scripts/ci/ci_summary_gate.py)
+    # — deliberately NOT a new top-level required context: a context that does
+    # not report on every PR shape wedges merges indefinitely under branch
+    # protection, and occ-autobind itself is network-flaky (omninode_infra#679,
+    # 2026-07-26). Unconditional (no needs/if) so CI Summary always WAITS for
+    # it and a skip/cancel fails closed; internal event scoping no-ops on
+    # push/workflow_dispatch (mirrors occ-preflight). GitHub-hosted + pure gh
+    # API polling: zero self-hosted/LAN dependency, and the poll window absorbs
+    # autobind mint + companion auto-merge latency instead of converting them
+    # into instant reds.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+      # Poll window (seconds) — bounded well under ci-summary's 90m deadline so
+      # this gate reaches a terminal state first; PENDING converts to FAIL.
+      DEADLINE_SECONDS: "1500"
+      POLL_INTERVAL_SECONDS: "30"
+    steps:
+      - name: Checkout (gate script)
+        uses: actions/checkout@v7
+      # OMN-16373: CROSS_REPO_PAT retirement. Mint a short-lived
+      # onexbot-occ-writer App installation token and export it as GH_TOKEN —
+      # job-level `env:` is resolved before any step runs, so it cannot
+      # reference a step output directly. `|| github.token` fallback kept
+      # for resilience.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+      - name: Export GH_TOKEN
+        run: echo "GH_TOKEN=${{ steps.app-token.outputs.token || github.token }}" >> "$GITHUB_ENV"
+      - name: Require cited OCC evidence to be merged/durable before product merge
+        run: python3 scripts/ci/check_occ_companion_merged.py
+
   ci-summary:
     name: CI Summary
     # OMN-14127: REQUIRED branch-protection context, implemented as a NO-`needs`,
@@ -3249,11 +3612,21 @@ jobs:
     # tests/ci/test_ci_summary_gate.py). Pure hosted GitHub-API polling: zero
     # self-hosted/LAN dependency. DO NOT rename — the job name IS the required
     # context; a rename re-wedges every PR.
+    # OMN-16000: also asserts an L4 EXPECTED_EXTERNAL_CONTEXTS layer against
+    # commits/{sha}/check-runs — every PR-triggered job living in a workflow
+    # file OTHER than ci.yml that this repo's branch protection also directly
+    # requires, so a future silent removal from branch protection is caught
+    # here too, not only by GitHub's required-checks UI. Includes an
+    # ALL-must-succeed assertion over every duplicate "occ-preflight /
+    # eligibility" producer (~52 caller workflows mint that same check-run
+    # name against one SHA; GitHub's own required-check semantics are
+    # ANY-not-ALL, generalizing the OMN-15112 gap).
     runs-on: ubuntu-latest
     if: always()
     permissions:
       actions: read
       contents: read
+      checks: read  # OMN-16000: L4 layer reads commits/{sha}/check-runs
     # Deadline (below) is comfortably under the observed ~167m run-cancellation
     # window so the required context ALWAYS posts a terminal state first. This
     # job timeout is only a hard backstop above the internal poll deadline.
@@ -3268,6 +3641,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          # HEAD_SHA drives the L4 external-context layer (OMN-16000):
+          # commits/{sha}/check-runs aggregates check-runs from EVERY workflow
+          # file that reported against this SHA, not just ci.yml's own run.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           # Bounded poll window (minutes) — kept under the run-cancel window so
           # the required context always reaches a terminal state first.
           DEADLINE_MINUTES: "90"
@@ -3293,17 +3670,29 @@ jobs:
               sleep "${POLL_INTERVAL_SECONDS}"
               continue
             fi
-            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}"
+            # L4: fetch check-runs for the PR head SHA (spans every workflow
+            # file, not just this run). A fetch failure here does NOT abort the
+            # poll — it writes a JSON `null`, which the gate script treats as
+            # "every external context unobserved" (PENDING, not skipped), and
+            # the next iteration retries the fetch.
+            if gh api --paginate \
+                "repos/${GH_REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+                --jq '.check_runs[]' > check_runs_raw.ndjson 2>/dev/null; then
+              jq -s '.' check_runs_raw.ndjson > check_runs.json
+            else
+              echo 'null' > check_runs.json
+            fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json
             rc=$?
             case "${rc}" in
               0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
-              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job failed/cancelled)"; exit 1 ;;
-              2) : ;;  # PENDING — gating jobs still running; keep polling
+              1) echo "::error::CI Summary = FAILURE (fail-closed: a gating job or an asserted external context failed/cancelled)"; exit 1 ;;
+              2) : ;;  # PENDING — gating jobs or external contexts still running; keep polling
               *) echo "::error::ci_summary_gate.py returned unexpected code ${rc}; failing closed"; exit 1 ;;
             esac
             if [ "$(date +%s)" -ge "${deadline}" ]; then
               echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
-              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --report-only || true
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --report-only || true
               exit 1
             fi
             sleep "${POLL_INTERVAL_SECONDS}"
@@ -3399,7 +3788,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         with:
           sarif_file: 'trivy-results.sarif'
@@ -3469,6 +3858,7 @@ jobs:
 
   ai-slop-check:
     needs: occ-preflight
+    if: always()
     name: AI-Slop Pattern Check (strict, PR diff)
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-

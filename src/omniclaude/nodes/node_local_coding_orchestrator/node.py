@@ -12,7 +12,6 @@ The orchestrator reacts only to structured results produced by downstream
 effect nodes. It has ZERO subprocess calls and ZERO direct API client imports.
 All side effects are delegated to the effect nodes:
   - NodeGitEffect: git operations
-  - NodeClaudeCodeSessionEffect: Claude Code session management
   - NodeLocalLlmInferenceEffect: local LLM inference
   - NodeLinearEffect: Linear ticket operations
 """
