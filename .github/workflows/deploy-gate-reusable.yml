@@ -105,6 +105,8 @@ jobs:
           fi
           pr_body="$(gh pr view "$PR_NUMBER" --json body -q '.body')"
 
+          python -m pip install pyyaml
+
           python "${GITHUB_WORKSPACE}/.omniclaude-deploy-gate/.github/actions/deploy-gate/validate_pr_deploy_required.py" \
             --changed-files "$changed_files" \
             --pr-body "$pr_body" \
