@@ -2437,11 +2437,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, reused below for both
+      # the own-repo PR-body read and the onex_change_control checkout.
+      # No `repositories:` filter: this job needs both.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          permission-contents: write
+
       - name: Resolve DoD evidence source
         id: dod-evidence
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
           BODY="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
           PR_NUMBER="$(jq -r '.pull_request.number // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
@@ -2491,7 +2504,7 @@ jobs:
           repository: OmniNode-ai/onex_change_control
           ref: ${{ steps.dod-evidence.outputs.source }}
           path: .onex_change_control_evidence
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Materialize central DoD evidence receipt
         if: steps.dod-evidence.outputs.source != ''
@@ -2649,12 +2662,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, scoped to the one
+      # sibling repo this job reads.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: onex_change_control
+          permission-contents: write
+
       - name: Checkout onex_change_control validator
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
             scripts/validation/
@@ -2696,12 +2722,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, scoped to the one
+      # sibling repo this job reads.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: onex_change_control
+          permission-contents: write
+
       - name: Checkout onex_change_control standards
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
             standards/
@@ -2794,12 +2833,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
+      # onexbot-occ-writer App installation token, scoped to the one
+      # sibling repo this job reads.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: onex_change_control
+          permission-contents: write
+
       - name: Checkout onex_change_control validator
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
           ref: main
-          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
             scripts/validation/
@@ -3512,7 +3564,6 @@ jobs:
       contents: read
       pull-requests: read
     env:
-      GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || github.token }}
       GH_REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
@@ -3523,6 +3574,20 @@ jobs:
     steps:
       - name: Checkout (gate script)
         uses: actions/checkout@v7
+      # OMN-16373: CROSS_REPO_PAT retirement. Mint a short-lived
+      # onexbot-occ-writer App installation token and export it as GH_TOKEN —
+      # job-level `env:` is resolved before any step runs, so it cannot
+      # reference a step output directly. `|| github.token` fallback kept
+      # for resilience.
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+      - name: Export GH_TOKEN
+        run: echo "GH_TOKEN=${{ steps.app-token.outputs.token || github.token }}" >> "$GITHUB_ENV"
       - name: Require cited OCC evidence to be merged/durable before product merge
         run: python3 scripts/ci/check_occ_companion_merged.py
 
