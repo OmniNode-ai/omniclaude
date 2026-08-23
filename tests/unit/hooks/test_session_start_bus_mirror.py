@@ -163,6 +163,8 @@ def test_session_start_bus_mirror_invokes_direct_dispatch_with_correct_args(
     payload_idx = argv_lines.index("--payload") + 1
     payload = json.loads(argv_lines[payload_idx])
     assert payload["session_id"] == "test-session-16162"
+    assert payload["working_directory"] == _REPO_ROOT.name
+    assert "git_branch" not in payload
 
 
 @pytest.mark.unit

@@ -103,21 +103,15 @@ fi
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
-
-GIT_BRANCH=""
-if command -v git >/dev/null 2>&1 && git -C "$CWD" rev-parse --git-dir >/dev/null 2>&1; then
-    GIT_BRANCH=$(git -C "$CWD" branch --show-current 2>/dev/null || echo "")
-fi
+WORKING_DIRECTORY="$(basename "$CWD")"
 
 PAYLOAD=$(jq -nc \
     --arg session_id "$SESSION_ID" \
-    --arg cwd "$CWD" \
-    --arg branch "$GIT_BRANCH" \
+    --arg working_directory "$WORKING_DIRECTORY" \
     '{
         session_id: $session_id,
-        working_directory: $cwd,
-        hook_source: "startup",
-        git_branch: $branch
+        working_directory: $working_directory,
+        hook_source: "startup"
     }' 2>/dev/null) || PAYLOAD='{}'
 [[ -z "$PAYLOAD" || "$PAYLOAD" == "null" ]] && PAYLOAD='{}'
 
