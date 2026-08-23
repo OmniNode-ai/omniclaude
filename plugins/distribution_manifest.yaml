@@ -1711,6 +1711,22 @@ components:
   path: plugins/onex/hooks/scripts/session_start_bus_mirror.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook (OMN-16162). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); direct-dispatches a session-started event to omnimarket's node_event_emit_effect, backgrounded and fail-open, registered in hooks.json alongside the other live SessionEnd/SubagentStop/PreToolUse hooks.
+- id: hooks/scripts/user_prompt_submit_bus_mirror.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/user_prompt_submit_bus_mirror.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-16162 S1). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); direct-dispatches a prompt-submitted event (length-only, never the prompt text) to omnimarket's node_event_emit_effect, backgrounded and fail-open, same pattern as the S0 SessionStart/SessionEnd bus-mirror hooks.
+- id: hooks/scripts/post_tool_use_bus_mirror.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_bus_mirror.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-16162 S1). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); direct-dispatches a tool-executed event (tool name/timing/interrupted-flag only, never tool_input/tool_response content) to omnimarket's node_event_emit_effect, backgrounded and fail-open, registered as a separate catch-all (.*) matcher group alongside the OMN-16277 Bash-matcher secret-redaction guard.
 - id: hooks/scripts/session_start_onex_cli_pin_check.sh
   kind: hook
   exposure: beta
