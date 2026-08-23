@@ -71,6 +71,7 @@ def _write_stub(path: Path, marker: Path, *, sleep_seconds: float = 0) -> None:
 def _base_env(tmp_path: Path, *, plugin_python_bin: str | None) -> dict[str, str]:
     env = os.environ.copy()
     env["CLAUDE_PROJECT_DIR"] = str(_REPO_ROOT)
+    env["OMNICLAUDE_MODE"] = "full"
     env["ONEX_STATE_DIR"] = str(tmp_path / "onex_state")
     if plugin_python_bin is not None:
         env["PLUGIN_PYTHON_BIN"] = plugin_python_bin
