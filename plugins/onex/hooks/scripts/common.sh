@@ -256,6 +256,10 @@ if [[ -z "${PYTHON_CMD}" ]]; then
         # direct-dispatch hand-offs -- a missing Python interpreter must
         # degrade gracefully, not hard-fail the session.
         session_start_bus_mirror.sh|session_end_bus_mirror.sh) _advisory_ok=true ;;
+        # OMN-16162 S1: UserPromptSubmit/PostToolUse bus-mirror hooks are the
+        # same best-effort direct-dispatch hand-off pattern, extended to the
+        # prompt-submitted/tool-executed topics.
+        user_prompt_submit_bus_mirror.sh|post_tool_use_bus_mirror.sh) _advisory_ok=true ;;
     esac
 
     if [[ "${OMNICLAUDE_HOOK_CRITICALITY:-critical}" == "advisory" && "$_advisory_ok" == "true" ]]; then

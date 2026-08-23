@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.46.5,<0.47.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=63ea1c1ef770349bcb9e47144263869db8fbe13e" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
 ]
 
@@ -1699,8 +1699,8 @@ wheels = [
 
 [[package]]
 name = "omnimarket"
-version = "0.4.3"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=63ea1c1ef770349bcb9e47144263869db8fbe13e#63ea1c1ef770349bcb9e47144263869db8fbe13e" }
+version = "0.4.10"
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f#0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1716,9 +1716,9 @@ dependencies = [
     { name = "omnibase-infra" },
     { name = "omnibase-spi" },
     { name = "omninode-memory" },
-    { name = "onex-change-control" },
     { name = "packaging" },
     { name = "psycopg2-binary" },
+    { name = "pyasn1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -1827,7 +1827,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.46.5,<0.47.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=63ea1c1ef770349bcb9e47144263869db8fbe13e" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
@@ -1895,8 +1895,8 @@ dependencies = [
 
 [[package]]
 name = "omninode-memory"
-version = "0.17.0"
-source = { git = "https://github.com/OmniNode-ai/omnimemory.git?rev=887dc679816b9ca4fe1cf51354ac9d5f2869d4ba#887dc679816b9ca4fe1cf51354ac9d5f2869d4ba" }
+version = "0.17.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
@@ -1922,6 +1922,10 @@ dependencies = [
     { name = "structlog" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/82/5339e1b682d8d3f701c65f9084832bfd7d6b5232aef392abfcd17466e738/omninode_memory-0.17.1.tar.gz", hash = "sha256:643ce9a903777e4449087e5657c7d7defaebe2c6a7dbbab91cb03ec52ae4f9a8", size = 1081149, upload-time = "2026-08-20T02:19:26.747Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/1c/5ffd911059352dbebf53763b016c6c81eebdc75e7871c9be4be480c64af3/omninode_memory-0.17.1-py3-none-any.whl", hash = "sha256:d186db370530eb817e7f6423a86b20ff79dcc3d3b4786858d5b09586ddf38398", size = 650146, upload-time = "2026-08-20T02:19:25.128Z" },
 ]
 
 [[package]]
@@ -2383,11 +2387,11 @@ wheels = [
 
 [[package]]
 name = "pyasn1"
-version = "0.6.3"
+version = "0.6.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5c/5f/6583902b6f79b399c9c40674ac384fd9cd77805f9e6205075f828ef11fb2/pyasn1-0.6.3.tar.gz", hash = "sha256:697a8ecd6d98891189184ca1fa05d1bb00e2f84b5977c481452050549c8a72cf", size = 148685, upload-time = "2026-03-17T01:06:53.382Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/9a/23310166d960def5897e91fe20e5b724601b02a22e84ba1f94232c0b7f67/pyasn1-0.6.4.tar.gz", hash = "sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81", size = 151262, upload-time = "2026-07-09T01:12:33.988Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/a0/7d793dce3fa811fe047d6ae2431c672364b462850c6235ae306c0efd025f/pyasn1-0.6.3-py3-none-any.whl", hash = "sha256:a80184d120f0864a52a073acc6fc642847d0be408e7c7252f31390c0f4eadcde", size = 83997, upload-time = "2026-03-17T01:06:52.036Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/3b/6163796d69c3977d1e4287bea4a6979161cbbdd170ebb430511e8e1999ce/pyasn1-0.6.4-py3-none-any.whl", hash = "sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b", size = 84410, upload-time = "2026-07-09T01:12:32.92Z" },
 ]
 
 [[package]]
@@ -2541,7 +2545,7 @@ wheels = [
 
 [[package]]
 name = "pytest"
-version = "9.0.2"
+version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -2550,9 +2554,9 @@ dependencies = [
     { name = "pluggy" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049ddb5ce41d3a49c235bf9ad299b6a25d5780a89f19230f/pytest-9.0.2.tar.gz", hash = "sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11", size = 1568901, upload-time = "2025-12-06T21:30:51.014Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]
