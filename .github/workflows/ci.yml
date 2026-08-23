@@ -3471,9 +3471,27 @@ jobs:
   contract-compliance:
     needs: occ-preflight
     name: Contract Compliance Check
-    # Lightweight OCC contract validation: keep it hosted and bounded so it
-    # cannot consume or wedge self-hosted capacity during merge sweeps.
-    runs-on: ubuntu-latest
+    # OMNI_RUNNER_SELECTOR_V1 (OMN-16431): `uv sync` here resolves onex_change_control's
+    # dependency set from the internal-only `.201` Tailscale PyPI mirror
+    # (http://omninode-pc.tail75df5e.ts.net:3141/root/pypi/...).
+    # onex-allow-internal-ip OMN-16431 reason="doc comment naming the host this fix routes around; not runnable"
+    # `ubuntu-latest` is GitHub-hosted, non-tailnet, and cannot resolve that hostname --
+    # confirmed on omniclaude#1998 (3 consecutive DNS-error reruns, run 32650791713).
+    # Same defect class as OMN-16413 (omnibase_core#1579) and OMN-16427
+    # (omninode_infra#969, same job name/shape) -- adopts the identical OMN-15699
+    # fork-aware selector already used elsewhere in this file: only an ACTUAL fork PR
+    # (head repo != base repo) routes to the public ubuntu-latest runner; every
+    # same-repo pull_request, push, and merge_group gets the tailnet-connected
+    # self-hosted omnibase-ci fleet, which CAN reach the .201 mirror. This does NOT
+    # widen the trust boundary: untrusted fork code still never reaches the
+    # self-hosted fleet.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
     timeout-minutes: 15
     if: needs.occ-preflight.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
     steps:
