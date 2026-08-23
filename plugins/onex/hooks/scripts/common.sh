@@ -252,6 +252,10 @@ if [[ -z "${PYTHON_CMD}" ]]; then
     _advisory_ok=false
     case "$_hook_base" in
         session-end.sh|stop.sh|pre-compact.sh|post-tool-use-quality.sh) _advisory_ok=true ;;
+        # OMN-16162: SessionStart/SessionEnd bus-mirror hooks are best-effort
+        # direct-dispatch hand-offs -- a missing Python interpreter must
+        # degrade gracefully, not hard-fail the session.
+        session_start_bus_mirror.sh|session_end_bus_mirror.sh) _advisory_ok=true ;;
     esac
 
     if [[ "${OMNICLAUDE_HOOK_CRITICALITY:-critical}" == "advisory" && "$_advisory_ok" == "true" ]]; then
