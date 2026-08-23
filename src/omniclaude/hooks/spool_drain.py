@@ -267,11 +267,12 @@ class GatewayTransport:
         *,
         timeout: float,
         client: httpx.Client | None = None,
+        client_factory: Callable[..., httpx.Client] = httpx.Client,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
-        self._client = client or httpx.Client(timeout=timeout)
+        self._client = client if client is not None else client_factory(timeout=timeout)
         self._owns_client = client is None
 
     def close(self) -> None:
