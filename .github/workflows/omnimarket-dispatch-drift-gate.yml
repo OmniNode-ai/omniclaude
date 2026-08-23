@@ -77,7 +77,20 @@ jobs:
           # omnimarket main; this baseline is the sanctioned "approved
           # release-lane baseline while a broader dependency cascade is
           # pending" override this gate's own docstring describes.
-          SHA="63ea1c1ef770349bcb9e47144263869db8fbe13e"
+          # OMN-16162: bumped 63ea1c1e -> 0bd86dbf (omnimarket dev tip at
+          # bump time). The prior pin was #2062's own merge commit and
+          # predated six fixes to node_event_emit_effect itself, most
+          # critically OMN-15987's topic-override escape hatch -- every
+          # omniclaude bus-mirror hook (SessionStart/SessionEnd/
+          # UserPromptSubmit/PostToolUse) dispatches through exactly this
+          # node and passes a topic-shaped event_type string that only the
+          # post-OMN-15987 handler accepts without raising
+          # UnknownEventTypeError. Live-verified: every bus-mirror hook
+          # raised that error on this Mac against the old pin, and published
+          # cleanly (independently confirmed via `rpk topic consume` against
+          # the .201 dev-lane broker) after this bump. See pyproject.toml's
+          # own override-dependencies comment for the full fix list.
+          SHA="0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Expected omnimarket dispatch SHA: $SHA"
 
