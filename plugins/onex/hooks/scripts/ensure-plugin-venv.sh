@@ -21,7 +21,9 @@ _GLOBAL_ENV="${HOME}/.omnibase/.env"
 if [[ -f "$_GLOBAL_ENV" ]]; then
     set -a
     # shellcheck disable=SC1090
-    source "$_GLOBAL_ENV" 2>/dev/null || true
+    if ! source "$_GLOBAL_ENV" 2>/dev/null; then
+        echo "[onex] warning: failed to load ${_GLOBAL_ENV}; continuing with current environment" >&2
+    fi
     set +a
 fi
 unset _GLOBAL_ENV
