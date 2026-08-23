@@ -122,7 +122,22 @@ def emit_event(event: ModelEvidenceWrittenEvent) -> None:
                 correlation_id=event.correlation_id or None,
             )
         )
-    except (RuntimeError, ValueError, AttributeError, TypeError, OSError):
+    except (
+        RuntimeError,
+        ValueError,
+        AttributeError,
+        TypeError,
+        OSError,
+        KeyError,
+    ):
+        # KeyError: node_event_emit_effect's default publish-adapter
+        # resolution (ModelKafkaEventBusConfig) reads KAFKA_BOOTSTRAP_SERVERS
+        # via a bare os.environ[...] with no default (OMN-16167 -- a missing
+        # bootstrap target is a loud construction failure by design, not a
+        # silent spool-only fallback). A unit-test / dev environment with no
+        # Kafka target configured must still hit this writer's own fail-open
+        # contract (disk is authoritative, Kafka is best-effort) rather than
+        # propagate that construction failure uncaught.
         logger.warning(
             "Failed to emit EvidenceWritten event for task %s (fail-open)",
             event.task_id,
