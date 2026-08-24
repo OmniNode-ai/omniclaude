@@ -149,7 +149,9 @@ def filesystem_key(pr_key: str) -> str:
 
 def _claim_path(pr_key: str) -> Path:
     """Return the Path for the claim file for the given PR key."""
-    return CLAIMS_DIR / f"{filesystem_key(pr_key)}.json"
+    # Resolve the claims dir lazily — CLAIMS_DIR is None until first use, so
+    # reading the global directly raised TypeError on the first call (OMN-16485).
+    return _get_claims_dir() / f"{filesystem_key(pr_key)}.json"
 
 
 def _now_utc() -> str:
@@ -250,6 +252,7 @@ class ClaimRegistry:
         run_id: str,
         action: str,
         dry_run: bool = False,
+        lane_id: str | None = None,
     ) -> bool:
         """Attempt to acquire a claim on the given PR.
 
@@ -260,6 +263,12 @@ class ClaimRegistry:
             run_id: Current run ID (e.g. "20260223-143012-a3f")
             action: Action description (e.g. "fix_ci", "rebase", "merge")
             dry_run: If True, no filesystem writes. Returns True (as-if acquired).
+            lane_id: Owning lane handle (OMN-16485). This is the field the
+                pre-mutation ownership guard reads to decide whether the caller
+                may close/cancel/dispatch against this target. A claim written
+                without it is treated as INDETERMINATE by that guard — it proves
+                someone holds the target but not which lane, so it cannot
+                authorize a mutation.
 
         Returns:
             True if claim was acquired (or dry_run), False if claimed by another active run.
@@ -326,6 +335,7 @@ class ClaimRegistry:
             "claimed_at": now,
             "last_heartbeat_at": now,
             "action": action,
+            "lane_id": lane_id,
         }
 
         # Write claim using atomic create-if-absent (os.link prevents races).

@@ -87,8 +87,8 @@ _GUARD_FILES = (
 
 
 # The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 +
-# OMN-15213 + OMN-16277 + OMN-16162 + OMN-16471 + OMN-16478 carve-outs, in hooks.json
-# registration order.
+# OMN-15213 + OMN-16277 + OMN-16162 + OMN-16471 + OMN-16478 + OMN-16485
+# carve-outs, in hooks.json registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
@@ -97,6 +97,9 @@ _WORKTREE_GUARD_COMMAND = (
 )
 _LANE_LIVENESS_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_liveness_guard.sh"
+)
+_PR_OWNERSHIP_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_pr_ownership_guard.sh"
 )
 _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
@@ -152,12 +155,13 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "hooks.json must register ONLY PreToolUse, PostToolUse, SubagentStop, "
         "SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
         "OMN-14330/OMN-15062/OMN-15213/OMN-16277/OMN-16162/OMN-16471/"
-        "OMN-16478 carve-outs "
+        "OMN-16478/OMN-16485 carve-outs "
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly four PreToolUse commands are wired: Done-flip guard, worktree
-    # guard, lane-open recorder, then lane-liveness guard.
+    # Exactly five PreToolUse commands are wired: Done-flip guard, worktree
+    # guard, PR lane-ownership guard (OMN-16485), lane-open recorder, then
+    # lane-liveness guard.
     commands = [
         hook.get("command", "")
         for group in hooks["PreToolUse"]
@@ -166,16 +170,17 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert commands == [
         _DONE_FLIP_GUARD_COMMAND,
         _WORKTREE_GUARD_COMMAND,
+        _PR_OWNERSHIP_GUARD_COMMAND,
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
-        "guard, the worktree canonical-root guard, the lane-dispatch recorder, and "
-        "the lane-liveness guard, and nothing else (OMN-13856 + OMN-14330 + "
-        "OMN-16471 + OMN-16478 carve-outs). A different or additional command "
-        "means either the measurement baseline was re-enabled without an operator "
-        "decision (OMN-13846) or one of the guards regressed. "
-        f"Found: {commands!r}"
+        "guard, the worktree canonical-root guard, the PR lane-ownership guard, "
+        "the lane-dispatch recorder, and the lane-liveness guard, and nothing else "
+        "(OMN-13856 + OMN-14330 + OMN-16485 + OMN-16471 + OMN-16478 carve-outs). "
+        "A different or additional command means either the measurement baseline "
+        "was re-enabled without an operator decision (OMN-13846) or one of the "
+        f"guards regressed. Found: {commands!r}"
     )
 
     # The matchers must target the Linear write tools that flip Done, then Bash,
