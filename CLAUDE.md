@@ -234,6 +234,7 @@ Full env tables, invocation examples, resume-after-rate-limit, and trigger surfa
 | Inventing raw Kafka topic strings outside contract YAML | Topic names come from `ContractConfig` / event contract YAML only. |
 | Writing "call helper X()" in a skill without a real implementation | Logic must be a tool, node, or handler — never a phantom callable in markdown. |
 | Manually adding onex plugin hooks to `~/.claude/settings.json` | Plugin hook registration lives exclusively in `plugins/onex/hooks/hooks.json` (loaded by the plugin manifest). Duplicate entries fire every event twice (doubled logs, doubled Kafka emissions). Sole sanctioned exception: `scripts/install-delegation.sh` (OMN-10626) merges its own delegation hooks block for customer installs. |
+| Editing `~/.claude/hooks/canonical-clone-guard.py` in place, or converging a dirty canonical clone with plumbing (`update-ref`, `read-tree`) or shell writes | The tracked source is `scripts/user-hooks/canonical-clone-guard.py` (tests: `tests/scripts/test_canonical_clone_guard.py`); change it there and re-install with `bash scripts/install-canonical-clone-guard.sh --apply`. It is a user-level hook on purpose — `deploy_local_plugin` does not touch it. A dirty canonical clone is converged ONLY by `bash scripts/converge-canonical-clone.sh <repo> --execute` (preserves the diff, writes a ledger row) — OMN-16496. |
 | Iterating plans beyond the adversarial review cap | 3-round severity-graded convergence, then present remaining CRITICAL/MAJOR findings to the user. |
 
 ---
