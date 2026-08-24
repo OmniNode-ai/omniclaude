@@ -87,7 +87,8 @@ _GUARD_FILES = (
 
 
 # The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 +
-# OMN-15213 + OMN-16277 + OMN-16162 carve-outs, in hooks.json registration order.
+# OMN-15213 + OMN-16277 + OMN-16162 + OMN-16471 carve-outs, in hooks.json
+# registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
@@ -102,6 +103,10 @@ _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND = (
 )
 _SUBAGENT_STOP_REPORT_CONTRACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_report_contract_guard.sh"
+)
+_LANE_OPEN_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_open.sh"
+_SUBAGENT_STOP_LANE_TERMINATION_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_lane_termination_guard.sh"
 )
 _SESSION_START_BUS_MIRROR_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_bus_mirror.sh"
@@ -143,7 +148,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     }, (
         "hooks.json must register ONLY PreToolUse, PostToolUse, SubagentStop, "
         "SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
-        "OMN-14330/OMN-15062/OMN-15213/OMN-16277/OMN-16162 carve-outs "
+        "OMN-14330/OMN-15062/OMN-15213/OMN-16277/OMN-16162/OMN-16471 carve-outs "
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
@@ -153,19 +158,30 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         for group in hooks["PreToolUse"]
         for hook in group.get("hooks", [])
     ]
-    assert commands == [_DONE_FLIP_GUARD_COMMAND, _WORKTREE_GUARD_COMMAND], (
+    assert commands == [
+        _DONE_FLIP_GUARD_COMMAND,
+        _WORKTREE_GUARD_COMMAND,
+        _LANE_OPEN_COMMAND,
+    ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
-        "guard and the worktree canonical-root guard and nothing else (OMN-13856 + "
-        "OMN-14330 carve-outs). A different or additional command means either the "
-        "measurement baseline was re-enabled without an operator decision "
-        f"(OMN-13846) or one of the guards regressed. Found: {commands!r}"
+        "guard, the worktree canonical-root guard, and the lane-dispatch recorder "
+        "and nothing else (OMN-13856 + OMN-14330 + OMN-16471 carve-outs). A "
+        "different or additional command means either the measurement baseline was "
+        "re-enabled without an operator decision (OMN-13846) or one of the guards "
+        f"regressed. Found: {commands!r}"
     )
 
-    # The matchers must target the Linear write tools that flip Done, then Bash.
+    # The matchers must target the Linear write tools that flip Done, then Bash,
+    # then the agent-lane dispatch tools (OMN-16471).
     matchers = [group.get("matcher", "") for group in hooks["PreToolUse"]]
-    assert matchers == ["^mcp__linear-server__(save_issue|update_issue)$", "Bash"], (
-        f"Done-flip guard must match Linear save_issue/update_issue and the "
-        f"worktree guard must match Bash. Found: {matchers!r}"
+    assert matchers == [
+        "^mcp__linear-server__(save_issue|update_issue)$",
+        "Bash",
+        "^(Task|Agent|Workflow)$",
+    ], (
+        f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
+        f"guard must match Bash, and the lane recorder must match the dispatch "
+        f"tools. Found: {matchers!r}"
     )
 
     # Exactly two PostToolUse commands are wired: the secret-redaction guard
@@ -191,8 +207,8 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"bus-mirror hook must match every tool (.*). Found: {post_tool_use_matchers!r}"
     )
 
-    # Exactly two SubagentStop commands are wired: the secret-leak guard,
-    # then the report-contract guard.
+    # Exactly three SubagentStop commands are wired: the secret-leak guard,
+    # the report-contract guard, then the lane-termination guard.
     subagent_stop_commands = [
         hook.get("command", "")
         for group in hooks["SubagentStop"]
@@ -201,10 +217,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert subagent_stop_commands == [
         _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND,
         _SUBAGENT_STOP_REPORT_CONTRACT_GUARD_COMMAND,
+        _SUBAGENT_STOP_LANE_TERMINATION_GUARD_COMMAND,
     ], (
         "hooks.json SubagentStop must register EXACTLY the secret-leak guard "
-        "(OMN-15062 carve-out) and the report-contract guard (OMN-15213 "
-        f"carve-out). Found: {subagent_stop_commands!r}"
+        "(OMN-15062 carve-out), the report-contract guard (OMN-15213 carve-out), "
+        "and the lane-termination guard (OMN-16471 carve-out). Found: "
+        f"{subagent_stop_commands!r}"
     )
 
     # Exactly one SessionStart command: the bus-mirror hook (OMN-16162).

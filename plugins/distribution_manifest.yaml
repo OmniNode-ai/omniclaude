@@ -1223,6 +1223,14 @@ components:
   path: plugins/onex/hooks/scripts/hook_verifier_role_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/onex-lane-reconcile.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/onex-lane-reconcile.sh
+  backing_nodes: []
+  rationale: operator/CI reconciliation CLI over the OMN-16471 lane records (not a Claude event hook); exits 1 when any dispatched lane holds a failure terminal state or never reported one.
 - id: hooks/scripts/onex-paths.sh
   kind: hook
   exposure: hidden
@@ -1551,6 +1559,14 @@ components:
   path: plugins/onex/hooks/scripts/pre_tool_use_hostile_review_gate.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_lane_open.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_lane_open.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-16471). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); records a durable OPEN lane record at the Task/Agent/Workflow dispatch seam so a lane that later dies before SubagentStop is still visible. Pure observer -- always exit 0, always silent, never gates a dispatch.
 - id: hooks/scripts/pre_tool_use_linear_done_verify.sh
   kind: hook
   exposure: beta
@@ -1799,6 +1815,14 @@ components:
   path: plugins/onex/hooks/scripts/subagent_skip_token_surface_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/subagent_stop_lane_termination_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/subagent_stop_lane_termination_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-16471). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); classifies how a subagent lane ended from transcript evidence (tool-call count, wall duration, usage-limit/auth/API/unresumable death signatures), writes the paired terminal lane record, and blocks once on a zero-work death so a lane that did nothing is never scored as a completed stage.
 - id: hooks/scripts/subagent_stop_report_contract_guard.sh
   kind: hook
   exposure: beta
