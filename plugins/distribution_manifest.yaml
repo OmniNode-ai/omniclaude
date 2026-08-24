@@ -1551,6 +1551,14 @@ components:
   path: plugins/onex/hooks/scripts/pre_tool_use_hostile_review_gate.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_lane_liveness_guard.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_lane_liveness_guard.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/pre_tool_use_linear_done_verify.sh
   kind: hook
   exposure: beta
