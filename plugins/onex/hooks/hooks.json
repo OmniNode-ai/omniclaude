@@ -1,7 +1,7 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
-  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856, OMN-14330, OMN-15062, OMN-15213, and OMN-16277 carve-outs. Every context-injection/measurement hook stays DISABLED; the only re-registered hooks are the Done-flip durable-evidence guard (OMN-13856, operator-approved, no fake Done), the OMN-7018 worktree canonical-root guard (OMN-14330, blocks `git worktree add` outside $OMNI_HOME/omni_worktrees), the SubagentStop secret-leak guard (OMN-15062, blocks a subagent's final report from completing when it matches a known secret pattern -- narrowly scoped security control), the SubagentStop report-contract guard (OMN-15213, fails a lane RED when its final return is bare-Done-class instead of the report the golden-chain contract requires), and the PostToolUse Bash-output secret-redaction guard (OMN-16277, masks secret-shaped patterns in raw Bash tool_response text via hookSpecificOutput.updatedToolOutput before it lands in the transcript -- narrowly scoped security control, same class as OMN-15062, NOT a re-enable of the disabled context-injection/measurement hooks). All other scripts remain on disk and re-registration stays a pure config change.",
-  "version": "1.7.0",
+  "description": "OmniClaude Core Hooks - OMN-13244 measurement baseline with the OMN-13856, OMN-14330, OMN-15062, OMN-15213, OMN-16277, and OMN-16162 carve-outs. Every context-injection/measurement hook stays DISABLED; the only re-registered hooks are the Done-flip durable-evidence guard (OMN-13856, operator-approved, no fake Done), the OMN-7018 worktree canonical-root guard (OMN-14330, blocks `git worktree add` outside $OMNI_HOME/omni_worktrees), the SubagentStop secret-leak guard (OMN-15062, blocks a subagent's final report from completing when it matches a known secret pattern -- narrowly scoped security control), the SubagentStop report-contract guard (OMN-15213, fails a lane RED when its final return is bare-Done-class instead of the report the golden-chain contract requires), the PostToolUse Bash-output secret-redaction guard (OMN-16277, masks secret-shaped patterns in raw Bash tool_response text via hookSpecificOutput.updatedToolOutput before it lands in the transcript -- narrowly scoped security control, same class as OMN-15062, NOT a re-enable of the disabled context-injection/measurement hooks), and the SessionStart/SessionEnd/UserPromptSubmit/PostToolUse(.*) bus-mirror hooks (OMN-16162, direct-dispatch a session-started/session-ended/prompt-submitted/tool-executed event to omnimarket's node_event_emit_effect, backgrounded and fail-open -- the local-bus-mirror transport superseding the OMN-16090 HTTP spool-shipper stopgap; S0 wired SessionStart/SessionEnd, S1 extends the identical pattern to UserPromptSubmit and a dedicated catch-all PostToolUse entry that never touches tool_response, kept separate from the OMN-16277 Bash-matcher secret-redaction guard). None of these re-registrations is a re-enable of the disabled context-injection/measurement hooks. All other scripts remain on disk and re-registration stays a pure config change.",
+  "version": "1.8.0",
   "hooks": {
     "PreToolUse": [
       {
@@ -32,6 +32,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
           }
         ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_bus_mirror.sh"
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -44,6 +53,36 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_report_contract_guard.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_bus_mirror.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_end_bus_mirror.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_submit_bus_mirror.sh"
           }
         ]
       }

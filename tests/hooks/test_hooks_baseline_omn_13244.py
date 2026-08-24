@@ -35,14 +35,30 @@ a security control, not a re-enable of the disabled context-injection/
 measurement hooks (real incident: two credential leaks on 2026-08-19, an
 over-broad kubectl jsonpath dump of an Infisical machine-identity
 ``clientSecret``, and an ``env | grep`` output whose password lived
-mid-URL rather than in a matched key). Everything else stays disabled.
-These tests therefore lock in a *narrowed* baseline:
+mid-URL rather than in a matched key). OMN-16162 carves a sixth exception
+(S0): a SessionStart and a SessionEnd bus-mirror hook that each
+direct-dispatch a single event (session-started / session-ended) to
+omnimarket's ``node_event_emit_effect``, backgrounded and fail-open -- the
+local-bus-mirror transport that supersedes the OMN-16090 HTTP spool-shipper
+stopgap. OMN-16162 S1 extends the identical carve-out to two more events: a
+UserPromptSubmit bus-mirror hook (prompt-submitted, length-only payload --
+never the prompt text itself, per the onex.evt.* preview-safe invariant) and
+a catch-all (matcher ``.*``) PostToolUse bus-mirror hook (tool-executed,
+tool-name/timing/interrupted-flag only -- never tool_input/tool_response
+content), kept as a separate registration entry from the OMN-16277
+Bash-matcher secret-redaction guard so neither touches the other's payload.
+None of these four hooks re-enables any of the disabled context-injection/
+measurement hooks; each is a dedicated, minimal script containing ONLY the
+direct-dispatch hand-off. Everything else stays disabled. These tests
+therefore lock in a *narrowed* baseline:
 
 1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard,
-   the worktree canonical-root guard, the PostToolUse secret-redaction
-   guard, the SubagentStop secret-leak guard, and the SubagentStop
-   report-contract guard, and nothing else, while retaining the ``$schema``
-   / ``description`` / ``version`` metadata keys.
+   the worktree canonical-root guard, the PostToolUse secret-redaction guard,
+   the PostToolUse bus-mirror hook, the SubagentStop secret-leak guard, the
+   SubagentStop report-contract guard, the SessionStart bus-mirror hook, the
+   SessionEnd bus-mirror hook, and the UserPromptSubmit bus-mirror hook, and
+   nothing else, while retaining the ``$schema`` / ``description`` /
+   ``version`` metadata keys.
 2. The skill-substitution guard machinery (module, config YAML, wrapper
    script, tests) REMAINS on disk -- unregistered, so activating it later is
    a one-line config add and an explicit operator decision, not a code
@@ -71,7 +87,7 @@ _GUARD_FILES = (
 
 
 # The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 +
-# OMN-15213 + OMN-16277 carve-outs, in hooks.json registration order.
+# OMN-15213 + OMN-16277 + OMN-16162 carve-outs, in hooks.json registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
@@ -86,6 +102,18 @@ _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND = (
 )
 _SUBAGENT_STOP_REPORT_CONTRACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_report_contract_guard.sh"
+)
+_SESSION_START_BUS_MIRROR_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_bus_mirror.sh"
+)
+_SESSION_END_BUS_MIRROR_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_end_bus_mirror.sh"
+)
+_USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_submit_bus_mirror.sh"
+)
+_POST_TOOL_USE_BUS_MIRROR_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_bus_mirror.sh"
 )
 
 
@@ -103,12 +131,20 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     data = json.loads(_HOOKS_JSON.read_text())
     hooks = data.get("hooks", {})
 
-    # Exactly three event classes -- PreToolUse, PostToolUse, and
-    # SubagentStop -- are registered.
-    assert set(hooks.keys()) == {"PreToolUse", "PostToolUse", "SubagentStop"}, (
-        "hooks.json must register ONLY PreToolUse, PostToolUse, and SubagentStop "
-        "for the OMN-13856/OMN-14330/OMN-15062/OMN-16277 carve-outs (measurement "
-        f"baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
+    # Exactly six event classes are registered: PreToolUse, PostToolUse,
+    # SubagentStop, SessionStart, SessionEnd, UserPromptSubmit.
+    assert set(hooks.keys()) == {
+        "PreToolUse",
+        "PostToolUse",
+        "SubagentStop",
+        "SessionStart",
+        "SessionEnd",
+        "UserPromptSubmit",
+    }, (
+        "hooks.json must register ONLY PreToolUse, PostToolUse, SubagentStop, "
+        "SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
+        "OMN-14330/OMN-15062/OMN-15213/OMN-16277/OMN-16162 carve-outs "
+        f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
     # Exactly two PreToolUse commands are wired: Done-flip guard, then worktree guard.
@@ -132,23 +168,27 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"worktree guard must match Bash. Found: {matchers!r}"
     )
 
-    # Exactly one PostToolUse command is wired: the secret-redaction guard,
-    # matching Bash only (OMN-16277 carve-out).
+    # Exactly two PostToolUse commands are wired: the secret-redaction guard
+    # (Bash only, OMN-16277), then the catch-all bus-mirror hook (.*, OMN-16162 S1).
     post_tool_use_commands = [
         hook.get("command", "")
         for group in hooks["PostToolUse"]
         for hook in group.get("hooks", [])
     ]
-    assert post_tool_use_commands == [_POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND], (
+    assert post_tool_use_commands == [
+        _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND,
+        _POST_TOOL_USE_BUS_MIRROR_COMMAND,
+    ], (
         "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
-        f"(OMN-16277 carve-out) and nothing else. Found: {post_tool_use_commands!r}"
+        "(OMN-16277 carve-out) and the bus-mirror hook (OMN-16162 S1 carve-out) "
+        f"and nothing else. Found: {post_tool_use_commands!r}"
     )
     post_tool_use_matchers = [
         group.get("matcher", "") for group in hooks["PostToolUse"]
     ]
-    assert post_tool_use_matchers == ["Bash"], (
-        "PostToolUse secret-redaction guard must match Bash only. Found: "
-        f"{post_tool_use_matchers!r}"
+    assert post_tool_use_matchers == ["Bash", ".*"], (
+        "PostToolUse secret-redaction guard must match Bash only and the "
+        f"bus-mirror hook must match every tool (.*). Found: {post_tool_use_matchers!r}"
     )
 
     # Exactly two SubagentStop commands are wired: the secret-leak guard,
@@ -165,6 +205,39 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "hooks.json SubagentStop must register EXACTLY the secret-leak guard "
         "(OMN-15062 carve-out) and the report-contract guard (OMN-15213 "
         f"carve-out). Found: {subagent_stop_commands!r}"
+    )
+
+    # Exactly one SessionStart command: the bus-mirror hook (OMN-16162).
+    session_start_commands = [
+        hook.get("command", "")
+        for group in hooks["SessionStart"]
+        for hook in group.get("hooks", [])
+    ]
+    assert session_start_commands == [_SESSION_START_BUS_MIRROR_COMMAND], (
+        "hooks.json SessionStart must register EXACTLY the bus-mirror hook "
+        f"(OMN-16162 carve-out). Found: {session_start_commands!r}"
+    )
+
+    # Exactly one SessionEnd command: the bus-mirror hook (OMN-16162).
+    session_end_commands = [
+        hook.get("command", "")
+        for group in hooks["SessionEnd"]
+        for hook in group.get("hooks", [])
+    ]
+    assert session_end_commands == [_SESSION_END_BUS_MIRROR_COMMAND], (
+        "hooks.json SessionEnd must register EXACTLY the bus-mirror hook "
+        f"(OMN-16162 carve-out). Found: {session_end_commands!r}"
+    )
+
+    # Exactly one UserPromptSubmit command: the bus-mirror hook (OMN-16162 S1).
+    user_prompt_submit_commands = [
+        hook.get("command", "")
+        for group in hooks["UserPromptSubmit"]
+        for hook in group.get("hooks", [])
+    ]
+    assert user_prompt_submit_commands == [_USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND], (
+        "hooks.json UserPromptSubmit must register EXACTLY the bus-mirror hook "
+        f"(OMN-16162 S1 carve-out). Found: {user_prompt_submit_commands!r}"
     )
 
 

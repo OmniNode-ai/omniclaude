@@ -130,5 +130,5 @@ jobs:
           gh pr create \
             --base "${GITHUB_REF_NAME}" \
             --head "$BRANCH" \
-            --title "chore(deps): refresh omninode sibling locks [bot]" \
+            --title "chore(deps, OMN-13902): refresh omninode sibling locks [bot]" \
             --body-file /tmp/sibling_refresh_body.md
