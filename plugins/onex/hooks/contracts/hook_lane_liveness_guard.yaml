@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+name: hook_lane_liveness_guard
+ticket_id: "OMN-16478"
+summary: >
+  PreToolUse hook on SendMessage. Enforces ONE lane namespace (a bare harness
+  ref is not an address) and makes lane liveness a proof obligation: a message
+  declaring another lane dead, or authorizing a takeover of its work, is
+  blocked unless an independent filesystem probe returns DEAD. UNREACHABLE is a
+  distinct verdict that blocks as hard as ALIVE — a lane you cannot reach may
+  be mid-push. Closes friction F-10 (P0), where a lane was declared dead and
+  its OMN-16432 push nearly taken over while it was alive.
+event: PreToolUse
+matcher: "^SendMessage$"
+script: pre_tool_use_lane_liveness_guard.sh
+lib: lane_liveness_guard.py
+# No kill switch, and no ONEX_HOOKS_MASK bit. This guard blocks exactly one
+# class of claim — an assertion of another lane's death that the evidence
+# contradicts — and an env var that waives it would be indistinguishable, at the
+# moment of use, from the false verdict it exists to catch. It is security-class
+# in the CLAUDE.md sense, so it stays out of the mask: a stale saved mask literal
+# in ~/.omnibase/.env must never silently disable it. Fail-open is already built
+# into the guard itself (unreadable input, absent registry, or any internal
+# error allows). The ONLY disable surface is lite mode, the global omniclaude
+# off switch. Unlike the Done-flip guard there is deliberately no
+# is_omninode_repo short-circuit either — lane coordination is not repo-scoped.
+kill_switch: none
+golden_path:
+  - Ordinary coordination message, no liveness claim — passes
+  - Message addressed to a bare harness ref (8a2709) — blocked, lane name offered
+  - "'<lane> is dead, take over' while that lane's transcript is fresh — blocked as ALIVE"
+  - Same message while the lane's evidence is inconclusive — blocked as UNREACHABLE
+  - Same message after the lane posted its own TERMINAL ledger row — passes (DEAD)
+  - Registry absent on the host — passes (fail-open, never block on a missing evidence root)
+dod_evidence:
+  - kind: tests
+    description: "Unit tests for the prober and the guard, including an F-10 incident replay"
+    command: "uv run pytest tests/hooks/test_lane_liveness_guard.py -v"
+  - kind: ci
+    description: "CI pipeline green"
+    command: "gh pr checks"

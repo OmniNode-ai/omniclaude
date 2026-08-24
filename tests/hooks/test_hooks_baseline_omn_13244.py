@@ -87,12 +87,16 @@ _GUARD_FILES = (
 
 
 # The hooks re-registered by the OMN-13856 + OMN-14330 + OMN-15062 +
-# OMN-15213 + OMN-16277 + OMN-16162 carve-outs, in hooks.json registration order.
+# OMN-15213 + OMN-16277 + OMN-16162 + OMN-16478 carve-outs, in hooks.json
+# registration order.
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
 _WORKTREE_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_worktree_guard.sh"
+)
+_LANE_LIVENESS_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_liveness_guard.sh"
 )
 _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
@@ -118,7 +122,7 @@ _POST_TOOL_USE_BUS_MIRROR_COMMAND = (
 
 
 def test_hooks_json_is_narrowed_option_a_baseline() -> None:
-    """hooks.json registers EXACTLY the Done-flip + worktree + secret-leak guards.
+    """hooks.json registers EXACTLY the Done-flip + worktree + lane-liveness + secret-leak guards.
 
     The OMN-13244 measurement baseline stays intact for every context-injection
     hook; the operator-approved OMN-13856, OMN-14330, and OMN-15062 carve-outs
@@ -147,25 +151,37 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly two PreToolUse commands are wired: Done-flip guard, then worktree guard.
+    # Exactly three PreToolUse commands are wired: Done-flip guard, worktree
+    # guard, then lane-liveness guard.
     commands = [
         hook.get("command", "")
         for group in hooks["PreToolUse"]
         for hook in group.get("hooks", [])
     ]
-    assert commands == [_DONE_FLIP_GUARD_COMMAND, _WORKTREE_GUARD_COMMAND], (
+    assert commands == [
+        _DONE_FLIP_GUARD_COMMAND,
+        _WORKTREE_GUARD_COMMAND,
+        _LANE_LIVENESS_GUARD_COMMAND,
+    ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
-        "guard and the worktree canonical-root guard and nothing else (OMN-13856 + "
-        "OMN-14330 carve-outs). A different or additional command means either the "
-        "measurement baseline was re-enabled without an operator decision "
-        f"(OMN-13846) or one of the guards regressed. Found: {commands!r}"
+        "guard, the worktree canonical-root guard, and the lane-liveness guard, and "
+        "nothing else (OMN-13856 + OMN-14330 + OMN-16478 carve-outs). A different or "
+        "additional command means either the measurement baseline was re-enabled "
+        "without an operator decision (OMN-13846) or one of the guards regressed. "
+        f"Found: {commands!r}"
     )
 
-    # The matchers must target the Linear write tools that flip Done, then Bash.
+    # The matchers must target the Linear write tools that flip Done, then Bash,
+    # then SendMessage.
     matchers = [group.get("matcher", "") for group in hooks["PreToolUse"]]
-    assert matchers == ["^mcp__linear-server__(save_issue|update_issue)$", "Bash"], (
-        f"Done-flip guard must match Linear save_issue/update_issue and the "
-        f"worktree guard must match Bash. Found: {matchers!r}"
+    assert matchers == [
+        "^mcp__linear-server__(save_issue|update_issue)$",
+        "Bash",
+        "^SendMessage$",
+    ], (
+        f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
+        f"guard must match Bash, and the lane-liveness guard must match SendMessage. "
+        f"Found: {matchers!r}"
     )
 
     # Exactly two PostToolUse commands are wired: the secret-redaction guard
