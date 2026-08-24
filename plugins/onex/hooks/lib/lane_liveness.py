@@ -129,6 +129,9 @@ class Evidence:
     team: str | None = None
     transcript_path: str | None = None
     transcript_age_s: float | None = None
+    #: Whether the transcript source could be consulted at all on this host.
+    #: False means "we could not look", which is never evidence of death.
+    transcript_source_available: bool = False
     ledger_age_s: float | None = None
     ledger_kind: str | None = None
     sources_unavailable: list[str] = field(default_factory=list)
@@ -139,6 +142,7 @@ class Evidence:
             "agent_id": self.agent_id,
             "team": self.team,
             "transcript_path": self.transcript_path,
+            "transcript_source_available": self.transcript_source_available,
             "transcript_age_s": (
                 round(self.transcript_age_s)
                 if self.transcript_age_s is not None
@@ -436,6 +440,7 @@ def probe(
         evidence.sources_unavailable.append("team registry (lane not registered)")
 
     transcript, scanned = find_transcript(lane, root)
+    evidence.transcript_source_available = scanned
     if transcript is not None:
         evidence.transcript_path = str(transcript)
         mtime = _safe_mtime(transcript)
@@ -471,7 +476,14 @@ def probe(
         )
 
     # --- DEAD path A: the lane declared its own clean completion.
-    if ledger_kind == "TERMINAL" and ledger_age is not None:
+    #
+    # Gated on the transcript source having been consulted. A TERMINAL row is a
+    # statement about one assignment, not about the process: a lane can post
+    # TERMINAL and keep running on the next thing. Without a transcript to
+    # corroborate that it went quiet afterwards, one unverifiable source must
+    # not authorize supersession — and if the transcript root is absent on this
+    # host we did not observe anything, we merely failed to look.
+    if ledger_kind == "TERMINAL" and ledger_age is not None and scanned:
         if evidence.transcript_age_s is None or evidence.transcript_age_s >= ledger_age:
             return Verdict(
                 lane,

@@ -26,18 +26,17 @@
 
 set -eo pipefail
 
-_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
-# shellcheck source=../lib/repo_guard.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
-if declare -F is_omninode_repo >/dev/null 2>&1; then
-    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
-        is_omninode_repo || {
-        _OMNICLAUDE_PASSTHROUGH=$(cat)
-        echo "$_OMNICLAUDE_PASSTHROUGH"
-        trap - EXIT 2>/dev/null || true
-        exit 0
-    }
-fi
+# Deliberately NO is_omninode_repo short-circuit, unlike the Done-flip guard.
+# Lane coordination is not repo-scoped: a lane can be declared dead from any
+# working directory, and the message that authorizes the takeover is the same
+# message either way. Same reasoning the OMN-16277 secret-redaction guard used
+# when it dropped the repo gate.
+#
+# Deliberately NO ONEX_HOOKS_MASK bit either. Per CLAUDE.md, no security-class
+# guard participates in the mask — a stale saved mask literal in ~/.omnibase/.env
+# must never silently disable a control that prevents work destruction, and a
+# bit added today is OFF for every operator carrying an older saved literal.
+# The only disable surface is lite mode (the global omniclaude off switch).
 
 # Lite mode guard [OMN-5398]
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,7 +53,6 @@ LIB_PY="${PLUGIN_ROOT}/hooks/lib/lane_liveness_guard.py"
 # that invoke Python. Sourced here to satisfy the hooks-source-common invariant.
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
-onex_hook_gate LANE_LIVENESS_GUARD || exit 0
 unset _SCRIPT_DIR _MODE_SH
 
 if [[ ! -f "$LIB_PY" ]]; then

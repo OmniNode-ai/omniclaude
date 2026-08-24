@@ -77,21 +77,32 @@ _SENT = "\x00"
 #: <lane>.
 _GAP = r"[^.!?\n]"
 
+#: Death words, fenced so a hyphenated compound cannot supply one. Plain ``\b``
+#: treats ``-`` as a boundary, so ``\bdead\b`` fires inside ``dead-letter`` and
+#: "The dead-letter queue for <lane> drained" reads as a death assertion.
+_DEATH_WORD = (
+    r"(?<![\w-])(?:dead|gone|died|defunct|unresponsive|stalled|"
+    r"not\s+responding|no\s+longer\s+running|not\s+running|not\s+alive|"
+    r"never\s+coming\s+back)(?![\w-])"
+)
+
+#: Narrower set for the label form, same hyphen fence.
+_DEATH_NOUN = r"(?<![\w-])(?:dead|died|defunct|gone)(?![\w-])"
+
 #: "<lane> is dead" / "<lane> has been gone" / "<lane> appears stalled".
 _DEATH_PREDICATE = re.compile(
     _SENT
     + _GAP
     + r"{0,40}?\b(?:is|was|'s|has\s+been|had\s+been|appears|appeared|seems|seemed|looks)\b"
     + _GAP
-    + r"{0,25}?\b(?:dead|gone|died|defunct|unresponsive|stalled|"
-    + r"not\s+responding|no\s+longer\s+running|not\s+running|not\s+alive|"
-    + r"never\s+coming\s+back)\b",
+    + r"{0,25}?"
+    + _DEATH_WORD,
     re.IGNORECASE,
 )
 
 #: "the dead lane <lane>" / "gone: <lane>".
 _DEATH_LABEL = re.compile(
-    r"\b(?:dead|died|defunct|gone)\b" + _GAP + r"{0,30}?" + _SENT,
+    _DEATH_NOUN + _GAP + r"{0,30}?" + _SENT,
     re.IGNORECASE,
 )
 

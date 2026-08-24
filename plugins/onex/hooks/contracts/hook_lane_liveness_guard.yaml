@@ -15,11 +15,16 @@ event: PreToolUse
 matcher: "^SendMessage$"
 script: pre_tool_use_lane_liveness_guard.sh
 lib: lane_liveness_guard.py
-# No kill switch by design. This guard blocks exactly one class of claim — an
-# assertion of another lane's death that the evidence contradicts — and an env
-# var that waives it would be indistinguishable, at the moment of use, from the
-# false verdict it exists to catch. Fail-open is already built into the guard
-# itself (unreadable input, absent registry, or any internal error allows).
+# No kill switch, and no ONEX_HOOKS_MASK bit. This guard blocks exactly one
+# class of claim — an assertion of another lane's death that the evidence
+# contradicts — and an env var that waives it would be indistinguishable, at the
+# moment of use, from the false verdict it exists to catch. It is security-class
+# in the CLAUDE.md sense, so it stays out of the mask: a stale saved mask literal
+# in ~/.omnibase/.env must never silently disable it. Fail-open is already built
+# into the guard itself (unreadable input, absent registry, or any internal
+# error allows). The ONLY disable surface is lite mode, the global omniclaude
+# off switch. Unlike the Done-flip guard there is deliberately no
+# is_omninode_repo short-circuit either — lane coordination is not repo-scoped.
 kill_switch: none
 golden_path:
   - Ordinary coordination message, no liveness claim — passes

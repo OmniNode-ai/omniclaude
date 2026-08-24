@@ -189,6 +189,27 @@ def test_recent_ledger_row_rescues_a_stale_transcript_from_dead(
 
 
 @pytest.mark.unit
+def test_terminal_row_alone_cannot_condemn_when_transcripts_are_unreadable(
+    claude_root: Path, tmp_path: Path
+) -> None:
+    """A TERMINAL row is a statement about one assignment, not about the process.
+
+    A lane can post TERMINAL and keep running on the next thing, so a single
+    uncorroborated source must not authorize supersession. With no transcript
+    root on this host we did not observe the lane going quiet — we merely failed
+    to look, which the module contract says resolves to UNREACHABLE.
+    """
+    _write_registry(claude_root, {"wave2-closeout": f"wave2-closeout@{TEAM}"})
+    # No projects/ tree at all -> the transcript source cannot be consulted.
+    ledger = _write_ledger(tmp_path, [(3 * 3600, "wave2-closeout", "TERMINAL")])
+
+    verdict = liveness.probe("wave2-closeout", root=claude_root, ledger=ledger)
+
+    assert verdict.state == liveness.UNREACHABLE
+    assert verdict.evidence.transcript_source_available is False
+
+
+@pytest.mark.unit
 def test_self_declared_terminal_row_is_dead(claude_root: Path, tmp_path: Path) -> None:
     """A lane's own TERMINAL row is the one clean, unambiguous death."""
     _write_registry(claude_root, {"wave2-closeout": f"wave2-closeout@{TEAM}"})
@@ -450,15 +471,20 @@ def test_stand_down_supersession_shape_is_blocked() -> None:
         "Ping supersede-binding-fix for the receipt-gate SHA when you get a chance.",
         "supersede-binding-fix is pushing right now; hold off on OMN-16432.",
         "Ask supersede-binding-fix whether the dead-letter topic drained.",
+        "The dead-letter queue for supersede-binding-fix drained overnight.",
+        "Gone-away handling for supersede-binding-fix is still on the backlog.",
         "Status from supersede-binding-fix: green, merged, worktree removed.",
     ],
 )
 def test_ordinary_coordination_is_not_blocked(message: str) -> None:
     """No liveness claim, no proof obligation — the guard must stay quiet.
 
-    The third and fourth cases matter: 'is pushing' and a literal 'dead-letter'
-    must not trip the death matcher, and a lane whose own name contains
-    'supersede' must not match the takeover matcher against itself.
+    The hyphenated-compound cases carry the weight: ``\\b`` treats ``-`` as a
+    word boundary, so a naive ``\\bdead\\b`` fires inside ``dead-letter`` and
+    condemns "The dead-letter queue for <lane> drained." Both word orders are
+    covered here, since only the death-word-first order can reach the label
+    matcher. A lane whose own name contains "supersede" must likewise not match
+    the takeover matcher against itself.
     """
     decision = guard.decide(
         _call("build-drive-closeout", message),
@@ -466,6 +492,19 @@ def test_ordinary_coordination_is_not_blocked(message: str) -> None:
         registry_lanes=["build-drive-closeout", "supersede-binding-fix"],
     )
     assert decision.allowed is True, decision.reason
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "message",
+    [
+        "The dead lane supersede-binding-fix still owns OMN-16432.",
+        "Reassigning: dead -> supersede-binding-fix.",
+    ],
+)
+def test_death_label_still_fires_on_a_genuine_label(message: str) -> None:
+    """The hyphen fence must not blunt the label matcher on real death labels."""
+    assert guard.find_triggers(message, "supersede-binding-fix") == ["death assertion"]
 
 
 @pytest.mark.unit
