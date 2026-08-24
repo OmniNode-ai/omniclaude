@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-08-24T03:14:22.100Z","message":{"role":"user","content":[{"type":"text","text":"You are verify-build-drive. Adversarially verify the 7 lanes of workflow wf_49e3ed80-aab. For each lane: confirm the PR exists, confirm gh pr checks is green, confirm the ticket has dod_evidence. Report PASS/FAIL per lane with citations."}]}}
+{"type":"system","timestamp":"2026-08-24T03:14:22.385Z","subtype":"error","content":"You've hit your weekly limit · resets Aug 26 at 11pm (America/New_York) · progress saved"}
