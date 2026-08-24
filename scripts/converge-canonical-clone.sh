@@ -19,10 +19,24 @@
 #   converge-canonical-clone.sh <repo-name | clone-path | .>                 # dry-run report
 #   converge-canonical-clone.sh <repo> --execute [--clean-untracked]
 #                               [--ticket OMN-XXXX] [--lane <name>]
+#   converge-canonical-clone.sh <repo> --branch <name> [--execute]
+#                               [--ticket OMN-XXXX] [--lane <name>]
+#
+# --branch <name> (OMN-16500) converges a NON-checked-out local branch to its
+# configured upstream without touching the working tree or the index: it
+# preserves the branch's unique commits first (log + per-commit patches +
+# branch reflog + sha256 manifest), then performs exactly
+# `git branch -f <name> <upstream sha>`. Built for the release-synced-main
+# policy, where origin/main is rewritten to the release tag and a canonical
+# clone's local main -- still holding the pre-rewrite promotion commits -- can
+# never fast-forward again.
 #
 # Refuses (exit 2): a target that is not a direct child of $OMNI_HOME with a .git
 # DIRECTORY (worktrees carry a .git file and are never converged here), detached
-# HEAD, a branch without an upstream, unknown options. Exit 0 on success or when
+# HEAD, a branch without an upstream, unknown options. With --branch, also
+# refuses the currently checked-out branch (use the default mode for that), a
+# nonexistent local branch, and the --clean-untracked combination (the working
+# tree is out of scope in branch mode). Exit 0 on success or when
 # the clone is already converged; exit 1 on a failed git step.
 #
 # Evidence: $OMNI_HOME/.onex_state/canonical-clone-converge/<repo>-<utc>/
@@ -58,10 +72,12 @@ execute=0
 clean_untracked=0
 ticket=""
 lane="converge-canonical-clone"
+branch_opt=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --execute) execute=1 ;;
     --clean-untracked) clean_untracked=1 ;;
+    --branch) [[ $# -ge 2 ]] || refuse "--branch needs a value"; branch_opt="$2"; shift ;;
     --ticket) [[ $# -ge 2 ]] || refuse "--ticket needs a value"; ticket="$2"; shift ;;
     --lane) [[ $# -ge 2 ]] || refuse "--lane needs a value"; lane="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -71,6 +87,9 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 [[ -n "$target" ]] || { usage >&2; exit 2; }
+if [[ -n "$branch_opt" && "$clean_untracked" == "1" ]]; then
+  refuse "--clean-untracked cannot be combined with --branch: branch mode never touches the working tree"
+fi
 
 # --- target must be a canonical clone: direct child of $OMNI_HOME with a .git DIRECTORY
 omni_home_abs="$(abs_dir "$OMNI_HOME")" || fail "OMNI_HOME does not exist: $OMNI_HOME"
@@ -87,6 +106,113 @@ repo="$(basename "$clone")"
   || refuse "$clone has no .git directory (a worktree has a .git FILE; worktrees are mutable and are not converged by this script)"
 
 g() { git -C "$clone" "$@"; }
+
+append_ledger_row() {
+  local row="$1"
+  local ledger="$OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md"
+  local lock="$OMNI_HOME/scripts/ledger_lock.py"
+  if [[ -f "$lock" ]]; then
+    python3 "$lock" "$ledger" --append "$row" \
+      || fail "ledger append via ledger_lock.py failed (the ref IS converged; evidence at $evidence)"
+  elif [[ -f "$ledger" ]]; then
+    printf '%s\n' "$row" >> "$ledger"
+  else
+    echo "WARN: no ledger at $ledger; row not recorded:" >&2
+    echo "$row" >&2
+  fi
+}
+
+# --- branch mode (OMN-16500): converge a NON-checked-out branch ref -----------
+if [[ -n "$branch_opt" ]]; then
+  checked_out="$(g symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  [[ "$branch_opt" != "$checked_out" ]] \
+    || refuse "'$branch_opt' is the checked-out branch in $clone; branch mode never moves HEAD -- use the default mode (preserve + reset --hard) for the checked-out branch"
+  g show-ref --verify --quiet "refs/heads/$branch_opt" \
+    || refuse "no local branch '$branch_opt' in $clone"
+  upstream="$(g rev-parse --abbrev-ref --symbolic-full-name "${branch_opt}@{u}" 2>/dev/null)" \
+    || refuse "branch '$branch_opt' in $clone has no upstream configured; refusing to guess a convergence target"
+  remote="${upstream%%/*}"
+
+  g fetch --quiet "$remote" || fail "git fetch $remote failed in $clone"
+
+  branch_before="$(g rev-parse "refs/heads/$branch_opt")"
+  target_sha="$(g rev-parse --verify "${upstream}^{commit}")" || fail "cannot resolve $upstream"
+  ahead="$(g rev-list --count "$upstream..refs/heads/$branch_opt")"
+  behind="$(g rev-list --count "refs/heads/$branch_opt..$upstream")"
+
+  if [[ "$branch_before" == "$target_sha" ]]; then
+    echo "already converged: $repo ($clone) $branch_opt == $upstream ($target_sha)"
+    exit 0
+  fi
+
+  evidence_root="$OMNI_HOME/.onex_state/canonical-clone-converge"
+
+  if (( ! execute )); then
+    cat <<EOF
+DRY-RUN: would converge branch '$branch_opt' of canonical clone '$repo' ($clone)
+  upstream=$upstream (checked-out branch '$checked_out' and working tree untouched)
+  $branch_opt $branch_before -> $target_sha (ahead $ahead, behind $behind)
+  would preserve ahead-commit log/patches/branch-reflog/MANIFEST under $evidence_root/$repo-branch-$branch_opt-<utc>/
+  then run: git -C $clone branch -f $branch_opt $target_sha
+Nothing was changed. Re-run with --execute to perform it.
+EOF
+    exit 0
+  fi
+
+  # --- preserve: the branch's unique commits, as log + per-commit patches ----
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  evidence="$evidence_root/${repo}-branch-${branch_opt}-${ts}"
+  mkdir -p "$evidence/ahead-patches"
+  g log --format='%H %ci %s' "$upstream..refs/heads/$branch_opt" \
+    > "$evidence/ahead-commits.log"
+  if (( ahead > 0 )); then
+    g format-patch --quiet -o "$evidence/ahead-patches" \
+      "$upstream..refs/heads/$branch_opt" >/dev/null
+  fi
+  g reflog show "$branch_opt" -n 20 > "$evidence/branch-reflog.txt" 2>/dev/null || true
+
+  {
+    echo "mode=branch"
+    echo "repo=$repo"
+    echo "clone=$clone"
+    echo "branch=$branch_opt"
+    echo "upstream=$upstream"
+    echo "branch_before=$branch_before"
+    echo "target=$target_sha"
+    echo "utc=$ts"
+    echo "ahead=$ahead behind=$behind"
+    echo "checked_out=${checked_out:-<detached>}"
+    echo "ticket=${ticket:-none}"
+    echo "lane=$lane"
+    for f in ahead-commits.log branch-reflog.txt; do
+      [[ -f "$evidence/$f" ]] && echo "sha256 $(sha256_of "$evidence/$f")  $f"
+    done
+    find "$evidence/ahead-patches" -type f | sort | while IFS= read -r f; do
+      echo "sha256 $(sha256_of "$f")  ahead-patches/${f#"$evidence/ahead-patches/"}"
+    done
+  } > "$evidence/MANIFEST.txt"
+
+  # --- converge: exactly one ref move, nothing else --------------------------
+  g branch -f "$branch_opt" "$target_sha" \
+    || fail "git branch -f $branch_opt $target_sha failed (evidence kept at $evidence)"
+  branch_after="$(g rev-parse "refs/heads/$branch_opt")"
+  [[ "$branch_after" == "$target_sha" ]] \
+    || fail "$branch_opt is $branch_after after branch -f, expected $target_sha"
+
+  # --- record -----------------------------------------------------------------
+  row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | $lane | ${ticket:-$repo} | BRANCH-CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch_opt upstream $upstream; $branch_opt ${branch_before:0:7} -> ${branch_after:0:7} ($ahead ahead / $behind behind); unique commits preserved at $evidence (ahead-commits.log + per-commit patches); git branch -f $branch_opt $target_sha; checked-out branch '${checked_out:-<detached>}' and working tree untouched. No secrets printed."
+  append_ledger_row "$row"
+
+  cat <<EOF
+BRANCH-CONVERGED: $repo ($clone)
+  branch=$branch_opt upstream=$upstream
+  $branch_opt $branch_before -> $branch_after (was ahead $ahead, behind $behind)
+  preserved: $evidence
+  checked-out branch '${checked_out:-<detached>}' and working tree untouched
+EOF
+  exit 0
+fi
+# --- end branch mode ----------------------------------------------------------
 
 branch="$(g symbolic-ref -q --short HEAD 2>/dev/null)" \
   || refuse "detached HEAD in $clone; converging requires a checked-out branch with an upstream"
@@ -176,16 +302,7 @@ head_after="$(g rev-parse HEAD)"
 
 # --- record ------------------------------------------------------------------
 row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | $lane | ${ticket:-$repo} | CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream; HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified HEAD==@{u} and clean tracked tree. No secrets printed."
-ledger="$OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md"
-lock="$OMNI_HOME/scripts/ledger_lock.py"
-if [[ -f "$lock" ]]; then
-  python3 "$lock" "$ledger" --append "$row" || fail "ledger append via ledger_lock.py failed (clone IS converged; evidence at $evidence)"
-elif [[ -f "$ledger" ]]; then
-  printf '%s\n' "$row" >> "$ledger"
-else
-  echo "WARN: no ledger at $ledger; row not recorded:" >&2
-  echo "$row" >&2
-fi
+append_ledger_row "$row"
 
 cat <<EOF
 CONVERGED: $repo ($clone)
