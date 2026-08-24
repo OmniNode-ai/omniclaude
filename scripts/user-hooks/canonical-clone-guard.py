@@ -46,7 +46,9 @@ worktree commands (guard log lines 155/181/206).
 
 Source of truth: omniclaude/scripts/user-hooks/canonical-clone-guard.py,
 installed to ~/.claude/hooks/ by omniclaude/scripts/install-canonical-clone-guard.sh.
-Do not edit the installed copy in place.
+Do not edit the installed copy in place. Decisions are logged to
+$ONEX_STATE_DIR/hooks/canonical-clone-guard.log (default
+$OMNI_HOME/.onex_state/hooks/canonical-clone-guard.log), never under ~/.claude/.
 
 Contract (current Claude Code): to DENY, print
   {"hookSpecificOutput": {"hookEventName": "PreToolUse",
@@ -163,12 +165,25 @@ _UPDATE_INDEX_REFRESH_ONLY = {
 }
 
 
+def _log_path() -> Path | None:
+    """Guard log lives with the other hook state, never under ~/.claude/."""
+    state_dir = os.environ.get("ONEX_STATE_DIR")
+    if not state_dir:
+        omni_home = os.environ.get("OMNI_HOME")
+        if not omni_home:
+            return None
+        state_dir = os.path.join(omni_home, ".onex_state")
+    return Path(state_dir) / "hooks" / "canonical-clone-guard.log"
+
+
 def _log(msg: str) -> None:
     # logging must never break the guard: any failure here is swallowed
     with contextlib.suppress(Exception):
-        log_dir = Path.home() / ".claude" / "hooks" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        with (log_dir / "canonical-clone-guard.log").open("a") as fh:
+        path = _log_path()
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as fh:
             fh.write(msg.rstrip("\n") + "\n")
 
 
@@ -406,17 +421,33 @@ class _Shell:
             return
         if head == "pushd":
             self.stack.append(self.cwd)
+        if len(tokens) > 1 and tokens[1] == "-":
+            _log(f"UNRESOLVED {head} - (OLDPWD unknown); treating location as unknown")
+            self.cwd = None
+            return
         args = [t for t in tokens[1:] if not t.startswith("-")]
         if not args:
             self.cwd = self.env.get("HOME") or None
-            return
-        if tokens[1] == "-":
-            self.cwd = None
             return
         resolved = _resolve_shell_path(args[0], self.cwd, self.env)
         if resolved is None:
             _log(f"UNRESOLVED {head} target {args[0]!r}; treating location as unknown")
         self.cwd = resolved
+
+
+_COMMAND_WRAPPERS = {"bash", "sh", "zsh", "env", "nohup", "time", "command", "exec"}
+
+
+def _invokes_converge_script(tokens: list[str]) -> bool:
+    """True only when the sanctioned script is the command word itself.
+
+    Matching any token would let ``git add converge-canonical-clone.sh`` or
+    ``git commit -m converge-canonical-clone.sh`` launder a mutation.
+    """
+    i = 0
+    while i < len(tokens) and tokens[i] in _COMMAND_WRAPPERS:
+        i += 1
+    return i < len(tokens) and os.path.basename(tokens[i]) == CONVERGE_SCRIPT
 
 
 def _segment_tokens(segment: str) -> list[str]:
@@ -465,7 +496,7 @@ def _iter_bash_checks(
         if tokens[0] in ("cd", "pushd", "popd"):
             shell.change_dir(tokens)
             continue
-        if any(os.path.basename(t) == CONVERGE_SCRIPT for t in tokens):
+        if _invokes_converge_script(tokens):
             _log(f"ALLOW sanctioned {CONVERGE_SCRIPT} invocation: {segment[:200]}")
             continue
         if "git" not in tokens:

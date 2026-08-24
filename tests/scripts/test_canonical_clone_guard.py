@@ -5,8 +5,9 @@
 The system under test is the user-level Claude Code PreToolUse hook that keeps
 agents out of the canonical clones under ``$OMNI_HOME/<repo>`` (omni_home
 CLAUDE.md rule 9). It is driven exactly the way Claude Code drives it: as a
-subprocess with the hook JSON on stdin, ``OMNI_HOME`` in the environment, and
-``HOME`` pointed at a scratch directory so the guard's own log lands there.
+subprocess with the hook JSON on stdin and ``OMNI_HOME`` / ``HOME`` pointed at a
+scratch registry, so the guard's own log lands under the scratch
+``$OMNI_HOME/.onex_state/hooks/`` and nothing touches the real machine.
 
 Gap coverage from the 2026-08-24 omnimarket forensics (ledger row
 2026-08-24T18:29:29Z):
@@ -58,7 +59,7 @@ class Registry:
 
     @property
     def log(self) -> str:
-        path = self.home / ".claude" / "hooks" / "logs" / "canonical-clone-guard.log"
+        path = self.omni_home / ".onex_state" / "hooks" / "canonical-clone-guard.log"
         return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
@@ -99,10 +100,12 @@ def run_guard(
     *,
     with_omni_home: bool = True,
     raw_stdin: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> Verdict:
     env = {"PATH": os.environ.get("PATH", ""), "HOME": str(registry.home)}
     if with_omni_home:
         env["OMNI_HOME"] = str(registry.omni_home)
+    env.update(extra_env or {})
     payload = (
         raw_stdin
         if raw_stdin is not None
@@ -648,3 +651,66 @@ def test_g5_edit_path_with_literal_env_var(registry: Registry) -> None:
         registry.clone("omnimarket"),
     )
     assert not verdict.denied
+
+
+# ---------------------------------------------------------------------------
+# Review follow-ups (omniclaude#2029 CodeRabbit threads)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_log_lives_under_onex_state_not_home_claude(registry: Registry) -> None:
+    verdict = bash(registry, "git commit -m x", registry.clone("omnimarket"))
+    assert verdict.denied
+    assert "DENY Bash 'git commit'" in registry.log
+    assert not (registry.home / ".claude" / "hooks" / "logs").exists()
+
+    state_dir = registry.home / "state-override"
+    verdict = run_guard(
+        registry,
+        "Bash",
+        {"command": "git commit -m y"},
+        registry.clone("omnimarket"),
+        extra_env={"ONEX_STATE_DIR": str(state_dir)},
+    )
+    assert verdict.denied
+    override_log = state_dir / "hooks" / "canonical-clone-guard.log"
+    assert "DENY Bash 'git commit'" in override_log.read_text(encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_cd_dash_is_an_unknown_location(registry: Registry) -> None:
+    verdict = bash(registry, "cd - && git commit -m x", registry.clone("omnimarket"))
+    assert not verdict.denied, verdict.reason
+    assert "UNRESOLVED cd -" in verdict.log
+    # ...but a later cd back to a canonical path is still tracked
+    verdict = bash(
+        registry,
+        f"cd - && cd {registry.clone('omnimarket')} && git commit -m x",
+        registry.home,
+    )
+    assert verdict.denied
+
+
+@pytest.mark.unit
+def test_converge_script_name_as_argument_does_not_launder(registry: Registry) -> None:
+    canonical = registry.clone("omnimarket")
+    for command in (
+        "git add converge-canonical-clone.sh",
+        "git commit -m converge-canonical-clone.sh",
+        f"git add {registry.omni_home}/omniclaude/scripts/converge-canonical-clone.sh",
+        "git checkout -- scripts/converge-canonical-clone.sh",
+    ):
+        verdict = bash(registry, command, canonical)
+        assert verdict.denied, command
+    script = (
+        registry.omni_home / "omniclaude" / "scripts" / "converge-canonical-clone.sh"
+    )
+    for command in (
+        f"{script} omnimarket --execute",
+        f"bash {script} omnimarket --execute",
+        f"env bash {script} omnimarket --execute",
+        f"nohup bash {script} omnimarket --execute",
+    ):
+        verdict = bash(registry, command, registry.home)
+        assert not verdict.denied, (command, verdict.reason)

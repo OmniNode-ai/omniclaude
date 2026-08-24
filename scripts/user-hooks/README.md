@@ -28,6 +28,11 @@ add`, and `worktree remove` of a worktree under `omni_worktrees/`.
 before matching; an unresolvable path is an unknown location and is never
 glued onto cwd.
 
+Every deny / unresolved / sanctioned-allow decision is appended to
+`$ONEX_STATE_DIR/hooks/canonical-clone-guard.log` (default
+`$OMNI_HOME/.onex_state/hooks/canonical-clone-guard.log`). Nothing is written
+under `~/.claude/`.
+
 Redeploy after changing the source:
 
 ```bash
