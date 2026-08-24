@@ -310,3 +310,178 @@ def test_script_carries_no_machine_specific_paths() -> None:
         assert needle not in text
     assert "set -euo pipefail" in text
     assert os.access(SCRIPT, os.X_OK)
+
+
+# --- --branch mode (OMN-16500) ------------------------------------------------
+#
+# The release-synced-main policy rewrites origin/main to the release tag, so a
+# canonical clone's local main -- which still holds the pre-rewrite promotion
+# commits -- can never fast-forward again. main is a release-pointer branch that
+# is never worked on locally, so converging it is always correct, but the move
+# must preserve the orphaned commits first and must not touch the checked-out
+# branch or the working tree.
+
+
+def _setup_rewritten_main(scratch: Scratch) -> tuple[str, str]:
+    """Model the release-synced-main incident shape.
+
+    Gives the remote a ``main``, gives the clone a local ``main`` tracking it
+    with one unique "promotion" commit, then rewrites remote main (force-push)
+    to a history that does not contain that commit. Returns
+    ``(local_main_sha, rewritten_origin_main_sha)``. The clone is left checked
+    out on ``dev`` and does NOT know about the rewrite yet (the script must
+    fetch for itself).
+    """
+    env, clone = scratch.env, scratch.clone
+    seed = scratch.remote.parent / "seed"
+
+    # remote main starts at c0; the clone tracks it
+    git(env, seed, "push", "-q", "origin", f"{scratch.old_head}:refs/heads/main")
+    git(env, clone, "fetch", "-q", "origin")
+    git(env, clone, "branch", "-q", "--track", "main", "origin/main")
+
+    # one local promotion commit on main (the orphan-to-be), back to dev after
+    git(env, clone, "switch", "-q", "main")
+    (clone / "promotion.txt").write_text("promotion artifact\n", encoding="utf-8")
+    git(env, clone, "add", "promotion.txt")
+    git(env, clone, "commit", "-q", "-m", "promotion commit (will be orphaned)")
+    local_main = git(env, clone, "rev-parse", "main")
+    git(env, clone, "switch", "-q", "dev")
+
+    # the release rewrites remote main to an unrelated-descendant history
+    git(
+        env,
+        seed,
+        "push",
+        "-q",
+        "-f",
+        "origin",
+        f"{scratch.upstream_head}:refs/heads/main",
+    )
+    return local_main, scratch.upstream_head
+
+
+@pytest.mark.unit
+def test_branch_dry_run_is_a_no_op(scratch: Scratch) -> None:
+    local_main, target = _setup_rewritten_main(scratch)
+    proc = scratch.run("omnimarket", "--branch", "main")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "DRY-RUN" in proc.stdout
+    assert "--execute" in proc.stdout
+    assert "branch -f" in proc.stdout
+    assert git(scratch.env, scratch.clone, "rev-parse", "main") == local_main
+    assert not scratch.evidence_root.exists()
+    assert scratch.ledger.read_text(encoding="utf-8") == "# ledger\n"
+
+
+@pytest.mark.unit
+def test_branch_execute_converges_without_touching_worktree(
+    scratch: Scratch,
+) -> None:
+    local_main, target = _setup_rewritten_main(scratch)
+    env, clone = scratch.env, scratch.clone
+
+    # dirty the checked-out dev tree: --branch must not touch any of it
+    (clone / "README.md").write_text("uncommitted dev edit\n", encoding="utf-8")
+    (clone / "scratchpad.txt").write_text("untracked\n", encoding="utf-8")
+    dev_head = git(env, clone, "rev-parse", "HEAD")
+
+    proc = scratch.run(
+        "omnimarket",
+        "--branch",
+        "main",
+        "--execute",
+        "--ticket",
+        "OMN-16500",
+        "--lane",
+        "test-lane",
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+
+    # the branch ref converged; nothing else moved
+    assert git(env, clone, "rev-parse", "main") == target
+    assert git(env, clone, "rev-parse", "HEAD") == dev_head
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "dev"
+    assert (clone / "README.md").read_text(encoding="utf-8") == "uncommitted dev edit\n"
+    assert (clone / "scratchpad.txt").read_text(encoding="utf-8") == "untracked\n"
+
+    # preservation evidence: the orphaned promotion commit is kept as log+patch
+    dirs = list(scratch.evidence_root.iterdir())
+    assert len(dirs) == 1
+    evidence = dirs[0]
+    assert "main" in evidence.name
+    ahead_log = (evidence / "ahead-commits.log").read_text(encoding="utf-8")
+    assert local_main in ahead_log
+    assert "promotion commit (will be orphaned)" in ahead_log
+    patches = sorted((evidence / "ahead-patches").glob("*.patch"))
+    assert patches, "no per-commit patches preserved for the orphaned commits"
+    joined = "".join(p.read_text(encoding="utf-8") for p in patches)
+    assert "promotion artifact" in joined
+    manifest = (evidence / "MANIFEST.txt").read_text(encoding="utf-8")
+    assert "mode=branch" in manifest
+    assert f"branch_before={local_main}" in manifest
+    assert f"target={target}" in manifest
+    assert "branch=main" in manifest
+    assert "upstream=origin/main" in manifest
+    assert "sha256 " in manifest
+    assert "ahead-commits.log" in manifest
+
+    ledger = scratch.ledger.read_text(encoding="utf-8")
+    rows = [line for line in ledger.splitlines() if "BRANCH-CONVERGED" in line]
+    assert len(rows) == 1, ledger
+    row = rows[0]
+    assert "| test-lane | OMN-16500 | BRANCH-CONVERGED |" in row
+    assert local_main[:7] in row
+    assert target[:7] in row
+    assert "branch -f" in row
+    assert str(evidence) in row
+
+
+@pytest.mark.unit
+def test_branch_already_converged_is_reported_without_evidence(
+    scratch: Scratch,
+) -> None:
+    _setup_rewritten_main(scratch)
+    proc = scratch.run("omnimarket", "--branch", "main", "--execute")
+    assert proc.returncode == 0, proc.stderr
+    proc2 = scratch.run("omnimarket", "--branch", "main", "--execute")
+    assert proc2.returncode == 0, proc2.stdout + proc2.stderr
+    assert "already converged" in proc2.stdout.lower()
+    # only the first run left evidence
+    assert len(list(scratch.evidence_root.iterdir())) == 1
+
+
+@pytest.mark.unit
+def test_branch_refuses_checked_out_branch(scratch: Scratch) -> None:
+    _setup_rewritten_main(scratch)
+    proc = scratch.run("omnimarket", "--branch", "dev", "--execute")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    combined = (proc.stdout + proc.stderr).lower()
+    assert "checked-out" in combined or "checked out" in combined
+    assert not scratch.evidence_root.exists()
+
+
+@pytest.mark.unit
+def test_branch_refuses_missing_branch_and_missing_upstream(
+    scratch: Scratch,
+) -> None:
+    env, clone = scratch.env, scratch.clone
+    proc = scratch.run("omnimarket", "--branch", "nosuchbranch", "--execute")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "no local branch" in (proc.stdout + proc.stderr).lower()
+
+    git(env, clone, "branch", "-q", "localonly")
+    proc = scratch.run("omnimarket", "--branch", "localonly", "--execute")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "upstream" in (proc.stdout + proc.stderr).lower()
+    assert not scratch.evidence_root.exists()
+
+
+@pytest.mark.unit
+def test_branch_refuses_clean_untracked_combination(scratch: Scratch) -> None:
+    _setup_rewritten_main(scratch)
+    proc = scratch.run(
+        "omnimarket", "--branch", "main", "--execute", "--clean-untracked"
+    )
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "clean-untracked" in (proc.stdout + proc.stderr).lower()
