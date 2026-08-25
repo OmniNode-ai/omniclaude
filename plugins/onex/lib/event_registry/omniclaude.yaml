@@ -20,6 +20,7 @@ events:
   session.started:
     fan_out:
       - topic: "onex.evt.omniclaude.session-started.v1"
+        tier: telemetry
         description: "Session start event for observability"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -27,6 +28,7 @@ events:
   session.ended:
     fan_out:
       - topic: "onex.evt.omniclaude.session-ended.v1"
+        tier: telemetry
         description: "Session end event for observability"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -34,8 +36,10 @@ events:
   session.outcome:
     fan_out:
       - topic: "onex.cmd.omniintelligence.session-outcome.v1"
+        tier: duty_critical
         description: "Session outcome for intelligence feedback loop"
       - topic: "onex.evt.omniclaude.session-outcome.v1"
+        tier: duty_critical
         description: "Session outcome for dashboards and monitoring"
     partition_key_field: session_id
     required_fields: [session_id, outcome]
@@ -43,6 +47,7 @@ events:
   utilization.scoring.requested:
     fan_out:
       - topic: "onex.cmd.omniintelligence.utilization-scoring.v1"
+        tier: telemetry
         description: "Utilization scoring command to omniintelligence"
     partition_key_field: session_id
     required_fields: [session_id, injected_pattern_ids]
@@ -53,8 +58,10 @@ events:
   prompt.submitted:
     fan_out:
       - topic: "onex.cmd.omniintelligence.claude-hook-event.v1"
+        tier: telemetry
         description: "Full prompt to intelligence service for analysis"
       - topic: "onex.evt.omniclaude.prompt-submitted.v1"
+        tier: telemetry
         transform: strip_prompt
         description: "Sanitized 100-char preview for observability"
     partition_key_field: session_id
@@ -66,6 +73,7 @@ events:
   tool.executed:
     fan_out:
       - topic: "onex.evt.omniclaude.tool-executed.v1"
+        tier: telemetry
         description: "Tool execution event for observability"
     partition_key_field: session_id
     required_fields: [tool_name, session_id]
@@ -73,6 +81,7 @@ events:
   tool.content:
     fan_out:
       - topic: "onex.cmd.omniintelligence.tool-content.v1"
+        tier: telemetry
         description: "Tool execution content for omniintelligence pattern learning"
     partition_key_field: session_id
     required_fields: [tool_name_raw, session_id]
@@ -83,6 +92,7 @@ events:
   routing.feedback:
     fan_out:
       - topic: "onex.evt.omniclaude.routing-feedback.v1"
+        tier: telemetry
         description: "Routing feedback for reinforcement learning"
     partition_key_field: session_id
     required_fields: [session_id, outcome, feedback_status]
@@ -90,6 +100,7 @@ events:
   routing.decision:
     fan_out:
       - topic: "onex.evt.omniclaude.routing-decision.v1"
+        tier: telemetry
         description: "Routing decision event for observability"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -97,6 +108,7 @@ events:
   llm.routing.decision:
     fan_out:
       - topic: "onex.evt.omniclaude.llm-routing-decision.v1"
+        tier: telemetry
         description: "LLM routing decision with determinism audit fields"
     partition_key_field: session_id
     required_fields: [session_id, selected_agent, routing_prompt_version]
@@ -104,6 +116,7 @@ events:
   llm.routing.fallback:
     fan_out:
       - topic: "onex.evt.omniclaude.llm-routing-fallback.v1"
+        tier: telemetry
         description: "LLM routing fallback -- pipeline fell through to fuzzy matching"
     partition_key_field: session_id
     required_fields: [session_id, fallback_reason, routing_prompt_version]
@@ -114,6 +127,7 @@ events:
   injection.recorded:
     fan_out:
       - topic: "onex.evt.omniclaude.injection-recorded.v1"
+        tier: telemetry
         description: "Injection tracking for A/B analysis"
     partition_key_field: session_id
     required_fields: [injection_id, session_id, cohort]
@@ -121,6 +135,7 @@ events:
   context.utilization:
     fan_out:
       - topic: "onex.evt.omniclaude.context-utilization.v1"
+        tier: telemetry
         description: "Context utilization metrics"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -128,6 +143,7 @@ events:
   context.enrichment:
     fan_out:
       - topic: "onex.evt.omniclaude.context-enrichment.v1"
+        tier: telemetry
         description: "Per-channel enrichment observability"
     partition_key_field: session_id
     required_fields: [session_id, channel]
@@ -138,6 +154,7 @@ events:
   agent.match:
     fan_out:
       - topic: "onex.evt.omniclaude.agent-match.v1"
+        tier: telemetry
         description: "Agent match metrics"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -145,6 +162,7 @@ events:
   agent.status:
     fan_out:
       - topic: "onex.evt.omniclaude.agent-status.v1"
+        tier: telemetry
         description: "Agent lifecycle status"
     partition_key_field: session_id
     required_fields: [agent_name, session_id, state, message]
@@ -152,6 +170,7 @@ events:
   agent.chat.broadcast:
     fan_out:
       - topic: "onex.evt.omniclaude.agent-chat-broadcast.v1"
+        tier: telemetry
         transform: strip_body
         description: "Agent chat broadcast for multi-terminal coordination"
     partition_key_field: session_id
@@ -163,6 +182,7 @@ events:
   latency.breakdown:
     fan_out:
       - topic: "onex.evt.omniclaude.latency-breakdown.v1"
+        tier: telemetry
         description: "Latency breakdown metrics"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -170,6 +190,7 @@ events:
   phase.metrics:
     fan_out:
       - topic: "onex.evt.omniclaude.phase-metrics.v1"
+        tier: telemetry
         description: "Phase instrumentation metrics"
     required_fields: [event_id, event_type, timestamp_iso, payload]
 
@@ -179,6 +200,7 @@ events:
   response.stopped:
     fan_out:
       - topic: "onex.cmd.omniintelligence.claude-hook-event.v1"
+        tier: telemetry
         description: "Stop hook event for pattern learning trigger"
     required_fields: [session_id, event_type]
 
@@ -188,6 +210,7 @@ events:
   notification.blocked:
     fan_out:
       - topic: "onex.evt.omniclaude.notification-blocked.v1"
+        tier: telemetry
         description: "Notification blocked event"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -195,6 +218,7 @@ events:
   notification.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.notification-completed.v1"
+        tier: telemetry
         description: "Notification completed event"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -205,6 +229,7 @@ events:
   compliance.evaluate:
     fan_out:
       - topic: "onex.cmd.omniintelligence.compliance-evaluate.v1"
+        tier: duty_critical
         description: "Compliance evaluation request"
     partition_key_field: session_id
     required_fields: [session_id, source_path, applicable_patterns]
@@ -212,6 +237,7 @@ events:
   pattern.enforcement:
     fan_out:
       - topic: "onex.evt.omniclaude.pattern-enforcement.v1"
+        tier: duty_critical
         description: "Pattern enforcement evaluation result"
     partition_key_field: session_id
     required_fields: [session_id, correlation_id, timestamp, language, domain, pattern_name, outcome]
@@ -222,6 +248,7 @@ events:
   validator.catch:
     fan_out:
       - topic: "onex.evt.omniclaude.validator-catch.v1"
+        tier: telemetry
         description: "Validator blocked or caught an issue"
     partition_key_field: session_id
     required_fields: [session_id, validator_name, severity]
@@ -232,6 +259,7 @@ events:
   static.context.edit.detected:
     fan_out:
       - topic: "onex.evt.omniclaude.static-context-edit-detected.v1"
+        tier: telemetry
         description: "Static context file change detected"
     partition_key_field: session_id
     required_fields: [session_id, changed_file_count]
@@ -242,6 +270,7 @@ events:
   task.delegated:
     fan_out:
       - topic: "onex.evt.omniclaude.task-delegated.v1"
+        tier: telemetry
         description: "Task delegation event"
     partition_key_field: session_id
     required_fields: [session_id, correlation_id, task_type]
@@ -249,6 +278,7 @@ events:
   delegate.task:
     fan_out:
       - topic: "onex.cmd.omniclaude.delegate-task.v1"
+        tier: duty_critical
         description: "Delegation request command for node_delegation_orchestrator"
     partition_key_field: correlation_id
     required_fields: [payload, correlation_id]
@@ -256,6 +286,7 @@ events:
   delegation.shadow.comparison:
     fan_out:
       - topic: "onex.evt.omniclaude.delegation-shadow-comparison.v1"
+        tier: telemetry
         description: "Shadow validation comparison result"
     partition_key_field: session_id
     required_fields: [session_id, correlation_id]
@@ -263,6 +294,7 @@ events:
   intent.drift.detected:
     fan_out:
       - topic: "onex.evt.omniclaude.agent-action.v1"
+        tier: telemetry
         description: "Intent drift detection event (legacy topic routing)"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -273,6 +305,7 @@ events:
   intent.commit.bound:
     fan_out:
       - topic: "onex.evt.omniclaude.intent-commit-bound.v1"
+        tier: duty_critical
         description: "Intent-to-commit binding record"
     partition_key_field: session_id
     required_fields: [commit_sha, session_id]
@@ -283,6 +316,7 @@ events:
   change.frame.emitted:
     fan_out:
       - topic: "onex.evt.omniclaude.change-frame.v1"
+        tier: duty_critical
         description: "ChangeFrame emitted after JSONL persist"
     partition_key_field: session_id
     required_fields: [frame_id, trace_id, session_id]
@@ -293,6 +327,7 @@ events:
   skill.started:
     fan_out:
       - topic: "onex.evt.omniclaude.skill-started.v1"
+        tier: telemetry
         description: "Skill invocation started"
     partition_key_field: run_id
     required_fields: [run_id, skill_name, correlation_id]
@@ -300,8 +335,10 @@ events:
   skill.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.skill-completed.v1"
+        tier: telemetry
         description: "Skill invocation completed"
       - topic: "onex.evt.omniclaude.skill-invoked.v1"
+        tier: telemetry
         description: "Skill invocation record for omnidash"
     partition_key_field: run_id
     required_fields: [run_id, skill_name, correlation_id, status]
@@ -314,6 +351,7 @@ events:
   friction.observed:
     fan_out:
       - topic: "onex.evt.omniclaude.friction-observed.v1"
+        tier: telemetry
         description: "Friction observation event"
     partition_key_field: session_id
     required_fields: [session_id, surface, severity]
@@ -324,6 +362,7 @@ events:
   epic.run.updated:
     fan_out:
       - topic: "onex.evt.omniclaude.epic-run-updated.v1"
+        tier: telemetry
         description: "Epic run state update"
     partition_key_field: run_id
     required_fields: [run_id, epic_id, status]
@@ -331,6 +370,7 @@ events:
   pr.watch.updated:
     fan_out:
       - topic: "onex.evt.omniclaude.pr-watch-updated.v1"
+        tier: telemetry
         description: "PR watch state update"
     partition_key_field: run_id
     required_fields: [run_id, pr_number, repo, status]
@@ -338,6 +378,7 @@ events:
   gate.decision:
     fan_out:
       - topic: "onex.evt.omniclaude.gate-decision.v1"
+        tier: duty_critical
         description: "Slack gate decision outcome"
     partition_key_field: gate_id
     required_fields: [gate_id, decision, correlation_id]
@@ -345,6 +386,7 @@ events:
   budget.cap.hit:
     fan_out:
       - topic: "onex.evt.omniclaude.budget-cap-hit.v1"
+        tier: telemetry
         description: "Token budget cap hit"
     partition_key_field: run_id
     required_fields: [run_id, tokens_used, tokens_budget]
@@ -352,6 +394,7 @@ events:
   circuit.breaker.tripped:
     fan_out:
       - topic: "onex.evt.omniclaude.circuit-breaker-tripped.v1"
+        tier: telemetry
         description: "Kafka circuit breaker opened"
     partition_key_field: session_id
     required_fields: [session_id, failure_count, threshold]
@@ -362,6 +405,7 @@ events:
   pr.validation.rollup:
     fan_out:
       - topic: "onex.evt.omniclaude.pr-validation-rollup.v1"
+        tier: telemetry
         description: "PR validation rollup with VTS"
     partition_key_field: run_id
     required_fields: [run_id, ticket_id, model_id, metric_version]
@@ -372,6 +416,7 @@ events:
   dod.verify.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
+        tier: duty_critical
         description: "DoD evidence verification run result"
     partition_key_field: session_id
     required_fields: [session_id, ticket_id]
@@ -379,6 +424,7 @@ events:
   dod.guard.fired:
     fan_out:
       - topic: "onex.evt.omniclaude.dod-guard-fired.v1"
+        tier: duty_critical
         description: "DoD completion guard interception"
     partition_key_field: session_id
     required_fields: [session_id, ticket_id]
@@ -386,6 +432,7 @@ events:
   dod.sweep.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.dod-sweep-completed.v1"
+        tier: duty_critical
         description: "DoD batch sweep result"
     partition_key_field: run_id
     required_fields: [run_id, overall_status, total_tickets]
@@ -396,6 +443,7 @@ events:
   evidence.written:
     fan_out:
       - topic: "onex.evt.omniclaude.evidence-written.v1"
+        tier: telemetry
         description: "Evidence artifact written to disk"
     partition_key_field: session_id
     required_fields: [session_id, ticket_id]
@@ -406,6 +454,7 @@ events:
   correlation.trace.span:
     fan_out:
       - topic: "onex.evt.omniclaude.correlation-trace.v1"
+        tier: telemetry
         description: "Trace span event"
     partition_key_field: trace_id
     required_fields: [span_id, trace_id, session_id, span_kind, operation_name]
@@ -416,6 +465,7 @@ events:
   audit.dispatch.validated:
     fan_out:
       - topic: "onex.evt.omniclaude.audit-dispatch-validated.v1"
+        tier: duty_critical
         description: "Task dispatch validation result"
     partition_key_field: task_id
     required_fields: [task_id, contract_id, agent_type]
@@ -423,6 +473,7 @@ events:
   audit.scope.violation:
     fan_out:
       - topic: "onex.evt.omniclaude.audit-scope-violation.v1"
+        tier: duty_critical
         description: "Scope boundary violation"
     partition_key_field: task_id
     required_fields: [task_id, violation_type, enforcement_action]
@@ -433,6 +484,7 @@ events:
   plan.review.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.plan-review-completed.v1"
+        tier: telemetry
         description: "Plan review strategy run result"
     partition_key_field: session_id
     required_fields: [session_id, plan_file, total_rounds, final_status]
@@ -440,6 +492,7 @@ events:
   hostile.reviewer.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.hostile-reviewer-completed.v1"
+        tier: telemetry
         description: "Multi-model hostile review aggregated result"
     partition_key_field: pr_number
     required_fields: [pr_number, repo, verdict]
@@ -447,6 +500,7 @@ events:
   hostile.reviewer.failed:
     fan_out:
       - topic: "onex.evt.omniclaude.hostile-reviewer-failed.v1"
+        tier: telemetry
         description: "Multi-model hostile review failure"
     partition_key_field: pr_number
     required_fields: [pr_number, repo]
@@ -457,6 +511,7 @@ events:
   coordination.signal:
     fan_out:
       - topic: "onex.evt.omniclaude.session-coordination-signal.v1"
+        tier: telemetry
         description: "Coordination signal for session registry"
     partition_key_field: session_id
     required_fields: [session_id, signal_type, task_id]
@@ -467,6 +522,7 @@ events:
   team.task.assigned:
     fan_out:
       - topic: "onex.evt.omniclaude.team-task-assigned.v1"
+        tier: telemetry
         description: "Team task assignment"
     partition_key_field: session_id
     required_fields: [session_id]
@@ -474,6 +530,7 @@ events:
   team.task.progress:
     fan_out:
       - topic: "onex.evt.omniclaude.team-task-progress.v1"
+        tier: telemetry
         description: "Team task progress update"
     partition_key_field: session_id
     required_fields: [session_id, task_id]
@@ -481,6 +538,7 @@ events:
   team.task.completed:
     fan_out:
       - topic: "onex.evt.omniclaude.team-task-completed.v1"
+        tier: telemetry
         description: "Team task completion"
     partition_key_field: session_id
     required_fields: [session_id, task_id]
@@ -488,6 +546,7 @@ events:
   team.evidence.written:
     fan_out:
       - topic: "onex.evt.omniclaude.team-evidence-written.v1"
+        tier: telemetry
         description: "Team evidence artifact written"
     partition_key_field: session_id
     required_fields: [session_id, task_id]
@@ -498,6 +557,7 @@ events:
   hook.health.error:
     fan_out:
       - topic: "onex.evt.omniclaude.hook-health-error.v1"
+        tier: telemetry
         description: "Structured hook error event"
     partition_key_field: session_id
     required_fields: [hook_name, error_tier, error_category, session_id]
