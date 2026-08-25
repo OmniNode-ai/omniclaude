@@ -55,28 +55,36 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 
 ### Architecture (`architecture/`)
 
-| Document | Purpose |
-|---|---|
-| [HOOK_DATA_FLOW.md](architecture/HOOK_DATA_FLOW.md) | UserPromptSubmit sync/async flow, timing |
-| [EMIT_DAEMON_ARCHITECTURE.md](architecture/EMIT_DAEMON_ARCHITECTURE.md) | Unix socket daemon, fan-out, dual-emission |
-| [AGENT_ROUTING_ARCHITECTURE.md](architecture/AGENT_ROUTING_ARCHITECTURE.md) | Fuzzy + LLM routing, candidate list injection |
-| [CONTEXT_ENRICHMENT_PIPELINE.md](architecture/CONTEXT_ENRICHMENT_PIPELINE.md) | Multi-channel enrichment pipeline |
-| [COMPLIANCE_ENFORCEMENT_ARCHITECTURE.md](architecture/COMPLIANCE_ENFORCEMENT_ARCHITECTURE.md) | PostToolUse enforcement, PatternAdvisory |
-| [DELEGATION_ARCHITECTURE.md](architecture/DELEGATION_ARCHITECTURE.md) | Task classifier, local LLM, quality gate |
-| [LLM_ROUTING_ARCHITECTURE.md](architecture/LLM_ROUTING_ARCHITECTURE.md) | Endpoint registry, token-count routing |
-| [SERVICE-BOUNDARIES.md](architecture/SERVICE-BOUNDARIES.md) | Omniclaude vs omniintelligence service ownership |
-| [skill-lifecycle.md](architecture/skill-lifecycle.md) | When a skill stays here vs. moves to omnimarket |
+**Moved.** Every file in this directory has been migrated to the public knowledge base and
+thinned in this repo to a pointer — see [`docs-taxonomy.md`'s Bucket A](https://github.com/OmniNode-ai/knowledge-base/blob/main/docs-taxonomy.md).
+Local files still resolve (they carry the pointer line), so the links below are not broken,
+but the content lives at:
 
-> **Note**: `architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md` and `architecture/ROUTING_ARCHITECTURE_COMPARISON.md` are ⚠️ Deprecated — they describe a superseded routing proposal. See banners within those files.
+| Local file | Knowledge-base destination |
+|---|---|
+| [HOOK_DATA_FLOW.md](architecture/HOOK_DATA_FLOW.md) | [`architecture/hook-data-flow.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md) |
+| [EMIT_DAEMON_ARCHITECTURE.md](architecture/EMIT_DAEMON_ARCHITECTURE.md) | [`architecture/emit-daemon-architecture.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/emit-daemon-architecture.md) |
+| [AGENT_ROUTING_ARCHITECTURE.md](architecture/AGENT_ROUTING_ARCHITECTURE.md) | [`architecture/agent-routing-architecture.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/agent-routing-architecture.md) |
+| [CONTEXT_ENRICHMENT_PIPELINE.md](architecture/CONTEXT_ENRICHMENT_PIPELINE.md) | [`architecture/context-enrichment-pipeline.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/context-enrichment-pipeline.md) |
+| [COMPLIANCE_ENFORCEMENT_ARCHITECTURE.md](architecture/COMPLIANCE_ENFORCEMENT_ARCHITECTURE.md) | [`architecture/compliance-enforcement-architecture.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/compliance-enforcement-architecture.md) |
+| [DELEGATION_ARCHITECTURE.md](architecture/DELEGATION_ARCHITECTURE.md) | [`architecture/delegation-architecture.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/delegation-architecture.md) (status: deprecated — the bridge it describes was removed) |
+| [LLM_ROUTING_ARCHITECTURE.md](architecture/LLM_ROUTING_ARCHITECTURE.md) | [`architecture/llm-routing-architecture.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/llm-routing-architecture.md) |
+| [SERVICE-BOUNDARIES.md](architecture/SERVICE-BOUNDARIES.md) | [`architecture/service-boundaries.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/service-boundaries.md) |
+| [skill-lifecycle.md](architecture/skill-lifecycle.md) | [`architecture/omniclaude-skill-lifecycle.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-skill-lifecycle.md) |
+| [EVENT_DRIVEN_ROUTING_PROPOSAL.md](architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md) | [`architecture/event-driven-routing-proposal.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/event-driven-routing-proposal.md) (status: superseded) |
+| [ROUTING_ARCHITECTURE_COMPARISON.md](architecture/ROUTING_ARCHITECTURE_COMPARISON.md) | [`architecture/routing-architecture-comparison.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/routing-architecture-comparison.md) (status: superseded) |
+| [charter.md](architecture/charter.md) | [`architecture/omniclaude-repo-charter.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-repo-charter.md) |
 
 ### Guides (`guides/`)
 
-| Document | Purpose |
+**Moved.** Same as Architecture above — content now lives at:
+
+| Local file | Knowledge-base destination |
 |---|---|
-| [ADDING_A_HOOK_HANDLER.md](guides/ADDING_A_HOOK_HANDLER.md) | Step-by-step: create, wire, test a handler |
-| [ADDING_AN_AGENT.md](guides/ADDING_AN_AGENT.md) | Create agent YAML and test routing |
-| [ADDING_A_SKILL.md](guides/ADDING_A_SKILL.md) | Create skill directory and SKILL.md |
-| [TESTING_GUIDE.md](guides/TESTING_GUIDE.md) | Unit test patterns, mocking Kafka, no-daemon testing |
+| [ADDING_A_HOOK_HANDLER.md](guides/ADDING_A_HOOK_HANDLER.md) | [`guides/adding-a-hook-handler.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-hook-handler.md) |
+| [ADDING_AN_AGENT.md](guides/ADDING_AN_AGENT.md) | [`guides/adding-an-agent.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-an-agent.md) |
+| [ADDING_A_SKILL.md](guides/ADDING_A_SKILL.md) | [`guides/adding-a-skill.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) |
+| [TESTING_GUIDE.md](guides/TESTING_GUIDE.md) | [`guides/omniclaude-testing-guide.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/omniclaude-testing-guide.md) |
 
 ### Reference (`reference/`)
 
@@ -101,10 +109,16 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 
 ### Standards (`standards/`)
 
-| Document | Purpose |
+**Moved.** Every file in this directory has been migrated to the knowledge base's `reference/`
+section (the taxonomy's destination for standards-type content) and thinned here to a pointer:
+
+| Local file | Knowledge-base destination |
 |---|---|
-| [STANDARD_DOC_LAYOUT.md](standards/STANDARD_DOC_LAYOUT.md) | Documentation structure and naming rules |
-| [CI_CD_STANDARDS.md](standards/CI_CD_STANDARDS.md) | CI pipeline jobs and gate aggregators |
+| [STANDARD_DOC_LAYOUT.md](standards/STANDARD_DOC_LAYOUT.md) | [`reference/omniclaude-standard-doc-layout.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-standard-doc-layout.md) |
+| [CI_CD_STANDARDS.md](standards/CI_CD_STANDARDS.md) | [`reference/omniclaude-ci-cd-standards.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-ci-cd-standards.md) |
+| [EVENT_ENVELOPE_FIELD_NAMES.md](standards/EVENT_ENVELOPE_FIELD_NAMES.md) | [`reference/event-envelope-field-names.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/event-envelope-field-names.md) |
+| [TEST_DISCIPLINE.md](standards/TEST_DISCIPLINE.md) | [`reference/omniclaude-test-discipline.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-test-discipline.md) |
+| [VERIFICATION_DOCTRINE.md](standards/VERIFICATION_DOCTRINE.md) | [`reference/omniclaude-verification-doctrine.md`](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-verification-doctrine.md) |
 
 ### Also Available
 
