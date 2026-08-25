@@ -70,6 +70,11 @@ _RUN_TIMEOUT_SECONDS = 120
 #: rename shows up as a failing assertion instead of a silently vacuous probe.
 _BACKING_NODE = "node_delegate_skill_orchestrator"
 
+#: git remote `node_package` (omnimarket) installs from as of OMN-16528 — a
+#: PyPI version pin cannot satisfy the omnimarket_drift_guard (see below), so
+#: the declared requirement is a PEP 508 direct git reference, not `name>=ver`.
+_OMNIMARKET_GIT_URL = "https://github.com/OmniNode-ai/omnimarket.git"
+
 
 def _compat() -> dict:
     return yaml.safe_load(COMPAT_YAML.read_text())["onex_cli"]
@@ -82,8 +87,35 @@ def _uv() -> str:
     return resolved
 
 
+def _resolve_omnimarket_ref() -> str:
+    """Resolve the git ref this test installs `omnimarket` from (OMN-16528).
+
+    Mirrors install_hint's own resolution exactly, so a pass here is proof
+    that hint actually works: prefer `$OMNI_HOME/omnimarket`'s own
+    checked-out commit when that canonical clone exists (the EXACT commit
+    `omnimarket_drift_guard.canonical_local_omnimarket_commit` will later
+    compare an installed venv against — a local dev machine, not CI), else
+    fall back to the live `dev` branch tip (CI has no `$OMNI_HOME`).
+    """
+    omni_home = os.environ.get("OMNI_HOME")
+    if omni_home:
+        clone = Path(omni_home) / "omnimarket"
+        if (clone / ".git").exists():
+            result = subprocess.run(  # nosec B603
+                ["git", "-C", str(clone), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            sha = result.stdout.strip()
+            if result.returncode == 0 and len(sha) == 40:
+                return sha
+    return "dev"
+
+
 def _declared_requirements(cli: dict) -> list[str]:
-    """The exact requirement strings a user following the manifests would type.
+    """The exact requirement strings `install_hint` resolves to right now.
 
     All three packages, because all three are load-bearing: the console script,
     the subcommand, and the node the subcommand dispatches (OMN-16191).
@@ -91,7 +123,7 @@ def _declared_requirements(cli: dict) -> list[str]:
     return [
         f"{cli['console_script_package']}>={cli['console_script_min_version']}",
         f"{cli['package']}>={cli['min_version']}",
-        f"{cli['node_package']}>={cli['node_package_min_version']}",
+        f"{cli['node_package']} @ git+{_OMNIMARKET_GIT_URL}@{_resolve_omnimarket_ref()}",
     ]
 
 
@@ -202,6 +234,37 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
         f"{venv} — the node is being picked up from a local workspace rather "
         "than the installed package, so this proves nothing about a clean install"
     )
+
+    # OMN-16528: prove the CLI's own pre-flight drift guard accepts this
+    # exact install, not just that it installs and the node resolves. Only
+    # meaningful on a machine with $OMNI_HOME set and a canonical omnimarket
+    # clone checked out (true locally, not in CI) -- omnimarket_drift_guard
+    # fails OPEN when it cannot determine a canonical commit to compare
+    # against, so there would be nothing to prove there.
+    omni_home = os.environ.get("OMNI_HOME")
+    if omni_home and (Path(omni_home) / "omnimarket" / ".git").exists():
+        guard_probe = (
+            "from omnibase_infra.cli.omnimarket_drift_guard import check_omnimarket_drift;"
+            f"check_omnimarket_drift(omni_home={omni_home!r});"
+            "print('NO_DRIFT')"
+        )
+        guard = subprocess.run(  # nosec B603
+            [str(venv / "bin" / "python"), "-c", guard_probe],
+            cwd=scratch,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_RUN_TIMEOUT_SECONDS,
+        )
+        assert guard.returncode == 0 and "NO_DRIFT" in guard.stdout, (
+            "omnimarket_drift_guard.check_omnimarket_drift() rejected the "
+            f"install produced by the declared pins {requirements} — this is "
+            "the exact OMN-16528 defect: the documented install recipe must "
+            "satisfy `onex delegate`'s own pre-flight guard, not merely "
+            f"install and resolve the node.\nstdout:\n{guard.stdout}\n"
+            f"stderr:\n{guard.stderr}"
+        )
 
 
 @pytest.mark.unit
