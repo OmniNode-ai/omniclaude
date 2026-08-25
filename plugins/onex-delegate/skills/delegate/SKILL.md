@@ -53,14 +53,14 @@ source of truth):
 
 **`omnimarket` MUST be installed from git, not a PyPI version pin.** `onex
 delegate` runs a pre-flight drift guard
-(`omnibase_infra.cli.omnimarket_drift_guard`, OMN-13930) before every REAL
+(`omnibase_infra.cli.omnimarket_drift_guard`) before every REAL
 dispatch — `--help` below is answered before the guard ever runs. On any
 machine with `$OMNI_HOME` set and a canonical `omnimarket` clone checked out
 at `$OMNI_HOME/omnimarket` (true for every OmniNode dev workspace) the guard
 REJECTS an `omnimarket` install that is not a git-VCS install matching that
 clone's checked-out commit exactly. `omnimarket>=0.4.7` (PyPI) carries no VCS
 provenance and fails this check by construction, every time — not
-intermittently (OMN-16528, live-reproduced).
+intermittently (live-reproduced).
 
 The commands below resolve the ref dynamically: pinned to
 `$OMNI_HOME/omnimarket`'s own checked-out commit when that clone exists (an
@@ -87,10 +87,10 @@ drift guard covers, the first real invocation instead fails with
 entry-point group over **installed distributions**, so once installed this
 way no further `$OMNI_HOME` access is needed to dispatch.
 
-Proven end-to-end 2026-08-25 (OMN-16528): a scratch venv built from exactly
-this recipe passes `omnimarket_drift_guard.check_omnimarket_drift()` with
-zero drift and resolves `node_delegate_skill_orchestrator` from the
-installed distribution, not a workspace checkout
+Proven end-to-end: a scratch venv built from exactly this recipe passes
+`omnimarket_drift_guard.check_omnimarket_drift()` with zero drift and
+resolves `node_delegate_skill_orchestrator` from the installed
+distribution, not a workspace checkout
 (`plugins/onex-delegate/tests/test_install_works.py`).
 
 **Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever
