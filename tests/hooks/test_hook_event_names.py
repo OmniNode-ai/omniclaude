@@ -122,6 +122,41 @@ def test_guard_script_flags_missing_hook_event_name() -> None:
         assert "subagent-start.sh" in result.stderr
 
 
+def test_guard_script_ignores_comment_hook_event_name_coverage() -> None:
+    """A nearby comment must not satisfy a hookSpecificOutput emission."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_root = pathlib.Path(tmp)
+        hook_dir = tmp_root / "plugins" / "onex" / "hooks" / "scripts"
+        hook_dir.mkdir(parents=True)
+        scripts_dir = tmp_root / "scripts"
+        scripts_dir.mkdir()
+        shutil.copy2(GUARD_SCRIPT, scripts_dir / GUARD_SCRIPT.name)
+        (scripts_dir / GUARD_SCRIPT.name).chmod(0o755)
+
+        target = hook_dir / "comment-masked.sh"
+        target.write_text(
+            "\n".join(
+                [
+                    "#!/bin/bash",
+                    "# hookEventName appears here but is only prose.",
+                    "printf '%s\\n' '{\"hookSpecificOutput\": {}}'",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["bash", str(scripts_dir / GUARD_SCRIPT.name)],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tmp_root,
+        )
+        assert result.returncode == 1
+        assert "comment-masked.sh" in result.stderr
+
+
 def test_cron_action_guard_emits_hook_event_name() -> None:
     """cron_action_guard.py must emit hookEventName=PostToolUse when it fires."""
     import importlib.util
