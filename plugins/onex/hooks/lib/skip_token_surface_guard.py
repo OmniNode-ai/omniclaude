@@ -268,7 +268,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--hook-event",
         default="Stop",
         choices=("Stop", "SubagentStop"),
-        help="Claude Code hook event name for hookSpecificOutput.",
+        help="Claude Code hook event name for hookSpecificOutput.",  # hook-event-name: not-an-emission
     )
     parser.add_argument(
         "--scan-session-evidence",
