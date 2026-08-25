@@ -28,21 +28,21 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "auto-merge.yml"
 
 
-def _extract_resolve_step_script() -> str:
-    """Pull the inline Bash from the ``Resolve PR and author`` step.
+def _extract_step_script(step_name_marker: str) -> str:
+    """Pull the inline Bash ``run:`` body from a named workflow step.
 
     Failing to extract a valid script is itself a test failure -- it means the
     YAML structure drifted and the test is no longer bound to the workflow.
     """
     text = WORKFLOW_PATH.read_text()
     lines = text.splitlines(keepends=True)
-    # Locate the start of the Resolve step's run block.
+    # Locate the start of the named step's run block.
     in_step = False
     in_run = False
     body_lines: list[str] = []
     for line in lines:
         if not in_step:
-            if "- name: Resolve PR and author" in line:
+            if step_name_marker in line:
                 in_step = True
             continue
         if not in_run:
@@ -60,11 +60,22 @@ def _extract_resolve_step_script() -> str:
             continue
         break
     assert body_lines, (
-        "Could not extract Resolve step script from auto-merge.yml; "
-        "workflow YAML structure changed. Test must be updated to match."
+        f"Could not extract '{step_name_marker}' step script from "
+        "auto-merge.yml; workflow YAML structure changed. Test must be "
+        "updated to match."
     )
     # Strip the 10-space YAML indent so Bash sees a normal script.
     return dedent("".join(body_lines))
+
+
+def _extract_resolve_step_script() -> str:
+    """Pull the inline Bash from the ``Resolve PR and author`` step."""
+    return _extract_step_script("- name: Resolve PR and author")
+
+
+def _extract_enable_auto_merge_step_script() -> str:
+    """Pull the inline Bash from the ``Enable auto-merge`` step."""
+    return _extract_step_script("- name: Enable auto-merge")
 
 
 @pytest.fixture
@@ -210,18 +221,32 @@ class TestAutoMergeStackedPrDetection:
 @pytest.mark.unit
 class TestAutoMergeWorkflowYaml:
     """YAML-level invariants that protect queue enrollment behavior and the
-    stacked-PR detection block from regressions (OMN-9353)."""
+    stacked-PR detection block from regressions (OMN-9353, OMN-16501)."""
 
-    def test_merge_command_lets_queue_pick_method(self) -> None:
+    def test_merge_command_tries_bare_auto_first(self) -> None:
         """OMN-13214: queue-controlled branches reject an explicit merge
-        method, so the workflow arms auto-merge without ``--squash`` and then
-        calls enqueuePullRequest explicitly."""
+        method, so the workflow's first attempt must still arm auto-merge
+        without ``--squash`` before falling back (queue picks the method,
+        then calls enqueuePullRequest explicitly)."""
         text = WORKFLOW_PATH.read_text()
         assert 'gh pr merge "$PR" --repo "$GH_REPO" --auto 2>&1' in text, (
-            "auto-merge.yml must arm auto-merge without an explicit merge method"
+            "auto-merge.yml must still try bare --auto first (queue-controlled path)"
         )
-        assert 'gh pr merge "$PR" --repo "$GH_REPO" --auto --squash' not in text, (
-            "auto-merge.yml must not pass --squash on queue-controlled branches"
+
+    def test_merge_command_has_squash_fallback_for_no_queue(self) -> None:
+        """OMN-16501: two-strike defect (omniclaude#2029, #2030) — gh's CLI
+        refuses a method-less --auto non-interactively when no merge queue is
+        active, even on a squash-only repo. The workflow must retry with
+        --squash gated on that specific gh-CLI-side error string, so a
+        genuine queue-controlled rejection ("merge strategy ... set by the
+        merge queue") is never retried with an explicit method."""
+        text = WORKFLOW_PATH.read_text()
+        assert 'gh pr merge "$PR" --repo "$GH_REPO" --auto --squash 2>&1' in text, (
+            "auto-merge.yml must retry with --squash when no merge queue is active"
+        )
+        assert "required when not running interactively" in text, (
+            "the --squash retry must be gated on gh's specific "
+            "non-interactive-method error, not a blanket catch-all"
         )
 
     def test_resolve_step_compares_base_to_default_branch(self) -> None:
@@ -232,6 +257,164 @@ class TestAutoMergeWorkflowYaml:
         assert "--json baseRefName" in text
         assert "--json defaultBranchRef" in text
         assert 'if [ "$BASE_REF" != "$DEFAULT_BRANCH" ]' in text
+
+
+@pytest.fixture
+def gh_merge_stub_dir(tmp_path: Path) -> Path:
+    """Stub ``gh`` CLI for the ``Enable auto-merge`` step's two possible
+    ``gh pr merge`` invocations (bare ``--auto`` and the ``--auto --squash``
+    fallback), each independently scripted to succeed or fail via env vars.
+    """
+    stub = tmp_path / "gh"
+    stub.write_text(
+        dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            args="$*"
+            case "$args" in
+              *"--auto --squash"*)
+                if [ "${STUB_SQUASH_RESULT:-success}" = "success" ]; then
+                  echo "${STUB_SQUASH_OUTPUT:-auto-merge enabled}"
+                  exit 0
+                else
+                  echo "${STUB_SQUASH_OUTPUT:-squash attempt failed}" >&2
+                  exit 1
+                fi
+                ;;
+              *"--auto"*)
+                if [ "${STUB_BARE_RESULT:-success}" = "success" ]; then
+                  echo "${STUB_BARE_OUTPUT:-auto-merge enabled}"
+                  exit 0
+                else
+                  echo "${STUB_BARE_OUTPUT:-bare attempt failed}" >&2
+                  exit 1
+                fi
+                ;;
+              *)
+                echo "unexpected gh invocation: $args" >&2
+                exit 99
+                ;;
+            esac
+            """
+        )
+    )
+    stub.chmod(0o755)
+    return tmp_path
+
+
+def _run_enable_auto_merge(
+    *,
+    gh_merge_stub_dir: Path,
+    bare_result: str = "success",
+    bare_output: str = "",
+    squash_result: str = "success",
+    squash_output: str = "",
+) -> subprocess.CompletedProcess[str]:
+    """Run the extracted ``Enable auto-merge`` Bash against the stub."""
+    script = _extract_enable_auto_merge_step_script()
+    env = {
+        "PATH": f"{gh_merge_stub_dir}:/usr/bin:/bin",
+        "GH_TOKEN": "stub-token",
+        "GH_REPO": "OmniNode-ai/omniclaude",
+        "PR": "2029",
+        "STUB_BARE_RESULT": bare_result,
+        "STUB_BARE_OUTPUT": bare_output,
+        "STUB_SQUASH_RESULT": squash_result,
+        "STUB_SQUASH_OUTPUT": squash_output,
+    }
+    return subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+
+@pytest.mark.unit
+class TestAutoMergeEnableStep:
+    """Behavioral coverage for the ``Enable auto-merge`` step's retry logic
+    (OMN-16501). Extracts the live Bash from the YAML so the tests are bound
+    to the deployed logic, not a re-implementation of it."""
+
+    def test_bare_auto_success_does_not_retry(self, gh_merge_stub_dir: Path) -> None:
+        """Queue-controlled regime (OMN-13214): bare --auto succeeding must
+        not trigger the --squash fallback at all."""
+        result = _run_enable_auto_merge(
+            gh_merge_stub_dir=gh_merge_stub_dir,
+            bare_result="success",
+            bare_output="Auto-merge enabled",
+        )
+        assert result.returncode == 0, result.stderr
+        assert "auto-merge enabled:" in result.stdout
+        assert "(squash)" not in result.stdout
+
+    def test_already_enqueued_is_benign_no_retry(self, gh_merge_stub_dir: Path) -> None:
+        """A benign 'already enqueued' race must exit 0 without invoking the
+        --squash retry (the squash stub is set to fail, proving it was never
+        called)."""
+        result = _run_enable_auto_merge(
+            gh_merge_stub_dir=gh_merge_stub_dir,
+            bare_result="failure",
+            bare_output="pull request already enqueued",
+            squash_result="failure",
+            squash_output="must not be invoked",
+        )
+        assert result.returncode == 0, result.stderr
+        assert "not newly enabled (expected)" in result.stdout
+
+    def test_no_active_queue_retries_with_squash(self, gh_merge_stub_dir: Path) -> None:
+        """OMN-16501 reproduction: bare --auto rejected non-interactively
+        (no active merge queue) must retry with --squash and succeed."""
+        result = _run_enable_auto_merge(
+            gh_merge_stub_dir=gh_merge_stub_dir,
+            bare_result="failure",
+            bare_output=(
+                "--merge, --rebase, or --squash required when not running interactively"
+            ),
+            squash_result="success",
+            squash_output="Auto-merge enabled",
+        )
+        assert result.returncode == 0, result.stderr
+        assert "bare --auto rejected" in result.stdout
+        assert "auto-merge enabled (squash):" in result.stdout
+
+    def test_squash_retry_failure_still_propagates(
+        self, gh_merge_stub_dir: Path
+    ) -> None:
+        """If the --squash retry itself fails for a real reason, the step
+        must still fail loudly rather than swallow the error."""
+        result = _run_enable_auto_merge(
+            gh_merge_stub_dir=gh_merge_stub_dir,
+            bare_result="failure",
+            bare_output=(
+                "--merge, --rebase, or --squash required when not running interactively"
+            ),
+            squash_result="failure",
+            squash_output="some unrelated permanent error",
+        )
+        assert result.returncode == 1
+        assert "auto-merge failed:" in result.stdout
+
+    def test_queue_controlled_rejection_is_not_retried_with_squash(
+        self, gh_merge_stub_dir: Path
+    ) -> None:
+        """A genuine queue-controlled rejection ('merge strategy ... set by
+        the merge queue') is a DIFFERENT error than gh's non-interactive
+        method requirement and must NOT trigger the --squash retry — passing
+        an explicit method on a queue-controlled branch is itself rejected
+        (OMN-13214). The squash stub is set to succeed, proving it was never
+        reached."""
+        result = _run_enable_auto_merge(
+            gh_merge_stub_dir=gh_merge_stub_dir,
+            bare_result="failure",
+            bare_output="The merge strategy for dev is set by the merge queue",
+            squash_result="success",
+        )
+        assert result.returncode == 1
+        assert "auto-merge failed:" in result.stdout
+        assert "(squash)" not in result.stdout
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run helper
