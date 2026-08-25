@@ -9,8 +9,14 @@ def test_charter_file_exists():
 
 
 def test_charter_declares_scope_boundary():
+    """The charter's scope-boundary prose (plugin scaffolding / omnimarket /
+    business logic split) now lives in the knowledge base
+    (architecture/omniclaude-repo-charter.md) -- this repo's copy was thinned
+    to the taxonomy pointer per the Wave 2 docs migration. Assert the pointer
+    is intact rather than the prose, which no longer lives here."""
     charter = Path("docs/architecture/charter.md")
     text = charter.read_text()
-    assert "plugin scaffolding" in text
-    assert "omnimarket" in text
-    assert "business logic" in text
+    assert (
+        "Full documentation \u2192 https://github.com/OmniNode-ai/knowledge-base"
+        in text
+    )
