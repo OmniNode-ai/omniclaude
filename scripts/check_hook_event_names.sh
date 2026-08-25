@@ -119,6 +119,8 @@ while IFS= read -r file; do
         hi = i + window; if (hi > NR) hi = NR
         covered = 0
         for (j = lo; j <= hi; j++) {
+          if (line[j] ~ /^[[:space:]]*#/) continue
+          if (indoc[j]) continue
           if (index(line[j], "hookEventName") > 0) { covered = 1; break }
         }
         if (!covered) print i
