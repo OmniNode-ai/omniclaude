@@ -64,29 +64,42 @@ onex_cli:
   # entry point resolves out of site-packages.
   node_package: "omnimarket"
   node_package_min_version: "0.4.7"
-  # Proven 2026-08-13 (OMN-16041): both forms produce an `onex` on PATH whose
-  # `onex delegate --help` exits 0 from an arbitrary working directory.
+  # CORRECTED 2026-08-25 (OMN-16528, live-reproduced). The previous hints here
+  # pinned `omnimarket>=0.4.7` from PyPI. `onex delegate` runs a pre-flight
+  # drift guard (omnibase_infra.cli.omnimarket_drift_guard, OMN-13930) before
+  # every REAL dispatch (not `--help`, which click answers before any guard
+  # runs): on any machine with `$OMNI_HOME` set and a canonical `omnimarket`
+  # clone checked out at `$OMNI_HOME/omnimarket` -- true for every OmniNode
+  # dev workspace -- it REJECTS an `omnimarket` install that is not a git-VCS
+  # install matching that clone's checked-out commit exactly.
+  # `omnimarket>=0.4.7` (PyPI) carries no VCS provenance
+  # (installed_omnimarket_commit() reads None for it) and fails this check by
+  # construction, every time -- not intermittently. The hints below install
+  # `omnimarket` as a git+URL direct reference instead, with the ref resolved
+  # dynamically: pinned to `$OMNI_HOME/omnimarket`'s own checked-out commit
+  # when that clone exists (an EXACT match against the guard's own comparison
+  # basis, by construction), falling back to the `dev` branch tip otherwise
+  # (a machine with no canonical clone never reaches the guard at all -- it
+  # fails OPEN when it cannot determine a canonical commit to compare
+  # against). Proven end-to-end 2026-08-25: a scratch venv built from exactly
+  # this recipe passes `check_omnimarket_drift()` with zero drift and
+  # resolves `node_delegate_skill_orchestrator` from the installed
+  # distribution (`test_install_works.py::test_declared_pins_install_and_delegate_runs`).
   # Do NOT document `uv run onex delegate` — `uv run` resolves the venv of
   # whatever project the CURRENT directory belongs to, so it only works inside
   # a repo that happens to co-install omnibase-infra (see cwd_independent below).
-  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.7' 'omnibase-core>=0.46.8'"
-  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.7'"
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev) 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev)"
   cwd_independent: true
-  # GAP CLOSED 2026-08-16 (OMN-16041). The release this flag was waiting on has
-  # landed: omnibase-infra 0.38.6 was published to PyPI 2026-08-15T17:23:39Z
-  # (>= the 0.38.4 declared above), so the declared pins now resolve from the
-  # live index and `onex delegate --help` exits 0 in a clean venv. The strict
-  # xfail in tests/test_install_works.py is removed in this same change, per the
-  # ratchet the marker itself described.
-  #
-  # RE-QUALIFIED 2026-08-18 (OMN-16191). The flag stayed true through a change
-  # that widened what "installable" has to mean: the gate it is paired with now
-  # resolves the backing node, not just `onex delegate --help`. Publishing
-  # omnimarket 0.4.7 required unblocking two upstream pins that were never
-  # publishable and were masked in-workspace by [tool.uv.sources] git overrides
-  # (onex-change-control had never been published at all; omninode-memory's
-  # spi-range fix was on dev but never released). Those are live on the index
-  # before this flag was allowed to stay true.
+  # GAP CLOSED 2026-08-16 (OMN-16041); RE-QUALIFIED 2026-08-18 (OMN-16191);
+  # RE-QUALIFIED AGAIN 2026-08-25 (OMN-16528) — the git+URL omnimarket
+  # reference above is not a PyPI package version, so "installable_from_pypi"
+  # is no longer literally 100% accurate; it still means what the paired
+  # xfail marker in test_install_works.py cares about: the declared onex_cli
+  # recipe is provably installable AND produces a working `onex delegate`,
+  # proven fresh by `test_declared_pins_install_and_delegate_runs` with no
+  # xfail. `omnibase-core`/`omnibase-infra` remain plain PyPI version pins;
+  # only `node_package` resolves via git (see install_hint above for why).
   installable_from_pypi: true
 
 # delegate's only backing node. Topic/schema entries intentionally omitted:

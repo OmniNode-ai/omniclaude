@@ -19,7 +19,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SKIP_TOKEN_PATTERN = re.compile(r"\[skip-[a-zA-Z][^\]\r\n<>]*\]", re.IGNORECASE)
+SKIP_TOKEN_PATTERN = re.compile(  # noqa: secrets
+    r"\[skip-[a-zA-Z][^\]\r\n<>]*\]",
+    re.IGNORECASE,
+)
 ALLOWLIST_PATTERN = re.compile(
     r"#\s*skip-token-allowed:\s*(?P<receipt>\S+)",
     re.IGNORECASE,
@@ -65,7 +68,7 @@ def find_unauthorized_skip_tokens(
     if not matches or ALLOWLIST_PATTERN.search(text):
         return []
     return [
-        SkipTokenFinding(surface=surface, token=match.group(0), path=path)
+        SkipTokenFinding(surface=surface, token=match.group(0), path=path)  # noqa: secrets
         for match in matches
     ]
 
@@ -268,7 +271,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--hook-event",
         default="Stop",
         choices=("Stop", "SubagentStop"),
-        help="Claude Code hook event name for hookSpecificOutput.",
+        help="Claude Code hook event name for hookSpecificOutput.",  # hook-event-name: not-an-emission
     )
     parser.add_argument(
         "--scan-session-evidence",

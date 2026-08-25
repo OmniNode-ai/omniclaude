@@ -85,7 +85,7 @@ if [[ -f "$_SKILL_MD" ]]; then
         || printf '%s\n' "$_FRONTMATTER" \
         | grep -qE '^skill_kind:[[:space:]]*dispatch[[:space:]]*$'; then
         # Exempt: skip enforcement, emit empty no-op output.
-        jq -n '{hookSpecificOutput: {}}'
+        jq -n '{hookSpecificOutput: {hookEventName: "PostToolUse"}}'
         exit 0
     fi
 fi

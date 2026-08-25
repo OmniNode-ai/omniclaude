@@ -1,6 +1,6 @@
 # ONEX Plugin for Claude Code
 
-Unified plugin for ONEX architecture providing hooks, agents, skills, and commands for enhanced Claude Code functionality.
+Unified plugin for ONEX architecture providing hooks, agents, and skills (including workflow-entrypoint commands) for enhanced Claude Code functionality.
 
 ## Overview
 
@@ -8,8 +8,9 @@ The ONEX plugin consolidates the previously fragmented plugin ecosystem into a s
 
 - **Hooks**: Event-driven lifecycle integration with Claude Code
 - **Agents**: Polymorphic agent framework with ONEX compliance
-- **Skills**: Reusable capabilities and domain expertise
-- **Commands**: User-facing slash commands for workflows
+- **Skills**: Reusable capabilities and domain expertise, including the workflow
+  entrypoints (invoked as `/onex:<skill-name>`) that a separate `commands/`
+  directory used to provide — see [Commands](#commands) below
 
 ## Architecture
 
@@ -24,9 +25,13 @@ plugins/onex/
 │   ├── logs/              # Hook execution logs
 │   └── hooks.json         # Hook configuration
 ├── agents/                 # Agent definitions and framework
-├── skills/                 # Reusable capabilities
-└── commands/               # Slash commands
+└── skills/                 # Reusable capabilities, incl. former commands/ workflows
 ```
+
+There is no `commands/` directory — it was retired (see
+[Migration from Legacy Plugin Structure](#migration-from-legacy-plugin-structure));
+workflow entrypoints that a "commands" directory would hold live under `skills/`
+instead and are invoked as `/onex:<skill-name>`.
 
 ## Components
 
@@ -34,11 +39,18 @@ plugins/onex/
 
 Event-driven integration with Claude Code lifecycle events:
 
-- **UserPromptSubmit**: Agent routing, manifest injection, intelligence requests
-- **PostToolUse**: Quality enforcement, pattern tracking
-- **SessionStart**: Session lifecycle logging, project context
-- **SessionEnd**: Session cleanup and finalization
-- **Stop**: Graceful shutdown and state persistence
+- **PreToolUse**: Authorization/safety guards — worktree boundary, PR ownership,
+  Done-flip evidence, dispatch-lane liveness
+- **PostToolUse**: Secret redaction on Bash output, event-bus mirroring
+- **SubagentStop**: Secret-leak guard, report-contract enforcement, lane-termination
+  classification
+- **SessionStart / SessionEnd / UserPromptSubmit**: Event-bus mirroring
+
+There is no registered `Stop` event — `SubagentStop` is the real lifecycle hook.
+This list names event *types* only; `hooks/hooks.json` is the sole authoritative
+source for the live matcher/script wiring (`jq . hooks/hooks.json`) — do not infer
+per-script detail from this README or from `CLAUDE.md`, both of which have gone
+stale against it before.
 
 **Location**: `hooks/scripts/`
 
@@ -82,16 +94,22 @@ Reusable capabilities and domain expertise:
 
 ### Commands
 
-User-facing slash commands for common workflows:
+**There is no `commands/` directory in this plugin.** It was retired (see
+[Migration from Legacy Plugin Structure](#migration-from-legacy-plugin-structure))
+and workflow entrypoints moved to `skills/`, invoked as `/onex:<skill-name>`
+(verified live 2026-08-25 against `plugins/onex/skills/`):
 
-- `/velocity-estimate` - Project velocity & ETA analysis
-- `/suggest-work` - Priority backlog recommendations
-- `/pr-release-ready` - Fix all PR issues
-- `/parallel-solve` - Execute tasks in parallel
-- `/project-status` - Linear insights dashboard
-- `/deep-dive` - Daily work analysis report
-- `/ci-failures` - CI/CD quick review
-- `/pr-review-dev` - PR review + CI failures
+- `/onex:ticketing_insights --mode <mode>` — one skill covering the reporting
+  workflows a `velocity-estimate`/`suggest-work`/`project-status`/`deep-dive`
+  command set once implied; `<mode>` is one of `deep-dive` (default),
+  `close-day`, `project`, `velocity`, `suggest`, `pipeline`, `github`, `all`
+- `/onex:ci_watch` — poll GitHub Actions CI for a PR, auto-fix failures, report
+  terminal state
+- `/onex:pr_review_bot` / `/onex:pr_review` / `/onex:pr_polish` — PR review and
+  CI-failure remediation workflows
+
+No skill in this plugin is named `pr-release-ready` or `parallel-solve`; those
+names do not correspond to any live workflow.
 
 ## Installation
 
@@ -425,12 +443,13 @@ tail -f hooks/logs/hook-session-start.log
 
 ### Using Commands
 
-Execute slash commands in Claude Code:
+Invoke the workflow-entrypoint skills directly in Claude Code (see
+[Commands](#commands) above for the full, live-verified list):
 
 ```
-/velocity-estimate
-/suggest-work
-/pr-release-ready
+/onex:ticketing_insights --mode velocity
+/onex:ticketing_insights --mode suggest
+/onex:ci_watch
 ```
 
 ### Using Skills
@@ -468,10 +487,11 @@ See `docs/guides/ADDING_A_SKILL.md` for the step-by-step guide.
 
 ### Adding New Commands
 
-1. Create command file in `commands/`
-2. Add frontmatter with metadata
-3. Implement command logic
-4. Test via Claude Code
+There is no `commands/` directory (retired — see
+[Migration from Legacy Plugin Structure](#migration-from-legacy-plugin-structure)).
+A new user-facing workflow entrypoint is added as a skill instead — follow
+[Adding New Skills](#adding-new-skills) above and
+`docs/guides/ADDING_A_SKILL.md`.
 
 ## Troubleshooting
 
