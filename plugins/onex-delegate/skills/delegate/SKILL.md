@@ -49,23 +49,49 @@ source of truth):
 |---|---|
 | `omnibase-core >= 0.46.8` | the `onex` console script and the `onex.cli` entry-point loader |
 | `omnibase-infra >= 0.38.4` | the `delegate` subcommand, registered into the `onex.cli` group |
-| `omnimarket >= 0.4.7` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
+| `omnimarket` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
+
+**`omnimarket` MUST be installed from git, not a PyPI version pin.** `onex
+delegate` runs a pre-flight drift guard
+(`omnibase_infra.cli.omnimarket_drift_guard`, OMN-13930) before every REAL
+dispatch — `--help` below is answered before the guard ever runs. On any
+machine with `$OMNI_HOME` set and a canonical `omnimarket` clone checked out
+at `$OMNI_HOME/omnimarket` (true for every OmniNode dev workspace) the guard
+REJECTS an `omnimarket` install that is not a git-VCS install matching that
+clone's checked-out commit exactly. `omnimarket>=0.4.7` (PyPI) carries no VCS
+provenance and fails this check by construction, every time — not
+intermittently (OMN-16528, live-reproduced).
+
+The commands below resolve the ref dynamically: pinned to
+`$OMNI_HOME/omnimarket`'s own checked-out commit when that clone exists (an
+exact match against the guard's own comparison basis), falling back to the
+`dev` branch tip otherwise — a machine with no canonical clone never reaches
+the guard at all, since it fails OPEN when it cannot determine a canonical
+commit to compare against.
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.7' 'omnibase-core>=0.46.8'
+uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev) 'omnibase-core>=0.46.8'
 # or:
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.7'
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev)
 ```
 
 Verify: `onex delegate --help` must exit 0 **from any directory**.
 
 `--help` alone is not proof the command works — click answers it before any
-dispatch. If `omnimarket` is missing, `--help` still exits 0 and the first real
-invocation fails with `Error: Unknown node 'node_delegate_skill_orchestrator'`,
-listing ~130 unrelated nodes as "known". The node is found through the
-`onex.nodes` entry-point group over **installed distributions**, so no
-`$OMNI_HOME` and no local `omnimarket` checkout is needed — the package alone is
-enough.
+dispatch. If `omnimarket` is missing entirely, `--help` still exits 0 and the
+first real invocation fails with `Error: Unknown node
+'node_delegate_skill_orchestrator'`, listing ~130 unrelated nodes as "known".
+If `omnimarket` is present but PyPI-installed (or stale) on a machine the
+drift guard covers, the first real invocation instead fails with
+`OmnimarketDriftError`. The node is found through the `onex.nodes`
+entry-point group over **installed distributions**, so once installed this
+way no further `$OMNI_HOME` access is needed to dispatch.
+
+Proven end-to-end 2026-08-25 (OMN-16528): a scratch venv built from exactly
+this recipe passes `omnimarket_drift_guard.check_omnimarket_drift()` with
+zero drift and resolves `node_delegate_skill_orchestrator` from the
+installed distribution, not a workspace checkout
+(`plugins/onex-delegate/tests/test_install_works.py`).
 
 **Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever
 project the *current directory* belongs to, so the command only works inside a
