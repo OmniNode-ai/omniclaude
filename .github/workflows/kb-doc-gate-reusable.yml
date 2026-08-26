@@ -14,9 +14,10 @@
 # Usage in caller repos:
 #   jobs:
 #     kb-doc-gate:
-#       uses: OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@main
+#       uses: OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@<immutable-sha>
 #       with:
 #         mode: transition   # or 'strict'; a repo's own .kb-doc-gate.yaml 'mode:' wins if set
+#         validator_ref: <same-immutable-sha>
 #
 # Canonical validator: scripts/kb_doc_gate.py (this repo). Same script also
 # runs locally via the exported 'kb-doc-gate' pre-commit hook
@@ -40,6 +41,13 @@ on:
         type: string
         required: false
         default: transition
+      validator_ref:
+        description: >-
+          omniclaude ref used to fetch scripts/kb_doc_gate.py for external
+          caller repos. Pin this to the same immutable SHA as the reusable
+          workflow.
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -72,14 +80,14 @@ jobs:
 
       # OMN-16589: the validator lives in omniclaude (this repo). When called
       # from another repo, GITHUB_WORKSPACE holds the CALLER's tree (checked
-      # out above), so pull just the script from omniclaude@main into a side
-      # path -- mirrors deploy-gate-reusable.yml's support-script fetch.
+      # out above), so pull just the script from the pinned omniclaude ref into
+      # a side path -- mirrors deploy-gate-reusable.yml's support-script fetch.
       - name: Fetch kb-doc-gate validator (omniclaude canonical source)
         if: github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
-          ref: main
+          ref: ${{ inputs.validator_ref || github.sha }}
           path: .omniclaude-kb-doc-gate
           persist-credentials: false
           sparse-checkout: |
