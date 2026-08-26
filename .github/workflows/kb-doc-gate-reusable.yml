@@ -1,0 +1,102 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# KB Doc Gate (reusable). OMN-16589.
+#
+# Blocks new/regrown non-KB markdown docs in product repos, evaluated
+# directly against the PR diff -- no repo inventory or external manifest
+# fetch needed at run time. Supersedes wiring the knowledge-base-hosted,
+# manifest-driven docs-drift-guard-reusable.yml into product repos: that
+# guard depends on a live manifest fetch from knowledge-base@main at run
+# time (a single point of failure fanning out to every wired repo) and only
+# covers repos with existing migrated-doc rows. This gate needs neither.
+#
+# Usage in caller repos:
+#   jobs:
+#     kb-doc-gate:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@main
+#       with:
+#         mode: transition   # or 'strict'; a repo's own .kb-doc-gate.yaml 'mode:' wins if set
+#
+# Canonical validator: scripts/kb_doc_gate.py (this repo). Same script also
+# runs locally via the exported 'kb-doc-gate' pre-commit hook
+# (.pre-commit-hooks.yaml) -- local and CI verdicts can never diverge.
+#
+# NOT a required status check on any caller repo yet (OMN-16589 P1: wire,
+# observe green on real PRs, do not gate). The required-check flip is
+# explicit follow-up scope once the pilots (omnibase_core, omnimarket) prove
+# green.
+
+name: KB Doc Gate (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: >-
+          Fallback mode when the caller repo's .kb-doc-gate.yaml does not set
+          'mode' ('transition' or 'strict'). A config-file mode always wins
+          over this input.
+        type: string
+        required: false
+        default: transition
+
+permissions:
+  contents: read
+
+jobs:
+  kb-doc-gate:
+    name: kb-doc-gate
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks / dev-base PRs default to ubuntu-latest
+    runs-on: >-
+      ${{
+        ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+         (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v7
+
+      - name: Fetch base ref
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          resolved_base_ref="${BASE_REF:-dev}"
+          git fetch origin "${resolved_base_ref}" --no-tags --quiet
+          echo "BASE_REF=${resolved_base_ref}" >> "$GITHUB_ENV"
+
+      # OMN-16589: the validator lives in omniclaude (this repo). When called
+      # from another repo, GITHUB_WORKSPACE holds the CALLER's tree (checked
+      # out above), so pull just the script from omniclaude@main into a side
+      # path -- mirrors deploy-gate-reusable.yml's support-script fetch.
+      - name: Fetch kb-doc-gate validator (omniclaude canonical source)
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: main
+          path: .omniclaude-kb-doc-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/kb_doc_gate.py
+          sparse-checkout-cone-mode: false
+
+      - name: Run kb-doc-gate
+        env:
+          MODE: ${{ inputs.mode }}
+          SCRIPT_PATH: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-kb-doc-gate/scripts/kb_doc_gate.py'
+                || 'scripts/kb_doc_gate.py' }}
+        run: |
+          set -euo pipefail
+          python3 "${SCRIPT_PATH}" \
+            --base-ref "origin/${BASE_REF}" \
+            --head-ref HEAD \
+            --mode "${MODE}" \
+            --repo-root .
