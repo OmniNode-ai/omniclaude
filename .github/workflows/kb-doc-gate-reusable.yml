@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           resolved_base_ref="${BASE_REF:-dev}"
-          git fetch origin "${resolved_base_ref}" --no-tags --quiet
+          git fetch origin "${resolved_base_ref}:refs/remotes/origin/${resolved_base_ref}" --no-tags --quiet
           echo "BASE_REF=${resolved_base_ref}" >> "$GITHUB_ENV"
 
       # OMN-16589: the validator lives in omniclaude (this repo). When called
