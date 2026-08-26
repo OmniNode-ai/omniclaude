@@ -1,0 +1,23 @@
+---
+# Pre-commit hooks exported by omniclaude.
+# Consumers reference these via:
+#
+#   - repo: https://github.com/OmniNode-ai/omniclaude
+#     rev: <tag-or-sha>
+#     hooks:
+#       - id: kb-doc-gate
+
+- id: kb-doc-gate
+  name: KB doc gate — block new/regrown non-KB markdown (OMN-16589)
+  description: >
+    Blocks (a) new .md files that are not in the exemption set, and (b), in
+    strict mode only, edits to existing non-exempt .md files that push them
+    past the stub-size cap. Canonical docs live in the knowledge-base repo;
+    this gate keeps local repos from re-growing content that belongs there.
+    Per-repo exemptions/mode: .kb-doc-gate.yaml at the consuming repo's root.
+    See scripts/kb_doc_gate.py for the full design.
+  language: script
+  entry: scripts/kb_doc_gate.py --staged
+  types: [markdown]
+  pass_filenames: true
+  stages: [pre-commit]
