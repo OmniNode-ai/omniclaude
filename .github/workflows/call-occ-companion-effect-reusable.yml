@@ -193,6 +193,38 @@ jobs:
             src/omnimarket/events/topics.py
           sparse-checkout-cone-mode: false
 
+      # OMN-16723: a sparse checkout of a path that does not exist at the
+      # requested ref SUCCEEDS and leaves an empty directory. Without this the
+      # miss surfaces later as a bare "python3: can't open file ... [Errno 2]"
+      # exit 2, which reads like a publish verdict rather than a plumbing
+      # failure. Name the cause here instead.
+      - name: Assert omnimarket publisher sources were fetched
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          REF: ${{ inputs.omnimarket-ref }}
+        run: |
+          set -euo pipefail
+          # Paths are spelled as literals rooted in this job's declared
+          # checkout `path:`, so the repo-root run:-script guard (OMN-15393)
+          # derives that they are foreign-checkout paths rather than missing
+          # in-tree scripts. Do not collapse them behind a variable.
+          missing=0
+          for f in ".occ-companion-effect-src/scripts/publish_occ_companion_effect_command.py" \
+                   ".occ-companion-effect-src/scripts/publish_occ_autobind_command.py" \
+                   ".occ-companion-effect-src/config/ci_bus_lanes.yaml" \
+                   ".occ-companion-effect-src/src/omnimarket/events/topics.py"; do
+            if [ ! -f "${f}" ]; then
+              echo "::error::omnimarket source ${f} was not fetched."
+              missing=1
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
+            echo "::error::The omnimarket ref '${REF}' does not carry the" \
+                 "publisher sources listed in this job's sparse-checkout." \
+                 "THE PUBLISH DID NOT RUN — this is not a publish failure."
+            exit 1
+          fi
+
       - name: Set up Python
         if: steps.eligibility.outputs.eligible == 'true'
         uses: actions/setup-python@v7

@@ -68,6 +68,12 @@ jobs:
       # the job's GITHUB_WORKSPACE holds the *caller* repo's tree. Pull just the
       # hardened checkout script from omniclaude@main into a side path so the
       # step below can invoke it without polluting the caller checkout.
+      # reusable-checkout-ref-ok: deploy-gate OMN-16726 pre-existing floating ref
+      # on a REQUIRED status check with heterogeneous caller pins (@main and a
+      # SHA). The flip needs every caller pin verified to carry the validator.
+      # reusable-checkout-sparse-ok: deploy-gate OMN-16726 existence assertion
+      # lands with the ref flip; omniclaude main is release-synced, which is the
+      # exact condition that fetched an empty validator path for the kb-doc-gate.
       - name: Fetch deploy-gate support scripts (omniclaude)
         if: github.event_name != 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
