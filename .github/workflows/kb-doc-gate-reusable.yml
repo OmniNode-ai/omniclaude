@@ -75,6 +75,18 @@ jobs:
     steps:
       - name: Checkout caller repo
         uses: actions/checkout@v7
+        with:
+          # fetch-depth: 0 is REQUIRED, not a nicety. The validator diffs
+          # `origin/<base>...HEAD` (three-dot), which needs a merge base. At the
+          # default depth 1 the checkout grabs one commit of the PR merge ref
+          # and the base-ref fetch below grabs one commit of the base branch, so
+          # the two histories share no ancestor and git aborts:
+          #   subprocess.CalledProcessError: Command '['git','diff',
+          #   '--name-status','-M','origin/dev...HEAD']' returned non-zero exit
+          #   status 128
+          # (omnimarket run 33035063242 -- the first run in which the validator
+          # was fetched successfully and could get far enough to hit this).
+          fetch-depth: 0
 
       - name: Fetch base ref
         env:
@@ -83,6 +95,15 @@ jobs:
           set -euo pipefail
           resolved_base_ref="${BASE_REF:-dev}"
           git fetch origin "${resolved_base_ref}:refs/remotes/origin/${resolved_base_ref}" --no-tags --quiet
+          # Prove the merge base the validator's three-dot diff depends on
+          # actually exists, and say so plainly if it does not -- otherwise the
+          # failure surfaces as a bare git exit 128 inside a Python traceback.
+          if ! git merge-base "refs/remotes/origin/${resolved_base_ref}" HEAD >/dev/null 2>&1; then
+            echo "::error::no merge base between origin/${resolved_base_ref} and HEAD." \
+                 "The caller checkout is shallow; kb-doc-gate needs fetch-depth: 0." \
+                 "THE GATE DID NOT RUN."
+            exit 1
+          fi
           echo "BASE_REF=${resolved_base_ref}" >> "$GITHUB_ENV"
 
       # OMN-16589: the validator lives in omniclaude (this repo). When called
