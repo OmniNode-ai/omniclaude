@@ -17,7 +17,13 @@
 #       uses: OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@<immutable-sha>
 #       with:
 #         mode: transition   # or 'strict'; a repo's own .kb-doc-gate.yaml 'mode:' wins if set
-#         validator_ref: <same-immutable-sha>
+#
+# ONE pin, not two: the validator checkout defaults to `github.job_workflow_sha`
+# (the SHA this reusable workflow was resolved at), so the `uses:` SHA above is
+# the single source of truth for both the workflow and the validator script.
+# Pin to an omniclaude commit on `dev` that carries scripts/kb_doc_gate.py --
+# NOT `@main`, which is release-synced and does not carry the gate yet.
+# `validator_ref:` remains available as an explicit override.
 #
 # Canonical validator: scripts/kb_doc_gate.py (this repo). Same script also
 # runs locally via the exported 'kb-doc-gate' pre-commit hook
@@ -43,9 +49,10 @@ on:
         default: transition
       validator_ref:
         description: >-
-          omniclaude ref used to fetch scripts/kb_doc_gate.py for external
-          caller repos. Pin this to the same immutable SHA as the reusable
-          workflow.
+          Optional override for the omniclaude ref used to fetch
+          scripts/kb_doc_gate.py for external caller repos. Leave unset in
+          normal use: the default is github.job_workflow_sha, which is already
+          the exact SHA the caller pinned this reusable workflow to.
         type: string
         required: false
 
@@ -82,12 +89,28 @@ jobs:
       # from another repo, GITHUB_WORKSPACE holds the CALLER's tree (checked
       # out above), so pull just the script from the pinned omniclaude ref into
       # a side path -- mirrors deploy-gate-reusable.yml's support-script fetch.
+      #
+      # The default MUST be `github.job_workflow_sha`: for a job that runs a
+      # reusable workflow, that context holds the commit SHA of THIS workflow
+      # file -- i.e. exactly the SHA the caller pinned in its `uses:`. The two
+      # obvious-looking alternatives are both wrong, and both have already
+      # broken this gate in production:
+      #   * `main` -- omniclaude main is release-synced and does not carry
+      #     scripts/kb_doc_gate.py, so the sparse checkout silently produced an
+      #     empty side path and every caller died at the next step with
+      #     "python3: can't open file ... [Errno 2]" / exit 2.
+      #   * `github.sha` -- inside a reusable workflow the `github` context is
+      #     the CALLER's, so this resolves to a commit SHA in the caller repo
+      #     (omnibase_core, omnimarket, ...) that does not exist in omniclaude.
+      # `job_workflow_sha` keeps the validator source and the workflow source
+      # on one immutable commit with a SINGLE caller-side pin, so the two can
+      # never drift apart. `validator_ref` stays as an explicit override.
       - name: Fetch kb-doc-gate validator (omniclaude canonical source)
         if: github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
-          ref: ${{ inputs.validator_ref || github.sha }}
+          ref: ${{ inputs.validator_ref || github.job_workflow_sha }}
           path: .omniclaude-kb-doc-gate
           persist-credentials: false
           sparse-checkout: |
@@ -103,6 +126,19 @@ jobs:
                 || 'scripts/kb_doc_gate.py' }}
         run: |
           set -euo pipefail
+          # Fail LOUD, not with a bare "python3: can't open file ... Errno 2".
+          # A sparse checkout of a path that does not exist at the requested
+          # ref SUCCEEDS and leaves an empty side path, so a bad validator ref
+          # surfaces only here, as an exit-2 that reads like a gate verdict but
+          # is actually "the gate never ran". Name the cause explicitly.
+          if [ ! -f "${SCRIPT_PATH}" ]; then
+            echo "::error::kb-doc-gate validator not found at ${SCRIPT_PATH}." \
+                 "The omniclaude ref this workflow was fetched from does not" \
+                 "carry scripts/kb_doc_gate.py. Pin the caller's 'uses:' to an" \
+                 "omniclaude commit that contains the validator (or pass" \
+                 "validator_ref explicitly). THE GATE DID NOT RUN."
+            exit 1
+          fi
           python3 "${SCRIPT_PATH}" \
             --base-ref "origin/${BASE_REF}" \
             --head-ref HEAD \
