@@ -34,9 +34,14 @@
 # dev-lane listener is plaintext, so SASL is unused. The static regression
 # test (tests/workflows/test_call_occ_companion_effect_reusable.py) pins this.
 #
-# BROKER / RUNNER BIFURCATION (OMN-14451, identical to the autobind reusable):
-# trusted (non-fork) PR events run on the self-hosted omnibase-ci runner on
-# .201, which reaches the dev-lane broker; fork PRs fall back to ubuntu-latest
+# BROKER / RUNNER BIFURCATION (OMN-14451, identical to the autobind reusable;
+# runner carve-out OMN-16691 / OMN-16682 constraint 8): trusted (non-fork) PR
+# events run on the self-hosted omnibase-ci runner on .201, which reaches the
+# dev-lane broker. That placement is pinned via the DEDICATED
+# `OMNI_OCC_AUTOBIND_RUNS_ON_JSON` variable rather than the shared
+# `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam, so a hosted-runner migration of general
+# CI cannot silently relocate this broker-dependent publisher — see the long
+# note on `runs-on:` below. Fork PRs fall back to ubuntu-latest
 # where the publisher skips gracefully (exit 0). `RUNNER_IS_TRUSTED` is
 # threaded into the publish step so the script fails LOUD (exit 1) on the
 # trusted runner for an unresolvable lane / unreachable broker / undelivered
@@ -98,15 +103,42 @@ jobs:
     # expensive publisher steps no-op while the job itself terminates green.
     # A job-level `if:` suppresses the check run entirely and leaves branch
     # protection waiting for a context that can never exist (OMN-14864).
-    # OMNI_RUNNER_SELECTOR_V1 — trusted (non-fork) PRs run on the self-hosted
-    # omnibase-ci runner so the publisher reaches the local lane broker; fork
-    # PRs fall back to ubuntu-latest (publisher skips gracefully, no broker).
+    # RUNNER CARVE-OUT (OMN-16691, OMN-16682 constraint 8) — the trusted branch
+    # reads a DEDICATED variable, `OMNI_OCC_AUTOBIND_RUNS_ON_JSON` (shared with
+    # call-occ-autobind-reusable.yml: one knob for the OCC publisher pair), and
+    # NOT the shared `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam that governs
+    # lint/test/build.
+    #
+    # WHY: this job publishes to the TAILNET-ONLY dev-lane broker
+    # `omninode-pc.tail75df5e.ts.net:19092`, declared directly in the committed
+    # omnimarket config/ci_bus_lanes.yaml overlay (OMN-14813). Only the
+    # self-hosted `omnibase-ci` fleet on .201 is on that tailnet; a GitHub-hosted
+    # runner cannot resolve the name at all. The OMN-14451/OMN-14639 fail-loud
+    # contract below then correctly refuses to exit 0, so no OCC companion is
+    # minted, so no `Evidence-Source: OCC#<n>` is stamped, so the receipt gate
+    # (OMN-10419) hard-fails EVERY PR in EVERY OCC-gated repo. This is not a
+    # degraded-CI seam; it is a merge-wide outage seam. It ran live for 45
+    # minutes on 2026-08-26 (22:46:41Z -> 23:32:03Z) when the OMN-16682 Step-1
+    # migration flipped `OMNI_TRUSTED_CI_RUNS_ON_JSON` to `["ubuntu-latest"]`;
+    # incident OMN-16691.
+    #
+    # HOW: the literal `["self-hosted","omnibase-ci"]` fallback IS the operating
+    # value. `OMNI_OCC_AUTOBIND_RUNS_ON_JSON` is deliberately left UNSET at org
+    # and repo scope, so this job pins to the fleet no matter what the shared
+    # seam is flipped to, while still leaving one explicit, single-purpose knob
+    # for the day the lane broker is reachable from another runner class.
+    #
+    # `vars` in a reusable workflow resolve in the CALLER's context, so every
+    # caller repo inherits this carve-out for free and passes nothing (OMN-16682
+    # constraint 7). Fork PRs keep the `OMNI_PUBLIC_PR_RUNS_ON_JSON` path — the
+    # publisher skips gracefully there (no broker), and fork isolation
+    # (OMN-16683) is untouched by this change.
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_OCC_AUTOBIND_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     # OMN-14451: same fork/non-fork test as `runs-on:` above, threaded into
     # the publish step so the script can fail loudly (not silently exit 0)

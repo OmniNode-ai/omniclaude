@@ -120,7 +120,16 @@ jobs:
     # OMN-14993: manual re-publish entrypoint, gated to the workflow_dispatch
     # trigger only. See the header comment above -- open/non-draft PRs only.
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    # RUNNER CARVE-OUT (OMN-16691, OMN-16682 constraint 8) — this replay job
+    # publishes to the same TAILNET-ONLY dev-lane broker as the reusable it
+    # mirrors, so it is pinned to the fleet via the DEDICATED
+    # `OMNI_OCC_AUTOBIND_RUNS_ON_JSON` knob, not the shared
+    # `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam. It hardcodes RUNNER_IS_TRUSTED=true
+    # below, so on a hosted runner it would fail loud on an unreachable broker —
+    # i.e. the recovery path for a companion-effect outage would itself be dead
+    # exactly when it is needed. Left UNSET org-wide; the literal is the
+    # operating value.
+    runs-on: ${{ fromJSON(vars.OMNI_OCC_AUTOBIND_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
     timeout-minutes: 5
     permissions:
       contents: read

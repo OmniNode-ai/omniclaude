@@ -164,7 +164,15 @@ def test_trusted_runner_bifurcation_and_fail_loud_threading() -> None:
     runs_on = job.get("runs-on")
     assert isinstance(runs_on, str)
     assert "OMNI_PUBLIC_PR_RUNS_ON_JSON" in runs_on
-    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" in runs_on
+    # OMN-16691 carve-out: the trusted branch moved OFF the shared
+    # `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam onto the dedicated
+    # `OMNI_OCC_AUTOBIND_RUNS_ON_JSON` knob. The bifurcation this test names is
+    # unchanged (fork -> public class, trusted -> fleet); only the source of the
+    # trusted class changed, so that a hosted-runner migration of general CI
+    # cannot relocate a tailnet-broker-dependent publisher. Full rationale and
+    # the cross-file guard live in test_occ_publisher_runner_carveout.py.
+    assert "OMNI_OCC_AUTOBIND_RUNS_ON_JSON" in runs_on
+    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" not in runs_on
 
     env = job.get("env")
     assert isinstance(env, dict)
