@@ -95,13 +95,25 @@ jobs:
           set -euo pipefail
           resolved_base_ref="${BASE_REF:-dev}"
           git fetch origin "${resolved_base_ref}:refs/remotes/origin/${resolved_base_ref}" --no-tags --quiet
+          base_ref="refs/remotes/origin/${resolved_base_ref}"
           # Prove the merge base the validator's three-dot diff depends on
           # actually exists, and say so plainly if it does not -- otherwise the
           # failure surfaces as a bare git exit 128 inside a Python traceback.
-          if ! git merge-base "refs/remotes/origin/${resolved_base_ref}" HEAD >/dev/null 2>&1; then
-            echo "::error::no merge base between origin/${resolved_base_ref} and HEAD." \
-                 "The caller checkout is shallow; kb-doc-gate needs fetch-depth: 0." \
-                 "THE GATE DID NOT RUN."
+          if ! git rev-parse --verify --quiet "${base_ref}^{commit}" >/dev/null; then
+            echo "::error::base ref ${base_ref} was not fetched as a commit." \
+                 "Check the caller base ref and fetch step. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if ! git merge-base "${base_ref}" HEAD >/dev/null 2>&1; then
+            if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+              echo "::error::no merge base between origin/${resolved_base_ref} and HEAD." \
+                   "The caller checkout is shallow; kb-doc-gate needs fetch-depth: 0." \
+                   "THE GATE DID NOT RUN."
+            else
+              echo "::error::no merge base between origin/${resolved_base_ref} and HEAD." \
+                   "Repository histories are unrelated or the base ref is not an ancestor-lineage peer." \
+                   "THE GATE DID NOT RUN."
+            fi
             exit 1
           fi
           echo "BASE_REF=${resolved_base_ref}" >> "$GITHUB_ENV"
