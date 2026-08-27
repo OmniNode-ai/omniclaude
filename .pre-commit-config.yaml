@@ -202,6 +202,46 @@ repos:
         files: '^(\.github/workflows/.*\.ya?ml|scripts/.*\.(py|sh)|plugins/.*/scripts/.*\.(py|sh)|tests/workflows/test_workflow_run_script_paths_exist\.py)$'
         stages: [pre-commit]
 
+      # OMN-16723: a reusable workflow's INNER checkout must be pinned to
+      # github.job_workflow_sha, and a sparse checkout must assert what it
+      # fetched. Sibling of the guard above, same shape, same trigger surface.
+      #
+      # The two defects it closes, both live and unlinted before this hook:
+      #   * A caller-side `uses: ...@<sha>` pin governs only which workflow FILE
+      #     loads. It cannot reach a second, independently-pinned checkout inside
+      #     that file, so `ref: main` there silently drifts from the workflow.
+      #     `github.sha` is worse — inside a reusable workflow that is the
+      #     CALLER's commit, which does not exist in the callee repo at all.
+      #   * A sparse checkout of a path that does not exist SUCCEEDS, leaving an
+      #     empty directory. The miss surfaces downstream as
+      #     "python3: can't open file ...: [Errno 2]" exit 2, which reads like a
+      #     gate verdict rather than a plumbing failure. That pair is why the KB
+      #     doc gate never once executed from any caller repo while both pilots
+      #     looked correctly wired.
+      #
+      # ~1s (17 static tests, pure YAML parsing, no services, no network).
+      # The CI half needs no new job: scripts/ci/test_selection_adjacency.yaml
+      # already maps `.github/workflows/**` -> `tests/workflows/`, so this module
+      # is selected on exactly the change class it guards. Local and CI verdicts
+      # come from the same assertions and cannot disagree.
+      #
+      # ESCAPE HATCH is an annotation, never an allowlist file. A knowingly
+      # carried instance writes, in the workflow itself:
+      #   # reusable-checkout-ref-ok: <job_id> OMN-XXXX <reason>
+      #   # reusable-checkout-sparse-ok: <job_id> OMN-XXXX <reason>
+      # A separate assertion fails any such annotation that cites no ticket, so
+      # the debt list stays greppable and cannot rot into an invisible bypass.
+      - id: reusable-workflow-inner-checkouts-pinned
+        name: Reusable-workflow inner checkouts must be pinned + asserted (OMN-16723)
+        entry: >-
+          uv run pytest
+          tests/workflows/test_reusable_workflow_inner_checkouts.py
+          -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/.*\.ya?ml|tests/workflows/test_reusable_workflow_inner_checkouts\.py)$'
+        stages: [pre-commit]
+
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
       # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
       # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero

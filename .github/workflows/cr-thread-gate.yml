@@ -47,6 +47,12 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
+      # reusable-checkout-ref-ok: gate OMN-16726 pre-existing floating ref; the
+      # flip to job_workflow_sha changes which validator every caller runs, so it
+      # needs the per-caller pin precondition check tracked on that ticket.
+      # reusable-checkout-sparse-ok: gate OMN-16726 fail-loud existence assertion
+      # lands with the ref flip — asserting a path fetched from a moving branch
+      # would only move the failure, not name the cause.
       - name: Checkout omniclaude scripts
         uses: actions/checkout@v7
         with:
