@@ -5,7 +5,7 @@
 
 ## What this actually is
 
-Contract inference (**AST-only, no LLM**) plus a template scaffold. The pipeline emits a **loadable, registered shell**; the LLM business-logic fill stage never landed. Handler bodies are written by hand.
+Contract inference (**AST-only, no LLM**) plus a template scaffold. **Nothing in this repo fills handler bodies.** omnimarket's generation loop does generate bodies on a live dispatch (measured 2026-08-28), but the output is non-canonical, references models it never emits, is never written to disk, and is registered without being proven to run — so it is not a substitute for writing the node. See `SKILL.md` for the measured readback.
 
 The wrapper scripts in this directory (`generate`, `regenerate`) call `uv run omninode-generate`, and **no such console script exists** — it is absent from `omniclaude/pyproject.toml`'s `[project.scripts]`, from the project venv's `bin/`, and from `PATH`. They are not runnable as written.
 
@@ -15,7 +15,7 @@ The wrapper scripts in this directory (`generate`, `regenerate`) call `uv run om
 | -- | -- |
 | Infer a `contract.yaml` from existing node source | `omniintelligence/scripts/infer_contracts.py` (AST-only) |
 | Scaffold a node package | omnimarket's generation loop, dispatched at `node_generation_consumer` (`runtime_dispatch.command_topic: onex.cmd.omnimarket.node-generation-requested.v1`) |
-| A filled handler body | nothing — write it yourself |
+| A handler body you can actually ship | nothing — write it yourself. The generation loop emits one, but not in canonical shape and not to disk |
 
 ## Files
 

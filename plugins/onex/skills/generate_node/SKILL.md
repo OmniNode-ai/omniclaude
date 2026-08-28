@@ -22,11 +22,21 @@ debug: false
 | -- | -- | -- |
 | **Contract inference** — derive a `contract.yaml` draft from existing node source | **Live, AST-only, no LLM** | `omniintelligence/scripts/infer_contracts.py`, whose own module docstring reads: *"AST-only (no LLM calls). Scans Python files for classes inheriting from `Node*` base classes and generates contract.yaml drafts."* |
 | **Template scaffold** — stamp a node package from templates | **Live** | `omnimarket/src/omnimarket/nodes/node_generate_node_effect/` |
-| **Loadability / registration** — the emitted package loads and registers | **Live** | proven on structure only |
-| **LLM business-logic fill** — write the handler body | **DOES NOT EXIST** | no implementation anywhere in `omniclaude/src/` |
+| **LLM business-logic fill** — write the handler body | **DOES NOT EXIST *here*; live in omnimarket** | nothing in `omniclaude/src/` implements it. The omnimarket generation loop *does* fill bodies — see the live-run note below |
 | **AI quorum / multi-model consensus validation** | **DOES NOT EXIST** | never ported; the `--enable-quorum` flag has no implementation behind it |
+| **Registration** — the generated node is announced as an MCP tool | **Live, but not gated on the node working** | see below |
 
-**Net: the pipeline emits a loadable, registered shell.** It does not emit working business logic, and it never has. The single end-to-end attempt on record did not satisfy the accepted code-output contract; normalization retries failed closed and no generated code was staged or accepted.
+### What a live run actually produces (measured 2026-08-28, dev lane)
+
+A real dispatch through omnimarket's `node_generation_consumer` was driven end-to-end on the dev lane and **succeeded**, so the honest account is more specific than "emits a shell":
+
+- **A handler body IS generated.** The local model wrote correct, defensive Python for the requested task. This is not a stub.
+- **But it is not a conforming ONEX handler.** The emitted body has the dict-in / dict-out shape `handle(input_data)`, not the canonical typed signature `handle(request: ModelX) -> ModelY`.
+- **The emitted contract references models that were never generated.** It names an `input_model` / `output_model` module that no run creates, and omits `descriptor`, `handler_routing`, `node_version`, `inputs`/`outputs`, and `event_bus`.
+- **Nothing is written to disk.** The contract and handler exist only as strings inside event payloads. There is no importable package.
+- **Registration is not gated on the node working.** The run registered the node as an MCP tool, and *then* its only sandbox invocation failed.
+
+**Net: a live run emits generated source text that is registered but not conforming, not staged, and not proven to run.** An earlier documented attempt failed outright — its response did not satisfy the accepted code-output contract and no code was staged or accepted. Treat "the loop works" as meaning *the dispatch path works*, not *the output is usable*.
 
 ---
 
@@ -54,7 +64,7 @@ Node generation lives in **omnimarket**, not here, and is driven as a node dispa
 | `node_generate_node_effect` | Template scaffold emission. |
 | `node_generated_code_validator` | Validation of emitted code. |
 | `node_generated_node_publish_effect` | Publication of the generated package. |
-| `node_rsd_fill_compute` | The body-fill **seam** — not a landed end-to-end fill stage. |
+| `node_rsd_fill_compute` | A separate body-fill **seam**. Not the path a live dispatch takes — the fill measured above happens inside `node_generation_consumer` itself. |
 
 For contract inference specifically, call the AST tool directly:
 
