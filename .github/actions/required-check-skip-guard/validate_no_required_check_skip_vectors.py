@@ -386,7 +386,12 @@ def validate_gate(
     rationale = gate.get("rationale", "")
 
     try:
-        resolved: ResolvedJob = resolve_context_to_job(context, workflows)
+        # OMN-16878: pass the manifest row's declared `workflow:` so a context
+        # name carried by two jobs in this repo resolves to the one the
+        # manifest says owns it, instead of whichever file sorts first.
+        resolved: ResolvedJob = resolve_context_to_job(
+            context, workflows, preferred_workflow=gate.get("workflow")
+        )
     except UnresolvedContext:
         if producer_kind == "local":
             findings.append(

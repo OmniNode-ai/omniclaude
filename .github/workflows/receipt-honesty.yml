@@ -44,6 +44,10 @@ jobs:
 
   receipt-honesty:
     needs: occ-preflight
+    # OMN-16878 (OMN-15057 vector 5): required on `dev` as of this change, so
+    # the job must not be skippable — a skipped job satisfies branch
+    # protection. See deploy-gate.yml for the full rationale.
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

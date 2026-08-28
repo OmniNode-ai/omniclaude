@@ -149,6 +149,35 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # doctrine corrected in the same PR, not fixed here (would be a larger,
     # separately-reviewed rename/removal decision -- see PR body).
     "required-check-skip-guard / check-skip-vectors",  # required-check-skip-guard-caller.yml
+    # OMN-16878 (OMN-16876 census items 1-2). These three ran on every omniclaude
+    # PR and could not block a merge: absent from branch protection AND from this
+    # tuple. House Rule 5 — detection not wired as a pre-merge gate is advisory.
+    # All three become live-required on `dev` in the same change, keeping this
+    # tuple's invariant (every member is also a branch-protection context) true.
+    #
+    # Admission measured over the 16 most recent merged `dev` PR heads,
+    # #2045..#2060 (2026-08-25T20:45:01Z -> 2026-08-28T17:09:18Z): each of the
+    # three is 16/16 present and 16/16 green, zero reds.
+    #
+    # 16/16 green is also exactly the vacuous-pass shape OMN-16876 finding 5
+    # warns about, so each was separately proven able to FAIL on real input
+    # before being admitted (negative test + positive control, recorded in
+    # OCC#7433 drift/dod_receipts/OMN-16878/dod-nonvacuity-negative-tests):
+    #   deploy-gate         — runtime path changed + PR body with no deploy
+    #                         evidence -> exit 1; docs-only diff -> exit 0.
+    #   receipt-honesty     — gamed receipt (verifier == runner) -> exit 1;
+    #                         real committed receipt -> exit 0.
+    #   contract-validation — schema-invalid contract -> exit 1;
+    #                         contracts/OMN-10041.yaml -> exit 0.
+    #
+    # Each producer job also gained `if: always()` in the same PR. Without it,
+    # `needs: occ-preflight` with no `if:` lets a failed occ-preflight SKIP the
+    # job, and a skipped job SATISFIES branch protection — requiring these
+    # contexts as they stood would have wired in a silent-pass bypass
+    # (OMN-15057 vector 5, caught by required-check-skip-guard).
+    "deploy-gate",  # deploy-gate.yml
+    "receipt-honesty",  # receipt-honesty.yml
+    "contract-validation",  # contract-validation.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
