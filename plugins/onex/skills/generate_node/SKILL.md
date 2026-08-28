@@ -69,7 +69,7 @@ Node generation lives in **omnimarket**, not here, and is driven as a node dispa
 For contract inference specifically, call the AST tool directly:
 
 ```bash
-cd "$OMNI_HOME/omniintelligence"
+# from the root of an omniintelligence checkout
 uv run python scripts/infer_contracts.py --dry-run
 uv run python scripts/infer_contracts.py --node NodePatternStorageEffect --execute
 ```
@@ -90,7 +90,7 @@ Budget this as writing a node with a pre-stamped skeleton — not as reviewing g
 
 ## Prerequisites
 
-The `generate` wrapper checks for `$OMNI_HOME`, `uv`, and `OMNIBASE_INFRA_DB_URL` before it fails on the missing CLI. The infrastructure the old document listed (PostgreSQL, Kafka/Redpanda, Consul) is what the **omnimarket** generation loop needs; it is not what makes this skill's wrapper work, because nothing makes this skill's wrapper work.
+The `generate` wrapper checks for a workspace-root env var, `uv`, and `OMNIBASE_INFRA_DB_URL` before it fails on the missing CLI. The infrastructure the old document listed (PostgreSQL, Kafka/Redpanda, Consul) is what the **omnimarket** generation loop needs; it is not what makes this skill's wrapper work, because nothing makes this skill's wrapper work.
 
 `ZAI_API_KEY` / `ZAI_ENDPOINT` / `ZAI_MODEL` are read by the `regenerate` wrapper's prompt-extraction path, which likewise terminates at the same missing CLI.
 
