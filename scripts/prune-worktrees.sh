@@ -318,12 +318,43 @@ for wt in "${STALE[@]}"; do
     continue
   fi
 
-  # Also check for uncommitted changes (dirty working tree)
-  DIRTY=$(git -C "$wt" status --porcelain 2>/dev/null || true)
-  if [[ -n "$DIRTY" ]]; then
+  # ---------------------------------------------------------------------------
+  # Safety check: uncommitted changes (dirty working tree), with the
+  # disposable-.onex_state carve-out (OMN-15989)
+  #
+  # THE RULE (identical to the one in each repo's .gitignore):
+  #   An UNTRACKED path under the worktree's own .onex_state/ is regenerable
+  #   output and does NOT block teardown -- except under the two named durable
+  #   subtrees .onex_state/evidence/ and .onex_state/friction/, which hold
+  #   committed content and DO block.
+  #
+  # Why the tool needs its own copy of the rule rather than deferring to
+  # .gitignore: a worktree checks out its own branch's .gitignore, so an ignore
+  # rule merged to dev today does not exist in the tree of a worktree branched
+  # before it. Six omnibase_core worktrees were blocked from teardown this way
+  # at the time of writing and no .gitignore change can reach them.
+  #
+  # Two details that are load-bearing:
+  #   * --untracked-files=all: with git's default `normal`, a wholly-untracked
+  #     directory collapses to a single `?? .onex_state/` line and a prefix
+  #     filter could not tell whether durable evidence was inside it.
+  #   * only `??` lines qualify. A tracked .onex_state file that is modified or
+  #     deleted (` M` / ` D` / `A `) is real work and still blocks -- which is
+  #     exactly what a naive `grep -v .onex_state` would get wrong.
+  # ---------------------------------------------------------------------------
+  DIRTY=$(git -C "$wt" status --porcelain --untracked-files=all 2>/dev/null || true)
+  BLOCKING_DIRTY=$(printf '%s' "$DIRTY" | awk '
+    # git quotes paths containing special characters, hence the optional ".
+    /^\?\? "?\.onex_state\// && !/^\?\? "?\.onex_state\/(evidence|friction)\// { next }
+    { print }
+  ')
+  if [[ -n "$BLOCKING_DIRTY" ]]; then
     log "  SKIP: $wt has uncommitted changes"
     SKIPPED+=("$wt (dirty working tree)")
     continue
+  fi
+  if [[ -n "$DIRTY" ]]; then
+    log "  NOTE: $wt carries only disposable .onex_state output — not a block (OMN-15989)"
   fi
 
   # Find the canonical clone to run git worktree remove from
