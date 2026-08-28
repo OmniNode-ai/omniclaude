@@ -75,7 +75,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     classify_worktree_prune,
 )
 
-LINEAR_API_URL = "https://api.linear.app/graphql"
+LINEAR_API_URL = "https://api.linear.app/graphql"  # url-authority-ok: the tracker's single documented GraphQL endpoint, read-only ticket-state lookups from a local maintenance script that is not a runtime node and has no routing authority or integration catalog to resolve from
 LINEAR_BATCH_SIZE = 50
 BASE_REF_CANDIDATES: tuple[str, ...] = ("origin/dev", "origin/main")
 GIT_TIMEOUT_SECONDS = 60

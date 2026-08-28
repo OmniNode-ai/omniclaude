@@ -459,9 +459,13 @@ Everything else is a triage row — never a deletion.
 ### Step 1: Run worktree_auto_prune.py <!-- ai-slop-ok: skill-step-heading -->
 
 ```bash
+# REPORT_DIR is the workspace tracking-docs directory; resolve it from the caller,
+# never from a machine-specific literal.
+REPORT_DIR="${REPORT_DIR:?set REPORT_DIR to the tracking docs directory}"
+
 uv run python scripts/worktree_auto_prune.py ${execute_flag} ${root_flag} \
-  --report-md "$OMNI_HOME/docs/tracking/$(date +%F)-worktree-prune.md" \
-  --report-json "$OMNI_HOME/docs/tracking/$(date +%F)-worktree-prune.json"
+  --report-md "$REPORT_DIR/$(date +%F)-worktree-prune.md" \
+  --report-json "$REPORT_DIR/$(date +%F)-worktree-prune.json"
 ```
 
 Dry run is the default. The script refuses to run at all when the work ledger is unreadable
@@ -478,8 +482,8 @@ Never hand-delete a worktree the classifier put in triage. If you disagree with 
 disagreement — the classifier wins.
 
 **Scheduled form.** The daily backstop runner is the committed named workflow
-`$OMNI_HOME/.claude/workflows/morning-worktree-prune.js`; its format contract is
-`$OMNI_HOME/docs/workflows/morning-worktree-prune/README.md`. That workflow, not this skill, is
+`.claude/workflows/morning-worktree-prune.js` in the workspace registry root; its format
+contract is `docs/workflows/morning-worktree-prune/README.md` there. That workflow, not this skill, is
 the surface the morning session arms.
 
 ---
