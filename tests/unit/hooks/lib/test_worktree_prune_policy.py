@@ -55,6 +55,7 @@ def _facts(**overrides: object) -> ModelWorktreePruneFacts:
         "unmerged_ahead_commits": (),
         "tree_diff_vs_base_empty": True,
         "attributed_stash_count": 0,
+        "unreadable_probes": (),
     }
     base.update(overrides)
     return ModelWorktreePruneFacts(**base)  # type: ignore[arg-type]
@@ -229,6 +230,35 @@ class TestSafety:
         assert safe is False
         assert EnumPruneBlockReason.BASE_REF_UNRESOLVED in reasons
 
+    def test_an_unreadable_git_probe_is_never_safe(self) -> None:
+        """A probe that failed is an UNKNOWN fact, never a clean one.
+
+        `git status --porcelain` returning non-zero (timeout, OSError, a broken
+        gitdir pointer) yields empty stdout. Read as a fact that would mean
+        "clean tree"; read honestly it means "we do not know". An empty result is
+        not evidence of absence, and here the difference is deleting live work.
+        """
+        safe, reasons, evidence = is_prune_safe(
+            _facts(unreadable_probes=("git status --porcelain",))
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.FACTS_UNREADABLE in reasons
+        assert evidence == ""
+
+    def test_unreadable_probe_blocks_even_when_every_other_fact_looks_clean(
+        self,
+    ) -> None:
+        safe, reasons, _ = is_prune_safe(
+            _facts(
+                dirty_files=(),
+                commits_ahead=0,
+                attributed_stash_count=0,
+                unreadable_probes=("git rev-list --count origin/dev..HEAD",),
+            )
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.FACTS_UNREADABLE in reasons
+
     def test_every_block_reason_is_reported_not_just_the_first(self) -> None:
         safe, reasons, _ = is_prune_safe(
             _facts(
@@ -291,6 +321,13 @@ class TestClassifyWorktreePrune:
         decision = classify_worktree_prune(_facts(ledger_open_claim=claim))
         assert decision.disposition is EnumPruneDisposition.TRIAGE
         assert decision.ledger_open_claim == claim
+
+    def test_unreadable_probe_triages_a_closed_clean_ticket(self) -> None:
+        decision = classify_worktree_prune(
+            _facts(unreadable_probes=("git status --porcelain",))
+        )
+        assert decision.disposition is EnumPruneDisposition.TRIAGE
+        assert EnumPruneBlockReason.FACTS_UNREADABLE in decision.block_reasons
 
     def test_decision_is_frozen(self) -> None:
         decision = classify_worktree_prune(_facts())

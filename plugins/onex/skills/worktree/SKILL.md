@@ -56,7 +56,7 @@ args:
 ## Purpose
 
 Unified worktree management skill. Consolidates health auditing, classification triage, and
-lifecycle garbage collection into a single entry point with five mode flags:
+lifecycle garbage collection into a single entry point with four mode flags and one modifier:
 
 | Flag | Former Skill | Description |
 |------|-------------|-------------|
@@ -74,7 +74,7 @@ merge-keyed (a PR merged, or the remote branch vanished), `--auto-prune` is tick
 owning ticket closed). See [Mode: --auto-prune](#mode---auto-prune-ticket-close-keyed) for why
 the merge-keyed predicate alone is unsafe.
 
-**Announce at start:** "I'm using the worktree skill to [audit/triage/prune] worktrees."
+**Announce at start:** "I'm using the worktree skill to [audit/triage/prune/auto-prune] worktrees."
 
 ---
 

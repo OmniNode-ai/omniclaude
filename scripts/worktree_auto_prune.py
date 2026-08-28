@@ -327,10 +327,23 @@ def collect_facts(
     ticket_dir = rel.parts[0]
     ticket = extract_ticket_id(ticket_dir)
 
+    # Every probe's exit code is checked. A git command that fails (timeout,
+    # OSError, a broken gitdir pointer) returns empty stdout, and empty stdout
+    # read as a fact means "clean tree" / "nothing ahead" — the two facts that
+    # authorise a deletion. Each failure is recorded here and fails the safety
+    # gate closed rather than being inferred away.
+    unreadable_probes: list[str] = []
+
     code, branch_out = _git(worktree, "branch", "--show-current")
+    # A non-zero rc here is a real failure; a zero rc with empty output is a
+    # detached HEAD, which the policy already refuses on its own terms.
+    if code != 0:
+        unreadable_probes.append("git branch --show-current")
     branch = branch_out if (code == 0 and branch_out) else None
 
-    _, status_out = _git(worktree, "status", "--porcelain")
+    code, status_out = _git(worktree, "status", "--porcelain")
+    if code != 0:
+        unreadable_probes.append("git status --porcelain")
     dirty_files = tuple(
         line[3:].strip() for line in status_out.splitlines() if line.strip()
     )
@@ -354,6 +367,8 @@ def collect_facts(
         code, count_out = _git(worktree, "rev-list", "--count", f"{base_ref}..HEAD")
         if code == 0 and count_out.isdigit():
             commits_ahead = int(count_out)
+        else:
+            unreadable_probes.append(f"git rev-list --count {base_ref}..HEAD")
         if commits_ahead > 0:
             code, cherry_out = _git(worktree, "cherry", base_ref, "HEAD")
             if code == 0:
@@ -364,8 +379,14 @@ def collect_facts(
                 )
             else:
                 # Unreadable cherry output must not read as "nothing unmerged".
+                unreadable_probes.append(f"git cherry {base_ref} HEAD")
                 unmerged = tuple(f"<unreadable:{i}>" for i in range(commits_ahead))
+            # `git diff --quiet` signals its answer through the exit code: 0 =
+            # no difference, 1 = differences. Anything else is a failure, and
+            # must not be read as "no difference".
             code, _ = _git(worktree, "diff", "--quiet", f"{base_ref}...HEAD")
+            if code not in (0, 1):
+                unreadable_probes.append(f"git diff --quiet {base_ref}...HEAD")
             tree_diff_empty = code == 0
 
     has_terminal, open_claim = ledger.get(ticket or "", (False, None))
@@ -388,6 +409,7 @@ def collect_facts(
         unmerged_ahead_commits=unmerged,
         tree_diff_vs_base_empty=tree_diff_empty,
         attributed_stash_count=count_attributed_stashes(stashes, branch),
+        unreadable_probes=tuple(unreadable_probes),
     )
 
 

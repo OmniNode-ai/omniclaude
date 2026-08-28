@@ -117,6 +117,15 @@ class EnumPruneBlockReason(StrEnum):
     BASE_REF_UNRESOLVED = "base_ref_unresolved"
     """Neither origin/dev nor origin/main resolved. Fails closed."""
 
+    FACTS_UNREADABLE = "facts_unreadable"
+    """A git probe failed, so at least one safety fact is UNKNOWN, not clean.
+
+    A failed ``git status --porcelain`` returns empty stdout, which is
+    indistinguishable from a clean tree if the exit code is discarded. An empty
+    result is not evidence of absence — here the difference is deleting live
+    work — so any unreadable probe fails the gate closed.
+    """
+
 
 class ModelWorktreePruneFacts(BaseModel):
     """Collected, already-observed facts about one worktree.
@@ -173,6 +182,14 @@ class ModelWorktreePruneFacts(BaseModel):
     )
     attributed_stash_count: int = Field(
         ..., ge=0, description="Stash entries whose subject names this branch"
+    )
+    unreadable_probes: tuple[str, ...] = Field(
+        ...,
+        description=(
+            "Git probes that did not complete successfully, named by command. "
+            "Non-empty means at least one safety fact below is UNKNOWN rather "
+            "than observed, and the gate must refuse."
+        ),
     )
 
 
@@ -291,6 +308,11 @@ def is_prune_safe(
 
     if facts.base_ref is None:
         reasons.append(EnumPruneBlockReason.BASE_REF_UNRESOLVED)
+
+    if facts.unreadable_probes:
+        # Before reading any fact below: a probe that failed produced empty
+        # output, not a clean observation. Refuse rather than infer.
+        reasons.append(EnumPruneBlockReason.FACTS_UNREADABLE)
 
     if facts.dirty_files:
         reasons.append(EnumPruneBlockReason.DIRTY_TREE)
