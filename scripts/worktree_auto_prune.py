@@ -288,7 +288,7 @@ def resolve_ticket_states(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
+            with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310  # nosec B310 — constant https Linear endpoint, no user-supplied scheme
                 body = json.loads(response.read().decode())
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
             print(
