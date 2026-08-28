@@ -55,15 +55,15 @@ source of truth):
 delegate` runs a pre-flight drift guard
 (`omnibase_infra.cli.omnimarket_drift_guard`) before every REAL
 dispatch — `--help` below is answered before the guard ever runs. On any
-machine with `$OMNI_HOME` set and a canonical `omnimarket` clone checked out
-at `$OMNI_HOME/omnimarket` (true for every OmniNode dev workspace) the guard
+machine with `$OMNI_HOME` set and a canonical `omnimarket` clone checked out <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
+at `$OMNI_HOME/omnimarket` (true for every OmniNode dev workspace) the guard <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
 REJECTS an `omnimarket` install that is not a git-VCS install matching that
 clone's checked-out commit exactly. `omnimarket>=0.4.7` (PyPI) carries no VCS
 provenance and fails this check by construction, every time — not
 intermittently (live-reproduced).
 
 The commands below resolve the ref dynamically: pinned to
-`$OMNI_HOME/omnimarket`'s own checked-out commit when that clone exists (an
+`$OMNI_HOME/omnimarket`'s own checked-out commit when that clone exists (an <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
 exact match against the guard's own comparison basis), falling back to the
 `dev` branch tip otherwise — a machine with no canonical clone never reaches
 the guard at all, since it fails OPEN when it cannot determine a canonical
@@ -85,7 +85,7 @@ If `omnimarket` is present but PyPI-installed (or stale) on a machine the
 drift guard covers, the first real invocation instead fails with
 `OmnimarketDriftError`. The node is found through the `onex.nodes`
 entry-point group over **installed distributions**, so once installed this
-way no further `$OMNI_HOME` access is needed to dispatch.
+way no further `$OMNI_HOME` access is needed to dispatch. <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
 
 Proven end-to-end: a scratch venv built from exactly this recipe passes
 `omnimarket_drift_guard.check_omnimarket_drift()` with zero drift and
