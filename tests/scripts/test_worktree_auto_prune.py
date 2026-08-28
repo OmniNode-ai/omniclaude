@@ -7,7 +7,7 @@ The pure predicate itself is covered by
 fact-collection half — the parts that decide *what the predicate is told*, where
 a bug is just as capable of deleting live work:
 
-* ledger claim-awareness (the OMN-15551 hazard: a lane that re-claimed a closed
+* ledger claim-awareness (the claim-awareness hazard: a lane that re-claimed a closed
   ticket must block the prune),
 * stash attribution to a branch (stashes are repo-wide, worktrees are not),
 * tracker state mapping (only ``completed``/``canceled`` are terminal).
@@ -61,7 +61,7 @@ class TestParseLedgerClaims:
         assert open_claim is None
 
     def test_claim_after_terminal_reopens_the_ticket(self, tmp_path: Path) -> None:
-        """The OMN-15551 hazard: a live lane resumed work on a closed ticket."""
+        """A live lane resumed work on a closed ticket."""
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
             "| 2026-08-02T10:00:00Z | lane-a | OMN-1234 | TERMINAL | landed |\n"
