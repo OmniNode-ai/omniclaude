@@ -1,0 +1,86 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-14096
+title: "Correct generate_node docs to the scaffold-only pipeline they describe"
+summary: >-
+  generate_node's SKILL.md and README.md advertised "100% automated node generation",
+  "ZERO manual work", a BusinessLogicGenerator that "writes working code", a
+  100%-automation performance table, and a fabricated success transcript with a
+  quality score. None of it was implemented in this repo. This corrects both public
+  skill docs and the registry-facing description on
+  node_skill_generate_node_orchestrator to describe what the pipeline provably does:
+  AST-only contract inference plus template scaffolding, with handler bodies written
+  by hand. Documentation-only; no runtime behaviour changes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: manual
+    description: "Public-skill hygiene gate passes on the corrected skill docs."
+    command: "python3 scripts/check_public_skill_hygiene.py"
+  - kind: manual
+    description: "Central OCC evidence binds OMN-14096 proof."
+    command: "Evidence-Source: OCC#7422"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-public-skill-hygiene
+    description: >-
+      check_public_skill_hygiene.py reports 0 blocked hits across the 463-file
+      plugins/onex/skills tree. The first draft carried internal ticket refs and
+      workspace-root paths inline and was correctly rejected by this gate; the
+      citations were moved to the commit messages and PR body instead.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "python3 scripts/check_public_skill_hygiene.py"
+  - id: dod-skill-monorepo-ref-gate
+    description: >-
+      No $OMNI_HOME token remains in plugins/onex/skills/generate_node/. Two were
+      introduced by the first correction commit and removed in 0c645ae42; Quality
+      Gate was red solely because it aggregates this gate.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "! grep -rn 'OMNI_HOME' plugins/onex/skills/generate_node/SKILL.md plugins/onex/skills/generate_node/README.md"
+  - id: dod-orchestrator-contract-parses
+    description: >-
+      The corrected registry-facing description on node_skill_generate_node_orchestrator
+      still parses as YAML. That description previously read "Generate ONEX nodes via
+      automated code generation with ContractInferencer and LLM-powered business
+      logic" — the plugin-registry half of the overclaim the ticket names.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "python3 -c \"import yaml; yaml.safe_load(open('src/omniclaude/nodes/node_skill_generate_node_orchestrator/contract.yaml'))\""
+  - id: dod-dead-entrypoint-verified
+    description: >-
+      The claim newly documented in this PR — that the documented entrypoint does not
+      resolve — is machine-checkable. generate:154 runs `uv run omninode-generate`, and
+      that console script is declared in no [project.scripts], is absent from .venv/bin,
+      and is not on PATH.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "! grep -q 'omninode-generate' pyproject.toml && ! command -v omninode-generate"
+  - id: dod-fill-claim-corrected-against-live-run
+    description: >-
+      The first commit asserted the pipeline "does not emit working business logic, and
+      it never has". A live dev-lane dispatch of omnimarket's node_generation_consumer
+      (correlation_id 1f848bc3-a79e-4939-ad47-2214847a5bd4) returned contract_passed=true
+      with a real generated handler body, disproving the second half. The docs were
+      corrected in d53498c6c rather than left standing — the honesty rule the same PR
+      adds. Full readback with bus evidence is recorded on the related orchestration
+      ticket.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'not gated on the node working' plugins/onex/skills/generate_node/SKILL.md"
+  - id: dod-occ-evidence
+    description: "Central OCC evidence for OMN-14096 is merged and referenced by this PR body."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'Evidence-Source: OCC#7422' /tmp/pr_body.txt"
