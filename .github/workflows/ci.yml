@@ -116,6 +116,16 @@ jobs:
             attempt=$((attempt + 1))
           done
 
+      # OMN-16823: the jq filters in scripts/check-unresolved-threads.sh decide
+      # whether the required `gate / CodeRabbit Thread Check` context can go
+      # green. Two separate defects (OMN-15532, OMN-16823) made that context
+      # unsatisfiable by construction, so its filter test is an enforced gate
+      # here, not an opt-in script. bash + jq only — no venv needed, so this
+      # runs ahead of the Python steps.
+      - name: CR-thread-gate jq filter tests
+        working-directory: ${{ github.workspace }}
+        run: bash tests/scripts/test_check_unresolved_threads.sh
+
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
         run: uv run ruff format --check src/ tests/

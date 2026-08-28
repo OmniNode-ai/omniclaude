@@ -10,6 +10,24 @@
 # (you're right / apologize / correct behavior / retract / understood + defer/
 # reasonable/pragmatic) are excluded from the count and logged to stderr as
 # cr_concession_ack lines.
+#
+# AGREEMENT-PLUS-DEFERRAL CLASS (OMN-16823): CodeRabbit also concedes without
+# any of the phrasings above, by agreeing with the rebuttal and accepting a
+# deferral to a ticket. The live case is omnibase_core#1604 thread 2 of 3 on
+# src/omnibase_core/models/cli/model_cli_user_config_logging.py: "agreed that
+# `EnumLogLevel` cannot represent this YAML contract ... deferring the
+# validation design to OMN-16037 is reasonable". That thread stayed counted as
+# blocking with no path to green short of a change the reviewer itself agreed
+# was not required. The class is recognized as a CONJUNCTION — an agreement
+# token AND a deferral/acceptance token AND no negation-or-escalation marker —
+# evaluated over the SALIENT body (auto-generated <details> blocks and HTML
+# comments stripped, so CodeRabbit's own "Learnings" boilerplate cannot supply
+# either token). The pre-existing human-rebuttal precondition still applies, so
+# an unanswered finding can never be read as conceded. Permanent negative
+# controls live in tests/scripts/test_check_unresolved_threads.sh cases L-R.
+#
+# This script COUNTS threads; it never resolves one. `pr_review_bot` is the sole
+# resolver of CodeRabbit threads — do not add a resolve mutation here.
 # Threads with more comments than fetched (totalCount > fetched) are skipped
 # and counted as blocking (conservative: never wrongly exclude on partial data).
 #
@@ -72,6 +90,47 @@ HUMAN_REBUTTAL_FILTER='select(
   ((.author.login // "") | test("coderabbitai"; "i") | not)
 )'
 
+# --- Concession predicate (single definition, shared by CONCESSION_JQ and BLOCKING_JQ) ---
+# Keeping one definition is deliberate: the two filters previously carried
+# byte-duplicated regex literals, which is exactly how a widened match silently
+# lands in the audit line but not in the count (or vice versa).
+
+# Pre-OMN-16823 phrasings, matched against CR's last reply verbatim.
+LEGACY_CONCESSION_RE='you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct|understood(.|\\n){0,200}(reasonable|pragmatic|tradeoff|defer|pre-existing|intentional)|i.?ll defer'
+
+# OMN-16823 agreement-plus-deferral class. All three are required together.
+AGREEMENT_RE='\\b(agreed|agree|agreeing|concur|concurred|fair point|good point|that.?s fair|point taken)\\b'
+DEFERRAL_RE='\\b(defer|defers|deferring|deferral|deferred|reasonable|pragmatic|trade.?off|pre-existing|intentional|out of scope|follow.?up|separate (ticket|issue|pr)|OMN-[0-9]+)\\b'
+# Negation / escalation markers. Any hit disqualifies the reply, so the two
+# tokens above can never be read out of a sentence that rejects them.
+# ("disagree" is additionally excluded by the \\b in AGREEMENT_RE.)
+NON_CONCESSION_RE='\\bdisagree|\\b(do not|don.?t|cannot|can.?t|will not|won.?t|not)\\s+(agree|concur)|\\bstill (stands|recommend|recommended|think|believe|applies|apply|required|require|needed|blocking|holds)|\\bre-?iterat|\\bescalat|\\bmust (still|be) (fix|address)|\\bfinding stands'
+
+# CR's last reply body, and the same body with auto-generated <details> blocks
+# and HTML comments stripped (the "salient" body).
+CR_LAST_BODY_JQ='([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "")'
+CR_SALIENT_BODY_JQ='('"$CR_LAST_BODY_JQ"' | gsub("<details>.*?</details>"; " "; "gim") | gsub("<!--.*?-->"; " "; "gim"))'
+
+HUMAN_REBUTTAL_PRESENT_JQ='([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)'
+
+AGREEMENT_DEFERRAL_JQ='(
+  ('"$CR_SALIENT_BODY_JQ"' | test("'"$AGREEMENT_RE"'"; "i"))
+  and ('"$CR_SALIENT_BODY_JQ"' | test("'"$DEFERRAL_RE"'"; "i"))
+  and (('"$CR_SALIENT_BODY_JQ"' | test("'"$NON_CONCESSION_RE"'"; "i")) | not)
+)'
+
+CR_CONCEDED_JQ='(
+  '"$HUMAN_REBUTTAL_PRESENT_JQ"'
+  and (
+    ('"$CR_LAST_BODY_JQ"' | test("'"$LEGACY_CONCESSION_RE"'"; "i"))
+    or '"$AGREEMENT_DEFERRAL_JQ"'
+  )
+)'
+
+# Which class matched — surfaced in the audit line so a widened match is legible
+# in CI logs rather than an unexplained drop in the count.
+CONCESSION_CLASS_JQ='(if ('"$CR_LAST_BODY_JQ"' | test("'"$LEGACY_CONCESSION_RE"'"; "i")) then "legacy" else "agreement_deferral" end)'
+
 # Threads to exclude (CR conceded after human rebuttal). Emits audit lines to stderr.
 # Skips threads where fetched comment count < totalCount (incomplete slice — treat as blocking).
 CONCESSION_JQ='[
@@ -85,12 +144,8 @@ CONCESSION_JQ='[
       )
     )
   | select(.comments.totalCount <= (.comments.nodes | length))
-  | select(
-      ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
-      and
-      ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct|understood(.|\\n){0,200}(reasonable|pragmatic|tradeoff|defer|pre-existing|intentional)|i.?ll defer"; "i"))
-    )
-  | "cr_concession_ack path=\(.comments.nodes[0].body[:40] // "unknown" | gsub("\\n";" ")) line=\([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | .[:80] | gsub("\\n";" "))"
+  | select('"$CR_CONCEDED_JQ"')
+  | "cr_concession_ack class=\('"$CONCESSION_CLASS_JQ"') path=\(.comments.nodes[0].body[:40] // "unknown" | gsub("\\n";" ")) line=\('"$CR_LAST_BODY_JQ"' | .[:80] | gsub("\\n";" "))"
 ][]'
 
 # Threads still blocking: CR thread without a concession-after-human-rebuttal pattern,
@@ -108,13 +163,7 @@ BLOCKING_JQ='[
   | select(
       (.comments.totalCount > (.comments.nodes | length))
       or
-      (
-        (
-          ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
-          and
-          ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct|understood(.|\\n){0,200}(reasonable|pragmatic|tradeoff|defer|pre-existing|intentional)|i.?ll defer"; "i"))
-        ) | not
-      )
+      (('"$CR_CONCEDED_JQ"') | not)
     )
 ] | length'
 
