@@ -21,6 +21,7 @@ REQUIRED_RULES = [
     "OCC receipt pairing",
     # OMN-13052 (D-6): UI DoD items require Playwright proof, not curl.
     "UI proof requires Playwright",
+    "Docker builds run on the runtime host's stability lane",
 ]
 
 WORKER_TEMPLATE_VERSION = "v2"
