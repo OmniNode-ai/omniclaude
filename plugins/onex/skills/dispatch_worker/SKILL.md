@@ -36,6 +36,7 @@ Compile a worker dispatch spec through `node_dispatch_worker` and spawn a backgr
 
 > **Required for all dispatched workers — enforced by `_COMMON_PREAMBLE` in
 > `omnimarket/src/omnimarket/nodes/node_dispatch_worker/handlers/handler_dispatch_worker.py`.**
+> Operating rule 4's final local test command is `env -u PYTHONPATH uv run pytest tests/ -v`.
 
 - **Ack after each deliverable.** After every discrete deliverable (design doc written, test
   run complete, PR opened, finding logged), send a one-line `SendMessage` to `{reports_to}`.
@@ -129,63 +130,17 @@ line per subagent tool call to
 
 ## Worker Operating Rules (worker_template_version: v2)
 
-The following 9 rules are injected verbatim into every worker prompt by `prompt.md`
+The Operating Rules are injected verbatim into every worker prompt by `prompt.md`
 before spawning. They are auto-injected — dispatchers MUST NOT hand-restate them.
 
-```
-## Operating Rules (auto-injected by dispatch_worker skill v2)
+They are defined once, canonically, and referenced here rather than restated:
 
-1. **No pre-existing excuse.** Pre-existing test failures block shipping regardless of
-   provenance. Fix them in the same PR or file a blocker — never push red tests.
+@_lib/dispatch-laws/helpers.md
 
-2. **PR closing keyword.** The PR body MUST contain `Closes OMN-XXXX.` (exact closing-
-   keyword form, where XXXX is the primary ticket). Without it the receipt gate fails.
+This file previously carried a second hand-maintained copy which had drifted from the
+injected block: it declared itself verbatim, undercounted the rules, dropped one
+entirely, and abridged two others. Do NOT restate them here again.
 
-3. **Worktree-only development.** All code changes happen in a ticket worktree under
-   `$ONEX_WORKTREES_ROOT/<ticket>/<repo>/`. NEVER stage or commit inside the
-   canonical repo clone. The worktree guard hook enforces this.
-
-4. **Full test suite before push.** Run `env -u PYTHONPATH uv run pytest tests/ -v` with
-   NO `-k` filter as the final pre-push check. The `env -u PYTHONPATH` prefix is required:
-   omniclaude hooks export PYTHONPATH into the parent environment, and that value shadows
-   the worktree's local `src/` layout, causing import failures. Always prefix `uv run`
-   and direct `python` invocations inside worktrees with `env -u PYTHONPATH`.
-
-5. **Never bypass pre-commit hooks.** Never use `--no-verify`, `--no-gpg-sign`, or any
-   bypass flag. Pre-commit hooks enforce code quality and architectural constraints.
-   Fix the issue instead of bypassing the gate.
-
-6. **Anchor-first ordering (<TICKET>).** Phase 0 is mandatory and must complete before
-   any long implementation leg: (a) verify or file the Linear ticket; (b) push a WIP
-   branch to origin (even if the branch is empty). Write a resume manifest to
-   `$ONEX_STATE_DIR/manifests/<ticket_id>/manifest.yaml` immediately after the WIP push
-   using `resume_manifest_writer.write_resume_manifest()` with
-   `phase=EnumResumeManifestPhase.PHASE_0_ANCHOR` and `wip_pushed_at` populated.
-   Update the manifest at every subsequent phase boundary (implement, local_review,
-   create_pr, done). On any auth or usage-limit error, call
-   `resume_manifest_writer.write_survivor_note(manifest, detail="<what was diagnosed>")`
-   before terminating so the defect retains identity even without a filed PR.
-
-7. **Verifiable-handle reporting.** End with a ```json-report``` block; a merged/deploy
-   claim without its handle is BLOCKED at SubagentStop. (Full text in prompt.md.)
-
-8. **OCC receipt pairing — tool-generate, never hand-author (<TICKET>, retro D-4).**
-   Runtime-path PRs pair with an OCC contract + receipt produced by
-   `uv run scripts/scaffold_occ_receipt.py <TICKET-ID> --pr-number <OCC-PR#> ...`,
-   which emits the full schema INCLUDING `contract_sha256`, defaults `--base dev`,
-   and self-reports the four OCC #2530 wedges. Each prohibition (no skip token,
-   target dev not main, never arm blind, cite Evidence-Source + Evidence-Ticket)
-   ships with its failure mode and alternative — "STOP and report back — any
-   bracketed skip-token hard-fails your PR." (Full text in prompt.md.)
-
-9. **UI proof requires Playwright, not `curl` (D-6, <TICKET>).** For any DoD item that
-   touches UI behavior, the required proof is a Playwright interaction with the operator's
-   running surface: the live URL, a screenshot, and the network log of the actual request
-   the UI emitted. A `curl` of the canonical endpoint is NOT acceptable evidence for a UI
-   claim — it proves the backend answered, not that the operator's surface renders the data
-   or emits the request. Bridges the gap until the A-2 Receipt-Gate evidence-class check
-   (<TICKET>) is live.
-```
 
 ## See Also
 
