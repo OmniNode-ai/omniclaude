@@ -279,8 +279,19 @@ def _path_in_canonical_clone(abspath: str, omni_home: str) -> str | None:
     """Return the canonical-clone repo name if *abspath* is inside one, else None.
 
     A canonical clone is a direct child directory of $OMNI_HOME that is itself a
-    git repo (has a .git entry), excluding the omni_worktrees work-root and
+    git repo (has a .git entry), excluding any omni_worktrees work-root and
     omni_home's own top-level files.
+
+    The ``omni_worktrees`` test covers the segment WHEREVER it appears, not just
+    directly under $OMNI_HOME (OMN-16826). A relative-path ``git worktree add``
+    run from inside a canonical clone lands the worktree at
+    ``<clone>/omni_worktrees/<ticket>/<repo>``; when only the first segment was
+    tested, the canonical-clone prefix match won there and the resulting
+    registration was one that NO sanctioned command could remove --
+    ``worktree remove`` was refused as a canonical-clone mutation while
+    ``worktree prune`` skips a registration whose directory still exists. The
+    stray is a worktree, not the clone's own checkout, so it is out of scope for
+    this guard at any depth.
     """
     omni_home = os.path.normpath(os.path.abspath(omni_home))
     try:
@@ -291,8 +302,11 @@ def _path_in_canonical_clone(abspath: str, omni_home: str) -> str | None:
     first = parts[0] if parts else "."
     if first in ("", ".", ".."):
         return None  # omni_home root file or outside the tree
-    if first == "omni_worktrees":
-        return None  # sanctioned work root
+    if "omni_worktrees" in parts:
+        # Sanctioned work root -- at ANY depth, so a clone-internal stray
+        # (<clone>/omni_worktrees/...) stays removable. Ordered before the
+        # canonical-clone prefix check below, which would otherwise claim it.
+        return None
     if os.path.exists(os.path.join(omni_home, first, ".git")):
         return first
     return None
