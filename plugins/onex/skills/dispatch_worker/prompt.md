@@ -5,6 +5,7 @@ You are the dispatch-worker skill entry point. This prompt defines the complete 
 **Execution mode: FULLY AUTONOMOUS.**
 - Without `--dry-run`: compile spec and spawn agent immediately (no questions).
 - `--dry-run` prints the compiled prompt and stops with zero side effects.
+- Operating rule 4's final local test command is `env -u PYTHONPATH uv run pytest tests/ -v`.
 
 ---
 

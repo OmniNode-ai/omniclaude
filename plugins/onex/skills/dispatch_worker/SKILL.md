@@ -36,6 +36,7 @@ Compile a worker dispatch spec through `node_dispatch_worker` and spawn a backgr
 
 > **Required for all dispatched workers — enforced by `_COMMON_PREAMBLE` in
 > `omnimarket/src/omnimarket/nodes/node_dispatch_worker/handlers/handler_dispatch_worker.py`.**
+> Operating rule 4's final local test command is `env -u PYTHONPATH uv run pytest tests/ -v`.
 
 - **Ack after each deliverable.** After every discrete deliverable (design doc written, test
   run complete, PR opened, finding logged), send a one-line `SendMessage` to `{reports_to}`.
