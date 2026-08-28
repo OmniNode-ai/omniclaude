@@ -174,4 +174,96 @@ CASE_J='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
 COUNT=$(echo "$CASE_J" | jq -s "$SECRET_BLOCKING_JQ")
 [ "$COUNT" -eq 0 ] && echo "PASS: Case J blocking=0 -- unrelated Critical (RCE/eval) finding is not misclassified as secret-class" || { echo "FAIL Case J: expected 0 got $COUNT"; exit 1; }
 
+# --- OMN-16823 agreement-plus-deferral concession class -----------------------
+# CodeRabbit routinely concedes a finding without using any of the pre-OMN-16823
+# phrasings ("you're right" / "I apologize" / "understood ... reasonable"). The
+# live shape that blocked omnibase_core#1604 was an *agreement* token plus an
+# explicit *deferral* to a ticket. Fixtures below are the verbatim bodies of
+# that PR's `src/omnibase_core/models/cli/model_cli_user_config_logging.py`
+# thread (thread 2 of 3), fetched via
+#   gh api graphql -f query='{repository(owner:"OmniNode-ai",name:"omnibase_core"){pullRequest(number:1604){reviewThreads(first:50){nodes{...}}}}}'
+#
+# The widened class is deliberately a CONJUNCTION (agreement AND deferral AND
+# no negation/escalation marker, all in the *salient* body with <details> and
+# HTML-comment blocks stripped) on top of the pre-existing human-rebuttal
+# precondition. Cases L-R below are the permanent negative controls that keep it
+# from degrading into "any CodeRabbit reply clears the thread".
+#
+# This is a DETECTION change only. Nothing here resolves a thread —
+# `pr_review_bot` remains the sole resolver of CodeRabbit threads.
+
+CR_1604_FINDING='<!-- coderabbit --> _Data Integrity  Integration_ | _Minor_ | _Quick win_\n\n**Use an Enum for `logging.level` without changing the YAML contract.**\n\n`normalize_user_config()` accepts unsupported values such as `INF0` because `ModelCliUserConfigLogging.level` is `str`.\n\n<!-- cr-comment:v1:48af85e4011b142ed22fd006 -->'
+CR_1604_HUMAN='Declining this one, with the evidence. `EnumLogLevel` members are lowercase (`INFO = info`) and this config on-disk contract is uppercase, so typing the field as `EnumLogLevel` would silently rewrite every `~/.onex/config.yaml` in the fleet. Recorded on OMN-16037 as a follow-up rather than dropped.'
+# Verbatim CodeRabbit concession from omnibase_core#1604, including the trailing
+# `<details>Learnings added</details>` block the real reply carries.
+CR_1604_CONCESSION='`@jonahgabriel`, agreed that `EnumLogLevel` cannot represent this YAML contract. Its lowercase values would cause an unintended serialized-value migration.\n\nThe finding requested a separate uppercase-valued enum, not reuse of `EnumLogLevel`. However, deferring the validation design to OMN-16037 is reasonable because the current PR must avoid silent rewrites of existing configuration files.\n\n---\n\n<details>\n<summary>Learnings added</summary>\n\nLearnt from: jonahgabriel\nRepo: OmniNode-ai/omnibase_core PR: 1604\n\n</details>\n\n<!-- This is an auto-generated reply by CodeRabbit -->'
+
+# Emits a one-thread page whose CR reply body is $1.
+cr_1604_thread_with_reply() {
+  printf '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"comments":{"totalCount":3,"nodes":[{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}},{"body":"%s","author":{"login":"jonahgabriel","__typename":"User"}},{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}}]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}' \
+    "$CR_1604_FINDING" "$CR_1604_HUMAN" "$1"
+}
+
+# Case K (POSITIVE, the ticket's live shape): verbatim #1604 concession
+# -> BLOCKING=0 and a cr_concession_ack line naming the new class.
+CASE_K="$(cr_1604_thread_with_reply "$CR_1604_CONCESSION")"
+COUNT=$(echo "$CASE_K" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 0 ] && echo "PASS: Case K blocking=0 for the verbatim omnibase_core#1604 agreement-plus-deferral concession" || { echo "FAIL Case K: expected 0 got $COUNT"; exit 1; }
+ACK=$(echo "$CASE_K" | jq -rs "$CONCESSION_JQ")
+echo "$ACK" | grep -q "class=agreement_deferral" && echo "PASS: Case K concession ack names class=agreement_deferral" || { echo "FAIL Case K: no class=agreement_deferral ack; got: $ACK"; exit 1; }
+
+# Case L (NEGATIVE CONTROL, permanent): the same finding with no reply at all
+# -> still BLOCKING=1. An unanswered CodeRabbit finding is never conceded.
+CASE_L=$(printf '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"comments":{"totalCount":1,"nodes":[{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}}]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}' "$CR_1604_FINDING")
+COUNT=$(echo "$CASE_L" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case L blocking=1 for an unanswered CodeRabbit finding" || { echo "FAIL Case L: expected 1 got $COUNT"; exit 1; }
+
+# Case M (NEGATIVE CONTROL, permanent): CodeRabbit replies re-stating and
+# escalating, reusing the whole deferral vocabulary while REJECTING it
+# -> still BLOCKING=1. This is the case a bare keyword search gets wrong.
+CASE_M="$(cr_1604_thread_with_reply 'I disagree that deferring the validation design to OMN-16037 is reasonable. The separate uppercase-valued enum should be added in this PR before merge; leaving the field as `str` keeps the defect live in a release.')"
+COUNT=$(echo "$CASE_M" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case M blocking=1 when CodeRabbit escalates while using deferral vocabulary" || { echo "FAIL Case M: expected 1 got $COUNT"; exit 1; }
+
+# Case N (NEGATIVE CONTROL, permanent): explicit negated agreement over the
+# exact deferral sentence -> still BLOCKING=1.
+CASE_N="$(cr_1604_thread_with_reply 'I do not agree that deferring the validation design to OMN-16037 is reasonable; the uppercase enum belongs in this PR.')"
+COUNT=$(echo "$CASE_N" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case N blocking=1 for a negated agreement (do not agree ... is reasonable)" || { echo "FAIL Case N: expected 1 got $COUNT"; exit 1; }
+
+# Case O (NEGATIVE CONTROL, permanent): partial agreement with NO deferral —
+# CodeRabbit grants a sub-point and keeps the finding -> still BLOCKING=1.
+CASE_O="$(cr_1604_thread_with_reply 'Agreed that the `EnumLogLevel` members are lowercase. The finding still stands: a separate uppercase-valued enum is required in this PR.')"
+COUNT=$(echo "$CASE_O" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case O blocking=1 for agreement on a sub-point with the finding kept" || { echo "FAIL Case O: expected 1 got $COUNT"; exit 1; }
+
+# Case P (NEGATIVE CONTROL, permanent): the concession vocabulary appears ONLY
+# inside the auto-generated `<details>Learnings</details>` block while the
+# visible reply keeps the finding -> still BLOCKING=1. Proves the match runs on
+# the salient body, not on CodeRabbit boilerplate.
+CASE_P="$(cr_1604_thread_with_reply 'The finding stands. A separate uppercase-valued enum is required in this PR.\n\n<details>\n<summary>Learnings used</summary>\n\nLearnt from: jonahgabriel — agreed that `EnumLogLevel` cannot represent this YAML contract, and deferring the validation design to OMN-16037 is reasonable.\n\n</details>')"
+COUNT=$(echo "$CASE_P" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case P blocking=1 when concession vocabulary only appears inside a details block" || { echo "FAIL Case P: expected 1 got $COUNT"; exit 1; }
+
+# Case Q (NEGATIVE CONTROL, permanent): the human-rebuttal precondition still
+# holds for the new class — a bot-only exchange ending in a textbook
+# agreement-plus-deferral reply is NOT a concession to a human -> BLOCKING=1.
+CASE_Q=$(printf '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"comments":{"totalCount":3,"nodes":[{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}},{"body":"auto-fix applied","author":{"login":"renovate","__typename":"Bot"}},{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}}]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}' "$CR_1604_FINDING" "$CR_1604_CONCESSION")
+COUNT=$(echo "$CASE_Q" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case Q blocking=1 — agreement-plus-deferral without a human rebuttal is not a concession" || { echo "FAIL Case Q: expected 1 got $COUNT"; exit 1; }
+
+# Case R (NEGATIVE CONTROL, permanent): the truncation guard still wins over the
+# new class — a partially-fetched thread stays blocking even with a textbook
+# concession in the fetched slice.
+CASE_R=$(printf '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"comments":{"totalCount":60,"nodes":[{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}},{"body":"%s","author":{"login":"jonahgabriel","__typename":"User"}},{"body":"%s","author":{"login":"coderabbitai","__typename":"Bot"}}]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}' "$CR_1604_FINDING" "$CR_1604_HUMAN" "$CR_1604_CONCESSION")
+COUNT=$(echo "$CASE_R" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 1 ] && echo "PASS: Case R blocking=1 — truncated thread stays conservative despite a concession in the fetched slice" || { echo "FAIL Case R: expected 1 got $COUNT"; exit 1; }
+
+# Guard: the script must never gain a resolve path. `pr_review_bot` is the sole
+# resolver of CodeRabbit threads; this gate only counts.
+if grep -qE 'resolveReviewThread|unresolveReviewThread|--resolve\b' "$SCRIPT"; then
+  echo "FAIL: check-unresolved-threads.sh must not resolve threads (pr_review_bot is the sole resolver)"; exit 1
+fi
+echo "PASS: no thread-resolution mutation present in the gate script"
+
 echo "ALL TESTS PASSED"
