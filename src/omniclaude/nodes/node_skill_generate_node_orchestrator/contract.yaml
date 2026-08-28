@@ -34,7 +34,9 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the generate-node skill.
-  Generate ONEX nodes via automated code generation with ContractInferencer and LLM-powered business logic
+  Scaffold ONEX nodes: AST-only contract inference plus template scaffolding.
+  Emits a loadable, registered SHELL — the LLM business-logic fill stage does
+  NOT exist and handler bodies are written by hand (OMN-14096, OMN-14923).
   Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
