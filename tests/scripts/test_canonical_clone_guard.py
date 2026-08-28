@@ -714,3 +714,61 @@ def test_converge_script_name_as_argument_does_not_launder(registry: Registry) -
     ):
         verdict = bash(registry, command, registry.home)
         assert not verdict.denied, (command, verdict.reason)
+
+
+# --------------------------------------------------------------------------
+# OMN-16826 -- clone-internal stray worktree registrations
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_g2_worktree_remove_of_clone_internal_stray_allowed(
+    registry: Registry,
+) -> None:
+    """A stray worktree INSIDE a canonical clone must still be removable.
+
+    A relative-path ``git worktree add`` run from inside a canonical clone
+    lands the worktree at ``<clone>/omni_worktrees/<ticket>/<repo>``. The
+    guard's canonical-clone prefix match used to win over its
+    ``omni_worktrees`` allowance there -- the allowance only tested the FIRST
+    path segment under $OMNI_HOME -- so the registration became one no
+    sanctioned command could remove. `git worktree remove` was refused as a
+    canonical-clone mutation and `git worktree prune` skipped it while the
+    directory existed, leaving the operator with no path forward at all.
+    """
+    clone = registry.clone("omnimarket")
+    stray = clone / "omni_worktrees" / "OMN-15911" / "onex_change_control"
+    stray.mkdir(parents=True)
+    for command in (
+        f"git -C {clone} worktree remove {stray}",
+        f"git -C {clone} worktree remove --force {stray}",
+        f"cd {clone} && git worktree remove omni_worktrees/OMN-15911/onex_change_control",
+        f"git -C {clone} worktree prune",
+    ):
+        verdict = bash(registry, command, registry.home)
+        assert not verdict.denied, (command, verdict.reason)
+
+
+@pytest.mark.unit
+def test_g2_stray_allowance_does_not_open_the_canonical_clone(
+    registry: Registry,
+) -> None:
+    """Permanent negative control for the allowance above.
+
+    Widening the ``omni_worktrees`` test to any path segment must NOT turn
+    into a general escape hatch: a genuine mutation of the canonical clone's
+    OWN checkout stays refused, including from a sibling directory of the
+    stray work-root.
+    """
+    clone = registry.clone("omnimarket")
+    (clone / "omni_worktrees" / "OMN-15911" / "onex_change_control").mkdir(parents=True)
+    for command in (
+        f"cd {clone} && git checkout -b jonah/omn-16826-nope",
+        f"cd {clone} && git add -A",
+        f"cd {clone} && git commit -m x",
+        f"cd {clone} && git reset --hard HEAD~1",
+        f"cd {clone}/src && git add -A",
+        f"git -C {clone} commit -m x",
+    ):
+        verdict = bash(registry, command, registry.home)
+        assert verdict.denied, (command, verdict.reason)
