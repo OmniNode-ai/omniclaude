@@ -523,3 +523,37 @@ gates:
     reusable_job: check-skip-vectors
     skip_semantics: never
     rationale: "OMN-14854/OMN-15178: this guard's own required check. FLIPPED to REQUIRED per operator ruling 2026-07-26T07:25Z (\"Make it blocking\") after 2 independent green runs of required-check-skip-guard-caller.yml on dev. Branch protection (gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks) already carries this context live (added additively, 57->58 contexts, 0 removed) — this manifest row now matches live state, per schema-v3 rule that mode and branch-protection stay in sync."
+
+  # OMN-16878 (OMN-16876 census items 1-2). Three checks that ran on every PR
+  # and could not block a merge: absent from branch protection AND from
+  # scripts/ci/ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS. Flipped to
+  # REQUIRED on dev in the same change, so this manifest matches live state.
+  #
+  # All three producer jobs gained `if: always()` in the same PR. Without it,
+  # `needs: occ-preflight` with no `if:` lets a failed occ-preflight SKIP the
+  # job, and a skipped job SATISFIES branch protection (OMN-15057 vector 5) —
+  # requiring them as they stood would have wired in a silent-pass bypass.
+  # This is why every row below can honestly carry `skip_semantics: never`.
+  - name: "deploy-gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: deploy-gate.yml
+    job_path: ["deploy-gate"]
+    skip_semantics: never
+    rationale: "OMN-16878: runtime-change PRs must cite a ticket with deploy DoD evidence (OMN-8912 gate, root cause OMN-8841). Ran 16/16 present and 16/16 green over merged dev PRs #2045-#2060 while unable to block anything. Non-vacuity proven: validate_pr_deploy_required.py exits 1 on a runtime-path diff whose PR body carries no deploy evidence, and 0 on a docs-only diff (OCC#7433, dod-nonvacuity-negative-tests). Corrects the omni_home CLAUDE.md claim that this context was already required here — it was not, in any form."
+
+  - name: "receipt-honesty"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: receipt-honesty.yml
+    job_path: ["receipt-honesty"]
+    skip_semantics: never
+    rationale: "OMN-16878: completes OMN-13328, whose OCC contract asserted omniclaude was 'already flipped' — live branch protection showed it never was. Ran 16/16 present and 16/16 green over #2045-#2060 while unable to block. Non-vacuity proven: the validator exits 1 on a gamed receipt (verifier == runner) and 0 on a real committed receipt. No-op by design on PRs that change no drift/dod_receipts/*.yaml — an explicit applicability guard in the workflow, not a silent pass."
+
+  - name: "contract-validation"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: contract-validation.yml
+    job_path: ["contract-validation"]
+    skip_semantics: never
+    rationale: "OMN-16878: completes OMN-13326, which claimed contract-validation was REQUIRED across all 6 repos; live readback showed omniclaude and omnibase_infra were never wired. Ran 16/16 present and 16/16 green over #2045-#2060 while unable to block. Non-vacuity proven: validate-yaml exits 1 on a schema-invalid contract and 0 on contracts/OMN-10041.yaml. Legitimately reports 'skipped' status internally when the branch carries no OMN-XXXX or no contract file, but the JOB always runs and always reports a conclusion, so skip_semantics is never."

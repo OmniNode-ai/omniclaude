@@ -755,7 +755,7 @@ class TestExternalContextCompleteness:
     def test_every_snapshot_external_context_is_classified(self) -> None:
         required = {
             line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-13.txt")
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-28.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()
@@ -784,7 +784,7 @@ class TestExternalContextCompleteness:
         # never gates anything live.
         required = {
             line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-13.txt")
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-28.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()

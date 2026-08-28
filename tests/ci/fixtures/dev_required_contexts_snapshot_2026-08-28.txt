@@ -47,7 +47,9 @@ Tests Gate
 URL Authority Gate
 Version Pin Compliance
 call-reject-skip-token / scan / reject-skip-gate-token
+contract-validation
 cr-thread-gate / CodeRabbit Thread Check
+deploy-gate
 gate / CodeRabbit Thread Check
 main-target-guard
 no-noncanonical-lifecycle-classes
@@ -55,4 +57,5 @@ non-dev-base-guard
 occ-preflight / eligibility
 pr-title / check-title
 reason-graph
+receipt-honesty
 required-check-skip-guard / check-skip-vectors

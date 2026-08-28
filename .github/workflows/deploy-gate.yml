@@ -39,6 +39,15 @@ jobs:
 
   deploy-gate:
     needs: occ-preflight
+    # OMN-16878 (OMN-15057 vector 5): this context becomes a REQUIRED status
+    # check on `dev` in the same change. `needs:` with no `if:` means GitHub's
+    # implicit job-level `if:` is `success()` over `needs:` — a failed or
+    # cancelled occ-preflight SKIPS this job, and a skipped job SATISFIES
+    # branch protection. Requiring the context without this line would have
+    # wired in a silent-pass bypass on the deploy gate itself. `if: always()`
+    # is the same shape the already-required url-authority-gate.yml and
+    # main-target-guard.yml use in this repo.
+    if: always()
     name: deploy-gate
     # Lightweight required metadata/OCC gate: keep it hosted so merge sweeps do
     # not wait on the self-hosted fleet for deploy-evidence checks.

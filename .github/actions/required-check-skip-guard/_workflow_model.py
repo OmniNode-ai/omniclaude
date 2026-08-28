@@ -184,7 +184,9 @@ def resolve_uses_ref(
 
 
 def resolve_context_to_job(
-    context: str, workflows: dict[str, ParsedWorkflow]
+    context: str,
+    workflows: dict[str, ParsedWorkflow],
+    preferred_workflow: str | None = None,
 ) -> ResolvedJob:
     """Implements the design spec §1 mapping algorithm.
 
@@ -193,6 +195,26 @@ def resolve_context_to_job(
     verbatim against the reusable job's own display name — this handles the
     real "call-reject-skip-token / scan / reject-skip-gate-token" case where
     the reusable job's own `name:` field itself contains a `/`).
+
+    ``preferred_workflow`` (OMN-16878) is the manifest row's own ``workflow:``
+    field, and it is consulted FIRST when supplied. Shape-A matching is
+    otherwise first-match-wins over a filename-sorted dict, which silently
+    mis-resolves whenever two jobs in the repo render the same context name.
+    omniclaude has exactly that collision: ``deploy-gate.yml`` carries the
+    local ``deploy-gate`` job that produces this repo's required context, and
+    ``deploy-gate-reusable.yml`` carries a job *also* named ``deploy-gate``
+    (it is the canonical cross-repo reusable that omnibase_core /
+    omnibase_infra / omnimarket call by ``uses:``, producing THEIR
+    ``deploy-gate / deploy-gate`` context — its job name is load-bearing
+    downstream and must not be renamed to break the tie).
+
+    ``"deploy-gate-reusable.yml" < "deploy-gate.yml"`` bytewise, so the
+    reusable won the race and the guard reported vector-4-no-pr-trigger
+    against a `workflow_call`-only workflow — a false finding about the wrong
+    file. The manifest already declares which workflow owns the context; this
+    parameter simply stops the resolver from throwing that away. It narrows
+    WHICH job a context resolves to; it never suppresses a finding, because
+    every vector check still runs against whatever job comes back.
 
     Deliberately does NOT filter candidate workflows by
     `triggers_on_pr_or_merge_group()` before matching: doing so would make
@@ -203,6 +225,13 @@ def resolve_context_to_job(
     still applied — just downstream, against the resolved job's own workflow
     — by the caller (see validate_no_required_check_skip_vectors.py).
     """
+    if preferred_workflow is not None:
+        preferred = workflows.get(preferred_workflow)
+        if preferred is not None:
+            for job_id, job in preferred.jobs.items():
+                if job.name == context:
+                    return ResolvedJob(workflow=preferred, job_id=job_id)
+
     for wf in workflows.values():
         for job_id, job in wf.jobs.items():
             if job.name == context:
