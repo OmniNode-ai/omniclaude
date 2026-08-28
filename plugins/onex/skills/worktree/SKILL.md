@@ -19,6 +19,9 @@ args:
   - name: --prune
     description: "GC merged worktrees by wrapping prune-worktrees.sh (remove stale/merged branches)"
     required: false
+  - name: --auto-prune
+    description: "Ticket-close-keyed prune: remove worktrees whose TICKET closed and whose tree is provably safe, triage-report everything else (wraps scripts/worktree_auto_prune.py)"
+    required: false
   - name: --cron
     description: "Schedule recurring execution via CronCreate (e.g., '7d', '2h'). Applies to whichever mode flag is also passed."
     required: false
@@ -53,19 +56,25 @@ args:
 ## Purpose
 
 Unified worktree management skill. Consolidates health auditing, classification triage, and
-lifecycle garbage collection into a single entry point with four mode flags:
+lifecycle garbage collection into a single entry point with four mode flags and one modifier:
 
 | Flag | Former Skill | Description |
 |------|-------------|-------------|
 | `--audit` | `worktree_sweep` | Health audit: SAFE_TO_DELETE, LOST_WORK, STALE, ACTIVE, DIRTY_ACTIVE |
 | `--triage` | `worktree_triage` | Classify ship_it/archive/prune, auto-PR ship_it, remove prune targets |
 | `--prune` | `worktree_lifecycle` | GC merged worktrees via prune-worktrees.sh |
+| `--auto-prune` | (new) | Ticket-close-keyed prune via worktree_auto_prune.py |
 | `--cron` | (shared) | Schedule recurring execution of whichever mode is active |
 
-Exactly one of `--audit`, `--triage`, or `--prune` must be specified per invocation.
-`--cron` is an additive modifier that schedules the chosen mode.
+Exactly one of `--audit`, `--triage`, `--prune`, or `--auto-prune` must be specified per
+invocation. `--cron` is an additive modifier that schedules the chosen mode.
 
-**Announce at start:** "I'm using the worktree skill to [audit/triage/prune] worktrees."
+`--prune` and `--auto-prune` key on **different things and disagree on purpose**: `--prune` is
+merge-keyed (a PR merged, or the remote branch vanished), `--auto-prune` is ticket-keyed (the
+owning ticket closed). See [Mode: --auto-prune](#mode---auto-prune-ticket-close-keyed) for why
+the merge-keyed predicate alone is unsafe.
+
+**Announce at start:** "I'm using the worktree skill to [audit/triage/prune/auto-prune] worktrees."
 
 ---
 
@@ -112,9 +121,13 @@ LLM drives the git/`gh` side effects; these helpers compute the flags.
 /worktree --prune --execute               # remove stale/merged worktrees
 /worktree --prune --verbose               # include active worktrees in report
 
+/worktree --auto-prune                    # dry-run: classify by ticket closure + tree safety
+/worktree --auto-prune --execute          # remove the proven-safe set, triage-report the rest
+
 /worktree --audit --cron 3d               # schedule daily audit
 /worktree --triage --cron 7d              # schedule weekly triage
 /worktree --prune --cron 2h               # schedule GC every 2 hours
+/worktree --auto-prune --cron 1d          # schedule the ticket-keyed sweep daily
 ```
 
 ---
@@ -132,8 +145,10 @@ elif args.triage:
     mode = "triage"
 elif args.prune:
     mode = "prune"
+elif args.auto_prune:
+    mode = "auto_prune"
 else:
-    raise ValueError("One of --audit, --triage, or --prune is required.")
+    raise ValueError("One of --audit, --triage, --prune, or --auto-prune is required.")
 
 execute = bool(args.execute)
 dry_run = not execute
@@ -416,6 +431,63 @@ Active: N   Stale: N   Removed: N
 
 ---
 
+## Mode: --auto-prune (ticket-close keyed)
+
+Removes worktrees whose **ticket has closed** and whose tree is provably safe, and emits a
+triage row for every worktree that is not prunable. Wraps `scripts/worktree_auto_prune.py`
+(no reimplementation), whose predicate lives as a pure function in
+`src/omniclaude/hooks/lib/worktree_prune_policy.py`.
+
+**Why this exists next to `--prune`.** `--prune` keys on a PR merging. That predicate is
+anti-correlated with liveness: clean + pushed + merged is exactly the state a
+live lane occupies between push and post-merge verification, and a measured dry run over 192
+worktrees found its only two deletions were both live-claimed. Pruning is keyed to the
+**ticket closing** instead — a ticket spans multiple PRs and OCC companions and worktrees are
+keyed by ticket directory, so a merged PR is an *input to the safety check* (it is what makes
+the tree-diff against `dev` empty) while ticket completion is what *fires* eligibility.
+
+Two parts, evaluated in order — eligibility fires, safety gates:
+
+1. **Eligibility** — the ticket directory resolves to a ticket in `Done`/`Canceled`, or (only
+   when that state is unresolvable) the work ledger shows a `TERMINAL` row with no newer open
+   `CLAIM`. An open / In Progress ticket is **never** eligible, however clean the tree.
+2. **Safety** — clean tree, nothing unmerged ahead of `origin/dev` (a squash-merged branch
+   with an empty tree-diff counts as merged), no stash attributable to the branch.
+
+Everything else is a triage row — never a deletion.
+
+### Step 1: Run worktree_auto_prune.py <!-- ai-slop-ok: skill-step-heading -->
+
+```bash
+# REPORT_DIR is the workspace tracking-docs directory; resolve it from the caller,
+# never from a machine-specific literal.
+REPORT_DIR="${REPORT_DIR:?set REPORT_DIR to the tracking docs directory}"
+
+uv run python scripts/worktree_auto_prune.py ${execute_flag} ${root_flag} \
+  --report-md "$REPORT_DIR/$(date +%F)-worktree-prune.md" \
+  --report-json "$REPORT_DIR/$(date +%F)-worktree-prune.json"
+```
+
+Dry run is the default. The script refuses to run at all when the work ledger is unreadable
+(exit 2) — a prune with no claim-awareness is the whole hazard this mode exists to avoid, so
+that is a hard stop, not a degraded mode. Removal uses plain `git worktree remove`, never `--force`.
+
+### Step 2: Report results <!-- ai-slop-ok: skill-step-heading -->
+
+```
+Scanned: N   Safe: N   Triage: N   Removed: N
+```
+
+Never hand-delete a worktree the classifier put in triage. If you disagree with it, record the
+disagreement — the classifier wins.
+
+**Scheduled form.** The daily backstop runner is the committed named workflow
+`.claude/workflows/morning-worktree-prune.js` in the workspace registry root; its format
+contract is `docs/workflows/morning-worktree-prune/README.md` there. That workflow, not this skill, is
+the surface the morning session arms.
+
+---
+
 ## Scheduling (--cron modifier)
 
 When `--cron <interval>` is provided alongside any mode flag, schedule recurring execution:
@@ -435,6 +507,9 @@ Report the cron job ID for later cancellation via CronDelete.
 ## Integration Points
 
 - **prune-worktrees.sh**: Used by `--prune` mode (no reimplementation)
+- **worktree_auto_prune.py**: Used by `--auto-prune` mode (no reimplementation); its predicate
+  is the pure `worktree_prune_policy.classify_worktree_prune`, which a future ticket-closed
+  event hook calls directly — the daily sweep is the backstop, not the design
 - **close-out / begin-day**: Run `--audit` at day start; `--triage` weekly
 - **autopilot**: `--audit` runs as Step 0 in close-out mode before merge-sweep
 - **`/loop`**: Alternative scheduling: `/loop 7d /onex:worktree --triage --execute`
