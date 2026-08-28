@@ -1,6 +1,6 @@
 ---
-version: 1.0.0
-description: Generate ONEX nodes via automated code generation with ContractInferencer and LLM-powered business logic
+version: 2.0.0
+description: "SCAFFOLD-ONLY. Contract inference (AST, no LLM) plus template scaffolding for ONEX nodes. The LLM business-logic fill stage does NOT exist; generated nodes need their handler bodies written by hand."
 mode: full
 level: advanced
 debug: false
@@ -8,422 +8,91 @@ debug: false
 
 # Generate ONEX Node
 
-Fully automated ONEX node generation using the omniclaude codegen system. Generates complete, production-ready nodes with contracts, infrastructure code, business logic, and tests.
+> **Status: SCAFFOLD-ONLY.**
+>
+> Every version of this document before 2.0.0 advertised **"100% automated node generation"**, **"ZERO manual work"**, and a `BusinessLogicGenerator` that "writes working code". None of that was true, and none of it was ever true in this repo. This skill is documented here as what it provably is: **contract inference plus a template scaffold**. Handler bodies are written by hand, or by a delegation stage that has **not landed**.
+>
+> The overclaim mattered because it was load-bearing: other documents cited this skill as a working conversion pipeline. It is not one.
 
-## 🚨 CRITICAL: ALWAYS DISPATCH TO GENERAL-PURPOSE AGENT
+---
 
-**DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a general-purpose agent.
+## What actually exists today
 
-### ❌ WRONG - Running scripts directly:
-```
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create PostgreSQL CRUD Effect")
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate src/nodes/my_node)
-```
+| Stage | Status | Where |
+| -- | -- | -- |
+| **Contract inference** — derive a `contract.yaml` draft from existing node source | **Live, AST-only, no LLM** | `omniintelligence/scripts/infer_contracts.py`, whose own module docstring reads: *"AST-only (no LLM calls). Scans Python files for classes inheriting from `Node*` base classes and generates contract.yaml drafts."* |
+| **Template scaffold** — stamp a node package from templates | **Live** | `omnimarket/src/omnimarket/nodes/node_generate_node_effect/` |
+| **Loadability / registration** — the emitted package loads and registers | **Live** | proven on structure only |
+| **LLM business-logic fill** — write the handler body | **DOES NOT EXIST** | no implementation anywhere in `omniclaude/src/` |
+| **AI quorum / multi-model consensus validation** | **DOES NOT EXIST** | never ported; the `--enable-quorum` flag has no implementation behind it |
 
-### ✅ CORRECT - Dispatch to general-purpose:
-```
-Task(
-  subagent_type="general-purpose",
-  description="Generate PostgreSQL CRUD Effect node",
-  prompt="Generate an ONEX node with the following requirements:
-    Description: Create a PostgreSQL CRUD Effect node for user management
-    Node Type: Effect
+**Net: the pipeline emits a loadable, registered shell.** It does not emit working business logic, and it never has. The single end-to-end attempt on record did not satisfy the accepted code-output contract; normalization retries failed closed and no generated code was staged or accepted.
 
-    Use the generate-node skill:
-    ${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate 'Create PostgreSQL CRUD Effect node for user management with async operations'
+---
 
-    Options available:
-    - --output-dir ./generated_nodes (default)
-    - --node-type effect|compute|reducer|orchestrator
-    - --enable-intelligence (default)
-    - --enable-quorum (multi-model validation)
+## The documented entrypoint does not resolve
 
-    After generation:
-    1. Verify the generated contract YAML
-    2. Check the business logic implementation
-    3. Run the generated tests
-    4. Report any issues found"
-)
-```
-
-**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running scripts directly bypasses all of this.
-
-## What It Does
-
-The codegen system provides **100% automated node generation** through an event-driven workflow:
-
-1. **ContractInferencer** - Analyzes requirements and generates ONEX v2.0 contract YAML (5-10s with LLM)
-2. **HybridStrategy** - Generates infrastructure code from templates (~50ms with Jinja2)
-3. **BusinessLogicGenerator** - Generates complete business logic (5-15s with LLM)
-4. **Validation** - Runs comprehensive tests and quality checks (~100ms)
-
-**Total Time**: 10-25 seconds per node, **ZERO manual work** ✨
-
-## When to Use
-
-- Creating new ONEX Effect nodes (API interactions, external systems)
-- Creating new ONEX Compute nodes (data processing, business logic)
-- Creating new ONEX Reducer nodes (state management, aggregation)
-- Creating new ONEX Orchestrator nodes (workflow coordination)
-- Regenerating nodes with updated patterns and best practices
-
-## Usage
-
-### Generate New Node (From Prompt)
-
-Use the Bash tool to execute:
+`skills/generate_node/generate` line 154 executes:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "<PROMPT>" [OPTIONS]
+uv run omninode-generate "$prompt" "$@"
 ```
 
-### Regenerate Existing Node (From Code)
+**There is no `omninode-generate` console script.** `omniclaude/pyproject.toml`'s `[project.scripts]` declares only `omniclaude-emit` and `omni-patterns`; the command is absent from the project venv's `bin/` and from `PATH`. The `generate` and `regenerate` wrappers in this directory are therefore **not runnable as written** — they fail at command resolution, after their prerequisite checks pass.
 
-To regenerate an existing node (useful for applying updated patterns or refactoring):
+The components named in the old architecture diagram — `ContractInferencer`, `HybridStrategy`, `BusinessLogicGenerator` — have **no implementation in `omniclaude/src/`**. The only occurrence of those names in this repo is prose inside `src/omniclaude/nodes/node_skill_generate_node_orchestrator/contract.yaml`'s `description:` field. They were never ported from the archived predecessor repo.
+
+---
+
+## Where the working surface actually is
+
+Node generation lives in **omnimarket**, not here, and is driven as a node dispatch rather than through this skill's wrapper scripts:
+
+| Node | Role |
+| -- | -- |
+| `node_generation_consumer` | The dispatch entrypoint. Declares `runtime_dispatch.command_topic: onex.cmd.omnimarket.node-generation-requested.v1` with terminal success/failure events. |
+| `node_generate_node_effect` | Template scaffold emission. |
+| `node_generated_code_validator` | Validation of emitted code. |
+| `node_generated_node_publish_effect` | Publication of the generated package. |
+| `node_rsd_fill_compute` | The body-fill **seam** — not a landed end-to-end fill stage. |
+
+For contract inference specifically, call the AST tool directly:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate <NODE_DIR> [OPTIONS]
+cd "$OMNI_HOME/omniintelligence"
+uv run python scripts/infer_contracts.py --dry-run
+uv run python scripts/infer_contracts.py --node NodePatternStorageEffect --execute
 ```
 
-The regenerate script intelligently extracts a generation prompt by:
-1. **First**, checking for README.md and extracting description
-2. **If no README**, analyzing all Python code files with Z.ai to extract purpose and functionality
-3. **Then**, calling the generate skill with the extracted prompt
+---
 
-### Arguments
+## What you must still do by hand
 
-- `PROMPT` - Natural language description of the node (required)
-- `--output-dir` - Output directory for generated files (default: ./generated_nodes)
-- `--node-type` - Node type hint: effect|orchestrator|reducer|compute (optional, auto-inferred)
-- `--interactive` - Enable interactive checkpoints for validation
-- `--enable-intelligence` - Use RAG intelligence gathering (enabled by default)
-- `--disable-intelligence` - Disable RAG intelligence gathering
-- `--enable-quorum` - Use AI quorum validation (multi-model consensus)
-- `--timeout` - Timeout in seconds (default: 300 = 5 minutes)
+After a scaffold run, expect to write:
 
-### Examples
+- **The handler body.** This is the whole point of a node, and none of it is generated.
+- **Contract I/O models** beyond what inference could derive from existing source. AST inference works from code that already exists; for a genuinely new node there is nothing to infer from.
+- **Tests.** "Validation ensures quality" in the old text described a stage that does not write tests.
 
-**Generate New Nodes:**
+Budget this as writing a node with a pre-stamped skeleton — not as reviewing generated code.
 
-```bash
-# Basic usage - generate PostgreSQL CRUD Effect
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create PostgreSQL CRUD Effect node"
-
-# With custom output directory
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create ML inference Orchestrator" --output-dir ./my_nodes
-
-# With node type hint and interactive mode
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create metrics aggregation Reducer" --node-type reducer --interactive
-
-# With intelligence disabled (faster, less context)
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create simple logger Effect" --disable-intelligence
-
-# With AI quorum validation (multi-model consensus)
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create payment processing Orchestrator" --enable-quorum
-```
-
-**Regenerate Existing Nodes:**
-
-```bash
-# Regenerate node from existing code (extracts prompt automatically)
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate src/omniclaude/nodes/llm_effect/v1_0_0/llm_effect_llm
-
-# Regenerate with custom output directory
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate nodes/my_node --output-dir ./regenerated
-
-# Regenerate with interactive mode
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate ../other_repo/nodes/custom_node --interactive
-
-# Regenerate from node with README.md (fast - no Z.ai call)
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate nodes/well_documented_node
-
-# Regenerate from node without README (uses Z.ai code analysis)
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate nodes/legacy_node --enable-intelligence
-```
-
-## Output
-
-The skill generates a complete ONEX node with:
-
-```
-generated_nodes/
-└── <node_name>/
-    ├── contract.yaml           # ONEX v2.0 contract specification
-    ├── node.py                 # Main node implementation
-    ├── models/                 # Pydantic models
-    │   ├── model_input.py
-    │   ├── model_output.py
-    │   └── model_intent.py
-    ├── __init__.py            # Package initialization
-    ├── README.md              # Node documentation
-    └── tests/                 # Unit tests (optional)
-        └── test_node.py
-```
-
-### Success Output Example
-
-```
-🚀 Generating ONEX node...
-   Correlation ID: 550e8400-e29b-41d4-a716-446655440000
-   Prompt: Create PostgreSQL CRUD Effect node
-   Output: ./generated_nodes
-
-[Progress updates via Kafka events...]
-
-✅ Generation complete!
-   Duration: 18.3s
-   Quality Score: 0.95
-   Files Generated: 8
-
-   Generated files:
-   - ./generated_nodes/postgresql_crud_effect/contract.yaml
-   - ./generated_nodes/postgresql_crud_effect/node.py
-   - ./generated_nodes/postgresql_crud_effect/models/model_input.py
-   - ./generated_nodes/postgresql_crud_effect/models/model_output.py
-   - ./generated_nodes/postgresql_crud_effect/models/model_intent.py
-   - ./generated_nodes/postgresql_crud_effect/__init__.py
-   - ./generated_nodes/postgresql_crud_effect/README.md
-   - ./generated_nodes/postgresql_crud_effect/tests/test_node.py
-```
-
-## Architecture
-
-The codegen uses **event-driven orchestration** via Kafka:
-
-```
-CLI (omninode-generate)
-    ↓ (publishes event)
-Kafka Topic: node.generation.requested
-    ↓ (consumed by)
-Code Generation Workflow
-    ├─ ContractInferencer (AST + LLM inference)
-    ├─ HybridStrategy (Jinja2 templates)
-    ├─ BusinessLogicGenerator (LLM code generation)
-    └─ Validation (pytest + quality checks)
-    ↓ (publishes progress events)
-Kafka Progress Topics
-    ↓ (consumed by)
-CLI Progress Display
-    ↓
-Generated Files
-```
-
-## Performance Metrics
-
-| Component              | Time   | Automation Level       |
-|------------------------|--------|------------------------|
-| ContractInferencer     | 5-10s  | 100% (LLM-based)       |
-| Jinja2 Templates       | ~50ms  | 100% (Template-based)  |
-| BusinessLogicGenerator | 5-15s  | 100% (LLM-based)       |
-| Validation             | ~100ms | 100% (Automated tests) |
-| **TOTAL**              | 10-25s | **100% AUTOMATED**     |
-
-**Manual work eliminated**: 45 min → 0 min per node = **100% time savings** 🎯
-
-## Z.ai Integration (Regenerate Mode)
-
-When regenerating nodes without README.md files, the skill uses **Z.ai LLM API** to analyze code and extract generation prompts:
-
-**How It Works:**
-1. Collects all Python files from the node directory
-2. Sends code to Z.ai with a system prompt asking to analyze the node
-3. Z.ai extracts: node type, functionality, operations, integrations, features
-4. Returns a concise 1-2 sentence generation prompt
-5. Uses extracted prompt to regenerate the node with updated patterns
-
-**API Configuration:**
-- **Endpoint**: `https://api.z.ai/api/anthropic` (Anthropic-compatible)
-- **Model**: `glm-4-flash` (fast, cost-effective) - configurable via `ZAI_MODEL` env var
-- **API Key**: Set `ZAI_API_KEY` in `.env` file
-- **Cost**: ~$0.01 per regeneration (typical node analysis)
-
-**Performance:**
-- **With README**: <1s (no API call needed)
-- **Without README**: 3-5s (includes Z.ai API call for code analysis)
-- **Accuracy**: 95%+ prompt extraction quality
-
-**Fallback Strategy:**
-1. Try README.md extraction first (fastest)
-2. If no README or extraction fails → Z.ai code analysis
-3. If Z.ai fails → error with helpful message
+---
 
 ## Prerequisites
 
-**Required Infrastructure** (running on your configured host):
-- PostgreSQL (port 5436) - For workflow state persistence
-- Kafka/Redpanda (port 9092/19092) - For event-driven orchestration
-- Consul (port 28500) - For service discovery
+The `generate` wrapper checks for `$OMNI_HOME`, `uv`, and `OMNIBASE_INFRA_DB_URL` before it fails on the missing CLI. The infrastructure the old document listed (PostgreSQL, Kafka/Redpanda, Consul) is what the **omnimarket** generation loop needs; it is not what makes this skill's wrapper work, because nothing makes this skill's wrapper work.
 
-**Environment Variables** (in `~/.omnibase/.env`):
-```bash
-POSTGRES_HOST=<postgres-host>
-POSTGRES_PORT=5436
-POSTGRES_DATABASE=omnibase_infra
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=<set_in_env>
+`ZAI_API_KEY` / `ZAI_ENDPOINT` / `ZAI_MODEL` are read by the `regenerate` wrapper's prompt-extraction path, which likewise terminates at the same missing CLI.
 
-KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # Docker services
-# OR
-KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092           # Host scripts
+---
 
-ZAI_API_KEY=<your_key>     # For LLM-powered generation and code analysis
-ZAI_ENDPOINT=https://api.z.ai/api/anthropic  # Optional, defaults to Z.ai
-ZAI_MODEL=glm-4-flash      # Optional, defaults to glm-4-flash
-```
+## Honesty rule for this document
 
-**For Regenerate Mode** (analyzing existing code):
-```bash
-# Required
-ZAI_API_KEY=<your_key>     # Z.ai API key for code analysis
+This skill sat in the **stubs-behind-complete-docs** failure class: a complete-looking document over a partial implementation. The rule going forward:
 
-# Optional
-ZAI_ENDPOINT=https://api.z.ai/api/anthropic  # Override endpoint
-ZAI_MODEL=glm-4-flash      # Override model (glm-4-flash, glm-4-plus, etc.)
-```
-
-**Working Directory**: Must be run from within the `omniclaude` repository.
-
-## Error Handling
-
-The skill provides comprehensive error handling:
-
-- **Empty prompt**: Returns error with helpful message
-- **Invalid output directory**: Validates path and prevents path traversal
-- **Timeout exceeded**: Cancels workflow and reports partial results
-- **Kafka connection failure**: Provides diagnostic information
-- **Generation failure**: Returns detailed error with correlation ID for debugging
-
-## Common Pitfalls Avoided
-
-❌ **Manual contract writing** - ContractInferencer does it automatically
-❌ **Template boilerplate** - HybridStrategy generates infrastructure
-❌ **Manual business logic** - BusinessLogicGenerator writes working code
-❌ **Missing tests** - Validation ensures quality
-
-✅ **100% automated** - From prompt to production-ready code
-✅ **Event-driven** - Real-time progress tracking via Kafka
-✅ **High quality** - LLM-powered with validation and quality checks
-✅ **Fast** - 10-25s total generation time
-
-## Skills Location
-
-**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/generate_node/`
-**Executable**: `${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate`
-**Repository**: `omniclaude`
-
-## Integration with Other Tools
-
-This skill integrates with:
-- **ContractInferencer** - AST parsing and contract generation
-- **HybridStrategy** - Template-based code generation
-- **BusinessLogicGenerator** - LLM-powered business logic
-- **Kafka Event Bus** - Real-time progress tracking
-- **PostgreSQL** - Workflow state persistence
-- **OmniIntelligence** - RAG-enhanced context gathering (optional)
-
-## Node Types Reference
-
-**Effect Nodes**:
-- External API interactions (REST, GraphQL, gRPC)
-- Database operations (CRUD, queries)
-- Message queue publishing/consuming
-- File system operations
-- Third-party service integrations
-
-**Compute Nodes**:
-- Data transformations and processing
-- Business logic execution
-- Algorithm implementation
-- Calculations and analytics
-- Data validation and sanitization
-
-**Reducer Nodes**:
-- State aggregation and management
-- Data persistence and caching
-- Stream reduction and windowing
-- Metrics collection and rollup
-- Event sourcing and replay
-
-**Orchestrator Nodes**:
-- Multi-step workflow coordination
-- Service composition and routing
-- Saga pattern implementation
-- Distributed transaction management
-- Event-driven choreography
-
-## Debugging
-
-If generation fails or produces unexpected results:
-
-```bash
-# Check Kafka connection
-curl http://<redpanda-console-host>:8080  # Redpanda Console
-
-# Check PostgreSQL connection
-psql -h <your-infrastructure-host> -p 5436 -U postgres -d omnibase_infra
-
-# View generation events in Kafka
-kcat -C -b <kafka-bootstrap-servers>:9092 -t node.generation.requested
-
-# Check correlation ID in logs
-grep "<correlation_id>" /path/to/logs
-
-# Run with shorter timeout for debugging
-${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Test node" --timeout 60
-```
-
-## Advanced Usage
-
-### Batch Generation
-
-Generate multiple nodes programmatically:
-
-```bash
-# Generate multiple related nodes
-for node_desc in "User CRUD Effect" "Auth Middleware Effect" "Session Reducer"; do
-    ${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "$node_desc" --output-dir ./my_service_nodes
-done
-```
-
-### Custom Workflow Integration
-
-```python
-# Python integration example
-import subprocess
-import json
-
-def generate_node(prompt: str, output_dir: str = "./generated_nodes"):
-    result = subprocess.run(
-        ["${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate", prompt, "--output-dir", output_dir],
-        capture_output=True,
-        text=True
-    )
-    return result.returncode == 0
-```
-
-## Quality Assurance
-
-**Generated nodes include**:
-- ✅ ONEX v2.0 compliant contracts
-- ✅ Type-safe Pydantic models
-- ✅ Comprehensive error handling
-- ✅ Logging and observability
-- ✅ Circuit breaker patterns (where applicable)
-- ✅ Retry logic (where applicable)
-- ✅ Input validation
-- ✅ Documentation (README, docstrings)
-- ✅ Unit tests (optional)
-
-**Quality Score**: 0.0-1.0 based on:
-- Contract completeness and correctness
-- Code quality and type safety
-- Test coverage
-- Documentation quality
-- ONEX compliance
+**No capability claim in this file without a citation to code that implements it, or to a receipt that proves it ran.** A percentage ("100% automated"), a duration ("10-25s per node"), or a quality score is a *measurement*; if no run produced it, it does not belong here. If the fill stage lands, this document changes in the same commit and cites the gate that proves it.
 
 ## See Also
 
-- **ContractInferencer Documentation**: `docs/codegen/CONTRACT_INFERENCER.md`
-- **HybridStrategy Guide**: `docs/codegen/HYBRID_STRATEGY.md`
-- **ONEX v2.0 Specification**: `docs/architecture/ONEX_V2_SPECIFICATION.md`
-- **Node Development Guide**: `docs/guides/NODE_DEVELOPMENT_GUIDE.md`
+- `omnimarket/src/omnimarket/nodes/node_generation_consumer/contract.yaml` — the real dispatch surface.
+- `omniintelligence/scripts/infer_contracts.py` — the AST contract inferencer.
