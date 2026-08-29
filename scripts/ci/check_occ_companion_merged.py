@@ -89,6 +89,29 @@ ENFORCED_EVENTS: frozenset[str] = frozenset({"pull_request", "merge_group"})
 EVIDENCE_SOURCE_RE = re.compile(
     r"^Evidence-Source:\s+(\S.*)$", re.IGNORECASE | re.MULTILINE
 )
+
+# OMN-15615 AC6 / OMN-14682: a stamp-shaped line inside a fenced code block or a
+# blockquote is DOCUMENTATION, never a machine-read declaration.
+#
+# ``EVIDENCE_SOURCE_RE`` is ``^...$`` MULTILINE, which anchors at column 0 —
+# and a fenced example is written at column 0. So a meta-PR that merely QUOTES
+# the canonical stamp (very common on PRs about this gate) had its quoted value
+# resolved as if it were a real declaration. Because the quoted example almost
+# always names a companion that really did merge — for some OTHER product PR —
+# the failure direction here is a **false PASS** on the gate whose entire job is
+# to prove the cited evidence is durable. Stripping first makes such a PR read
+# as "no Evidence-Source yet", which is PENDING and converts to FAIL at the
+# deadline: fail-closed, the posture this gate already documents.
+#
+# Line-for-line mirror of
+# ``omnibase_core.validation.validator_receipt_gate.strip_noncanonical_regions``
+# (OMN-14682), which retired this exact defect on the Receipt Gate and was never
+# propagated to the other two live sites. It is copied rather than imported
+# because CI runs this file as bare ``python3 scripts/ci/...`` with no project
+# venv on the path (.github/workflows/ci.yml), and pinned byte-for-byte against
+# the real helper by tests/ci/test_check_occ_companion_merged.py::
+# TestStripAgreesWithCanonicalHelper.
+FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 OCC_PR_REF_RE = re.compile(r"^OCC#(\d+)$", re.IGNORECASE)
 HEX_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 MERGE_GROUP_PR_RE = re.compile(r"/pr-(\d+)-")
@@ -159,9 +182,53 @@ class GhFetcher:
         return raw.strip() if raw is not None else None
 
 
+def strip_noncanonical_regions(pr_body: str) -> str:
+    """Blank out PR-body regions that cannot carry a *canonical* stamp.
+
+    Mirror of ``validator_receipt_gate.strip_noncanonical_regions`` (OMN-14682).
+    Excluded lines become empty lines rather than disappearing, so line
+    positions survive and the MULTILINE anchors behave identically for every
+    surviving canonical line. An unterminated opening fence blanks everything to
+    end-of-body — fail-closed, since a stamp after malformed markup is not a
+    trustworthy declaration.
+
+    Idempotent: re-stripping an already-stripped body is a no-op.
+    """
+    out: list[str] = []
+    in_fence = False
+    fence_marker = ""
+    for line in pr_body.splitlines():
+        fence = FENCE_LINE_RE.match(line)
+        if fence is not None:
+            marker = fence.group(1)
+            marker_char = marker[0]
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif marker_char == fence_marker[0] and len(marker) >= len(fence_marker):
+                in_fence = False
+                fence_marker = ""
+            out.append("")
+            continue
+        if in_fence:
+            out.append("")
+            continue
+        if line.lstrip().startswith(">"):
+            out.append("")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def parse_evidence_source(body: str) -> str | None:
-    """First ``Evidence-Source:`` value in the PR body, or ``None``."""
-    match = EVIDENCE_SOURCE_RE.search(body or "")
+    """First canonical ``Evidence-Source:`` value in the PR body, or ``None``.
+
+    Non-canonical regions (fenced code blocks, blockquotes) are stripped first
+    (OMN-15615 AC6): a stamp quoted as an example is documentation, and
+    resolving it would let a meta-PR pass this gate on somebody else's
+    companion.
+    """
+    match = EVIDENCE_SOURCE_RE.search(strip_noncanonical_regions(body or ""))
     return match.group(1).strip() if match else None
 
 
