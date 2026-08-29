@@ -57,6 +57,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+# OMN-16983: sibling modules live in this same ``lib/`` directory, and this file
+# runs under TWO layouts.  In the source tree it sits at
+# ``<omniclaude>/plugins/onex/hooks/lib/`` (importable as
+# ``plugins.onex.hooks.lib.*``); in the plugin cache Claude Code actually loads
+# it from ``~/.claude/plugins/cache/<marketplace>/onex/<version>/hooks/lib/``,
+# where there is no ``plugins`` package anywhere on the path.  Absolute
+# ``plugins.onex.hooks.lib.*`` imports raised ModuleNotFoundError there, the
+# decision core exited 1, and the wrapper's fail-closed branch refused every
+# matching command — read-only ``gh api`` GETs included.  Resolve siblings from
+# this module's own directory instead, matching ``lane_liveness_guard.py`` and
+# ``done_flip_guard.py``.  (CI's mypy/pyright are scoped to ``src/omniclaude``
+# and never see this file, so the bare-name sibling imports below are fine.)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
@@ -707,7 +721,7 @@ def decide(
 
 def _read_claim(claims_dir: Path, target_key: str) -> tuple[ClaimStatus, str | None]:
     """Read a claim, distinguishing absent from unreadable (fail-closed input)."""
-    from plugins.onex.hooks.lib.pr_claim_registry import filesystem_key, is_active
+    from pr_claim_registry import filesystem_key, is_active
 
     claim_file = claims_dir / f"{filesystem_key(target_key)}.json"
     if not claim_file.exists():
@@ -744,7 +758,22 @@ def evaluate_command(
     mutations = parse_mutations(command, default_repo=default_repo)
     if not mutations:
         return []
+    return evaluate_mutations(mutations, claims_dir=claims_dir, env=env, cwd=cwd)
 
+
+def evaluate_mutations(
+    mutations: list[Mutation],
+    *,
+    claims_dir: Path,
+    env: dict[str, str] | None = None,
+    cwd: str | Path | None = None,
+) -> list[Decision]:
+    """Decide already-parsed mutations against the on-disk claims directory.
+
+    Split out from :func:`evaluate_command` so the CLI can parse FIRST and skip
+    every ownership surface — registry import included — when the command holds
+    no guarded mutation (OMN-16983).
+    """
     lane_id = resolve_lane_id(env=env, cwd=cwd)
     decisions: list[Decision] = []
     for mutation in mutations:
@@ -783,16 +812,30 @@ def main(argv: list[str] | None = None) -> int:
 
     command = Path(args.command_file).read_text()
 
-    from plugins.onex.hooks.lib.pr_claim_registry import get_registry
+    # The shell pre-filter is a cheap, deliberately over-matching grep: it fires
+    # on a bare `gh api` for ANY HTTP method, and on quoted text that merely
+    # names a guarded verb.  THIS parser is the authority.  A command carrying
+    # no guarded mutation — a read-only `gh api <path> --jq`, a
+    # `printf 'gh api ...'` — is decided right here, before any ownership
+    # surface is touched: no registry import, no claims directory, no state
+    # directory.  That ordering is the fix, not an optimization (OMN-16983): it
+    # is what stops a defect in the ownership path from converting read-only
+    # GitHub traffic into a refusal.  Genuine mutation verbs fall through and
+    # keep the OMN-16485 fail-closed contract.
+    mutations = parse_mutations(command, default_repo=args.default_repo)
+    if not mutations:
+        print(json.dumps({"blocked": False, "decisions": [], "reason": ""}))
+        return EXIT_ALLOW
+
+    from pr_claim_registry import get_registry
 
     registry = get_registry()
     claims_dir = registry._claims_dir  # noqa: SLF001 — same-package accessor
 
-    decisions = evaluate_command(
-        command,
+    decisions = evaluate_mutations(
+        mutations,
         claims_dir=claims_dir,
         cwd=args.cwd,
-        default_repo=args.default_repo,
     )
 
     blocked = [decision for decision in decisions if not decision.allowed]
@@ -817,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Record claims for allowed first-writer (exclusivity) mutations so the next
     # racing lane sees a live claim rather than an empty registry.
-    from plugins.onex.hooks.lib.session_id import resolve_session_id
+    from session_id import resolve_session_id
 
     lane_id = resolve_lane_id(cwd=args.cwd)
     for decision in decisions:
