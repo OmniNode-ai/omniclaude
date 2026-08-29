@@ -55,6 +55,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess  # noqa: S404 — fixed git argv lists, never shell-interpolated
 import sys
 import urllib.error
@@ -65,13 +66,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from omniclaude.hooks.lib.worktree_health import extract_ticket_id
 from omniclaude.hooks.lib.worktree_prune_policy import (
+    EnumDebrisRemediation,
     EnumPruneBlockReason,
     EnumPruneDisposition,
     EnumTicketLifecycle,
+    ModelPartialMutationDebrisDecision,
+    ModelPartialMutationDebrisFacts,
     ModelWorktreePruneDecision,
     ModelWorktreePruneFacts,
+    classify_partial_mutation_debris,
     classify_worktree_prune,
 )
 
@@ -110,6 +117,27 @@ def _git(cwd: Path, *args: str) -> tuple[int, str]:
     return proc.returncode, proc.stdout.strip()
 
 
+def _git_capture(cwd: Path, *args: str) -> tuple[int, str, str]:
+    """Run a git command, returning ``(returncode, stripped stdout, stripped stderr)``.
+
+    ``_git`` above discards stderr, which is exactly where git puts a
+    refusal reason (``git worktree remove`` in particular) — that discard is
+    OMN-16951 defect 1. This variant is for every call site that needs to
+    report *why* git refused, not just whether it did.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            ["git", "-C", str(cwd), *args],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return 1, "", f"{type(exc).__name__}: {exc}"
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+
 def discover_worktrees(root: Path) -> list[Path]:
     """Return every git worktree directory under ``root``.
 
@@ -120,6 +148,161 @@ def discover_worktrees(root: Path) -> list[Path]:
     found += [p.parent for p in root.glob("*/*/.git") if p.is_file()]
     found += [p.parent for p in root.glob("*/*/*/.git") if p.is_file()]
     return sorted(set(found))
+
+
+def discover_debris_directories(root: Path, known_worktrees: set[Path]) -> list[Path]:
+    """Return ticket-dir children under ``root`` that carry no discoverable
+    ``.git`` but still hold file content on disk [OMN-16951 defect 2].
+
+    ``discover_worktrees`` above only finds directories via a ``*/.git`` glob,
+    so a directory whose ``.git`` link is already gone is invisible to it —
+    not merely unprunable, but never even reported. This walks the same three
+    depths, keeps whatever is NOT a known valid worktree and NOT already
+    carrying a ``.git`` of its own, and drops directories with no file content
+    (``cleanup_empty_ticket_dirs`` already reclaims those; an empty leftover is
+    not debris, it is nothing).
+    """
+    candidates: list[Path] = []
+    for depth_glob in ("*/*", "*/*/*", "*/*/*/*"):
+        for child in root.glob(depth_glob):
+            if not child.is_dir():
+                continue
+            if child in known_worktrees:
+                continue
+            if (child / ".git").exists():
+                continue
+            if not any(p.is_file() for p in child.rglob("*")):
+                continue
+            candidates.append(child)
+
+    # The three glob depths can re-match a subdirectory of an already-flagged
+    # candidate (e.g. the depth-3 glob matching a folder one level inside a
+    # depth-2 debris directory) — keep only the shallowest match per lineage.
+    ordered = sorted(set(candidates), key=lambda p: len(p.parts))
+    kept: list[Path] = []
+    for candidate in ordered:
+        if not any(ancestor in candidate.parents for ancestor in kept):
+            kept.append(candidate)
+    return sorted(kept)
+
+
+def discover_canonical_clones(registry_root: Path) -> list[Path]:
+    """Return every full git clone directly under ``registry_root``.
+
+    A canonical clone's ``.git`` is a *directory*; a linked worktree's is a
+    file. ``registry_root`` is conventionally ``$OMNI_HOME`` — the parent of
+    the worktrees root — where every repo in the registry is cloned.
+    """
+    if not registry_root.is_dir():
+        return []
+    return [
+        child
+        for child in sorted(registry_root.iterdir())
+        if child.is_dir() and (child / ".git").is_dir()
+    ]
+
+
+def collect_worktree_list_entries(canonical: Path) -> dict[str, str]:
+    """Map each worktree path a canonical clone still knows about to its raw
+    ``git worktree list --porcelain`` annotation state.
+
+    The map key is the resolved absolute path as git reports it; the value is
+    the ``prunable``/``locked`` annotation line(s) joined, or ``""`` for a
+    clean (non-stale) record. A clone that has lost the ``.git`` link inside a
+    worktree still carries this administrative record until ``git worktree
+    prune`` runs — that is exactly the signal that makes a debris directory's
+    removal provably safe.
+    """
+    code, out = _git(canonical, "worktree", "list", "--porcelain")
+    if code != 0 or not out:
+        return {}
+
+    entries: dict[str, str] = {}
+    current_path: str | None = None
+    current_state: list[str] = []
+    for line in [*out.splitlines(), ""]:
+        if line.startswith("worktree "):
+            current_path = line[len("worktree ") :].strip()
+            current_state = []
+        elif line == "":
+            if current_path is not None:
+                try:
+                    resolved = str(Path(current_path).resolve())
+                except OSError:
+                    resolved = current_path
+                entries[resolved] = " ".join(current_state)
+            current_path = None
+            current_state = []
+        elif line.startswith(("prunable", "locked")):
+            current_state.append(line.strip())
+    return entries
+
+
+def leftover_content_reachable(
+    candidate: Path, canonical: Path
+) -> tuple[int, tuple[str, ...]]:
+    """Check every regular file under ``candidate`` against ``canonical``'s
+    object database. Returns ``(file_count, unreachable_relpaths)``.
+
+    A file's content is "reachable" when ``git hash-object`` on it matches a
+    blob that already exists in the clone (``git cat-file -e``) — byte-
+    identical to something already in the repo, so removing it loses nothing
+    unique. This is a presence check against the object database, not a
+    reachability-from-a-ref check; the object database of a canonical clone
+    holds everything ever fetched, which is the conservative direction to err
+    in (a blob that exists but is unreachable from any ref still proves the
+    content is not unique local work).
+    """
+    files = sorted(p for p in candidate.rglob("*") if p.is_file())
+    unreachable: list[str] = []
+    for file in files:
+        code, sha, _ = _git_capture(canonical, "hash-object", str(file))
+        if code != 0 or not sha:
+            unreachable.append(str(file.relative_to(candidate)))
+            continue
+        check_code, _, _ = _git_capture(canonical, "cat-file", "-e", sha)
+        if check_code != 0:
+            unreachable.append(str(file.relative_to(candidate)))
+    return len(files), tuple(unreachable)
+
+
+def collect_debris_facts(
+    candidate: Path,
+    root: Path,
+    owner_lookup: dict[str, tuple[Path, str]],
+) -> ModelPartialMutationDebrisFacts:
+    """Observe one ``.git``-gone leftover directory. Pure observation."""
+    rel = candidate.relative_to(root)
+    ticket = extract_ticket_id(rel.parts[0])
+    repo = candidate.name
+
+    try:
+        resolved = str(candidate.resolve())
+    except OSError:
+        resolved = str(candidate)
+    owner = owner_lookup.get(resolved)
+    if owner is None:
+        return ModelPartialMutationDebrisFacts(
+            path=str(candidate),
+            ticket=ticket,
+            repo=repo,
+            owning_clone=None,
+            worktree_list_state=None,
+            file_count=0,
+            unreachable_files=(),
+        )
+
+    canonical, state = owner
+    file_count, unreachable = leftover_content_reachable(candidate, canonical)
+    return ModelPartialMutationDebrisFacts(
+        path=str(candidate),
+        ticket=ticket,
+        repo=repo,
+        owning_clone=str(canonical),
+        worktree_list_state=state,
+        file_count=file_count,
+        unreachable_files=unreachable,
+    )
 
 
 def canonical_root_of(worktree: Path) -> Path | None:
@@ -418,7 +601,27 @@ def collect_facts(
 # ---------------------------------------------------------------------------
 
 
-def prune_worktree(decision: ModelWorktreePruneDecision) -> tuple[bool, str]:
+class ModelRemovalAttempt(BaseModel):
+    """The full evidence of one removal attempt [OMN-16951 defect 1].
+
+    A prior revision recorded only a free-text ``detail`` string built from
+    ``_git``'s stdout — which git never uses for a refusal reason, so every
+    failure rendered identically as "no output". This model is the fix: the
+    exact command, exit code, and full stderr are captured for every attempt,
+    success or failure, so a refusal row can actually be adjudicated.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(..., min_length=1)
+    ok: bool = Field(...)
+    command: str = Field(..., min_length=1, description="The exact command run")
+    exit_code: int = Field(..., description="-1 when the command was never run")
+    stderr: str = Field(..., description="Full stderr text; '' on a clean success")
+    detail: str = Field(..., description="Human-readable summary of the outcome")
+
+
+def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
     """Remove one proven-safe worktree and its local branch.
 
     Uses plain ``git worktree remove`` — never ``--force`` — so git re-checks
@@ -427,18 +630,102 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> tuple[bool, str]:
     worktree = Path(decision.path)
     canonical = canonical_root_of(worktree)
     if canonical is None:
-        return False, "canonical clone not resolvable"
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=f"git -C <unresolved> worktree remove {worktree}",
+            exit_code=-1,
+            stderr="",
+            detail="canonical clone not resolvable",
+        )
 
-    code, out = _git(canonical, "worktree", "remove", str(worktree))
+    argv = ["git", "-C", str(canonical), "worktree", "remove", str(worktree)]
+    code, out, err = _git_capture(canonical, "worktree", "remove", str(worktree))
     if code != 0:
-        return False, f"git worktree remove refused: {out or 'no output'}"
+        stderr_text = err or out or "(git produced no stdout or stderr)"
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=" ".join(argv),
+            exit_code=code,
+            stderr=stderr_text,
+            detail=f"git worktree remove refused (exit {code}): {stderr_text}",
+        )
 
+    detail = "worktree removed; local branch deleted"
     if decision.branch:
-        branch_code, branch_out = _git(canonical, "branch", "-D", decision.branch)
+        branch_code, _, branch_err = _git_capture(
+            canonical, "branch", "-D", decision.branch
+        )
         if branch_code != 0:
-            return True, f"worktree removed; branch delete failed: {branch_out}"
+            detail = (
+                f"worktree removed; branch delete failed: {branch_err or '(no stderr)'}"
+            )
 
-    return True, "worktree removed; local branch deleted"
+    return ModelRemovalAttempt(
+        path=decision.path,
+        ok=True,
+        command=" ".join(argv),
+        exit_code=0,
+        stderr="",
+        detail=detail,
+    )
+
+
+def remediate_debris(
+    decision: ModelPartialMutationDebrisDecision, owning_clone: Path
+) -> ModelRemovalAttempt:
+    """Execute the ONE auto-removable remediation for a partial-mutation
+    debris row [OMN-16951 defect 2]: ``git worktree prune`` in the owning
+    clone (administrative-record-only — this never touches the worktree
+    directory itself), then remove the now-orphaned leftover directory.
+
+    Caller contract: only invoke this when ``decision.remediation`` is
+    :data:`EnumDebrisRemediation.AUTO_REMOVABLE` — that is where the predicate
+    already proved every remaining file's content is reachable as a blob in
+    ``owning_clone``. Never ``--force`` on the git side; the directory removal
+    that follows is not a blind ``rm -rf`` — it only runs after that proof.
+    """
+    prune_argv = ["git", "-C", str(owning_clone), "worktree", "prune"]
+    code, out, err = _git_capture(owning_clone, "worktree", "prune")
+    if code != 0:
+        stderr_text = err or out or "(git produced no stdout or stderr)"
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=" ".join(prune_argv),
+            exit_code=code,
+            stderr=stderr_text,
+            detail=f"git worktree prune refused (exit {code}) in {owning_clone}",
+        )
+
+    target = Path(decision.path)
+    rm_command = f"{' '.join(prune_argv)} && rm -rf {target}"
+    try:
+        shutil.rmtree(target)
+    except OSError as exc:
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=rm_command,
+            exit_code=0,
+            stderr=str(exc),
+            detail=(
+                "git worktree prune succeeded but the leftover directory removal failed"
+            ),
+        )
+
+    return ModelRemovalAttempt(
+        path=decision.path,
+        ok=True,
+        command=rm_command,
+        exit_code=0,
+        stderr="",
+        detail=(
+            "owning-clone administrative record pruned; leftover directory "
+            "removed (content proven reachable as blobs already in the repo)"
+        ),
+    )
 
 
 def cleanup_empty_ticket_dirs(root: Path) -> list[str]:
@@ -465,8 +752,9 @@ def render_report(
     root: Path,
     executed: bool,
     generated_at: str,
-    removals: Sequence[tuple[str, bool, str]],
+    removals: Sequence[ModelRemovalAttempt],
     tracker_resolved: int,
+    debris_decisions: Sequence[ModelPartialMutationDebrisDecision] = (),
 ) -> str:
     """Render the markdown report. Every worktree appears exactly once."""
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
@@ -476,6 +764,8 @@ def render_report(
     for decision in triage:
         for reason in decision.block_reasons:
             by_reason[reason] += 1
+    if debris_decisions:
+        by_reason[EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS] += len(debris_decisions)
 
     mode = "EXECUTE" if executed else "DRY RUN — nothing was removed"
     lines: list[str] = [
@@ -487,6 +777,7 @@ def render_report(
         f"- **Scanned:** {len(decisions)}",
         f"- **Prune-eligible and safe:** {len(prunable)}",
         f"- **Triage (never deleted):** {len(triage)}",
+        f"- **Partial-mutation debris candidates:** {len(debris_decisions)}",
         f"- **Ticket states resolved from tracker:** {tracker_resolved}",
         "",
         "Pruning is keyed to the **ticket closing**, not to a PR merging. A merged",
@@ -540,16 +831,52 @@ def render_report(
     if not triage:
         lines.append("| _(none)_ | | | | | | |")
 
+    auto_removable_debris = sum(
+        1
+        for d in debris_decisions
+        if d.remediation is EnumDebrisRemediation.AUTO_REMOVABLE
+    )
+    lines += [
+        "",
+        f"## Partial-mutation debris ({len(debris_decisions)})",
+        "",
+        "No `.git` link remains under these directories, so `git worktree remove`",
+        "can never succeed — see `partial_mutation_debris` in",
+        "`docs/workflows/morning-worktree-prune/README.md`. Never deleted here;",
+        f"only the auto-removable subset ({auto_removable_debris}) is a candidate for",
+        "the conservative `git worktree prune` + proven-reachable-content removal",
+        "path, and only on an `--execute` run.",
+        "",
+        "| Path | Ticket | Repo | Remediation | Evidence |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for debris in debris_decisions:
+        lines.append(
+            f"| `{debris.path}` | {debris.ticket or '—'} | {debris.repo} "
+            f"| {debris.remediation.value} | {debris.evidence} |"
+        )
+    if not debris_decisions:
+        lines.append("| _(none)_ | | | | |")
+
     if removals:
+        succeeded = sum(1 for r in removals if r.ok)
         lines += [
             "",
-            f"## Removals ({sum(1 for _, ok, _ in removals if ok)} succeeded)",
+            f"## Removals ({succeeded} succeeded)",
             "",
-            "| Path | Result | Detail |",
-            "| --- | --- | --- |",
+            "| Path | Result | Command | Exit code | Stderr | Detail |",
+            "| --- | --- | --- | ---: | --- | --- |",
         ]
-        for path, ok, detail in removals:
-            lines.append(f"| `{path}` | {'OK' if ok else 'FAILED'} | {detail} |")
+        for attempt in removals:
+            stderr_cell = (
+                (attempt.stderr or "—").replace("|", "\\|").replace("\n", "<br>")
+            )
+            command_cell = attempt.command.replace("|", "\\|")
+            lines.append(
+                f"| `{attempt.path}` | {'OK' if attempt.ok else 'FAILED'} "
+                f"| `{command_cell}` | {attempt.exit_code} | {stderr_cell} "
+                f"| {attempt.detail} |"
+            )
 
     lines.append("")
     return "\n".join(lines)
@@ -558,6 +885,15 @@ def render_report(
 def decision_to_json(decision: ModelWorktreePruneDecision) -> dict[str, Any]:
     payload = decision.model_dump(mode="json")
     payload["block_reasons"] = [r.value for r in decision.block_reasons]
+    return payload
+
+
+def debris_decision_to_json(
+    decision: ModelPartialMutationDebrisDecision,
+) -> dict[str, Any]:
+    payload = decision.model_dump(mode="json")
+    payload["block_reasons"] = [r.value for r in decision.block_reasons]
+    payload["remediation"] = decision.remediation.value
     return payload
 
 
@@ -700,12 +1036,51 @@ def main(argv: Sequence[str] | None = None) -> int:
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
     triage = [d for d in decisions if d.disposition is EnumPruneDisposition.TRIAGE]
 
-    removals: list[tuple[str, bool, str]] = []
+    # Partial-mutation debris [OMN-16951 defect 2]: directories whose `.git`
+    # link is already gone are invisible to `discover_worktrees` (it keys off
+    # a `.git` glob), so they need their own discovery pass and their own
+    # (much narrower) predicate — see worktree_prune_policy.classify_
+    # partial_mutation_debris. Cheap even at registry scale: one `git
+    # worktree list` per canonical clone, not per worktree.
+    canonicals_for_debris = discover_canonical_clones(root.parent)
+    owner_lookup: dict[str, tuple[Path, str]] = {}
+    for canonical in canonicals_for_debris:
+        for path_str, state in collect_worktree_list_entries(canonical).items():
+            owner_lookup[path_str] = (canonical, state)
+
+    debris_candidates = discover_debris_directories(root, set(worktrees))
+    print(
+        f"Found {len(debris_candidates)} partial-mutation-debris candidate(s) "
+        f"across {len(canonicals_for_debris)} canonical clone(s)",
+        flush=True,
+    )
+    debris_decisions: list[ModelPartialMutationDebrisDecision] = []
+    debris_owner_by_path: dict[str, Path] = {}
+    for candidate in debris_candidates:
+        facts = collect_debris_facts(candidate, root, owner_lookup)
+        debris_decision = classify_partial_mutation_debris(facts)
+        debris_decisions.append(debris_decision)
+        if facts.owning_clone:
+            debris_owner_by_path[debris_decision.path] = Path(facts.owning_clone)
+
+    removals: list[ModelRemovalAttempt] = []
     if args.execute:
         for decision in prunable:
-            ok, detail = prune_worktree(decision)
-            removals.append((decision.path, ok, detail))
-            print(f"  {'REMOVED' if ok else 'FAILED '} {decision.path} — {detail}")
+            attempt = prune_worktree(decision)
+            removals.append(attempt)
+            status = "REMOVED" if attempt.ok else "FAILED "
+            print(f"  {status} {attempt.path} — {attempt.detail}")
+        for debris_decision in debris_decisions:
+            if debris_decision.remediation is not EnumDebrisRemediation.AUTO_REMOVABLE:
+                continue
+            owner = debris_owner_by_path.get(debris_decision.path)
+            if owner is None:
+                continue  # classify_partial_mutation_debris never reaches
+                # AUTO_REMOVABLE without an owning clone; this is a fail-safe.
+            attempt = remediate_debris(debris_decision, owner)
+            removals.append(attempt)
+            status = "REMOVED" if attempt.ok else "FAILED "
+            print(f"  {status} {attempt.path} — {attempt.detail}")
         for empty_dir in cleanup_empty_ticket_dirs(root):
             print(f"  RMDIR   {empty_dir}")
 
@@ -717,6 +1092,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         generated_at=generated_at,
         removals=removals,
         tracker_resolved=len(ticket_states),
+        debris_decisions=debris_decisions,
     )
 
     if args.report_md:
@@ -737,9 +1113,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "prune_count": len(prunable),
                     "triage_count": len(triage),
                     "decisions": [decision_to_json(d) for d in decisions],
-                    "removals": [
-                        {"path": p, "ok": ok, "detail": d} for p, ok, d in removals
+                    "debris_count": len(debris_decisions),
+                    "debris_decisions": [
+                        debris_decision_to_json(d) for d in debris_decisions
                     ],
+                    "removals": [r.model_dump(mode="json") for r in removals],
                 },
                 indent=2,
             ),
@@ -749,7 +1127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(
         f"\nscanned={len(decisions)} safe={len(prunable)} triage={len(triage)} "
-        f"removed={sum(1 for _, ok, _ in removals if ok)}"
+        f"debris={len(debris_decisions)} removed={sum(1 for r in removals if r.ok)}"
     )
     if not args.execute and prunable:
         print("Dry run — re-run with --execute to remove the prune candidates.")

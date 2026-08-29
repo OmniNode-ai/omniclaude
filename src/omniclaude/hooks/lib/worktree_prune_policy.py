@@ -126,6 +126,97 @@ class EnumPruneBlockReason(StrEnum):
     work — so any unreadable probe fails the gate closed.
     """
 
+    PARTIAL_MUTATION_DEBRIS = "partial_mutation_debris"
+    """The worktree's ``.git`` link is gone but its directory was not fully
+    removed [OMN-16951]. Plain ``git worktree remove`` can never succeed here —
+    there is no linked ``.git`` for git to resolve from the worktree side. See
+    :func:`classify_partial_mutation_debris`.
+    """
+
+
+class EnumDebrisRemediation(StrEnum):
+    """What the auto-prune sweep may do about one partial-mutation debris row.
+
+    Conservative by construction: the only automated action stronger than
+    reporting is ``git worktree prune`` (administrative-record-only, never
+    touches the directory) plus removing the leftover directory, and even that
+    fires only when :func:`classify_partial_mutation_debris` has already proven
+    every remaining file's content is a blob already in the owning clone.
+    """
+
+    AUTO_REMOVABLE = "auto_removable"
+    """The owning clone's administrative record is ``prunable`` AND every
+    remaining file's content is byte-identical to a blob already in that
+    clone's object database. Safe to ``git worktree prune`` + remove the
+    directory.
+    """
+
+    TRIAGE = "triage"
+    """Not provably safe — report for human adjudication. Never removed."""
+
+
+class ModelPartialMutationDebrisFacts(BaseModel):
+    """Observed facts about a worktree directory whose ``.git`` link is gone.
+
+    Every field is an observation, never a judgement — collected by the caller
+    (``scripts/worktree_auto_prune.py``) from the filesystem and from the
+    owning clone's ``git worktree list`` / object database.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(
+        ..., min_length=1, description="Absolute path to the leftover directory"
+    )
+    ticket: str | None = Field(
+        ..., description="OMN-NNNN owning ticket, or None when the path carries none"
+    )
+    repo: str = Field(..., min_length=1, description="Directory name (the repo slug)")
+    owning_clone: str | None = Field(
+        ...,
+        description=(
+            "Canonical clone whose `git worktree list` still references this "
+            "path, or None when no known clone's registry does"
+        ),
+    )
+    worktree_list_state: str | None = Field(
+        ...,
+        description=(
+            "Raw annotation from the owning clone's `git worktree list "
+            "--porcelain` for this path (e.g. 'prunable ...'), '' when the "
+            "record is clean, or None when there is no owning clone"
+        ),
+    )
+    file_count: int = Field(
+        ..., ge=0, description="Regular files remaining under the directory"
+    )
+    unreachable_files: tuple[str, ...] = Field(
+        ...,
+        description=(
+            "Relative paths whose content is NOT a blob already present in "
+            "the owning clone's object database. Empty means every remaining "
+            "file (there may be zero) is proven reachable."
+        ),
+    )
+
+
+class ModelPartialMutationDebrisDecision(BaseModel):
+    """The adjudicated disposition of one partial-mutation debris directory."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(..., min_length=1)
+    ticket: str | None = Field(...)
+    repo: str = Field(..., min_length=1)
+    block_reasons: tuple[EnumPruneBlockReason, ...] = Field(
+        ...,
+        description="Always (PARTIAL_MUTATION_DEBRIS,) — this classifier has one reason",
+    )
+    remediation: EnumDebrisRemediation = Field(...)
+    evidence: str = Field(
+        ..., description="Why the remediation was chosen — names every fact used"
+    )
+
 
 class ModelWorktreePruneFacts(BaseModel):
     """Collected, already-observed facts about one worktree.
@@ -401,4 +492,85 @@ def classify_worktree_prune(
         dirty_file_count=len(facts.dirty_files),
         commits_ahead=facts.commits_ahead,
         ledger_open_claim=facts.ledger_open_claim,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Partial-mutation debris predicate [OMN-16951]
+#
+# A distinct shape from the eligibility/safety predicate above: the worktree's
+# `.git` link is already gone, so there is nothing for `git worktree remove` to
+# resolve — plain removal can never succeed, and the classifier above never
+# even sees these directories (its discovery keys off a `.git` glob). This
+# predicate never re-derives ticket eligibility; a debris directory with
+# unverifiable content is never auto-removed regardless of ticket state.
+# ---------------------------------------------------------------------------
+
+
+def classify_partial_mutation_debris(
+    facts: ModelPartialMutationDebrisFacts,
+) -> ModelPartialMutationDebrisDecision:
+    """Adjudicate one `.git`-gone leftover directory.
+
+    Auto-removal fires on exactly one conjunction, both halves provable from
+    ``facts`` alone: the owning clone's administrative record must already say
+    ``prunable`` (git itself agrees the worktree is gone), AND every remaining
+    file's content must be a blob already in that clone's object database (so
+    nothing unique is lost). Any other case — no owning clone found, the
+    record not prunable, or even one file that cannot be proven reachable —
+    is TRIAGE. This is deliberately the only auto-removable case; the
+    conjunction is never weakened to "most files reachable" or "probably the
+    same repo".
+
+    Args:
+        facts: Observed facts for one leftover directory.
+
+    Returns:
+        A frozen decision naming the remediation and the evidence behind it.
+    """
+    is_prunable = bool(
+        facts.worktree_list_state and "prunable" in facts.worktree_list_state
+    )
+    content_reachable = not facts.unreachable_files
+
+    if is_prunable and content_reachable:
+        evidence = (
+            f"no .git link; owning clone {facts.owning_clone!r} worktree-list "
+            f"state {facts.worktree_list_state!r}; {facts.file_count} "
+            "remaining file(s) all content-reachable as blobs already in the "
+            "repo"
+        )
+        return ModelPartialMutationDebrisDecision(
+            path=facts.path,
+            ticket=facts.ticket,
+            repo=facts.repo,
+            block_reasons=(EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS,),
+            remediation=EnumDebrisRemediation.AUTO_REMOVABLE,
+            evidence=evidence,
+        )
+
+    parts: list[str] = []
+    if facts.owning_clone is None:
+        parts.append("no owning clone's worktree-list references this path")
+    elif not is_prunable:
+        parts.append(
+            f"owning clone {facts.owning_clone!r} worktree-list state "
+            f"{facts.worktree_list_state!r} is not 'prunable'"
+        )
+    if not content_reachable:
+        shown = ", ".join(facts.unreachable_files[:5])
+        more = "…" if len(facts.unreachable_files) > 5 else ""
+        parts.append(
+            f"{len(facts.unreachable_files)} file(s) not reachable as a blob "
+            f"already in the repo: {shown}{more}"
+        )
+    evidence = "no .git link; " + "; ".join(parts)
+
+    return ModelPartialMutationDebrisDecision(
+        path=facts.path,
+        ticket=facts.ticket,
+        repo=facts.repo,
+        block_reasons=(EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS,),
+        remediation=EnumDebrisRemediation.TRIAGE,
+        evidence=evidence,
     )

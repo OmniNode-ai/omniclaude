@@ -18,12 +18,19 @@ No network calls, no subprocesses.
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-from omniclaude.hooks.lib.worktree_prune_policy import EnumTicketLifecycle
+from omniclaude.hooks.lib.worktree_prune_policy import (
+    EnumDebrisRemediation,
+    EnumPruneBlockReason,
+    EnumPruneDisposition,
+    EnumTicketLifecycle,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -198,3 +205,245 @@ class TestDiscoverWorktrees:
         assert linked in found
         assert nested in found
         assert clone not in found
+
+
+# =============================================================================
+# Real-git harness [OMN-16951] — the two defects under test both depend on
+# git's actual behavior (stderr content on refusal, `worktree list --porcelain`
+# annotations, object-database presence), so these tests run the real binary
+# against real throwaway repos rather than mocking subprocess.
+# =============================================================================
+
+_GIT_ENV = {
+    **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+    "GIT_AUTHOR_NAME": "omn16951",
+    "GIT_COMMITTER_NAME": "omn16951",
+    "GIT_AUTHOR_EMAIL": "omn16951@example.invalid",
+    "GIT_COMMITTER_EMAIL": "omn16951@example.invalid",
+}
+
+
+def _git_ok(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+        check=False,
+        timeout=60,
+    )
+    assert proc.returncode == 0, f"git {' '.join(args)} failed: {proc.stderr}"
+    return proc
+
+
+@pytest.fixture
+def canonical_repo(tmp_path: Path) -> Path:
+    """A real, throwaway git clone with one committed file under `src/`."""
+    canonical = tmp_path / "canonical" / "omnibase_infra"
+    canonical.mkdir(parents=True)
+    _git_ok(canonical, "init", "-q", "-b", "dev")
+    (canonical / "src").mkdir()
+    (canonical / "src" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _git_ok(canonical, "add", "-A")
+    _git_ok(canonical, "commit", "-q", "-m", "init")
+    return canonical
+
+
+# =============================================================================
+# Defect 1 — refusal observability: stderr must reach the report
+# =============================================================================
+
+
+class TestGitCaptureAndPruneWorktreeStderr:
+    def test_git_capture_returns_the_real_stderr_on_a_refusal(
+        self, canonical_repo: Path
+    ) -> None:
+        code, _out, err = mod._git_capture(
+            canonical_repo, "worktree", "remove", str(canonical_repo / "nonexistent")
+        )
+        assert code != 0
+        assert err != "", "a real git refusal must not read as empty stderr"
+
+    def test_prune_worktree_records_command_exit_code_and_real_stderr(
+        self, tmp_path: Path, canonical_repo: Path
+    ) -> None:
+        """RED 1: a refused removal must surface stderr text in the report.
+
+        Dirty the worktree so git itself refuses the removal (the second,
+        independent safety gate the module's docstring promises), and prove
+        the refusal reason actually reaches the ``ModelRemovalAttempt`` —
+        never the old flat ``"no output"`` regardless of cause.
+        """
+        worktree = tmp_path / "omni_worktrees" / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            canonical_repo, "worktree", "add", "-q", str(worktree), "-b", "wt-branch"
+        )
+        (worktree / "src" / "uncommitted.py").write_text(
+            "DIRTY = True\n", encoding="utf-8"
+        )
+
+        decision = mod.ModelWorktreePruneDecision(
+            path=str(worktree),
+            ticket="OMN-1",
+            repo="omnibase_infra",
+            branch="wt-branch",
+            disposition=EnumPruneDisposition.PRUNE,
+            block_reasons=(),
+            eligibility_evidence="test",
+            safety_evidence="test",
+            dirty_file_count=0,
+            commits_ahead=0,
+            ledger_open_claim=None,
+        )
+
+        attempt = mod.prune_worktree(decision)
+
+        assert attempt.ok is False
+        assert attempt.exit_code != 0
+        assert attempt.stderr != "", "the refusal reason must not be swallowed"
+        assert attempt.stderr != "no output"
+        assert "worktree remove" in attempt.command
+        assert str(worktree) in attempt.command
+        assert worktree.is_dir(), "a refused removal must leave the tree untouched"
+
+
+# =============================================================================
+# Defect 2 — partial-mutation debris: detection + the narrow auto-remove case
+# =============================================================================
+
+
+class TestDiscoverDebrisDirectories:
+    def test_finds_a_git_gone_directory_with_content(self, tmp_path: Path) -> None:
+        debris = tmp_path / "OMN-1" / "omnibase_infra"
+        debris.mkdir(parents=True)
+        (debris / "src").mkdir()
+        (debris / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        found = mod.discover_debris_directories(tmp_path, known_worktrees=set())
+        assert debris in found
+
+    def test_excludes_an_empty_leftover_directory(self, tmp_path: Path) -> None:
+        empty = tmp_path / "OMN-2" / "omnibase_infra"
+        empty.mkdir(parents=True)
+
+        found = mod.discover_debris_directories(tmp_path, known_worktrees=set())
+        assert empty not in found
+
+    def test_excludes_a_directory_with_a_valid_git_link(self, tmp_path: Path) -> None:
+        valid = tmp_path / "OMN-3" / "omnibase_infra"
+        valid.mkdir(parents=True)
+        (valid / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+        (valid / "src.py").write_text("x = 1\n", encoding="utf-8")
+
+        found = mod.discover_debris_directories(tmp_path, known_worktrees=set())
+        assert valid not in found
+
+    def test_excludes_a_directory_already_known_as_a_valid_worktree(
+        self, tmp_path: Path
+    ) -> None:
+        known = tmp_path / "OMN-4" / "omnibase_infra"
+        known.mkdir(parents=True)
+        (known / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        found = mod.discover_debris_directories(tmp_path, known_worktrees={known})
+        assert known not in found
+
+
+class TestPartialMutationDebrisIntegration:
+    """RED 2, end to end against real git: a `.git`-gone directory must
+    classify as `partial_mutation_debris`, and the provably-reachable-content
+    case must be the ONLY auto-removable one."""
+
+    def test_git_gone_worktree_with_untouched_content_is_auto_removable(
+        self, tmp_path: Path, canonical_repo: Path
+    ) -> None:
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-16869" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            canonical_repo, "worktree", "add", "-q", str(worktree), "-b", "wt-branch"
+        )
+        assert mod.discover_worktrees(root) == [worktree]
+
+        # Simulate the partial-mutation debris shape: the linked `.git` file
+        # is gone, every tracked file is untouched.
+        (worktree / ".git").unlink()
+        assert mod.discover_worktrees(root) == []  # invisible to the old path
+        debris_candidates = mod.discover_debris_directories(root, set())
+        assert worktree in debris_candidates
+
+        owner_lookup: dict[str, tuple[Path, str]] = {}
+        for path_str, state in mod.collect_worktree_list_entries(
+            canonical_repo
+        ).items():
+            owner_lookup[path_str] = (canonical_repo, state)
+        owner = owner_lookup.get(str(worktree.resolve()))
+        assert owner is not None, "git must still carry the administrative record"
+        assert "prunable" in owner[1]
+
+        facts = mod.collect_debris_facts(worktree, root, owner_lookup)
+        assert facts.file_count > 0
+        assert facts.unreachable_files == ()
+
+        decision = mod.classify_partial_mutation_debris(facts)
+        assert decision.block_reasons == (EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS,)
+        assert decision.remediation is EnumDebrisRemediation.AUTO_REMOVABLE
+
+    def test_git_gone_worktree_with_a_locally_edited_file_is_triage_only(
+        self, tmp_path: Path, canonical_repo: Path
+    ) -> None:
+        """The provably-reachable-content case must be the ONLY
+        auto-removable one — a single edited file must flip it to TRIAGE."""
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-16906" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            canonical_repo, "worktree", "add", "-q", str(worktree), "-b", "wt-branch2"
+        )
+        (worktree / ".git").unlink()
+        # Local, uncommitted-and-now-unrecoverable-via-git-status edit: the
+        # content no longer matches any blob in the owning clone.
+        (worktree / "src" / "app.py").write_text(
+            "VALUE = 2  # locally edited\n", encoding="utf-8"
+        )
+
+        owner_lookup: dict[str, tuple[Path, str]] = {}
+        for path_str, state in mod.collect_worktree_list_entries(
+            canonical_repo
+        ).items():
+            owner_lookup[path_str] = (canonical_repo, state)
+
+        facts = mod.collect_debris_facts(worktree, root, owner_lookup)
+        assert facts.unreachable_files != ()
+
+        decision = mod.classify_partial_mutation_debris(facts)
+        assert decision.remediation is EnumDebrisRemediation.TRIAGE
+
+    def test_remediate_debris_prunes_and_removes_only_when_auto_removable(
+        self, tmp_path: Path, canonical_repo: Path
+    ) -> None:
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-16891" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            canonical_repo, "worktree", "add", "-q", str(worktree), "-b", "wt-branch3"
+        )
+        (worktree / ".git").unlink()
+
+        owner_lookup: dict[str, tuple[Path, str]] = {}
+        for path_str, state in mod.collect_worktree_list_entries(
+            canonical_repo
+        ).items():
+            owner_lookup[path_str] = (canonical_repo, state)
+        facts = mod.collect_debris_facts(worktree, root, owner_lookup)
+        decision = mod.classify_partial_mutation_debris(facts)
+        assert decision.remediation is EnumDebrisRemediation.AUTO_REMOVABLE
+
+        attempt = mod.remediate_debris(decision, canonical_repo)
+
+        assert attempt.ok is True
+        assert not worktree.exists()
+        # The administrative record must be gone too (git worktree prune ran).
+        remaining = mod.collect_worktree_list_entries(canonical_repo)
+        assert str(worktree.resolve()) not in remaining
