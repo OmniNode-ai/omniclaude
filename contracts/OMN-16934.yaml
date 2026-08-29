@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-16934"
+title: "Track out-of-scope CodeRabbit dead-code cleanup"
+summary: >
+  The CodeRabbit gate-removal PR deliberately leaves deeper coderabbit_triage
+  and pr_review_bot deletions out of scope until ownership decides whether
+  pr_review_bot has non-CodeRabbit duties.
+
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+
+evidence_requirements:
+  - kind: "manual"
+    description: "The PR body records OMN-16934 as an explicit follow-up rather than deleting broader review-bot code opportunistically."
+    command: "gh pr view 2069 --repo OmniNode-ai/omniclaude --json body"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-dead-code-cleanup-left-scoped"
+    description: >
+      The PR records the CodeRabbit triage/review-bot cleanup as not in scope
+      and does not remove broader review-bot code without an ownership decision.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "grep"
+        check_value: "OMN-16934 is listed in the PR body as follow-up scope."

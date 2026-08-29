@@ -1,0 +1,35 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-16823"
+title: "Remove CodeRabbit jq-filter test hook with the deleted gate"
+summary: >
+  The CodeRabbit thread gate and its jq-filter tests are deleted together so
+  the repository does not retain a dead required-check implementation after
+  branch protection no longer requires it.
+
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - ci_gate
+
+evidence_requirements:
+  - kind: "tests"
+    description: "Required-check and self-gating tests remain covered with synthetic examples."
+    command: "uv run pytest tests/ci/test_ci_summary_gate.py tests/ci/test_validate_no_required_check_skip_vectors.py tests/hooks/test_check_self_gating_workflows.py -q"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-coderabbit-test-hook-deleted-with-gate"
+    description: >
+      The PR deletes the CodeRabbit thread-gate workflow, caller workflows,
+      shell checker, and jq-filter test hook while preserving required-check
+      and self-gating coverage through non-CodeRabbit fixture names.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py tests/ci/test_validate_no_required_check_skip_vectors.py tests/hooks/test_check_self_gating_workflows.py -q"
