@@ -121,7 +121,7 @@ _omniclaude_error_guard_trap() {
     if [[ -n "${SLACK_BOT_TOKEN:-}" ]] && [[ -n "${SLACK_CHANNEL_ID:-}" ]]; then
         _alert_configured=1
     fi
-    if [[ "$_alert_configured" -eq 1 ]] && command -v curl >/dev/null 2>&1; then
+    if [[ "$_alert_configured" -eq 1 ]]; then
         # Rate limiting: one alert per hook per 5 minutes
         local rate_dir="${_ERROR_GUARD_LOG_DIR}/rate"
         mkdir -p "$rate_dir" 2>/dev/null || true
