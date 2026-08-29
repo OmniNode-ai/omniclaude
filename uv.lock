@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = ">=0.46.5,<0.47.0" },
+    { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
@@ -1601,7 +1601,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.46.13"
+version = "0.47.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1618,9 +1618,9 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fc/b7/00d477072a87d1f47d50edf1b4280833e50f5c9ffaa7639c9e10d3546331/omnibase_core-0.46.13.tar.gz", hash = "sha256:430b90d3ef1079089932f1e20e56276f43974335b5a7a2068b3c8e13b4ced1a3", size = 9914609, upload-time = "2026-08-27T14:13:35.781Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/e6/eb9191c468df278a88e4faf2ac8d234f04b503167a6a90495ac3ea20dd74/omnibase_core-0.47.0.tar.gz", hash = "sha256:e6ea2d8cb9e2179f4b12ac716a8759311c6937ab802336b491265b6a4c93a9aa", size = 9968941, upload-time = "2026-08-29T09:48:56.345Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ac/cd/d92830eabc61f8f2a41e1e397de12ce6f53b10d6363c9aeb7bc18ebe90df/omnibase_core-0.46.13-py3-none-any.whl", hash = "sha256:98c55768c911791b7cade74a5b24246e42eff7f60a1b7c2f316afa4c60fabcdb", size = 6780933, upload-time = "2026-08-27T14:13:32.519Z" },
+    { url = "https://files.pythonhosted.org/packages/80/03/7449684177d998fe75c0551f9f5f699824015ff36d478d98aa493f7c009a/omnibase_core-0.47.0-py3-none-any.whl", hash = "sha256:dd89bb9dd755a6b4715e2c0d20914933921186135a946a199ee70b1116319130", size = 6821455, upload-time = "2026-08-29T09:48:54.236Z" },
 ]
 
 [[package]]
@@ -1822,7 +1822,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = ">=0.46.5,<0.47.0" },
+    { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
