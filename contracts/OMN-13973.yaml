@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-13973"
+title: "Governed pre-push selector remains covered after CodeRabbit removal"
+summary: >
+  The CodeRabbit removal PR updates the gate surface without weakening the
+  governed pre-push selector evidence path. The selector remains part of the
+  local verification record for the runtime-touching skill and hook changes.
+
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+
+evidence_requirements:
+  - kind: "tests"
+    description: "The governed pre-push selector runs as part of the PR verification."
+    command: "pre-push governed impacted-test selector"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-governed-prepush-selector-retained"
+    description: >
+      The PR body records that the governed pre-push selector ran and passed
+      while CodeRabbit-specific checks were removed from the gate surface.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "pre-push governed impacted-test selector"

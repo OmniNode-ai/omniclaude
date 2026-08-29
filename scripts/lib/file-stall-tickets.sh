@@ -165,7 +165,7 @@ was identical across ${stall_count} consecutive 5-minute snapshots while in a bl
 
 **Suggested actions:**
 - Check CI: \`gh pr checks ${pr_number} --repo ${repo}\`
-- Check for CodeRabbit unresolved threads
+- Check for unresolved review threads
 - Rebase if conflicted: \`gh pr view ${pr_number} --repo ${repo} --json mergeable\`"
 
   # Build request body via Python so title/description are properly JSON-escaped,

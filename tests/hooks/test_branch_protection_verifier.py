@@ -170,21 +170,19 @@ class TestMutationVerification(unittest.TestCase):
     def test_single_unmatched_context_blocks(self):
         cmd = (
             "gh api --method PUT repos/OmniNode-ai/omniclaude/branches/main/protection "
-            "-f required_status_checks[contexts][]='gate / CodeRabbit Thread Check'"
+            "-f required_status_checks[contexts][]='gate / Example Thread Check'"
         )
         with patch.object(
             bpv.subprocess,
             "run",
-            side_effect=_fake_gh(["CodeRabbit Thread Check", "Tests-Gate"]),
+            side_effect=_fake_gh(["Example Thread Check", "Tests-Gate"]),
         ):
             out, code = _run_main(_mk_bash_tool_info(cmd))
         self.assertEqual(code, 2)
         payload = json.loads(out)
         self.assertEqual(payload["decision"], "block")
-        self.assertIn("gate / CodeRabbit Thread Check", payload["reason"])
-        self.assertIn(
-            "CodeRabbit Thread Check", payload["reason"]
-        )  # observed set listed
+        self.assertIn("gate / Example Thread Check", payload["reason"])
+        self.assertIn("Example Thread Check", payload["reason"])  # observed set listed
 
     def test_mixed_match_one_unmatched_blocks(self):
         cmd = (
@@ -260,11 +258,11 @@ class TestExtractionPrimitives(unittest.TestCase):
     def test_parse_contexts_respects_quotes(self):
         cmd = (
             "gh api --method PUT repos/x/y/branches/main/protection "
-            "-f required_status_checks[contexts][]='gate / CodeRabbit Thread Check' "
+            "-f required_status_checks[contexts][]='gate / Example Thread Check' "
             "-f required_status_checks[contexts][]=Tests-Gate"
         )
         contexts = bpv._parse_contexts(cmd)
-        self.assertIn("gate / CodeRabbit Thread Check", contexts)
+        self.assertIn("gate / Example Thread Check", contexts)
         self.assertIn("Tests-Gate", contexts)
 
     def test_extract_protection_mutation_requires_method(self):

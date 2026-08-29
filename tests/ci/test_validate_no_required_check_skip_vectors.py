@@ -210,12 +210,13 @@ def test_real_shape_regression_cr_thread_gate_caller_condition_is_red(
     tmp_path: Path,
 ) -> None:
     """Reproduction (copied verbatim as a fixture, not read from the live file)
-    of the real cr-thread-gate-caller.yml `gate:` job condition. Real-shape
+    of a cross-repo reusable caller's `gate:` job condition (modelled on the
+    former cr-thread-gate-caller.yml, deleted in OMN-16933). Real-shape
     regression fixture per design spec section 6."""
     manifest_path, wf_dir = _write(
         tmp_path,
         {
-            "cr-thread-gate-caller.yml": """\
+            "reusable-caller.yml": """\
                 name: CR Thread Gate (caller)
                 on:
                   pull_request:
@@ -228,20 +229,20 @@ def test_real_shape_regression_cr_thread_gate_caller_condition_is_red(
                       github.event_name == 'merge_group' ||
                       ((github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
                       github.actor != 'dependabot[bot]')
-                    uses: ./.github/workflows/cr-thread-gate.yml
+                    uses: ./.github/workflows/reusable-gate.yml
                 """,
-            "cr-thread-gate.yml": """\
+            "reusable-gate.yml": """\
                 name: CR Thread Gate
                 on:
                   workflow_call: {}
                 jobs:
                   gate:
-                    name: CodeRabbit Thread Check
+                    name: Thread Check
                     runs-on: ubuntu-latest
                     steps: [{run: "echo hi"}]
                 """,
         },
-        [_manifest_row("gate / CodeRabbit Thread Check")],
+        [_manifest_row("gate / Thread Check")],
     )
     findings = run(manifest_path, wf_dir)
     assert any(f.vector == "vector-3-ungated-caller-if" for f in findings)

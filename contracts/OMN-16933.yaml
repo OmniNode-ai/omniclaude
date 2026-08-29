@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-16933"
+title: "Remove CodeRabbit entirely from the omniclaude gate surface"
+summary: >
+  CodeRabbit is removed from omniclaude's reusable workflow, callers,
+  required-check manifests, CI summary expectations, hooks, skills, and
+  doctrine so the repository no longer gates merges on CodeRabbit.
+
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+
+evidence_requirements:
+  - kind: "tests"
+    description: "CI summary, required-check skip-vector, branch-protection, and queue-stall tests continue to cover the gate surface."
+    command: "uv run pytest tests/ci/test_ci_summary_gate.py tests/ci/test_validate_no_required_check_skip_vectors.py tests/hooks/test_branch_protection_verifier.py tests/hooks/test_check_self_gating_workflows.py tests/hooks/test_queue_stall_classifier.py -q"
+  - kind: "tests"
+    description: "Skill routing and hygiene suites remain green after doctrine text changes."
+    command: "uv run pytest tests/skills tests/unit/skills test_validate_deterministic_skill_routing.py -q"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-coderabbit-gate-surface-removed"
+    description: >
+      The PR removes CodeRabbit workflows, required contexts, scripts, tests,
+      and skill/doctrine references while retaining generic review-thread and
+      required-check guard coverage.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py tests/ci/test_validate_no_required_check_skip_vectors.py tests/hooks/test_branch_protection_verifier.py tests/hooks/test_check_self_gating_workflows.py tests/hooks/test_queue_stall_classifier.py -q"
+      - check_type: "command"
+        check_value: "uv run pytest tests/skills tests/unit/skills test_validate_deterministic_skill_routing.py -q"

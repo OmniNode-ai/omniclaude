@@ -182,7 +182,7 @@ def _parse_contexts(command: str) -> list[str]:
     """Extract required_status_checks.contexts[] values from inline -f args.
 
     Tokenizes the command with shlex so quoted context names (e.g.,
-    'gate / CodeRabbit Thread Check') survive. Unwraps `bash -lc '...'`
+    'pr-title / check-title') survive. Unwraps `bash -lc '...'`
     style wrappers first so they cannot be used to bypass the guard.
     """
     inner = _unwrap_shell_wrapper(command)
