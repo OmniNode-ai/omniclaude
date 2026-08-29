@@ -14,7 +14,7 @@ dependencies = [
     # OMN-13873: pin from PyPI (not a git tag) for the dep-provenance gate.
     # omniclaude.shared.models.model_skill_result intentionally falls back to
     # the local legacy model when newer core releases move the export path.
-    "omnibase-core>=0.46.5,<0.47.0",
+    "omnibase-core>=0.47.0,<0.48.0",
     "omnibase-spi>=0.23.1,<0.24.0",
     "omnibase-infra>=0.38.3,<0.39.0",
     "omnimarket>=0.4.0",
@@ -243,7 +243,7 @@ build-backend = "hatchling.build"
 [tool.uv]
 # Override transitive pins so our direct pins win.
 override-dependencies = [
-    "omnibase-core>=0.46.5,<0.47.0",
+    "omnibase-core>=0.47.0,<0.48.0",
     "omnibase-spi>=0.23.1,<0.24.0",
     "omnibase-infra>=0.38.3,<0.39.0",
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
