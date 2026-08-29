@@ -52,9 +52,9 @@
 # exits 0 without printing one of `skipped_bound_to:` /
 # `published_correlation_id:` / `publish_declined:`. The emitting side is
 # omnimarket `scripts/publish_occ_companion_effect_command.py`, which this
-# workflow sparse-checks-out from `omnimarket@dev` AT RUN TIME — so the two
-# halves are NOT versioned together and a change to either lands live for every
-# caller repo immediately.
+# workflow sparse-checks-out from `omnimarket@${{ inputs.omnimarket-ref }}` AT
+# RUN TIME — so the two halves are NOT versioned together and a change to that
+# supplied ref lands live for caller repos using it.
 #
 # Consequences, both directions:
 #   * Removing or renaming a marker in the omnimarket publisher fails EVERY
