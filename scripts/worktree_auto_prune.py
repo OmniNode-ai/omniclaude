@@ -150,6 +150,25 @@ def discover_worktrees(root: Path) -> list[Path]:
     return sorted(set(found))
 
 
+def _inside_a_known_worktree(
+    candidate: Path, root: Path, known_worktrees: set[Path]
+) -> bool:
+    """True when a strict ancestor of ``candidate``, between it and ``root``
+    (exclusive of ``root`` itself), is a known worktree or carries its own
+    ``.git`` [OMN-16951 debris-discovery fix]. A subdirectory of a healthy
+    linked worktree is not debris — its parent already answered the
+    `.git`/known-worktree checks, and a plain subdirectory match must not
+    re-litigate that on the child.
+    """
+    rel_parts = candidate.relative_to(root).parts[:-1]  # exclude candidate itself
+    ancestor = root
+    for part in rel_parts:
+        ancestor = ancestor / part
+        if ancestor in known_worktrees or (ancestor / ".git").exists():
+            return True
+    return False
+
+
 def discover_debris_directories(root: Path, known_worktrees: set[Path]) -> list[Path]:
     """Return ticket-dir children under ``root`` that carry no discoverable
     ``.git`` but still hold file content on disk [OMN-16951 defect 2].
@@ -161,6 +180,13 @@ def discover_debris_directories(root: Path, known_worktrees: set[Path]) -> list[
     carrying a ``.git`` of its own, and drops directories with no file content
     (``cleanup_empty_ticket_dirs`` already reclaims those; an empty leftover is
     not debris, it is nothing).
+
+    The ``.git``/``known_worktrees`` checks below apply to ``child`` itself —
+    a subdirectory of a healthy linked worktree (e.g. ``<ticket>/<repo>/src``)
+    matches a deeper glob, is itself neither a known worktree nor `.git`-
+    bearing, and would otherwise pass every filter. Each candidate's ancestry
+    up to ``root`` is walked so a directory living inside a real worktree is
+    never reported as debris [CodeRabbit, OMN-16951 PR review].
     """
     candidates: list[Path] = []
     for depth_glob in ("*/*", "*/*/*", "*/*/*/*"):
@@ -170,6 +196,8 @@ def discover_debris_directories(root: Path, known_worktrees: set[Path]) -> list[
             if child in known_worktrees:
                 continue
             if (child / ".git").exists():
+                continue
+            if _inside_a_known_worktree(child, root, known_worktrees):
                 continue
             if not any(p.is_file() for p in child.rglob("*")):
                 continue
@@ -700,7 +728,30 @@ def remediate_debris(
         )
 
     target = Path(decision.path)
-    rm_command = f"{' '.join(prune_argv)} && rm -rf {target}"
+    rm_command = f"{' '.join(prune_argv)} ; shutil.rmtree({target})"
+
+    # Re-prove reachability immediately before deleting, not just at
+    # classification time [CodeRabbit, OMN-16951 PR review]: the scan that
+    # produced this decision can run minutes ahead of the --execute pass over
+    # a large root, and a file written into the directory during that gap
+    # would otherwise be deleted without ever being checked.
+    _recheck_count, recheck_unreachable = leftover_content_reachable(
+        target, owning_clone
+    )
+    if recheck_unreachable:
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=rm_command,
+            exit_code=-1,
+            stderr="",
+            detail=(
+                f"refused: {len(recheck_unreachable)} file(s) are no longer "
+                "reachable as blobs in the owning clone at removal time — "
+                "content changed after classification"
+            ),
+        )
+
     try:
         shutil.rmtree(target)
     except OSError as exc:
@@ -764,8 +815,15 @@ def render_report(
     for decision in triage:
         for reason in decision.block_reasons:
             by_reason[reason] += 1
-    if debris_decisions:
-        by_reason[EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS] += len(debris_decisions)
+    # Only the TRIAGE subset belongs in the block-reason table — an
+    # AUTO_REMOVABLE debris row is (on --execute) actually removed, so
+    # counting it as triage would misreport what the morning sweep left
+    # behind [CodeRabbit, OMN-16951 PR review].
+    triage_debris = sum(
+        1 for d in debris_decisions if d.remediation is EnumDebrisRemediation.TRIAGE
+    )
+    if triage_debris:
+        by_reason[EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS] += triage_debris
 
     mode = "EXECUTE" if executed else "DRY RUN — nothing was removed"
     lines: list[str] = [

@@ -349,6 +349,39 @@ class TestDiscoverDebrisDirectories:
         found = mod.discover_debris_directories(tmp_path, known_worktrees={known})
         assert known not in found
 
+    def test_excludes_subdirectories_of_a_valid_git_linked_worktree(
+        self, tmp_path: Path
+    ) -> None:
+        """CodeRabbit (OMN-16951 PR review): the `.git` check on Line 172 only
+        applies to `child` itself. `root/OMN-5/repo/src` matches the depth-3
+        glob, is not itself a known worktree, carries no `.git` of its own,
+        and holds a file — every prior filter passed it through. Its parent
+        (`root/OMN-5/repo`) does carry `.git`, which must be enough to
+        exclude the subdirectory too.
+        """
+        valid = tmp_path / "OMN-5" / "repo"
+        valid.mkdir(parents=True)
+        (valid / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+        src = valid / "src"
+        src.mkdir()
+        (src / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        found = mod.discover_debris_directories(tmp_path, known_worktrees=set())
+        assert valid not in found
+        assert src not in found
+
+    def test_excludes_subdirectories_of_a_known_worktree(self, tmp_path: Path) -> None:
+        """Same shape as above, but the ancestor is excluded via
+        `known_worktrees` rather than an on-disk `.git`."""
+        known = tmp_path / "OMN-6" / "repo"
+        known.mkdir(parents=True)
+        src = known / "src"
+        src.mkdir()
+        (src / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        found = mod.discover_debris_directories(tmp_path, known_worktrees={known})
+        assert src not in found
+
 
 class TestPartialMutationDebrisIntegration:
     """RED 2, end to end against real git: a `.git`-gone directory must
@@ -447,3 +480,80 @@ class TestPartialMutationDebrisIntegration:
         # The administrative record must be gone too (git worktree prune ran).
         remaining = mod.collect_worktree_list_entries(canonical_repo)
         assert str(worktree.resolve()) not in remaining
+
+    def test_remediate_debris_refuses_when_content_changed_after_classification(
+        self, tmp_path: Path, canonical_repo: Path
+    ) -> None:
+        """CodeRabbit (OMN-16951 PR review): reachability is proven once, at
+        classification time; `--execute` over a large root can run minutes
+        later. A file edited into unreachability during that gap must refuse
+        the deletion rather than delete it unchecked."""
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-16999" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            canonical_repo, "worktree", "add", "-q", str(worktree), "-b", "wt-branch4"
+        )
+        (worktree / ".git").unlink()
+
+        owner_lookup: dict[str, tuple[Path, str]] = {}
+        for path_str, state in mod.collect_worktree_list_entries(
+            canonical_repo
+        ).items():
+            owner_lookup[path_str] = (canonical_repo, state)
+        facts = mod.collect_debris_facts(worktree, root, owner_lookup)
+        decision = mod.classify_partial_mutation_debris(facts)
+        assert decision.remediation is EnumDebrisRemediation.AUTO_REMOVABLE
+
+        # The gap: content changes after classification proved it reachable.
+        (worktree / "src" / "app.py").write_text(
+            "VALUE = 2  # edited after classification\n", encoding="utf-8"
+        )
+
+        attempt = mod.remediate_debris(decision, canonical_repo)
+
+        assert attempt.ok is False
+        assert worktree.exists()  # never deleted
+        assert (worktree / "src" / "app.py").exists()
+
+
+class TestRenderReportDebrisAccounting:
+    """CodeRabbit (OMN-16951 PR review): an AUTO_REMOVABLE debris row is (on
+    `--execute`) actually removed, so the "Triage block reasons" table must
+    not count it — only the TRIAGE subset belongs there."""
+
+    def test_by_reason_table_excludes_auto_removable_debris(
+        self, tmp_path: Path
+    ) -> None:
+        from omniclaude.hooks.lib.worktree_prune_policy import (
+            ModelPartialMutationDebrisDecision,
+        )
+
+        auto_removable = ModelPartialMutationDebrisDecision(
+            path=str(tmp_path / "OMN-1" / "repo"),
+            ticket="OMN-1",
+            repo="repo",
+            block_reasons=(EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS,),
+            remediation=EnumDebrisRemediation.AUTO_REMOVABLE,
+            evidence="every remaining file content-reachable",
+        )
+        triage_only = ModelPartialMutationDebrisDecision(
+            path=str(tmp_path / "OMN-2" / "repo"),
+            ticket="OMN-2",
+            repo="repo",
+            block_reasons=(EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS,),
+            remediation=EnumDebrisRemediation.TRIAGE,
+            evidence="one file unreachable",
+        )
+
+        report = mod.render_report(
+            [],
+            root=tmp_path,
+            executed=True,
+            generated_at="2026-08-29T00:00:00Z",
+            removals=[],
+            tracker_resolved=0,
+            debris_decisions=[auto_removable, triage_only],
+        )
+
+        assert "| `partial_mutation_debris` | 1 |" in report
