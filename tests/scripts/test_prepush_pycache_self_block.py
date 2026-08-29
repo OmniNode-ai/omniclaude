@@ -61,13 +61,13 @@ even though the isolated mechanism tests above would still pass.
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -226,26 +226,23 @@ _PYTEST_HOOK_IDS = (
 )
 
 
-def _entry_block_for(hook_id: str, config_text: str) -> str:
-    # Each hook's YAML block runs from its `- id: <hook_id>` line up to the
-    # next `- id:` line (or EOF). Sufficient for a static substring check
-    # without pulling in a YAML parser dependency this repo doesn't already
-    # need for pytest config assertions.
-    pattern = re.compile(
-        rf"^ *- id: {re.escape(hook_id)}\n(.*?)(?=^ *- id: |\Z)",
-        re.MULTILINE | re.DOTALL,
-    )
-    match = pattern.search(config_text)
-    assert match, f"hook id {hook_id!r} not found in .pre-commit-config.yaml"
-    return match.group(0)
+def _entry_for(hook_id: str, config_text: str) -> str:
+    config = yaml.safe_load(config_text)
+    for repo_config in config["repos"]:
+        for hook in repo_config.get("hooks", []):
+            if hook.get("id") == hook_id:
+                entry = hook.get("entry")
+                assert isinstance(entry, str), f"{hook_id}: entry is not a string"
+                return entry
+    raise AssertionError(f"hook id {hook_id!r} not found in .pre-commit-config.yaml")
 
 
 def test_shipped_pytest_hooks_set_pythondontwritebytecode():
     config_text = _PRECOMMIT_CONFIG.read_text()
     for hook_id in _PYTEST_HOOK_IDS:
-        block = _entry_block_for(hook_id, config_text)
-        assert "uv run pytest" in block, f"{hook_id}: expected a pytest invocation"
-        assert "PYTHONDONTWRITEBYTECODE=1" in block, (
+        entry = _entry_for(hook_id, config_text)
+        assert "uv run pytest" in entry, f"{hook_id}: expected a pytest invocation"
+        assert "PYTHONDONTWRITEBYTECODE=1" in entry, (
             f"{hook_id}: pytest entry no longer sets PYTHONDONTWRITEBYTECODE=1 "
             "-- this reopens OMN-14463's pre-push self-block"
         )
