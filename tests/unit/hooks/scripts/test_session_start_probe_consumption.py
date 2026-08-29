@@ -90,7 +90,6 @@ def _run(tmp_path: Path, probe: Path) -> subprocess.CompletedProcess[str]:
         "LOG_FILE": str(log_file),
         "OMNICLAUDE_MODE": "full",
         "PLUGIN_PYTHON_BIN": str(probe),
-        "SLACK_WEBHOOK_URL": "",
         "SLACK_BOT_TOKEN": "",
         "SLACK_CHANNEL_ID": "",
     }
@@ -224,15 +223,17 @@ class TestHealthyPathStaysQuiet:
 class TestDegradedChannelIsSurfaced:
     """A dead secondary masked by a live primary must not be silent.
 
-    Alerting still works, so this is a WARNING and not a failure — but the dead
-    webhook delivers nothing, and if the live channel later lapses it is all
-    that is left. This is the live state on the operator's machine today:
-    ``bot_token=ok; webhook=HTTP_404 no_service``.
+    Alerting still works, so this is a WARNING and not a failure. The shell
+    consumer must render whatever channel name(s) the probe reports generically
+    — it is not hardcoded to a fixed channel list. As of OMN-15600 the only
+    channel the probe ever checks is ``bot_token`` (the incoming-webhook
+    channel was retired), so this fixture uses a synthetic secondary name to
+    prove the rendering path is generic rather than special-cased.
     """
 
     _DEGRADED = (
         '{"hook_health": [], "alert_channel": {"status": "live",'
-        ' "live_channels": ["bot_token"], "dead_channels": ["webhook"]},'
+        ' "live_channels": ["bot_token"], "dead_channels": ["secondary_channel"]},'
         ' "failures": 0}'
     )
 
@@ -242,7 +243,7 @@ class TestDegradedChannelIsSurfaced:
         log = _log(tmp_path)
         assert "rc=0" in result.stdout, f"{result.stdout!r} {result.stderr!r}"
         assert "degraded" in log, log
-        assert "webhook" in log, log
+        assert "secondary_channel" in log, log
         assert "ERROR" not in log, log
 
 

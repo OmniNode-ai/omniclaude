@@ -213,14 +213,20 @@ class TestGuardChecks:
         payload = _make_blocked_payload(agent_name="mock-agent-1")
         assert _is_test_payload(payload) is True
 
-    def test_no_webhook_url_returns_false_with_debug_log(
+    def test_no_bot_token_returns_false_with_debug_log(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No SLACK_WEBHOOK_URL returns False and logs at DEBUG."""
+        """No SLACK_BOT_TOKEN/SLACK_CHANNEL_ID returns False and logs at DEBUG.
+
+        SLACK_WEBHOOK_URL is retired (OMN-15600) — the bot-token path is the
+        sole configuration signal.
+        """
         from plugins.onex.hooks.lib import blocked_notifier
         from plugins.onex.hooks.lib.blocked_notifier import maybe_notify_blocked
 
         monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.delenv("SLACK_CHANNEL_ID", raising=False)
 
         with patch.object(blocked_notifier.logger, "debug") as mock_debug:
             result = maybe_notify_blocked(_make_blocked_payload())
@@ -354,7 +360,8 @@ class TestSlackDelivery:
 
         rate_file = str(tmp_path) + "/rate_limits.json"  # type: ignore[operator]
         monkeypatch.setenv("BLOCKED_RATE_LIMIT_PATH", rate_file)
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/test")
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+        monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
 
         with patch(
             "plugins.onex.hooks.lib.blocked_notifier._send_via_handler",
@@ -365,30 +372,30 @@ class TestSlackDelivery:
         assert result is True
         mock_handler.assert_called_once()
 
-    def test_falls_back_to_urllib_when_handler_unavailable(
+    def test_returns_false_when_handler_import_fails(
         self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Falls back to urllib when HandlerSlackWebhook import fails."""
+        """Returns False, without a fallback send, when HandlerSlackWebhook import fails.
+
+        SLACK_WEBHOOK_URL is retired (OMN-15600) — the bot-token path has no
+        fallback; an import failure must be reported, not silently retried
+        against a channel that no longer exists.
+        """
         from plugins.onex.hooks.lib.blocked_notifier import maybe_notify_blocked
 
         rate_file = str(tmp_path) + "/rate_limits.json"  # type: ignore[operator]
         monkeypatch.setenv("BLOCKED_RATE_LIMIT_PATH", rate_file)
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/test")
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+        monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
 
-        with (
-            patch(
-                "plugins.onex.hooks.lib.blocked_notifier._send_via_handler",
-                side_effect=ImportError("no omnibase_infra"),
-            ),
-            patch(
-                "plugins.onex.hooks.lib.blocked_notifier._send_via_urllib",
-                return_value=True,
-            ) as mock_urllib,
-        ):
+        with patch(
+            "plugins.onex.hooks.lib.blocked_notifier._send_via_handler",
+            side_effect=ImportError("no omnibase_infra"),
+        ) as mock_handler:
             result = maybe_notify_blocked(_make_blocked_payload())
 
-        assert result is True
-        mock_urllib.assert_called_once()
+        assert result is False
+        mock_handler.assert_called_once()
 
     def test_message_format_includes_all_fields(self) -> None:
         """Formatted message includes all non-None fields."""
@@ -518,7 +525,6 @@ class TestSlackDelivery:
 
         with mock.patch.dict(sys.modules, patched_modules):
             _send_via_handler(
-                "https://hooks.slack.test/test",
                 "Agent blocked",
                 "corr-id-123",
                 agent_name="real-agent",
@@ -574,7 +580,6 @@ class TestSlackDelivery:
 
         with mock.patch.dict(sys.modules, patched_modules):
             _send_via_handler(
-                "https://hooks.slack.test/test",
                 "Agent blocked",
                 "corr-id-123",
                 agent_name="unknown",
@@ -596,22 +601,21 @@ class TestFailOpen:
     def test_sender_exception_returns_false(
         self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When both send paths raise, returns False without raising."""
+        """When the handler send raises, returns False without raising.
+
+        No fallback exists (SLACK_WEBHOOK_URL retired, OMN-15600) — a raising
+        handler is the only failure mode left to cover.
+        """
         from plugins.onex.hooks.lib.blocked_notifier import maybe_notify_blocked
 
         rate_file = str(tmp_path) + "/rate_limits.json"  # type: ignore[operator]
         monkeypatch.setenv("BLOCKED_RATE_LIMIT_PATH", rate_file)
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/test")
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+        monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
 
-        with (
-            patch(
-                "plugins.onex.hooks.lib.blocked_notifier._send_via_handler",
-                side_effect=RuntimeError("Handler exploded"),
-            ),
-            patch(
-                "plugins.onex.hooks.lib.blocked_notifier._send_via_urllib",
-                side_effect=ConnectionError("Network down"),
-            ),
+        with patch(
+            "plugins.onex.hooks.lib.blocked_notifier._send_via_handler",
+            side_effect=RuntimeError("Handler exploded"),
         ):
             result = maybe_notify_blocked(_make_blocked_payload())
 
@@ -625,7 +629,8 @@ class TestFailOpen:
 
         rate_file = str(tmp_path) + "/rate_limits.json"  # type: ignore[operator]
         monkeypatch.setenv("BLOCKED_RATE_LIMIT_PATH", rate_file)
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/test")
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+        monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
 
         # Write garbage to the rate limit file
         with open(rate_file, "w") as f:

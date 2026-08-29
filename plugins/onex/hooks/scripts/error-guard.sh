@@ -115,10 +115,10 @@ _omniclaude_error_guard_trap() {
     _log "ERROR" "exit code $exit_code${_ERROR_GUARD_LAST_ERR:+ at $_ERROR_GUARD_LAST_ERR}"
 
     # --- 3. Send Slack alert (outcome-checked; a dead channel is recorded, not
-    #        discarded — OMN-15600). Never changes this trap's exit 0. ---
+    #        discarded — OMN-15600). Never changes this trap's exit 0.
+    #        SLACK_WEBHOOK_URL is retired; the bot token is the sole channel. ---
     local _alert_configured=0
-    if [[ -n "${SLACK_WEBHOOK_URL:-}" ]] \
-        || { [[ -n "${SLACK_BOT_TOKEN:-}" ]] && [[ -n "${SLACK_CHANNEL_ID:-}" ]]; }; then
+    if [[ -n "${SLACK_BOT_TOKEN:-}" ]] && [[ -n "${SLACK_CHANNEL_ID:-}" ]]; then
         _alert_configured=1
     fi
     if [[ "$_alert_configured" -eq 1 ]] && command -v curl >/dev/null 2>&1; then

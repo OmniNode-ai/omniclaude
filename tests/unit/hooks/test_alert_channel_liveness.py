@@ -2,12 +2,18 @@
 # SPDX-License-Identifier: MIT
 """Alert-channel liveness must be checked, not assumed (OMN-15600).
 
-AC-2 of the ticket: "point the checker at a known-dead webhook ... and assert
+AC-2 of the ticket: "point the checker at a known-dead channel ... and assert
 the checker reports FAILURE and emits on the fallback path."
 
 RED at commit 8c1e3d96 (``origin/dev``): ``omniclaude.hooks.alert_channel`` did
 not exist and ``probe_hook_health()`` had no notion of alert delivery, so a
 revoked webhook scored as healthy on every surface.
+
+Revised AC1 (2026-08-27): the incoming webhook (``SLACK_WEBHOOK_URL``) is
+retired entirely — it was revoked and never regenerated, and
+``#omninode-notifications`` is already served by the bot-token path. The bot
+token is the sole channel this probe checks; ``SLACK_WEBHOOK_URL`` is not read
+anywhere in this module and must have zero effect if set.
 """
 
 from __future__ import annotations
@@ -65,18 +71,6 @@ def _serve(status: int, body: bytes) -> Iterator[_FakeSlack]:
         server.server_close()
 
 
-@pytest.fixture
-def dead_webhook() -> Iterator[_FakeSlack]:
-    """Slack's verbatim answer for a webhook whose owning app was deleted."""
-    yield from _serve(404, b"no_service")
-
-
-@pytest.fixture
-def live_webhook() -> Iterator[_FakeSlack]:
-    """A webhook that still exists rejects an empty body with invalid_payload."""
-    yield from _serve(400, b"invalid_payload")
-
-
 @dataclass
 class _Bench:
     failure_log: Path
@@ -103,42 +97,6 @@ def bench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Bench:
 
 
 class TestLivenessDetectsDeadChannel:
-    def test_dead_webhook_reports_dead(
-        self, bench: _Bench, dead_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", f"{dead_webhook.url}/services/T0/B0/X")
-        result = probe_alert_channel(force=True)
-        assert result.status == "dead"
-        assert result.healthy is False
-        assert result.dead_channels == ["webhook"]
-        assert "404" in result.detail
-
-    def test_dead_channel_emits_on_the_fallback_path(
-        self, bench: _Bench, dead_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The failure must surface through a channel that is NOT the dead one."""
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", f"{dead_webhook.url}/services/T0/B0/X")
-        probe_alert_channel(force=True)
-        assert bench.failure_log.exists()
-        assert "CHANNEL DEAD" in bench.failure_log.read_text(encoding="utf-8")
-        assert bench.notify_record.exists(), "no local fallback notification emitted"
-
-    def test_live_webhook_reports_live_without_posting_a_message(
-        self, bench: _Bench, live_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", f"{live_webhook.url}/services/T0/B0/X")
-        result = probe_alert_channel(force=True)
-        assert result.status == "live"
-        assert result.healthy is True
-        assert not bench.failure_log.exists()
-
-    def test_unconfigured_is_not_dead(self, bench: _Bench) -> None:
-        """Three states: unset is quiet, dead is loud (AC-5)."""
-        result = probe_alert_channel(force=True)
-        assert result.status == "not_configured"
-        assert result.healthy is True
-        assert not bench.failure_log.exists()
-
     def test_bot_token_http_200_with_ok_false_is_dead(
         self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -155,63 +113,138 @@ class TestLivenessDetectsDeadChannel:
             with pytest.raises(StopIteration):
                 next(gen)
         assert result.status == "dead"
+        assert result.healthy is False
+        assert result.dead_channels == ["bot_token"]
         assert "invalid_auth" in result.detail
 
-    def test_live_bot_token_masks_a_dead_webhook_but_records_it(
-        self, bench: _Bench, dead_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
+    def test_dead_channel_emits_on_the_fallback_path(
+        self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Alerting works via the token; the dead webhook is still reported."""
+        """The failure must surface through a channel that is NOT the dead one."""
+        gen = _serve(200, json.dumps({"ok": False, "error": "invalid_auth"}).encode())
+        api = next(gen)
+        try:
+            monkeypatch.setenv(
+                "SLACK_BOT_TOKEN", "xoxb-revoked"
+            )  # secret-ok: test fixture
+            monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
+            monkeypatch.setenv("SLACK_API_BASE_URL", f"{api.url}/api")
+            probe_alert_channel(force=True)
+        finally:
+            with pytest.raises(StopIteration):
+                next(gen)
+        assert bench.failure_log.exists()
+        assert "CHANNEL DEAD" in bench.failure_log.read_text(encoding="utf-8")
+        assert bench.notify_record.exists(), "no local fallback notification emitted"
+
+    def test_live_bot_token_reports_live(
+        self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         gen = _serve(200, json.dumps({"ok": True, "team": "t"}).encode())
         api = next(gen)
         try:
-            token = "xoxb-live"  # secret-ok: test fixture
-            monkeypatch.setenv("SLACK_BOT_TOKEN", token)
+            monkeypatch.setenv(
+                "SLACK_BOT_TOKEN", "xoxb-live"
+            )  # secret-ok: test fixture
             monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
             monkeypatch.setenv("SLACK_API_BASE_URL", f"{api.url}/api")
-            monkeypatch.setenv(
-                "SLACK_WEBHOOK_URL", f"{dead_webhook.url}/services/T0/B0/X"
-            )
             result = probe_alert_channel(force=True)
         finally:
             with pytest.raises(StopIteration):
                 next(gen)
         assert result.status == "live"
-        assert result.live_channels == ["bot_token"]
-        assert result.dead_channels == ["webhook"]
+        assert result.healthy is True
+        assert not bench.failure_log.exists()
+
+    def test_unconfigured_is_not_dead(self, bench: _Bench) -> None:
+        """Three states: unset is quiet, dead is loud (AC-5)."""
+        result = probe_alert_channel(force=True)
+        assert result.status == "not_configured"
+        assert result.healthy is True
+        assert not bench.failure_log.exists()
+
+    def test_slack_webhook_url_has_zero_effect(
+        self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OMN-15600 revised AC1: the webhook is retired, not merely unread.
+
+        Setting SLACK_WEBHOOK_URL to a value that looks like the historically
+        dead webhook must not change the verdict — the module no longer reads
+        that variable at all, and no bot token is configured, so this must
+        still classify as NOT_CONFIGURED, never DEAD or LIVE.
+        """
+        monkeypatch.setenv(
+            "SLACK_WEBHOOK_URL",
+            "https://hooks.slack.com/services/T0/B0/XXXXXXXX",
+        )
+        result = probe_alert_channel(force=True)
+        assert result.status == "not_configured"
+        assert result.dead_channels == []
+        assert result.live_channels == []
 
 
 class TestLivenessCache:
     def test_second_probe_is_served_from_cache(
-        self, bench: _Bench, dead_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
+        self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Session start must not pay a network round trip every session."""
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", f"{dead_webhook.url}/services/T0/B0/X")
-        probe_alert_channel(force=True)
-        before = len(dead_webhook.requests)
-        cached = probe_alert_channel()
-        assert cached.from_cache is True
-        assert cached.status == "dead"
-        assert len(dead_webhook.requests) == before, "cache did not prevent a re-probe"
+        gen = _serve(200, json.dumps({"ok": False, "error": "invalid_auth"}).encode())
+        api = next(gen)
+        try:
+            monkeypatch.setenv(
+                "SLACK_BOT_TOKEN", "xoxb-revoked"
+            )  # secret-ok: test fixture
+            monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
+            monkeypatch.setenv("SLACK_API_BASE_URL", f"{api.url}/api")
+            probe_alert_channel(force=True)
+            before = len(api.requests)
+            cached = probe_alert_channel()
+            assert cached.from_cache is True
+            assert cached.status == "dead"
+            assert len(api.requests) == before, "cache did not prevent a re-probe"
+        finally:
+            with pytest.raises(StopIteration):
+                next(gen)
 
     def test_expired_cache_is_reprobed(
-        self, bench: _Bench, dead_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
+        self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", f"{dead_webhook.url}/services/T0/B0/X")
-        monkeypatch.setenv("ONEX_ALERT_LIVENESS_TTL_SECONDS", "0")
-        probe_alert_channel(force=True)
-        before = len(dead_webhook.requests)
-        probe_alert_channel()
-        assert len(dead_webhook.requests) > before
+        gen = _serve(200, json.dumps({"ok": False, "error": "invalid_auth"}).encode())
+        api = next(gen)
+        try:
+            monkeypatch.setenv(
+                "SLACK_BOT_TOKEN", "xoxb-revoked"
+            )  # secret-ok: test fixture
+            monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
+            monkeypatch.setenv("SLACK_API_BASE_URL", f"{api.url}/api")
+            monkeypatch.setenv("ONEX_ALERT_LIVENESS_TTL_SECONDS", "0")
+            probe_alert_channel(force=True)
+            before = len(api.requests)
+            probe_alert_channel()
+            assert len(api.requests) > before
+        finally:
+            with pytest.raises(StopIteration):
+                next(gen)
 
 
 class TestHookHealthProbeSurfacesDeadChannel:
     """AC-4: the liveness check rides the EXISTING periodic health surface."""
 
     def test_probe_hook_health_reports_dead_channel(
-        self, bench: _Bench, dead_webhook: _FakeSlack, monkeypatch: pytest.MonkeyPatch
+        self, bench: _Bench, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", f"{dead_webhook.url}/services/T0/B0/X")
-        result = probe_hook_health()
+        gen = _serve(200, json.dumps({"ok": False, "error": "invalid_auth"}).encode())
+        api = next(gen)
+        try:
+            monkeypatch.setenv(
+                "SLACK_BOT_TOKEN", "xoxb-revoked"
+            )  # secret-ok: test fixture
+            monkeypatch.setenv("SLACK_CHANNEL_ID", "C0TEST")
+            monkeypatch.setenv("SLACK_API_BASE_URL", f"{api.url}/api")
+            result = probe_hook_health()
+        finally:
+            with pytest.raises(StopIteration):
+                next(gen)
         assert result.alert_channel_status == "dead"
         assert result.healthy is False, (
             "a dead alert channel must make hook health unhealthy — otherwise "
@@ -228,6 +261,6 @@ class TestHookHealthProbeSurfacesDeadChannel:
 
 
 def test_model_is_frozen_and_strict() -> None:
-    health = ModelAlertChannelHealth(status="dead", dead_channels=["webhook"])
+    health = ModelAlertChannelHealth(status="dead", dead_channels=["bot_token"])
     with pytest.raises(Exception):  # noqa: B017, PT011 — pydantic ValidationError
         health.status = "live"  # type: ignore[misc]

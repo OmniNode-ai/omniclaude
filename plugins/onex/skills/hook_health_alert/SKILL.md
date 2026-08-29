@@ -75,8 +75,8 @@ runtime node system is operational.
      hour regardless of session count. Three states, not two: `live`, `dead`,
      `not_configured`.
 3. If alert needed and not --dry-run:
-   - Post to Slack via `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID` (preferred, since
-     a bot token is webhook-independent), falling back to `SLACK_WEBHOOK_URL`
+   - Post to Slack via `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID` — the sole
+     channel (the incoming webhook is retired; no fallback)
    - Rate limit: one alert per stable alert identity per 30 minutes
    - Alert identity = `{hook_name}:{error_tier}:{error_category}`
    - Message format matches existing blocked_notifier.py Block Kit style

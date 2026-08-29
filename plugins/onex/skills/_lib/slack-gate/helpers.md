@@ -19,9 +19,10 @@ release, and other skills that need human-in-the-loop approval.
 import os
 
 # Credential resolution (from ~/.omnibase/.env or Infisical)
+# The Slack incoming webhook is retired — the bot token is the sole channel;
+# there is no webhook fallback.
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID", "")
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 
 # Default timeouts by risk tier (minutes)
 GATE_TIMEOUTS = {
@@ -119,10 +120,11 @@ def post_gate(
         timeout_minutes: Override default timeout for this tier.
 
     Returns:
-        thread_ts (str) if posted via Bot Token, None if webhook fallback.
+        thread_ts (str) from the posted message.
 
     Raises:
-        RuntimeError: If both Bot Token and webhook are unavailable.
+        RuntimeError: If the Bot Token credentials are unavailable, or the
+            post itself fails. There is no fallback channel.
     """
     timeout = timeout_minutes or GATE_TIMEOUTS.get(risk_level, 60)
 
@@ -141,14 +143,9 @@ def post_gate(
         f"Gate expires in {timeout} minutes."
     )
 
-    try:
-        bot_token, channel_id = resolve_credentials()
-    except RuntimeError:
-        # Webhook fallback (LOW_RISK only)
-        if risk_level == "LOW_RISK" and SLACK_WEBHOOK_URL:
-            _post_webhook(formatted)
-            return None
-        raise
+    # No fallback channel — the incoming webhook is retired. A gate that
+    # cannot be posted must raise, not silently degrade.
+    bot_token, channel_id = resolve_credentials()
 
     # Post via chat.postMessage
     payload = json.dumps({
@@ -171,22 +168,7 @@ def post_gate(
                 raise RuntimeError(f"chat.postMessage failed: {data.get('error')}")
             return data["message"]["ts"]
     except urllib.error.URLError as exc:
-        # Webhook fallback for LOW_RISK
-        if risk_level == "LOW_RISK" and SLACK_WEBHOOK_URL:
-            _post_webhook(formatted)
-            return None
         raise RuntimeError(f"Failed to post gate message: {exc}") from exc
-
-
-def _post_webhook(message: str) -> None:
-    """Fire-and-forget webhook post (no thread_ts capture)."""
-    payload = json.dumps({"text": message}).encode()
-    req = urllib.request.Request(
-        SLACK_WEBHOOK_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    urllib.request.urlopen(req, timeout=10)
 ```
 
 ---
@@ -219,7 +201,8 @@ def poll_gate_reply(
     LOW_RISK gates skip polling entirely and auto-approve.
 
     Args:
-        thread_ts: Thread timestamp from post_gate(). None for webhook fallback.
+        thread_ts: Thread timestamp from post_gate(). None if the gate could
+            not be posted or polled (no fallback channel exists).
         risk_level: Gate tier for default timeout/interval.
         timeout_minutes: Override default timeout.
         poll_interval_seconds: Override default poll interval.
@@ -233,7 +216,7 @@ def poll_gate_reply(
     if risk_level == "LOW_RISK":
         return GateResult(status="accepted", reply=None)
 
-    # No thread_ts means webhook fallback -- cannot poll
+    # No thread_ts -- nothing to poll
     if thread_ts is None:
         return GateResult(status="timeout", reply=None)
 
