@@ -11,15 +11,21 @@ Named in the ticket:
 Each drove ``curl ... >/dev/null 2>&1`` and branched only on whether
 ``SLACK_WEBHOOK_URL`` was non-empty. Against a webhook returning HTTP 404 the
 observable behaviour was byte-identical to a healthy send. These tests assert
-the 404 case is now distinguishable from the 200 case at each call site.
+the dead case is now distinguishable from the healthy case at each call site.
 
 RED at commit 8c1e3d96 (``origin/dev``): ``slack_notify`` returns 0 and writes
 nothing when the endpoint is dead.
+
+Revised AC1 (2026-08-27): the incoming webhook (``SLACK_WEBHOOK_URL``) is
+retired — the bot-token path via ``chat.postMessage`` is the sole delivery
+mechanism, so these tests drive the bot-token channel dead/live rather than a
+webhook.
 """
 
 from __future__ import annotations
 
 import http.server
+import json
 import os
 import subprocess
 import sys
@@ -42,8 +48,8 @@ class _FakeSlack:
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
-    status: int = 404
-    body: bytes = b"no_service"
+    status: int = 200
+    body: bytes = b'{"ok": false, "error": "invalid_auth"}'
     sink: list[str] = []
 
     def do_POST(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler API
@@ -76,14 +82,14 @@ def _serve(status: int, body: bytes) -> Iterator[_FakeSlack]:
 
 
 @pytest.fixture
-def dead_webhook() -> Iterator[_FakeSlack]:
-    """Reproduces the live behaviour of the revoked webhook (404 no_service)."""
-    yield from _serve(404, b"no_service")
+def dead_bot_token_api() -> Iterator[_FakeSlack]:
+    """Reproduces Slack's answer for a revoked bot token: HTTP 200 + ok:false."""
+    yield from _serve(200, json.dumps({"ok": False, "error": "invalid_auth"}).encode())
 
 
 @pytest.fixture
-def live_webhook() -> Iterator[_FakeSlack]:
-    yield from _serve(200, b"ok")
+def live_bot_token_api() -> Iterator[_FakeSlack]:
+    yield from _serve(200, json.dumps({"ok": True, "ts": "1.0"}).encode())
 
 
 @dataclass
@@ -115,7 +121,7 @@ def bench(tmp_path: Path) -> _Bench:
     )
 
 
-def _base_env(bench: _Bench, tmp_path: Path, webhook_url: str) -> dict[str, str]:
+def _base_env(bench: _Bench, tmp_path: Path, api_base: str) -> dict[str, str]:
     """Build a hermetic environment for sourcing common.sh / error-guard.sh.
 
     ``common.sh`` sources ``${HOME}/.omnibase/.env`` under ``set -a``, which
@@ -133,10 +139,29 @@ def _base_env(bench: _Bench, tmp_path: Path, webhook_url: str) -> dict[str, str]
         "LOG_FILE": str(tmp_path / "hooks.log"),
         "OMNICLAUDE_MODE": "full",
         "PLUGIN_PYTHON_BIN": sys.executable,
-        "SLACK_WEBHOOK_URL": webhook_url,
-        # Ensure the machine's real bot token is never used by these tests.
+        "SLACK_BOT_TOKEN": "xoxb-test-token",  # secret-ok: test fixture
+        "SLACK_CHANNEL_ID": "C0TEST",
+        "SLACK_API_BASE_URL": api_base,
+        **bench.env,
+    }
+
+
+def _unconfigured_env(bench: _Bench, tmp_path: Path) -> dict[str, str]:
+    """No channel configured at all — SLACK_WEBHOOK_URL must have zero effect."""
+    fake_home = tmp_path / "home"
+    (fake_home / ".omnibase").mkdir(parents=True, exist_ok=True)
+    return {
+        **os.environ,
+        "HOME": str(fake_home),
+        "PLUGIN_ROOT": str(_PLUGIN_ROOT),
+        "PROJECT_ROOT": "",
+        "LOG_FILE": str(tmp_path / "hooks.log"),
+        "OMNICLAUDE_MODE": "full",
+        "PLUGIN_PYTHON_BIN": sys.executable,
         "SLACK_BOT_TOKEN": "",
         "SLACK_CHANNEL_ID": "",
+        # A retired var set to a live-looking value must not resurrect delivery.
+        "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/T0/B0/XXXXXXXX",
         **bench.env,
     }
 
@@ -164,25 +189,34 @@ slack_notify "$1" "$2"
 echo "rc=$?"
 """
 
-    def test_dead_webhook_is_distinguishable_from_healthy(
-        self, bench: _Bench, tmp_path: Path, dead_webhook: _FakeSlack
+    def test_dead_bot_token_is_distinguishable_from_healthy(
+        self, bench: _Bench, tmp_path: Path, dead_bot_token_api: _FakeSlack
     ) -> None:
-        env = _base_env(bench, tmp_path, f"{dead_webhook.url}/services/T0/B0/X")
+        env = _base_env(bench, tmp_path, f"{dead_bot_token_api.url}/api")
         # Unique category per run so the 5-minute rate limiter cannot suppress.
         result = _run(self._SCRIPT, env, f"omn15600-dead-{os.getpid()}", "canary")
         assert "rc=1" in result.stdout, (
-            f"slack_notify swallowed a 404: {result.stdout!r} {result.stderr!r}"
+            f"slack_notify swallowed a dead bot token: {result.stdout!r} {result.stderr!r}"
         )
         assert bench.failure_log.exists()
-        assert "HTTP_404" in bench.failure_log.read_text(encoding="utf-8")
+        assert "invalid_auth" in bench.failure_log.read_text(encoding="utf-8")
         assert bench.notify_record.exists()
 
-    def test_live_webhook_stays_silent(
-        self, bench: _Bench, tmp_path: Path, live_webhook: _FakeSlack
+    def test_live_bot_token_stays_silent(
+        self, bench: _Bench, tmp_path: Path, live_bot_token_api: _FakeSlack
     ) -> None:
-        env = _base_env(bench, tmp_path, f"{live_webhook.url}/services/T0/B0/X")
+        env = _base_env(bench, tmp_path, f"{live_bot_token_api.url}/api")
         result = _run(self._SCRIPT, env, f"omn15600-live-{os.getpid()}", "canary")
         assert "rc=0" in result.stdout, result.stdout
+        assert not bench.failure_log.exists()
+
+    def test_slack_webhook_url_cannot_resurrect_delivery(
+        self, bench: _Bench, tmp_path: Path
+    ) -> None:
+        """OMN-15600 revised AC1: no fallback exists — nothing configured is 2."""
+        env = _unconfigured_env(bench, tmp_path)
+        result = _run(self._SCRIPT, env, f"omn15600-unconf-{os.getpid()}", "canary")
+        assert "rc=2" in result.stdout, result.stdout
         assert not bench.failure_log.exists()
 
 
@@ -196,10 +230,10 @@ notify_hook_degraded "$1" "$2"
 echo "rc=$?"
 """
 
-    def test_dead_webhook_is_reported(
-        self, bench: _Bench, tmp_path: Path, dead_webhook: _FakeSlack
+    def test_dead_bot_token_is_reported(
+        self, bench: _Bench, tmp_path: Path, dead_bot_token_api: _FakeSlack
     ) -> None:
-        env = _base_env(bench, tmp_path, f"{dead_webhook.url}/services/T0/B0/X")
+        env = _base_env(bench, tmp_path, f"{dead_bot_token_api.url}/api")
         result = _run(
             self._SCRIPT,
             env,
@@ -208,7 +242,7 @@ echo "rc=$?"
         )
         assert "rc=1" in result.stdout, result.stdout
         assert bench.failure_log.exists()
-        assert "HTTP_404" in bench.failure_log.read_text(encoding="utf-8")
+        assert "invalid_auth" in bench.failure_log.read_text(encoding="utf-8")
 
 
 class TestErrorGuardCallSite:
@@ -226,9 +260,9 @@ exit 3
 """
 
     def test_trap_still_exits_zero_but_records_dead_channel(
-        self, bench: _Bench, tmp_path: Path, dead_webhook: _FakeSlack
+        self, bench: _Bench, tmp_path: Path, dead_bot_token_api: _FakeSlack
     ) -> None:
-        env = _base_env(bench, tmp_path, f"{dead_webhook.url}/services/T0/B0/X")
+        env = _base_env(bench, tmp_path, f"{dead_bot_token_api.url}/api")
         env["_ERROR_GUARD_LOG_DIR"] = str(tmp_path / "guard")
         result = _run(self._SCRIPT, env)
         assert result.returncode == 0, (
@@ -237,4 +271,4 @@ exit 3
         assert bench.failure_log.exists(), (
             "error-guard discarded the alert delivery outcome"
         )
-        assert "HTTP_404" in bench.failure_log.read_text(encoding="utf-8")
+        assert "invalid_auth" in bench.failure_log.read_text(encoding="utf-8")

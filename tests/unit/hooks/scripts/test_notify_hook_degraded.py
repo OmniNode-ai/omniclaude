@@ -8,12 +8,16 @@ Verifies:
 - Call after debounce window expires fires again
 - Different errors from the same hook get separate debounce keys
 
-OMN-15600 changed two contracts these tests encode:
+OMN-15600 changed three contracts these tests encode:
 
 1. Delivery outcome is no longer discarded. A configured-but-dead channel now
    returns 1 (and records the failure durably); "not configured" returns 2.
 2. The debounce file is written on ATTEMPT, not only on success — otherwise a
    dead channel costs a curl on every single hook invocation.
+3. The incoming webhook (``SLACK_WEBHOOK_URL``) is retired — the bot-token
+   path via ``chat.postMessage`` is the sole delivery mechanism, so "dead" is
+   now driven by pointing ``SLACK_API_BASE_URL`` at an unreachable endpoint
+   rather than by a fake webhook URL.
 
 The harness is also now hermetic. ``common.sh`` sources ``${HOME}/.omnibase/.env``
 under ``set -a``, so without a test-owned HOME these tests picked up the
@@ -30,7 +34,8 @@ import pytest
 _REPO_ROOT = Path(__file__).parents[4]
 
 # Minimal bash script that sources common.sh and calls notify_hook_degraded.
-# Uses a fake webhook URL (won't actually send) — we check the rate file instead.
+# Uses a bot token pointed at an unreachable API base (won't actually send) —
+# we check the rate file instead.
 _TEST_SCRIPT = """\
 #!/bin/bash
 set -uo pipefail
@@ -41,9 +46,9 @@ export HOME="{fake_home}"
 export PLUGIN_ROOT="{plugin_root}"
 export PROJECT_ROOT=""
 export LOG_FILE="{log_file}"
-export SLACK_WEBHOOK_URL="{webhook_url}"
-export SLACK_BOT_TOKEN=""
-export SLACK_CHANNEL_ID=""
+export SLACK_BOT_TOKEN="{bot_token}"
+export SLACK_CHANNEL_ID="{channel_id}"
+export SLACK_API_BASE_URL="{api_base}"
 export ONEX_ALERT_DELIVERY_LOG="{failure_log}"
 export ONEX_ALERT_LOCAL_NOTIFY_CMD="/usr/bin/true"
 export ONEX_ALERT_LOCAL_NOTIFY_RATE_DIR="{notify_rate_dir}"
@@ -89,14 +94,23 @@ def _run_notify(
     error_msg: str,
     rate_dir: Path,
     log_file: Path,
-    webhook_url: str = "http://localhost:19999/fake-webhook",
+    api_base: str = "http://localhost:19999",
+    bot_token: str = "xoxb-test-token",  # secret-ok: test fixture
+    channel_id: str = "C0TEST",
 ) -> subprocess.CompletedProcess[str]:
-    """Run notify_hook_degraded via a bash wrapper."""
+    """Run notify_hook_degraded via a bash wrapper.
+
+    ``api_base`` points chat.postMessage at an unreachable port — the
+    bot-token equivalent of the old fake-webhook trick — so the channel is
+    configured but dead rather than not configured at all.
+    """
     plugin_root = str(_REPO_ROOT / "plugins" / "onex")
     script = _TEST_SCRIPT.format(
         plugin_root=plugin_root,
         log_file=str(log_file),
-        webhook_url=webhook_url,
+        bot_token=bot_token,
+        channel_id=channel_id,
+        api_base=api_base,
         **_hermetic(log_file),
     )
     env = {
@@ -174,7 +188,9 @@ class TestNotifyHookDegraded:
         script = _TEST_SCRIPT.format(
             plugin_root=plugin_root,
             log_file=str(log_file),
-            webhook_url="",  # Empty webhook, and no bot token either
+            bot_token="",
+            channel_id="",
+            api_base="http://localhost:19999",
             **_hermetic(log_file),
         )
         result = subprocess.run(

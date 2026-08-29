@@ -467,13 +467,13 @@ export KAFKA_ENABLED
 # Rate-limited per category (5-min window) to prevent alert spam.
 # Always call from a backgrounded subshell: ( slack_notify "cat" "msg" ) &
 #
-# Delivery itself lives in alert-channel.sh (OMN-15600): bot token preferred,
-# webhook as fallback, and a non-2xx outcome is recorded on a durable log plus
-# a local notification instead of being discarded.
+# Delivery itself lives in alert-channel.sh (OMN-15600): the Slack Web API
+# via a bot token is the sole channel — SLACK_WEBHOOK_URL was retired, not
+# replaced — and a non-2xx outcome is recorded on a durable log plus a local
+# notification instead of being discarded.
 #
-# Channels (no-op only when NONE is configured):
-#   - SLACK_BOT_TOKEN + SLACK_CHANNEL_ID: Slack Web API (preferred)
-#   - SLACK_WEBHOOK_URL: incoming webhook (fallback)
+# Channel (no-op only when not configured):
+#   - SLACK_BOT_TOKEN + SLACK_CHANNEL_ID: Slack Web API
 #
 # Returns: 0 delivered, 1 configured-but-dead, 2 not configured.
 #
@@ -489,10 +489,10 @@ slack_notify() {
     local category="$1"
     local message="$2"
 
-    # No-op only when no channel at all is configured. A channel that is
-    # configured but dead is NOT a no-op — see alert_channel_send (OMN-15600).
-    if [[ -z "${SLACK_WEBHOOK_URL:-}" ]] \
-        && { [[ -z "${SLACK_BOT_TOKEN:-}" ]] || [[ -z "${SLACK_CHANNEL_ID:-}" ]]; }; then
+    # No-op only when the bot-token channel is not configured. A channel that
+    # is configured but dead is NOT a no-op — see alert_channel_send
+    # (OMN-15600). SLACK_WEBHOOK_URL is retired; there is no fallback.
+    if [[ -z "${SLACK_BOT_TOKEN:-}" ]] || [[ -z "${SLACK_CHANNEL_ID:-}" ]]; then
         return 2
     fi
 
@@ -548,9 +548,9 @@ notify_hook_degraded() {
     local hook_name="$1"
     local error_message="$2"
 
-    # No-op only when no channel at all is configured (OMN-15600).
-    if [[ -z "${SLACK_WEBHOOK_URL:-}" ]] \
-        && { [[ -z "${SLACK_BOT_TOKEN:-}" ]] || [[ -z "${SLACK_CHANNEL_ID:-}" ]]; }; then
+    # No-op only when the bot-token channel is not configured (OMN-15600).
+    # SLACK_WEBHOOK_URL is retired; there is no fallback.
+    if [[ -z "${SLACK_BOT_TOKEN:-}" ]] || [[ -z "${SLACK_CHANNEL_ID:-}" ]]; then
         return 2
     fi
 
