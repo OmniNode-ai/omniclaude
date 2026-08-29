@@ -281,3 +281,111 @@ class TestMainEntrypoint:
             ]
         )
         assert rc == EXIT_FAIL
+
+
+# --------------------------------------------------------------------------
+# OMN-15615 AC6 — the second live site of the OMN-14682 defect.
+#
+# `EVIDENCE_SOURCE_RE` is `^...$` MULTILINE, so it anchors at column 0 — and a
+# fenced example is written at column 0. A meta-PR that merely QUOTED the
+# canonical stamp therefore had the quoted value resolved as a real
+# declaration. The quoted example almost always names a companion that really
+# did merge, for some OTHER product PR, so the failure direction on THIS gate
+# is a false PASS: the durability gate passing on evidence that was never this
+# PR's. OMN-14682 retired this on the Receipt Gate and was never propagated.
+# --------------------------------------------------------------------------
+
+_FENCED_QUOTE_BODY = """\
+Closes OMN-15615.
+
+The publisher's log line reads:
+
+```
+SKIP: OmniNode-ai/omniclaude#1969 body already carries the stamp
+Evidence-Source: OCC#5032
+```
+
+This PR has no companion of its own yet.
+"""
+
+
+class TestQuotedStampIsNotEvidence:
+    def test_fenced_stamp_does_not_parse_as_a_source(self) -> None:
+        assert parse_evidence_source(_FENCED_QUOTE_BODY) is None
+
+    def test_blockquoted_stamp_does_not_parse_as_a_source(self) -> None:
+        assert parse_evidence_source("> Evidence-Source: OCC#5032\n") is None
+
+    def test_unterminated_fence_blanks_to_end_of_body(self) -> None:
+        """Fail-closed: a stamp after malformed markup is not trustworthy."""
+        assert parse_evidence_source("```\nEvidence-Source: OCC#5032\n") is None
+
+    def test_real_stamp_after_a_fenced_example_still_parses(self) -> None:
+        body = _FENCED_QUOTE_BODY + "\nEvidence-Source: OCC#7777\n"
+        assert parse_evidence_source(body) == "OCC#7777"
+
+    def test_fenced_stamp_makes_the_gate_pending_not_a_false_pass(self) -> None:
+        """The whole point: a quoted OCC#5032 that really did merge (for another
+        PR) used to satisfy this gate. It must now read as 'no stamp yet' —
+        PENDING, which the deadline converts to FAIL."""
+        fetcher = FakeFetcher(
+            prs={
+                (PRODUCT_REPO, "2500"): _product_pr(_FENCED_QUOTE_BODY),
+                (OCC_REPO, "5032"): {
+                    "state": "MERGED",
+                    "mergedAt": "2026-07-26T00:00:00Z",
+                },
+            }
+        )
+        verdict = _evaluate(fetcher)
+        assert verdict.code == EXIT_PENDING, verdict.reason
+        assert "Evidence-Source" in verdict.reason
+
+
+class TestStripAgreesWithCanonicalHelper:
+    """AC5/AC6 — pin the mirror against the canonical helper it copies.
+
+    CI runs this file as bare ``python3 scripts/ci/check_occ_companion_merged.py``
+    with no project venv on the path, so omnibase_core cannot be imported at
+    runtime. The test env can import it, and does: that is what makes the copy
+    a reuse of the canonical notion of "non-canonical region" rather than a
+    fourth private one.
+    """
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "",
+            "Closes OMN-15615",
+            _FENCED_QUOTE_BODY,
+            "> Evidence-Source: OCC#5032\n",
+            "  > quoted with leading space\n",
+            "```\nEvidence-Source: OCC#1\n```\nEvidence-Source: OCC#2\n",
+            "~~~\nEvidence-Source: OCC#1\n~~~\n",
+            "~~~\n```\nstill inside the tilde fence\n~~~\nout\n",
+            "````\nfour backticks\n````\n",
+            "```\nEvidence-Source: OCC#5032\n",
+            "Evidence-Source: OCC#7\n",
+            "text\r\nmore text\r\n",
+        ],
+    )
+    def test_mirror_matches_core_helper(self, body: str) -> None:
+        from omnibase_core.validation.validator_receipt_gate import (
+            strip_noncanonical_regions as canonical,
+        )
+
+        from scripts.ci.check_occ_companion_merged import strip_noncanonical_regions
+
+        assert strip_noncanonical_regions(body) == canonical(body), body
+
+    def test_mirror_is_idempotent(self) -> None:
+        from scripts.ci.check_occ_companion_merged import strip_noncanonical_regions
+
+        once = strip_noncanonical_regions(_FENCED_QUOTE_BODY)
+        assert strip_noncanonical_regions(once) == once
+
+    def test_closing_fence_must_match_opening_delimiter_length(self) -> None:
+        from scripts.ci.check_occ_companion_merged import parse_evidence_source
+
+        body = "````\nEvidence-Source: OCC#5032\n```\nEvidence-Source: OCC#9999\n"
+        assert parse_evidence_source(body) is None

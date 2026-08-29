@@ -107,15 +107,27 @@ def test_workflow_is_secret_free() -> None:
         "construction, OMN-14813)"
     )
 
-    # The publish step env carries exactly the PR context + lane — nothing
-    # broker-shaped.
+    # The publish step env carries exactly the PR context + lane + the
+    # citation-resolution token — nothing broker-shaped, and nothing sourced
+    # from `secrets.`. GH_TOKEN is `${{ github.token }}` (OMN-15615): the
+    # caller's own default token, used solely for a PUBLIC-repo pulls read,
+    # under unchanged `permissions: contents: read`. Pinned as an exact set so
+    # a broker-shaped variable cannot be slipped in beside it.
     step = _step(
         _publish_job(workflow),
         "Publish onex.cmd.omnimarket.occ-companion-effect-requested.v1",
     )
     env = step.get("env")
     assert isinstance(env, dict)
-    assert set(env) == {"PR_REPO", "PR_NUMBER", "PR_HEAD_SHA", "PR_BODY", "LANE"}
+    assert set(env) == {
+        "PR_REPO",
+        "PR_NUMBER",
+        "PR_HEAD_SHA",
+        "PR_BODY",
+        "LANE",
+        "GH_TOKEN",
+    }
+    assert "secrets." not in str(env["GH_TOKEN"])
 
 
 def test_omnimarket_ref_defaults_to_dev_the_only_resolvable_ref() -> None:
@@ -231,5 +243,67 @@ def test_publish_step_runs_canonical_script_with_lane() -> None:
 
 
 def test_permissions_are_contents_read_only() -> None:
+    workflow = _load_workflow()
+    assert workflow.get("permissions") == {"contents": "read"}
+
+
+# OMN-15615 AC7 — SUCCESS stops being vacuous.
+#
+# The publisher prints exactly one machine-readable verdict marker on every
+# exit-0 path. This workflow is a required context in every caller repo, so a
+# run that terminates 0 with NO marker must fail the step: before this gate,
+# a run that published nothing was indistinguishable from a run that minted a
+# companion (omniclaude#1969 sat 34 min red behind two green publisher runs,
+# omnibase_core#1540 sat 54). A rule without its wiring is not a mechanism —
+# these tests are what keep the wiring attached to the rule.
+
+_VERDICT_MARKERS = (
+    "skipped_bound_to:",
+    "published_correlation_id:",
+    "publish_declined:",
+)
+
+_PUBLISH_STEP_NAME = "Publish onex.cmd.omnimarket.occ-companion-effect-requested.v1"
+
+
+def test_publish_step_fails_on_a_missing_verdict_marker() -> None:
+    step = _step(_publish_job(_load_workflow()), _PUBLISH_STEP_NAME)
+    run = step.get("run")
+    assert isinstance(run, str)
+    for marker in _VERDICT_MARKERS:
+        assert marker in run, (
+            f"the verdict grep must cover {marker!r} — a marker the publisher "
+            "can emit but the workflow does not recognise would fail every "
+            "run on that path"
+        )
+    assert "exit 1" in run, (
+        "a publisher run that exits 0 with no verdict marker must FAIL the "
+        "step; without the exit the grep is decoration (OMN-15615 AC7)"
+    )
+    assert "verdict_count" in run
+    assert "grep -cE" in run
+    assert '[[ "${verdict_count}" -ne 1 ]]' in run
+    assert "set -euo pipefail" in run, (
+        "pipefail is load-bearing: the publisher's own exit code must survive "
+        "the tee, or a hard publish failure would be masked by tee's success"
+    )
+
+
+def test_publish_step_receives_a_token_for_citation_resolution() -> None:
+    """OMN-15615: the idempotency skip RESOLVES the cited companion against
+    onex_change_control. The repo is public so the read works without a token,
+    but the shared self-hosted egress IP burns the 60/hr anonymous budget
+    fast — and every unavailable read publishes redundantly."""
+    step = _step(_publish_job(_load_workflow()), _PUBLISH_STEP_NAME)
+    env = step.get("env")
+    assert isinstance(env, dict)
+    assert env.get("GH_TOKEN") == "${{ github.token }}", (
+        "resolution uses the caller's default token; a PAT or app token would "
+        "grant far more than a public-repo pulls read needs"
+    )
+
+
+def test_workflow_permissions_stay_read_only() -> None:
+    """The token added for resolution must not come with a scope widening."""
     workflow = _load_workflow()
     assert workflow.get("permissions") == {"contents": "read"}
