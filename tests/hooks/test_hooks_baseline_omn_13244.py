@@ -399,6 +399,20 @@ def test_hooks_json_description_carries_baseline_disable_expiry_rule() -> None:
         "expiry rule exists to prevent recurring."
     )
 
+    # A disable record that says only "this is off" reproduces OMN-13244: the
+    # reader cannot tell who is accountable, why this specific hook is dark,
+    # when the disable stops being valid, or what puts it back. The standing
+    # rule therefore has to enumerate all four, or it is an instruction with
+    # no shape and the next disable satisfies it by writing one sentence.
+    for field in ("OWNER", "REASON", "EXPIRY", "RESTORATION"):
+        assert field in description, (
+            f"hooks.json description's STANDING RULE must require a baseline "
+            f"disable to record all four of OWNER / REASON / EXPIRY / "
+            f"RESTORATION (OMN-17006). Missing: {field!r}. Without {field!r} a "
+            f"future disable can satisfy the rule while still being "
+            f"indistinguishable from a decision — the OMN-13244 failure."
+        )
+
 
 @pytest.mark.parametrize("rel_path", _DISPATCH_CLAIM_FILES)
 def test_dispatch_claim_machinery_remains_on_disk(rel_path: str) -> None:
