@@ -193,10 +193,23 @@ repos:
       # commit in the repo for a check with two narrow inputs.
       - id: workflow-run-script-paths-exist
         name: Workflow `run:` script paths must exist in-tree (OMN-15393)
+        # PYTHONDONTWRITEBYTECODE=1 (OMN-14463): this hook's own pytest
+        # invocation compiles the root conftest.py, writing a root-level
+        # __pycache__/ that the later pre-push validate-clean-root hook then
+        # rejects -- a deterministic self-block, not a race with ambient
+        # tooling (reproduced: bare `uv run pytest` here leaves
+        # __pycache__/conftest.*.pyc at repo root; with the env var, it does
+        # not). The env var must be set on the interpreter's own command
+        # line/environment (a `sys.dont_write_bytecode = True` inside
+        # conftest.py is too late -- CPython writes a module's .pyc as part
+        # of import, before that module's top-level code runs), so this is
+        # wrapped in `bash -c` rather than left as bare `entry:` args, which
+        # pre-commit execs directly with no shell and would treat
+        # `PYTHONDONTWRITEBYTECODE=1` as the binary to run.
         entry: >-
-          uv run pytest
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
           tests/workflows/test_workflow_run_script_paths_exist.py
-          -q -p no:cacheprovider
+          -q -p no:cacheprovider'
         language: system
         pass_filenames: false
         files: '^(\.github/workflows/.*\.ya?ml|scripts/.*\.(py|sh)|plugins/.*/scripts/.*\.(py|sh)|tests/workflows/test_workflow_run_script_paths_exist\.py)$'
@@ -233,10 +246,13 @@ repos:
       # the debt list stays greppable and cannot rot into an invisible bypass.
       - id: reusable-workflow-inner-checkouts-pinned
         name: Reusable-workflow inner checkouts must be pinned + asserted (OMN-16723)
+        # PYTHONDONTWRITEBYTECODE=1 (OMN-14463) -- same self-block as the
+        # sibling pytest hook above; see that hook's comment for the full
+        # mechanism and why `bash -c` is required to set the env var.
         entry: >-
-          uv run pytest
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
           tests/workflows/test_reusable_workflow_inner_checkouts.py
-          -q -p no:cacheprovider
+          -q -p no:cacheprovider'
         language: system
         pass_filenames: false
         files: '^(\.github/workflows/.*\.ya?ml|tests/workflows/test_reusable_workflow_inner_checkouts\.py)$'
