@@ -738,7 +738,7 @@ class TestExternalContextCliWiring:
 @pytest.mark.unit
 class TestExternalContextCompleteness:
     """Data-driven completeness pin against a committed snapshot of dev's
-    live required-status-check contexts (captured 2026-08-13 via
+    live required-status-check contexts (recaptured 2026-08-29 via
     `gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/
     required_status_checks --jq '.contexts[]'`) and ci.yml's own job names
     at the same commit. Every required context that does NOT correspond to a
@@ -755,7 +755,7 @@ class TestExternalContextCompleteness:
     def test_every_snapshot_external_context_is_classified(self) -> None:
         required = {
             line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-28.txt")
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-29.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()
@@ -784,7 +784,7 @@ class TestExternalContextCompleteness:
         # never gates anything live.
         required = {
             line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-28.txt")
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-29.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()

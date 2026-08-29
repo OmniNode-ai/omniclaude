@@ -49,13 +49,13 @@ def test_cross_repo_at_main_blocks(tmp_path: pathlib.Path) -> None:
         name: ci
         jobs:
           gate:
-            uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
+            uses: OmniNode-ai/omniclaude/.github/workflows/some-reusable.yml@main
         """,
     )
     code, stderr = _run_on([path])
     assert code == 2
     assert "cross-repo @main ref" in stderr
-    assert "cr-thread-gate.yml" in stderr
+    assert "some-reusable.yml" in stderr
     assert "OMN-9039" in stderr
 
 
@@ -66,7 +66,7 @@ def test_local_path_allows(tmp_path: pathlib.Path) -> None:
         name: ci
         jobs:
           gate:
-            uses: ./.github/workflows/cr-thread-gate.yml
+            uses: ./.github/workflows/some-reusable.yml
         """,
     )
     code, stderr = _run_on([path])
@@ -80,7 +80,7 @@ def test_pinned_sha_allows(tmp_path: pathlib.Path) -> None:
         name: ci
         jobs:
           gate:
-            uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@abcd1234abcd1234abcd1234abcd1234abcd1234
+            uses: OmniNode-ai/omniclaude/.github/workflows/some-reusable.yml@abcd1234abcd1234abcd1234abcd1234abcd1234
         """,
     )
     code, stderr = _run_on([path])
@@ -94,7 +94,7 @@ def test_tagged_version_allows(tmp_path: pathlib.Path) -> None:
         name: ci
         jobs:
           gate:
-            uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@v1.0.0
+            uses: OmniNode-ai/omniclaude/.github/workflows/some-reusable.yml@v1.0.0
         """,
     )
     code, stderr = _run_on([path])
@@ -124,7 +124,7 @@ def test_annotation_without_reason_still_blocks(tmp_path: pathlib.Path) -> None:
         jobs:
           gate:
             # self-gating-ok:
-            uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
+            uses: OmniNode-ai/omniclaude/.github/workflows/some-reusable.yml@main
         """,
     )
     code, stderr = _run_on([path])
@@ -145,7 +145,7 @@ def test_annotation_too_far_still_blocks(tmp_path: pathlib.Path) -> None:
           other:
             name: other_job
           gate:
-            uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
+            uses: OmniNode-ai/omniclaude/.github/workflows/some-reusable.yml@main
         """,
     )
     code, stderr = _run_on([path])

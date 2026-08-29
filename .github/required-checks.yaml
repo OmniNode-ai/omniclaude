@@ -494,26 +494,6 @@ gates:
     skip_semantics: never
     rationale: "Skip-token bypass scanner (OMN-10347/10422/10971) — the gate this guard's own design is modeled on."
 
-  - name: "gate / CodeRabbit Thread Check"
-    mode: REQUIRED
-    producer_kind: local
-    caller_workflow: cr-thread-gate-caller.yml
-    caller_job: gate
-    reusable_workflow: cr-thread-gate.yml
-    reusable_job: gate
-    skip_semantics: never
-    rationale: "CodeRabbit thread resolution gate (primary caller). OMN-14856/OMN-15120 repair (mirrors omnibase_core@470d326dc / PR #1549): caller job 'gate' previously had an ungated `if:` (github.actor != 'dependabot[bot]', among other clauses) — vector-3, a skipped caller job produces NO check run at all, which permanently wedged this required context on Dependabot PRs (live cases: omniclaude#1981, #1982). The `if:` is now `always()`; the caller always invokes the reusable, and the former non-PR issue_comment guard moved into the pr-number input (resolves to 0, which the reusable already no-ops on). The reusable (cr-thread-gate.yml) carries no job-level `if:` of its own, so this context now always completes success/failure — never skipped — hence skip_semantics: never."
-
-  - name: "cr-thread-gate / CodeRabbit Thread Check"
-    mode: REQUIRED
-    producer_kind: local
-    caller_workflow: cr-thread-check.yml
-    caller_job: cr-thread-gate
-    reusable_workflow: cr-thread-gate.yml
-    reusable_job: gate
-    skip_semantics: neutral_ok
-    rationale: "CodeRabbit thread resolution gate — legacy duplicate caller of the same reusable; consolidation tracked separately, not this ticket's scope. OMN-14856/OMN-15120 repair (mirrors omnibase_core@470d326dc / PR #1549): caller job 'cr-thread-gate' previously had an ungated `if:` including the dependabot-actor exemption — same vector-3 shape as 'gate / CodeRabbit Thread Check'. The dependabot-actor clause is now dropped and the issue_comment guard moved into the pr-number input; unlike the primary caller, this job still legitimately skips on `merge_group` (the sibling `merge-queue-compat` job is the dedicated merge_group producer for this composed context), which still posts a real check run with conclusion=skipped that branch protection accepts — hence skip_semantics stays neutral_ok, not never."
-
   - name: "required-check-skip-guard / check-skip-vectors"
     mode: REQUIRED
     producer_kind: local
