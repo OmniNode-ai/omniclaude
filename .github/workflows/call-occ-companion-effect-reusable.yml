@@ -47,6 +47,24 @@
 # trusted runner for an unresolvable lane / unreachable broker / undelivered
 # message, instead of a silent green no-op (OMN-14639).
 #
+# VERDICT-MARKER CONTRACT (OMN-15615) — A TWO-REPO CONTRACT, READ BEFORE
+# EDITING EITHER SIDE. The publish step below fails the job when the publisher
+# exits 0 without printing one of `skipped_bound_to:` /
+# `published_correlation_id:` / `publish_declined:`. The emitting side is
+# omnimarket `scripts/publish_occ_companion_effect_command.py`, which this
+# workflow sparse-checks-out from `omnimarket@dev` AT RUN TIME — so the two
+# halves are NOT versioned together and a change to either lands live for every
+# caller repo immediately.
+#
+# Consequences, both directions:
+#   * Removing or renaming a marker in the omnimarket publisher fails EVERY
+#     publisher run in EVERY OCC-gated repo on the next run, with no PR of this
+#     repo's involved. Add markers, never rename them.
+#   * Adding this grep before the publisher emits markers has the same effect.
+#     That ordering constraint is why omnimarket#2202 merged before this.
+# The grep list and the `exit 1` are pinned by
+# tests/workflows/test_call_occ_companion_effect_reusable.py.
+#
 # Usage in caller repos (no Kafka secrets required):
 #   jobs:
 #     occ-companion-effect:
@@ -54,7 +72,8 @@
 #       with:
 #         lane: dev
 #
-# Ticket: OMN-14941 (OMN-14811 / OMN-14801 / OMN-14813 / OMN-14451 lineage)
+# Ticket: OMN-14941 (OMN-14811 / OMN-14801 / OMN-14813 / OMN-14451 lineage;
+# verdict-marker gate OMN-15615)
 
 name: OCC Companion Effect Publisher (reusable)
 
