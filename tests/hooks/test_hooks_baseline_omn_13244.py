@@ -49,8 +49,28 @@ content), kept as a separate registration entry from the OMN-16277
 Bash-matcher secret-redaction guard so neither touches the other's payload.
 None of these four hooks re-enables any of the disabled context-injection/
 measurement hooks; each is a dedicated, minimal script containing ONLY the
-direct-dispatch hand-off. Everything else stays disabled. These tests
-therefore lock in a *narrowed* baseline:
+direct-dispatch hand-off.
+
+OMN-17006 carves the final exception, and it is a *re-enable* rather than a new
+build: the OMN-8376 overseer foreground-block guard, which the OMN-13244
+baseline unregistered and which then sat on disk for months while the rule it
+enforces was corrected by hand ~61 times over 16 of 18 days
+(``docs/tracking/2026-08-29-beta-off-the-rails-analysis.md``, mechanism A1).
+It blocks foreground Bash/Edit/Write/NotebookEdit/MultiEdit against repo paths
+only while ``$ONEX_STATE_DIR/overseer-active.flag`` marks an overseer contract
+as driving, and passes everything through when the flag is absent.
+
+Its sibling from the same audit -- the OMN-8928/8929 dispatch-claim pre/post
+pair -- is deliberately NOT re-registered. Live probing on 2026-08-29 showed
+its ``exit 2`` is swallowed by the ``error-guard.sh`` EXIT trap (it never calls
+``trap - EXIT``, unlike every registered guard), its deny payload uses a
+``{"type": "permissionDenied"}`` shape this harness does not honour, and its
+claimant falls back to the shared constant ``session`` so two anonymous lanes
+can never collide. OMN-17005 carries the re-registration ACs and the expiry
+condition. Both scripts stay on disk, unregistered.
+
+Everything else stays disabled. These tests therefore lock in a *narrowed*
+baseline:
 
 1. ``plugins/onex/hooks/hooks.json`` registers EXACTLY the Done-flip guard,
    the worktree canonical-root guard, the PostToolUse secret-redaction guard,
@@ -126,6 +146,18 @@ _USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND = (
 _POST_TOOL_USE_BUS_MIRROR_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_bus_mirror.sh"
 )
+_OVERSEER_FOREGROUND_BLOCK_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_overseer_foreground_block.sh"
+)
+
+# The OMN-8928/8929 dispatch-claim pair: on disk, deliberately unregistered.
+# See OMN-17005 for the three probed defects and the expiry condition.
+_DISPATCH_CLAIM_FILES = (
+    "plugins/onex/hooks/scripts/hook_dispatch_claim_pretool.sh",
+    "plugins/onex/hooks/scripts/hook_dispatch_claim_posttool.sh",
+    "plugins/onex/hooks/lib/dispatch_claim_gate.py",
+    "plugins/onex/hooks/lib/dispatch_claim_release.py",
+)
 
 
 def test_hooks_json_is_narrowed_option_a_baseline() -> None:
@@ -173,11 +205,13 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _PR_OWNERSHIP_GUARD_COMMAND,
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
+        _OVERSEER_FOREGROUND_BLOCK_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the worktree canonical-root guard, the PR lane-ownership guard, "
-        "the lane-dispatch recorder, and the lane-liveness guard, and nothing else "
-        "(OMN-13856 + OMN-14330 + OMN-16485 + OMN-16471 + OMN-16478 carve-outs). "
+        "the lane-dispatch recorder, the lane-liveness guard, and the overseer "
+        "foreground-block guard, and nothing else (OMN-13856 + OMN-14330 + "
+        "OMN-16485 + OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
         "A different or additional command means either the measurement baseline "
         "was re-enabled without an operator decision (OMN-13846) or one of the "
         f"guards regressed. Found: {commands!r}"
@@ -191,11 +225,13 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "Bash",
         "^(Task|Agent|Workflow)$",
         "^SendMessage$",
+        "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$",
     ], (
         f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
         f"guard must match Bash, the lane recorder must match the dispatch tools, "
-        f"and the lane-liveness guard must match SendMessage. "
-        f"Found: {matchers!r}"
+        f"the lane-liveness guard must match SendMessage, and the overseer "
+        f"foreground-block guard must match exactly the BLOCK_TOOLS set in "
+        f"overseer_foreground_block.py. Found: {matchers!r}"
     )
 
     # Exactly two PostToolUse commands are wired: the secret-redaction guard
@@ -325,3 +361,98 @@ def test_bash_guard_and_bash_guard_py_remain_on_disk_unregistered() -> None:
         "pre_tool_use_bash_guard.sh must NOT be registered by the OMN-14330 "
         "carve-out — only the dedicated pre_tool_use_worktree_guard.sh is."
     )
+
+
+def test_hooks_json_description_carries_baseline_disable_expiry_rule() -> None:
+    """Any future baseline-style disable must carry an expiry + a re-enable ticket.
+
+    OMN-13244 unregistered the whole hook surface with no expiry condition, no
+    re-enable ticket, and no inventory of what went dark. The result
+    (``docs/tracking/2026-08-29-beta-off-the-rails-analysis.md``, root cause
+    RC-A(a)) was that ``pre_tool_use_overseer_foreground_block.sh`` lay on disk,
+    switched off, while the foreground rule it enforces was corrected by hand
+    ~61 times over 16 of 18 days. Nobody noticed, because a disable with no
+    expiry is indistinguishable from a decision.
+
+    This test pins the corrective rule into the artifact it governs: the rule
+    lives in the ``description`` of the very file a future disable would edit,
+    so it cannot be dropped without failing here.
+    """
+    data = json.loads(_HOOKS_JSON.read_text())
+    description = data.get("description", "")
+
+    for phrase in (
+        "STANDING RULE",
+        "expiry condition",
+        "re-enable ticket",
+    ):
+        assert phrase in description, (
+            f"hooks.json description must state the standing rule that any future "
+            f"baseline-style disable lands with an expiry condition and a named "
+            f"re-enable ticket in the same change (OMN-17006). Missing: {phrase!r}"
+        )
+
+    # The rule must name the incident it exists to prevent, so the next reader
+    # gets the reason and not just the instruction.
+    assert "OMN-13244" in description, (
+        "hooks.json description must cite OMN-13244 as the disable the standing "
+        "expiry rule exists to prevent recurring."
+    )
+
+    # A disable record that says only "this is off" reproduces OMN-13244: the
+    # reader cannot tell who is accountable, why this specific hook is dark,
+    # when the disable stops being valid, or what puts it back. The standing
+    # rule therefore has to enumerate all four, or it is an instruction with
+    # no shape and the next disable satisfies it by writing one sentence.
+    for field in ("OWNER", "REASON", "EXPIRY", "RESTORATION"):
+        assert field in description, (
+            f"hooks.json description's STANDING RULE must require a baseline "
+            f"disable to record all four of OWNER / REASON / EXPIRY / "
+            f"RESTORATION (OMN-17006). Missing: {field!r}. Without {field!r} a "
+            f"future disable can satisfy the rule while still being "
+            f"indistinguishable from a decision — the OMN-13244 failure."
+        )
+
+
+@pytest.mark.parametrize("rel_path", _DISPATCH_CLAIM_FILES)
+def test_dispatch_claim_machinery_remains_on_disk(rel_path: str) -> None:
+    """The OMN-8928/8929 claim pair stays on disk while OMN-17005 is open."""
+    path = _REPO_ROOT / rel_path
+    assert path.is_file(), (
+        f"Dispatch-claim file missing: {rel_path}. The OMN-13244 baseline leaves it "
+        "unregistered, not deleted — OMN-17005 carries the re-registration ACs. "
+        "Deleting it is the *expiry* branch of OMN-17005 and must close that ticket "
+        "won't-fix in the same change, not happen silently."
+    )
+
+
+def test_dispatch_claim_pair_is_not_registered() -> None:
+    """The claim pair must stay unregistered until OMN-17005's ACs are met.
+
+    Re-registering it as-is would be worse than leaving it off. Probed
+    2026-08-29: (1) its ``exit 2`` is converted to ``exit 0`` by the
+    ``error-guard.sh`` EXIT trap because it never calls ``trap - EXIT``, so the
+    deny is advisory text and the tool call proceeds; (2) the same run writes a
+    false ``HOOK FAILURE ... exited with code 2`` into the error-guard log,
+    which also spawns a background Kafka emitter on the OMN-16996-regressed
+    interpreter; (3) ``AGENT_ID="${CLAUDE_AGENT_ID:-session}"`` collapses every
+    anonymous session onto one claimant, and ``check_and_acquire`` passes when
+    ``held_by == claimant`` — so two ordinary lanes never collide.
+    """
+    data = json.loads(_HOOKS_JSON.read_text())
+    hooks = data.get("hooks", {})
+    all_commands = [
+        hook.get("command", "")
+        for groups in hooks.values()
+        for group in groups
+        for hook in group.get("hooks", [])
+    ]
+    for script in (
+        "hook_dispatch_claim_pretool.sh",
+        "hook_dispatch_claim_posttool.sh",
+    ):
+        assert not any(cmd.endswith(script) for cmd in all_commands), (
+            f"{script} must NOT be registered — see OMN-17005 for the three probed "
+            "defects (swallowed exit 2, non-canonical deny payload, constant "
+            "claimant identity) that must be fixed first."
+        )
