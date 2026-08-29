@@ -26,11 +26,14 @@ import pytest
 from pydantic import ValidationError
 
 from omniclaude.hooks.lib.worktree_prune_policy import (
+    EnumDebrisRemediation,
     EnumPruneBlockReason,
     EnumPruneDisposition,
     EnumTicketLifecycle,
+    ModelPartialMutationDebrisFacts,
     ModelWorktreePruneDecision,
     ModelWorktreePruneFacts,
+    classify_partial_mutation_debris,
     classify_worktree_prune,
     is_prune_eligible,
     is_prune_safe,
@@ -333,3 +336,90 @@ class TestClassifyWorktreePrune:
         decision = classify_worktree_prune(_facts())
         with pytest.raises(ValidationError):
             decision.disposition = EnumPruneDisposition.TRIAGE  # type: ignore[misc]
+
+
+# =============================================================================
+# Partial-mutation debris predicate [OMN-16951]
+#
+# A `.git`-gone leftover directory is a DISTINCT shape from the eligibility/
+# safety predicate above: `git worktree remove` can never succeed on it, so it
+# gets its own block reason and its own (much narrower) auto-remove predicate.
+# The provably-reachable-content-AND-prunable case must be the ONLY
+# auto-removable one — every other combination is TRIAGE, never a deletion.
+# =============================================================================
+
+
+def _debris_facts(**overrides: object) -> ModelPartialMutationDebrisFacts:
+    """Build the one auto-removable baseline: prunable clone record, all
+    remaining file content already reachable as a blob in the owning clone."""
+    base: dict[str, object] = {
+        "path": "/wt/omni_worktrees/OMN-9999/omnibase_infra",
+        "ticket": "OMN-9999",
+        "repo": "omnibase_infra",
+        "owning_clone": "/wt/omnibase_infra",
+        "worktree_list_state": "prunable gitdir file points to non-existent location",
+        "file_count": 3,
+        "unreachable_files": (),
+    }
+    base.update(overrides)
+    return ModelPartialMutationDebrisFacts(**base)
+
+
+class TestClassifyPartialMutationDebris:
+    def test_always_carries_the_partial_mutation_debris_reason(self) -> None:
+        """Every decision from this classifier names the one reason it exists for."""
+        decision = classify_partial_mutation_debris(_debris_facts())
+        assert decision.block_reasons == (EnumPruneBlockReason.PARTIAL_MUTATION_DEBRIS,)
+
+    def test_prunable_and_fully_reachable_is_auto_removable(self) -> None:
+        decision = classify_partial_mutation_debris(_debris_facts())
+        assert decision.remediation is EnumDebrisRemediation.AUTO_REMOVABLE
+        assert "prunable" in decision.evidence
+        assert "3" in decision.evidence
+
+    def test_prunable_but_one_unreachable_file_is_triage_not_auto_removable(
+        self,
+    ) -> None:
+        """The conjunction is never weakened to 'most files reachable'."""
+        decision = classify_partial_mutation_debris(
+            _debris_facts(unreachable_files=("src/omnibase_infra/local_edit.py",))
+        )
+        assert decision.remediation is EnumDebrisRemediation.TRIAGE
+        assert "local_edit.py" in decision.evidence
+
+    def test_fully_reachable_but_not_prunable_is_triage(self) -> None:
+        """Git itself must already agree the worktree is administratively gone."""
+        decision = classify_partial_mutation_debris(
+            _debris_facts(worktree_list_state="")
+        )
+        assert decision.remediation is EnumDebrisRemediation.TRIAGE
+        assert "not 'prunable'" in decision.evidence
+
+    def test_locked_worktree_list_state_is_not_prunable(self) -> None:
+        decision = classify_partial_mutation_debris(
+            _debris_facts(worktree_list_state="locked")
+        )
+        assert decision.remediation is EnumDebrisRemediation.TRIAGE
+
+    def test_no_owning_clone_found_is_triage(self) -> None:
+        """No known clone's `git worktree list` references this path at all."""
+        decision = classify_partial_mutation_debris(
+            _debris_facts(owning_clone=None, worktree_list_state=None)
+        )
+        assert decision.remediation is EnumDebrisRemediation.TRIAGE
+        assert "no owning clone" in decision.evidence
+
+    def test_multiple_unreachable_files_are_all_named_up_to_a_cap(self) -> None:
+        decision = classify_partial_mutation_debris(
+            _debris_facts(
+                unreachable_files=tuple(f"src/f{i}.py" for i in range(7)),
+                file_count=7,
+            )
+        )
+        assert decision.remediation is EnumDebrisRemediation.TRIAGE
+        assert "7 file(s)" in decision.evidence
+
+    def test_decision_is_frozen(self) -> None:
+        decision = classify_partial_mutation_debris(_debris_facts())
+        with pytest.raises(ValidationError):
+            decision.remediation = EnumDebrisRemediation.TRIAGE  # type: ignore[misc]
