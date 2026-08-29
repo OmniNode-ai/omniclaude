@@ -139,8 +139,6 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     "Omni Standards Gate",  # omni-standards-compliance.yml
     "URL Authority Gate",  # url-authority-gate.yml
     "call-reject-skip-token / scan / reject-skip-gate-token",  # call-reject-skip.yml
-    "cr-thread-gate / CodeRabbit Thread Check",  # cr-thread-gate-caller.yml
-    "gate / CodeRabbit Thread Check",  # cr-thread-check.yml
     "main-target-guard",  # main-target-guard.yml
     "non-dev-base-guard",  # non-dev-base-guard.yml
     "pr-title / check-title",  # pr-title-check.yml

@@ -1,16 +1,16 @@
-AI-Slop Pattern Check (strict, PR diff)
 Agent Contract Validation
+AI-Slop Pattern Check (strict, PR diff)
 Aislop Sweep
 Arch: ModelCostLedger confined to effects (check 5)
 Arch: ModelCostLedger run_id field + index (check 9)
-Arch: No DB access in orchestrator/compute (checks 1 & 8)
-Arch: No LinearClient outside effects (check 3)
 Arch: No datetime.utcnow() (check 11)
+Arch: No DB access in orchestrator/compute (checks 1 & 8)
+Arch: No direct adapter imports in business logic (check 13)
 Arch: No direct EventBus instantiation (OMN-10725)
 Arch: No direct Kafka producer outside publisher (check 10)
-Arch: No direct adapter imports in business logic (check 13)
 Arch: No git/gh calls outside effects (check 2)
 Arch: No hardcoded internal IPs (check 12)
+Arch: No LinearClient outside effects (check 3)
 Arch: No localhost/default env fallbacks (OMN-10658)
 Arch: No polymorphic-agent in enforcement paths (OMN-9143)
 Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)
@@ -19,11 +19,14 @@ Arch: omnidash_readonly role provisioning + CI (check 7)
 Arch: onex.* topic naming convention (check 6)
 Architecture Handshake
 Architecture Invariants
-CI Summary
+call-reject-skip-token / scan / reject-skip-gate-token
 Canonical Inference Gate
+CI Summary
 Code Quality
+contract-validation
 Cross-Repo Boundary Parity
 Database Schema Validation
+deploy-gate
 DoD Evidence Check
 Enum Governance
 Env Var Registry (OMN-6263)
@@ -31,14 +34,22 @@ Exports Validation
 F5.1 No compact cmd topic
 Hostile Review Gate
 Kafka Import Guard
+main-target-guard
 Markdown Link Check
 Merge-Sweep Contract
 Migration Freeze
 Mode Metadata Integrity
 No Faked Boundary Gate
-ONEX Compliance
+no-noncanonical-lifecycle-classes
+non-dev-base-guard
+occ-preflight / eligibility
 Omni Standards Gate
+ONEX Compliance
+pr-title / check-title
 Quality Gate
+reason-graph
+receipt-honesty
+required-check-skip-guard / check-skip-vectors
 Secret Detection
 Skill Contract Validation
 Skill Hygiene
@@ -46,16 +57,3 @@ Skill Monorepo-Ref Gate
 Tests Gate
 URL Authority Gate
 Version Pin Compliance
-call-reject-skip-token / scan / reject-skip-gate-token
-contract-validation
-cr-thread-gate / CodeRabbit Thread Check
-deploy-gate
-gate / CodeRabbit Thread Check
-main-target-guard
-no-noncanonical-lifecycle-classes
-non-dev-base-guard
-occ-preflight / eligibility
-pr-title / check-title
-reason-graph
-receipt-honesty
-required-check-skip-guard / check-skip-vectors

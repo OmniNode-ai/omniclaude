@@ -56,7 +56,7 @@ def _entry(
 def _orphaned_check(minutes_ago: int = 25) -> dict:
     started = (NOW - timedelta(minutes=minutes_ago)).isoformat().replace("+00:00", "Z")
     return {
-        "name": "CodeRabbit",
+        "name": "ThirdPartyBot",
         "status": "IN_PROGRESS",
         "conclusion": None,
         "startedAt": started,
@@ -243,9 +243,9 @@ def test_has_orphaned_check_null_status_not_orphaned() -> None:
 
 
 def test_has_failed_required_check_ignores_non_required() -> None:
-    rollup = [_failing_required("CodeRabbit")]
+    rollup = [_failing_required("ThirdPartyBot")]
     assert has_failed_required_check(rollup, {"Quality Gate"}) is False
-    assert has_failed_required_check(rollup, {"CodeRabbit"}) is True
+    assert has_failed_required_check(rollup, {"ThirdPartyBot"}) is True
 
 
 # --- persistence round-trip ------------------------------------------------

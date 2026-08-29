@@ -363,22 +363,6 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
-      # OMN-16823: the CR-thread gate's jq filters decide whether the required
-      # `gate / CodeRabbit Thread Check` context can ever go green. Its
-      # concession-detection has now been wrong twice in a way that made the
-      # context unsatisfiable by construction, so the filter test runs as an
-      # enforced gate (here and in CI) rather than as an opt-in script nobody
-      # invokes. The suite carries the permanent negative controls that keep
-      # the widened match from degrading into "any CodeRabbit reply clears the
-      # thread"; it needs only bash + jq.
-      - id: cr-thread-gate-filters
-        name: CR-thread-gate jq filter tests (OMN-16823)
-        entry: bash tests/scripts/test_check_unresolved_threads.sh
-        language: system
-        files: '^(scripts/check-unresolved-threads\.sh|tests/scripts/test_check_unresolved_threads\.sh)$'
-        pass_filenames: false
-        stages: [pre-commit]
-
       # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep
       # keywords need a precondition-probe: annotation; deliverable sections
       # with file paths need an ## Artifact Manifest section; each manifest

@@ -156,7 +156,7 @@ higher; the injection step will breach its budget whenever the API responds at t
 ## Git/CI Standards
 
 Commit format `type(scope): description` (`feat`, `fix`, `chore`, `refactor`, `docs`).
-Workspace-wide PR requirements (title ticket ref, Receipt Gate, CodeRabbit, deploy-gate,
+Workspace-wide PR requirements (title ticket ref, Receipt Gate, deploy-gate,
 merge policy) are in `omni_home/CLAUDE.md`.
 
 Do **not** trust any hand-maintained CI job list — the consolidated workflow
