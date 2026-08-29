@@ -247,17 +247,59 @@ jobs:
         # All potentially attacker-controlled inputs (PR body) are passed
         # through environment variables — never interpolated into the script
         # text — to prevent shell injection. PR_BODY powers the publisher-side
-        # idempotency skip: when the body already carries
-        # "Evidence-Source: OCC#", the companion is already bound and the
-        # publisher exits 0 loudly without publishing (OMN-14941). No broker
-        # env is injected: the publisher resolves the committed overlay broker
-        # for the lane directly (OMN-14813).
+        # idempotency skip: the publisher parses the canonical Evidence-Source
+        # stamp out of the non-quoted body and RESOLVES it against this PR's
+        # own OCC companion branch; it skips only on an OPEN-or-MERGED
+        # companion and publishes on every indeterminate answer (OMN-14941,
+        # OMN-16710, OMN-15615). No broker env is injected: the publisher
+        # resolves the committed overlay broker for the lane directly
+        # (OMN-14813).
+        #
+        # GH_TOKEN (OMN-15615): the caller's default GITHUB_TOKEN, used ONLY
+        # for that resolution read. onex_change_control is a PUBLIC repo, so
+        # the read succeeds unauthenticated too — but the self-hosted
+        # omnibase-ci fleet shares one egress IP and would burn the 60/hr
+        # anonymous budget. The token is not required for correctness: an
+        # unavailable or rate-limited read is INDETERMINATE, and indeterminate
+        # publishes. `permissions: contents: read` is unchanged — a public-repo
+        # pulls read needs no additional scope.
         env:
           PR_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
           LANE: ${{ inputs.lane }}
+          GH_TOKEN: ${{ github.token }}
         working-directory: .occ-companion-effect-src
+        # AC7 (OMN-15615) — SUCCESS stops being vacuous. The publisher prints
+        # exactly one machine-readable verdict marker on every exit-0 path:
+        #
+        #   skipped_bound_to: OCC#<n>          the skip NAMES the resolved companion
+        #   published_correlation_id: <uuid>   a command reached the broker
+        #   publish_declined: <reason>         a declared no-op (dry-run, fork
+        #                                      runner, in-memory lane, no broker)
+        #
+        # This job is a required context in every caller repo. Before this gate
+        # existed, a run that published nothing was indistinguishable from a run
+        # that minted a companion — omniclaude#1969 sat 34 minutes red behind two
+        # green publisher runs, and omnibase_core#1540 sat 54. `gh pr checks`
+        # pointed at downstream `needs:` cascades; the green job was the last
+        # place anyone looked. A run that terminates 0 with NO marker is now a
+        # hard failure of this step, so "green publisher, nothing happened" is
+        # not representable. tee, not a pipe: the publisher's own exit code must
+        # still decide the step (pipefail would work, but tee keeps the log
+        # streaming to the job output as it happens).
         run: |
-          python scripts/publish_occ_companion_effect_command.py --lane "${LANE}"
+          set -euo pipefail
+          python scripts/publish_occ_companion_effect_command.py --lane "${LANE}" \
+            2>&1 | tee /tmp/occ-companion-effect-publisher.log
+          verdict_count="$(
+            grep -cE '^(skipped_bound_to:|published_correlation_id:|publish_declined:)' \
+              /tmp/occ-companion-effect-publisher.log || true
+          )"
+          if [[ "${verdict_count}" -ne 1 ]]; then
+            echo "::error::VACUOUS PUBLISHER SUCCESS (OMN-15615): the publisher"\
+                 "exited 0 without emitting exactly one verdict marker, so this green check"\
+                 "attests only that a script ran. No companion can be assumed."
+            exit 1
+          fi
