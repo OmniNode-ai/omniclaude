@@ -17,7 +17,7 @@ evidence_requirements:
   - kind: "tests"
     description: "The delegate shim test keeps the skill as a thin wrapper over the CLI-backed cloud delegation path."
     command: "uv run pytest -q tests/unit/hooks/lib/test_delegate_shim_thin.py --tb=short"
-  - kind: "lint"
+  - kind: "ci"
     description: "The touched skill and cloud delegate node paths pass ruff format/check."
     command: "uv run ruff format --check plugins/onex/skills/cloud_delegate src/omniclaude/nodes/node_skill_cloud_delegate_orchestrator tests && uv run ruff check plugins/onex/skills/cloud_delegate src/omniclaude/nodes/node_skill_cloud_delegate_orchestrator tests"
 
