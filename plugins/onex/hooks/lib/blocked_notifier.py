@@ -315,7 +315,7 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
 
         # R3/R6: Check the bot-token path is configured (sole delivery
         # mechanism as of OMN-15600 — SLACK_WEBHOOK_URL is retired).
-        bot_token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+        bot_token = os.environ.get("SLACK_BOT_TOKEN", "").strip()  # secret-ok: env read
         channel_id = os.environ.get("SLACK_CHANNEL_ID", "").strip()
         if not bot_token or not channel_id:
             logger.debug("Slack not configured (no SLACK_BOT_TOKEN/SLACK_CHANNEL_ID)")
