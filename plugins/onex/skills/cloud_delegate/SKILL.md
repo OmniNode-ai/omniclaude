@@ -51,7 +51,7 @@ See `prompt.md` for the one command and how to present the result.
 | Runs on | a local LLM, in-process or over the local bus | the OmniNode platform |
 | Transport | event bus / in-process | HTTPS to the gateway |
 | Credential | none | a dashboard-minted `onxk_` API key |
-| Needs | `$OMNI_HOME`, a canonical `omnimarket` clone, broker access | nothing but the key and a base URL |
+| Needs | a local workspace, a canonical `omnimarket` clone, broker access | nothing but the key and a base URL |
 | Receipt | typed result on stdout | a signed receipt saved to disk |
 
 The two are siblings, not modes of one command. `delegate` is the internal
