@@ -67,7 +67,7 @@ POLISH_RESULTS_AFTER=""
 #
 # OMN-9065: enable admin-merge-fallback by default so the tick auto-unsticks
 # queue stalls (PRs stuck AWAITING_CHECKS > threshold). Without this, a
-# hanging third-party check-run (e.g. CodeRabbit) can wedge the queue head
+# hanging third-party check-run can wedge the queue head
 # indefinitely — observed 2026-04-17 with omnibase_infra#1330 stalled 70+ min
 # across multiple tick cycles because the feature was off.
 #

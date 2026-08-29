@@ -33,7 +33,7 @@ boundary_exempt: true
 
 ## Purpose
 
-GitHub merge queues require ALL `statusCheckRollup` entries to complete — not just the repo's required checks on `main`. Third-party bot check-runs (CodeRabbit, flaky runners, dropped webhooks) can hang `IN_PROGRESS` indefinitely, pinning the queue head `AWAITING_CHECKS` forever and blocking every downstream PR from merging.
+GitHub merge queues require ALL `statusCheckRollup` entries to complete — not just the repo's required checks on `main`. Third-party bot check-runs, flaky runners and dropped webhooks can hang `IN_PROGRESS` indefinitely, pinning the queue head `AWAITING_CHECKS` forever and blocking every downstream PR from merging.
 
 This skill detects that specific condition and recovers by dequeuing + re-enqueuing the head PR. It is deliberately scoped to avoid admin-bypass of genuine failures: a PR with a failed *required* check is classified `BROKEN` and left alone.
 

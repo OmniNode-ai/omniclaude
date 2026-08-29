@@ -106,7 +106,7 @@ Run each phase in sequence, advancing the FSM via `handler.advance()`. For each 
 4. **CREATE_PR**: Create PR via `gh pr create`, enable auto-merge
 5. **TEST_ITERATE**: Fix failing tests up to `--max-test-iterations` cycles
 6. **CI_WATCH**: Poll CI until green or timeout; auto-fix failures
-7. **PR_REVIEW**: Address CodeRabbit + human review comments
+7. **PR_REVIEW**: Address human review comments
 8. **AUTO_MERGE**: Wait for merge queue; verify merged
 9. **WORKTREE_CLEANUP**: Verify and remove safe per-ticket worktrees before Done
 
