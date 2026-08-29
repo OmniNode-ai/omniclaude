@@ -26,8 +26,11 @@
 #   2  not configured        — nothing to send through; silent no-op.
 # State 1 is the state that did not exist before OMN-15600.
 #
-# Channel order: Slack Web API with a bot token first (webhook-independent, so
-# it survives a webhook revocation), incoming webhook as fallback.
+# Channel: Slack Web API with a bot token (webhook-independent). The incoming
+# webhook (SLACK_WEBHOOK_URL) was retired — it was revoked and never
+# regenerated, `#omninode-notifications` already receives live traffic via the
+# bot token, and the operator directive is no new Slack app/webhook. Do not
+# reintroduce a SLACK_WEBHOOK_URL read here.
 #
 # Dependencies: curl only. No Python, no jq, no common.sh — error-guard.sh
 # sources this before common.sh and some hooks never source common.sh at all.
@@ -176,12 +179,11 @@ alert_channel_send() {
     local text="$2"
     local bot_token="${SLACK_BOT_TOKEN:-}"
     local channel_id="${SLACK_CHANNEL_ID:-}"
-    local webhook_url="${SLACK_WEBHOOK_URL:-}"
     local connect_timeout="${ONEX_ALERT_CURL_CONNECT_TIMEOUT:-1}"
     local max_time="${ONEX_ALERT_CURL_MAX_TIME:-2}"
 
     # Nothing configured at all — genuinely nothing to report.
-    if [[ -z "$bot_token" || -z "$channel_id" ]] && [[ -z "$webhook_url" ]]; then
+    if [[ -z "$bot_token" || -z "$channel_id" ]]; then
         return 2
     fi
 
@@ -193,9 +195,10 @@ alert_channel_send() {
     local escaped detail=""
     escaped="$(alert_channel_json_escape "$text")"
 
-    # --- Channel 1 (preferred): Slack Web API via bot token -------------------
+    # --- Slack Web API via bot token — the sole delivery channel --------------
     # Webhook-independent: survives a webhook revocation, which is the exact
-    # failure OMN-15600 was filed for.
+    # failure OMN-15600 was filed for. SLACK_WEBHOOK_URL is retired; there is
+    # no fallback channel.
     if [[ -n "$bot_token" && -n "$channel_id" ]]; then
         local api_base resp code body compact
         api_base="${SLACK_API_BASE_URL:-https://slack.com/api}"
@@ -216,20 +219,6 @@ alert_channel_send() {
         local slack_err
         slack_err="$(_alert_channel_slack_error "$body")"
         detail="${detail}chat.postMessage=HTTP_${code:-000}${slack_err:+ slack_error=${slack_err}}; "
-    fi
-
-    # --- Channel 2 (fallback): incoming webhook -------------------------------
-    if [[ -n "$webhook_url" ]]; then
-        local wcode
-        wcode=$(curl -sS --connect-timeout "$connect_timeout" --max-time "$max_time" \
-            -o /dev/null -w '%{http_code}' \
-            -H 'Content-Type: application/json' \
-            -d "{\"text\": \"${escaped}\"}" \
-            --url "$webhook_url" 2>/dev/null) || wcode=""
-        if [[ "$wcode" =~ ^2[0-9][0-9]$ ]]; then
-            return 0
-        fi
-        detail="${detail}webhook=HTTP_${wcode:-000}; "
     fi
 
     alert_channel_record_failure "$category" "${detail}message=${text:0:160}"

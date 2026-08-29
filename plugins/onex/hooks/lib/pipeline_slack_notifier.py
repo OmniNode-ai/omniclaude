@@ -5,8 +5,10 @@
 """Pipeline Slack Notifier - Threaded Slack notifications for ticket-pipeline.
 
 Provides correlation-formatted, per-ticket threaded Slack notifications for
-the ticket-pipeline. Uses the omnibase_infra HandlerSlackWebhook for formatting
-and delivery, with thread_ts management for grouping pipeline messages.
+the ticket-pipeline. Uses the omnibase_infra HandlerSlackWebhook (bot-token
+path) for formatting and delivery, with thread_ts management for grouping
+pipeline messages. SLACK_WEBHOOK_URL is retired (OMN-15600) — there is no
+webhook mode; the bot token is the sole channel.
 
 Architecture:
     ```
@@ -16,15 +18,12 @@ Architecture:
         │
         └── PipelineSlackNotifier.notify()
                 │
-                ├── [Web API mode] → chat.postMessage (threading)
-                │     └── returns thread_ts for state storage
-                │
-                └── [Webhook mode] → HandlerSlackWebhook (no threading)
-                      └── returns None for thread_ts
+                └── chat.postMessage (threading)
+                      └── returns thread_ts for state storage
     ```
 
-    Web API mode (OMN-2157) is activated when SLACK_BOT_TOKEN is configured.
-    Falls back to webhook mode (existing infrastructure) otherwise.
+    Activated when SLACK_BOT_TOKEN is configured; otherwise notifications are
+    silently skipped (see _create_default_handler).
 
 Message Format:
     ```
@@ -39,7 +38,7 @@ Threading:
     - >3 parallel pipelines stay organized via per-ticket threads
 
 Dependencies:
-    - omnibase_infra.handlers.HandlerSlackWebhook (existing, for webhook mode)
+    - omnibase_infra.handlers.HandlerSlackWebhook (existing, bot-token path)
     - omnibase_infra.handlers.models.ModelSlackAlert (existing, for payload)
     - OMN-2157 (future, for Web API threading support)
 
@@ -149,7 +148,7 @@ class NotifyResult:
     Attributes:
         success: True if the notification was delivered (or skipped in dry-run).
         thread_ts: Slack thread timestamp for threading subsequent messages.
-            None if threading not available (webhook mode) or delivery failed.
+            None if not configured or delivery failed.
         error: Error message if delivery failed.
         dry_run: True if this was a dry-run notification.
     """
@@ -171,14 +170,12 @@ class PipelineSlackNotifier:
     Formats messages with correlation context and manages thread_ts for
     per-ticket message threading.
 
-    Supports two modes:
-    1. Webhook mode (current): Uses HandlerSlackWebhook, no threading
-    2. Web API mode (OMN-2157): Uses extended handler with thread_ts support
+    Uses the Web API (chat.postMessage via HandlerSlackWebhook) with
+    thread_ts threading support. SLACK_WEBHOOK_URL is retired (OMN-15600) —
+    there is no non-threaded webhook mode.
 
     Graceful degradation:
-    - No SLACK_WEBHOOK_URL and no SLACK_BOT_TOKEN: notifications silently skipped
-    - Webhook only: notifications sent without threading
-    - Bot token: full threading support
+    - No SLACK_BOT_TOKEN: notifications silently skipped
 
     Attributes:
         ticket_id: Linear ticket identifier (e.g., "OMN-1804")
@@ -230,7 +227,8 @@ class PipelineSlackNotifier:
             handler_cls = mod.HandlerSlackWebhook
 
             # OMN-2157: HandlerSlackWebhook uses bot_token + default_channel
-            # from env vars (SLACK_BOT_TOKEN / SLACK_CHANNEL_ID). No more webhook_url.
+            # from env vars (SLACK_BOT_TOKEN / SLACK_CHANNEL_ID). No webhook_url
+            # parameter — SLACK_WEBHOOK_URL is retired (OMN-15600).
             handler: SlackHandlerProtocol = handler_cls(
                 bot_token=bot_token or None,
                 default_channel=None,

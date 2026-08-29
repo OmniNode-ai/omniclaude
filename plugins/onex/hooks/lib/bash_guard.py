@@ -40,9 +40,13 @@ Pattern design
     ``pre_tool_use_permissions.py`` for a full discussion of limitations.
 
 Slack integration
-    Set the ``SLACK_WEBHOOK_URL`` environment variable to enable notifications.
-    If the variable is absent or empty, notifications are silently skipped and
-    the guard still functions correctly.
+    Set ``SLACK_BOT_TOKEN`` and ``SLACK_CHANNEL_ID`` to enable notifications
+    (bot-token path via ``omnibase_infra.handlers.handler_slack_webhook``,
+    the sole delivery mechanism as of OMN-15600 — the prior
+    ``SLACK_WEBHOOK_URL`` incoming webhook was revoked and retired, never
+    replaced). If either variable is absent or empty, notifications are
+    silently skipped and the guard still functions correctly. A configured
+    but failing send is logged at ERROR (fail loud), not silently discarded.
 
     HARD_BLOCK notifications are sent synchronously (up to 9 s) so the message
     arrives before the block response.  SOFT_ALERT notifications are
@@ -60,7 +64,8 @@ Related modules
     plugins/onex/hooks/scripts/pre_tool_use_permissions.py
         Source of the full ``DESTRUCTIVE_PATTERNS`` list and ``normalize_bash_command``.
     plugins/onex/hooks/lib/blocked_notifier.py
-        Pattern for fire-and-forget Slack delivery via ``urllib.request``.
+        Pattern this module mirrors for bot-token Slack delivery via
+        ``HandlerSlackWebhook``.
 
 .. versionadded:: 0.4.0
 """
@@ -69,13 +74,15 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
 import threading
-import urllib.request
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Validator catch event emission (OMN-5549)
@@ -634,19 +641,25 @@ def matches_any(command: str, patterns: list[re.Pattern[str]]) -> bool:
 
 
 def _send_slack_alert(
-    webhook_url: str,
     command: str,
     tier: str,
     session_id: str,
 ) -> None:
-    """Send a Slack webhook notification for a flagged command.
+    """Send a Slack notification for a flagged command via the bot-token path.
 
-    Designed to be called from a :class:`threading.Thread`.  All exceptions
-    are silently swallowed so that a failed notification never crashes or
-    delays the hook.
+    Designed to be called from a :class:`threading.Thread`.  Delivery
+    exceptions are logged at ERROR (fail loud, classified) rather than
+    swallowed — the caller's hook outcome is never affected either way; only
+    the notification is best-effort.
+
+    Uses ``omnibase_infra.handlers.handler_slack_webhook.HandlerSlackWebhook``,
+    which reads ``SLACK_BOT_TOKEN`` / ``SLACK_CHANNEL_ID`` from the
+    environment. This is the sole delivery mechanism as of OMN-15600 — the
+    prior direct POST to ``SLACK_WEBHOOK_URL`` (a revoked incoming webhook)
+    was retired without a webhook-based replacement, mirroring
+    ``blocked_notifier.py``.
 
     Args:
-        webhook_url: Incoming Webhook URL (from ``SLACK_WEBHOOK_URL`` env var).
         command: The bash command that was flagged (truncated to 500 chars in
             the message).
         tier: ``"HARD_BLOCK"`` or ``"SOFT_ALERT"`` — controls emoji and
@@ -661,26 +674,63 @@ def _send_slack_alert(
             if tier == "HARD_BLOCK"
             else "ALLOWED — but flagged for awareness"
         )
-        payload: dict[str, str] = {
-            "text": (
-                f"{emoji} *{tier}: Bash Command Intercepted*\n\n"
-                f"```{command[:500]}```\n\n"
-                f"*Action*: {action}\n"
-                f"*Session*: `{session_id[:16]}...`\n"
-                f"*Time*: {datetime.datetime.now(datetime.UTC).isoformat()}"
-            )
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(  # noqa: S310
-            webhook_url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        message = (
+            f"{emoji} *{tier}: Bash Command Intercepted*\n\n"
+            f"```{command[:500]}```\n\n"
+            f"*Action*: {action}\n"
+            f"*Session*: `{session_id[:16]}...`\n"
+            f"*Time*: {datetime.datetime.now(datetime.UTC).isoformat()}"
         )
-        urllib.request.urlopen(req, timeout=8)  # noqa: S310
+
+        import asyncio  # noqa: PLC0415
+        import importlib  # noqa: PLC0415
+
+        mod = importlib.import_module("omnibase_infra.handlers.handler_slack_webhook")
+        handler = mod.HandlerSlackWebhook()
+
+        try:
+            from omnibase_infra.handlers.models.model_slack_alert import (  # noqa: PLC0415
+                EnumAlertSeverity,
+                ModelSlackAlert,
+            )
+
+            severity = (
+                EnumAlertSeverity.CRITICAL
+                if tier == "HARD_BLOCK"
+                else EnumAlertSeverity.WARNING
+            )
+            alert = ModelSlackAlert(
+                severity=severity,
+                message=message,
+                title="Bash Command Intercepted",
+            )
+        except ImportError:
+            from dataclasses import dataclass, field  # noqa: PLC0415
+            from uuid import uuid4  # noqa: PLC0415
+
+            @dataclass(frozen=True)
+            class _FallbackAlert:
+                severity: str = "warning"
+                message: str = ""
+                title: str = "Bash Command Intercepted"
+                details: dict[str, str] = field(default_factory=dict)
+                correlation_id: object = field(default_factory=uuid4)
+
+            alert = _FallbackAlert(message=message)
+
+        asyncio.run(asyncio.wait_for(handler.handle(alert), timeout=8.0))
     except Exception:  # noqa: BLE001
-        # Fail-open: notification failure must never affect hook outcome
-        pass
+        # The hook outcome must never depend on notification delivery, but a
+        # failed send must still be visible — EnumChannelStatus vocabulary
+        # (LIVE/DEAD/NOT_CONFIGURED/PROBE_ERROR) lives in
+        # omniclaude.hooks.alert_channel; this is a leaf sender, not the
+        # liveness prober, so it just logs the failure classified as an error.
+        logger.error(
+            "Slack delivery failed for %s alert (session=%s)",
+            tier,
+            session_id[:16],
+            exc_info=True,
+        )
 
 
 # =============================================================================
@@ -741,7 +791,10 @@ def main() -> int:
         hook_input.get("session_id", hook_input.get("sessionId", "unknown"))
     )
 
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+    _slack_configured = bool(
+        os.environ.get("SLACK_BOT_TOKEN", "").strip()
+        and os.environ.get("SLACK_CHANNEL_ID", "").strip()
+    )
 
     # ------------------------------------------------------------------
     # Pre-check: Whitelist rm on Claude Code transient paths (OMN-7567)
@@ -939,10 +992,10 @@ def main() -> int:
             catch_description=block_reason[:500],
             severity="error",
         )
-        if webhook_url:
+        if _slack_configured:
             notifier = threading.Thread(
                 target=_send_slack_alert,
-                args=(webhook_url, command, "HARD_BLOCK", session_id),
+                args=(command, "HARD_BLOCK", session_id),
                 daemon=True,
             )
             notifier.start()
@@ -974,11 +1027,11 @@ def main() -> int:
     # Tier 2 — SOFT_ALERT
     # ------------------------------------------------------------------
     if matches_any(command, SOFT_ALERT_PATTERNS):
-        if webhook_url:
+        if _slack_configured:
             # Fire-and-forget — do NOT delay the tool call
             threading.Thread(
                 target=_send_slack_alert,
-                args=(webhook_url, command, "SOFT_ALERT", session_id),
+                args=(command, "SOFT_ALERT", session_id),
                 daemon=True,
             ).start()
         print("{}")

@@ -45,7 +45,8 @@ Features:
 - Correlation ID management
 - Error handling and logging
 - Graceful degradation if Kafka unavailable
-- Optional Slack notifications for critical errors (opt-in via SLACK_WEBHOOK_URL)
+- Optional Slack notifications for critical errors (opt-in; requires
+  SLACK_BOT_TOKEN — SLACK_WEBHOOK_URL is retired, OMN-15600)
 - Intelligent throttling (max 1 notification per error type per 5 minutes)
 """
 
@@ -319,7 +320,7 @@ class ActionLogger:
             Slack notifications are only sent if:
             - send_slack_notification=True
             - Severity is 'error' or 'critical'
-            - SLACK_WEBHOOK_URL is configured
+            - SLACK_BOT_TOKEN is configured (SLACK_WEBHOOK_URL is retired, OMN-15600)
             - Notification passes throttling check
         """
         # Record Prometheus metrics for errors
@@ -553,7 +554,7 @@ if __name__ == "__main__":
                 "database": "mydb",
                 "retry_count": 3,
             },
-            severity="critical",  # Will trigger Slack if SLACK_WEBHOOK_URL is set
+            severity="critical",  # Will trigger Slack if SLACK_BOT_TOKEN is set
         )
 
         print("✓ Critical error logged (with Slack notification if configured)")

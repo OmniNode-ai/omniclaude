@@ -4,8 +4,14 @@
 
 A configured alert channel that no longer delivers is worse than no channel at
 all: it reads as healthy on every surface while every alert goes nowhere. That
-is the state ``SLACK_WEBHOOK_URL`` was in — a revoked webhook answering HTTP
-404 ``no_service`` — for an unknown period, because nothing ever checked.
+is the state the old ``SLACK_WEBHOOK_URL`` incoming webhook was in — revoked,
+answering HTTP 404 ``no_service`` — for an unknown period, because nothing
+ever checked.
+
+That webhook is retired (OMN-15600 revised AC1): ``#omninode-notifications``
+already receives live traffic via ``SLACK_BOT_TOKEN`` + ``SLACK_CHANNEL_ID``,
+and the operator directive is no new Slack app/webhook. The bot token is the
+sole channel this probe checks.
 
 This probe is folded into the EXISTING hook-health check path (see
 ``hook_health_probe``), which runs at every session start. It is deliberately
@@ -15,10 +21,6 @@ exists to close.
 Probing without spamming the channel
 ------------------------------------
 * Bot token: ``auth.test`` is a read-only Slack Web API call that posts nothing.
-* Incoming webhook: POST an **empty** body. Slack answers HTTP 400
-  ``invalid_payload`` for a webhook that still exists and HTTP 404
-  ``no_service`` for one whose app was deleted. The distinction is exactly the
-  liveness signal, and no message is delivered either way.
 
 On a dead channel the probe writes the same durable failure log the shell
 sender uses and raises a local notification, so the operator learns at the
@@ -171,17 +173,6 @@ def _probe_bot_token(token: str) -> tuple[bool, str]:
     return False, f"bot_token=HTTP_{status}"
 
 
-def _probe_webhook(url: str) -> tuple[bool, str]:
-    status, body = _post(url, b"", {"Content-Type": "application/json"})
-    snippet = body.strip()[:64]
-    if status == 400 or "invalid_payload" in snippet:
-        # The webhook exists and rejected the empty payload: alive, nothing posted.
-        return True, "webhook=alive (invalid_payload)"
-    if 200 <= status < 300:
-        return True, f"webhook=HTTP_{status}"
-    return False, f"webhook=HTTP_{status} body={snippet}"
-
-
 def _local_notify(summary: str) -> bool:
     """Raise a notification on this machine. Mirrors alert-channel.sh."""
     override = os.environ.get("ONEX_ALERT_LOCAL_NOTIFY_CMD", "").strip()
@@ -290,10 +281,6 @@ def probe_alert_channel(*, force: bool = False) -> ModelAlertChannelHealth:
         # `os.environ.get(...)` assignment but not one wrapped in `.strip()`.
         token = os.environ.get("SLACK_BOT_TOKEN", "")
         channel_id = os.environ.get("SLACK_CHANNEL_ID", "")
-        # An incoming-webhook URL IS the credential — the secret is in its path — so
-        # it lives in the canonical operator env file and cannot be published in a
-        # contract. Same read as blocked_notifier.py / bash_guard.py.
-        webhook = os.environ.get("SLACK_WEBHOOK_URL", "")  # url-authority-ok: the URL is itself the secret credential  # fmt: skip
 
         live: list[str] = []
         dead: list[str] = []
@@ -303,16 +290,10 @@ def probe_alert_channel(*, force: bool = False) -> ModelAlertChannelHealth:
             ok, detail = _probe_bot_token(token.strip())
             details.append(detail)
             (live if ok else dead).append("bot_token")
-        if webhook.strip():
-            ok, detail = _probe_webhook(webhook.strip())
-            details.append(detail)
-            (live if ok else dead).append("webhook")
 
         if not live and not dead:
             result = ModelAlertChannelHealth(status=EnumChannelStatus.NOT_CONFIGURED)
         elif live:
-            # At least one channel delivers. A dead secondary is still recorded
-            # in `dead_channels` so it can be cleaned up, but alerting works.
             result = ModelAlertChannelHealth(
                 status=EnumChannelStatus.LIVE,
                 live_channels=live,

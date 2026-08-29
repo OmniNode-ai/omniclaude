@@ -156,7 +156,6 @@ def _run_probe(*, home: Path, tmp_path: Path, sitecustomize: str | None = None) 
         "ONEX_ALERT_LOCAL_NOTIFY_CMD": str(_noop_notifier(tmp_path)),
         "SLACK_BOT_TOKEN": "",
         "SLACK_CHANNEL_ID": "",
-        "SLACK_WEBHOOK_URL": "",
     }
     if sitecustomize is not None:
         inject = tmp_path / "inject"
@@ -407,8 +406,7 @@ class TestProbeAlertChannelOwnBodyFailsLoud:
 
     Measured, not assumed: reverting that one line to ``NOT_CONFIGURED`` — the
     exact pre-OMN-15606 shape — left all 33 tests green. The mutant is
-    behaviourally reachable (any exception escaping ``_probe_bot_token``,
-    ``_probe_webhook`` or ``_write_cache``: TLS, DNS, a read-only cache dir) and
+    behaviourally reachable (any exception escaping ``_probe_bot_token`` or ``_write_cache``: TLS, DNS, a read-only cache dir) and
     material: ``not_configured`` is silent and exits 0, ``probe_error`` is loud
     and exits 1. These tests bind that line.
     """
@@ -428,7 +426,6 @@ class TestProbeAlertChannelOwnBodyFailsLoud:
         # before entering the bot-token branch.
         monkeypatch.setenv("SLACK_BOT_TOKEN", "forced-test-value-not-a-credential")
         monkeypatch.setenv("SLACK_CHANNEL_ID", "forced-test-channel")
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "")
 
         health = alert_channel.probe_alert_channel(force=True)
 
@@ -458,7 +455,6 @@ class TestProbeAlertChannelOwnBodyFailsLoud:
         monkeypatch.setenv("ONEX_ALERT_LIVENESS_CACHE", str(tmp_path / "cache.json"))
         monkeypatch.setenv("SLACK_BOT_TOKEN", "")
         monkeypatch.setenv("SLACK_CHANNEL_ID", "")
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "")
 
         health = alert_channel.probe_alert_channel(force=True)
 

@@ -7,7 +7,8 @@ Called by emit_agent_status() after successful event emission when state=blocked
 Implements rate limiting, graceful degradation, and fail-open semantics.
 
 INVARIANT: This function MUST fail open and NEVER raise exceptions.
-All failures are logged at DEBUG level and return False.
+Delivery failures are logged at ERROR level (classified, not silent) and return
+False.
 
 Architecture:
     ```
@@ -18,16 +19,19 @@ Architecture:
         └── maybe_notify_blocked(payload)
                 │
                 ├── Guard: state != "blocked" → return False
-                ├── Guard: no SLACK_WEBHOOK_URL → return False
+                ├── Guard: no SLACK_BOT_TOKEN/SLACK_CHANNEL_ID → return False
                 ├── Rate limit check (file-based, 5min window)
                 │
-                ├── [omnibase_infra available] → HandlerSlackWebhook
-                └── [fallback] → urllib.request POST to webhook
+                └── HandlerSlackWebhook (bot-token path; sole delivery
+                    mechanism as of OMN-15600 — the incoming-webhook fallback
+                    was retired, not replaced, when SLACK_WEBHOOK_URL was
+                    removed)
     ```
 
 Related Tickets:
     - OMN-1851: Integrate blocked agent status with Slack notifications
     - OMN-1848: Agent Status Kafka Emitter (prerequisite)
+    - OMN-15600: retired the SLACK_WEBHOOK_URL fallback
 
 .. versionadded:: 0.3.0
 """
@@ -40,7 +44,6 @@ import logging
 import os
 import tempfile
 import time
-import urllib.request
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -201,7 +204,6 @@ def _format_slack_message(payload: dict[str, object]) -> str:
 
 
 def _send_via_handler(
-    _webhook_url: str,  # Unused; retained for call-site parity with urllib fallback
     message: str,
     correlation_id_str: str | None = None,
     agent_name: str | None = None,
@@ -279,22 +281,6 @@ def _send_via_handler(
     return True
 
 
-def _send_via_urllib(webhook_url: str, message: str) -> bool:
-    """Send notification via stdlib urllib as fallback.
-
-    Returns True if sent successfully, False otherwise.
-    """
-    payload_json = json.dumps({"text": message}).encode("utf-8")
-    req = urllib.request.Request(  # noqa: S310
-        webhook_url,
-        data=payload_json,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    urllib.request.urlopen(req, timeout=10)  # noqa: S310
-    return True
-
-
 def maybe_notify_blocked(payload: dict[str, object]) -> bool:
     """Send a Slack notification when an agent reports state=blocked.
 
@@ -303,7 +289,7 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
 
     Guards:
         - Only proceeds if payload state is "blocked"
-        - Only proceeds if SLACK_WEBHOOK_URL is configured
+        - Only proceeds if SLACK_BOT_TOKEN and SLACK_CHANNEL_ID are configured
         - Rate-limited per agent (5 minute window)
 
     Args:
@@ -327,10 +313,12 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
             )
             return False
 
-        # R3/R6: Check SLACK_WEBHOOK_URL
-        webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
-        if not webhook_url:
-            logger.debug("Slack not configured (no SLACK_WEBHOOK_URL)")
+        # R3/R6: Check the bot-token path is configured (sole delivery
+        # mechanism as of OMN-15600 — SLACK_WEBHOOK_URL is retired).
+        bot_token = os.environ.get("SLACK_BOT_TOKEN", "").strip()  # secret-ok: env read
+        channel_id = os.environ.get("SLACK_CHANNEL_ID", "").strip()
+        if not bot_token or not channel_id:
+            logger.debug("Slack not configured (no SLACK_BOT_TOKEN/SLACK_CHANNEL_ID)")
             return False
 
         # R4: Rate limiting
@@ -344,28 +332,25 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
         agent_name_str = str(payload.get("agent_name", "")) or None
         session_id_str = str(payload.get("session_id", "")) or None
 
-        # R6: Send notification — try handler first, fall back to urllib
+        # R6: Send notification via the bot-token path. No fallback: a
+        # delivery failure here must be reported, not silently swallowed to a
+        # channel that no longer exists.
         try:
             return _send_via_handler(
-                webhook_url,
                 message,
                 correlation_id_str,
                 agent_name=agent_name_str,
                 session_id=session_id_str,
             )
         except ImportError:
-            logger.debug(
-                "omnibase_infra not available, falling back to urllib for Slack"
+            logger.error(
+                "Slack delivery failed: omnibase_infra (HandlerSlackWebhook) "
+                "not available — the bot-token path is the sole delivery "
+                "mechanism and has no fallback"
             )
+            return False
         except Exception:
-            logger.debug(
-                "HandlerSlackWebhook failed, falling back to urllib", exc_info=True
-            )
-
-        try:
-            return _send_via_urllib(webhook_url, message)
-        except Exception:
-            logger.debug("urllib Slack delivery failed", exc_info=True)
+            logger.error("Slack delivery via HandlerSlackWebhook failed", exc_info=True)
             return False
 
     except Exception:

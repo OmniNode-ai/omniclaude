@@ -567,7 +567,7 @@ class TestMainIntegration(unittest.TestCase):
     # -- SOFT_ALERT integration --
 
     def test_main_allows_force_push_with_no_slack(self) -> None:
-        """Without SLACK_WEBHOOK_URL the hook still exits 0 for soft alerts."""
+        """Without SLACK_BOT_TOKEN/SLACK_CHANNEL_ID the hook still exits 0 for soft alerts."""
         with patch.dict("os.environ", {}, clear=True):
             stdout, code = _run_main(
                 {
@@ -642,11 +642,17 @@ class TestMainIntegration(unittest.TestCase):
 
     # -- Slack notification (mocked) --
 
-    def test_hard_block_fires_slack_when_webhook_set(self) -> None:
-        """When SLACK_WEBHOOK_URL is set, _send_slack_alert is called for HARD_BLOCK."""
+    def test_hard_block_fires_slack_when_bot_token_set(self) -> None:
+        """When SLACK_BOT_TOKEN/SLACK_CHANNEL_ID are set, _send_slack_alert fires for HARD_BLOCK.
+
+        SLACK_WEBHOOK_URL is retired (OMN-15600) — the bot-token path is the
+        sole delivery mechanism and the sole configuration signal.
+        """
         with (
             patch.dict(
-                "os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}
+                "os.environ",
+                {"SLACK_BOT_TOKEN": "xoxb-test", "SLACK_CHANNEL_ID": "C0TEST"},
+                clear=True,
             ),
             patch.object(bash_guard, "_send_slack_alert") as mock_alert,
         ):
@@ -676,14 +682,20 @@ class TestMainIntegration(unittest.TestCase):
 
         self.assertEqual(code, 2)
         mock_alert.assert_called_once()
-        _, call_command, call_tier, _ = mock_alert.call_args[0]
+        call_command, call_tier, _ = mock_alert.call_args[0]
         self.assertEqual(call_tier, "HARD_BLOCK")
 
-    def test_soft_alert_fires_slack_when_webhook_set(self) -> None:
-        """When SLACK_WEBHOOK_URL is set, _send_slack_alert is called for SOFT_ALERT."""
+    def test_soft_alert_fires_slack_when_bot_token_set(self) -> None:
+        """When SLACK_BOT_TOKEN/SLACK_CHANNEL_ID are set, _send_slack_alert fires for SOFT_ALERT.
+
+        SLACK_WEBHOOK_URL is retired (OMN-15600) — the bot-token path is the
+        sole delivery mechanism and the sole configuration signal.
+        """
         with (
             patch.dict(
-                "os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}
+                "os.environ",
+                {"SLACK_BOT_TOKEN": "xoxb-test", "SLACK_CHANNEL_ID": "C0TEST"},
+                clear=True,
             ),
             patch.object(bash_guard, "_send_slack_alert") as mock_alert,
         ):
@@ -713,7 +725,7 @@ class TestMainIntegration(unittest.TestCase):
 
         self.assertEqual(code, 0)
         mock_alert.assert_called_once()
-        _, call_command, call_tier, _ = mock_alert.call_args[0]
+        call_command, call_tier, _ = mock_alert.call_args[0]
         self.assertEqual(call_tier, "SOFT_ALERT")
 
     # -- session_id key variants --
