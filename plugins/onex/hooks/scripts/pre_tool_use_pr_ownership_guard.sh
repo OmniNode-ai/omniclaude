@@ -18,15 +18,27 @@
 #       -> exclusivity class, first-writer-wins. An active peer claim refuses;
 #          otherwise the claim is recorded so the racing peer refuses.
 #
-# Read-only verbs (gh pr view/list/checks, gh run view/list/watch) are never
-# touched — the parser matches specific mutation verbs only, and quoted text
-# (a commit message containing "gh pr close") is not a command.
+# Read-only verbs (gh pr view/list/checks, gh run view/list/watch, and a
+# `gh api` call with no mutating method) are never refused. Two layers make
+# that true, and only the second is authoritative:
+#   * this script's grep pre-filter is a cheap over-matcher — it fires on a
+#     bare `gh api` regardless of HTTP method, and on quoted text that merely
+#     names a verb (`printf 'gh api ...'`). It decides nothing.
+#   * pr_ownership_guard.py parses the command and is the authority. It treats
+#     a `gh api` with no `-X/--method PATCH|POST|PUT|DELETE` as no mutation at
+#     all and returns ALLOW before touching any ownership surface, and it does
+#     not read quoted text as a command (OMN-16983).
 #
 # Fail-open / fail-closed boundary, stated deliberately:
 #   * A command containing no guarded verb never invokes Python at all — a bug
 #     in this guard cannot brick unrelated Bash traffic.
-#   * A command that DOES contain a guarded verb and whose evaluation errors is
-#     BLOCKED, not allowed. Ownership that cannot be established fails closed.
+#   * A command the PARSER resolves to a genuine mutation, whose evaluation
+#     then errors, is BLOCKED, not allowed. Ownership that cannot be
+#     established fails closed.
+#   * A command that only trips the grep pre-filter is NOT in that category:
+#     the parser finds no mutation and the guard allows it. Before OMN-16983
+#     the two were conflated, and an ImportError in the decision core refused
+#     every `gh api` read on the host.
 #
 # Gating: the BASH_GUARD bit. A dedicated bit would require a new EnumHookBit
 # member in omnibase_core plus a regenerated hook_bits.sh (cross-repo release
@@ -128,9 +140,20 @@ if [[ ! -f "$GUARD_PY" ]]; then
         "BLOCKED: the OMN-16485 lane-ownership guard module is missing at ${GUARD_PY}, so ownership of this GitHub mutation cannot be checked. Unverifiable ownership fails closed. Repair the plugin install, or disable the guard deliberately: onex hooks disable BASH_GUARD"
 fi
 
+# OMN-16983: run the decision core as a plain script from its own directory.
+# The previous form did `cd "$PLUGIN_ROOT/../.."` with a matching PYTHONPATH so
+# the module could `import plugins.onex.hooks.lib.*` — an assumption that only
+# holds in the SOURCE tree (<omniclaude>/plugins/onex). Claude Code loads hooks
+# from the plugin CACHE (~/.claude/plugins/cache/<mp>/onex/<ver>), where `../..`
+# is the marketplace dir and no `plugins` package exists: the import raised
+# ModuleNotFoundError, the core exited 1, and the fail-closed branch below
+# refused every matching command — read-only `gh api` GETs included. The core
+# now resolves its siblings from its own lib/ directory, so no PYTHONPATH or cwd
+# contract is needed. PYTHONPATH is cleared so an ambient value cannot shadow a
+# sibling module with a same-named one from another tree.
 set +e
-GUARD_OUT=$(cd "$PLUGIN_ROOT/../.." 2>/dev/null || cd "$PLUGIN_ROOT"; \
-    env -u PYTHONPATH PYTHONPATH="$PLUGIN_ROOT/../.." "${PYTHON_CMD:-python3}" "$GUARD_PY" \
+GUARD_OUT=$(cd "$PLUGIN_ROOT" 2>/dev/null || cd "$HOME"; \
+    env -u PYTHONPATH "${PYTHON_CMD:-python3}" "$GUARD_PY" \
     --command-file "$CMD_FILE" \
     --cwd "$HOOK_ORIGINAL_CWD" \
     --default-repo "$DEFAULT_REPO" 2>&1)

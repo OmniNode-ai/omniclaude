@@ -11,7 +11,7 @@
     {
       "name": "onex",
       "description": "Full ONEX architecture plugin — intelligent agent routing, manifest injection, quality enforcement, polymorphic YAML agents, reusable skills, and custom slash commands. Internal dev tooling only; distinct MARKETPLACE (omninode-tools-dev) so `onex@omninode-tools-dev` never collides with the consumer-facing `onex@omninode-tools` install — the plugin name matches plugins/onex/.claude-plugin/plugin.json's own `name` field, uniqueness comes from marketplace scoping.",
-      "version": "2.3.1",
+      "version": "2.3.2",
       "author": {
         "name": "OmniNode",
         "email": "dev@omninode.ai"
