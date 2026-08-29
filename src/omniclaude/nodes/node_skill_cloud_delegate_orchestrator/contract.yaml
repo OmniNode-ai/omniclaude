@@ -96,6 +96,18 @@ io_operations:
       - correlation_id: UUID
     idempotent: false
 
+# Handler routing
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "skill.cloud_delegate"
+      handler:
+        name: "HandlerCloudDelegateSkill"
+        module: "omniclaude.nodes.node_skill_cloud_delegate_orchestrator.handler_cloud_delegate_skill"
+      description: "Dispatch cloud_delegate through the shared skill request handler"
+  execution_mode: "single"
+  max_timeout_seconds: 30
+
 # Dependencies
 dependencies:
   - name: handler_skill_requested
