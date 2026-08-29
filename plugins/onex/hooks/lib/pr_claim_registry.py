@@ -59,9 +59,19 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+# OMN-16983: ``onex_state`` is a sibling in this same ``lib/`` directory.  This
+# module is reached from the OMN-16485 PreToolUse guard, which runs out of the
+# plugin CACHE (``~/.claude/plugins/cache/<marketplace>/onex/<version>/hooks/lib``)
+# where no ``plugins`` package exists — an absolute
+# ``plugins.onex.hooks.lib.onex_state`` import raises ModuleNotFoundError and
+# the guard fails closed on every candidate command.  Resolve the sibling from
+# this module's own directory so both layouts work.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -75,7 +85,7 @@ def _get_claims_dir() -> Path:
     """Return the claims directory, resolved lazily."""
     global CLAIMS_DIR
     if CLAIMS_DIR is None:
-        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+        from onex_state import ensure_state_dir
 
         CLAIMS_DIR = ensure_state_dir("pr-queue", "claims")
     return CLAIMS_DIR
@@ -85,7 +95,7 @@ def _get_instance_id_path() -> Path:
     """Return the instance ID file path, resolved lazily."""
     global INSTANCE_ID_PATH
     if INSTANCE_ID_PATH is None:
-        from plugins.onex.hooks.lib.onex_state import ensure_state_path
+        from onex_state import ensure_state_path
 
         INSTANCE_ID_PATH = ensure_state_path("instance_id")
     return INSTANCE_ID_PATH
