@@ -151,6 +151,19 @@ components:
   backing_nodes:
   - node_ci_watch
   rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_ci_watch'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: cloud_delegate
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: dispatch
+  path: plugins/onex/skills/cloud_delegate/SKILL.md
+  backing_nodes: []
+  rationale: 'class=dispatch; a thin shim over one CLI call (`onex cloud delegate`),
+    which is contributed to the onex CLI by the omnimarket package''s onex.cli entry
+    point. backing_nodes is empty by design: the tenant delegation path is HTTPS to
+    the gateway, so the node that serves it runs platform-side and is not a locally
+    resolvable plugin component. Beta, not stable: this is a new customer-facing surface and the stable set is
+    frozen to [''delegate''] pending Phase 2 admission proof.'
 - id: coderabbit_triage
   kind: skill
   exposure: beta
