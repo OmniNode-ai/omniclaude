@@ -1244,6 +1244,14 @@ components:
   path: plugins/onex/hooks/scripts/onex-lane-reconcile.sh
   backing_nodes: []
   rationale: operator/CI reconciliation CLI over the OMN-16471 lane records (not a Claude event hook); exits 1 when any dispatched lane holds a failure terminal state or never reported one.
+- id: hooks/scripts/hook_edge_lane.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/hook_edge_lane.sh
+  backing_nodes: []
+  rationale: shared helper sourced by the four *_bus_mirror.sh hooks (OMN-17204), not a distributable Claude event hook of its own. Applies the declared hook-edge bus lane from hooks/contracts/hook_edge_lane.yaml AFTER common.sh, so the publish lane is a contract answer instead of whichever of ~/.omnibase/.env or ~/.claude/settings.json sourced last. Pure bash, no interpreter dependency, fail-open.
 - id: hooks/scripts/onex-paths.sh
   kind: hook
   exposure: hidden
