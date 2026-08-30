@@ -434,7 +434,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     (
       result='{'
       first=1
-      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control" "market:omnimarket" "sea:onex-self-extending-agent"; do
+      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control" "market:omnimarket"; do
         short="${pair%%:*}"; repo="${pair##*:}"
         # One call per repo; split open PRs by base branch (main vs dev/develop).
         bases=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json baseRefName --jq '[.[].baseRefName]' 2>/dev/null || echo "[]")
@@ -457,7 +457,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
       PR_DATA='{}'
     fi
     PR_PARTS=""
-    for short in core infra spi claude node dash intel mem web cc market sea; do
+    for short in core infra spi claude node dash intel mem web cc market; do
       # Value is "main/dev" (e.g. "2/1"); tolerate legacy flat integer form.
       val=$(printf '%s' "$PR_DATA" | jq -r ".${short} // \"0/0\"" 2>/dev/null) || val="0/0"
       case "$val" in */*) : ;; *) val="${val}/0" ;; esac
