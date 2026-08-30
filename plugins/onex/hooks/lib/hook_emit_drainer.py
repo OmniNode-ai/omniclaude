@@ -32,6 +32,23 @@ Backpressure: when the broker is unreachable the drainer backs off and
 leaves records queued. The journal's own bound
 (``hook_emit_journal.DEFAULT_MAX_RECORDS``) is what stops unbounded growth,
 dropping oldest and counting the drops.
+
+Which broker
+------------
+The declared one, from ``hooks/contracts/hook_edge_lane.yaml`` (OMN-17204),
+resolved by :func:`apply_declared_lane` before the first publish.
+
+This is load-bearing rather than tidy. OMN-17204 made every
+``*_bus_mirror.sh`` apply that contract; this ticket then moved the publish
+out of those scripts and into this process, so from that moment the
+lane-governed files were the only ones on the edge that no longer published
+anything. launchd starts this drainer with an environment of exactly
+``{OMNI_HOME, ONEX_STATE_DIR, HOME}`` -- no ``KAFKA_BOOTSTRAP_SERVERS`` at
+all -- and ``ModelKafkaEventBusConfig`` has no default for it, so under the
+shipped plist every publish raised ``KeyError: 'KAFKA_BOOTSTRAP_SERVERS'``
+and every record stayed queued (proven on the operator Mac 2026-08-30).
+``validate_hook_edge_lane.py`` now reads this file, so the publisher cannot
+leave the declared lane again without failing a merge gate.
 """
 
 from __future__ import annotations
@@ -63,6 +80,59 @@ def _handle_signal(signum: int, _frame: object) -> None:
     global _shutdown
     _shutdown = True
     logger.info("received signal %s; finishing current batch then exiting", signum)
+
+
+def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
+    """Point this process at the contract-declared bus lane. Returns the broker.
+
+    Sets ``KAFKA_BOOTSTRAP_SERVERS`` (what ``ModelKafkaEventBusConfig`` reads),
+    ``KAFKA_BROKERS`` (the legacy alias ``common.sh`` keeps in lock-step) and
+    ``ONEX_HOOK_EDGE_LANE`` (the lane NAME, so a log line can say which lane it
+    meant instead of making a reader re-derive it from a host:port).
+
+    The contract wins over an ambient value, in both directions: an unset var
+    is filled in, and a var naming a different lane is overwritten. That is the
+    OMN-17204 rule -- an env var that disagrees is a finding, never an input --
+    applied to the process that actually publishes.
+
+    Returns ``None`` and leaves the environment untouched when the contract
+    cannot be read. Deliberately not fatal: this is a launchd ``KeepAlive``
+    agent, so exiting here would spin the restart loop and recreate the CPU
+    burn OMN-17224 removed. Degrading to the ambient env means the next publish
+    raises a named error and the drainer backs off -- loud, bounded, and with
+    every record still on disk.
+    """
+    path = contract_path or (
+        Path(__file__).resolve().parent.parent / "contracts" / "hook_edge_lane.yaml"
+    )
+    try:
+        import hook_edge_lane
+
+        contract = hook_edge_lane.load_contract(path)
+        brokers = hook_edge_lane.resolve_bootstrap_servers(contract)
+    except Exception as exc:  # noqa: BLE001 -- degrade, do not kill the daemon
+        logger.error(
+            "could not resolve the declared hook-edge lane from %s: %s; "
+            "falling back to the ambient environment",
+            path,
+            exc,
+        )
+        return None
+
+    previous = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+    if previous and previous != brokers:
+        logger.warning(
+            "ambient KAFKA_BOOTSTRAP_SERVERS=%s disagrees with declared lane "
+            "%s (%s); the contract wins",
+            previous,
+            contract.lane,
+            brokers,
+        )
+    os.environ["KAFKA_BOOTSTRAP_SERVERS"] = brokers
+    os.environ["KAFKA_BROKERS"] = brokers
+    os.environ["ONEX_HOOK_EDGE_LANE"] = contract.lane
+    logger.info("publishing to declared lane %s (%s)", contract.lane, brokers)
+    return brokers
 
 
 class _Emitter:
@@ -166,6 +236,10 @@ def run(
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
+
+    # Before the first publish, never after: the emitter reads the broker out
+    # of the environment when it builds its adapter.
+    apply_declared_lane()
 
     emitter = _Emitter()
     logger.info("draining %s (pid %s)", journal_dir, os.getpid())

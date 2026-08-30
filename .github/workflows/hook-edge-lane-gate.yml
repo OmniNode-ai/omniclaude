@@ -26,6 +26,15 @@ on:
       - 'plugins/onex/hooks/contracts/hook_edge_lane.yaml'
       - 'plugins/onex/hooks/lib/hook_edge_lane.py'
       - 'scripts/validation/validate_hook_edge_lane.py'
+      # OMN-17224: the drainer is the process that actually publishes, and its
+      # launchd plist is the environment it publishes from. Both are gate
+      # inputs, so both must be able to TRIGGER the gate -- otherwise a PR that
+      # touches only the publisher slips past the lane policy entirely, which
+      # is how the publisher ended up off the lane in the first place.
+      # tests/hooks/test_hook_edge_lane.py::test_gate_workflow_triggers_on_every_input
+      # keeps this list and the gate's inputs in lock-step.
+      - 'plugins/onex/hooks/lib/hook_emit_drainer.py'
+      - 'scripts/launchd/ai.omninode.hook-emit-drainer.plist'
   pull_request:
     branches: [main, dev]
     paths:
@@ -33,6 +42,15 @@ on:
       - 'plugins/onex/hooks/contracts/hook_edge_lane.yaml'
       - 'plugins/onex/hooks/lib/hook_edge_lane.py'
       - 'scripts/validation/validate_hook_edge_lane.py'
+      # OMN-17224: the drainer is the process that actually publishes, and its
+      # launchd plist is the environment it publishes from. Both are gate
+      # inputs, so both must be able to TRIGGER the gate -- otherwise a PR that
+      # touches only the publisher slips past the lane policy entirely, which
+      # is how the publisher ended up off the lane in the first place.
+      # tests/hooks/test_hook_edge_lane.py::test_gate_workflow_triggers_on_every_input
+      # keeps this list and the gate's inputs in lock-step.
+      - 'plugins/onex/hooks/lib/hook_emit_drainer.py'
+      - 'scripts/launchd/ai.omninode.hook-emit-drainer.plist'
 
 jobs:
   occ-preflight:
