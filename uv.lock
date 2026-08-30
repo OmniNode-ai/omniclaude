@@ -11,7 +11,7 @@ resolution-markers = [
 [manifest]
 overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.14" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
@@ -1625,8 +1625,8 @@ wheels = [
 
 [[package]]
 name = "omnibase-infra"
-version = "0.38.9"
-source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9#e3cb9969ea0c95802421bdef141ceed7d02b68b7" }
+version = "0.38.14"
+source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.14#033890c6d412319c21e12de3129485f78b1e9b3a" }
 dependencies = [
     { name = "a2a-sdk" },
     { name = "aiofiles" },
@@ -1823,7 +1823,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.9" },
+    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.14" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" },

@@ -69,6 +69,20 @@ claimant falls back to the shared constant ``session`` so two anonymous lanes
 can never collide. OMN-17005 carries the re-registration ACs and the expiry
 condition. Both scripts stay on disk, unregistered.
 
+OMN-17168 carves an eleventh exception, and it is the first that exists to make
+an artifact *visible* rather than to refuse an action: a SessionStart
+goal-surface hook that prints the ``state_as_of`` of
+``$KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md``, its age, and the goal rows, and
+that prints the exact re-baseline command when the goal is missing or older than
+12h. It is print-only -- pure bash, no interpreter, no network, no writes -- and
+exits 0 on every user-visible outcome, so it can neither refuse nor delay a
+session. It is not a re-enable of the disabled context-injection hooks: it
+surfaces one artifact the session is already required to open from (memory
+``feedback_session_goal_from_ground_state_reconciled_to_plan``), not
+model-generated context. ``KNOWLEDGE_BASE_INTERNAL_PATH`` has no default,
+because a guessed clone would surface another checkout's goal as if it were this
+one (CLAUDE.md rule 8).
+
 Everything else stays disabled. These tests therefore lock in a *narrowed*
 baseline:
 
@@ -148,6 +162,9 @@ _POST_TOOL_USE_BUS_MIRROR_COMMAND = (
 )
 _OVERSEER_FOREGROUND_BLOCK_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_overseer_foreground_block.sh"
+)
+_SESSION_START_GOAL_SURFACE_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_goal_surface.sh"
 )
 
 # The OMN-8928/8929 dispatch-claim pair: on disk, deliberately unregistered.
@@ -275,15 +292,22 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"{subagent_stop_commands!r}"
     )
 
-    # Exactly one SessionStart command: the bus-mirror hook (OMN-16162).
+    # Exactly two SessionStart commands, in order: the bus-mirror hook
+    # (OMN-16162) then the goal-surface hook (OMN-17168). Order matters --
+    # the bus mirror backgrounds its dispatch and returns immediately, so the
+    # goal block is the last thing written to the session's opening context.
     session_start_commands = [
         hook.get("command", "")
         for group in hooks["SessionStart"]
         for hook in group.get("hooks", [])
     ]
-    assert session_start_commands == [_SESSION_START_BUS_MIRROR_COMMAND], (
+    assert session_start_commands == [
+        _SESSION_START_BUS_MIRROR_COMMAND,
+        _SESSION_START_GOAL_SURFACE_COMMAND,
+    ], (
         "hooks.json SessionStart must register EXACTLY the bus-mirror hook "
-        f"(OMN-16162 carve-out). Found: {session_start_commands!r}"
+        "(OMN-16162 carve-out) and the goal-surface hook (OMN-17168 carve-out), "
+        f"and nothing else. Found: {session_start_commands!r}"
     )
 
     # Exactly one SessionEnd command: the bus-mirror hook (OMN-16162).
@@ -456,3 +480,83 @@ def test_dispatch_claim_pair_is_not_registered() -> None:
             "defects (swallowed exit 2, non-canonical deny payload, constant "
             "claimant identity) that must be fixed first."
         )
+
+
+def test_goal_surface_carve_out_records_owner_reason_expiry_restoration() -> None:
+    """The OMN-17168 carve-out carries its own four-field record, not just the rule.
+
+    ``test_hooks_json_description_carries_baseline_disable_expiry_rule`` proves the
+    STANDING RULE text is present. That is not the same as proving any *particular*
+    carve-out obeys it: the four words appear once in the rule's own sentence, so a
+    new registration with no record at all still passes that test. This one pins the
+    record for the carve-out that is expected to expire soonest.
+
+    OMN-17168 is a stopgap by construction — it reads a Markdown file that OMN-17169
+    is scheduled to replace with a REDUCER projection. Without the RESTORATION line
+    naming the repoint, the likeliest failure is not that the hook is deleted but that
+    the projection lands and the hook keeps reading a file nobody re-baselines, which
+    is a worse outcome than not having it: a stale goal renders as a goal.
+    """
+    description = json.loads(_HOOKS_JSON.read_text()).get("description", "")
+
+    assert "OMN-17168" in description, (
+        "hooks.json description must record the SessionStart goal-surface carve-out "
+        "under its ticket (OMN-17168)."
+    )
+
+    marker = "its own carve-out record:"
+    assert marker in description, (
+        "The OMN-17168 carve-out must introduce its OWNER/REASON/EXPIRY/RESTORATION "
+        f"record with {marker!r} so the record is locatable, not merely present."
+    )
+    record = description.split(marker, 1)[1]
+
+    for field in ("OWNER", "REASON", "EXPIRY", "RESTORATION"):
+        assert field in record, (
+            f"The OMN-17168 carve-out record must name {field!r}. The STANDING RULE "
+            "requires all four; a carve-out that inherits the rule's own wording "
+            "without stating its own is the OMN-13244 shape (a registration nobody "
+            f"can later evaluate). Record found: {record!r}"
+        )
+
+    assert "OMN-17169" in record, (
+        "The OMN-17168 carve-out's EXPIRY/RESTORATION must name OMN-17169 — the node "
+        "re-baseline that turns the session goal into a projection and repoints this "
+        "hook off the Markdown file. An expiry with no ticket is not an expiry."
+    )
+
+
+def test_goal_surface_hook_never_hardcodes_a_kb_internal_path() -> None:
+    """KNOWLEDGE_BASE_INTERNAL_PATH must have no default (CLAUDE.md rules 6 and 8).
+
+    A default clone path is worse here than a hard failure: the hook would read some
+    other checkout's GOAL.md and print it as *this* session's goal, with a plausible
+    age and no signal that it came from the wrong tree. The unset branch must print
+    the variable name instead.
+    """
+    script = (
+        _REPO_ROOT
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / "session_start_goal_surface.sh"
+    )
+    source = script.read_text()
+
+    # No `${VAR:-default}` / `${VAR:=default}` on the config variable.
+    for defaulting in (
+        "KNOWLEDGE_BASE_INTERNAL_PATH:-/",
+        "KNOWLEDGE_BASE_INTERNAL_PATH:=",
+    ):
+        assert defaulting not in source, (
+            f"session_start_goal_surface.sh must not default "
+            f"KNOWLEDGE_BASE_INTERNAL_PATH ({defaulting!r} found). Rule 8: a silent "
+            "default surfaces another checkout's goal as if it were this one."
+        )
+
+    # The unset branch must name the variable so the fix is actionable.
+    assert "Missing env var: KNOWLEDGE_BASE_INTERNAL_PATH" in source, (
+        "The unset branch must print the exact missing variable name — 'cannot find "
+        "the goal' is not an actionable message."
+    )
