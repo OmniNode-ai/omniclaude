@@ -3,8 +3,19 @@
 # SPDX-License-Identifier: MIT
 
 # PostToolUse Changeset Guard Hook
-# After a git commit, checks the changeset size and warns if >15 files changed.
-# Warning-only Phase 1 — does not block, only injects advisory context.
+# After a git commit, records the changeset size to a local JSONL series when
+# more than 15 files changed.
+#
+# OMN-17207: revived from the OMN-13244 unregister as DURABLE LOCAL CAPTURE ONLY.
+# The original also injected an advisory warning into the model's context on
+# every oversized commit; that half is deliberately NOT revived --
+# per-turn context injection is precisely the token cost OMN-13244 removed. The
+# JSONL side-write is kept because it was the ONLY durable machine-readable
+# output the entire pre-OMN-13244 hook surface ever produced (2,703 lines over
+# 56 days), and this preserves continuity of that series.
+#
+# Local disk only. Nothing here reaches the bus: that stays gated behind
+# OMN-17209.
 #
 # Event:   PostToolUse
 # Matcher: Bash
@@ -29,7 +40,6 @@ TOOL_INFO=$(cat)
 
 # Guard: jq is required
 if ! command -v jq >/dev/null 2>&1; then
-    printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
@@ -40,7 +50,6 @@ TOOL_CMD=$(printf '%s' "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/n
 # Gate: only fire when the command contains "git commit"
 # -----------------------------------------------------------------------
 if [[ "$TOOL_CMD" != *"git commit"* ]]; then
-    printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
@@ -57,16 +66,12 @@ fi
 # Threshold: warn if more than 15 files changed
 THRESHOLD=15
 if [[ "$FILE_COUNT" -le "$THRESHOLD" ]] 2>/dev/null; then
-    printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
 # -----------------------------------------------------------------------
-# Emit warning via hookSpecificOutput
+# Record the event for data-driven escalation decisions (local JSONL only).
 # -----------------------------------------------------------------------
-WARNING="[Changeset Guard] WARNING: Large changeset ($FILE_COUNT files changed in last commit). Consider splitting into focused commits. Large changesets are harder to review, more likely to contain scope creep, and riskier to revert."
-
-# Log the event for data-driven escalation decisions
 LOG_DIR="${HOME}/.claude/changeset-guard-events"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 printf '{"timestamp":"%s","event":"large_changeset","file_count":%d,"threshold":%d}\n' \
@@ -75,20 +80,8 @@ printf '{"timestamp":"%s","event":"large_changeset","file_count":%d,"threshold":
     "$THRESHOLD" \
     >> "$LOG_DIR/events.jsonl" 2>/dev/null || true
 
-# Inject the warning into the output
-MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
-    --arg warning "$WARNING" \
-    '.hookSpecificOutput = (.hookSpecificOutput // {}) |
-     .hookSpecificOutput.hookEventName = "PostToolUse" |
-     .hookSpecificOutput.additionalContext = (
-       ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $warning)
-       | ltrimstr("\n\n")
-     )' 2>/dev/null)
-
-if [[ -n "$MODIFIED" && "$MODIFIED" != "null" ]]; then
-    printf '%s\n' "$MODIFIED"
-else
-    printf '%s\n' "$TOOL_INFO"
-fi
-
+# Emit NOTHING on stdout. The advisory injection this hook used to write is the
+# context-injection class OMN-13244 disabled; and echoing $TOOL_INFO back would
+# re-emit the raw tool_response that the OMN-16277 secret-redaction guard masks
+# on this same Bash matcher.
 exit 0

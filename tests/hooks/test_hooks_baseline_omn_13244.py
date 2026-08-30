@@ -83,6 +83,27 @@ model-generated context. ``KNOWLEDGE_BASE_INTERNAL_PATH`` has no default,
 because a guessed clone would surface another checkout's goal as if it were this
 one (CLAUDE.md rule 8).
 
+OMN-17207 carves a twelfth exception, and it is the second pure *re-enable*: the
+local-capture pair ``post_tool_use_auto_checkpoint.sh`` and
+``post_tool_use_changeset_guard.sh``, revived from the OMN-13244 unregister as
+DURABLE LOCAL CAPTURE ONLY. The 2026-08-30 archaeology of that unregister found
+the surface had produced almost nothing durable -- ~160k trajectory invocations
+wrote zero entries, and the only machine-readable series that survived was
+changeset-guard's 2,703-line JSONL. These two are revived because they are the
+only ones whose captured fields overlap the C11 git-delta set (commit sha,
+branch, message, files-changed, PR number+state).
+
+Three defects the archaeology found are fixed as a condition of re-registering:
+the ``printf '%s' "$TOOL_INFO"`` passthrough echo is removed from every branch
+(it re-emitted the raw ``tool_response`` that the OMN-16277 guard masks on this
+same Bash matcher); changeset-guard's advisory ``additionalContext`` injection is
+NOT revived, only its JSONL side-write (per-turn injection is the token cost
+OMN-13244 removed); and auto-checkpoint's ``gh pr view`` is bounded by
+``timeout 5`` with its retention cap raised from 5 to 200 (the 5-file cap is why
+only one 8-hour window of checkpoints survived to be examined). Neither hook
+publishes to the bus -- that half stays gated behind OMN-17209 -- so this is not
+an OMN-16162-class transport re-enable.
+
 Everything else stays disabled. These tests therefore lock in a *narrowed*
 baseline:
 
@@ -102,6 +123,8 @@ baseline:
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -165,6 +188,16 @@ _OVERSEER_FOREGROUND_BLOCK_COMMAND = (
 )
 _SESSION_START_GOAL_SURFACE_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_goal_surface.sh"
+)
+
+# OMN-17207 twelfth carve-out: the two LOCAL-ONLY capture hooks revived from
+# the OMN-13244 unregister. Neither publishes to the bus (that stays gated
+# behind OMN-17209) and neither emits anything on stdout.
+_POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_auto_checkpoint.sh"
+)
+_POST_TOOL_USE_CHANGESET_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_changeset_guard.sh"
 )
 
 # The OMN-8928/8929 dispatch-claim pair: on disk, deliberately unregistered.
@@ -261,17 +294,33 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert post_tool_use_commands == [
         _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND,
         _POST_TOOL_USE_BUS_MIRROR_COMMAND,
+        _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND,
+        _POST_TOOL_USE_CHANGESET_GUARD_COMMAND,
     ], (
         "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
-        "(OMN-16277 carve-out) and the bus-mirror hook (OMN-16162 S1 carve-out) "
-        f"and nothing else. Found: {post_tool_use_commands!r}"
+        "(OMN-16277 carve-out), the bus-mirror hook (OMN-16162 S1 carve-out), and "
+        "the two OMN-17207 local-only capture hooks (auto-checkpoint, "
+        f"changeset-guard) and nothing else. Found: {post_tool_use_commands!r}"
     )
     post_tool_use_matchers = [
         group.get("matcher", "") for group in hooks["PostToolUse"]
     ]
-    assert post_tool_use_matchers == ["Bash", ".*"], (
-        "PostToolUse secret-redaction guard must match Bash only and the "
-        f"bus-mirror hook must match every tool (.*). Found: {post_tool_use_matchers!r}"
+    assert post_tool_use_matchers == ["Bash", ".*", "Bash"], (
+        "PostToolUse secret-redaction guard must match Bash only, the bus-mirror "
+        "hook must match every tool (.*), and the OMN-17207 local-capture group "
+        f"must match Bash only. Found: {post_tool_use_matchers!r}"
+    )
+
+    # The OMN-17207 local-capture hooks MUST be registered AFTER the
+    # secret-redaction guard. `updatedToolOutput` is last-writer-wins
+    # (docs/research/2026-06-12-updated-tool-output-shape-probe.md, probe 3),
+    # so the redaction guard may only be overwritten by a hook that emits the
+    # field -- and these two emit nothing at all. Pinning the order here keeps
+    # a future reorder from silently un-redacting Bash output.
+    assert post_tool_use_commands.index(
+        _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND
+    ) < post_tool_use_commands.index(_POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND), (
+        "the secret-redaction guard must stay ahead of the OMN-17207 capture hooks"
     )
 
     # Exactly three SubagentStop commands are wired: the secret-leak guard,
@@ -559,4 +608,331 @@ def test_goal_surface_hook_never_hardcodes_a_kb_internal_path() -> None:
     assert "Missing env var: KNOWLEDGE_BASE_INTERNAL_PATH" in source, (
         "The unset branch must print the exact missing variable name — 'cannot find "
         "the goal' is not an actionable message."
+    )
+
+
+# ---------------------------------------------------------------------------
+# OMN-17207: the two LOCAL-ONLY capture hooks revived from the OMN-13244
+# unregister. These tests are behavioural -- they drive the real scripts --
+# because the whole point of the revival is that the previous iteration
+# captured nothing across ~160k invocations while looking registered.
+# ---------------------------------------------------------------------------
+
+_REVIVED_LOCAL_CAPTURE_SCRIPTS = (
+    "post_tool_use_auto_checkpoint.sh",
+    "post_tool_use_changeset_guard.sh",
+)
+
+
+def _run_hook(
+    script_name: str, payload: dict, home: Path
+) -> subprocess.CompletedProcess:
+    """Drive a hook script exactly as the harness does: JSON on stdin."""
+    script = _REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts" / script_name
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+    env["CLAUDE_PLUGIN_ROOT"] = str(_REPO_ROOT / "plugins" / "onex")
+    # Force the mask open so the gate is not what makes the test pass.
+    env.pop("OMNICLAUDE_HOOKS_DISABLED", None)
+    env.pop("ONEX_HOOKS_MASK", None)
+    return subprocess.run(
+        ["bash", str(script)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+        check=False,  # the hook's own exit code is the assertion
+    )
+
+
+@pytest.mark.parametrize("script_name", _REVIVED_LOCAL_CAPTURE_SCRIPTS)
+def test_revived_capture_hook_emits_nothing_on_stdout(
+    script_name: str, tmp_path: Path
+) -> None:
+    """Neither revived hook may write to stdout, on any path.
+
+    This is the contract that lets them be registered at all. Plain PostToolUse
+    stdout is debug-log-only, but a hook that echoes its whole input back is one
+    schema change away from re-emitting raw ``tool_response`` -- the exact text
+    the OMN-16277 secret-redaction guard exists to mask, on the same matcher.
+    The pre-OMN-13244 versions of both scripts did precisely that
+    (``printf '%s\\n' "$TOOL_INFO"`` on every branch). Silence is the fix.
+    """
+    payload = {
+        "session_id": "test-session",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo hello"},
+        "tool_response": {"stdout": "AKIAIOSFODNN7EXAMPLE", "stderr": ""},
+    }
+    result = _run_hook(script_name, payload, tmp_path)
+
+    assert result.returncode == 0, (
+        f"{script_name} must exit 0 (fail-open). stderr: {result.stderr!r}"
+    )
+    assert result.stdout == "", (
+        f"{script_name} must emit NOTHING on stdout. A passthrough echo re-emits "
+        "the raw tool_response the OMN-16277 guard masks on this same matcher. "
+        f"Found: {result.stdout!r}"
+    )
+
+
+@pytest.mark.parametrize("script_name", _REVIVED_LOCAL_CAPTURE_SCRIPTS)
+def test_revived_capture_hook_never_injects_context(script_name: str) -> None:
+    """No ``additionalContext`` / ``updatedToolOutput`` in either revived script.
+
+    OMN-13244 unregistered these hooks for token cost -- per-turn context
+    injection at ~250-300 tokens/message. Reviving the durable-capture half
+    while leaving the injection in would re-create the exact cost that caused
+    the baseline. The JSONL side-write is kept; the warning injection is not.
+    """
+    script = _REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts" / script_name
+    # Comments are stripped deliberately: the scripts document *what was removed
+    # and why*, and that prose necessarily names the fields. The invariant under
+    # test is that no executable line emits them.
+    code = "\n".join(
+        line
+        for line in script.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    for banned in ("additionalContext", "updatedToolOutput", "hookSpecificOutput"):
+        assert banned not in code, (
+            f"{script_name} must not emit {banned!r} — these hooks are revived as "
+            "durable LOCAL capture only (OMN-17207), not as context injection. "
+            "The injection half is what OMN-13244 killed."
+        )
+
+
+@pytest.mark.parametrize("script_name", _REVIVED_LOCAL_CAPTURE_SCRIPTS)
+def test_revived_capture_hook_does_not_publish_to_the_bus(script_name: str) -> None:
+    """Local capture only — the bus half stays gated behind OMN-17209.
+
+    These hooks write to the local filesystem and nothing else. Any dispatch,
+    publish, or HTTP call from this seam would put agent-attributable payloads
+    on the bus ahead of the OMN-17209 egress/redaction decision.
+    """
+    script = _REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts" / script_name
+    code = "\n".join(
+        line
+        for line in script.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    for banned in (
+        "node_event_emit_effect",
+        "hook_emit_append",
+        "rpk",
+        "curl",
+        "kafka",
+    ):
+        assert banned not in code, (
+            f"{script_name} must not reference {banned!r} — OMN-17207 revives these "
+            "as local-only capture; publishing stays gated behind OMN-17209."
+        )
+
+
+def test_auto_checkpoint_bounds_its_network_call(tmp_path: Path) -> None:
+    """``gh pr view`` must be bounded by an explicit timeout.
+
+    This is the one unbounded-latency call in either revived hook, and it sits
+    on the PostToolUse path. OMN-17224 (the fast-append + singleton-drainer
+    split) is NOT merged yet, so nothing upstream amortises a slow hook: on
+    2026-08-30 the measured emitter load already reached 598 events / 10 s with
+    895 windows at or above the 14-concurrent stacking threshold. An unbounded
+    network call re-creates that failure mode one commit at a time.
+    """
+    script = (
+        _REPO_ROOT
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / "post_tool_use_auto_checkpoint.sh"
+    )
+    code_lines = [
+        line
+        for line in script.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    assert any("gh pr view" in line for line in code_lines), (
+        "the PR-state capture is part of the OMN-17207 field set"
+    )
+    gh_line = next(line for line in code_lines if "gh pr view" in line)
+    assert "timeout" in gh_line, (
+        "the `gh pr view` call must be wrapped in `timeout` so a hung network call "
+        f"cannot stall the PostToolUse path. Found: {gh_line!r}"
+    )
+
+
+def test_auto_checkpoint_writes_a_checkpoint_on_git_commit(tmp_path: Path) -> None:
+    """Live synthetic invocation: the hook must actually write the file.
+
+    The archaeology's central finding is that the previous hook iteration looked
+    registered and produced zero durable data. A registration test alone would
+    reproduce that mistake, so this drives the real script against a real git
+    repo and asserts the artefact exists with the fields the archaeology named.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=env)
+    (repo / "a.txt").write_text("one\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "OMN-17207 first"],
+        check=True,
+        env=env,
+    )
+    (repo / "a.txt").write_text("two\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "OMN-17207 second"],
+        check=True,
+        env=env,
+    )
+
+    home = tmp_path / "home"
+    home.mkdir()
+    script = (
+        _REPO_ROOT
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / "post_tool_use_auto_checkpoint.sh"
+    )
+    hook_env = dict(os.environ)
+    hook_env["HOME"] = str(home)
+    hook_env["CLAUDE_PLUGIN_ROOT"] = str(_REPO_ROOT / "plugins" / "onex")
+    hook_env.pop("ONEX_HOOKS_MASK", None)
+    result = subprocess.run(
+        ["bash", str(script)],
+        input=json.dumps(
+            {
+                "session_id": "s",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git commit -m 'OMN-17207 second'"},
+                "tool_response": {"stdout": "", "stderr": ""},
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env=hook_env,
+        cwd=str(repo),
+        timeout=90,
+        check=False,  # the hook's own exit code is the assertion
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "", f"must stay silent on stdout, found {result.stdout!r}"
+
+    written = sorted((home / ".claude" / "handoffs").glob("checkpoint-*.md"))
+    assert written, (
+        "auto-checkpoint fired on a real `git commit` and wrote NO file — this is "
+        "the exact zero-capture failure the archaeology documented."
+    )
+    body = written[-1].read_text()
+    for field in (
+        "commit_hash:",
+        "branch:",
+        "OMN-17207 second",
+        "type: auto-checkpoint",
+    ):
+        assert field in body, f"checkpoint missing {field!r}. Got:\n{body}"
+
+
+def test_changeset_guard_writes_jsonl_above_threshold(tmp_path: Path) -> None:
+    """Live synthetic invocation of the retained JSONL side-write.
+
+    The archaeology found this was the ONLY durable machine-readable output the
+    whole pre-OMN-13244 hook surface ever produced (2,703 lines over 56 days).
+    It is kept for continuity of that one series; the warning injection is not.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=env)
+    (repo / "seed.txt").write_text("seed\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "seed"], check=True, env=env
+    )
+    for i in range(20):  # 20 > the 15-file threshold
+        (repo / f"f{i}.txt").write_text(f"{i}\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "big"], check=True, env=env
+    )
+
+    home = tmp_path / "home"
+    home.mkdir()
+    script = (
+        _REPO_ROOT
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / "post_tool_use_changeset_guard.sh"
+    )
+    hook_env = dict(os.environ)
+    hook_env["HOME"] = str(home)
+    hook_env["CLAUDE_PLUGIN_ROOT"] = str(_REPO_ROOT / "plugins" / "onex")
+    hook_env.pop("ONEX_HOOKS_MASK", None)
+    result = subprocess.run(
+        ["bash", str(script)],
+        input=json.dumps(
+            {
+                "session_id": "s",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git commit -m big"},
+                "tool_response": {"stdout": "", "stderr": ""},
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env=hook_env,
+        cwd=str(repo),
+        timeout=90,
+        check=False,  # the hook's own exit code is the assertion
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "", f"must stay silent on stdout, found {result.stdout!r}"
+
+    events = home / ".claude" / "changeset-guard-events" / "events.jsonl"
+    assert events.exists(), "changeset guard wrote no events.jsonl above threshold"
+    record = json.loads(events.read_text().strip().splitlines()[-1])
+    assert record["event"] == "large_changeset"
+    assert record["file_count"] == 20, record
+    assert record["threshold"] == 15, record
+
+
+def test_local_capture_carve_out_records_owner_reason_expiry_restoration() -> None:
+    """The OMN-17207 carve-out carries its own four-field STANDING-RULE record."""
+    description = json.loads(_HOOKS_JSON.read_text()).get("description", "")
+    assert "OMN-17207" in description, (
+        "hooks.json description must record the local-capture carve-out under "
+        "its ticket (OMN-17207)."
+    )
+    marker = "OMN-17207 carve-out record:"
+    assert marker in description, (
+        f"The OMN-17207 carve-out must introduce its record with {marker!r}."
+    )
+    record = description.split(marker, 1)[1]
+    for field in ("OWNER", "REASON", "EXPIRY", "RESTORATION"):
+        assert field in record, (
+            f"The OMN-17207 carve-out record must name {field!r}. Record: {record!r}"
+        )
+    assert "OMN-17209" in record, (
+        "The OMN-17207 record must name OMN-17209 — the bus-egress gate that "
+        "these hooks are deliberately kept local-only ahead of."
     )
