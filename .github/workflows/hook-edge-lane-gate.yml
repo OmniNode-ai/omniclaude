@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Hook Edge Lane Gate
+
+# OMN-17204. Blocking gate on the hook edge's bus lane policy.
+#
+# The hook edge had no declared lane: which .201 broker a *_bus_mirror.sh
+# published to was settled per invocation by shell sourcing order between
+# ~/.omnibase/.env, ~/.claude/settings.json and the mac-dev overlay -- three
+# surfaces, three answers. That produced three wrong conclusions (OMN-16162
+# flipped Done -> Backlog on a wrong-lane probe, OMN-16996 filed then
+# falsified, beta/GOAL.md row 0 written unfalsifiable). Detection that is not
+# a merge gate gets ignored, so this ships as one.
+#
+# Static mode only. `--live` probes ~/.omnibase/.env and ~/.claude/settings.json,
+# neither of which exists on a runner; a check that passes because its inputs
+# are absent is worse than no check, so live mode stays off CI and runs on the
+# operator Mac (and via the pre-commit hook of the same name).
+
+on:
+  push:
+    branches: [main, 'hotfix/**']
+    paths:
+      - 'plugins/onex/hooks/scripts/**'
+      - 'plugins/onex/hooks/contracts/hook_edge_lane.yaml'
+      - 'plugins/onex/hooks/lib/hook_edge_lane.py'
+      - 'scripts/validation/validate_hook_edge_lane.py'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'plugins/onex/hooks/scripts/**'
+      - 'plugins/onex/hooks/contracts/hook_edge_lane.yaml'
+      - 'plugins/onex/hooks/lib/hook_edge_lane.py'
+      - 'scripts/validation/validate_hook_edge_lane.py'
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  hook-edge-lane-gate:
+    needs: occ-preflight
+    name: Hook Edge Lane Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python -m pip install --disable-pip-version-check "PyYAML>=6.0"
+
+      - name: Validate hook-edge lane pairing
+        working-directory: ${{ github.workspace }}
+        run: python scripts/validation/validate_hook_edge_lane.py

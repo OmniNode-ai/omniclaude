@@ -1039,6 +1039,18 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-17204: the hook edge's bus lane is declared, not derived from the
+      # sourcing order between ~/.omnibase/.env and ~/.claude/settings.json.
+      # Static half only -- `--live` reads host files a CI runner does not have,
+      # and a check that passes on absent inputs is worse than no check.
+      - id: hook-edge-lane-gate
+        name: Hook edge bus lane pairing
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_hook_edge_lane.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # OMN-3777: Block cloud bus references in source code
       - id: no-cloud-bus
         name: Block cloud bus references

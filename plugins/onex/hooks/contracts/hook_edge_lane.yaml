@@ -1,0 +1,156 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# hook_edge_lane.yaml — THE declared bus lane for the Claude Code hook edge (OMN-17204).
+#
+# ---------------------------------------------------------------------------
+# Why this file exists
+# ---------------------------------------------------------------------------
+# Before OMN-17204 there was no declared answer to "which lane does the hook
+# edge publish to, and which lane does the cloud relay consume from." The
+# answer was produced, per invocation, by shell sourcing order:
+# `plugins/onex/hooks/scripts/common.sh` sources ~/.omnibase/.env under
+# `set -a` AFTER the Claude session env is already in place, so that file beat
+# ~/.claude/settings.json's own KAFKA_BOOTSTRAP_SERVERS export — and a third
+# surface, omnibase_infra/config/overlays/mac-dev.yaml, which the emit node's
+# own contract.yaml names as the authority, declared a fourth value
+# (localhost:19092) that matched neither live surface.
+#
+# That undeclared fact cost real time three times:
+#   * OMN-16162 flipped Done -> Backlog on a probe run against the wrong lane.
+#   * OMN-16996 was filed ("hooks report publish SUCCESS while zero events
+#     reach the broker") and later falsified for the same reason.
+#   * beta/GOAL.md row 0's hook clause named a lane it could never observe.
+#
+# This file is the single authority. `scripts/hook_edge_lane.sh` applies it
+# AFTER common.sh in every *_bus_mirror.sh, so no .env can pick a lane, and
+# `scripts/validation/validate_hook_edge_lane.py` fails the build if any of
+# that stops being true.
+#
+# ---------------------------------------------------------------------------
+# Scope boundary: this is the RULE, not the INSTANCE
+# ---------------------------------------------------------------------------
+# OMN-17034 owns the instance — the live `omninode-gateway-forwarder` is
+# attached to the DEV lane network while the hook edge publishes to the
+# STABILITY lane, so no hook event can currently cross to the cloud relay.
+# This file deliberately does NOT silently repoint the publisher to make that
+# symptom disappear: repointing would move hook rows off the lane the .201
+# projection (OMN-16994/16993) reads, which is a behaviour ruling OMN-17034
+# has to make explicitly. What this file changes is that the pairing is now
+# declared and machine-checked, so the mismatch is a check failure with a
+# named cause instead of a zero row count someone has to interpret.
+#
+# ---------------------------------------------------------------------------
+# Maintenance
+# ---------------------------------------------------------------------------
+# `known_lanes` is derived from the canonical compose lane files in
+# omnibase_infra (`docker/docker-compose.infra.yml` for dev,
+# `docker/docker-compose.stability-test.yml`, `docker/docker-compose.prod.yml`).
+# When a lane's external broker port or network name changes there, update it
+# here in the same PR — omnibase_infra's deploy/lane-census/lane-manifest.yaml
+# carries a `hook_edge:` pointer back to this file so an audit reads the lane
+# fact from the lane map instead of re-deriving it from .env sourcing order.
+#
+# verified: 2026-08-30 via
+#   grep -nE '9092|name: omnibase-infra' omnibase_infra/docker/docker-compose.{infra,stability-test,prod}.yml
+# (dev 19092 / omnibase-infra-network; stability 39092 /
+#  omnibase-infra-stability-test-network; prod ${PROD_REDPANDA_EXTERNAL_PORT:-49092}
+#  / omnibase-infra-prod-network)
+---
+schema_version: "1.0.0"
+name: hook_edge_lane
+ticket_id: "OMN-17204"
+summary: >
+  Declares the one bus lane the Claude Code hook edge publishes to and the
+  cloud relay must consume from. Replaces resolution-by-shell-sourcing-order
+  across ~/.omnibase/.env, ~/.claude/settings.json and the mac-dev overlay.
+
+# ---------------------------------------------------------------------------
+# The pairing. ONE lane name, read by BOTH sides.
+# ---------------------------------------------------------------------------
+# The publisher's broker and the relay's required network are both DERIVED
+# from this single field via `known_lanes`, so a declaration in which the
+# publisher and the consumer disagree is unrepresentable.
+lane: "stability-test"
+
+# The host the operator Mac dials. Lane ports below are host-side published
+# ports on that host; containers on a lane network use redpanda:9092 instead.
+lane_host: "192.168.86.201"  # onex-allow-internal-ip
+
+known_lanes:
+  dev:
+    compose_project: "omnibase-infra"
+    network: "omnibase-infra-network"
+    bootstrap_servers: "192.168.86.201:19092"  # onex-allow-internal-ip onex-allow-kafka-broker
+  stability-test:
+    compose_project: "omnibase-infra-stability-test"
+    network: "omnibase-infra-stability-test-network"
+    bootstrap_servers: "192.168.86.201:39092"  # onex-allow-internal-ip onex-allow-kafka-broker
+  prod:
+    compose_project: "omnibase-infra-prod"
+    network: "omnibase-infra-prod-network"
+    bootstrap_servers: "192.168.86.201:49092"  # onex-allow-internal-ip onex-allow-kafka-broker
+
+# ---------------------------------------------------------------------------
+# Consumer side of the same pairing.
+# ---------------------------------------------------------------------------
+# `required_network` MUST equal known_lanes[lane].network. The validator
+# enforces that equality, which is what turns "publisher and consumer are on
+# different lanes" from an offset-reading exercise into a failing check.
+relay:
+  container: "omninode-gateway-forwarder"
+  required_network: "omnibase-infra-stability-test-network"
+  role: >
+    Sole process bridging a local .201 broker to the cloud MSK relay. Anything
+    it cannot see on its attached lane network can never reach the cloud
+    gateway, independent of every other link in the hooks->relay chain.
+
+# ---------------------------------------------------------------------------
+# The hook topics this pairing governs.
+# ---------------------------------------------------------------------------
+# Named by their canonical-registry constant, never by literal. The topic
+# STRING has exactly one home -- src/omniclaude/hooks/topic_registry.yaml,
+# which is what TopicBase and emit_client_wrapper already read -- so this file
+# cannot become a second place a topic name is spelled, and a rename in the
+# registry cannot leave a stale literal behind here. The validator resolves
+# these constants through the registry and cross-checks the resolved strings
+# against the --event-type each *_bus_mirror.sh actually emits, so a new hook
+# cannot join the edge without joining the lane policy.
+topic_registry: "src/omniclaude/hooks/topic_registry.yaml"
+governed_topics:
+  - "SESSION_STARTED"
+  - "SESSION_ENDED"
+  - "TOOL_EXECUTED"
+  - "PROMPT_SUBMITTED"
+
+# ---------------------------------------------------------------------------
+# Surfaces explicitly demoted from authority (AC3).
+# ---------------------------------------------------------------------------
+# These are not banned — they still carry bootstrap-class config for other
+# consumers. They are simply no longer the hook edge's answer. The resolver
+# overrides whatever they set, and `validate_hook_edge_lane.py --live` reports
+# which of them disagree so the disagreement is legible rather than decisive.
+non_authoritative_surfaces:
+  - "~/.omnibase/.env"
+  - "~/.claude/settings.json"
+  - "omnibase_infra/config/overlays/mac-dev.yaml"
+
+# ---------------------------------------------------------------------------
+# Golden path — the behaviour this contract is responsible for.
+# ---------------------------------------------------------------------------
+golden_path:
+  - A *_bus_mirror.sh sources common.sh (which loads ~/.omnibase/.env under `set -a`), then sources hook_edge_lane.sh — the declared lane wins and KAFKA_BOOTSTRAP_SERVERS is the contract's answer, whatever .env said
+  - A hook invoked with KAFKA_BOOTSTRAP_SERVERS preset to another lane still publishes to the declared lane — proven live 2026-08-30T15:50:34Z, marker OMN17204LaneProof-1788105033 read back 8 hits on stability, 0 on dev
+  - relay.required_network disagrees with known_lanes[lane].network — validate_hook_edge_lane.py exits 1 naming the publisher/consumer split (the OMN-17034 defect, made checkable)
+  - A bus-mirror script drops the resolver, or sources it BEFORE common.sh — validate_hook_edge_lane.py exits 1 naming the file and both line numbers
+  - A governed topic constant leaves src/omniclaude/hooks/topic_registry.yaml — validate_hook_edge_lane.py exits 1 rather than governing an empty topic set
+  - The contract is unreadable at hook time — the resolver leaves the environment untouched and returns 0, degrading to pre-OMN-17204 behaviour for one invocation instead of killing the session; the merge gate is what keeps a malformed contract off a machine
+  - A demoted host surface (~/.omnibase/.env, ~/.claude/settings.json) disagrees — `--live` names it and exits 1 on the operator Mac; the contract still wins at hook time, and CI never runs --live because neither file exists on a runner
+
+dod_evidence:
+  - kind: tests
+    description: "Contract, resolver, and gate proven, including both mismatch directions"
+    command: "uv run pytest tests/hooks/test_hook_edge_lane.py -v"
+  - kind: ci
+    description: "hook-edge-lane-gate is a required check"
+    command: "gh pr checks"
