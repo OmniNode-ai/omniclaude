@@ -95,6 +95,16 @@ source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || {
     cat >/dev/null 2>/dev/null || true
     exit 0
 }
+
+# OMN-17204: apply the declared hook-edge lane AFTER common.sh.
+# common.sh sources ~/.omnibase/.env and $PROJECT_ROOT/.env under `set -a`, so
+# before this ticket the publish lane was whatever those files happened to say
+# last -- racing ~/.claude/settings.json, which says a different lane. The
+# contract (hooks/contracts/hook_edge_lane.yaml) is now the authority and this
+# line is where it wins. Order is enforced by
+# scripts/validation/validate_hook_edge_lane.py, not left to convention.
+# shellcheck source=hook_edge_lane.sh
+source "$(dirname "${BASH_SOURCE[0]}")/hook_edge_lane.sh" 2>/dev/null || true
 onex_hook_gate USER_PROMPT_SUBMIT || {
     cat >/dev/null 2>/dev/null || true
     exit 0
