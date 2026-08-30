@@ -299,13 +299,18 @@ repos:
         stages: [pre-commit]
 
       # OMN-13873: dep-provenance gate — forbid first-party git-source overrides.
-      # omnibase-core / omnibase-spi / omnibase-compat must resolve from PyPI, not
-      # git commits/branches/tags, on dev/main (recurrence guard for PR #2184's
-      # UNRELEASED-commit overrides that passed all CI green). Pure static +
-      # offline; onex-change-control / omnibase-infra are intentionally exempt.
+      # omnibase-core / omnibase-spi / omnibase-compat / omnibase-infra must resolve
+      # from PyPI, not git commits/branches/tags, on dev/main (recurrence guard for
+      # PR #2184's UNRELEASED-commit overrides that passed all CI green). Pure static
+      # + offline; onex-change-control is intentionally exempt (immutable-main pin
+      # model), as are siblings that publish no PyPI distribution yet.
+      # OMN-17176: omnibase-infra is NO LONGER exempt. Its git override was
+      # unreachable by `uv lock --upgrade-package`, so every release cascade was a
+      # silent no-op and the pin rotted to v0.38.9 -- which still advertised the
+      # `onex run` entry point that collides with omnibase-core 0.47.x.
       # Mirrors the required CI job in .github/workflows/dep-provenance-gate.yml.
       - id: check-dep-provenance
-        name: Forbid first-party git-source overrides (OMN-13873)
+        name: Forbid first-party git-source overrides (OMN-13873, OMN-17176)
         entry: python3 scripts/check_dep_provenance.py
         language: system
         files: ^pyproject\.toml$

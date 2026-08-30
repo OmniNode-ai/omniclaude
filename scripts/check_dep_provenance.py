@@ -14,14 +14,23 @@ dependency is sourced from git instead of PyPI.
 
 Forbidden first-party deps (both hyphen and underscore spellings):
 
-    omnibase-core   omnibase-spi   omnibase-compat
+    omnibase-core   omnibase-spi   omnibase-compat   omnibase-infra
 
 A ``[tool.uv.sources]`` entry for any of the above with a ``git`` / ``rev`` /
 ``branch`` / ``tag`` key is a forbidden override and fails the gate.
 
-``onex-change-control`` is deliberately NOT checked — it follows an
-immutable-main pin release model (different from the three PyPI-released deps),
-so its git pin is intentional and must remain allowed.
+``onex-change-control`` is deliberately NOT checked — it publishes no PyPI
+distribution and follows an immutable-main pin release model, so its git pin is
+intentional and must remain allowed.
+
+``omninode-intelligence`` and ``omnimarket`` are also git-pinned here and are
+NOT checked, but for a weaker reason: both DO publish to PyPI (0.24.0 and 0.4.10
+as of 2026-08-30), so both carry the same override-masking risk this gate exists
+to catch. They stay exempt only because their pins are load-bearing on
+unreleased commits (see the ``[tool.uv.sources]`` comments in pyproject.toml;
+omnimarket's release is tracked by OMN-16997). Retiring those two pins is
+follow-up work, not a settled exemption — do not read their absence here as a
+claim that they are safe.
 
 Escape hatch (Rule-10 style): a forbidden source line may carry an inline
 comment ``# raw-override-ok: <ticket>`` with a NON-EMPTY token. This exempts the
@@ -60,6 +69,17 @@ _FORBIDDEN_PACKAGES: frozenset[str] = frozenset(
         "omnibase-core",
         "omnibase-spi",
         "omnibase-compat",
+        # OMN-17176: omnibase-infra joined the set. It was exempt while it had no
+        # usable tag, so the gate reported OK against a live git override that
+        # `uv lock --upgrade-package` structurally cannot move -- every
+        # omnibase_infra release cascade against omniclaude was a silent no-op and
+        # the pin rotted at v0.38.9 while PyPI reached 0.38.14. That is why the
+        # OMN-16761 fix (retiring the legacy `onex run` entry-point alias) never
+        # arrived, and why the core 0.47.1 bump made the packaged `onex` CLI raise
+        # ONEX_CORE_064_DUPLICATE_REGISTRATION on import in every fresh venv.
+        # omnibase-infra publishes to PyPI, so it has a movable channel and belongs
+        # under the same provenance rule as its siblings.
+        "omnibase-infra",
     }
 )
 

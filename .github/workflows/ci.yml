@@ -116,6 +116,18 @@ jobs:
             attempt=$((attempt + 1))
           done
 
+      # OMN-17176: invoke the console script the repo's own pre-commit hooks
+      # depend on. When #2076 bumped omnibase-core to 0.47.1 against a stale
+      # omnibase-infra v0.38.9 pin, `onex` raised
+      # ONEX_CORE_064_DUPLICATE_REGISTRATION on import and every onex-backed hook
+      # died -- while dev CI stayed green, because no required check had ever run
+      # it. Cheap (no network, no services) and placed in an always-required job.
+      - name: Packaged onex CLI imports
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run python scripts/check_onex_cli_imports.py
+          uv run onex --help > /dev/null
+
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
         run: uv run ruff format --check src/ tests/
