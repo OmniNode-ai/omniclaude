@@ -271,7 +271,12 @@ class GatewayTransport:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
-        self._client = client or httpx.Client(timeout=timeout)
+        self._client = (
+            client
+            or httpx.Client(  # no-contract-check: GatewayTransport is the hook-event gateway contract transport.
+                timeout=timeout
+            )
+        )
         self._owns_client = client is None
 
     def close(self) -> None:
