@@ -92,15 +92,31 @@ if missing_ids:
     )
     sys.exit(1)
 
-failed_paths: list[str] = []
-for path in receipt_paths:
-    text = path.read_text()
+def receipt_has_pass(text: str) -> bool:
     has_top_level_pass = re.search(r"(?m)^status:\s*[\"']?PASS[\"']?\s*$", text)
     has_supersession_pass = re.search(
         r"(?m)^\s+\"?status\"?:\s*[\"']?PASS[\"']?\s*$",
         text,
     )
-    if not (has_top_level_pass or has_supersession_pass):
+    return bool(has_top_level_pass or has_supersession_pass)
+
+
+superseded_paths: set[str] = set()
+for path in receipt_paths:
+    text = path.read_text()
+    if not receipt_has_pass(text):
+        continue
+    match = re.search(r"(?m)^supersedes:\s*[\"']?([^\"'\s]+)[\"']?\s*$", text)
+    if match:
+        superseded_paths.add(match.group(1))
+
+failed_paths: list[str] = []
+for path in receipt_paths:
+    text = path.read_text()
+    receipt_relpath = path.relative_to(occ_root).as_posix()
+    if receipt_relpath in superseded_paths:
+        continue
+    if not receipt_has_pass(text):
         failed_paths.append(str(path))
 
 if failed_paths:

@@ -1,0 +1,48 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-17018"
+title: "Sync the dispatch queue drainer skill shim to its backing node"
+summary: >
+  The omniclaude distribution must keep the dispatch_queue_drainer skill shim
+  aligned with the OMN-17018 backing node and hook inventory. This contract
+  covers the documentation/plugin side of the dispatch queue drainer rollout.
+
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+
+evidence_requirements:
+  - kind: "tests"
+    description: "Hook edge, hook inventory, and disable-control canary tests pass for the updated skill/hook surface."
+    command: "uv run pytest tests/hooks/test_hook_edge_lane.py tests/hooks/test_hook_inventory.py tests/hooks/test_hook_disable_control_canary.py -q"
+  - kind: "ci"
+    description: "Central OCC DoD evidence for OMN-17018 materializes from PASS receipts, including PASS supersessions of initial PENDING receipts."
+    command: "bash scripts/materialize-dod-evidence-from-occ.sh OMN-17018 .onex_change_control_evidence"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-omniclaude-hook-surface"
+    description: >
+      The omniclaude hook and skill surface remains internally consistent after
+      syncing the dispatch_queue_drainer shim. Verified locally in the PR
+      worktree after merging current dev.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/hooks/test_hook_edge_lane.py tests/hooks/test_hook_inventory.py tests/hooks/test_hook_disable_control_canary.py -q"
+  - id: "dod-occ-supersession-materialization"
+    description: >
+      The DoD evidence materializer accepts a PASS supersession for an initial
+      OCC receipt that was minted PENDING by the autobind producer and later
+      replaced by a product-repo CI receipt.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/test_dod_occ_materialization.py -q"
