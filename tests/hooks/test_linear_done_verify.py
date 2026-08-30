@@ -131,6 +131,60 @@ class TestParsing:
         repos = sorted(r.repo or "" for r in refs)
         assert repos == ["OmniNode-ai/omnibase_core", "OmniNode-ai/omniclaude"]
 
+    # OMN-14882: Linear's rich-text layer rewrites a pasted
+    # `github.com/.../pull/N` URL into its own internal embed at save time.
+    # Two rewritten shapes have been observed live (both un-matchable by
+    # `_PR_URL_RE`, which requires the literal `github.com` substring that
+    # Linear's rewrite deletes):
+    #
+    #   1. an XML-ish `<pull-request id="..." href="...">owner/repo#N</pull-request>`
+    #      tag (current live form, verbatim from OMN-16495's description,
+    #      2026-08-30).
+    #   2. a markdown link `[owner/repo#N](https://linear.app/.../review/...)`
+    #      (older live form, OMN-14882's original repro, 2026-07-21).
+    #
+    # Both carry the real `owner/repo#N` citation in their visible/inner text
+    # even though the URL itself is unusable. The guard must extract it from
+    # there rather than from the URL.
+    def test_extracts_owner_repo_hash_n_from_linear_pull_request_tag(self) -> None:
+        desc = (
+            '> **RESOLVED by** <pull-request id="57fbf7f9-ad47-4116-b249-'
+            'd5ecd8483cf1" href="https://linear.app/omninode/review/'
+            "fixomn-16705-restore-the-two-in-place-rewritten-node-migrations-"
+            'and-76b6c4c30313">OmniNode-ai/omnibase_infra#2921</pull-request> '
+            "— `fix(OMN-16705): restore the two in-place-rewritten node "
+            "migrations and enforce append-only migration history`, merged "
+            "2026-08-27T08:18:21Z."
+        )
+        refs = parse_pr_refs(desc, default_repo="OmniNode-ai/omnibase_infra")
+        assert len(refs) == 1
+        assert refs[0].number == 2921
+        assert refs[0].repo == "OmniNode-ai/omnibase_infra"
+        assert refs[0].bare is False
+
+    def test_extracts_owner_repo_hash_n_from_linear_markdown_link_rewrite(
+        self,
+    ) -> None:
+        desc = (
+            "[OmniNode-ai/onex-self-extending-agent#126]"
+            "(https://linear.app/omninode/review/"
+            "docsomn-11494-readme-and-demo-guide-credibility-batch-10-fixes-"
+            "3f880b86f427)"
+        )
+        refs = parse_pr_refs(desc, default_repo="OmniNode-ai/omniclaude")
+        assert len(refs) == 1
+        assert refs[0].number == 126
+        assert refs[0].repo == "OmniNode-ai/onex-self-extending-agent"
+
+    def test_owner_repo_hash_n_dedupes_against_full_url_same_pr(self) -> None:
+        desc = (
+            "https://github.com/OmniNode-ai/omnibase_infra/pull/2921 (aka "
+            "<pull-request>OmniNode-ai/omnibase_infra#2921</pull-request>)"
+        )
+        refs = parse_pr_refs(desc)
+        assert len(refs) == 1
+        assert refs[0].number == 2921
+
 
 class TestVerify:
     def test_allows_when_all_prs_merged(self) -> None:
