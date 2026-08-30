@@ -16,7 +16,7 @@ dependencies = [
     # the local legacy model when newer core releases move the export path.
     "omnibase-core>=0.47.0,<0.48.0",
     "omnibase-spi>=0.23.1,<0.24.0",
-    "omnibase-infra>=0.38.3,<0.39.0",
+    "omnibase-infra>=0.38.14,<0.39.0",
     "omnimarket>=0.4.0",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
@@ -245,7 +245,7 @@ build-backend = "hatchling.build"
 override-dependencies = [
     "omnibase-core>=0.47.0,<0.48.0",
     "omnibase-spi>=0.23.1,<0.24.0",
-    "omnibase-infra>=0.38.3,<0.39.0",
+    "omnibase-infra>=0.38.14,<0.39.0",
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
     # OMN-15968: omninode-intelligence's own pin (v0.4.0) otherwise conflicts
     # with our direct omnimarket rev below -- force our rev to win transitively.
@@ -273,21 +273,19 @@ override-dependencies = [
 # Release v0.25.1: pin to paired release PR heads until tags are published.
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
 # gate passes; the version constraint above governs core resolution.
-# OMN-15968: bumped from v0.38.3 -- omnimarket's dev tip (pinned above, for
-# node_event_emit_effect) transitively imports omnibase_infra.event_bus.kafka_auth
-# (OMN-12986 MSK IAM auth), added after v0.38.3 with no newer tag yet cut.
-# OMN-15604 (cascade-leg recovery): v0.38.9 is now tagged and a strict
-# descendant of the a6d52de2 commit this was pinned to (kafka_auth.py still
-# present) -- moved to the tag now that one exists, inside the
-# override-dependencies range below -- no range change.
-# OMN-17176: v0.38.9 predates omnibase_infra#2934 (OMN-16761), which retired the
-# legacy `onex run` entry-point alias. omnibase-core 0.47.x owns `run` natively and
-# HARD-FAILS on the collision (ONEX_CORE_064_DUPLICATE_REGISTRATION), so with the
-# 0.47.1 bump (#2076) the packaged `onex` CLI raised on import in every fresh venv --
-# taking the `validate-spdx-headers` pre-commit gate (and every other onex-backed
-# hook) down with it. v0.38.14 carries the fix and is a strict descendant of v0.38.9,
-# inside the unchanged >=0.38.3,<0.39.0 override range above.
-omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.14" }  # pragma: allowlist secret
+# OMN-17176 / OMN-17177: omnibase-infra resolves from PyPI. The [tool.uv.sources]
+# git override that used to live here (last at rev v0.38.14) is REMOVED. A git
+# override is unreachable by `uv lock --upgrade-package`, which re-resolves against
+# the SAME override and reports no lockfile change -- so every omnibase_infra release
+# cascade against omniclaude was a silent no-op, and the pin rotted to v0.38.9 while
+# PyPI moved to 0.38.14. That is how the OMN-16761 fix (omnibase_infra#2934, which
+# retired the legacy `onex run` entry-point alias) never reached omniclaude: core
+# 0.47.x owns `run` natively and its OMN-16967 loader HARD-FAILS on the collision
+# (ONEX_CORE_064_DUPLICATE_REGISTRATION), so the packaged `onex` CLI raised on import
+# in every fresh venv and took every onex-backed pre-commit hook down with it.
+# The >=0.38.14 floor above is what now carries that fix; do not re-add an override.
+# scripts/check_dep_provenance.py enforces this -- omnibase-infra is a forbidden
+# git-source override as of OMN-17176.
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.

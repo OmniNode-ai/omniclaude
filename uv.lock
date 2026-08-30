@@ -11,7 +11,7 @@ resolution-markers = [
 [manifest]
 overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.14" },
+    { name = "omnibase-infra", specifier = ">=0.38.14,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
@@ -1626,7 +1626,7 @@ wheels = [
 [[package]]
 name = "omnibase-infra"
 version = "0.38.14"
-source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.14#033890c6d412319c21e12de3129485f78b1e9b3a" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "a2a-sdk" },
     { name = "aiofiles" },
@@ -1679,6 +1679,10 @@ dependencies = [
     { name = "textual" },
     { name = "uvicorn" },
     { name = "watchdog" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/e3/8a48e10e14c4631319d1a2523548104f24bd780df620fe0207fb5145ec8e/omnibase_infra-0.38.14.tar.gz", hash = "sha256:c51d5f5928910c504882699888f588842b1d791da0ad1ff2c85c90428237fa95", size = 13352144, upload-time = "2026-08-30T13:33:52.697Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/18/cc2075059ba34e06a7f587bbaabdea3eaf9947120517328e2b1c467af974/omnibase_infra-0.38.14-py3-none-any.whl", hash = "sha256:45e2677f1740c821a53361f79986f7e86c9ea8addf9e45b515a36d120e86a2cb", size = 6212351, upload-time = "2026-08-30T13:33:50.319Z" },
 ]
 
 [[package]]
@@ -1823,7 +1827,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?rev=v0.38.14" },
+    { name = "omnibase-infra", specifier = ">=0.38.14,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" },

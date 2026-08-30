@@ -1,0 +1,81 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-17176"
+title: "Resolve omnibase-infra from PyPI and gate the packaged onex CLI in CI"
+summary: >
+  omniclaude pinned omnibase-infra through a [tool.uv.sources] git override,
+  which uv lock --upgrade-package structurally cannot move, so every
+  omnibase_infra release cascade was a silent no-op and the pin rotted at
+  v0.38.9. That is why the OMN-16761 fix retiring the legacy `onex run`
+  entry-point alias never arrived, and why the core 0.47.1 bump (#2076) made the
+  packaged `onex` CLI raise ONEX_CORE_064_DUPLICATE_REGISTRATION on import in
+  every fresh venv, taking every onex-backed pre-commit hook with it. This
+  removes the override, floors the range at >=0.38.14, widens the dep-provenance
+  gate to cover omnibase-infra, and adds the CI assertion that the packaged CLI
+  imports at all.
+
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+
+evidence_requirements:
+  - kind: "tests"
+    description: "The dep-provenance gate rejects an omnibase-infra git override in every spelling, and still allows the intentionally git-pinned siblings."
+    command: "uv run pytest -q tests/scripts/test_check_dep_provenance_infra_omn17176.py tests/scripts/test_check_dep_provenance.py --tb=short"
+  - kind: "tests"
+    description: "The onex CLI import check passes against the live environment and reports both claimants on a duplicate entry-point name."
+    command: "uv run pytest -q tests/scripts/test_check_onex_cli_imports_omn17176.py --tb=short"
+  - kind: "ci"
+    description: "The packaged onex CLI imports and its onex.cli entry-point set is collision-free."
+    command: "uv run python scripts/check_onex_cli_imports.py && uv run onex --help"
+  - kind: "ci"
+    description: "Touched scripts and tests pass ruff format/check."
+    command: "uv run ruff format --check scripts/check_dep_provenance.py scripts/check_onex_cli_imports.py tests/scripts && uv run ruff check scripts/check_dep_provenance.py scripts/check_onex_cli_imports.py tests/scripts"
+
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+
+dod_evidence:
+  - id: "dod-infra-resolves-from-pypi"
+    description: >
+      The [tool.uv.sources] git override for omnibase-infra is removed and the
+      [project.dependencies] range is floored at >=0.38.14,<0.39.0 so PyPI cannot
+      resolve back to a version advertising the colliding `run` entry point.
+      Verified: uv lock reports "omnibase-infra v0.38.14 (033890c6) -> v0.38.14"
+      — same version, provenance moved from git to PyPI, no version drift. The
+      omnibase_infra.event_bus.kafka_auth import that OMN-15968 cited as the
+      original reason for the override still resolves at the PyPI-published
+      0.38.14.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python -c \"import omnibase_infra.event_bus.kafka_auth\" && uv run python scripts/check_dep_provenance.py"
+  - id: "dod-provenance-gate-covers-infra"
+    description: >
+      omnibase-infra is added to _FORBIDDEN_PACKAGES so the override cannot
+      return. Proven RED-first: before the fix the five reject cases failed and
+      the gate reported "OK" against the live override; mutation-verified by
+      removing the single set entry, which returns the same five to RED.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest -q tests/scripts/test_check_dep_provenance_infra_omn17176.py --tb=short"
+  - id: "dod-onex-cli-import-is-a-ci-signal"
+    description: >
+      scripts/check_onex_cli_imports.py is wired into the required Code Quality
+      job. Verified RED/GREEN on one controlled variable in an isolated venv with
+      core pinned at 0.47.1: infra 0.38.9 reproduces
+      "[ONEX_CORE_064_DUPLICATE_REGISTRATION] the 'onex.cli' entry point 'run'
+      (from omnibase_infra) collides" and the checker exits 1; infra 0.38.14
+      reports 7 extensions attached without collision and exits 0.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run python scripts/check_onex_cli_imports.py && uv run onex --help"
+      - check_type: "command"
+        check_value: "uv run pytest -q tests/scripts/test_check_onex_cli_imports_omn17176.py --tb=short"
