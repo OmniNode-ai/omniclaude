@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Hook Inventory Gate
+
+# OMN-17020. Blocking gate on hook inventory parity.
+#
+# OMN-13244 unregistered the whole hook surface for a measurement baseline with
+# no expiry, no re-enable ticket and no inventory of what went dark. The
+# enforcing hook for the foreground rule then sat on disk, switched off, while
+# that rule was corrected by hand ~61 times over 16 of 18 days
+# (docs/tracking/2026-08-29-beta-off-the-rails-analysis.md, root cause RC-B).
+# Nothing failed, because nothing was checking.
+#
+# This is the check. It fails CLOSED and names the hook when
+# plugins/onex/hooks/contracts/hook_inventory.yaml, hooks.json and the scripts
+# on disk stop agreeing, or when a declared disable outlives its own review
+# date.
+#
+# Static mode only, deliberately. `--live` reads ONEX_HOOKS_MASK, which
+# common.sh re-reads from ~/.omnibase/.env — a file no runner has. A check that
+# passes because its input is absent is worse than no check, so the mask
+# surface belongs to session_start_hook_parity.sh on the operator Mac, not
+# here. Same boundary hook-edge-lane-gate draws.
+#
+# Detection that is not a merge gate gets ignored (CLAUDE.md rule 5), which is
+# why this ships as a workflow and a pre-commit hook in the same change as the
+# inventory it enforces.
+
+on:
+  push:
+    branches: [main, 'hotfix/**']
+    paths:
+      - 'plugins/onex/hooks/hooks.json'
+      - 'plugins/onex/hooks/contracts/hook_inventory.yaml'
+      - 'plugins/onex/hooks/lib/hook_inventory.py'
+      - 'plugins/onex/hooks/lib/hook_bits.sh'
+      - 'plugins/onex/hooks/scripts/**'
+      - 'scripts/validation/validate_hook_inventory.py'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'plugins/onex/hooks/hooks.json'
+      - 'plugins/onex/hooks/contracts/hook_inventory.yaml'
+      - 'plugins/onex/hooks/lib/hook_inventory.py'
+      - 'plugins/onex/hooks/lib/hook_bits.sh'
+      - 'plugins/onex/hooks/scripts/**'
+      - 'scripts/validation/validate_hook_inventory.py'
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  hook-inventory-gate:
+    needs: occ-preflight
+    name: Hook Inventory Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python -m pip install --disable-pip-version-check "PyYAML>=6.0"
+
+      - name: Validate hook inventory parity
+        working-directory: ${{ github.workspace }}
+        env:
+          # The mask is a per-machine surface; clear any inherited value so a
+          # runner cannot accidentally start reporting on one.
+          ONEX_HOOKS_MASK: ''
+        run: python scripts/validation/validate_hook_inventory.py
