@@ -495,3 +495,37 @@ def test_validator_fails_when_plist_hardcodes_a_lane(tmp_path: Path) -> None:
         "a second place a lane endpoint is spelled, which is the whole defect"
     )
     assert "hook-emit-drainer.plist" in (proc.stdout + proc.stderr)
+
+
+def test_gate_workflow_triggers_on_every_input() -> None:
+    """Every file the gate READS must also be able to TRIGGER it.
+
+    A path-filtered workflow that does not list one of its own inputs is
+    detection, not enforcement: a PR touching only that file skips the gate
+    entirely. That is precisely how the publisher ended up off the declared
+    lane -- OMN-17204's gate governed four shell scripts, and OMN-17224 moved
+    the publish into a fifth file the filter never named.
+    """
+    workflow = _REPO_ROOT / ".github/workflows/hook-edge-lane-gate.yml"
+    text = workflow.read_text(encoding="utf-8")
+
+    inputs = (
+        "plugins/onex/hooks/scripts/",
+        "plugins/onex/hooks/contracts/hook_edge_lane.yaml",
+        "plugins/onex/hooks/lib/hook_edge_lane.py",
+        "plugins/onex/hooks/lib/hook_emit_drainer.py",
+        "scripts/validation/validate_hook_edge_lane.py",
+        "scripts/launchd/ai.omninode.hook-emit-drainer.plist",
+    )
+    missing = [rel for rel in inputs if rel not in text]
+    assert not missing, (
+        f"{workflow} does not trigger on {missing}. The gate reads these files, "
+        "so a PR that changes only one of them would never run the gate."
+    )
+
+    # Both triggers (push and pull_request), not just one.
+    for rel in inputs:
+        assert text.count(rel) >= 2, (
+            f"{rel} appears in only one trigger block of {workflow}; it must be "
+            "listed under both `push` and `pull_request`."
+        )
