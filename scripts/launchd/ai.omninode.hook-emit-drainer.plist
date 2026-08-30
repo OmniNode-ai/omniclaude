@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.hook-emit-drainer.plist — launchd KeepAlive daemon for the
+  hook-emit journal drainer (OMN-17224).
+
+  Why a resident process: before OMN-17224 every Claude Code tool call
+  forked a Python that imported the omnimarket handler stack and published
+  to Kafka inline. Profiling put 31.08s of a 31.65s handle() inside a
+  lazily-imported omnibase_infra chain building ~2,497 Pydantic classes.
+  Fourteen of those ran concurrently at ~270% CPU on the operator Mac.
+
+  The hook now only appends to a local journal (sub-100ms, stdlib only).
+  This daemon pays that import ONCE for the life of the process and drains
+  the journal, so the cost is amortized across every tool call instead of
+  repaid by each one.
+
+  KeepAlive (not a periodic job): launchd periodic jobs do not fire
+  reliably on this Mac (memory feedback_local_durability); a resident
+  KeepAlive process sidesteps that failure mode, matching the
+  ai.omninode.worktree-reaper precedent.
+
+  Interpreter: the brew python3.13 literal path per CLAUDE.md rule 11 —
+  launchd runs with a restricted PATH, so $(brew --prefix) expansion is not
+  available, and the macOS Local Network grant is per-binary. A
+  uv-managed interpreter silently EHOSTUNREACHes on the LAN publish to the
+  .201 broker (memory feedback_macos_lan_grant_per_binary).
+
+  Template: __OMNI_HOME__, __HOME__ and __PYTHON__ are expanded at install
+  time by install-hook-emit-drainer.sh.
+
+  Install:
+    bash omniclaude/scripts/install-hook-emit-drainer.sh
+
+  Uninstall:
+    bash omniclaude/scripts/install-hook-emit-drainer.sh --uninstall
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.hook-emit-drainer</string>
+
+  <!-- Shipped disabled; the install script flips this and loads it. -->
+  <key>Disabled</key>
+  <true/>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__OMNI_HOME__/omniclaude/plugins/onex/hooks/lib/hook_emit_drainer.py</string>
+    <string>--log-level</string>
+    <string>INFO</string>
+  </array>
+
+  <!-- Resident: launchd restarts it if it exits. The singleton flock in
+       hook_emit_journal.SingletonLock guarantees a restart cannot produce a
+       second concurrent publisher, and the kernel frees that lock when the
+       holder dies, so a killed drainer never wedges the system. -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Restart backoff: without this, a drainer that fails fast (e.g. an
+       unimportable omnimarket during a venv rebuild) would be respawned in
+       a tight loop, recreating the CPU burn this ticket removes. -->
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <!-- Low priority: telemetry drain must never compete with the operator's
+       own work for CPU. This is the whole point of the ticket. -->
+  <key>Nice</key>
+  <integer>10</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+    <key>ONEX_STATE_DIR</key>
+    <string>__OMNI_HOME__/.onex_state</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>__OMNI_HOME__</string>
+
+  <key>StandardOutPath</key>
+  <string>__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log</string>
+  <key>StandardErrorPath</key>
+  <string>__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log</string>
+</dict>
+</plist>

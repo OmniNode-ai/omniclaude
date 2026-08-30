@@ -157,13 +157,22 @@ def test_post_tool_use_bus_mirror_invokes_direct_dispatch_with_correct_args(
         time.sleep(0.05)
 
     assert marker.exists(), (
-        "node_event_emit_effect_dispatch.py was never invoked -- expected "
+        "hook_emit_append.py was never invoked -- expected "
         f"argv marker at {marker}.\nstderr: {result.stderr}"
     )
     argv_lines = marker.read_text().splitlines()
-    assert any(
+    # OMN-17224: the hook now invokes the stdlib-only fast-path appender,
+    # not the old inline publisher. The publish moved to the singleton
+    # drainer; the hook's argv contract is otherwise unchanged.
+    assert any(line.endswith("hook_emit_append.py") for line in argv_lines), (
+        f"Expected the fast-path append script in argv, got: {argv_lines}"
+    )
+    assert not any(
         line.endswith("node_event_emit_effect_dispatch.py") for line in argv_lines
-    ), f"Expected the dispatch script path in argv, got: {argv_lines}"
+    ), (
+        "hook must not invoke the inline publisher -- that is the "
+        "OMN-17224 per-tool-call ~30s import regression"
+    )
     assert "--event-type" in argv_lines
     event_type_idx = argv_lines.index("--event-type") + 1
     assert argv_lines[event_type_idx] == "onex.evt.omniclaude.tool-executed.v1"
