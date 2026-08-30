@@ -157,12 +157,26 @@ section (the taxonomy's destination for standards-type content) and thinned here
 
 ## 5. Current Runtime Note (verified against code on this refresh)
 
-**All onex plugin hooks are currently disabled.** The `hooks` block in
-`plugins/onex/hooks/hooks.json` is empty (`{}`) for a measurement baseline, so Claude
-Code invokes no onex hooks. The hook scripts (`plugins/onex/hooks/scripts/`) and Python
-handler modules (`plugins/onex/hooks/lib/`) remain on disk — re-enabling is a pure config
-change. The architecture docs above describe the wired behavior when
-hooks are registered.
+**Most onex plugin hooks are disabled; a named set is not.** This paragraph
+previously read "All onex plugin hooks are currently disabled ... the `hooks` block
+is empty (`{}`)". That was true of the original OMN-13244 measurement baseline and
+has been false since the first carve-out (OMN-13856); `hooks.json` registers 16
+commands today. Corrected under OMN-17020, which exists because a stale claim about
+what is switched on is the same defect as a switched-off hook nobody recorded.
+
+Do not read the registered set from prose. The authority is the typed inventory at
+`plugins/onex/hooks/contracts/hook_inventory.yaml`: every registration is declared
+there with an owner, a ticket and either an end-to-end canary or a stated reason one
+cannot be run, and every deliberate disable carries owner, reason, an absolute
+`review_by` date and a restoration. Parity between the inventory, `hooks.json` and
+the scripts on disk is enforced by `hook-inventory-gate` (fails closed) and reported
+at session start by `session_start_hook_parity.sh` (warns, never blocks).
+
+The context-injection and measurement hooks that OMN-13244 unregistered are still
+off. Their scripts (`plugins/onex/hooks/scripts/`) and handler modules
+(`plugins/onex/hooks/lib/`) remain on disk, so re-enabling one stays a pure config
+change — plus an inventory entry. The architecture docs above describe the wired
+behavior when hooks are registered.
 
 The delegation Kafka bridge is also no longer wired; delegation runs only on
 explicit `/onex:delegate` invocation. See the status banner in

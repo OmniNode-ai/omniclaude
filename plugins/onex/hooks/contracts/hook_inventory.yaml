@@ -1,0 +1,850 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# hook_inventory.yaml — THE typed inventory of every hook this plugin is
+# expected to register, and of every hook deliberately left dark (OMN-17020).
+#
+# ---------------------------------------------------------------------------
+# Why this file exists
+# ---------------------------------------------------------------------------
+# OMN-13244 gutted `hooks.json` to `{}` for a measurement baseline. That change
+# carried no expiry, no re-enable ticket, and — the part this file addresses —
+# **no inventory of what went dark**. The consequence
+# (`docs/tracking/2026-08-29-beta-off-the-rails-analysis.md`, root cause RC-B):
+# `pre_tool_use_overseer_foreground_block.sh` sat on disk, unregistered, while
+# the foreground rule it enforces was corrected by hand ~61 times over 16 of 18
+# days. Nobody noticed, because nothing in the repo could answer the question
+# "which hooks are supposed to be on?"
+#
+# OMN-17006 wrote the corrective rule (OWNER / REASON / EXPIRY / RESTORATION)
+# into the `description` of `hooks.json` and asserted its presence with a test.
+# That fixes the ONE disable it addressed. This file generalises it: the rule
+# becomes a typed record per disable, and "which hooks are supposed to be on"
+# becomes a declaration a merge gate can fail on.
+#
+# ---------------------------------------------------------------------------
+# What is checked, and where
+# ---------------------------------------------------------------------------
+# `plugins/onex/hooks/lib/hook_inventory.py` computes parity between three
+# surfaces — this file, `hooks.json`, and the scripts on disk — and is driven
+# from two entry points:
+#
+#   * `scripts/validation/validate_hook_inventory.py` (CI, `hook-inventory-gate`)
+#     Static. Fails CLOSED on any drift: an expected hook that is no longer
+#     registered, a registration nobody declared, a matcher or ordering change,
+#     a script deleted from disk, a disable whose review date has passed.
+#
+#   * `plugins/onex/hooks/scripts/session_start_hook_parity.sh` (session bootstrap)
+#     Same parity, plus the live `ONEX_HOOKS_MASK` surface, and **warns only**.
+#     It always exits 0: a hook-manifest mismatch must never make the machine
+#     unusable. Blocking session start on an inventory disagreement would be a
+#     larger outage than the one it reports.
+#
+# ---------------------------------------------------------------------------
+# The second disable surface: ONEX_HOOKS_MASK
+# ---------------------------------------------------------------------------
+# `hooks.json` is not the only way a hook goes dark. Most guards call
+# `onex_hook_gate <BIT>` (see `plugins/onex/hooks/lib/hook_bits.sh`), and a bit
+# cleared in `ONEX_HOOKS_MASK` — which `common.sh` re-reads from
+# `~/.omnibase/.env` under `set -a`, so it beats the caller's environment —
+# turns a fully registered hook into a no-op with no repo-visible signal.
+#
+# That is not hypothetical. Building this file found `WORKTREE_GUARD`
+# (`0x800000000000000`) absent from the operator Mac's live mask
+# `0x3ffffeffffffffe`, i.e. `pre_tool_use_worktree_guard.sh` is registered under
+# the OMN-14330 carve-out and dark in practice — the RC-B shape again, one
+# surface over. So each entry declares its `mask.gate_call` and whether that
+# name is actually defined in `hook_bits.sh` (`mask.bit_defined`), both
+# machine-checked. A `gate_call` naming an undefined bit is a gate that can
+# never fire: `hook_bits_bit_for_name` returns non-zero, `onex_hook_gate`
+# returns 0, and the hook runs unconditionally. Four registered hooks are in
+# that state today; they are recorded as `bit_defined: false` rather than
+# quietly rounded to "ungated", because the difference is exactly the kind of
+# fact this inventory exists to hold.
+#
+# The mask is a per-machine environment fact, so it is reported by the session
+# bootstrap check and never by CI — a runner has no `~/.omnibase/.env`, and a
+# check that passes because its input is absent is worse than no check (the
+# same boundary `validate_hook_edge_lane.py --live` draws).
+#
+# ---------------------------------------------------------------------------
+# The third disable surface: OMNICLAUDE_MODE (and it defaults to OFF)
+# ---------------------------------------------------------------------------
+# `plugins/onex/lib/mode.sh` resolves "lite" for any cwd outside
+# omni_home/omni_worktrees with no local `omnibase_core` — i.e. lite is the
+# DEFAULT on a CI runner and in every external repo — and nine registered hooks
+# exit 0 silently under it. Three of those nine are ENFORCEMENT guards: the
+# Done-flip gate, the lane-liveness guard, and the Bash secret-redaction guard.
+# A lite-mode session has none of them and nothing says so.
+#
+# This was found the hard way while building this file: three canaries passed
+# on the operator Mac (a worktree under omni_worktrees resolves to full) and
+# failed on the CI runner with `exit 0` and empty output. So each entry declares
+# `lite_mode_exit`, machine-checked against the script's early-exit COMPARISON
+# (`"$(omniclaude_mode)" == "lite"`) rather than a bare mention of the function
+# — `session_start_hook_parity.sh` calls it to REPORT the mode and must not be
+# counted as exiting on it. Like the mask, it is a per-session fact: the
+# bootstrap check reports DARK_IN_LITE_MODE, CI never does, and the canary
+# harness pins OMNICLAUDE_MODE=full so it tests the hook rather than the host.
+#
+# ---------------------------------------------------------------------------
+# Maintenance
+# ---------------------------------------------------------------------------
+# The mechanical half of `expected_hooks` (script / event / matcher / order) is
+# generated from the live `hooks.json`, which is why this file starts green:
+#
+#   python scripts/validation/validate_hook_inventory.py --generate
+#
+# The semantic half (owner, ticket, purpose, enforcement, canary) is authored.
+# Adding a registration to `hooks.json` without adding it here fails the gate,
+# by design: an undeclared hook is how an inventory rots.
+#
+# verified: 2026-08-30 — every `canary:` block below was executed end to end
+# against the script named in the same entry, in the worktree, via the runner in
+# `tests/hooks/test_hook_disable_control_canary.py`.
+---
+schema_version: "1.0.0"
+name: hook_inventory
+ticket_id: "OMN-17020"
+summary: >
+  Typed inventory of every hook expected to be registered by this plugin, and
+  of every hook deliberately left unregistered. Parity between this file,
+  hooks.json and the scripts on disk is a merge gate (fail closed) and a
+  session-bootstrap warning (never blocking).
+
+hooks_json: "plugins/onex/hooks/hooks.json"
+scripts_dir: "plugins/onex/hooks/scripts"
+hook_bits: "plugins/onex/hooks/lib/hook_bits.sh"
+
+# ---------------------------------------------------------------------------
+# expected_hooks — every registration hooks.json MUST carry, in order.
+# ---------------------------------------------------------------------------
+# `order` is the flat index of the command within its event class, counting
+# across matcher groups. It is pinned because order is behaviour: the OMN-17168
+# goal surface must print AFTER the bus mirror backgrounds its dispatch, so the
+# goal block is the last thing in the session's opening context.
+#
+# `enforcement: true` means the hook can REFUSE or REWRITE a tool call. Every
+# such hook MUST carry a `canary:` block — an end-to-end negative test run
+# against the registered script itself. `enforcement: false` means the hook can
+# only observe; it MUST carry a `no_canary_reason` or a `pass_through` canary
+# proving it never refuses.
+expected_hooks:
+  - script: "pre_tool_use_done_flip_guard.sh"
+    event: "PreToolUse"
+    matcher: "^mcp__linear-server__(save_issue|update_issue)$"
+    order: 0
+    ticket: "OMN-13856"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Linear flip to Done when the ticket carries no merged-PR
+      citation and no PASS node_dod_verify receipt on OCC main. Fail-closed:
+      no fake Done.
+    enforcement: true
+    lite_mode_exit: true
+    mask:
+      gate_call: "DONE_FLIP_GUARD"
+      bit_defined: false
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "mcp__linear-server__save_issue"
+        tool_input:
+          id: "OMN-99999"
+          state: "Done"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "no_durable_evidence"
+        stdout_absent: []
+
+  - script: "pre_tool_use_worktree_guard.sh"
+    event: "PreToolUse"
+    matcher: "Bash"
+    order: 1
+    ticket: "OMN-14330"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      OMN-7018 canonical-root enforcement, extracted to a minimal script:
+      blocks `git worktree add` targeting anything outside
+      $OMNI_HOME/omni_worktrees.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: "WORKTREE_GUARD"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "git worktree add /tmp/onex-canary-outside-root -b canary"
+      env:
+        OMNI_HOME: "{repo_root}"
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "must be created under"
+        stdout_absent: []
+
+  - script: "pre_tool_use_pr_ownership_guard.sh"
+    event: "PreToolUse"
+    matcher: "Bash"
+    order: 2
+    ticket: "OMN-16485"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a cross-lane or unattributable GitHub mutation (`gh pr
+      close/reopen`, `gh run cancel`, `gh workflow run`, `gh api`). Ownership
+      that cannot be established fails closed.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: "BASH_GUARD"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "gh pr close 999999 --repo OmniNode-ai/omniclaude"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "REFUSED"
+        stdout_absent: []
+
+  - script: "pre_tool_use_lane_open.sh"
+    event: "PreToolUse"
+    matcher: "^(Task|Agent|Workflow)$"
+    order: 3
+    ticket: "OMN-16471"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Records a durable OPEN lane record at the dispatch seam. Pure observer:
+      always exits 0, always silent, so it can never refuse or delay a
+      dispatch.
+    enforcement: false
+    lite_mode_exit: false
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "pass_through"
+      stdin:
+        tool_name: "Task"
+        tool_input:
+          description: "hook-inventory canary dispatch"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+
+  - script: "pre_tool_use_lane_liveness_guard.sh"
+    event: "PreToolUse"
+    matcher: "^SendMessage$"
+    order: 4
+    ticket: "OMN-16478"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a message that declares another lane dead or authorizes a
+      takeover of its work without an independent filesystem probe, and
+      refuses a bare harness ref used as an address.
+    enforcement: true
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "SendMessage"
+        tool_input:
+          to: "abcdef"
+          message: "picking up your work"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "raw harness ref"
+        stdout_absent: []
+
+  - script: "pre_tool_use_overseer_foreground_block.sh"
+    event: "PreToolUse"
+    matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
+    order: 5
+    ticket: "OMN-17006"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Blocks foreground Bash/Edit/Write against repo paths while
+      $ONEX_STATE_DIR/overseer-active.flag marks an overseer contract as
+      driving. This is the hook RC-B left dark; it is the reason this
+      inventory exists.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: "OVERSEER_FOREGROUND_BLOCK"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "git push origin dev"
+      env:
+        ONEX_STATE_DIR: "{state_dir}"
+        ONEX_REGISTRY_ROOT: "{repo_root}"
+      fixtures:
+        overseer_flag: |
+          contract_path: /canary/hook-inventory.yaml
+          active_phase: canary
+          started_at: 2026-01-01T00:00:00Z
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "Overseer contract"
+        stdout_absent: []
+
+  - script: "post_tool_use_secret_redact_guard.sh"
+    event: "PostToolUse"
+    matcher: "Bash"
+    order: 0
+    ticket: "OMN-16277"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Masks secret-shaped patterns in raw Bash tool_response text via
+      hookSpecificOutput.updatedToolOutput before they land in the transcript.
+    enforcement: true
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      # `redact` rather than `block`: this guard's enforcement is a rewrite,
+      # not a refusal, so "did it fire" is proven by the value being GONE from
+      # the emitted output — never by an exit code alone.
+      kind: "redact"
+      stdin:
+        tool_name: "Bash"
+        tool_response:
+          stdout: "api creds: sk-CANARYcanaryCANARYcanary01"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains:
+          - "updatedToolOutput"
+          - "REDACTED"
+        stdout_absent:
+          - "sk-CANARYcanaryCANARYcanary01"
+
+  - script: "post_tool_use_bus_mirror.sh"
+    event: "PostToolUse"
+    matcher: ".*"
+    order: 1
+    ticket: "OMN-16162"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Direct-dispatches a tool-executed event (tool name, timing, interrupted
+      flag only) to the local bus. Backgrounded and fail-open.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "POST_TOOL_USE_BUS_MIRROR"
+      bit_defined: false
+    canary: null
+    no_canary_reason: >
+      Running it publishes a synthetic row to whichever .201 lane
+      hook_edge_lane.yaml declares (OMN-17204). A canary that writes real
+      events onto the lane the observability projection reads would corrupt
+      the surface it is meant to protect. It is an observer, so A17's
+      "every enforcement mechanism" does not reach it; its behaviour is
+      covered by tests/hooks/test_hook_edge_lane.py.
+
+  - script: "workspace_reconcile_tick.sh"
+    event: "PostToolUse"
+    matcher: ".*"
+    order: 2
+    ticket: "OMN-17190"
+    owner: "Jonah Gray / the workspace-reconcile lane"
+    purpose: >
+      At most once every ONEX_RECONCILE_TICK_SECONDS it fetches each canonical
+      clone, fast-forwards the CLEAN ones on dev/main, and reconciles the
+      venvs. Runs detached, exits 0 on every path, never pulls into a dirty
+      clone.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary: null
+    no_canary_reason: >
+      Running it fetches and fast-forwards the operator's canonical clones and
+      rebuilds venvs. A canary that mutates the workspace it is checking is a
+      worse instrument than no canary. It is an observer of the workspace, not
+      an enforcement mechanism, so A17 does not reach it; OMN-17190 carries its
+      own tests.
+
+  - script: "post_tool_use_auto_checkpoint.sh"
+    event: "PostToolUse"
+    matcher: "Bash"
+    order: 3
+    ticket: "OMN-17207"
+    owner: "Jonah Gray / the observability ladder lane (epic OMN-16176)"
+    purpose: >
+      On a `git commit`, writes ~/.claude/handoffs/checkpoint-<ts>.md with the
+      commit sha, branch, message, changed-file count, active plan and PR
+      state. Durable LOCAL capture only: writes to disk, emits nothing on
+      stdout.
+    enforcement: false
+    lite_mode_exit: false
+    mask:
+      gate_call: "AUTO_CHECKPOINT"
+      bit_defined: true
+    canary:
+      # Worth a pass_through: OMN-17207 re-registered this specifically after
+      # removing a `printf "$TOOL_INFO"` passthrough that re-emitted the raw
+      # tool_response the OMN-16277 guard masks on this same Bash matcher.
+      # Emitting NOTHING is the property that keeps that fix, so it is asserted.
+      kind: "pass_through"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "ls -la"
+        tool_response:
+          stdout: "hook-inventory canary"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+          - "hook-inventory canary"
+
+  - script: "post_tool_use_changeset_guard.sh"
+    event: "PostToolUse"
+    matcher: "Bash"
+    order: 4
+    ticket: "OMN-17207"
+    owner: "Jonah Gray / the observability ladder lane (epic OMN-16176)"
+    purpose: >
+      Appends one JSON line to ~/.claude/changeset-guard-events/events.jsonl
+      when a commit exceeds 15 files. Side-write only: its pre-baseline
+      advisory context injection was deliberately not revived.
+    enforcement: false
+    lite_mode_exit: false
+    mask:
+      gate_call: "CHANGESET_GUARD_POST"
+      bit_defined: true
+    canary:
+      kind: "pass_through"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "ls -la"
+        tool_response:
+          stdout: "hook-inventory canary"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+          - "hook-inventory canary"
+
+  - script: "subagent_stop_secret_leak_guard.sh"
+    event: "SubagentStop"
+    matcher: null
+    order: 0
+    ticket: "OMN-15062"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Blocks a subagent's final report from completing when it matches a known
+      secret pattern. Fail-SAFE: blocks rather than passes when the guard
+      itself cannot run.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "block"
+      stdin:
+        hook_event_name: "SubagentStop"
+        transcript_path: "{transcript_path}"
+      env: {}
+      fixtures:
+        transcript:
+          - type: "assistant"
+            message:
+              role: "assistant"
+              content:
+                - type: "text"
+                  text: "Report: the key is sk-CANARYcanaryCANARYcanary01 and the lane is done."
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "secret_pattern_matched"
+        stdout_absent: []
+
+  - script: "subagent_stop_report_contract_guard.sh"
+    event: "SubagentStop"
+    matcher: null
+    order: 1
+    ticket: "OMN-15213"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Fails a lane RED when its final return is bare-Done-class rather than
+      the report the golden-chain contract requires.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "block"
+      stdin:
+        hook_event_name: "SubagentStop"
+        transcript_path: "{transcript_path}"
+      env: {}
+      fixtures:
+        transcript:
+          - type: "assistant"
+            message:
+              role: "assistant"
+              content:
+                - type: "text"
+                  text: "Done."
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "bare_completion_claim"
+        stdout_absent: []
+
+  - script: "subagent_stop_lane_termination_guard.sh"
+    event: "SubagentStop"
+    matcher: null
+    order: 2
+    ticket: "OMN-16471"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Classifies HOW a lane ended from transcript evidence, writes the paired
+      terminal record, and blocks once on a zero-work death so a lane that
+      never ran cannot be scored as a completed stage.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "block"
+      stdin:
+        hook_event_name: "SubagentStop"
+        transcript_path: "{transcript_path}"
+        duration_ms: 285
+      env:
+        ONEX_STATE_DIR: "{state_dir}"
+      fixtures:
+        transcript:
+          - type: "assistant"
+            timestamp: "2026-01-01T00:00:00.000Z"
+            message:
+              role: "assistant"
+              content:
+                - type: "text"
+                  text: "starting"
+          - type: "assistant"
+            timestamp: "2026-01-01T00:00:00.285Z"
+            message:
+              role: "assistant"
+              content:
+                - type: "text"
+                  text: "starting"
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "died_zero_work"
+        stdout_absent: []
+
+  - script: "session_start_bus_mirror.sh"
+    event: "SessionStart"
+    matcher: null
+    order: 0
+    ticket: "OMN-16162"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Direct-dispatches a session-started event to the local bus.
+      Backgrounded and fail-open.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "SESSION_START"
+      bit_defined: true
+    canary: null
+    no_canary_reason: >
+      Same reason as post_tool_use_bus_mirror.sh: running it publishes a
+      synthetic session-started row to the declared .201 lane. Observer, not
+      an enforcement mechanism.
+
+  - script: "session_start_goal_surface.sh"
+    event: "SessionStart"
+    matcher: null
+    order: 1
+    ticket: "OMN-17168"
+    owner: "Jonah Gray / the session-goal lane"
+    purpose: >
+      Prints the state_as_of, age and rows of the durable session goal, and
+      the exact re-baseline command when it is missing or stale. Print-only:
+      pure bash, no interpreter, no network, no writes.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      # Cheap and worth having: this hook's whole safety claim is "it cannot
+      # refuse or delay a session", and the unset-variable path is the one
+      # most likely to regress into a non-zero exit.
+      kind: "pass_through"
+      stdin:
+        hook_event_name: "SessionStart"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+
+  - script: "session_start_workspace_sync.sh"
+    event: "SessionStart"
+    matcher: null
+    order: 2
+    ticket: "OMN-17190"
+    owner: "Jonah Gray / the workspace-reconcile lane"
+    purpose: >
+      Prints one line saying whether the canonical clones and locally-installed
+      venvs are in sync, with the verdict's age, labelling anything older than
+      30 minutes or of unknown age as unproven. Print-only: pure bash, no
+      network, no writes, reads exactly one file.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "pass_through"
+      stdin:
+        hook_event_name: "SessionStart"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+
+  - script: "session_start_hook_parity.sh"
+    event: "SessionStart"
+    matcher: null
+    order: 3
+    ticket: "OMN-17020"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Session-bootstrap half of this inventory: reports hook-inventory drift
+      and mask darkness at session start. Warn-only by construction — it
+      always exits 0.
+    enforcement: false
+    lite_mode_exit: false
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      # The one canary that is load-bearing for this ticket's own DoD item 3:
+      # a bootstrap parity check that could block session start would be a
+      # worse outage than the drift it reports.
+      kind: "pass_through"
+      stdin:
+        hook_event_name: "SessionStart"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+
+  - script: "session_end_bus_mirror.sh"
+    event: "SessionEnd"
+    matcher: null
+    order: 0
+    ticket: "OMN-16162"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Direct-dispatches a session-ended event to the local bus. Backgrounded
+      and fail-open.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "SESSION_END"
+      bit_defined: false
+    canary: null
+    no_canary_reason: >
+      Publishes a synthetic session-ended row to the declared .201 lane.
+      Observer, not an enforcement mechanism.
+
+  - script: "user_prompt_submit_bus_mirror.sh"
+    event: "UserPromptSubmit"
+    matcher: null
+    order: 0
+    ticket: "OMN-16162"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Direct-dispatches a prompt-submitted event (length only, never the
+      prompt text) to the local bus. Backgrounded and fail-open.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "USER_PROMPT_SUBMIT"
+      bit_defined: false
+    canary: null
+    no_canary_reason: >
+      Publishes a synthetic prompt-submitted row to the declared .201 lane.
+      Observer, not an enforcement mechanism.
+
+# ---------------------------------------------------------------------------
+# disabled_hooks — every script deliberately on disk and NOT registered.
+# ---------------------------------------------------------------------------
+# This is the half OMN-13244 never wrote down. Each entry carries the four
+# fields OMN-17006 made a standing rule, now typed and machine-checked rather
+# than a sentence in a description:
+#
+#   owner        — the person or lane accountable for restoring it
+#   reason       — why THIS hook is off, not merely that it is
+#   review_by    — an absolute date. When it passes, the gate FAILS and names
+#                  the entry. This is what OMN-13244 lacked; a disable with no
+#                  date is indistinguishable from a decision.
+#   restoration  — what puts it back: a typed kind, a re-enable ticket, and
+#                  the action. `re_register` additionally requires the script
+#                  to still be on disk, so the restoration it names is
+#                  actually a one-line config add and not a rewrite.
+#
+# The gate also refuses a disabled entry that IS registered — a contradiction
+# between the two halves of this file is drift, not a preference.
+disabled_hooks:
+  - script: "hook_dispatch_claim_pretool.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Probed 2026-08-29 with four independent defects, any one of which makes
+      re-registration unsafe: its `exit 2` is converted to `exit 0` by the
+      error-guard EXIT trap because it never calls `trap - EXIT`; its deny
+      payload uses a {"type":"permissionDenied"} shape this harness does not
+      honour; AGENT_ID falls back to the shared constant `session` so two
+      anonymous lanes are the same claimant and never collide; and the lease
+      is a fixed non-renewable 300s whose expiry deletes the claim file
+      instead of recording CLAIM_EXPIRED.
+    review_by: "2026-10-31"
+    restoration:
+      kind: "re_register"
+      reenable_ticket: "OMN-17005"
+      action: >
+        OMN-17005 ACs 1-8 all hold with individual live probes — renewable
+        leases, fencing tokens, a real per-lane claimant identity, durable
+        CLAIM_EXPIRED evidence, and the A17 canary in this file proving the
+        registered hook actually refuses — then re-register the pair in one
+        change. No partial re-registration. If AC3 (per-lane identity) cannot
+        be produced, OMN-17005 closes won't-fix and this entry converts to
+        kind delete; a guard that cannot identify a lane is not a guard.
+
+  - script: "hook_dispatch_claim_posttool.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      The release half of the same OMN-8928/8929 pair. It is unregistered for
+      the same reason and must be restored, or deleted, together with its
+      pre-tool sibling — a release path registered without its acquire path
+      would report `not_owner` on every call.
+    review_by: "2026-10-31"
+    restoration:
+      kind: "re_register"
+      reenable_ticket: "OMN-17005"
+      action: >
+        Re-registered in the same change as hook_dispatch_claim_pretool.sh
+        once OMN-17005's ACs hold, or deleted in the same change if OMN-17005
+        closes won't-fix.
+
+  - script: "pre_tool_use_bash_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      The full bash guard bundles destructive-command HARD_BLOCK, --no-verify
+      enforcement, `gh pr merge` method-mismatch blocking, SOFT_ALERT and
+      CONTEXT_ADVISORY alongside the worktree check. OMN-14330 extracted the
+      one control that had to come back (pre_tool_use_worktree_guard.sh) and
+      left the rest under the OMN-13244 measurement baseline rather than
+      re-enabling five behaviours in one config line.
+    review_by: "2026-12-31"
+    restoration:
+      kind: "re_register"
+      reenable_ticket: "OMN-13244"
+      action: >
+        Re-register only after each bundled behaviour has its own carve-out
+        record and its own canary in this file. Registering it whole would
+        re-enable four unmeasured controls to get one, which is the shape
+        OMN-14330 deliberately refused.
+
+  - script: "pre_tool_use_skill_substitution_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Skill-substitution machinery kept on disk by the OMN-13846 baseline lock
+      so activating it is a one-line config add and an explicit operator
+      decision, not a code restore. Its latency and usefulness were never
+      measured, which is the measurement OMN-13244 exists to take.
+    review_by: "2026-12-31"
+    restoration:
+      kind: "re_register"
+      reenable_ticket: "OMN-13244"
+      action: >
+        Register in hooks.json and add an entry to expected_hooks with a
+        canary, once the OMN-13244 measurement produces a verdict on it.
+
+# ---------------------------------------------------------------------------
+# Golden path — the behaviour this inventory is responsible for.
+# ---------------------------------------------------------------------------
+golden_path:
+  - A hook is removed from hooks.json — validate_hook_inventory.py exits 1 with UNREGISTERED_EXPECTED naming the script, its ticket and its owner. This is the OMN-13244 direction, and before this file it produced no signal for 16 of 18 days.
+  - A hook is added to hooks.json without a declaration here — exits 1 with UNDECLARED_REGISTRATION. An inventory that only catches removals rots by addition.
+  - A matcher is widened or narrowed, or a registration is reordered within its event — exits 1 with MATCHER_MISMATCH / ORDER_MISMATCH. Order is behaviour: the OMN-17168 goal block must print after the bus mirror backgrounds its dispatch.
+  - A declared disable's review_by date passes — exits 1 with DISABLE_REVIEW_LAPSED naming the owner, the re-enable ticket and the declared restoration action. The gate does not execute the restoration; no check can decide for OMN-17005 whether a per-lane claimant identity now exists. What it refuses is letting the disable outlive its own review date in silence.
+  - A declared disable is registered anyway, or its script is deleted from disk — exits 1 with DISABLED_BUT_REGISTERED / DISABLED_SCRIPT_DELETED. Deleting a disabled hook is the expiry branch of its re-enable ticket, not a cleanup.
+  - An enforcement hook is declared with no canary — exits 1 with ENFORCEMENT_WITHOUT_CANARY. `enforcement: true` is a claim about refusal; the OMN-8928 gate made that claim, returned a correct deny, and still exited 0.
+  - A registered hook's ONEX_HOOKS_MASK bit is cleared on the operator Mac — session_start_hook_parity.sh prints MASKED_OFF at session start and exits 0. CI never reports on the mask: a runner has no ~/.omnibase/.env, and a check that passes because its input is absent is worse than no check.
+  - The inventory is unreadable at session start — the bootstrap hook prints SKIPPED with the reason and exits 0, degrading to pre-OMN-17020 behaviour for one session instead of blocking a start. The merge gate is what keeps a malformed inventory off a machine.
+
+dod_evidence:
+  - kind: tests
+    description: "Inventory schema, parity, and all four falsifiable directions"
+    command: "uv run pytest tests/hooks/test_hook_inventory.py -v"
+  - kind: tests
+    description: "End-to-end canary against every registered enforcement hook"
+    command: "uv run pytest tests/hooks/test_hook_disable_control_canary.py -v"
+  - kind: ci
+    description: "hook-inventory-gate runs on every PR touching the hook surface"
+    command: "gh pr checks"

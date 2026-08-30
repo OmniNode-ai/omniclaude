@@ -1788,6 +1788,14 @@ components:
   path: plugins/onex/hooks/scripts/workspace_reconcile_tick.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook (OMN-17190). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); at most once every ONEX_RECONCILE_TICK_SECONDS (default 600) it fetches each canonical clone, fast-forwards the CLEAN ones on dev/main, and runs omnibase_infra/scripts/reconcile-workspace-venvs.sh, writing a per-repo receipt line and a one-line verdict. Never pulls into a dirty clone (reports it instead), never touches a clone on a feature branch, runs detached, exits 0 on every path. Interim by design - the OMN-17190 successor replaces it with a runtime-driven NodeEffect emitting its receipt to the bus.
+- id: hooks/scripts/session_start_hook_parity.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/session_start_hook_parity.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-17020). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); reports any disagreement between plugins/onex/hooks/contracts/hook_inventory.yaml, hooks.json, the scripts on disk, and this machine's ONEX_HOOKS_MASK. Warn-only by construction - every path exits 0, including its own failures, because a hook-manifest mismatch must never block a session start; the fail-closed half is the hook-inventory-gate CI check.
 - id: hooks/scripts/user_prompt_submit_bus_mirror.sh
   kind: hook
   exposure: beta

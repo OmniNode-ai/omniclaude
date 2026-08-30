@@ -104,6 +104,22 @@ only one 8-hour window of checkpoints survived to be examined). Neither hook
 publishes to the bus -- that half stays gated behind OMN-17209 -- so this is not
 an OMN-16162-class transport re-enable.
 
+OMN-17020 carves a further exception and, unlike every one before it, also moves
+where this file's guarantee lives. The exception is a SessionStart hook-inventory
+parity check (``session_start_hook_parity.sh``): warn-only by construction, every
+path exits 0, because a hook-manifest mismatch must never make the machine
+unusable. The relocation is the more important half. The lists below are
+hand-maintained -- every carve-out since OMN-13856 has added another literal to
+them, and the ordinal chain in ``hooks.json``'s description has already collided
+at "thirteenth" -- and a hand-maintained list is exactly what OMN-13244 did not
+have when it switched the surface off. As of OMN-17020 the typed inventory at
+``plugins/onex/hooks/contracts/hook_inventory.yaml`` is the general record, with
+its own gate (``hook-inventory-gate``), its own end-to-end canary for every
+enforcement hook, and its own tests (``tests/hooks/test_hook_inventory.py``).
+This file keeps its narrower job: it locks the OMN-13244 *baseline* specifically
+-- that the measurement hooks stay disabled and that these named carve-outs, and
+no others, exist.
+
 Everything else stays disabled. These tests therefore lock in a *narrowed*
 baseline:
 
@@ -195,8 +211,11 @@ _SESSION_START_WORKSPACE_SYNC_COMMAND = (
 _WORKSPACE_RECONCILE_TICK_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workspace_reconcile_tick.sh"
 )
+_SESSION_START_HOOK_PARITY_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_hook_parity.sh"
+)
 
-# OMN-17207 twelfth carve-out: the two LOCAL-ONLY capture hooks revived from
+# OMN-17207 carve-out: the two LOCAL-ONLY capture hooks revived from
 # the OMN-13244 unregister. Neither publishes to the bus (that stays gated
 # behind OMN-17209) and neither emits anything on stdout.
 _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND = (
@@ -351,12 +370,14 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"{subagent_stop_commands!r}"
     )
 
-    # Exactly three SessionStart commands, in order: the bus-mirror hook
-    # (OMN-16162), the goal-surface hook (OMN-17168), then the workspace-sync
-    # line (OMN-17190). Order matters -- the bus mirror backgrounds its dispatch
-    # and returns immediately, so what follows is what the session actually
-    # opens on: the goal it is working toward, then whether the workspace it
-    # will work in is current.
+    # Exactly four SessionStart commands, in order: the bus-mirror hook
+    # (OMN-16162), the goal-surface hook (OMN-17168), the workspace-sync line
+    # (OMN-17190), then the hook-inventory parity warning (OMN-17020). Order
+    # matters -- the bus mirror backgrounds its dispatch and returns
+    # immediately, so what follows is what the session actually opens on: the
+    # goal it is working toward, whether the workspace it will work in is
+    # current, and whether any hook that is supposed to be enforcing has gone
+    # dark.
     session_start_commands = [
         hook.get("command", "")
         for group in hooks["SessionStart"]
@@ -366,10 +387,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _SESSION_START_BUS_MIRROR_COMMAND,
         _SESSION_START_GOAL_SURFACE_COMMAND,
         _SESSION_START_WORKSPACE_SYNC_COMMAND,
+        _SESSION_START_HOOK_PARITY_COMMAND,
     ], (
         "hooks.json SessionStart must register EXACTLY the bus-mirror hook "
-        "(OMN-16162 carve-out), the goal-surface hook (OMN-17168 carve-out), and "
-        "the workspace-sync line (OMN-17190 carve-out), and nothing else. "
+        "(OMN-16162 carve-out), the goal-surface hook (OMN-17168 carve-out), the "
+        "workspace-sync line (OMN-17190 carve-out), and the hook-inventory parity "
+        "check (OMN-17020 carve-out), and nothing else. "
         f"Found: {session_start_commands!r}"
     )
 
