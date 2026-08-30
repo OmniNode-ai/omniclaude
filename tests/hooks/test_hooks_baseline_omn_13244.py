@@ -189,6 +189,12 @@ _OVERSEER_FOREGROUND_BLOCK_COMMAND = (
 _SESSION_START_GOAL_SURFACE_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_goal_surface.sh"
 )
+_SESSION_START_WORKSPACE_SYNC_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_workspace_sync.sh"
+)
+_WORKSPACE_RECONCILE_TICK_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workspace_reconcile_tick.sh"
+)
 
 # OMN-17207 twelfth carve-out: the two LOCAL-ONLY capture hooks revived from
 # the OMN-13244 unregister. Neither publishes to the bus (that stays gated
@@ -284,8 +290,10 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"overseer_foreground_block.py. Found: {matchers!r}"
     )
 
-    # Exactly two PostToolUse commands are wired: the secret-redaction guard
-    # (Bash only, OMN-16277), then the catch-all bus-mirror hook (.*, OMN-16162 S1).
+    # Exactly five PostToolUse commands are wired: the secret-redaction guard
+    # (Bash only, OMN-16277), the catch-all bus-mirror hook (.*, OMN-16162 S1),
+    # the workspace-reconcile tick (.*, OMN-17190), then the two OMN-17207
+    # local-capture hooks (Bash only).
     post_tool_use_commands = [
         hook.get("command", "")
         for group in hooks["PostToolUse"]
@@ -294,21 +302,25 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert post_tool_use_commands == [
         _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND,
         _POST_TOOL_USE_BUS_MIRROR_COMMAND,
+        _WORKSPACE_RECONCILE_TICK_COMMAND,
         _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND,
         _POST_TOOL_USE_CHANGESET_GUARD_COMMAND,
     ], (
         "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
-        "(OMN-16277 carve-out), the bus-mirror hook (OMN-16162 S1 carve-out), and "
-        "the two OMN-17207 local-only capture hooks (auto-checkpoint, "
-        f"changeset-guard) and nothing else. Found: {post_tool_use_commands!r}"
+        "(OMN-16277 carve-out), the bus-mirror hook (OMN-16162 S1 carve-out), "
+        "the workspace-reconcile tick (OMN-17190 carve-out), and the two "
+        "OMN-17207 local-only capture hooks (auto-checkpoint, changeset-guard) "
+        "and nothing else. "
+        f"Found: {post_tool_use_commands!r}"
     )
     post_tool_use_matchers = [
         group.get("matcher", "") for group in hooks["PostToolUse"]
     ]
-    assert post_tool_use_matchers == ["Bash", ".*", "Bash"], (
+    assert post_tool_use_matchers == ["Bash", ".*", ".*", "Bash"], (
         "PostToolUse secret-redaction guard must match Bash only, the bus-mirror "
-        "hook must match every tool (.*), and the OMN-17207 local-capture group "
-        f"must match Bash only. Found: {post_tool_use_matchers!r}"
+        "hook and workspace-reconcile tick must each match every tool (.*), and "
+        "the OMN-17207 local-capture group must match Bash only. "
+        f"Found: {post_tool_use_matchers!r}"
     )
 
     # The OMN-17207 local-capture hooks MUST be registered AFTER the
@@ -341,10 +353,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"{subagent_stop_commands!r}"
     )
 
-    # Exactly two SessionStart commands, in order: the bus-mirror hook
-    # (OMN-16162) then the goal-surface hook (OMN-17168). Order matters --
-    # the bus mirror backgrounds its dispatch and returns immediately, so the
-    # goal block is the last thing written to the session's opening context.
+    # Exactly three SessionStart commands, in order: the bus-mirror hook
+    # (OMN-16162), the goal-surface hook (OMN-17168), then the workspace-sync
+    # line (OMN-17190). Order matters -- the bus mirror backgrounds its dispatch
+    # and returns immediately, so what follows is what the session actually
+    # opens on: the goal it is working toward, then whether the workspace it
+    # will work in is current.
     session_start_commands = [
         hook.get("command", "")
         for group in hooks["SessionStart"]
@@ -353,10 +367,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert session_start_commands == [
         _SESSION_START_BUS_MIRROR_COMMAND,
         _SESSION_START_GOAL_SURFACE_COMMAND,
+        _SESSION_START_WORKSPACE_SYNC_COMMAND,
     ], (
         "hooks.json SessionStart must register EXACTLY the bus-mirror hook "
-        "(OMN-16162 carve-out) and the goal-surface hook (OMN-17168 carve-out), "
-        f"and nothing else. Found: {session_start_commands!r}"
+        "(OMN-16162 carve-out), the goal-surface hook (OMN-17168 carve-out), and "
+        "the workspace-sync line (OMN-17190 carve-out), and nothing else. "
+        f"Found: {session_start_commands!r}"
     )
 
     # Exactly one SessionEnd command: the bus-mirror hook (OMN-16162).

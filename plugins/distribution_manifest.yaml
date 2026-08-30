@@ -1772,6 +1772,22 @@ components:
   path: plugins/onex/hooks/scripts/session_start_goal_surface.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook (OMN-17168). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); prints the state_as_of, age, and rows of $KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md at session start, and the re-baseline workflow command when that goal is missing or older than 12h. Print-only, pure bash, no network, no writes, exits 0 on every user-visible outcome. Interim by design - OMN-17169 replaces the file read with a goal-projection read.
+- id: hooks/scripts/session_start_workspace_sync.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/session_start_workspace_sync.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-17190). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); prints one line at session start saying whether the canonical clones and the locally-installed venvs are in sync, with the verdict's age, labelling anything older than 30 minutes or of unknown age as unproven. Print-only, pure bash, no network, no writes; reads exactly one file (the reconcile tick's status line). Interim by design - the OMN-17190 successor repoints it from the status file to a runtime projection.
+- id: hooks/scripts/workspace_reconcile_tick.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/workspace_reconcile_tick.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-17190). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); at most once every ONEX_RECONCILE_TICK_SECONDS (default 600) it fetches each canonical clone, fast-forwards the CLEAN ones on dev/main, and runs omnibase_infra/scripts/reconcile-workspace-venvs.sh, writing a per-repo receipt line and a one-line verdict. Never pulls into a dirty clone (reports it instead), never touches a clone on a feature branch, runs detached, exits 0 on every path. Interim by design - the OMN-17190 successor replaces it with a runtime-driven NodeEffect emitting its receipt to the bus.
 - id: hooks/scripts/user_prompt_submit_bus_mirror.sh
   kind: hook
   exposure: beta
