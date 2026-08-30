@@ -537,3 +537,31 @@ gates:
     job_path: ["contract-validation"]
     skip_semantics: never
     rationale: "OMN-16878: completes OMN-13326, which claimed contract-validation was REQUIRED across all 6 repos; live readback showed omniclaude and omnibase_infra were never wired. Ran 16/16 present and 16/16 green over #2045-#2060 while unable to block. Non-vacuity proven: validate-yaml exits 1 on a schema-invalid contract and 0 on contracts/OMN-10041.yaml. Legitimately reports 'skipped' status internally when the branch carries no OMN-XXXX or no contract file, but the JOB always runs and always reports a conclusion, so skip_semantics is never."
+
+  # OMN-17204. The hook edge's bus lane is now a declared contract
+  # (plugins/onex/hooks/contracts/hook_edge_lane.yaml) instead of an answer
+  # produced per invocation by shell sourcing order between ~/.omnibase/.env,
+  # ~/.claude/settings.json and omnibase_infra's mac-dev overlay. That
+  # undeclared fact cost three wrong conclusions (OMN-16162 flipped
+  # Done -> Backlog on a wrong-lane probe, OMN-16996 was filed then falsified,
+  # beta/GOAL.md row 0's hook clause could only ever fail). The gate shipped in
+  # the same PR as the contract but landed advisory-only: absent from this
+  # manifest AND from live branch protection, so a PR that deleted the resolver
+  # out of a *_bus_mirror.sh went red here and merged anyway. A ticket whose
+  # subject is "a rule nobody owns" cannot ship its own rule unenforced.
+  #
+  # Non-vacuity proven before admission, both directions, as unit tests rather
+  # than a one-off run (tests/hooks/test_hook_edge_lane.py):
+  #   - a *_bus_mirror.sh with the resolver deleted        -> exit 1
+  #   - a *_bus_mirror.sh sourcing it BEFORE common.sh     -> exit 1
+  #   - relay.required_network != known_lanes[lane].network -> exit 1 (this is
+  #     the live OMN-17034 publisher/consumer split, made checkable)
+  #   - a governed topic constant absent from the registry -> exit 1
+  #   - the shipped tree                                    -> exit 0
+  - name: "Hook Edge Lane Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: hook-edge-lane-gate.yml
+    job_path: ["hook-edge-lane-gate"]
+    skip_semantics: never
+    rationale: "OMN-17204: the hook edge's publish lane and the cloud relay's consume lane are one declared pairing; a mismatch must be a failing check, not a human reading two broker offsets. Path filters removed and `if: always()` added in the same change so the context reports on every PR (skip-vectors 1 and 5). Non-vacuity proven in tests/hooks/test_hook_edge_lane.py: the validator exits 1 on a dropped resolver, on resolver-before-common.sh ordering, on a relay/lane network split, and on a governed topic leaving the registry; 0 on the shipped tree."

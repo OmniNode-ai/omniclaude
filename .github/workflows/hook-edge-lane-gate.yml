@@ -11,28 +11,27 @@ name: Hook Edge Lane Gate
 # surfaces, three answers. That produced three wrong conclusions (OMN-16162
 # flipped Done -> Backlog on a wrong-lane probe, OMN-16996 filed then
 # falsified, beta/GOAL.md row 0 written unfalsifiable). Detection that is not
-# a merge gate gets ignored, so this ships as one.
+# a merge gate gets ignored, so this is one: `Hook Edge Lane Gate` is a
+# REQUIRED status check on `dev` (row in .github/required-checks.yaml, asserted
+# by ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS, reconciled hourly against
+# live branch protection by required-check-manifest-reconcile.yml).
 #
 # Static mode only. `--live` probes ~/.omnibase/.env and ~/.claude/settings.json,
 # neither of which exists on a runner; a check that passes because its inputs
 # are absent is worse than no check, so live mode stays off CI and runs on the
 # operator Mac (and via the pre-commit hook of the same name).
 
+# No `paths:` filter, deliberately. This context is REQUIRED on `dev`
+# (.github/required-checks.yaml), and a required context behind a path filter is
+# skip-vector 1: a PR touching only excluded paths never runs the job, the
+# context never reports, and the PR sits PENDING forever. The gate is a ~1s
+# static read of one contract plus four shell scripts, so it runs on every PR
+# rather than buying that wedge back.
 on:
   push:
-    branches: [main, 'hotfix/**']
-    paths:
-      - 'plugins/onex/hooks/scripts/**'
-      - 'plugins/onex/hooks/contracts/hook_edge_lane.yaml'
-      - 'plugins/onex/hooks/lib/hook_edge_lane.py'
-      - 'scripts/validation/validate_hook_edge_lane.py'
+    branches: [main, dev, 'hotfix/**']
   pull_request:
     branches: [main, dev]
-    paths:
-      - 'plugins/onex/hooks/scripts/**'
-      - 'plugins/onex/hooks/contracts/hook_edge_lane.yaml'
-      - 'plugins/onex/hooks/lib/hook_edge_lane.py'
-      - 'scripts/validation/validate_hook_edge_lane.py'
 
 jobs:
   occ-preflight:
@@ -47,6 +46,13 @@ jobs:
 
   hook-edge-lane-gate:
     needs: occ-preflight
+    # Skip-vector 5 (OMN-15057, same fix OMN-16878 applied to deploy-gate):
+    # `needs:` with no `if:` means the implicit job condition is `success()`
+    # over `needs:`, so a failed or cancelled occ-preflight SKIPS this job — and
+    # a skipped job SATISFIES branch protection. Requiring this context without
+    # `if: always()` would wire a silent-pass bypass into the very gate that
+    # exists because the hook edge had no enforced rule.
+    if: always()
     name: Hook Edge Lane Gate
     runs-on: >-
       ${{

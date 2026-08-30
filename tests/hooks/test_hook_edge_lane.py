@@ -402,3 +402,96 @@ def _copy_gate_tree(dest: Path) -> None:
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(_REPO_ROOT / rel, target)
+
+
+# ---------------------------------------------------------------------------
+# AC2, enforcement half: the gate is a MERGE gate, not an advisory red run.
+# ---------------------------------------------------------------------------
+# hook-edge-lane-gate.yml's own header asserts "Detection that is not a merge
+# gate gets ignored, so this ships as one." When OMN-17204's first PR landed
+# that sentence was false: the context was absent from omniclaude `dev`'s
+# required_status_checks AND from ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS,
+# so a PR that dropped the resolver out of a *_bus_mirror.sh would go red on
+# this workflow and still merge. A ticket whose whole subject is "a rule nobody
+# owns" cannot ship its own rule as advisory. These tests pin the three
+# mechanical facts that make it blocking, in the shape OMN-16878 already used
+# for deploy-gate / receipt-honesty / contract-validation.
+
+_GATE_CONTEXT = "Hook Edge Lane Gate"
+_GATE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "hook-edge-lane-gate.yml"
+_REQUIRED_CHECKS_MANIFEST = _REPO_ROOT / ".github" / "required-checks.yaml"
+
+
+def _load_gate_workflow() -> dict:
+    import yaml
+
+    return yaml.safe_load(_GATE_WORKFLOW.read_text(encoding="utf-8"))
+
+
+def test_gate_has_a_required_row_in_the_required_checks_manifest() -> None:
+    """The manifest is reconciled against live branch protection hourly.
+
+    ``required-check-manifest-reconcile.yml`` fails closed in BOTH directions,
+    so a REQUIRED row here and a live context are the same fact stated twice on
+    purpose. No row means the context is not required.
+    """
+    import yaml
+
+    manifest = yaml.safe_load(_REQUIRED_CHECKS_MANIFEST.read_text(encoding="utf-8"))
+    rows = {gate["name"]: gate for gate in manifest["gates"]}
+    assert _GATE_CONTEXT in rows, (
+        f"{_GATE_CONTEXT!r} has no row in .github/required-checks.yaml — the hook-edge "
+        "lane gate cannot block a merge, so a PR that drops the resolver merges red."
+    )
+    row = rows[_GATE_CONTEXT]
+    assert row["mode"] == "REQUIRED", f"{_GATE_CONTEXT} row is mode={row['mode']!r}"
+    assert row["skip_semantics"] == "never"
+    assert "OMN-17204" in row["rationale"]
+
+
+def test_gate_workflow_carries_no_path_filter() -> None:
+    """Skip-vector 1: a REQUIRED context behind a ``paths:`` filter wedges PRs.
+
+    A PR touching only excluded paths never runs the job, so the required
+    context never reports and the PR sits PENDING forever. The guard
+    (``validate_no_required_check_skip_vectors.py``) rejects this shape; the
+    gate is a ~1s static check, so it runs on every PR instead.
+    """
+    workflow = _load_gate_workflow()
+    triggers = workflow[True] if True in workflow else workflow["on"]
+    for event, spec in triggers.items():
+        if not isinstance(spec, dict):
+            continue
+        for key in ("paths", "paths-ignore"):
+            assert key not in spec, (
+                f"hook-edge-lane-gate.yml `{event}` trigger still has a `{key}` filter; "
+                "a REQUIRED context behind a path filter is skip-vector 1."
+            )
+
+
+def test_gate_job_fails_closed_when_occ_preflight_does_not_succeed() -> None:
+    """Skip-vector 5: ``needs:`` with no ``if:`` lets a red dependency SKIP the job.
+
+    A skipped job SATISFIES branch protection, so requiring the context without
+    ``if: always()`` would wire in a silent-pass bypass on the gate itself.
+    """
+    workflow = _load_gate_workflow()
+    job = workflow["jobs"]["hook-edge-lane-gate"]
+    assert job.get("if") == "always()", (
+        "hook-edge-lane-gate job needs `if: always()` — otherwise a failed "
+        "occ-preflight skips it and the skip satisfies branch protection."
+    )
+
+
+def test_gate_context_is_asserted_by_the_ci_summary_umbrella() -> None:
+    """CI Summary asserts every expected external context is present AND green.
+
+    Branch protection alone is satisfied by a context that never reports at
+    all in some shapes; the umbrella closes that by asserting presence.
+    """
+    source = (_REPO_ROOT / "scripts" / "ci" / "ci_summary_gate.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'"{_GATE_CONTEXT}"' in source, (
+        f"{_GATE_CONTEXT!r} is not in ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS"
+    )
