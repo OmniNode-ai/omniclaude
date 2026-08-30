@@ -4,8 +4,10 @@
 
 # PostToolUse Auto-Checkpoint Hook
 # After a git commit, auto-writes a lightweight checkpoint file to
-# ~/.claude/handoffs/ for session recovery. Keeps only the last 5
-# checkpoints (deletes older ones).
+# ~/.claude/handoffs/ for session recovery. Retention is CHECKPOINT_RETENTION
+# (default 200): the original cap of 5 destroyed the entire pre-2026-07-02
+# series, which is why the archaeology could recover only 5 files, all from a
+# single 8-hour window.
 #
 # Event:   PostToolUse
 # Matcher: Bash
@@ -30,7 +32,6 @@ TOOL_INFO=$(cat)
 
 # Guard: jq is required
 if ! command -v jq >/dev/null 2>&1; then
-    printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
@@ -41,7 +42,6 @@ TOOL_CMD=$(printf '%s' "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/n
 # Gate: only fire when the command contains "git commit"
 # -----------------------------------------------------------------------
 if [[ "$TOOL_CMD" != *"git commit"* ]]; then
-    printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
@@ -69,7 +69,9 @@ fi
 # PR status (best-effort, non-blocking)
 PR_STATUS=""
 if command -v gh >/dev/null 2>&1; then
-    PR_STATUS=$(gh pr view --json number,url,state 2>/dev/null | jq -r '"PR #\(.number) [\(.state)]: \(.url)"' 2>/dev/null) || PR_STATUS=""
+    # Bounded: `gh pr view` is a network call on the PostToolUse path. Without the
+    # timeout a hung remote stalls the hook (and, pre-OMN-17224, stacks emitters).
+    PR_STATUS=$(timeout 5 gh pr view --json number,url,state 2>/dev/null | jq -r '"PR #\(.number) [\(.state)]: \(.url)"' 2>/dev/null) || PR_STATUS=""
 fi
 
 # -----------------------------------------------------------------------
@@ -104,19 +106,23 @@ Use \`/onex:session\` to resume from this point.
 CHECKPOINT_EOF
 
 # -----------------------------------------------------------------------
-# Retention: keep only the last 5 checkpoints
+# Retention: keep the last CHECKPOINT_RETENTION checkpoints
 # -----------------------------------------------------------------------
 CHECKPOINT_COUNT=$(ls -1 "${CHECKPOINT_DIR}"/checkpoint-*.md 2>/dev/null | wc -l | tr -d '[:space:]')
-if [[ "$CHECKPOINT_COUNT" -gt 5 ]]; then
+RETENTION="${OMNICLAUDE_CHECKPOINT_RETENTION:-200}"
+if [[ "$CHECKPOINT_COUNT" -gt "$RETENTION" ]]; then
     # Delete oldest checkpoints (sorted by name = sorted by timestamp)
-    DELETE_COUNT=$((CHECKPOINT_COUNT - 5))
+    DELETE_COUNT=$((CHECKPOINT_COUNT - RETENTION))
     ls -1 "${CHECKPOINT_DIR}"/checkpoint-*.md 2>/dev/null | head -n "$DELETE_COUNT" | while read -r old_file; do
         rm -f "$old_file" 2>/dev/null || true
     done
 fi
 
 # -----------------------------------------------------------------------
-# Pass through original tool info (checkpoint is a side effect)
+# Emit NOTHING. Plain PostToolUse stdout is debug-log-only
+# (docs/research/2026-06-12-updated-tool-output-shape-probe.md), and echoing
+# $TOOL_INFO back would re-emit the raw tool_response that the OMN-16277
+# secret-redaction guard masks on this same Bash matcher. The checkpoint file
+# is the only output of this hook.
 # -----------------------------------------------------------------------
-printf '%s\n' "$TOOL_INFO"
 exit 0
