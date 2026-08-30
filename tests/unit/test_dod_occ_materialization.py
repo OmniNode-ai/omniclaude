@@ -100,6 +100,33 @@ def test_fails_when_occ_receipt_is_not_pass(tmp_path: Path) -> None:
     ).exists()
 
 
+def test_accepts_pass_supersession_for_pending_base_receipt(tmp_path: Path) -> None:
+    occ_root = tmp_path / "onex_change_control"
+    _write_occ_evidence(occ_root, receipt_status="PENDING")
+    receipt_dir = occ_root / "drift" / "dod_receipts" / "OMN-9999" / "dod-ci-proof"
+    (receipt_dir / "command.supersede.1.yaml").write_text(
+        "\n".join(
+            [
+                "---",
+                "schema_version: 1.0.0",
+                "ticket_id: OMN-9999",
+                "evidence_item_id: dod-ci-proof",
+                "supersedes: drift/dod_receipts/OMN-9999/dod-ci-proof/command.yaml",
+                "replacement:",
+                "  status: PASS",
+                "",
+            ]
+        )
+    )
+
+    result = _run_materializer(tmp_path, occ_root)
+
+    assert result.returncode == 0, result.stderr
+    receipt_path = tmp_path / "state" / "evidence" / "OMN-9999" / "dod_report.json"
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["status"] == "PASS"
+
+
 def test_fails_when_contract_receipt_id_is_missing(tmp_path: Path) -> None:
     occ_root = tmp_path / "onex_change_control"
     _write_occ_evidence(occ_root, receipt_id="dod-other")
