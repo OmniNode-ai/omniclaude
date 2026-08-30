@@ -137,7 +137,16 @@ PAYLOAD=$(jq -nc \
     }' 2>/dev/null) || PAYLOAD='{}'
 [[ -z "$PAYLOAD" || "$PAYLOAD" == "null" ]] && PAYLOAD='{}'
 
-_EMIT_DISPATCH_PY="${HOOKS_LIB}/node_event_emit_effect_dispatch.py"
+# OMN-17224: fast-path append. This used to invoke
+# node_event_emit_effect_dispatch.py, which imported the omnimarket
+# handler stack and published to Kafka inline -- 31.08s of a 31.65s
+# handle() was a lazily-imported omnibase_infra chain building ~2,497
+# Pydantic classes. One such process per tool call produced 14
+# concurrent emitters at ~270% CPU on the operator Mac. The hook now
+# only appends to the local journal (stdlib only, sub-100ms); the
+# singleton drainer (launchd ai.omninode.hook-emit-drainer) pays that
+# import once and publishes the backlog.
+_EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
     (
         "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
