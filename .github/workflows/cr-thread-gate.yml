@@ -1,43 +1,72 @@
 name: CR Thread Gate
-# Reusable workflow — call via:
-#   uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@dev
+# Reusable CodeRabbit thread gate. Consumed cross-repo as:
+#   uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
 # Required status check string: "gate / CodeRabbit Thread Check"
 # (produced by callers whose job key is named 'gate:' and uses this workflow)
+#
+# OMN-17146: this gate is now a NO-OP.
+#
+# CodeRabbit is being retired org-wide (decision 2026-08-29, OMN-16933).
+# OMN-16933 landed the producer half of that retirement first: omniclaude#2069
+# (051f96da6) deleted `scripts/check-unresolved-threads.sh` and the local
+# callers from omniclaude `dev`. This reusable — still served from `main` and
+# still consumed `@main` by callers in 11 repos — checked that script out with
+# `ref: dev`, so every consumer started failing at `chmod: cannot access
+# 'scripts/check-unresolved-threads.sh'`.
+#
+# The fix deliberately does NOT restore the script or re-point the checkout at
+# `main`: re-pointing would reintroduce the CodeRabbit dependency this
+# retirement exists to remove, and restoring the script on `dev` would reverse
+# OMN-16933. Instead the job succeeds with a notice, keeping the composed
+# contexts ("gate / CodeRabbit Thread Check",
+# "cr-thread-gate / CodeRabbit Thread Check") reporting green so no branch
+# protection or CI-summary umbrella is left requiring a context that can never
+# report. Deleting the workflow and its callers, and removing the contexts from
+# every repo's required_status_checks / EXPECTED_EXTERNAL_CONTEXTS, is tracked
+# by OMN-16933 (and OMN-16934 / OMN-16389 for the node/skill and local-fork
+# residuals).
+#
+# The `workflow_call` interface below is intentionally UNCHANGED — inputs and
+# secrets stay declared so every existing caller keeps resolving without edits.
 on:
   workflow_call:
     secrets:
-      # OMN-16373: CROSS_REPO_PAT retiring. CROSS_REPO_PAT and github-token
-      # stay declared (not removed — deletion deferred) so callers that
-      # have not yet migrated their `secrets:` block keep working; the job
-      # below now prefers a minted onexbot-occ-writer App token and falls
-      # back to these only if the caller still passes them.
+      # OMN-16373: CROSS_REPO_PAT retiring. Kept declared (unused) so callers
+      # that still pass a `secrets:` block keep resolving.
       CROSS_REPO_PAT:
-        description: "Deprecated (OMN-16373): GitHub PAT with read:discussion scope for CR thread queries. Prefer onexbot-occ-app-id/onexbot-occ-private-key."
+        description: "Deprecated (OMN-16373), unused since OMN-17146: GitHub PAT with read:discussion scope."
         required: false
       github-token:
-        description: "Deprecated: pass onexbot-occ-app-id/onexbot-occ-private-key instead"
+        description: "Deprecated, unused since OMN-17146."
         required: false
       onexbot-occ-app-id:
-        description: "onexbot-occ-writer GitHub App id (org secret ONEXBOT_OCC_APP_ID)"
+        description: "onexbot-occ-writer GitHub App id (org secret ONEXBOT_OCC_APP_ID). Unused since OMN-17146."
         required: false
       onexbot-occ-private-key:
-        description: "onexbot-occ-writer GitHub App private key (org secret ONEXBOT_OCC_PRIVATE_KEY)"
+        description: "onexbot-occ-writer GitHub App private key (org secret ONEXBOT_OCC_PRIVATE_KEY). Unused since OMN-17146."
         required: false
     inputs:
       repo:
-        description: "Target repo name (owner/repo or bare name). Defaults to caller's github.repository."
+        description: "Target repo name (owner/repo or bare name). Defaults to caller's github.repository. Unused since OMN-17146."
         required: false
         type: string
         default: ""
       pr-number:
-        description: "Pull request number to check. Pass '0' or empty to skip (merge_group context)."
+        description: "Pull request number to check. Unused since OMN-17146."
         required: false
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   gate:
     name: CodeRabbit Thread Check
+    # OMN-14856/OMN-15120 vector-3: no job-level `if:` here. The reusable's job
+    # must always run so the composed check run is always created; a skipped
+    # `uses:` caller job produces zero check runs and wedges the required
+    # context. That constraint survives the no-op.
     runs-on: >-
       ${{
         ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
@@ -46,71 +75,18 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
+    timeout-minutes: 5
     steps:
-      - name: Checkout omniclaude scripts
-        uses: actions/checkout@v7
-        with:
-          repository: OmniNode-ai/omniclaude
-          ref: dev
-          sparse-checkout: scripts/check-unresolved-threads.sh
-          sparse-checkout-cone-mode: false
-
-      - name: Resolve repo name
-        id: resolve-repo
+      - name: CodeRabbit retired — gate is a no-op
         working-directory: ${{ github.workspace }}
         run: |
-          REPO="${{ inputs.repo }}"
-          [ -z "$REPO" ] && REPO="${{ github.repository }}"
-          # Strip owner prefix if present (owner/repo -> repo)
-          echo "repo=${REPO##*/}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve PR number
-        id: resolve-pr
-        working-directory: ${{ github.workspace }}
-        run: |
-          PR="${{ inputs.pr-number }}"
-          if [ -z "$PR" ]; then
-            PR="${{ github.event.pull_request.number }}"
-          fi
-          if [ -z "$PR" ]; then
-            PR="${{ github.event.issue.number }}"
-          fi
-          echo "pr=$PR" >> "$GITHUB_OUTPUT"
-
-      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
-      # onexbot-occ-writer App installation token when the caller passes
-      # App credentials. continue-on-error because older callers that
-      # haven't migrated their `secrets:` block yet pass empty app-id/key,
-      # which would otherwise hard-fail this step; the token-chain fallback
-      # below covers that case (old CROSS_REPO_PAT caller, or plain
-      # GITHUB_TOKEN for a same-repo read).
-      - name: Mint onexbot-occ-writer app token
-        id: app-token
-        continue-on-error: true
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
-        with:
-          app-id: ${{ secrets.onexbot-occ-app-id }}
-          private-key: ${{ secrets.onexbot-occ-private-key }}
-          owner: OmniNode-ai
-
-      - name: Check unresolved CodeRabbit threads
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.CROSS_REPO_PAT || secrets.github-token || secrets.GITHUB_TOKEN }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          PR="${{ steps.resolve-pr.outputs.pr }}"
-          if [ -z "$PR" ] || [ "$PR" = "0" ]; then
-            echo "No PR number — skipping (merge_group context)."
-            exit 0
-          fi
-          chmod +x scripts/check-unresolved-threads.sh
-          COUNT=$(bash scripts/check-unresolved-threads.sh \
-            "${{ github.repository_owner }}" \
-            "${{ steps.resolve-repo.outputs.repo }}" \
-            "$PR")
-          echo "Unresolved CodeRabbit threads: $COUNT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "::error::$COUNT unresolved CodeRabbit thread(s). Resolve all CR threads before merging."
-            exit 1
-          fi
-          echo "All CodeRabbit threads resolved."
+          echo "::notice::CodeRabbit retired (OMN-16933); gate is a no-op pending removal from required contexts."
+          echo "OMN-17146: this reusable no longer checks out or executes"
+          echo "scripts/check-unresolved-threads.sh — that script was deleted from"
+          echo "omniclaude dev by omniclaude#2069 (051f96da6, OMN-16933) and the"
+          echo "CodeRabbit dependency is deliberately not being reintroduced."
+          echo "Removal of this workflow, its callers, and the composed contexts"
+          echo "\"gate / CodeRabbit Thread Check\" and"
+          echo "\"cr-thread-gate / CodeRabbit Thread Check\" from every repo's"
+          echo "required_status_checks / EXPECTED_EXTERNAL_CONTEXTS is tracked by OMN-16933."
+          exit 0
