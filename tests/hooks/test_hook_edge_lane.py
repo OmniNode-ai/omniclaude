@@ -505,27 +505,126 @@ def test_gate_workflow_triggers_on_every_input() -> None:
     entirely. That is precisely how the publisher ended up off the declared
     lane -- OMN-17204's gate governed four shell scripts, and OMN-17224 moved
     the publish into a fifth file the filter never named.
+
+    OMN-17204 (AC2, enforcement half) answers that concern by DELETION rather
+    than by extending the list: the workflow now carries no ``paths:`` filter,
+    so every input triggers it -- including inputs nobody has written yet, which
+    a maintained list can never cover. A list would also re-open skip-vector 1
+    now that ``Hook Edge Lane Gate`` is a REQUIRED context: a PR touching only
+    excluded paths would never report it and would sit PENDING forever. This
+    test therefore asserts the stronger property; see also
+    ``test_gate_workflow_carries_no_path_filter``.
     """
-    workflow = _REPO_ROOT / ".github/workflows/hook-edge-lane-gate.yml"
-    text = workflow.read_text(encoding="utf-8")
+    import yaml
 
-    inputs = (
-        "plugins/onex/hooks/scripts/",
-        "plugins/onex/hooks/contracts/hook_edge_lane.yaml",
-        "plugins/onex/hooks/lib/hook_edge_lane.py",
-        "plugins/onex/hooks/lib/hook_emit_drainer.py",
-        "scripts/validation/validate_hook_edge_lane.py",
-        "scripts/launchd/ai.omninode.hook-emit-drainer.plist",
+    workflow_path = _REPO_ROOT / ".github/workflows/hook-edge-lane-gate.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    triggers = workflow[True] if True in workflow else workflow["on"]
+
+    for event in ("push", "pull_request"):
+        assert event in triggers, f"{workflow_path} lost its `{event}` trigger"
+        spec = triggers[event]
+        if not isinstance(spec, dict):
+            continue
+        for key in ("paths", "paths-ignore"):
+            assert key not in spec, (
+                f"{workflow_path} `{event}` trigger has a `{key}` filter again. "
+                "The gate reads the four *_bus_mirror.sh scripts, the contract, "
+                "hook_edge_lane.py, hook_emit_drainer.py, the drainer's launchd "
+                "plist and the validator; any filter that misses one lets a PR "
+                "change it without running the gate."
+            )
+
+
+# ---------------------------------------------------------------------------
+# AC2, enforcement half: the gate is a MERGE gate, not an advisory red run.
+# ---------------------------------------------------------------------------
+# hook-edge-lane-gate.yml's own header asserts "Detection that is not a merge
+# gate gets ignored, so this ships as one." When OMN-17204's first PR landed
+# that sentence was false: the context was absent from omniclaude `dev`'s
+# required_status_checks AND from ci_summary_gate.py's
+# EXPECTED_EXTERNAL_CONTEXTS, so a PR that dropped the resolver out of a
+# *_bus_mirror.sh would go red on this workflow and still merge. A ticket whose
+# whole subject is "a rule nobody owns" cannot ship its own rule as advisory.
+# These tests pin the three mechanical facts that make it blocking, in the
+# shape OMN-16878 already used for deploy-gate / receipt-honesty /
+# contract-validation.
+
+_GATE_CONTEXT = "Hook Edge Lane Gate"
+_GATE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "hook-edge-lane-gate.yml"
+_REQUIRED_CHECKS_MANIFEST = _REPO_ROOT / ".github" / "required-checks.yaml"
+
+
+def _load_gate_workflow() -> dict:
+    import yaml
+
+    return yaml.safe_load(_GATE_WORKFLOW.read_text(encoding="utf-8"))
+
+
+def test_gate_has_a_required_row_in_the_required_checks_manifest() -> None:
+    """The manifest is reconciled against live branch protection hourly.
+
+    ``required-check-manifest-reconcile.yml`` fails closed in BOTH directions,
+    so a REQUIRED row here and a live context are the same fact stated twice on
+    purpose. No row means the context is not required.
+    """
+    import yaml
+
+    manifest = yaml.safe_load(_REQUIRED_CHECKS_MANIFEST.read_text(encoding="utf-8"))
+    rows = {gate["name"]: gate for gate in manifest["gates"]}
+    assert _GATE_CONTEXT in rows, (
+        f"{_GATE_CONTEXT!r} has no row in .github/required-checks.yaml — the hook-edge "
+        "lane gate cannot block a merge, so a PR that drops the resolver merges red."
     )
-    missing = [rel for rel in inputs if rel not in text]
-    assert not missing, (
-        f"{workflow} does not trigger on {missing}. The gate reads these files, "
-        "so a PR that changes only one of them would never run the gate."
+    row = rows[_GATE_CONTEXT]
+    assert row["mode"] == "REQUIRED", f"{_GATE_CONTEXT} row is mode={row['mode']!r}"
+    assert row["skip_semantics"] == "never"
+    assert "OMN-17204" in row["rationale"]
+
+
+def test_gate_workflow_carries_no_path_filter() -> None:
+    """Skip-vector 1: a REQUIRED context behind a ``paths:`` filter wedges PRs.
+
+    A PR touching only excluded paths never runs the job, so the required
+    context never reports and the PR sits PENDING forever. The guard
+    (``validate_no_required_check_skip_vectors.py``) rejects this shape; the
+    gate is a ~1s static check, so it runs on every PR instead.
+    """
+    workflow = _load_gate_workflow()
+    triggers = workflow[True] if True in workflow else workflow["on"]
+    for event, spec in triggers.items():
+        if not isinstance(spec, dict):
+            continue
+        for key in ("paths", "paths-ignore"):
+            assert key not in spec, (
+                f"hook-edge-lane-gate.yml `{event}` trigger still has a `{key}` filter; "
+                "a REQUIRED context behind a path filter is skip-vector 1."
+            )
+
+
+def test_gate_job_fails_closed_when_occ_preflight_does_not_succeed() -> None:
+    """Skip-vector 5: ``needs:`` with no ``if:`` lets a red dependency SKIP the job.
+
+    A skipped job SATISFIES branch protection, so requiring the context without
+    ``if: always()`` would wire in a silent-pass bypass on the gate itself.
+    """
+    workflow = _load_gate_workflow()
+    job = workflow["jobs"]["hook-edge-lane-gate"]
+    assert job.get("if") == "always()", (
+        "hook-edge-lane-gate job needs `if: always()` — otherwise a failed "
+        "occ-preflight skips it and the skip satisfies branch protection."
     )
 
-    # Both triggers (push and pull_request), not just one.
-    for rel in inputs:
-        assert text.count(rel) >= 2, (
-            f"{rel} appears in only one trigger block of {workflow}; it must be "
-            "listed under both `push` and `pull_request`."
-        )
+
+def test_gate_context_is_asserted_by_the_ci_summary_umbrella() -> None:
+    """CI Summary asserts every expected external context is present AND green.
+
+    Branch protection alone is satisfied by a context that never reports at
+    all in some shapes; the umbrella closes that by asserting presence.
+    """
+    source = (_REPO_ROOT / "scripts" / "ci" / "ci_summary_gate.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'"{_GATE_CONTEXT}"' in source, (
+        f"{_GATE_CONTEXT!r} is not in ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS"
+    )
