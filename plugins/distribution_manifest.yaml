@@ -1756,6 +1756,14 @@ components:
   path: plugins/onex/hooks/scripts/session_start_bus_mirror.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook (OMN-16162). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); direct-dispatches a session-started event to omnimarket's node_event_emit_effect, backgrounded and fail-open, registered in hooks.json alongside the other live SessionEnd/SubagentStop/PreToolUse hooks.
+- id: hooks/scripts/session_start_goal_surface.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/session_start_goal_surface.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude event hook (OMN-17168). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); prints the state_as_of, age, and rows of $KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md at session start, and the re-baseline workflow command when that goal is missing or older than 12h. Print-only, pure bash, no network, no writes, exits 0 on every user-visible outcome. Interim by design - OMN-17169 replaces the file read with a goal-projection read.
 - id: hooks/scripts/user_prompt_submit_bus_mirror.sh
   kind: hook
   exposure: beta
