@@ -1051,6 +1051,20 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-17020: every hook this plugin registers is declared in
+      # plugins/onex/hooks/contracts/hook_inventory.yaml, and every deliberate
+      # disable carries owner/reason/review_by/restoration. OMN-13244 went dark
+      # with no inventory at all; this refuses the commit that would repeat it.
+      # Static half only -- the ONEX_HOOKS_MASK surface is per-machine and is
+      # reported by session_start_hook_parity.sh, never by a gate.
+      - id: hook-inventory-gate
+        name: Hook inventory parity
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_hook_inventory.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # OMN-3777: Block cloud bus references in source code
       - id: no-cloud-bus
         name: Block cloud bus references

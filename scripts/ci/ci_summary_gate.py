@@ -176,6 +176,16 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     "deploy-gate",  # deploy-gate.yml
     "receipt-honesty",  # receipt-honesty.yml
     "contract-validation",  # contract-validation.yml
+    # OMN-17204. The hook edge's bus lane is a declared contract; the gate that
+    # proves publisher and consumer name the SAME lane shipped with the contract
+    # but landed advisory-only (absent from branch protection and from this
+    # tuple), so a PR deleting the resolver out of a *_bus_mirror.sh went red
+    # here and merged anyway. Becomes a live-required `dev` context in the same
+    # change, keeping this tuple's invariant — every member is also a
+    # branch-protection context — true. Its `paths:` filter is removed and
+    # `if: always()` added in the same change, so it reports on every PR
+    # (skip-vectors 1 and 5) rather than wedging PRs that touch no hook file.
+    "Hook Edge Lane Gate",  # hook-edge-lane-gate.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
