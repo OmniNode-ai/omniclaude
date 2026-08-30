@@ -59,4 +59,4 @@ jobs:
     if: always()
     # self-gating-ok: intentional cross-repo caller — omniclaude does not host
     # receipt-gate.yml itself; the reusable workflow lives in omnibase_core.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@3608b195f9183b03e5dc58b03f325462896f1c0d # OMN-16432: pinned to fix SHA — main is release-synced; repoint to @main after the next core release ships
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@f5e51ad47c81e2136715752380224e7eba2f6eb0 # OMN-13902: pinned to commit-text receipt-gate fix; repoint to @main after the next core release ships
