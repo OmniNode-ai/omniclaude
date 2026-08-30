@@ -397,11 +397,143 @@ def _copy_gate_tree(dest: Path) -> None:
         # the canonical topic registry the contract's constants resolve through
         Path("src/omniclaude/hooks/topic_registry.yaml"),
         Path("plugins/onex/hooks/scripts/hook_edge_lane.sh"),
+        # OMN-17224: the drainer is the process that actually publishes, so the
+        # gate reads it too -- see test_validator_fails_when_drainer_drops_the_lane.
+        Path("plugins/onex/hooks/lib/hook_emit_drainer.py"),
+        Path("scripts/launchd/ai.omninode.hook-emit-drainer.plist"),
         *[Path("plugins/onex/hooks/scripts") / n for n in _BUS_MIRROR_SCRIPTS],
     ):
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(_REPO_ROOT / rel, target)
+
+
+# =============================================================================
+# the drainer is on the edge too (OMN-17224 follow-on)
+# =============================================================================
+# OMN-17204 made every *_bus_mirror.sh apply the declared lane. OMN-17224 then
+# moved the publish OUT of those scripts and into hook_emit_drainer.py, which
+# launchd starts with an environment of exactly {OMNI_HOME, ONEX_STATE_DIR,
+# HOME}. The gate's four bus-mirror scripts were, from that moment, the only
+# lane-governed files on a path that no longer publishes anything.
+#
+# Verified on the operator Mac 2026-08-30 under that exact launchd env:
+# `publish raised ... 'KAFKA_BOOTSTRAP_SERVERS'`, record stayed queued.
+
+
+def test_drainer_applies_the_declared_lane() -> None:
+    """The publishing process resolves its broker from the contract."""
+    drainer = _REPO_ROOT / "plugins/onex/hooks/lib/hook_emit_drainer.py"
+    text = drainer.read_text(encoding="utf-8")
+    assert "hook_edge_lane" in text, (
+        "hook_emit_drainer.py does not resolve the declared lane. It is the "
+        "only process on the hook edge that publishes; a lane policy the "
+        "publisher ignores governs nothing."
+    )
+
+
+def test_validator_fails_when_drainer_drops_the_lane(tmp_path: Path) -> None:
+    """Removing lane resolution from the publisher FAILS the gate."""
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    target = fake_root / "plugins/onex/hooks/lib/hook_emit_drainer.py"
+    text = target.read_text(encoding="utf-8")
+    stripped = "\n".join(
+        line for line in text.splitlines() if "hook_edge_lane" not in line
+    )
+    target.write_text(stripped + "\n", encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert proc.returncode != 0, (
+        "gate passed a drainer that publishes to whatever the ambient env "
+        "happens to say -- the regression this check exists to catch"
+    )
+    assert "hook_emit_drainer.py" in (proc.stdout + proc.stderr)
+
+
+def test_validator_fails_when_plist_hardcodes_a_lane(tmp_path: Path) -> None:
+    """A broker pinned in the launchd plist is a second answer. FAIL."""
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    # The endpoint to inject is DERIVED from the contract, never spelled here:
+    # a literal in this test would be one more place a lane is written down,
+    # which is the defect the gate exists to close.
+    lib = _load_lib()
+    contract = lib.load_contract(
+        fake_root / "plugins/onex/hooks/contracts/hook_edge_lane.yaml"
+    )
+    pinned = contract.bootstrap_servers
+
+    plist = fake_root / "scripts/launchd/ai.omninode.hook-emit-drainer.plist"
+    text = plist.read_text(encoding="utf-8")
+    text = text.replace(
+        "<key>OMNI_HOME</key>",
+        "<key>KAFKA_BOOTSTRAP_SERVERS</key>\n"
+        f"    <string>{pinned}</string>\n"
+        "    <key>OMNI_HOME</key>",
+        1,
+    )
+    plist.write_text(text, encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert proc.returncode != 0, (
+        "gate passed a launchd plist that pins the drainer's broker -- that is "
+        "a second place a lane endpoint is spelled, which is the whole defect"
+    )
+    assert "hook-emit-drainer.plist" in (proc.stdout + proc.stderr)
+
+
+def test_gate_workflow_triggers_on_every_input() -> None:
+    """Every file the gate READS must also be able to TRIGGER it.
+
+    A path-filtered workflow that does not list one of its own inputs is
+    detection, not enforcement: a PR touching only that file skips the gate
+    entirely. That is precisely how the publisher ended up off the declared
+    lane -- OMN-17204's gate governed four shell scripts, and OMN-17224 moved
+    the publish into a fifth file the filter never named.
+
+    OMN-17204 (AC2, enforcement half) answers that concern by DELETION rather
+    than by extending the list: the workflow now carries no ``paths:`` filter,
+    so every input triggers it -- including inputs nobody has written yet, which
+    a maintained list can never cover. A list would also re-open skip-vector 1
+    now that ``Hook Edge Lane Gate`` is a REQUIRED context: a PR touching only
+    excluded paths would never report it and would sit PENDING forever. This
+    test therefore asserts the stronger property; see also
+    ``test_gate_workflow_carries_no_path_filter``.
+    """
+    import yaml
+
+    workflow_path = _REPO_ROOT / ".github/workflows/hook-edge-lane-gate.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    triggers = workflow[True] if True in workflow else workflow["on"]
+
+    for event in ("push", "pull_request"):
+        assert event in triggers, f"{workflow_path} lost its `{event}` trigger"
+        spec = triggers[event]
+        if not isinstance(spec, dict):
+            continue
+        for key in ("paths", "paths-ignore"):
+            assert key not in spec, (
+                f"{workflow_path} `{event}` trigger has a `{key}` filter again. "
+                "The gate reads the four *_bus_mirror.sh scripts, the contract, "
+                "hook_edge_lane.py, hook_emit_drainer.py, the drainer's launchd "
+                "plist and the validator; any filter that misses one lets a PR "
+                "change it without running the gate."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -410,12 +542,13 @@ def _copy_gate_tree(dest: Path) -> None:
 # hook-edge-lane-gate.yml's own header asserts "Detection that is not a merge
 # gate gets ignored, so this ships as one." When OMN-17204's first PR landed
 # that sentence was false: the context was absent from omniclaude `dev`'s
-# required_status_checks AND from ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS,
-# so a PR that dropped the resolver out of a *_bus_mirror.sh would go red on
-# this workflow and still merge. A ticket whose whole subject is "a rule nobody
-# owns" cannot ship its own rule as advisory. These tests pin the three
-# mechanical facts that make it blocking, in the shape OMN-16878 already used
-# for deploy-gate / receipt-honesty / contract-validation.
+# required_status_checks AND from ci_summary_gate.py's
+# EXPECTED_EXTERNAL_CONTEXTS, so a PR that dropped the resolver out of a
+# *_bus_mirror.sh would go red on this workflow and still merge. A ticket whose
+# whole subject is "a rule nobody owns" cannot ship its own rule as advisory.
+# These tests pin the three mechanical facts that make it blocking, in the
+# shape OMN-16878 already used for deploy-gate / receipt-honesty /
+# contract-validation.
 
 _GATE_CONTEXT = "Hook Edge Lane Gate"
 _GATE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "hook-edge-lane-gate.yml"

@@ -51,6 +51,19 @@ _BUS_MIRROR_SCRIPTS = (
 
 _RESOLVER_BASENAME = "hook_edge_lane.sh"
 
+# OMN-17224 moved the publish off the *_bus_mirror.sh path and into a singleton
+# drainer that launchd starts with {OMNI_HOME, ONEX_STATE_DIR, HOME} and
+# nothing else. From that moment the four scripts this gate governed were the
+# only lane-checked files on the edge that no longer published anything, while
+# the process that did publish obeyed no lane at all (and, with no
+# KAFKA_BOOTSTRAP_SERVERS in its environment and no default in
+# ModelKafkaEventBusConfig, could not publish at all). These two files close
+# that hole: the publisher must read the contract, and its launchd plist must
+# not become a second place a lane endpoint is spelled.
+_DRAINER_REL = Path("plugins/onex/hooks/lib/hook_emit_drainer.py")
+_DRAINER_PLIST_REL = Path("scripts/launchd/ai.omninode.hook-emit-drainer.plist")
+_LANE_LIB_STEM = "hook_edge_lane"
+
 
 def _load_lib(repo_root: Path):  # type: ignore[no-untyped-def]
     """Import the resolver lib from the tree under test, not from this repo.
@@ -184,6 +197,61 @@ def _check_static(repo_root: Path) -> list[str]:
                         "must come from the contract."
                     )
 
+    # --- the process that actually publishes is on the lane too ------------
+    violations.extend(_check_drainer(repo_root, contract))
+
+    return violations
+
+
+def _check_drainer(repo_root: Path, contract) -> list[str]:  # type: ignore[no-untyped-def]
+    """The singleton drainer must resolve its broker from the contract.
+
+    Checked as source text rather than by importing the module: importing it
+    would drag in the ~30s omnibase_infra chain the drainer exists to amortize,
+    and a merge gate must run on a runner with no omnimarket install.
+    """
+    violations: list[str] = []
+
+    drainer = repo_root / _DRAINER_REL
+    if not drainer.is_file():
+        return [
+            f"{drainer}: hook-emit drainer missing. It is the only process on "
+            "the hook edge that publishes; the gate cannot govern a lane "
+            "without it."
+        ]
+    if _LANE_LIB_STEM not in drainer.read_text(encoding="utf-8"):
+        violations.append(
+            f"{drainer}: does not resolve the declared lane from "
+            f"{_LANE_LIB_STEM}. Since OMN-17224 the *_bus_mirror.sh scripts only "
+            "append to a journal — this process is what publishes, so a lane "
+            "policy it ignores governs nothing."
+        )
+
+    # No second answer pinned in the launchd environment. Ports are DERIVED
+    # from known_lanes, never listed here, for the same reason as above.
+    plist = repo_root / _DRAINER_PLIST_REL
+    if not plist.is_file():
+        return [*violations, f"{plist}: drainer launchd plist missing"]
+    lane_ports = {
+        f":{endpoint.bootstrap_servers.rsplit(':', 1)[-1]}"
+        for endpoint in contract.known_lanes.values()
+    }
+    in_comment = False
+    for lineno, line in enumerate(plist.read_text(encoding="utf-8").splitlines(), 1):
+        if "<!--" in line:
+            in_comment = True
+        if in_comment:
+            if "-->" in line:
+                in_comment = False
+            continue
+        for port in sorted(lane_ports):
+            if port in line:
+                violations.append(
+                    f"{plist}:{lineno}: pins broker port {port} in the drainer's "
+                    "launchd environment. The lane must come from the contract, "
+                    "or the plist becomes a surface that can silently disagree "
+                    "with it."
+                )
     return violations
 
 

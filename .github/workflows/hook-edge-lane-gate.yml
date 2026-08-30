@@ -32,6 +32,13 @@ on:
     branches: [main, dev, 'hotfix/**']
   pull_request:
     branches: [main, dev]
+    # OMN-17224 asked for a wider `paths:` list here — the drainer
+    # (plugins/onex/hooks/lib/hook_emit_drainer.py) and its launchd plist are
+    # gate inputs too, and a PR touching only the publisher was slipping past
+    # the lane policy, which is how the publisher ended up off the lane. That
+    # concern is answered more completely by having NO filter at all: every
+    # input, named or not yet written, triggers the gate. Keeping a list would
+    # also re-open skip-vector 1 now that the context is REQUIRED.
 
 jobs:
   occ-preflight:
