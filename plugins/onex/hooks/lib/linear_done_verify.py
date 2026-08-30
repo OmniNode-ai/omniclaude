@@ -69,6 +69,21 @@ BLOCKING_MERGE_STATES = {"BLOCKED", "DIRTY", "BEHIND"}
 
 DEFAULT_OWNER = "OmniNode-ai"
 
+# OMN-14882: Linear's rich-text layer rewrites a pasted
+# `github.com/<owner>/<repo>/pull/<N>` URL into its own internal embed at save
+# time, deleting the literal `github.com` substring `_PR_URL_RE` requires.
+# Two rewritten shapes have been observed live, both an XML-ish
+# `<pull-request href="...">owner/repo#N</pull-request>` tag (current) and a
+# `[owner/repo#N](https://linear.app/.../review/...)` markdown link (older) —
+# but in both the real citation survives as plain `owner/repo#N` text inside
+# the tag/link. Scoped to `DEFAULT_OWNER` (the only org this workspace's
+# tickets cite) so an unrelated `path/to/file#42`-shaped string in prose is
+# never mistaken for a PR reference.
+_PR_OWNER_REPO_HASH_RE = re.compile(
+    rf"\b({re.escape(DEFAULT_OWNER)}/[\w.-]+)#(\d+)\b",
+    re.IGNORECASE,
+)
+
 # Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
 # deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
 # satisfies nor blocks a *product* ticket's Done — it is a receipt companion,
@@ -158,6 +173,16 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
         num = int(url_match.group(3))
         full_repo = f"{owner}/{repo_name}"
         refs[(full_repo, num)] = PRRef(number=num, repo=full_repo)
+
+    # OMN-14882: Linear-rewritten `<pull-request>...</pull-request>` tags and
+    # `[owner/repo#N](...)` markdown-link embeds — see _PR_OWNER_REPO_HASH_RE.
+    for owner_repo_match in _PR_OWNER_REPO_HASH_RE.finditer(text):
+        full_repo = owner_repo_match.group(1)
+        num = int(owner_repo_match.group(2))
+        key = (full_repo, num)
+        if key in refs:
+            continue
+        refs[key] = PRRef(number=num, repo=full_repo)
 
     repo_key = default_repo or ""
     for num_match in _PR_NUMBER_RE.finditer(text):
@@ -513,6 +538,15 @@ def parse_implementing_pr_refs(
             num = int(url_match.group(3))
             full_repo = f"{owner}/{repo_name}"
             refs[(full_repo, num)] = PRRef(number=num, repo=full_repo)
+
+        # OMN-14882: Linear-rewritten `<pull-request>` tag / markdown-link
+        # embed — see _PR_OWNER_REPO_HASH_RE.
+        for owner_repo_match in _PR_OWNER_REPO_HASH_RE.finditer(block):
+            full_repo = owner_repo_match.group(1)
+            num = int(owner_repo_match.group(2))
+            key = (full_repo, num)
+            if key not in refs:
+                refs[key] = PRRef(number=num, repo=full_repo)
 
         # A bare ``#N`` is only an implementing citation when it resolves to a
         # concrete repo. Without a default repo it is unverifiable narrative and
