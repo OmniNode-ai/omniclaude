@@ -21,6 +21,7 @@ a broker and without paying the ~30s import the drainer exists to amortize.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -237,3 +238,74 @@ def test_drainer_lock_frees_after_holder_is_killed(tmp_path: Path, jdir: Path) -
         jdir, lock_path, poll_seconds=0.1, idle_poll_seconds=0.1, once=True
     )
     assert rc == 0, "restarted drainer must be able to take the freed lock"
+
+
+# ---------------------------------------------------------------------------
+# Declared lane (OMN-17224 follow-on; contract from OMN-17204)
+# ---------------------------------------------------------------------------
+# OMN-17224 moved the publish off the shell hook path and into this drainer.
+# OMN-17204 declared the hook edge's lane and made every *_bus_mirror.sh apply
+# it -- but those scripts no longer publish anything. They now only run
+# hook_emit_append.py, which touches no broker at all. The process that DOES
+# publish is this drainer, launched by launchd with an environment of exactly
+# {OMNI_HOME, ONEX_STATE_DIR, HOME}.
+#
+# Proven on the operator Mac 2026-08-30, running the drainer under that exact
+# environment: `publish raised ... 'KAFKA_BOOTSTRAP_SERVERS'` and the record
+# stayed queued. The two tickets composed into a publisher that obeys no lane
+# and, under launchd, cannot publish at all.
+#
+# These tests pin the composition: the drainer resolves its broker from the
+# declared contract, and a disagreeing ambient env does not win.
+
+
+def test_drainer_applies_declared_lane_when_env_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """launchd hands the drainer no KAFKA_BOOTSTRAP_SERVERS. The contract must."""
+    monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
+    monkeypatch.delenv("KAFKA_BROKERS", raising=False)
+    monkeypatch.delenv("ONEX_HOOK_EDGE_LANE", raising=False)
+
+    lane = drainer.apply_declared_lane()
+
+    contract_path = (
+        _REPO_ROOT / "plugins" / "onex" / "hooks" / "contracts" / "hook_edge_lane.yaml"
+    )
+    import hook_edge_lane  # noqa: PLC0415 - test-local, never on the hook path
+
+    expected = hook_edge_lane.load_contract(contract_path).bootstrap_servers
+
+    assert lane == expected
+    assert os.environ["KAFKA_BOOTSTRAP_SERVERS"] == expected
+    assert os.environ["KAFKA_BROKERS"] == expected
+
+
+def test_declared_lane_beats_a_disagreeing_ambient_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An env var naming another lane is a finding, never an input (OMN-17204)."""
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "other-lane.invalid:9999")
+    monkeypatch.setenv("KAFKA_BROKERS", "other-lane.invalid:9999")
+
+    lane = drainer.apply_declared_lane()
+
+    assert lane is not None
+    assert lane != "other-lane.invalid:9999"
+    assert os.environ["KAFKA_BOOTSTRAP_SERVERS"] == lane
+    assert os.environ["KAFKA_BROKERS"] == lane
+
+
+def test_unreadable_contract_leaves_env_untouched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A missing contract degrades to the ambient env, loudly, not to a guess.
+
+    The drainer is a KeepAlive agent: exiting here would spin launchd's restart
+    loop and recreate the CPU burn this ticket removed. Leaving the env alone
+    makes the next publish raise a named KeyError and back off instead.
+    """
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "other-lane.invalid:9999")
+
+    assert drainer.apply_declared_lane(contract_path=tmp_path / "absent.yaml") is None
+    assert os.environ["KAFKA_BOOTSTRAP_SERVERS"] == "other-lane.invalid:9999"
