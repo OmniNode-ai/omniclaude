@@ -273,19 +273,134 @@ def test_refuses_worktree_non_clone_and_outside_paths(scratch: Scratch) -> None:
 
 
 @pytest.mark.unit
-def test_refuses_detached_head_and_missing_upstream(scratch: Scratch) -> None:
+def test_refuses_missing_upstream(scratch: Scratch) -> None:
     env, clone = scratch.env, scratch.clone
-    git(env, clone, "checkout", "-q", "--detach")
-    proc = scratch.run("omnimarket", "--execute")
-    assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert "detached" in (proc.stdout + proc.stderr).lower()
-
-    git(env, clone, "checkout", "-q", "dev")
     git(env, clone, "branch", "--unset-upstream")
     proc = scratch.run("omnimarket", "--execute")
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "upstream" in (proc.stdout + proc.stderr).lower()
     assert not scratch.evidence_root.exists()
+
+
+# --- detached HEAD (OMN-17313) ------------------------------------------------
+#
+# A canonical clone left in detached HEAD by a stray ``git checkout FETCH_HEAD``
+# used to be refused here, and that refusal was a dead end: the canonical-clone
+# guard denies ``checkout``/``switch`` inside a clone and points the operator at
+# THIS script, and pull-all.sh delegates its drift-repair stage here too. The
+# live case was $OMNI_HOME/omnimarket sitting detached at an unmerged PR-branch
+# commit for two days, which is what served a stale routing contract to both
+# BIFROST_CONTRACT_PATH and the clone-HEAD-pinned venv (OMN-6790 / OMN-17193).
+
+
+def test_detached_head_reattaches_and_converges(scratch: Scratch) -> None:
+    env, clone = scratch.env, scratch.clone
+    _dirty_like_the_incident(scratch)
+    git(env, clone, "checkout", "-q", "--detach")
+
+    proc = scratch.run("omnimarket", "--execute", "--ticket", "OMN-17313")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    # HEAD is ATTACHED again -- the sha alone is not the assertion.
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "dev"
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.upstream_head
+    assert git(env, clone, "status", "--porcelain", "--untracked-files=no") == ""
+
+    out = proc.stdout + proc.stderr
+    assert "re-attached DETACHED HEAD to dev" in out, out
+    assert "derived from HEAD reflog" in out, out
+
+    # The uncommitted work is preserved, exactly as in the attached path.
+    evidence = sorted(scratch.evidence_root.glob("omnimarket-*"))[-1]
+    manifest = (evidence / "MANIFEST.txt").read_text(encoding="utf-8")
+    assert "detached_before=1" in manifest, manifest
+    assert "reattach_target_source=derived from HEAD reflog" in manifest, manifest
+    assert (evidence / "untracked" / "untracked.txt").read_text(
+        encoding="utf-8"
+    ) == "untracked draft\n"
+    assert "preserved" in (evidence / "full-vs-HEAD.patch").read_text(encoding="utf-8")
+
+    row = scratch.ledger.read_text(encoding="utf-8")
+    assert "CONVERGED" in row and "re-attached DETACHED HEAD" in row, row
+    assert "OMN-17313" in row, row
+
+
+def test_detached_only_commits_are_preserved_as_patches(scratch: Scratch) -> None:
+    env, clone = scratch.env, scratch.clone
+    git(env, clone, "checkout", "-q", "--detach")
+    (clone / "orphan.txt").write_text("only on the detached HEAD\n", encoding="utf-8")
+    git(env, clone, "add", "-A")
+    git(env, clone, "commit", "-q", "-m", "orphan work")
+    orphan_sha = git(env, clone, "rev-parse", "HEAD")
+
+    proc = scratch.run("omnimarket", "--execute")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    evidence = sorted(scratch.evidence_root.glob("omnimarket-*"))[-1]
+    log = (evidence / "detached-commits.log").read_text(encoding="utf-8")
+    assert orphan_sha in log, log
+    patches = sorted((evidence / "detached-patches").glob("*.patch"))
+    assert patches, "detached-only commit was not preserved as a patch"
+    assert "only on the detached HEAD" in patches[-1].read_text(encoding="utf-8")
+    manifest = (evidence / "MANIFEST.txt").read_text(encoding="utf-8")
+    assert "detached-patches/" in manifest, manifest
+
+
+def test_detached_head_on_upstream_tip_is_not_already_converged(
+    scratch: Scratch,
+) -> None:
+    """A detached HEAD whose sha equals the upstream tip is still broken.
+
+    Nothing can fast-forward it and every clone-HEAD-pinned consumer stays
+    frozen, so the sha-equality early exit must not swallow this case.
+    """
+    env, clone = scratch.env, scratch.clone
+    git(env, clone, "fetch", "-q", "origin")
+    git(env, clone, "checkout", "-q", "--detach", scratch.upstream_head)
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.upstream_head
+
+    proc = scratch.run("omnimarket", "--execute")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "already converged" not in (proc.stdout + proc.stderr).lower()
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "dev"
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.upstream_head
+
+
+def test_detached_head_honours_to_branch_override(scratch: Scratch) -> None:
+    env, clone = scratch.env, scratch.clone
+    git(env, clone, "branch", "alt", "--track", "origin/dev")
+    git(env, clone, "checkout", "-q", "--detach")
+
+    proc = scratch.run("omnimarket", "--execute", "--to-branch", "alt")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "alt"
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.upstream_head
+    assert "--to-branch" in (proc.stdout + proc.stderr)
+
+
+def test_detached_head_refuses_when_target_cannot_be_derived(
+    scratch: Scratch,
+) -> None:
+    """Derivation never guesses: a reflog naming a branch that no longer exists
+    is skipped, and with no candidate left the script refuses and names the
+    explicit override instead of picking a default."""
+    env, clone = scratch.env, scratch.clone
+    git(env, clone, "checkout", "-q", "--detach")
+    git(env, clone, "branch", "-D", "dev")
+
+    proc = scratch.run("omnimarket", "--execute")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    out = proc.stdout + proc.stderr
+    assert "--to-branch" in out, out
+    assert not scratch.evidence_root.exists()
+
+
+def test_to_branch_and_branch_modes_are_mutually_exclusive(
+    scratch: Scratch,
+) -> None:
+    proc = scratch.run("omnimarket", "--branch", "dev", "--to-branch", "dev")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "--to-branch cannot be combined with --branch" in (proc.stdout + proc.stderr)
 
 
 @pytest.mark.unit
