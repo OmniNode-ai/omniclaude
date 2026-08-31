@@ -2,71 +2,35 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# CI lint gate: fail if any skill file contains monorepo-local references.
-# OMN-8795 (SD-08) — companion to tests/skills/test_no_monorepo_refs_in_plugin_skills.py
+# CI lint gate: fail if any gated plugin file contains monorepo-local references.
+# OMN-8795 (SD-08); rewritten as a wrapper by OMN-16850.
 #
-# Escape hatch: append "# local-path-ok: <reason>" to the offending line to suppress.
+# This script used to carry its own hand-copied `grep -E` pattern list, a second
+# implementation of the rule already living in
+# tests/skills/test_no_monorepo_refs_in_plugin_skills.py. The two drifted by
+# construction -- one engine's escaping is not the other's -- so both now call the
+# single matcher in scripts/skill_monorepo_refs.py over the single registry in
+# scripts/skill_monorepo_ref_patterns.json. Keep this file thin: patterns and roots
+# belong in the JSON, matching belongs in the Python.
+#
+# Escape hatch: append "# local-path-ok: <reason>" to the offending line.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SKILLS_ROOT="$REPO_ROOT/plugins/onex/skills"
 
-# Forbidden patterns (regex) and their replacement guidance.
-# The path literals below are the patterns we're enforcing, not violations.
-PAT_0='\$ONEX_REGISTRY_ROOT'
-MSG_0='Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead'
-PAT_1='uv run python -m omni'
-MSG_1="Use 'onex run <node_name>' instead — see OMN-8770 standalone install"
-PAT_2='\/Users\/jonah\/' # local-path-ok: pattern registry — enforcing this literal
-MSG_2='Hardcoded user path — use environment variable instead'
-PAT_3='\/Volumes\/PRO-G40\/' # local-path-ok: pattern registry — enforcing this literal
-MSG_3='Hardcoded volume path — use environment variable instead'
-PAT_4='\$OMNI_HOME'
-MSG_4='Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead of legacy $OMNI_HOME'
-
-PATTERNS=("$PAT_0" "$PAT_1" "$PAT_2" "$PAT_3" "$PAT_4")
-MESSAGES=("$MSG_0" "$MSG_1" "$MSG_2" "$MSG_3" "$MSG_4")
-
-ESCAPE_HATCH='# local-path-ok'
-FAILED=false
-
-mapfile -t SKILL_FILES < <(find "$SKILLS_ROOT" -name "*.md" -type f | sort)
-
-if [ "${#SKILL_FILES[@]}" -eq 0 ]; then
-  echo "No skill .md files found under $SKILLS_ROOT — skipping"
-  exit 0
-fi
-
-for file in "${SKILL_FILES[@]}"; do
-  lineno=0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    lineno=$((lineno + 1))
-    if [[ "$line" == *"$ESCAPE_HATCH"* ]]; then
-      # Require a reason after the marker (e.g. "# local-path-ok: <reason>")
-      if ! echo "$line" | grep -qE '#\s*local-path-ok\b(\s*:\s*|\s+)\S'; then
-        rel="${file#"$REPO_ROOT/"}"
-        echo "::error file=$rel,line=$lineno::escape hatch '# local-path-ok' requires a reason (e.g. '# local-path-ok: <why>')"
-        FAILED=true
-      fi
-      continue
-    fi
-    for i in "${!PATTERNS[@]}"; do
-      if echo "$line" | grep -qE "${PATTERNS[$i]}"; then
-        rel="${file#"$REPO_ROOT/"}"
-        echo "::error file=$rel,line=$lineno::${PATTERNS[$i]} found — ${MESSAGES[$i]}"
-        FAILED=true
-      fi
-    done
-  done < "$file"
+PYTHON=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
 done
 
-if [ "$FAILED" = "true" ]; then
-  echo ""
-  echo "Skill monorepo-ref gate FAILED."
-  echo "Fix violations or add '# local-path-ok' with a reason to suppress."
+if [ -z "$PYTHON" ]; then
+  echo "::error::skill monorepo-ref gate needs python3 on PATH and found none" >&2
+  echo "The gate fails closed rather than reporting a pass it did not perform." >&2
   exit 1
 fi
 
-echo "Skill monorepo-ref gate PASSED (${#SKILL_FILES[@]} files checked)."
+exec "$PYTHON" "$SCRIPT_DIR/skill_monorepo_refs.py" "$@"

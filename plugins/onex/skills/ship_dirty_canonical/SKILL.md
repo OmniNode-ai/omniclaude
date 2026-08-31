@@ -77,7 +77,8 @@ payload:
 
 ```bash
 # Run from the omnimarket project so the node package is importable.
-uv run --project "${OMNI_HOME:?set OMNI_HOME}/omnimarket" \
+OMNIMARKET_PROJECT="${OMNI_HOME:?set OMNI_HOME}/omnimarket"  # local-path-ok: operator-workspace surface; the workspace root deliberately keeps its OMNI_HOME spelling here
+uv run --project "$OMNIMARKET_PROJECT" \
   python -m omnimarket.nodes.node_dirty_canonical_sweep \
   [--dry-run] [--repos REPO ...] [--omni-home PATH] \
   [--worktrees-root PATH] [--pr-label LABEL] [--base-branch BRANCH]

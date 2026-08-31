@@ -837,7 +837,7 @@ for wave_idx, wave in enumerate(waves):
         ticket = tickets_by_id.get(ticket_id, {})
         title = ticket.get("title", ticket_id)
         url = ticket.get("url", "")
-        repo_path = f"{os.environ['OMNI_HOME']}/{repo}"
+        repo_path = f"{os.environ['OMNI_HOME']}/{repo}"  # local-path-ok: operator-workspace surface; the workspace root deliberately keeps its OMNI_HOME spelling here
 
         result = Task(
             subagent_type="general-purpose",

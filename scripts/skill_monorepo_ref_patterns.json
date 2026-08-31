@@ -1,0 +1,88 @@
+{
+  "$comment": [
+    "Single source of truth for the skill monorepo-ref gate (OMN-8795 SD-08, widened by OMN-16850).",
+    "Consumed by scripts/skill_monorepo_refs.py, which backs BOTH the CI shell entrypoint",
+    "(scripts/check-skill-monorepo-refs.sh) and the pytest gate",
+    "(tests/skills/test_no_monorepo_refs_in_plugin_skills.py). There is exactly one matcher",
+    "implementation and exactly one pattern list, so the two surfaces cannot drift.",
+    "",
+    "Regexes are Python `re` syntax. This file is data, never scanned, so the literals below",
+    "do not need the '# local-path-ok' escape hatch the old in-source registries required.",
+    "",
+    "OMNIBASE_PATH is the ALLOWED replacement vocabulary (OMN-16849): no pattern here matches",
+    "a fail-fast OMNIBASE_PATH read. Only its FAIL-SOFT forms are forbidden -- the whole point",
+    "of the rename is that the workspace root must never resolve silently to the wrong directory."
+  ],
+  "escape_hatch": "# local-path-ok",
+  "roots": [
+    {
+      "path": "plugins/onex/skills",
+      "include": ["*.md"],
+      "why": "the original SD-08 surface: internal skill docs, still gated"
+    },
+    {
+      "path": "plugins/onex-delegate",
+      "include": ["*.md", "*.json", "*.yaml", "*.py"],
+      "why": "OMN-16855: the tree marketplace.json actually ships to customers -- the install commands live here, and the pre-OMN-16850 gate never looked at them"
+    },
+    {
+      "path": "plugins/.claude-plugin",
+      "include": ["*.json"],
+      "why": "OMN-16855: published marketplace metadata, carries install_hint / install_hint_pipx"
+    },
+    {
+      "path": ".claude-plugin",
+      "include": ["*.json"],
+      "why": "OMN-16855: the repo-root marketplace manifest, a second published copy of the same hints"
+    }
+  ],
+  "patterns": [
+    {
+      "id": "onex_registry_root",
+      "regex": "\\$ONEX_REGISTRY_ROOT",
+      "message": "Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead"
+    },
+    {
+      "id": "omni_home_bare",
+      "regex": "\\$OMNI_HOME",
+      "message": "Use $OMNIBASE_PATH (fail-fast) instead of legacy $OMNI_HOME"
+    },
+    {
+      "id": "omni_home_braced",
+      "regex": "\\$\\{OMNI_HOME",
+      "message": "Braced $OMNI_HOME expansion -- use ${OMNIBASE_PATH:?<message>}; ${OMNI_HOME:-.} silently resolves to the caller's cwd"
+    },
+    {
+      "id": "omni_home_environ",
+      "regex": "environ\\[[\"']OMNI_HOME[\"']\\]|environ\\.get\\([ ]*[\"']OMNI_HOME[\"']",
+      "message": "Python read of OMNI_HOME -- use os.environ[\"OMNIBASE_PATH\"] (fail-fast, no default)"
+    },
+    {
+      "id": "omni_home_envvar_binding",
+      "regex": "envvar[ ]*=[ ]*[\"']OMNI_HOME[\"']",
+      "message": "CLI envvar binding to OMNI_HOME -- bind OMNIBASE_PATH instead"
+    },
+    {
+      "id": "omni_home_yaml_key",
+      "regex": "(^|[^A-Za-z0-9_${])OMNI_HOME[ ]*:",
+      "message": "YAML/env declaration of OMNI_HOME -- declare OMNIBASE_PATH instead"
+    },
+    {
+      "id": "omnibase_path_failsoft_shell",
+      "regex": "\\$\\{OMNIBASE_PATH:-",
+      "message": "Fail-soft OMNIBASE_PATH default -- the rename exists to remove silent cwd resolution; use ${OMNIBASE_PATH:?<message>}"
+    },
+    {
+      "id": "omnibase_path_failsoft_python",
+      "regex": "environ\\.get\\([ ]*[\"']OMNIBASE_PATH[\"'][ ]*,",
+      "message": "environ.get(\"OMNIBASE_PATH\", <fallback>) reintroduces the silent default -- use os.environ[\"OMNIBASE_PATH\"]"
+    },
+    {
+      "id": "uv_run_python_m_omni",
+      "regex": "uv run python -m omni",
+      "message": "Use 'onex run <node_name>' instead -- see OMN-8770 standalone install"
+    },
+    { "id": "hardcoded_user_path", "regex": "/Users/jonah/", "note": "local-path-ok: this registry IS the machine-path rule; the literal is the thing being enforced, not a violation", "message": "Hardcoded user path -- use environment variable instead" },
+    { "id": "hardcoded_volume_path", "regex": "/Volumes/PRO-G40/", "note": "local-path-ok: this registry IS the machine-path rule; the literal is the thing being enforced, not a violation", "message": "Hardcoded volume path -- use environment variable instead" }
+  ]
+}
