@@ -751,6 +751,46 @@ allowed_extras:
       topic contract is tracked by OMN-10126.
     ticket: OMN-10126
 
+  - topic: "onex.evt.omniclaude.work-obligation-abandoned.v1"
+    lifecycle: observability
+    reason: >
+      Hook-side work obligation lifecycle event emitted through the daemon
+      registry sync. No dedicated omniclaude node contract owns this
+      observability topic yet; registry parity is bound by OMN-13902.
+    ticket: OMN-13902
+
+  - topic: "onex.evt.omniclaude.work-obligation-created.v1"
+    lifecycle: observability
+    reason: >
+      Hook-side work obligation lifecycle event emitted through the daemon
+      registry sync. No dedicated omniclaude node contract owns this
+      observability topic yet; registry parity is bound by OMN-13902.
+    ticket: OMN-13902
+
+  - topic: "onex.evt.omniclaude.work-obligation-satisfied.v1"
+    lifecycle: observability
+    reason: >
+      Hook-side work obligation lifecycle event emitted through the daemon
+      registry sync. No dedicated omniclaude node contract owns this
+      observability topic yet; registry parity is bound by OMN-13902.
+    ticket: OMN-13902
+
+  - topic: "onex.evt.omniclaude.work-obligation-superseded.v1"
+    lifecycle: observability
+    reason: >
+      Hook-side work obligation lifecycle event emitted through the daemon
+      registry sync. No dedicated omniclaude node contract owns this
+      observability topic yet; registry parity is bound by OMN-13902.
+    ticket: OMN-13902
+
+  - topic: "onex.evt.omniclaude.work-obligation-transferred.v1"
+    lifecycle: observability
+    reason: >
+      Hook-side work obligation lifecycle event emitted through the daemon
+      registry sync. No dedicated omniclaude node contract owns this
+      observability topic yet; registry parity is bound by OMN-13902.
+    ticket: OMN-13902
+
   # ---------------------------------------------------------------------------
   # OmniClaw channel messaging topics (OMN-7185)
   # Inbound normalized messages from channel adapters, outbound replies,

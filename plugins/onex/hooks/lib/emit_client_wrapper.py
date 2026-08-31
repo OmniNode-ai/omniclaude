@@ -163,6 +163,11 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "agent.action",  # wire-missing-producers - Per-tool agent action (hook → agent_actions table)
         "artifact.captured",  # OMN-13092 - Content-addressed artifact captured (duty_critical)
         "tool.output.captured",  # OMN-13092 - Tool output captured with artifact refs (duty_critical)
+        "work.obligation.abandoned",  # OMN-13902 - Work obligation lifecycle registry sync
+        "work.obligation.created",  # OMN-13902 - Work obligation lifecycle registry sync
+        "work.obligation.satisfied",  # OMN-13902 - Work obligation lifecycle registry sync
+        "work.obligation.superseded",  # OMN-13902 - Work obligation lifecycle registry sync
+        "work.obligation.transferred",  # OMN-13902 - Work obligation lifecycle registry sync
     ]
 )
 

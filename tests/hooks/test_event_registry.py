@@ -855,6 +855,12 @@ class TestEventRegistryIntegration:
             # Durable capture events (OMN-13092)
             "artifact.captured",
             "tool.output.captured",
+            # Work obligation lifecycle events (OMN-13902)
+            "work.obligation.abandoned",
+            "work.obligation.created",
+            "work.obligation.satisfied",
+            "work.obligation.superseded",
+            "work.obligation.transferred",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
