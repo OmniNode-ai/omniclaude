@@ -393,6 +393,91 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "injected_pattern_ids"],
     ),
     # =========================================================================
+    # Work Obligation Events
+    # =========================================================================
+    "work.obligation.abandoned": EventRegistration(
+        event_type="work.obligation.abandoned",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_OBLIGATION_ABANDONED,
+                transform=None,
+                description=(
+                    "Closed without delivery, with a recorded reason -- never a silent drop"
+                ),
+            ),
+        ],
+        partition_key_field="obligation_id",
+        required_fields=["obligation_id", "actor_id", "summary", "abandon_reason"],
+    ),
+    "work.obligation.created": EventRegistration(
+        event_type="work.obligation.created",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_OBLIGATION_CREATED,
+                transform=None,
+                description=(
+                    "An obligation is opened: who asked, who owes, what would satisfy it"
+                ),
+            ),
+        ],
+        partition_key_field="obligation_id",
+        required_fields=[
+            "obligation_id",
+            "actor_id",
+            "summary",
+            "asked_by",
+            "owed_by",
+            "acceptance_condition",
+        ],
+    ),
+    "work.obligation.satisfied": EventRegistration(
+        event_type="work.obligation.satisfied",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_OBLIGATION_SATISFIED,
+                transform=None,
+                description="Closed by delivery: artifact reference plus delivery state",
+            ),
+        ],
+        partition_key_field="obligation_id",
+        required_fields=[
+            "obligation_id",
+            "actor_id",
+            "summary",
+            "evidence_uri",
+            "delivery_state",
+        ],
+    ),
+    "work.obligation.superseded": EventRegistration(
+        event_type="work.obligation.superseded",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_OBLIGATION_SUPERSEDED,
+                transform=None,
+                description="Closed because a named successor obligation replaced it",
+            ),
+        ],
+        partition_key_field="obligation_id",
+        required_fields=[
+            "obligation_id",
+            "actor_id",
+            "summary",
+            "superseded_by_obligation_id",
+        ],
+    ),
+    "work.obligation.transferred": EventRegistration(
+        event_type="work.obligation.transferred",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_OBLIGATION_TRANSFERRED,
+                transform=None,
+                description="The debt moves to a different owner; the obligation survives",
+            ),
+        ],
+        partition_key_field="obligation_id",
+        required_fields=["obligation_id", "actor_id", "summary", "owed_by"],
+    ),
+    # =========================================================================
     # Prompt Events (Fan-out to TWO topics)
     # =========================================================================
     "prompt.submitted": EventRegistration(

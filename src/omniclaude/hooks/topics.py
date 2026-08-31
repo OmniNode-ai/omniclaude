@@ -43,6 +43,11 @@ class TopicBase(StrEnum):
     TOOL_EXECUTED = "onex.evt.omniclaude.tool-executed.v1"
     AGENT_ACTION = "onex.evt.omniclaude.agent-action.v1"
     LEARNING_PATTERN = "onex.evt.omniclaude.learning-pattern.v1"
+    WORK_OBLIGATION_ABANDONED = "onex.evt.omniclaude.work-obligation-abandoned.v1"
+    WORK_OBLIGATION_CREATED = "onex.evt.omniclaude.work-obligation-created.v1"
+    WORK_OBLIGATION_SATISFIED = "onex.evt.omniclaude.work-obligation-satisfied.v1"
+    WORK_OBLIGATION_SUPERSEDED = "onex.evt.omniclaude.work-obligation-superseded.v1"
+    WORK_OBLIGATION_TRANSFERRED = "onex.evt.omniclaude.work-obligation-transferred.v1"
 
     # ==========================================================================
     # omninode routing topics (agent routing commands/events)
