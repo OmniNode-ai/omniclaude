@@ -2,8 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Workspace reconcile tick (OMN-17190)
-# ===================================
+# Workspace reconcile tick (OMN-17190, delegating since OMN-17311)
 #
 # Keeps the canonical clones and the locally-installed venvs tracking `dev`,
 # automatically, without anyone typing a command.
@@ -15,11 +14,26 @@
 # so the install tracks the clones and this tick is what closes the gap.
 #
 # What it does, at most once every ONEX_RECONCILE_TICK_SECONDS (default 600):
-#   1. `git fetch` each canonical clone
-#   2. where the tracked branch moved and the tree is CLEAN, `git pull --ff-only`
-#   3. if anything moved, run omnibase_infra/scripts/reconcile-workspace-venvs.sh
-#   4. write a receipt line naming each repo, its old -> new SHA, and the venv
-#      sync result, plus a one-line status the SessionStart hook reads
+#   1. bootstrap the omnibase_infra clone IF the reconciler is not present yet
+#   2. run omnibase_infra/scripts/reconcile-host.sh
+#   3. write a receipt line and the one-line status the SessionStart hook reads
+#
+# This hook owns THROTTLING, DETACHMENT and the STATUS LINE. It owns no repair
+# logic and no verdict logic (OMN-17311).
+#
+# What it used to do, and why that had to stop
+# --------------------------------------------
+# Until OMN-17311 this file carried its own clone loop: fetch, `git pull
+# --ff-only`, then write `status=PULLED` on THE PULL'S EXIT CODE. That is the
+# OMN-17307 defect sitting in the scheduler. A `.201` clone with
+# `core.bare=true` and a working tree fetches cleanly forever while every
+# checkout fails with exit 128 (OMN-17291); nothing here ever re-read HEAD, so
+# a loop shaped like this one would have called that clone healthy for as long
+# as it existed. And the Mac having its own implementation meant the two hosts
+# were reconciled by different code, so a fix on one was not a fix on the other.
+#
+# There is now ONE reconciler, `reconcile-host.sh`, run identically here and
+# from `.201`'s cron unit. It proves every surface moved by reading it back.
 #
 # Why a PostToolUse tick and not a scheduler
 # ------------------------------------------
@@ -55,8 +69,8 @@
 # is the `onex` CLI guard, which refuses at the point where a stale venv would
 # actually produce bad results.
 #
-# Never pulls into a dirty clone
-# ------------------------------
+# Never pulls into a dirty clone (now the delegate's guarantee, not this file's)
+# ----------------------------------------------------------------------------
 # A dirty canonical clone is reported, never touched. Pulling would either fail
 # noisily mid-tick or, worse, succeed and entangle someone's uncommitted work
 # with a fast-forward they did not ask for. Committing directly in a canonical
@@ -133,86 +147,75 @@ printf '%s\n' "$_now" > "$_STAMP" 2>/dev/null || exit 0
 # The tick body, run detached so no tool call ever waits on it
 # ---------------------------------------------------------------------------
 _run_tick() {
-    local ts moved=0 dirty_repos="" moved_repos="" repo dir branch local_sha remote_sha
+    local ts reconciler bootstrap_note="" verdict rc
     ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    for dir in "$OMNI_HOME"/*/; do
-        [[ -d "${dir}.git" ]] || continue
-        repo="$(basename "$dir")"
+    reconciler="$OMNI_HOME/omnibase_infra/scripts/reconcile-host.sh"
 
-        branch="$(git -C "$dir" branch --show-current 2>/dev/null)"
-        # Only the tracking branches are ours to advance. A canonical clone
-        # parked on a feature branch is somebody's deliberate state.
-        [[ "$branch" == "dev" || "$branch" == "main" ]] || continue
-
-        git -C "$dir" fetch --quiet --prune origin "$branch" 2>/dev/null || continue
-
-        local_sha="$(git -C "$dir" rev-parse HEAD 2>/dev/null)"
-        remote_sha="$(git -C "$dir" rev-parse "origin/$branch" 2>/dev/null)"
-        [[ -n "$local_sha" && -n "$remote_sha" ]] || continue
-        [[ "$local_sha" != "$remote_sha" ]] || continue
-
-        if [[ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]]; then
-            # Reported, never touched. See the header for why.
-            printf '%s repo=%s branch=%s status=DIRTY head=%s remote=%s action=none\n' \
-                "$ts" "$repo" "$branch" "${local_sha:0:12}" "${remote_sha:0:12}" \
-                >> "$_RECEIPTS"
-            dirty_repos="${dirty_repos}${repo} "
-            continue
-        fi
-
-        if git -C "$dir" pull --ff-only --quiet origin "$branch" 2>/dev/null; then
-            printf '%s repo=%s branch=%s status=PULLED old=%s new=%s\n' \
-                "$ts" "$repo" "$branch" "${local_sha:0:12}" "${remote_sha:0:12}" \
-                >> "$_RECEIPTS"
-            moved=1
-            moved_repos="${moved_repos}${repo} "
-        else
-            printf '%s repo=%s branch=%s status=NOT_FF head=%s remote=%s action=none\n' \
-                "$ts" "$repo" "$branch" "${local_sha:0:12}" "${remote_sha:0:12}" \
-                >> "$_RECEIPTS"
-            dirty_repos="${dirty_repos}${repo}(not-ff) "
-        fi
-    done
-
-    # ---- venv reconcile ---------------------------------------------------
-    local reconciler venv_result="skipped"
-    reconciler="$OMNI_HOME/omnibase_infra/scripts/reconcile-workspace-venvs.sh"
-
-    if [[ "$moved" -eq 1 && -f "$reconciler" ]]; then
-        if bash "$reconciler" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1; then
-            venv_result="ok"
-        else
-            venv_result="FAILED"
-        fi
-    elif [[ -f "$reconciler" ]]; then
-        # Nothing pulled, but the venv can still be behind -- another session's
-        # pull-all, or a `uv sync` someone ran by hand, moves it independently.
-        # --check is read-only and cheap, so a no-movement tick still notices.
-        if bash "$reconciler" --check --omni-home "$OMNI_HOME" >/dev/null 2>&1; then
-            venv_result="ok"
-        else
-            venv_result="drift"
-            if bash "$reconciler" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1; then
-                venv_result="ok"
-            else
-                venv_result="FAILED"
+    # ---- bootstrap: how the reconciler itself gets here --------------------
+    # The tick no longer pulls the clones. That leaves exactly one ordering
+    # problem: on a host whose omnibase_infra clone predates OMN-17307, the
+    # reconciler does not exist yet, and nothing else advances the clone that
+    # would deliver it. So the ONE repo the tick still advances by itself is
+    # omnibase_infra, and only while the reconciler is absent.
+    #
+    # It is verified by content like everything else -- HEAD is re-read after
+    # the pull and compared to origin/dev. A bootstrap that reports success on
+    # `git pull`'s exit status would be the OMN-17307 defect reintroduced in the
+    # one place nobody would look for it.
+    if [[ ! -f "$reconciler" ]]; then
+        local infra="$OMNI_HOME/omnibase_infra" head_before head_after target
+        if [[ -d "$infra/.git" ]]; then
+            head_before="$(git -C "$infra" rev-parse HEAD 2>/dev/null)"
+            git -C "$infra" fetch --quiet --prune origin dev 2>/dev/null
+            target="$(git -C "$infra" rev-parse origin/dev 2>/dev/null)"
+            if [[ -z "$(git -C "$infra" status --porcelain 2>/dev/null)" ]]; then
+                git -C "$infra" pull --ff-only --quiet origin dev 2>/dev/null
             fi
+            head_after="$(git -C "$infra" rev-parse HEAD 2>/dev/null)"
+            if [[ -n "$head_after" && "$head_after" == "$target" ]]; then
+                bootstrap_note="bootstrap=omnibase_infra ${head_before:0:12}->${head_after:0:12}"
+            else
+                bootstrap_note="bootstrap=FAILED omnibase_infra head=${head_after:0:12} target=${target:0:12}"
+            fi
+            printf '%s %s\n' "$ts" "$bootstrap_note" >> "$_RECEIPTS"
         fi
     fi
 
-    printf '%s tick=complete pulled="%s" dirty="%s" venv=%s\n' \
-        "$ts" "${moved_repos% }" "${dirty_repos% }" "$venv_result" >> "$_RECEIPTS"
+    # ---- delegate ----------------------------------------------------------
+    # One reconciler, every machine (OMN-17307). This hook owns throttling,
+    # detachment and the SessionStart line; it owns no repair logic and no
+    # verdict logic. The previous version of this function fetched, pulled
+    # --ff-only and wrote `status=PULLED` on the PULL'S EXIT CODE -- the exact
+    # defect OMN-17307 exists to end, sitting in the scheduler. It also had no
+    # idea that a clone with core.bare=true fetches cleanly forever while every
+    # checkout fails (OMN-17291), because nothing here ever re-read HEAD.
+    if [[ ! -f "$reconciler" ]]; then
+        printf '%s tick=complete reconciler=ABSENT path=%s %s\n' \
+            "$ts" "$reconciler" "$bootstrap_note" >> "$_RECEIPTS"
+        printf 'DRIFT: no workspace reconciler at %s as of %s\n' "$reconciler" "$ts" > "$_STATUS"
+        return 0
+    fi
+
+    bash "$reconciler" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
+    rc=$?
+
+    case "$rc" in
+        0) verdict="in sync" ;;
+        2) verdict="FAILED" ;;
+        *) verdict="INDETERMINATE (exit $rc)" ;;
+    esac
+
+    printf '%s tick=complete reconciler_exit=%s verdict="%s" %s\n' \
+        "$ts" "$rc" "$verdict" "$bootstrap_note" >> "$_RECEIPTS"
 
     # ---- one-line status for the SessionStart hook ------------------------
     # A file, not a computation: SessionStart is contracted to be fast, and
-    # re-deriving this there would mean a `uv` invocation on every session open.
-    if [[ "$venv_result" == "FAILED" ]]; then
-        printf 'DRIFT: venv reconcile FAILED as of %s — see %s\n' "$ts" "$_RECEIPTS" > "$_STATUS"
-    elif [[ -n "$dirty_repos" ]]; then
-        printf 'DRIFT: %s not pulled (dirty or non-ff) as of %s\n' "${dirty_repos% }" "$ts" > "$_STATUS"
-    else
+    # re-deriving this there would mean a git fetch on every session open.
+    if [[ "$rc" -eq 0 ]]; then
         printf 'clones/venv: in sync as of %s\n' "$ts" > "$_STATUS"
+    else
+        printf 'DRIFT: reconcile %s as of %s — see %s\n' "$verdict" "$ts" "$_RECEIPTS" > "$_STATUS"
     fi
 }
 

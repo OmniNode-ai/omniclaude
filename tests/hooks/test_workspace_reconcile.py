@@ -6,19 +6,22 @@ Two hooks, one job: keep the canonical clones and the locally-installed venvs
 tracking ``dev`` without anyone typing a command, and make the answer visible at
 session start instead of at the first failed dispatch.
 
-* ``workspace_reconcile_tick.sh`` — PostToolUse, throttled. Fetches each
-  canonical clone, fast-forwards the CLEAN ones, runs the reconciler, and
-  writes a receipt line plus a one-line verdict.
+* ``workspace_reconcile_tick.sh`` — PostToolUse, throttled. Delegates to
+  ``omnibase_infra/scripts/reconcile-host.sh`` (OMN-17311) and writes a receipt
+  line plus a one-line verdict. It performs no repair of its own: it used to
+  fetch and ``git pull --ff-only`` each clone and report ``status=PULLED`` on
+  the pull's EXIT CODE, which is the OMN-17307 defect -- a clone with
+  ``core.bare=true`` fetches cleanly forever while every checkout fails.
 * ``session_start_workspace_sync.sh`` — SessionStart. Prints that verdict with
   its age.
 
 Everything here runs the real scripts as subprocesses against a hermetic
 ``$OMNI_HOME`` built from local git repos. Nothing reaches the network, no real
 clone is touched, and the reconciler is a recording stub (its own behaviour is
-covered by omnibase_infra's ``tests/scripts/test_reconcile_workspace_venvs.py``)
+covered by omnibase_infra's ``tests/scripts/test_reconcile_host_omn17307.py``)
 so these tests prove the hooks' WIRING and their two hard safety properties:
 
-    the tick never pulls into a dirty clone, and it can never fail a tool call.
+    the tick performs no repair of its own, and it can never fail a tool call.
 """
 
 from __future__ import annotations
@@ -100,25 +103,33 @@ class _Workspace:
 
         self.clone, self.seed = _make_clone_with_remote(self.root, "omnimarket")
 
-        infra_scripts = self.root / "omnibase_infra" / "scripts"
-        infra_scripts.mkdir(parents=True)
-        self.reconciler = infra_scripts / "reconcile-workspace-venvs.sh"
+        self.infra_scripts = self.root / "omnibase_infra" / "scripts"
+        self.infra_scripts.mkdir(parents=True)
+        # OMN-17311: the tick delegates to the ONE host reconciler. Its own
+        # behaviour -- fetch, fast-forward, refuse a dirty clone, and prove by
+        # readback that every surface reached its target -- is covered by
+        # omnibase_infra's tests/scripts/test_reconcile_host_omn17307.py. Here
+        # it is a recording stub, because what these tests pin is the WIRING.
+        self.reconciler = self.infra_scripts / "reconcile-host.sh"
         self.reconcile_log = root / "reconcile.log"
         self.set_reconciler_exit(0)
 
-    def set_reconciler_exit(self, code: int, *, check_code: int | None = None) -> None:
-        """Recording stub. ``check_code`` lets --check answer differently."""
-        checked = code if check_code is None else check_code
+    def set_reconciler_exit(self, code: int) -> None:
+        """Recording stub for ``reconcile-host.sh``.
+
+        Exit codes are the reconciler's own: 0 every surface proven at target,
+        2 a surface could not be proven, 3 indeterminate configuration.
+        """
         self.reconciler.write_text(
             "#!/usr/bin/env bash\n"
             f'printf "%s\\n" "$*" >> "{self.reconcile_log}"\n'
-            'for a in "$@"; do\n'
-            f'  if [[ "$a" == "--check" ]]; then exit {checked}; fi\n'
-            "done\n"
             f"exit {code}\n",
             encoding="utf-8",
         )
         self.reconciler.chmod(0o755)
+
+    def remove_reconciler(self) -> None:
+        self.reconciler.unlink()
 
     @property
     def status_file(self) -> Path:
@@ -255,7 +266,7 @@ def test_tick_exits_zero_even_when_the_reconciler_fails(ws: _Workspace) -> None:
     the same fact.
     """
     _advance_remote(ws.seed, "omnimarket", ws.root, "two")
-    ws.set_reconciler_exit(1, check_code=1)
+    ws.set_reconciler_exit(2)
 
     result = ws.run_tick()
 
@@ -286,96 +297,127 @@ def test_tick_is_silent_without_omni_home(ws: _Workspace) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Pull behaviour
+# Delegation -- one reconciler, every machine (OMN-17311)
 # --------------------------------------------------------------------------- #
-def test_clone_behind_origin_is_fast_forwarded_and_reconciled(
+def test_the_tick_delegates_and_does_not_reimplement_the_clone_loop(
     ws: _Workspace,
 ) -> None:
-    before = _git("rev-parse", "HEAD", cwd=ws.clone)
-    after = _advance_remote(ws.seed, "omnimarket", ws.root, "two")
-    assert before != after
+    """The tick owns throttling, detachment and the status line. Nothing else.
+
+    Before OMN-17311 this hook fetched every clone, ran ``git pull --ff-only``,
+    and wrote ``status=PULLED`` on THE PULL'S EXIT CODE. That is the OMN-17307
+    defect sitting in the scheduler: a clone with ``core.bare=true`` fetches
+    cleanly forever while every checkout fails with exit 128 (OMN-17291), and
+    nothing here ever re-read HEAD to notice.
+    """
+    _advance_remote(ws.seed, "omnimarket", ws.root, "two")
 
     ws.run_tick()
 
-    assert _git("rev-parse", "HEAD", cwd=ws.clone) == after, (
-        "the clone was behind origin/dev on a clean tree and was not pulled"
+    calls = ws.reconcile_calls()
+    assert calls, "the tick did not delegate to the host reconciler at all"
+    assert any("--omni-home" in c for c in calls), (
+        f"the reconciler must be handed the root explicitly; calls were {calls!r}"
     )
     receipts = ws.receipts.read_text(encoding="utf-8")
-    assert "status=PULLED" in receipts
-    assert before[:12] in receipts and after[:12] in receipts, (
-        "the receipt must name the old -> new SHA, not merely that something moved"
+    assert "reconciler_exit=0" in receipts
+    assert "status=PULLED" not in receipts, (
+        "the tick is still reporting a pull of its own; the delegate owns that "
+        "and owns the readback that proves it"
     )
-    assert ws.reconcile_calls(), "clone moved but the venv reconcile never ran"
 
 
-def test_dirty_clone_is_reported_and_never_pulled(ws: _Workspace) -> None:
-    """The hard safety property.
+def test_the_tick_never_pulls_a_clone_itself(ws: _Workspace) -> None:
+    """A stubbed reconciler that does nothing must leave every clone untouched.
 
-    Pulling into a dirty canonical clone would either fail noisily mid-tick or,
-    worse, succeed and entangle someone's uncommitted work with a fast-forward
-    they did not ask for. Committing in a canonical clone is already a policy
-    violation, so a dirty clone is a thing to surface, not to resolve.
+    This is the structural half of the assertion above: if the tick still had a
+    pull loop, the clone would advance even though the delegate is a no-op.
     """
     before = _git("rev-parse", "HEAD", cwd=ws.clone)
     _advance_remote(ws.seed, "omnimarket", ws.root, "two")
-    (ws.clone / "f.txt").write_text("uncommitted local edit", encoding="utf-8")
+
+    ws.run_tick()
+
+    assert _git("rev-parse", "HEAD", cwd=ws.clone) == before, (
+        "the tick advanced a clone by itself; repair belongs to reconcile-host.sh "
+        "so that both hosts run identical logic and one readback covers both"
+    )
+
+
+def test_a_failing_reconcile_surfaces_as_drift_not_as_in_sync(ws: _Workspace) -> None:
+    """Exit 2 is 'a surface could not be proven at target'."""
+    ws.set_reconciler_exit(2)
 
     result = ws.run_tick()
 
-    assert result.returncode == 0
-    assert _git("rev-parse", "HEAD", cwd=ws.clone) == before, (
-        "a DIRTY canonical clone was pulled -- this can entangle uncommitted work"
-    )
-    assert (ws.clone / "f.txt").read_text(encoding="utf-8") == "uncommitted local edit"
-
-    receipts = ws.receipts.read_text(encoding="utf-8")
-    assert "status=DIRTY" in receipts
-    assert "action=none" in receipts
-    assert "DRIFT" in ws.status_file.read_text(encoding="utf-8"), (
-        "a clone that could not be pulled must surface as DRIFT at session start, "
-        "not be silently absorbed"
-    )
+    assert result.returncode == 0, "a tick must never fail the tool call that fired it"
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT" in status
+    assert "in sync" not in status
+    assert "reconciler_exit=2" in ws.receipts.read_text(encoding="utf-8")
 
 
-def test_clone_on_a_feature_branch_is_left_alone(ws: _Workspace) -> None:
-    """Only the tracking branches are ours to advance."""
-    _git("checkout", "--quiet", "-b", "jonah/some-work", cwd=ws.clone)
-    before = _git("rev-parse", "HEAD", cwd=ws.clone)
-    _advance_remote(ws.seed, "omnimarket", ws.root, "two")
+def test_an_indeterminate_reconcile_is_not_reported_as_in_sync(ws: _Workspace) -> None:
+    """Exit 3 is a configuration the reconciler could not resolve.
 
-    ws.run_tick()
-
-    assert _git("rev-parse", "HEAD", cwd=ws.clone) == before
-    assert _git("branch", "--show-current", cwd=ws.clone) == "jonah/some-work"
-
-
-def test_up_to_date_clone_still_verifies_the_venv(ws: _Workspace) -> None:
-    """Nothing pulled is not the same as nothing drifted.
-
-    Another session's pull-all, or a `uv sync` someone ran by hand, moves the
-    venv independently of this clone. A tick that only looked at git would call
-    that state clean.
+    'Could not determine' is never 'fine' -- the same fail-closed posture the
+    verdict table takes on an unreadable surface.
     """
-    ws.run_tick()
-
-    calls = ws.reconcile_calls()
-    assert calls, "a no-movement tick never checked the venv at all"
-    assert any("--check" in c for c in calls), (
-        f"a no-movement tick must use the read-only probe; calls were {calls!r}"
-    )
-
-
-def test_check_drift_without_movement_triggers_a_repair(ws: _Workspace) -> None:
-    ws.set_reconciler_exit(0, check_code=1)  # --check says DRIFT, repair succeeds
+    ws.set_reconciler_exit(3)
 
     ws.run_tick()
 
-    calls = ws.reconcile_calls()
-    assert any("--check" in c for c in calls)
-    assert any("--check" not in c for c in calls), (
-        f"--check reported drift and no repair followed; calls were {calls!r}"
-    )
-    assert "in sync" in ws.status_file.read_text(encoding="utf-8")
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT" in status
+    assert "INDETERMINATE" in status
+
+
+def test_a_missing_reconciler_is_reported_not_silently_skipped(ws: _Workspace) -> None:
+    """An uncovered host must say so at session start.
+
+    A tick that quietly does nothing on a host with no reconciler is the
+    OMN-17291 condition -- the workspace looks governed while it drifts.
+    """
+    ws.remove_reconciler()
+
+    ws.run_tick()
+
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT" in status
+    assert "reconciler" in status
+
+
+def test_bootstrap_advances_omnibase_infra_only_while_the_reconciler_is_absent(
+    ws: _Workspace,
+) -> None:
+    """The one ordering problem delegation creates, and its bounded answer.
+
+    On a host whose omnibase_infra clone predates OMN-17307 the reconciler does
+    not exist, and nothing else advances the clone that would deliver it. So the
+    tick advances THAT ONE repo, only while the reconciler is missing -- and it
+    verifies the result by re-reading HEAD, because a bootstrap that trusted
+    ``git pull``'s exit status would be the same defect in the last place anyone
+    would look for it.
+    """
+    infra_clone, infra_seed = _make_clone_with_remote(ws.root, "omnibase_infra_src")
+    # Point the tick's bootstrap at a real clone by relocating it into place.
+    import shutil
+
+    shutil.rmtree(ws.root / "omnibase_infra")
+    shutil.move(str(infra_clone), str(ws.root / "omnibase_infra"))
+    target = _advance_remote(infra_seed, "omnibase_infra_src", ws.root, "two")
+
+    ws.run_tick()
+
+    assert _git("rev-parse", "HEAD", cwd=ws.root / "omnibase_infra") == target
+    receipts = ws.receipts.read_text(encoding="utf-8")
+    assert "bootstrap=omnibase_infra" in receipts
+    assert target[:12] in receipts
+
+
+def test_bootstrap_does_not_run_once_the_reconciler_exists(ws: _Workspace) -> None:
+    ws.run_tick()
+    assert "bootstrap=" not in ws.receipts.read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -403,7 +445,7 @@ def test_interval_is_claimed_before_the_work_not_after(ws: _Workspace) -> None:
     last: the OMN-15590 stall shape, reproduced by design.
     """
     _advance_remote(ws.seed, "omnimarket", ws.root, "two")
-    ws.set_reconciler_exit(1, check_code=1)
+    ws.set_reconciler_exit(2)
 
     ws.run_tick()
 
@@ -441,18 +483,22 @@ def test_session_line_prints_the_in_sync_verdict_with_its_age(
     )
 
 
-def test_session_line_prints_drift_when_a_clone_could_not_be_pulled(
+def test_session_line_prints_drift_when_a_surface_could_not_be_proven(
     ws: _Workspace,
 ) -> None:
-    _advance_remote(ws.seed, "omnimarket", ws.root, "two")
-    (ws.clone / "f.txt").write_text("uncommitted", encoding="utf-8")
+    """The reconciler said a surface is not at target; the session must say so.
+
+    This is the whole reason the status line exists: drift becomes visible
+    before any work is planned, rather than at the first failed dispatch.
+    """
+    ws.set_reconciler_exit(2)
     ws.run_tick()
 
     result = ws.run_session_line()
 
     assert result.returncode == 0
     assert "DRIFT" in result.stdout
-    assert "omnimarket" in result.stdout
+    assert "in sync" not in result.stdout
 
 
 def test_session_line_reports_unknown_rather_than_in_sync_when_no_tick_has_run(
