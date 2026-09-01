@@ -38,7 +38,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
@@ -293,11 +293,22 @@ def test_line_numbers_point_at_the_offending_call() -> None:
 # ---------------------------------------------------------------------------
 
 
+#: Fixture census, pinned so a fixture that vanishes fails the suite rather
+#: than silently shrinking its coverage. ``passing`` gained one in the
+#: OMN-17499 follow-up: pr-backlog-drain carries ``.replace(/'/g, '')`` inside
+#: a ``${}`` substitution -- a real regular-expression literal containing a
+#: quote -- and the first shipped revision refused it as ``<unparsed>``. It is
+#: the only script in the 1895-script live corpus whose verdict the regex
+#: tokeniser changes.
+_FIXTURE_COUNTS: Final[dict[str, int]] = {"offending": 3, "passing": 4}
+
+
 def _fixtures(prefix: str) -> list[Path]:
     found = sorted(_FIXTURES.glob(f"{prefix}_*.js"))
-    assert len(found) == 3, (
-        f"expected 3 {prefix} fixtures from the real corpus, found {len(found)}: "
-        f"{[p.name for p in found]!r}"
+    expected = _FIXTURE_COUNTS[prefix]
+    assert len(found) == expected, (
+        f"expected {expected} {prefix} fixtures from the real corpus, found "
+        f"{len(found)}: {[p.name for p in found]!r}"
     )
     return found
 
@@ -399,7 +410,7 @@ def _registered_command() -> str:
         "rather than skips on purpose: an unregistered enforcement hook is "
         "exactly the OMN-13244 defect, and a skipped check reports it as green."
     )
-    return matching[0]
+    return str(matching[0])
 
 
 def _run_hook(
@@ -594,3 +605,316 @@ def test_registered_hook_reads_a_script_from_script_path(tmp_path: Path) -> None
     assert result.returncode == 2
     assert "from-disk" in result.stdout
     assert "fable" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Scanner desynchronisation (OMN-17499 follow-up)
+#
+# Every case below was ALLOWED (exit 0) by the first shipped revision of this
+# guard, verified against the live registered hook before the fix. They are the
+# whole reason the module now tokenises regular-expression literals: a scanner
+# that cannot see a pattern reads its bytes as code, and the constructs a
+# pattern legitimately contains -- an escaped slash, a quote, a backtick -- are
+# exactly the constructs that blank the rest of a line or the rest of a file.
+#
+# The shipped docstring claimed this residual "yields an unresolvable_call
+# finding -- it fails closed". That was true only when the desynchronisation
+# landed INSIDE an argument list. When it landed before the call, the call
+# stopped existing and the dispatch passed in silence.
+# ---------------------------------------------------------------------------
+
+
+def test_url_scheme_regex_does_not_hide_the_call_that_follows_it() -> None:
+    """`\\/\\/` inside a pattern is a literal slash pair, not a line comment.
+
+    The shipped scanner read it as `//`, blanked the remainder of the line,
+    and with it the `agent(` token -- so `_call_sites` returned [] and the
+    dispatch was allowed.
+    """
+    findings = _check(
+        "const norm = (u) => u.replace(/^https?:\\/\\//, ''); "
+        "agent('t', { label: 'after-regex' });\n"
+    )
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert findings[0].label == "after-regex"
+    assert "no model" in findings[0].reason
+
+
+def test_url_scheme_regex_does_not_hide_a_banned_model_on_the_same_line() -> None:
+    """The same shape with an explicitly banned model still has to be caught."""
+    findings = _check(
+        "const re = /a\\/\\//; agent('t', { label: 'x', model: 'fable' });\n"
+    )
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert "'fable'" in findings[0].reason
+
+
+def test_quote_inside_a_character_class_does_not_swallow_later_calls() -> None:
+    """A quote inside a pattern is not a string delimiter.
+
+    The shipped scanner opened a string at the `'` in the character class and
+    closed it at the opening quote of a later argument, blanking BOTH calls in
+    between. This is the more severe variant: it is not bounded to one line.
+    """
+    findings = _check(
+        "const tok = str.split(/[^'\"]+/);\n"
+        "agent('a', { label: 'one' });\n"
+        "agent('b', { label: 'two' });\n"
+    )
+    assert [f.label for f in findings] == ["one", "two"], [f.render() for f in findings]
+    assert [f.line for f in findings] == [2, 3]
+
+
+def test_apostrophe_inside_a_regex_does_not_swallow_the_next_call() -> None:
+    findings = _check("const m = /don't/;\nagent('a', { label: 'one' });\n")
+    assert [f.label for f in findings] == ["one"], [f.render() for f in findings]
+
+
+def test_backtick_inside_a_regex_does_not_swallow_the_rest_of_the_file() -> None:
+    """A backtick in a pattern pushed a template frame in the shipped scanner,
+    which then ran to end of file."""
+    findings = _check("const m = /`/;\nagent('a', { label: 'one' });\n")
+    assert [f.label for f in findings] == ["one"], [f.render() for f in findings]
+
+
+def test_escaped_slash_and_character_class_do_not_terminate_a_pattern() -> None:
+    """The two lexer rules the fix turns on, asserted directly on the mask."""
+    masked = _GUARD._mask("const a = /[a/b]\\//; agent('t', { label: 'x' });\n").text
+    assert "agent(" in masked, masked
+    assert "[a/b]" not in masked, "pattern body must be blanked, not preserved"
+
+
+def test_regex_inside_the_argument_list_is_parsed_rather_than_refused() -> None:
+    """The shipped revision refused this as `<unparsed>`. It names a model.
+
+    Verbatim shape from the live corpus (`.replace(/'/g, '')` inside a `${}`
+    substitution); see the fixture of the same name.
+    """
+    findings = _check("agent('t', { label: 'x', re: /a\\/\\//, model: 'sonnet' });\n")
+    assert findings == [], [f.render() for f in findings]
+
+
+def test_division_is_not_mistaken_for_a_pattern() -> None:
+    """The classifier has to keep arithmetic working, or every script with a
+    `/` in it becomes a false block."""
+    findings = _check(
+        "const half = total / 2;\n"
+        "const rate = (a + b) / 2;\n"
+        "const each = items[0] / count;\n"
+        "agent('t', { label: 'after-division' });\n"
+    )
+    assert [f.label for f in findings] == ["after-division"], [
+        f.render() for f in findings
+    ]
+    assert findings[0].line == 4
+
+
+def test_regex_after_a_keyword_is_a_pattern_not_a_division() -> None:
+    findings = _check(
+        "function f(s) { return /a'b/.test(s); }\nagent('t', { label: 'x' });\n"
+    )
+    assert [f.label for f in findings] == ["x"], [f.render() for f in findings]
+
+
+def test_ambiguous_slash_after_a_paren_is_refused_not_guessed() -> None:
+    """`)` ends a value AND a control head, so `/` after it is genuinely
+    ambiguous. When the two readings disagree about the rest of the file, the
+    guard refuses instead of picking one."""
+    findings = _check("if (ok) /a'b\\/c/.test(s);\nagent('t', { label: 'x' });\n")
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert findings[0].label == "<unparsed source>"
+    assert "refuses rather than pick one" in findings[0].reason
+
+
+def test_unterminated_string_refuses_the_whole_script() -> None:
+    """A single-quoted string cannot carry a raw newline. One that appears to
+    is proof the scan desynchronised, and a desynchronised scan is void."""
+    findings = _check(
+        "const s = 'oops;\nagent('t', { label: 'x', model: 'sonnet' });\n"
+    )
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert findings[0].label == "<unparsed source>"
+    assert findings[0].line == 1
+
+
+def test_unterminated_template_refuses_the_whole_script() -> None:
+    findings = _check(
+        "const s = `oops;\nagent('t', { label: 'x', model: 'sonnet' });\n"
+    )
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert findings[0].label == "<unparsed source>"
+
+
+def test_unterminated_block_comment_refuses_the_whole_script() -> None:
+    findings = _check("/* oops\nagent('t', { label: 'x', model: 'sonnet' });\n")
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert findings[0].label == "<unparsed source>"
+
+
+def test_a_desync_refuses_even_when_every_visible_call_is_clean() -> None:
+    """The refusal is of the SCAN, not of the calls it happened to see. A mask
+    that desynchronised cannot prove the absence of a call it never saw."""
+    findings = _check(
+        "agent('a', { label: 'clean', model: 'sonnet' });\nconst s = 'unterminated;\n"
+    )
+    assert len(findings) == 1
+    assert findings[0].label == "<unparsed source>"
+
+
+# ---------------------------------------------------------------------------
+# The helper referenced without being called (OMN-17499 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def test_agent_bound_to_another_name_is_refused() -> None:
+    """`const a = agent; a('t', {...})` dispatched past the shipped guard.
+
+    `_call_sites` matched the literal token `agent(`, so any other binding of
+    the helper was invisible. This is deliberate-evasion only -- it cannot
+    arise from the accidental omission the guard targets -- but a control that
+    holds only against accidents is not a control, and nothing in the shipped
+    artifacts said so.
+    """
+    findings = _check("const a = agent;\na('t', { label: 'aliased' });\n")
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert "referenced here without being called" in findings[0].reason
+    assert findings[0].line == 1
+
+
+def test_agent_passed_as_a_value_is_refused() -> None:
+    findings = _check("dispatchAll([agent, agent]);\n")
+    assert len(findings) == 2, [f.render() for f in findings]
+    assert all("without being called" in f.reason for f in findings)
+
+
+def test_agent_destructured_out_of_an_object_is_refused() -> None:
+    findings = _check("const { agent } = helpers;\n")
+    assert len(findings) == 1, [f.render() for f in findings]
+    assert "without being called" in findings[0].reason
+
+
+def test_the_word_agent_in_a_prompt_is_still_not_a_reference() -> None:
+    """The new rule must not fire on prose. Measured on the live corpus of
+    1895 workflow scripts, no real script carries a non-call reference."""
+    findings = _check(
+        "agent(`tell the agent that agent orchestration is hard`, "
+        "{ label: 'x', model: 'sonnet' });\n"
+        "// the agent helper is documented here\n"
+    )
+    assert findings == [], [f.render() for f in findings]
+
+
+def test_subagent_and_property_access_are_not_the_global_helper() -> None:
+    findings = _check(
+        "subagent('t', { label: 'a' });\nrunner.agent('t', { label: 'b' });\n"
+    )
+    assert findings == [], [f.render() for f in findings]
+
+
+# ---------------------------------------------------------------------------
+# script + scriptPath (OMN-17499 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def test_both_script_and_script_path_are_checked(tmp_path: Path) -> None:
+    """The shipped guard preferred the inline `script` and never opened the
+    path, so a clean inline body was a cover for a dirty one on disk.
+
+    Which of the two the harness would actually run is not knowable from
+    inside a PreToolUse hook, and does not need to be: every body the call
+    carries is checked.
+    """
+    script = tmp_path / "on-disk.js"
+    script.write_text("agent('t', { label: 'on-disk' });\n", encoding="utf-8")
+    sources = _GUARD._resolve_script_sources(
+        {
+            "script": "agent('t', { label: 'inline', model: 'sonnet' });\n",
+            "scriptPath": str(script),
+        }
+    )
+    assert [name for name, _ in sources] == ["<inline script>", str(script)]
+    findings = [
+        finding
+        for name, source in sources
+        for finding in _GUARD.check_workflow_script(source, ALLOWLIST, filename=name)
+    ]
+    assert [f.label for f in findings] == ["on-disk"], [f.render() for f in findings]
+
+
+def test_neither_script_nor_script_path_raises(tmp_path: Path) -> None:
+    with pytest.raises(_GUARD.AllowlistError):
+        _GUARD._resolve_script_sources({})
+
+
+def test_registered_hook_blocks_a_regex_hidden_call(tmp_path: Path) -> None:
+    """End to end, through the command the harness runs. The checker returning
+    a finding is not the same fact as the hook exiting 2 (OMN-8928)."""
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {
+                "script": (
+                    "const norm = (u) => u.replace(/^https?:\\/\\//, ''); "
+                    "agent('t', { label: 'after-regex' });\n"
+                )
+            },
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2, (
+        f"expected a block, got {result.returncode}.\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert '"decision": "block"' in result.stdout
+    assert "after-regex" in result.stdout
+
+
+def test_registered_hook_blocks_a_quote_in_a_character_class(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {
+                "script": (
+                    "const tok = str.split(/[^'\"]+/);\n"
+                    "agent('a', { label: 'one' });\n"
+                    "agent('b', { label: 'two' });\n"
+                )
+            },
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "one" in result.stdout and "two" in result.stdout
+
+
+def test_registered_hook_blocks_an_aliased_dispatch(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {
+                "script": "const a = agent;\na('t', { label: 'aliased' });\n"
+            },
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "without being called" in result.stdout
+
+
+def test_registered_hook_blocks_a_dirty_script_path_behind_a_clean_script(
+    tmp_path: Path,
+) -> None:
+    script = tmp_path / "on-disk.js"
+    script.write_text("agent('t', { label: 'on-disk' });\n", encoding="utf-8")
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {
+                "script": "agent('t', { label: 'inline', model: 'sonnet' });\n",
+                "scriptPath": str(script),
+            },
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "on-disk" in result.stdout

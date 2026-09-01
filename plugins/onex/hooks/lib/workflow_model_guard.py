@@ -53,18 +53,49 @@ tell an options object from a prompt that happens to contain the text
 ``model:``, and it cannot follow a multi-line or nested one.
 
 ``_mask()`` walks the source once and blanks the *contents* of comments, single
-and double quoted strings, and template literals -- preserving length, newlines
-and delimiters, and correctly re-entering code mode inside ``${...}``
-substitutions so a nested template cannot desynchronise the scan. Every
-structural decision afterwards is made on the masked text (where no brace,
-paren or comma inside a string or comment survives to be miscounted) while
-every *value* is read from the original text.
+and double quoted strings, template literals **and regular-expression
+literals** -- preserving length, newlines and delimiters, and correctly
+re-entering code mode inside ``${...}`` substitutions so a nested template
+cannot desynchronise the scan. Every structural decision afterwards is made on
+the masked text (where no brace, paren, comma, quote or slash inside a string,
+comment or pattern survives to be miscounted) while every *value* is read from
+the original text.
 
-Known limitation, stated rather than hidden: regular-expression literals are
-not tokenised. A regex containing an unbalanced brace or paren inside an
-``agent()`` argument list would desynchronise the bracket scan. That case
-yields an ``unresolvable_call`` finding -- the guard fails closed and says it
-could not parse, it never silently passes.
+Regex tokenisation is not a nicety (OMN-17499 follow-up). The first shipped
+revision did not tokenise patterns, and its own docstring claimed the residual
+failed closed. It did not. A regex is ordinary code to a scanner that cannot
+see it, so ``/^https?:\\/\\//`` read as a line comment and blanked the rest of
+its line -- including an ``agent(`` token that followed it -- and
+``/[^'"]+/`` opened a "string" at the quote inside the character class that ran
+until some later line's quote closed it, blanking every ``agent(`` in between.
+Both cases exited 0. The claim that an unparseable call fails closed held only
+when the desynchronisation landed *inside* an argument list; when it landed
+before the call, the call stopped existing.
+
+So the mask now reports what it could not resolve instead of guessing:
+
+* ``/`` is classified the way a JavaScript lexer classifies it -- pattern in
+  expression position, division after a value -- and patterns are parsed with
+  character classes and escapes, so ``\\/`` and ``[a/b]`` do not terminate one.
+* ``)``, ``]`` and ``}`` are the one position where both readings are
+  grammatical (``(a + b) / 2`` versus ``if (ok) /x/.test(s)``). Division is
+  assumed only when the two readings cannot disagree about the rest of the
+  file; when the candidate pattern carries a quote, a backslash, a bracket or
+  a comment opener, the script is refused.
+* A single- or double-quoted string that never closes on its line is not valid
+  JavaScript, so it is proof the scan desynchronised. Same for an unterminated
+  template or block comment.
+
+Any of those voids the whole scan, not just the construct it tripped on: a
+desynchronised mask reclassifies every byte after it. ``check_workflow_script``
+returns one finding naming the position and the reason, and the dispatch is
+refused.
+
+The scanner also refuses a *reference* to the ``agent`` helper that is not a
+call -- ``const a = agent``, ``[agent]``, a destructure. Dispatches through an
+alias are invisible to a scanner looking for ``agent(``, and a control that
+only holds against the accident it was built for is not a control. Measured on
+the live corpus of 1895 workflow scripts, no real script carries one.
 
 ``meta.phases[].model`` is informational only and is not inspected: it declares
 UI phase metadata, not the model a dispatched agent runs on. The per-call
@@ -106,7 +137,37 @@ _IDENT_CHARS: Final[frozenset[str]] = frozenset(
 
 _QUOTES: Final[frozenset[str]] = frozenset("'\"`")
 
-_AGENT_CALL: Final[re.Pattern[str]] = re.compile(r"agent\s*\(")
+#: The bare global helper, with a trailing identifier boundary. The *leading*
+#: boundary is checked in code, because a lookbehind cannot also reject the
+#: ``.`` of ``x.agent``.
+_AGENT_IDENT: Final[re.Pattern[str]] = re.compile(r"agent(?![A-Za-z0-9_$])")
+
+#: Keywords after which a ``/`` opens a regular-expression literal rather than
+#: dividing. Everything else that can precede a regex is punctuation, which
+#: ``_slash_context`` handles positionally.
+_REGEX_AFTER_KEYWORD: Final[frozenset[str]] = frozenset(
+    {
+        "await",
+        "case",
+        "delete",
+        "do",
+        "else",
+        "in",
+        "instanceof",
+        "new",
+        "of",
+        "return",
+        "throw",
+        "typeof",
+        "void",
+        "yield",
+    }
+)
+
+#: Characters that, inside a candidate pattern, make the regex reading and the
+#: division reading of an ambiguous ``/`` structurally different: quotes open
+#: strings, a backslash hides a delimiter, brackets shift nesting depth.
+_SLASH_AMBIGUITY_CHARS: Final[frozenset[str]] = frozenset("'\"`\\()[]{}")
 
 _OPENERS: Final[dict[str, str]] = {"(": ")", "[": "]", "{": "}"}
 _CLOSERS: Final[frozenset[str]] = frozenset(")]}")
@@ -206,6 +267,35 @@ def _allowed(allowlist: frozenset[str]) -> str:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class _Desync:
+    """A place where the scanner could not tell one construct from another.
+
+    Its presence voids the whole scan of that source. A desynchronised mask
+    does not merely lose the construct it tripped on -- it silently reclassifies
+    every byte after it, which is exactly how an ``agent(`` token disappears
+    from a script that contains one (OMN-17499 follow-up, gaps 1 and 2).
+    """
+
+    offset: int
+    reason: str
+
+
+@dataclass(slots=True)
+class _Frame:
+    """One nesting level of the mask walk: code, a template, or a ``${}``."""
+
+    kind: str
+    depth: int
+    start: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Masked:
+    text: str
+    desyncs: tuple[_Desync, ...]
+
+
 def _mask_line_comment(source: str, out: list[str], i: int) -> int:
     n = len(source)
     while i < n and source[i] != "\n":
@@ -214,8 +304,11 @@ def _mask_line_comment(source: str, out: list[str], i: int) -> int:
     return i
 
 
-def _mask_block_comment(source: str, out: list[str], i: int) -> int:
+def _mask_block_comment(
+    source: str, out: list[str], i: int, desyncs: list[_Desync]
+) -> int:
     n = len(source)
+    start = i
     out[i] = " "
     out[i + 1] = " "
     i += 2
@@ -227,13 +320,33 @@ def _mask_block_comment(source: str, out: list[str], i: int) -> int:
         if source[i] != "\n":
             out[i] = " "
         i += 1
+    desyncs.append(
+        _Desync(
+            offset=start,
+            reason=(
+                "a /* block comment opened here is never closed, so every byte "
+                "after it was read as comment text"
+            ),
+        )
+    )
     return i
 
 
-def _mask_quoted(source: str, out: list[str], i: int) -> int:
-    """Blank a ``'``- or ``"``-delimited literal, keeping both delimiters."""
+def _mask_quoted(source: str, out: list[str], i: int, desyncs: list[_Desync]) -> int:
+    """Blank a ``'``- or ``"``-delimited literal, keeping both delimiters.
+
+    A single- or double-quoted JavaScript string cannot contain a raw newline;
+    only a backslash line-continuation carries one across. So a scan that walks
+    off the end of the line looking for the closing quote has proved one of two
+    things -- the source is not valid JavaScript, or this quote was never a
+    string delimiter at all (a quote inside a regular-expression literal the
+    slash classifier got wrong). Either way the mask from here on is fiction,
+    so the newline is recorded as a desync and the scan resumes at it rather
+    than blanking whole lines of real code on the way to some distant quote.
+    """
     n = len(source)
     quote = source[i]
+    start = i
     i += 1
     while i < n:
         ch = source[i]
@@ -245,38 +358,135 @@ def _mask_quoted(source: str, out: list[str], i: int) -> int:
             continue
         if ch == quote:
             return i + 1
-        if ch != "\n":
-            out[i] = " "
+        if ch == "\n":
+            desyncs.append(
+                _Desync(
+                    offset=start,
+                    reason=(
+                        f"a {quote}-quoted string opened here is not closed on "
+                        "its own line, which no valid JavaScript string does; "
+                        "the scanner cannot tell a string from a quote "
+                        "character inside some other literal"
+                    ),
+                )
+            )
+            return i
+        out[i] = " "
         i += 1
+    desyncs.append(
+        _Desync(
+            offset=start,
+            reason=(
+                f"a {quote}-quoted string opened here is never closed, so every "
+                "byte after it was read as string text"
+            ),
+        )
+    )
     return i
 
 
-def _mask(source: str) -> str:
-    """Blank comment and string-literal *contents*, preserving every offset.
+def _scan_regex(source: str, i: int) -> tuple[int, int] | None:
+    """Parse a regular-expression literal starting at the ``/`` at ``i``.
+
+    Returns ``(close_slash_index, index_past_flags)``, or ``None`` when no
+    closing ``/`` is reached before the end of the line -- a regex literal
+    cannot span a newline, so that is proof this ``/`` was not one.
+
+    Character classes are tracked because ``/`` is literal inside ``[...]``
+    (``/[a/b]/`` is one regex, not two divisions), and backslash escapes are
+    skipped because ``\\/`` is a literal slash, not the terminator. Those two
+    rules are the whole reason the shipped scanner mis-read
+    ``/^https?:\\/\\//`` as a line comment.
+    """
+    n = len(source)
+    j = i + 1
+    in_class = False
+    while j < n:
+        ch = source[j]
+        if ch == "\n":
+            return None
+        if ch == "\\":
+            j += 2
+            continue
+        if in_class:
+            if ch == "]":
+                in_class = False
+        elif ch == "[":
+            in_class = True
+        elif ch == "/":
+            close = j
+            j += 1
+            while j < n and source[j] in _IDENT_CHARS:
+                j += 1
+            return close, j
+        j += 1
+    return None
+
+
+def _slash_context(source: str, prev: int) -> str:
+    """Classify a ``/`` as ``regex``, ``division`` or ``ambiguous``.
+
+    The classification is the standard one every JavaScript lexer uses: a
+    ``/`` in *expression* position opens a regular-expression literal, and a
+    ``/`` after a *value* is division. ``prev`` is the offset of the last
+    significant character (whitespace and comments are not significant).
+
+    ``)``, ``]`` and ``}`` are reported ``ambiguous`` rather than guessed at.
+    They end a value (``(a + b) / 2``) but also end a control head or a block
+    (``if (ok) /x/.test(s)``), and nothing local decides which. The caller
+    refuses when -- and only when -- the two readings would actually disagree
+    about the structure of the rest of the file.
+    """
+    if prev < 0:
+        return "regex"
+    ch = source[prev]
+    if ch in ")]}":
+        return "ambiguous"
+    if ch in _IDENT_CHARS:
+        start = prev
+        while start > 0 and source[start - 1] in _IDENT_CHARS:
+            start -= 1
+        word = source[start : prev + 1]
+        return "regex" if word in _REGEX_AFTER_KEYWORD else "division"
+    if ch in _QUOTES:
+        return "division"
+    return "regex"
+
+
+def _mask(source: str) -> _Masked:
+    """Blank comment, string and regex *contents*, preserving every offset.
 
     The returned text has exactly the same length and the same newline
     positions as ``source``, so an index computed on the mask indexes the
     original. Delimiters survive so a later pass can still tell that a value is
-    a string; the bytes between them do not, so no brace, paren or comma inside
-    a prompt is ever counted as structure.
+    a string; the bytes between them do not, so no brace, paren, comma, quote
+    or slash inside a prompt, a comment or a pattern is ever counted as
+    structure.
 
     ``${...}`` substitutions inside a template literal re-enter code mode, with
     their own brace depth, so a nested template cannot terminate the outer scan
     early. The ``${`` and its matching ``}`` are themselves blanked, which
     keeps brace balance intact for the caller.
+
+    Anything the walk cannot resolve is recorded in ``desyncs`` instead of
+    being guessed at. The caller turns a non-empty ``desyncs`` into a refusal
+    of the entire script: a mask that desynchronised does not lose one
+    construct, it reclassifies every byte after it.
     """
     out = list(source)
     n = len(source)
     i = 0
-    # Each frame is [kind, brace_depth]. kind is "code", "sub" (inside ${...})
-    # or "tmpl" (inside a backtick literal).
-    stack: list[list[object]] = [["code", 0]]
+    desyncs: list[_Desync] = []
+    stack: list[_Frame] = [_Frame(kind="code", depth=0, start=0)]
+    # Offset of the last significant character in the current expression, or
+    # -1 at the start of one. Comments and whitespace never update it.
+    prev = -1
 
     while i < n:
-        kind = stack[-1][0]
+        frame = stack[-1]
         ch = source[i]
 
-        if kind == "tmpl":
+        if frame.kind == "tmpl":
             if ch == "\\":
                 out[i] = " "
                 if i + 1 < n and source[i + 1] != "\n":
@@ -285,12 +495,14 @@ def _mask(source: str) -> str:
                 continue
             if ch == "`":
                 stack.pop()
+                prev = i
                 i += 1
                 continue
             if ch == "$" and i + 1 < n and source[i + 1] == "{":
                 out[i] = " "
                 out[i + 1] = " "
-                stack.append(["sub", 0])
+                stack.append(_Frame(kind="sub", depth=0, start=i))
+                prev = -1
                 i += 2
                 continue
             if ch != "\n":
@@ -303,31 +515,104 @@ def _mask(source: str) -> str:
             i = _mask_line_comment(source, out, i)
             continue
         if ch == "/" and i + 1 < n and source[i + 1] == "*":
-            i = _mask_block_comment(source, out, i)
+            i = _mask_block_comment(source, out, i, desyncs)
+            continue
+        if ch == "/":
+            i = _mask_slash(source, out, i, prev, desyncs)
+            prev = i - 1
             continue
         if ch in ("'", '"'):
-            i = _mask_quoted(source, out, i)
+            i = _mask_quoted(source, out, i, desyncs)
+            prev = i - 1
             continue
         if ch == "`":
-            stack.append(["tmpl", 0])
+            stack.append(_Frame(kind="tmpl", depth=0, start=i))
             i += 1
             continue
-        if kind == "sub":
-            depth = stack[-1][1]
-            if not isinstance(depth, int):  # pragma: no cover - shape is internal
-                depth = 0
+        if frame.kind == "sub":
             if ch == "{":
-                stack[-1][1] = depth + 1
+                frame.depth += 1
             elif ch == "}":
-                if depth == 0:
+                if frame.depth == 0:
                     stack.pop()
                     out[i] = " "
+                    prev = i
                     i += 1
                     continue
-                stack[-1][1] = depth - 1
+                frame.depth -= 1
+        if not ch.isspace():
+            prev = i
         i += 1
 
-    return "".join(out)
+    for frame in stack[1:]:
+        desyncs.append(
+            _Desync(
+                offset=frame.start,
+                reason=(
+                    "a template literal opened here is never closed, so every "
+                    "byte after it was read as template text"
+                    if frame.kind == "tmpl"
+                    else "a ${ substitution opened here is never closed"
+                ),
+            )
+        )
+
+    return _Masked(text="".join(out), desyncs=tuple(desyncs))
+
+
+def _mask_slash(
+    source: str, out: list[str], i: int, prev: int, desyncs: list[_Desync]
+) -> int:
+    """Handle one ``/`` that is neither ``//`` nor ``/*``.
+
+    Returns the offset to continue the walk at. Division advances one
+    character and changes nothing; a regular-expression literal has its body
+    blanked between surviving delimiters, exactly like a string.
+    """
+    context = _slash_context(source, prev)
+    if context == "division":
+        return i + 1
+
+    parsed = _scan_regex(source, i)
+    if parsed is None:
+        if context == "regex":
+            desyncs.append(
+                _Desync(
+                    offset=i,
+                    reason=(
+                        "a '/' in expression position does not close as a "
+                        "regular-expression literal on its own line, so the "
+                        "scanner cannot tell a pattern from a division here"
+                    ),
+                )
+            )
+        # Ambiguous with no same-line close is a division: no regex reading
+        # exists at all.
+        return i + 1
+
+    close, end = parsed
+    body = source[i + 1 : close]
+    if context == "ambiguous" and (
+        _SLASH_AMBIGUITY_CHARS.intersection(body) or "//" in body
+    ):
+        desyncs.append(
+            _Desync(
+                offset=i,
+                reason=(
+                    "this '/' follows ')', ']' or '}', where a division and a "
+                    "regular-expression literal are both grammatical, and the "
+                    "two readings disagree about the rest of the file (the "
+                    f"candidate pattern {source[i:end]!r} carries a quote, a "
+                    "backslash, a bracket or a comment opener). The guard "
+                    "refuses rather than pick one"
+                ),
+            )
+        )
+        return i + 1
+
+    for j in range(i + 1, close):
+        out[j] = " "
+    return end
 
 
 def _line_of(source: str, offset: int) -> int:
@@ -485,17 +770,57 @@ def _label_text(source: str, masked: str, props: list[_Property]) -> str:
     return "<no label>"
 
 
-def _call_sites(masked: str) -> list[int]:
-    """Offsets of every ``(`` that opens a genuine ``agent(...)`` call."""
-    sites: list[int] = []
-    for match in _AGENT_CALL.finditer(masked):
+def _source_snippet(source: str, offset: int, *, width: int = 60) -> str:
+    """The source line containing ``offset``, squeezed and trimmed.
+
+    Used as the label of a finding that has no options object to read a
+    ``label:`` out of, so the refusal still names the line it is about.
+    """
+    line_start = source.rfind("\n", 0, offset) + 1
+    line_end = source.find("\n", offset)
+    if line_end == -1:
+        line_end = len(source)
+    text = " ".join(source[line_start:line_end].split())
+    return text[:width] if text else "<no source>"
+
+
+@dataclass(frozen=True, slots=True)
+class _Reference:
+    """One occurrence of the bare global ``agent`` identifier in masked code.
+
+    ``open_paren`` is the offset of the ``(`` that calls it, or ``None`` when
+    the helper is referenced without being called -- bound to another name,
+    passed as a value, destructured. That form is invisible to a scanner that
+    only looks for ``agent(``, which is how ``const a = agent; a('t', {...})``
+    dispatched an unmodelled background agent past the shipped guard.
+    """
+
+    name_start: int
+    name_end: int
+    open_paren: int | None
+
+
+def _agent_references(masked: str) -> list[_Reference]:
+    """Every use of the bare global ``agent`` identifier, called or not.
+
+    ``subagent(``, ``x.agent(`` and ``agents`` are excluded: the first two are
+    a different callable and the third a different identifier.
+    """
+    references: list[_Reference] = []
+    for match in _AGENT_IDENT.finditer(masked):
         start = match.start()
         if start > 0 and (
             masked[start - 1] in _IDENT_CHARS or masked[start - 1] == "."
         ):
             continue
-        sites.append(match.end() - 1)
-    return sites
+        cursor = match.end()
+        while cursor < len(masked) and masked[cursor].isspace():
+            cursor += 1
+        open_paren = cursor if cursor < len(masked) and masked[cursor] == "(" else None
+        references.append(
+            _Reference(name_start=start, name_end=match.end(), open_paren=open_paren)
+        )
+    return references
 
 
 def check_workflow_script(
@@ -509,10 +834,44 @@ def check_workflow_script(
     An empty list means every call named an allowed model explicitly. Anything
     else is a block.
     """
-    masked = _mask(source)
+    scan = _mask(source)
+    if scan.desyncs:
+        desync = scan.desyncs[0]
+        return [
+            Finding(
+                file=filename,
+                line=_line_of(source, desync.offset),
+                label="<unparsed source>",
+                reason=(
+                    f"{desync.reason}. A desynchronised scan does not lose one "
+                    "construct, it silently reclassifies every byte after it -- "
+                    "an agent( call among them -- so the whole script is "
+                    "refused rather than scanned"
+                ),
+            )
+        ]
+    masked = scan.text
     findings: list[Finding] = []
 
-    for open_paren in _call_sites(masked):
+    for reference in _agent_references(masked):
+        if reference.open_paren is None:
+            findings.append(
+                Finding(
+                    file=filename,
+                    line=_line_of(source, reference.name_start),
+                    label=_source_snippet(source, reference.name_start),
+                    reason=(
+                        "the agent() helper is referenced here without being "
+                        "called -- bound to another name, passed as a value, or "
+                        "destructured. Every dispatch made through that binding "
+                        "is invisible to this guard, so the model it runs on "
+                        "cannot be verified before it runs"
+                    ),
+                )
+            )
+            continue
+
+        open_paren = reference.open_paren
         line = _line_of(source, open_paren)
         spans = _split_arguments(masked, open_paren)
         if spans is None:
@@ -523,9 +882,8 @@ def check_workflow_script(
                     label="<unparsed>",
                     reason=(
                         "the argument list of this agent( call could not be "
-                        "resolved (unbalanced brackets, or a regex literal the "
-                        "scanner does not tokenise). The guard fails closed "
-                        "rather than assume a model was chosen"
+                        "resolved: its brackets do not balance. The guard "
+                        "fails closed rather than assume a model was chosen"
                     ),
                 )
             )
@@ -757,27 +1115,42 @@ def _block(reason: str) -> int:
     return 3
 
 
-def _resolve_script_source(tool_input: dict[str, object]) -> str:
-    """The workflow script text, from ``script`` or from ``scriptPath`` on disk.
+def _resolve_script_sources(
+    tool_input: dict[str, object],
+) -> list[tuple[str, str]]:
+    """Every script body this Workflow call could execute, as (name, text).
+
+    Both ``script`` and ``scriptPath`` are read when both are present. The
+    shipped guard preferred the inline ``script`` and never opened the path,
+    so a payload carrying a clean inline script alongside a ``scriptPath``
+    whose ``agent()`` calls name no model passed. Which of the two the harness
+    would actually run is not knowable from inside a PreToolUse hook, and a
+    guard does not need to know: it checks every body the call carries, and
+    refuses if any of them is unverifiable.
 
     Raises on anything unreadable. The caller converts that into a block: a
     script the guard cannot read is a script whose model choices are unknown.
     """
+    sources: list[tuple[str, str]] = []
+
     script = tool_input.get("script")
     if isinstance(script, str) and script.strip():
-        return script
+        sources.append(("<inline script>", script))
 
     script_path = tool_input.get("scriptPath")
     if isinstance(script_path, str) and script_path.strip():
         candidate = Path(script_path).expanduser()
         try:
-            return candidate.read_text(encoding="utf-8")
+            sources.append((str(candidate), candidate.read_text(encoding="utf-8")))
         except OSError as exc:
             msg = f"scriptPath {candidate} is not readable: {exc}"
             raise AllowlistError(msg) from exc
 
-    msg = "the Workflow call carries neither an inline 'script' nor a 'scriptPath'"
-    raise AllowlistError(msg)
+    if not sources:
+        msg = "the Workflow call carries neither an inline 'script' nor a 'scriptPath'"
+        raise AllowlistError(msg)
+
+    return sources
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -825,16 +1198,16 @@ def main(argv: list[str] | None = None) -> int:
         findings = check_agent_input(tool_input, allowlist)
     else:
         try:
-            source = _resolve_script_source(tool_input)
+            sources = _resolve_script_sources(tool_input)
         except AllowlistError as exc:
             return _block(
                 "BLOCKED: the Workflow script could not be read, so its "
                 f"agent() model choices cannot be verified ({exc}). "
                 "An unverifiable dispatch is refused, never assumed clean."
             )
-        name = tool_input.get("scriptPath")
-        filename = name if isinstance(name, str) and name else "<workflow script>"
-        findings = check_workflow_script(source, allowlist, filename=filename)
+        findings = []
+        for filename, source in sources:
+            findings.extend(check_workflow_script(source, allowlist, filename=filename))
 
     if findings:
         return _block(render_block_reason(findings, allowlist))
