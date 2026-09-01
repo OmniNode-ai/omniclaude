@@ -87,17 +87,35 @@ def _uv() -> str:
     return resolved
 
 
+def _workspace_root() -> str | None:
+    """The OmniNode workspace root, or None when this is not a workspace machine.
+
+    Single-argument ``environ.get`` on purpose (OMN-16855/OMN-16849): "unset"
+    must stay distinguishable from a value. The form this replaced —
+    a braced OMNI_HOME reference in the install hint — supplied ``.`` as its default and
+    so could not tell a customer machine apart from a workspace rooted at the
+    caller's cwd. That conflation is the whole defect.
+    """
+    return os.environ.get("OMNIBASE_PATH")
+
+
 def _resolve_omnimarket_ref() -> str:
     """Resolve the git ref this test installs `omnimarket` from (OMN-16528).
 
-    Mirrors install_hint's own resolution exactly, so a pass here is proof
-    that hint actually works: prefer `$OMNI_HOME/omnimarket`'s own
-    checked-out commit when that canonical clone exists (the EXACT commit
-    `omnimarket_drift_guard.canonical_local_omnimarket_commit` will later
-    compare an installed venv against — a local dev machine, not CI), else
-    fall back to the live `dev` branch tip (CI has no `$OMNI_HOME`).
+    Mirrors the two documented install commands, and which one it mirrors is
+    decided by the same fact that decides which one a human should run:
+
+    * ``OMNIBASE_PATH`` set with a canonical clone under it — an OmniNode
+      workspace machine, where the drift guard bites — mirrors SKILL.md's
+      commit-pinned variant and yields the EXACT commit
+      ``omnimarket_drift_guard.canonical_local_omnimarket_commit`` will later
+      compare the installed venv against.
+    * otherwise — CI, and every customer machine — mirrors the published
+      ``install_hint``, which as of OMN-16855 pins the ``dev`` branch tip
+      outright rather than expanding a workspace variable that resolves to the
+      caller's cwd when unset.
     """
-    omni_home = os.environ.get("OMNI_HOME")
+    omni_home = _workspace_root()
     if omni_home:
         clone = Path(omni_home) / "omnimarket"
         if (clone / ".git").exists():
@@ -228,7 +246,7 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
     )
     # Resolution must come from the installed distribution, not from a developer
     # workspace that happens to be on this machine. That distinction IS the bug:
-    # the tool was built assuming a canonical $OMNI_HOME/omnimarket clone.
+    # the tool was built assuming a canonical <workspace>/omnimarket clone.
     assert venv in contract.parents, (
         f"{_BACKING_NODE} resolved to {contract}, outside the scratch venv "
         f"{venv} — the node is being picked up from a local workspace rather "
@@ -237,11 +255,15 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
 
     # OMN-16528: prove the CLI's own pre-flight drift guard accepts this
     # exact install, not just that it installs and the node resolves. Only
-    # meaningful on a machine with $OMNI_HOME set and a canonical omnimarket
+    # meaningful on a machine with OMNIBASE_PATH set and a canonical omnimarket
     # clone checked out (true locally, not in CI) -- omnimarket_drift_guard
     # fails OPEN when it cannot determine a canonical commit to compare
     # against, so there would be nothing to prove there.
-    omni_home = os.environ.get("OMNI_HOME")
+    #
+    # The guard's own keyword is still spelled `omni_home` because the rename
+    # has not reached omnibase_infra yet (OMN-16852); the VALUE passed is this
+    # repo's renamed OMNIBASE_PATH, which is the same workspace root.
+    omni_home = _workspace_root()
     if omni_home and (Path(omni_home) / "omnimarket" / ".git").exists():
         guard_probe = (
             "from omnibase_infra.cli.omnimarket_drift_guard import check_omnimarket_drift;"

@@ -54,26 +54,52 @@ source of truth):
 **`omnimarket` MUST be installed from git, not a PyPI version pin.** `onex
 delegate` runs a pre-flight drift guard
 (`omnibase_infra.cli.omnimarket_drift_guard`) before every REAL
-dispatch — `--help` below is answered before the guard ever runs. On any
-machine with `$OMNI_HOME` set and a canonical `omnimarket` clone checked out <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
-at `$OMNI_HOME/omnimarket` (true for every OmniNode dev workspace) the guard <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
-REJECTS an `omnimarket` install that is not a git-VCS install matching that
-clone's checked-out commit exactly. `omnimarket>=0.4.7` (PyPI) carries no VCS
-provenance and fails this check by construction, every time — not
-intermittently (live-reproduced).
+dispatch — `--help` below is answered before the guard ever runs. On a
+machine that has a canonical `omnimarket` clone checked out under the
+workspace root the guard reads (true for every OmniNode dev workspace, not
+for a customer) the guard REJECTS an `omnimarket` install that is not a
+git-VCS install matching that clone's checked-out commit exactly.
+`omnimarket>=0.4.7` (PyPI) carries no VCS provenance and fails this check by
+construction, every time — not intermittently (live-reproduced).
 
-The commands below resolve the ref dynamically: pinned to
-`$OMNI_HOME/omnimarket`'s own checked-out commit when that clone exists (an <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
-exact match against the guard's own comparison basis), falling back to the
-`dev` branch tip otherwise — a machine with no canonical clone never reaches
-the guard at all, since it fails OPEN when it cannot determine a canonical
-commit to compare against.
+Install (this is the command to run):
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev) 'omnibase-core>=0.46.8'
+uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev' 'omnibase-core>=0.46.8'
 # or:
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev)
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev'
 ```
+
+It names no directory, so there is nothing for it to resolve wrongly. It
+installs the `dev` branch tip, and it says so. It used to expand a
+workspace variable with a `.` fallback and run `git -C
+<that>/omnimarket rev-parse HEAD 2>/dev/null || echo dev`: on a machine where
+that variable was unset — every customer machine — the expansion became the
+**current working directory**, `rev-parse` failed there, and the `|| echo
+dev` swallowed the failure. You got an unpinned `dev` install from a command
+that read like a commit pin, with no error either way.
+
+Nothing is lost by pinning `dev` outright. A machine with no canonical clone
+never reaches the drift guard at all: it fails OPEN when it cannot determine
+a canonical commit to compare against, which is exactly the machine this
+command is for.
+
+**On an OmniNode workspace machine** the guard *does* bite, so pin to your
+own clone's commit instead. Export `OMNIBASE_PATH` to your workspace root
+first; the `:?` refuses loudly rather than falling back to the wrong
+directory if you have not:
+
+```bash
+OMNIMARKET_REF="$(git -C "${OMNIBASE_PATH:?export OMNIBASE_PATH to your OmniNode workspace root}/omnimarket" rev-parse HEAD)" \
+  && uv tool install --with 'omnibase-infra>=0.38.4' \
+       --with "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@${OMNIMARKET_REF}" \
+       'omnibase-core>=0.46.8'
+```
+
+That ref is an exact match against the guard's own comparison basis, by
+construction. Note the guard itself still reads the older `OMNI_HOME`
+spelling of the same workspace root; export both to the same path until that
+rename reaches it.
 
 Verify: `onex delegate --help` must exit 0 **from any directory**.
 
@@ -85,7 +111,7 @@ If `omnimarket` is present but PyPI-installed (or stale) on a machine the
 drift guard covers, the first real invocation instead fails with
 `OmnimarketDriftError`. The node is found through the `onex.nodes`
 entry-point group over **installed distributions**, so once installed this
-way no further `$OMNI_HOME` access is needed to dispatch. <!-- # local-path-ok: documents omnimarket_drift_guard's own env var; guard fails OPEN when unset -->
+way no workspace-root access of any kind is needed to dispatch.
 
 Proven end-to-end: a scratch venv built from exactly this recipe passes
 `omnimarket_drift_guard.check_omnimarket_drift()` with zero drift and

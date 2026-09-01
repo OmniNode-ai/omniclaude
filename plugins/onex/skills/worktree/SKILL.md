@@ -153,7 +153,7 @@ else:
 execute = bool(args.execute)
 dry_run = not execute
 cron_interval = args.cron  # e.g. "7d", "2h", or None
-worktrees_root = args.worktrees_root or os.path.join(os.environ["OMNI_HOME"], "omni_worktrees")
+worktrees_root = args.worktrees_root or os.path.join(os.environ["OMNI_HOME"], "omni_worktrees")  # local-path-ok: operator-workspace surface; the workspace root deliberately keeps its OMNI_HOME spelling here
 ```
 
 ---

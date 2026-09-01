@@ -60,7 +60,7 @@ onex_cli:
   #   Error: Unknown node 'node_delegate_skill_orchestrator'
   # on a byte-for-byte-as-documented clean install — with ~130 other nodes
   # listed as "known", which made it read like a registry bug rather than a
-  # missing package. There is no workspace/$OMNI_HOME requirement here: the
+  # missing package. There is no workspace-root requirement here at all: the
   # entry point resolves out of site-packages.
   node_package: "omnimarket"
   node_package_min_version: "0.4.7"
@@ -68,28 +68,45 @@ onex_cli:
   # pinned `omnimarket>=0.4.7` from PyPI. `onex delegate` runs a pre-flight
   # drift guard (omnibase_infra.cli.omnimarket_drift_guard, OMN-13930) before
   # every REAL dispatch (not `--help`, which click answers before any guard
-  # runs): on any machine with `$OMNI_HOME` set and a canonical `omnimarket`
-  # clone checked out at `$OMNI_HOME/omnimarket` -- true for every OmniNode
-  # dev workspace -- it REJECTS an `omnimarket` install that is not a git-VCS
-  # install matching that clone's checked-out commit exactly.
+  # runs): on any machine that has a canonical `omnimarket` clone checked out
+  # under the workspace root that guard reads -- true for every OmniNode dev
+  # workspace, not for a customer -- it REJECTS an `omnimarket` install that
+  # is not a git-VCS install matching that clone's checked-out commit exactly.
   # `omnimarket>=0.4.7` (PyPI) carries no VCS provenance
   # (installed_omnimarket_commit() reads None for it) and fails this check by
-  # construction, every time -- not intermittently. The hints below install
-  # `omnimarket` as a git+URL direct reference instead, with the ref resolved
-  # dynamically: pinned to `$OMNI_HOME/omnimarket`'s own checked-out commit
-  # when that clone exists (an EXACT match against the guard's own comparison
-  # basis, by construction), falling back to the `dev` branch tip otherwise
-  # (a machine with no canonical clone never reaches the guard at all -- it
-  # fails OPEN when it cannot determine a canonical commit to compare
-  # against). Proven end-to-end 2026-08-25: a scratch venv built from exactly
-  # this recipe passes `check_omnimarket_drift()` with zero drift and
-  # resolves `node_delegate_skill_orchestrator` from the installed
-  # distribution (`test_install_works.py::test_declared_pins_install_and_delegate_runs`).
+  # construction, every time -- not intermittently. The hints below therefore
+  # install `omnimarket` as a git+URL direct reference rather than a PyPI pin.
+  #
+  # CORRECTED AGAIN 2026-08-31 (OMN-16855). Until now the ref was resolved
+  # in-line by expanding a braced OMNI_HOME reference with a `.` fallback and
+  # running `git -C <that>/omnimarket rev-parse HEAD 2>/dev/null || echo dev`.
+  # On any machine without that variable -- i.e. every customer -- the
+  # expansion resolved to the CALLER'S CURRENT WORKING DIRECTORY, the
+  # `rev-parse` failed there, and the `|| echo dev` swallowed it: the customer
+  # installed an unpinned `dev` ref from a command that reads like a commit
+  # pin. Silent in both directions, and the no-monorepo-refs gate could not
+  # see it either, because its single pattern matched only the bare `$`-form
+  # (OMN-16850, now widened).
+  #
+  # The published hints below name NO workspace directory at all. They pin
+  # `dev` outright, which is exactly what a machine with no canonical clone
+  # resolved to before -- the drift guard fails OPEN there, having no
+  # canonical commit to compare against -- but now says so. OmniNode
+  # workspace machines, where the guard does bite, use the commit-pinned
+  # variant documented in `skills/delegate/SKILL.md`; that one reads
+  # OMNIBASE_PATH fail-fast (`:?`), so a missing workspace root refuses
+  # loudly instead of resolving to the wrong directory.
+  #
+  # Proven end-to-end 2026-08-25 and re-proven 2026-08-31: a scratch venv
+  # built from exactly this recipe passes `check_omnimarket_drift()` with
+  # zero drift and resolves `node_delegate_skill_orchestrator` from the
+  # installed distribution
+  # (`test_install_works.py::test_declared_pins_install_and_delegate_runs`).
   # Do NOT document `uv run onex delegate` — `uv run` resolves the venv of
   # whatever project the CURRENT directory belongs to, so it only works inside
   # a repo that happens to co-install omnibase-infra (see cwd_independent below).
-  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev) 'omnibase-core>=0.46.8'"
-  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@'$(git -C ${OMNI_HOME:-.}/omnimarket rev-parse HEAD 2>/dev/null || echo dev)"
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev' 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev'"
   cwd_independent: true
   # GAP CLOSED 2026-08-16 (OMN-16041); RE-QUALIFIED 2026-08-18 (OMN-16191);
   # RE-QUALIFIED AGAIN 2026-08-25 (OMN-16528) — the git+URL omnimarket

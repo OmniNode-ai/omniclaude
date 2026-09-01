@@ -92,6 +92,43 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 
 ## Environment Variables Reference
 
+### Workspace root — `OMNIBASE_PATH` (OMN-16849 / OMN-16855)
+
+`OMNIBASE_PATH` is the absolute path to a multi-repo OmniNode workspace: the
+directory holding `omnimarket`, `omnibase_core`, `omnibase_infra`, and the rest
+as sibling clones.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OMNIBASE_PATH` | OmniNode multi-repo workspace root | **none — there is no default** |
+
+**Unset behaviour is the contract, so it is stated explicitly.**
+
+- **Unset is a valid, supported state.** Installing and running `onex delegate`
+  requires no workspace at all. The published install command in
+  `../onex-delegate/skills/delegate/SKILL.md` names no directory, and node
+  lookup resolves through `onex.nodes` entry points over installed
+  distributions.
+- **Every read of it is fail-fast.** `${OMNIBASE_PATH:?<message>}` in shell,
+  `os.environ["OMNIBASE_PATH"]` in Python. A missing workspace root refuses
+  loudly and names the variable.
+- **No `:-` default, no `environ.get(..., fallback)`, ever.** This is enforced,
+  not merely documented: `scripts/skill_monorepo_ref_patterns.json` forbids both
+  forms and the gate runs in CI (`Skill Monorepo-Ref Gate`) and as a pre-commit
+  hook. The rule exists because the predecessor variable's `:-.` default
+  resolved silently to the caller's current working directory, so a customer's
+  install command pinned nothing and said nothing (OMN-16855).
+- **Only opt-in behaviour depends on it.** On an OmniNode workspace machine it
+  selects the commit-pinned install variant, which matches
+  `omnimarket_drift_guard`'s comparison basis exactly. That guard still reads
+  the older `OMNI_HOME` spelling of the same root until OMN-16852 lands; export
+  both to the same path in the interim.
+
+The older `OMNI_HOME` name is retained deliberately for **operator-workspace**
+surfaces — worktree flows, ledger tooling, hooks, and CI that operates on a
+maintainer's own checkout (OMN-16849 scope fence). Those are not product
+parameters and are not renamed. The tables below are such surfaces.
+
 ### Required Path Variables
 
 | Variable | Description | Example |

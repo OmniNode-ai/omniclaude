@@ -78,8 +78,8 @@ GITHUB_ORG = "OmniNode-ai"
 ```python
 import os
 
-ONEX_REGISTRY_ROOT = os.environ["OMNI_HOME"]
-WORKTREE_ROOT = os.path.join(os.environ["OMNI_HOME"], "omni_worktrees", "release")
+ONEX_REGISTRY_ROOT = os.environ["OMNI_HOME"]  # local-path-ok: operator-workspace surface; the workspace root deliberately keeps its OMNI_HOME spelling here
+WORKTREE_ROOT = os.path.join(os.environ["OMNI_HOME"], "omni_worktrees", "release")  # local-path-ok: operator-workspace surface; the workspace root deliberately keeps its OMNI_HOME spelling here
 STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/release")
 ARCHIVE_DIR = os.path.join(STATE_DIR, "archive")
 ```
