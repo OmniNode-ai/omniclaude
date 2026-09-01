@@ -8,14 +8,14 @@
 #       - id: kb-doc-gate
 
 - id: kb-doc-gate
-  name: KB doc gate — block new/regrown non-KB markdown (OMN-16589)
+  name: KB doc gate — keep repo markdown inside the allowed set (OMN-16589, OMN-17172)
   description: >
-    Blocks (a) new .md files that are not in the exemption set, and (b), in
-    strict mode only, edits to existing non-exempt .md files that push them
-    past the stub-size cap. Canonical docs live in the knowledge-base repo;
-    this gate keeps local repos from re-growing content that belongs there.
-    Per-repo exemptions/mode: .kb-doc-gate.yaml at the consuming repo's root.
-    See scripts/kb_doc_gate.py for the full design.
+    In 'diff' mode (the default) blocks adding or modifying any .md file
+    outside the allowed set; in 'strict' mode blocks the mere existence of one
+    anywhere on the branch. Deletions always pass — canonical docs live in the
+    knowledge-base repo, and a pointer stub is not a removal. Per-repo mode and
+    additional allowed globs: .kb-doc-gate.yaml at the consuming repo's root.
+    See scripts/kb_doc_gate.py for the full ruling this implements.
   language: script
   entry: scripts/kb_doc_gate.py --staged
   types: [markdown]

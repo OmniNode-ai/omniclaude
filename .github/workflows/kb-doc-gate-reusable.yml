@@ -1,22 +1,34 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# KB Doc Gate (reusable). OMN-16589.
+# KB Doc Gate (reusable). OMN-16589 (pilot), OMN-17172 (fleet rollout).
 #
-# Blocks new/regrown non-KB markdown docs in product repos, evaluated
-# directly against the PR diff -- no repo inventory or external manifest
-# fetch needed at run time. Supersedes wiring the knowledge-base-hosted,
-# manifest-driven docs-drift-guard-reusable.yml into product repos: that
-# guard depends on a live manifest fetch from knowledge-base@main at run
-# time (a single point of failure fanning out to every wired repo) and only
-# covers repos with existing migrated-doc rows. This gate needs neither.
+# Keeps product-repo markdown inside the allowed set defined by the operator
+# ruling of 2026-09-01 -- root README, CLAUDE.md/.claude, CHANGELOG*, LICENSE*,
+# root SECURITY.md, .github/**, skills|commands|agents/**, and the tests/**
+# fixture subtrees. Everything else is documentation whose home is the
+# knowledge-base repo. Full statement of the rule, and the per-repo
+# .kb-doc-gate.yaml schema, in scripts/kb_doc_gate.py.
+#
+# Two modes:
+#   diff   (default) -- fails a PR that ADDS or MODIFIES markdown outside the
+#                       allowed set. Deletions always pass; a rename is judged
+#                       on its destination. This is the fleet default: it stops
+#                       regrowth without blocking PRs against a repo's existing
+#                       pre-migration doc sprawl.
+#   strict           -- fails if ANY tracked markdown outside the allowed set
+#                       exists on the branch. The end state for a repo whose
+#                       KB Wave-4 migration (epic OMN-16602) has landed.
 #
 # Usage in caller repos:
 #   jobs:
 #     kb-doc-gate:
 #       uses: OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@<immutable-sha>
 #       with:
-#         mode: transition   # or 'strict'; a repo's own .kb-doc-gate.yaml 'mode:' wins if set
+#         mode: diff   # or 'strict'; a repo's own .kb-doc-gate.yaml 'mode:' wins if set
+#
+# Surfaced check context in the caller: `kb-doc-gate / kb-doc-gate` (caller job
+# id / this job's name). That is the context registered in branch protection.
 #
 # ONE pin, not two: the validator checkout defaults to `github.job_workflow_sha`
 # (the SHA this reusable workflow was resolved at), so the `uses:` SHA above is
@@ -29,10 +41,12 @@
 # runs locally via the exported 'kb-doc-gate' pre-commit hook
 # (.pre-commit-hooks.yaml) -- local and CI verdicts can never diverge.
 #
-# NOT a required status check on any caller repo yet (OMN-16589 P1: wire,
-# observe green on real PRs, do not gate). The required-check flip is
-# explicit follow-up scope once the pilots (omnibase_core, omnimarket) prove
-# green.
+# REQUIRED status check as of OMN-17172: registered in dev branch protection
+# (main for omnistream) across the registry, and asserted through
+# EXPECTED_EXTERNAL_CONTEXTS in scripts/ci/ci_summary_gate.py for the two repos
+# that gate behind the single `CI Summary` umbrella (omnibase_infra,
+# omnimarket). A caller that drops this workflow therefore wedges its own
+# branch rather than silently losing the gate.
 
 name: KB Doc Gate (reusable)
 
@@ -42,11 +56,12 @@ on:
       mode:
         description: >-
           Fallback mode when the caller repo's .kb-doc-gate.yaml does not set
-          'mode' ('transition' or 'strict'). A config-file mode always wins
-          over this input.
+          'mode' ('diff' or 'strict'). A config-file mode always wins over this
+          input. An unrecognized value is an argparse error (exit 2) inside the
+          validator, not a silent pass -- the gate fails closed.
         type: string
         required: false
-        default: transition
+        default: diff
       validator_ref:
         description: >-
           Optional override for the omniclaude ref used to fetch

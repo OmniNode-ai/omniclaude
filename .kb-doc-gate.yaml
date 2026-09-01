@@ -1,0 +1,18 @@
+# KB doc gate — repo config for omniclaude. OMN-16589 (pilot), OMN-17172 (fleet).
+#
+# Canonical validator + reusable workflow: scripts/kb_doc_gate.py and
+# .github/workflows/kb-doc-gate-reusable.yml (this repo). The default allowed
+# set lives in DEFAULT_ALLOWED in that script; this file is ADDITIVE to it.
+
+# 'diff' blocks adding or modifying markdown outside the allowed set.
+# Flip to 'strict' (blocks its mere existence, tree-wide) once this repo's
+# Wave-4 doc migration OMN-16609 has landed — 131 residual docs as of
+# 2026-09-01, so strict today would block every unrelated PR.
+mode: diff
+
+allowed:
+  # omniclaude ships the org's Claude Code plugin. Everything under plugins/
+  # is executable agent configuration — skill/agent/command definitions the
+  # harness loads — not prose that belongs in the knowledge base. The ruling
+  # names it explicitly ("omniclaude plugins/**"). 228 files as of 2026-09-01.
+  - "plugins/**"

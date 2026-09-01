@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# KB Doc Gate — thin caller for omniclaude's own PRs. OMN-17172.
+#
+# omniclaude hosts the validator and the reusable workflow, so it calls them
+# by local path (`./`) rather than by pinned SHA: there is no cross-repo drift
+# to pin against, and a local call keeps the gate's own repo honest on the same
+# commit that changes the gate. Every other repo in the registry pins
+# `OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@<sha>`.
+#
+# Surfaced check context: `kb-doc-gate / kb-doc-gate` (caller job id / reusable
+# job name), which is the context registered in this repo's dev branch
+# protection.
+
+name: KB Doc Gate
+
+on:
+  pull_request:
+    branches: [dev]
+
+jobs:
+  kb-doc-gate:
+    uses: ./.github/workflows/kb-doc-gate-reusable.yml
+    with:
+      mode: diff

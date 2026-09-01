@@ -1,12 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Tests for the org-wide KB doc gate (OMN-16589).
+"""Tests for the org-wide KB doc gate (OMN-16589 pilot, OMN-17172 fleet shape).
 
 Exercises the module functions directly (fast, no subprocess) plus a set of
 end-to-end tests against real tmp git repos (proves the git plumbing — status
-detection, rename handling, staged vs ref-diff modes — actually works, not
-just the pure evaluation logic).
+detection, rename handling, staged vs ref-diff vs tree scan — actually works,
+not just the pure evaluation logic).
+
+The behavioral contract under test is the operator ruling of 2026-09-01: an
+allowed set of markdown that may remain in a product repo, with everything
+else being documentation that must LEAVE (be deleted, not stubbed). Two modes:
+``diff`` blocks add-or-modify outside that set, ``strict`` blocks the mere
+existence of anything outside it.
 """
 
 from __future__ import annotations
@@ -39,35 +45,91 @@ def mod():
     return _load_module()
 
 
+def _allowed(mod, *extra: str) -> tuple[str, ...]:
+    return mod.DEFAULT_ALLOWED + extra
+
+
 # ---------------------------------------------------------------------------
-# Unit-level: evaluate() against synthetic ChangedFile rows
+# diff mode: add / modify / rename / delete
 # ---------------------------------------------------------------------------
 
 
-def test_new_markdown_blocked_in_transition_mode(mod, tmp_path):
+def test_diff_mode_blocks_new_markdown(mod):
     changed = [mod.ChangedFile(status="A", path="docs/new-thing.md")]
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "new-thing.md").write_text("hello\n")
 
-    violations = mod.evaluate(
-        changed, mode="transition", extra_exemptions=(), repo_root=tmp_path
-    )
+    violations = mod.evaluate_diff(changed, allowed=_allowed(mod))
 
     assert len(violations) == 1
     assert violations[0].path == "docs/new-thing.md"
-    assert "new" in violations[0].reason.lower()
+    assert "new" in violations[0].reason
 
 
-def test_new_markdown_blocked_in_strict_mode_too(mod, tmp_path):
-    changed = [mod.ChangedFile(status="A", path="docs/new-thing.md")]
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "new-thing.md").write_text("hello\n")
+def test_diff_mode_blocks_modification_of_existing_markdown(mod):
+    """The OMN-17172 widening: the pilot let any in-place edit through."""
+    changed = [mod.ChangedFile(status="M", path="docs/existing.md")]
 
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
+    violations = mod.evaluate_diff(changed, allowed=_allowed(mod))
 
     assert len(violations) == 1
+    assert "modified" in violations[0].reason
+
+
+def test_diff_mode_blocks_shrinking_a_doc_to_a_pointer_stub(mod):
+    """A stub is not a removal — the ruling is explicit, and the pilot's
+    30-line stub cap would have waved this through as 'small enough'."""
+    changed = [mod.ChangedFile(status="M", path="docs/design/big-design.md")]
+
+    assert mod.evaluate_diff(changed, allowed=_allowed(mod)) != []
+
+
+def test_diff_mode_allows_deletion(mod):
+    changed = [mod.ChangedFile(status="D", path="docs/going-away.md")]
+
+    assert mod.evaluate_diff(changed, allowed=_allowed(mod)) == []
+
+
+def test_diff_mode_blocks_rename_to_another_disallowed_path(mod):
+    """`git mv docs/a.md docs/b.md` must not launder a doc past the gate."""
+    changed = [
+        mod.ChangedFile(status="R", path="docs/b.md", old_path="docs/a.md"),
+    ]
+
+    violations = mod.evaluate_diff(changed, allowed=_allowed(mod))
+
+    assert len(violations) == 1
+    assert violations[0].path == "docs/b.md"
+    assert "docs/a.md" in violations[0].reason
+
+
+def test_diff_mode_allows_rename_into_the_allowed_set(mod):
+    changed = [
+        mod.ChangedFile(
+            status="R", path=".github/CONTRIBUTING.md", old_path="docs/contributing.md"
+        ),
+    ]
+
+    assert mod.evaluate_diff(changed, allowed=_allowed(mod)) == []
+
+
+def test_diff_mode_ignores_non_markdown(mod):
+    changed = [
+        mod.ChangedFile(status="A", path="docs/diagram.png"),
+        mod.ChangedFile(status="M", path="src/thing.py"),
+    ]
+
+    assert mod.evaluate_diff(changed, allowed=_allowed(mod)) == []
+
+
+def test_diff_mode_honors_repo_extra_allowed(mod):
+    changed = [mod.ChangedFile(status="A", path="plugins/onex/README.md")]
+
+    assert mod.evaluate_diff(changed, allowed=_allowed(mod)) != []
+    assert mod.evaluate_diff(changed, allowed=_allowed(mod, "plugins/**")) == []
+
+
+# ---------------------------------------------------------------------------
+# The allowed set itself — the ruling, expressed as a table
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -75,219 +137,123 @@ def test_new_markdown_blocked_in_strict_mode_too(mod, tmp_path):
     [
         "README.md",
         "CLAUDE.md",
-        "src/CLAUDE.md",
         ".claude/agents/foo.md",
-        ".github/PULL_REQUEST_TEMPLATE.md",
-        "plugins/onex/skills/foo/SKILL.md",
-        "agents/reviewer.md",
-        "commands/deploy.md",
-        "rules/no-foo.md",
-        "hooks/pre-commit.md",
-        "SECURITY.md",
-        "CODE_OF_CONDUCT.md",
-        "CONTRIBUTING.md",
+        ".claude/CLAUDE.md",
         "CHANGELOG.md",
+        "CHANGELOG-2025.md",
+        "LICENSE.md",
+        "SECURITY.md",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".github/ISSUE_TEMPLATE/bug.md",
+        "skills/deploy/SKILL.md",
+        "plugins/onex/skills/foo/SKILL.md",
+        "commands/deploy.md",
+        "agents/reviewer.md",
         "tests/fixtures/sample.md",
+        "tests/unit/data/payload.md",
+        "tests/golden/chain.md",
+        "src/pkg/tests/e2e/fixtures/case.md",
     ],
 )
-def test_exempt_new_markdown_allowed(mod, tmp_path, path):
-    changed = [mod.ChangedFile(status="A", path=path)]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
+def test_allowed_paths(mod, path):
+    assert mod.is_allowed(path, mod.DEFAULT_ALLOWED), path
 
 
-def test_nested_readme_is_not_exempt(mod, tmp_path):
-    # Only the repo-root README.md is exempt; nested READMEs are ordinary docs.
-    changed = [mod.ChangedFile(status="A", path="src/README.md")]
-
-    violations = mod.evaluate(
-        changed, mode="transition", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert len(violations) == 1
-    assert violations[0].path == "src/README.md"
-
-
-def test_stub_edit_within_cap_allowed_in_strict_mode(mod, tmp_path):
-    target = tmp_path / "docs" / "pointer.md"
-    target.parent.mkdir(parents=True)
-    target.write_text(
-        "\n".join(f"line {i}" for i in range(5)) + "\n"
-    )  # 5 lines, well under cap
-    changed = [mod.ChangedFile(status="M", path="docs/pointer.md")]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/architecture.md",
+        "src/README.md",  # only the ROOT README is load-bearing
+        "docs/README.md",
+        "src/CLAUDE.md",  # ruling: root CLAUDE.md or under .claude/ only
+        "CONTRIBUTING.md",  # allowed under .github/, not at the root
+        "CODE_OF_CONDUCT.md",
+        "rules/no-foo.md",  # pilot default; not in the ruling
+        "hooks/pre-commit.md",
+        "tests/test_plan.md",  # tests/** is narrowed to the fixture subtrees
+        "tests/unit/notes.md",
+        "design-tasks/task-1.md",
+        "evidence/2026-01-01-run.md",
+    ],
+)
+def test_disallowed_paths(mod, path):
+    assert not mod.is_allowed(path, mod.DEFAULT_ALLOWED), path
 
 
-def test_stub_inflated_past_cap_blocked_in_strict_mode(mod, tmp_path):
-    target = tmp_path / "docs" / "pointer.md"
-    target.parent.mkdir(parents=True)
-    target.write_text(
-        "\n".join(f"line {i}" for i in range(mod.STUB_LINE_CAP + 5)) + "\n"
-    )
-    changed = [mod.ChangedFile(status="M", path="docs/pointer.md")]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert len(violations) == 1
-    assert "stub cap" in violations[0].reason
+def test_glob_double_star_matches_any_depth(mod):
+    assert mod.is_allowed("skills/foo/SKILL.md", ("**/skills/**",))
+    assert mod.is_allowed("plugins/onex/skills/foo/SKILL.md", ("**/skills/**",))
+    assert not mod.is_allowed("skillsxyz/foo.md", ("**/skills/**",))
 
 
-def test_stub_inflated_past_cap_allowed_in_transition_mode(mod, tmp_path):
-    target = tmp_path / "docs" / "pointer.md"
-    target.parent.mkdir(parents=True)
-    target.write_text(
-        "\n".join(f"line {i}" for i in range(mod.STUB_LINE_CAP + 50)) + "\n"
-    )
-    changed = [mod.ChangedFile(status="M", path="docs/pointer.md")]
-
-    violations = mod.evaluate(
-        changed, mode="transition", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
-
-
-def test_root_readme_exempt_from_cap_in_strict_mode(mod, tmp_path):
-    target = tmp_path / "README.md"
-    target.write_text("\n".join(f"line {i}" for i in range(500)) + "\n")
-    changed = [mod.ChangedFile(status="M", path="README.md")]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
-
-
-def test_per_repo_exemption_override_honored(mod, tmp_path):
-    changed = [mod.ChangedFile(status="A", path="docs/adr/0001-decision.md")]
-
-    blocked = mod.evaluate(
-        changed, mode="transition", extra_exemptions=(), repo_root=tmp_path
-    )
-    assert len(blocked) == 1
-
-    allowed = mod.evaluate(
-        changed,
-        mode="transition",
-        extra_exemptions=("docs/adr/**",),
-        repo_root=tmp_path,
-    )
-    assert allowed == []
-
-
-def test_renames_allowed_regardless_of_content(mod, tmp_path):
-    target = tmp_path / "docs" / "moved.md"
-    target.parent.mkdir(parents=True)
-    target.write_text("\n".join(f"line {i}" for i in range(500)) + "\n")
-    changed = [
-        mod.ChangedFile(status="R", path="docs/moved.md", old_path="docs/old-name.md")
-    ]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
-
-
-def test_deletions_allowed(mod, tmp_path):
-    changed = [mod.ChangedFile(status="D", path="docs/removed.md")]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
-
-
-def test_non_markdown_files_ignored(mod, tmp_path):
-    changed = [mod.ChangedFile(status="A", path="src/new_module.py")]
-
-    violations = mod.evaluate(
-        changed, mode="strict", extra_exemptions=(), repo_root=tmp_path
-    )
-
-    assert violations == []
+def test_glob_exact_match_is_anchored(mod):
+    assert mod.is_allowed("README.md", ("README.md",))
+    assert not mod.is_allowed("docs/README.md", ("README.md",))
 
 
 # ---------------------------------------------------------------------------
-# Config loading
+# strict mode: whole-tree scan
 # ---------------------------------------------------------------------------
 
 
-def test_load_config_missing_file_returns_defaults(mod, tmp_path):
-    mode, exemptions = mod.load_config(tmp_path / ".kb-doc-gate.yaml")
-    assert mode is None
-    assert exemptions == ()
+def test_strict_mode_flags_untouched_markdown(mod):
+    paths = ["README.md", "docs/legacy.md", "docs/sub/other.md"]
+
+    violations = mod.evaluate_tree(paths, allowed=_allowed(mod))
+
+    assert [v.path for v in violations] == ["docs/legacy.md", "docs/sub/other.md"]
 
 
-def test_load_config_parses_mode_and_exemptions(mod, tmp_path):
+def test_strict_mode_clean_tree_passes(mod):
+    paths = ["README.md", "CLAUDE.md", ".github/PULL_REQUEST_TEMPLATE.md"]
+
+    assert mod.evaluate_tree(paths, allowed=_allowed(mod)) == []
+
+
+# ---------------------------------------------------------------------------
+# Config parsing
+# ---------------------------------------------------------------------------
+
+
+def test_missing_config_returns_no_mode_and_no_extras(mod, tmp_path):
+    assert mod.load_config(tmp_path / ".kb-doc-gate.yaml") == (None, ())
+
+
+def test_config_parses_mode_and_allowed(mod, tmp_path):
     config = tmp_path / ".kb-doc-gate.yaml"
     config.write_text(
-        "\n".join(
-            [
-                "# a comment",
-                "mode: strict",
-                "exemptions:",
-                '  - "docs/adr/**"',
-                "  - docs/decisions/*.md",
-                "",
-            ]
-        )
+        "# repo config\nmode: strict\nallowed:\n  - \"plugins/**\"\n  - 'docs/adr/**'\n"
     )
 
-    mode, exemptions = mod.load_config(config)
-
-    assert mode == "strict"
-    assert exemptions == ("docs/adr/**", "docs/decisions/*.md")
+    assert mod.load_config(config) == ("strict", ("plugins/**", "docs/adr/**"))
 
 
-def test_load_config_rejects_bad_mode(mod, tmp_path):
+def test_config_rejects_unknown_mode(mod, tmp_path):
     config = tmp_path / ".kb-doc-gate.yaml"
-    config.write_text("mode: yolo\n")
+    config.write_text("mode: transition\n")
 
-    with pytest.raises(ValueError, match="mode must be"):
+    with pytest.raises(ValueError, match="mode must be one of"):
         mod.load_config(config)
 
 
-def test_load_config_rejects_unknown_key(mod, tmp_path):
+def test_config_rejects_unknown_key(mod, tmp_path):
     config = tmp_path / ".kb-doc-gate.yaml"
-    config.write_text("unknown_key: 1\n")
+    config.write_text("exemptions:\n  - 'docs/**'\n")
 
     with pytest.raises(ValueError, match="unknown key"):
         mod.load_config(config)
 
 
-# ---------------------------------------------------------------------------
-# Glob matcher
-# ---------------------------------------------------------------------------
+def test_config_rejects_list_item_outside_allowed_section(mod, tmp_path):
+    config = tmp_path / ".kb-doc-gate.yaml"
+    config.write_text("mode: strict\n  - 'docs/**'\n")
 
-
-def test_glob_double_star_matches_any_depth(mod):
-    assert mod.is_exempt("skills/foo/SKILL.md", ("**/skills/**",))
-    assert mod.is_exempt("plugins/onex/skills/foo/SKILL.md", ("**/skills/**",))
-    assert not mod.is_exempt("skillsxyz/foo.md", ("**/skills/**",))
-
-
-def test_glob_exact_match_is_anchored(mod):
-    assert mod.is_exempt("README.md", ("README.md",))
-    assert not mod.is_exempt("docs/README.md", ("README.md",))
+    with pytest.raises(ValueError, match="outside an 'allowed:' section"):
+        mod.load_config(config)
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: real git repos, both --staged and --base-ref/--head-ref modes
+# End-to-end: real git repos
 # ---------------------------------------------------------------------------
 
 
@@ -308,9 +274,9 @@ def git_repo(tmp_path):
     _git(repo, "init", "-q", "-b", "main")
     _git(repo, "config", "user.email", "test@example.com")
     _git(repo, "config", "user.name", "Test")
-    (repo / "README.md").write_text("# Repo\n\nPointer to knowledge-base.\n")
+    (repo / "README.md").write_text("# Repo\n\nDocs live in the knowledge-base.\n")
     (repo / "docs").mkdir()
-    (repo / "docs" / "existing-stub.md").write_text("stub\npoints to KB\n")
+    (repo / "docs" / "legacy.md").write_text("a doc that should have moved\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "initial")
     return repo
@@ -326,9 +292,7 @@ def _run_cli(argv: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def test_e2e_staged_mode_blocks_new_file(git_repo):
-    (git_repo / "docs" / "sneaky-new-doc.md").write_text(
-        "this should not exist locally\n"
-    )
+    (git_repo / "docs" / "sneaky-new-doc.md").write_text("should not exist locally\n")
     _git(git_repo, "add", "docs/sneaky-new-doc.md")
 
     result = _run_cli(
@@ -339,7 +303,7 @@ def test_e2e_staged_mode_blocks_new_file(git_repo):
     assert "docs/sneaky-new-doc.md" in result.stderr
 
 
-def test_e2e_staged_mode_allows_exempt_new_file(git_repo):
+def test_e2e_staged_mode_allows_allowed_new_file(git_repo):
     (git_repo / ".claude").mkdir()
     (git_repo / ".claude" / "note.md").write_text("agent note\n")
     _git(git_repo, "add", ".claude/note.md")
@@ -349,86 +313,79 @@ def test_e2e_staged_mode_allows_exempt_new_file(git_repo):
     assert result.returncode == 0, result.stderr
 
 
-def test_e2e_base_ref_mode_blocks_new_file_on_branch(git_repo):
+def test_e2e_diff_mode_blocks_edit_of_existing_doc(git_repo):
     _git(git_repo, "checkout", "-q", "-b", "feature")
-    (git_repo / "docs" / "another-sneaky-doc.md").write_text("nope\n")
+    (git_repo / "docs" / "legacy.md").write_text("edited in place\n")
     _git(git_repo, "add", "-A")
-    _git(git_repo, "commit", "-q", "-m", "add doc")
+    _git(git_repo, "commit", "-q", "-m", "edit doc")
 
     result = _run_cli(
         ["--base-ref", "main", "--head-ref", "feature", "--repo-root", str(git_repo)]
     )
 
     assert result.returncode == 1, result.stderr
-    assert "docs/another-sneaky-doc.md" in result.stderr
+    assert "docs/legacy.md" in result.stderr
 
 
-def test_e2e_rename_allowed_end_to_end(git_repo):
+def test_e2e_diff_mode_allows_deletion(git_repo):
     _git(git_repo, "checkout", "-q", "-b", "feature")
-    big_content = "\n".join(f"line {i}" for i in range(200)) + "\n"
-    (git_repo / "docs" / "existing-stub.md").write_text(big_content)
-    _git(git_repo, "mv", "docs/existing-stub.md", "docs/renamed-stub.md")
-    _git(git_repo, "commit", "-q", "-m", "rename doc")
+    _git(git_repo, "rm", "-q", "docs/legacy.md")
+    _git(git_repo, "commit", "-q", "-m", "remove doc")
 
     result = _run_cli(
-        [
-            "--base-ref",
-            "main",
-            "--head-ref",
-            "feature",
-            "--mode",
-            "strict",
-            "--repo-root",
-            str(git_repo),
-        ]
+        ["--base-ref", "main", "--head-ref", "feature", "--repo-root", str(git_repo)]
     )
 
     assert result.returncode == 0, result.stderr
 
 
-def test_e2e_strict_mode_blocks_inflated_stub_on_branch(git_repo):
+def test_e2e_diff_mode_blocks_rename_within_docs(git_repo):
     _git(git_repo, "checkout", "-q", "-b", "feature")
-    big_content = "\n".join(f"line {i}" for i in range(200)) + "\n"
-    (git_repo / "docs" / "existing-stub.md").write_text(big_content)
-    _git(git_repo, "add", "-A")
-    _git(git_repo, "commit", "-q", "-m", "inflate stub")
+    _git(git_repo, "mv", "docs/legacy.md", "docs/renamed.md")
+    _git(git_repo, "commit", "-q", "-m", "rename doc")
 
     result = _run_cli(
-        [
-            "--base-ref",
-            "main",
-            "--head-ref",
-            "feature",
-            "--mode",
-            "strict",
-            "--repo-root",
-            str(git_repo),
-        ]
+        ["--base-ref", "main", "--head-ref", "feature", "--repo-root", str(git_repo)]
     )
 
     assert result.returncode == 1, result.stderr
-    assert "docs/existing-stub.md" in result.stderr
+    assert "docs/renamed.md" in result.stderr
 
 
-def test_e2e_transition_mode_allows_inflated_stub_on_branch(git_repo):
+def test_e2e_diff_mode_ignores_untouched_violations(git_repo):
+    """docs/legacy.md is already on the branch and stays disallowed — but a PR
+    that does not touch it is not this gate's problem in diff mode."""
     _git(git_repo, "checkout", "-q", "-b", "feature")
-    big_content = "\n".join(f"line {i}" for i in range(200)) + "\n"
-    (git_repo / "docs" / "existing-stub.md").write_text(big_content)
+    (git_repo / "src.py").write_text("x = 1\n")
     _git(git_repo, "add", "-A")
-    _git(git_repo, "commit", "-q", "-m", "inflate stub")
+    _git(git_repo, "commit", "-q", "-m", "unrelated change")
 
     result = _run_cli(
-        [
-            "--base-ref",
-            "main",
-            "--head-ref",
-            "feature",
-            "--mode",
-            "transition",
-            "--repo-root",
-            str(git_repo),
-        ]
+        ["--base-ref", "main", "--head-ref", "feature", "--repo-root", str(git_repo)]
     )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_e2e_strict_mode_flags_the_same_untouched_file(git_repo):
+    """Same tree, same PR, strict mode: existence alone is the violation."""
+    _git(git_repo, "checkout", "-q", "-b", "feature")
+    (git_repo / "src.py").write_text("x = 1\n")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "unrelated change")
+
+    result = _run_cli(["--mode", "strict", "--repo-root", str(git_repo)])
+
+    assert result.returncode == 1, result.stderr
+    assert "docs/legacy.md" in result.stderr
+
+
+def test_e2e_strict_mode_passes_on_a_scrubbed_tree(git_repo):
+    _git(git_repo, "checkout", "-q", "-b", "feature")
+    _git(git_repo, "rm", "-q", "docs/legacy.md")
+    _git(git_repo, "commit", "-q", "-m", "scrub docs")
+
+    result = _run_cli(["--mode", "strict", "--repo-root", str(git_repo)])
 
     assert result.returncode == 0, result.stderr
 
@@ -437,39 +394,49 @@ def test_e2e_config_file_mode_takes_precedence_over_cli_flag(git_repo):
     (git_repo / ".kb-doc-gate.yaml").write_text("mode: strict\n")
     _git(git_repo, "add", "-A")
     _git(git_repo, "commit", "-q", "-m", "add strict config")
-    _git(git_repo, "checkout", "-q", "-b", "feature")
-    big_content = "\n".join(f"line {i}" for i in range(200)) + "\n"
-    (git_repo / "docs" / "existing-stub.md").write_text(big_content)
-    _git(git_repo, "add", "-A")
-    _git(git_repo, "commit", "-q", "-m", "inflate stub")
 
-    # CLI says transition, but the repo's own config says strict -- config wins.
+    # CLI says diff (which would pass — nothing changed), config says strict.
     result = _run_cli(
         [
             "--base-ref",
             "main",
             "--head-ref",
-            "feature",
+            "main",
             "--mode",
-            "transition",
+            "diff",
             "--repo-root",
             str(git_repo),
         ]
     )
 
     assert result.returncode == 1, result.stderr
+    assert "strict mode" in result.stderr
 
 
-def test_e2e_deletion_allowed(git_repo):
-    _git(git_repo, "checkout", "-q", "-b", "feature")
-    _git(git_repo, "rm", "-q", "docs/existing-stub.md")
-    _git(git_repo, "commit", "-q", "-m", "remove doc")
+def test_e2e_repo_config_allowed_list_is_honored(git_repo):
+    (git_repo / ".kb-doc-gate.yaml").write_text('allowed:\n  - "docs/**"\n')
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "allow docs")
 
-    result = _run_cli(
-        ["--base-ref", "main", "--head-ref", "feature", "--repo-root", str(git_repo)]
-    )
+    result = _run_cli(["--mode", "strict", "--repo-root", str(git_repo)])
 
     assert result.returncode == 0, result.stderr
+
+
+def test_e2e_diff_mode_without_a_source_is_a_usage_error(git_repo):
+    result = _run_cli(["--repo-root", str(git_repo)])
+
+    assert result.returncode == 2
+    assert "--staged or --base-ref" in result.stderr
+
+
+def test_e2e_bad_config_is_exit_2_not_a_pass(git_repo):
+    (git_repo / ".kb-doc-gate.yaml").write_text("mode: nonsense\n")
+
+    result = _run_cli(["--mode", "strict", "--repo-root", str(git_repo)])
+
+    assert result.returncode == 2
+    assert "config error" in result.stderr
 
 
 def test_e2e_no_changes_is_ok(git_repo):
