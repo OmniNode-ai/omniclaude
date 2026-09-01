@@ -1,74 +1,91 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""KB doc gate — block new/regrown non-KB markdown docs in product repos.
+"""KB doc gate — keep product-repo markdown inside the allowed set.
 
-OMN-16589. Operator direction (2026-08-26), verbatim: "all we need is a hook
-that stops new MD docs from getting created in non kb repos" — plus two
-ratified amendments: (1) non-README ``.md`` files must also stay stub-sized,
-blocking regrowth-by-edit of an existing pointer stub; (2) functional
-markdown (plugin skills/agents/commands/rules, CLAUDE.md, README.md,
-community-health files, ``.github/`` templates, test fixtures) is exempt.
+OMN-16589 built the pilot; OMN-17172 rolls it to the fleet and flips it to a
+required status check. This module is the canonical validator for both.
 
-This supersedes wiring the knowledge-base-hosted, manifest-driven
-``docs-drift-guard-reusable.yml`` into product repos: that guard needs a live
-manifest fetched from ``knowledge-base@main`` at run time (a single point of
-failure fanning out to every wired repo) and only covers repos with existing
-migrated-doc rows. This gate needs no repo inventory or external manifest —
-it evaluates the PR/commit diff directly, so it applies to any product repo,
-migrated or not.
+Operator ruling (2026-09-01) that this file implements verbatim — the list of
+markdown that is **ALLOWED TO REMAIN** in a product repo, everything else
+being "documentation that must leave" (its home is the knowledge-base repo):
 
-## Behavior
+  * root ``README.md`` (which must link to the knowledge base)
+  * ``CLAUDE.md`` at the repo root, or anything under ``.claude/``
+  * ``CHANGELOG*.md``
+  * ``LICENSE*``
+  * ``SECURITY.md`` at the repo root (only because GitHub looks for it there)
+  * ``.github/**`` (issue/PR templates)
+  * markdown that is executable agent configuration: any ``skills/**``,
+    ``commands/**`` or ``agents/**`` directory used by Claude Code
+  * test fixtures under ``tests/**/fixtures/**``, ``tests/**/data/**`` or
+    ``tests/**/golden/**`` that a test reads as data
 
-FAILS when a changed ``.md`` file is:
+A repo-specific addition (``omniclaude``'s ``plugins/**``, say) goes in that
+repo's own ``.kb-doc-gate.yaml``, not in this default.
 
-  (a) **NEW** and not exempt, or
-  (b) **existing** (modified in place), not exempt, not the repo-root
-      ``README.md``, and exceeds the stub-size cap (``STUB_LINE_CAP`` lines)
-      — only enforced in ``strict`` mode.
-
-Renames and deletions are always allowed regardless of content or mode.
+**A pointer stub is not a removal.** A file whose whole content is "moved to
+the knowledge base" is documentation that still exists; the root README's
+knowledge-base link carries that signposting role for the entire repo. This is
+why the gate has no stub-size allowance: a doc outside the allowed set is a
+violation at any length. (The OMN-16589 pilot had a 30-line ``STUB_LINE_CAP``
+that let a shrunken doc stay forever. The ruling above removes it.)
 
 ## Modes
 
-  transition (default) — new-file block only. For repos not yet stripped
-    down to pointer stubs by the Wave-4 KB migration.
-  strict — new-file block + stub-size cap. For repos already stripped.
+``diff`` (default)
+    Fails when a changed ``.md`` file's **post-image** path is outside the
+    allowed set — additions and in-place modifications alike. Deletions are
+    always fine (that is the migration doing its job). A rename or copy is
+    judged on its DESTINATION path: moving a stray doc to another stray path
+    keeps it in the repo, and treating that as exempt would be a one-command
+    bypass of the whole gate; moving it *into* the allowed set passes.
 
-## Exemptions
+``strict``
+    Fails when **any** tracked markdown file on the branch is outside the
+    allowed set, whether or not this change touched it. This is the end-state
+    mode for a repo whose Wave-4 migration (epic OMN-16602) has landed; it is
+    what keeps a scrubbed repo scrubbed. Turning it on before that repo's
+    migration lands blocks every unrelated PR, so it is opt-in per repo.
 
-A shared default set is baked into this script (``DEFAULT_EXEMPTIONS``
-below). A repo may add its own path globs via a ``.kb-doc-gate.yaml`` file at
-its root — additive only, the defaults always apply. The same file may set
-``mode: strict`` to opt a repo into the size cap; an explicit ``--mode`` CLI
-argument is the fallback when the repo carries no config file (or the config
-file does not set ``mode``), never an override of a config-file mode.
+## Configuration
+
+``.kb-doc-gate.yaml`` at the consuming repo's root — absent means "default
+allowed set, ``diff`` mode":
 
     # .kb-doc-gate.yaml
     mode: strict
-    exemptions:
+    allowed:
+      - "plugins/**"
       - "docs/adr/**"
-      - "docs/decisions/*.md"
 
-Only a restricted subset of YAML is supported (see ``load_config`` below) —
-this script is stdlib-only, no PyYAML dependency.
+``allowed:`` is ADDITIVE — the defaults above always apply on top of it. A
+``mode:`` in this file always wins over the ``--mode`` CLI argument, which is
+only the fallback for a repo that ships no config file.
+
+Only that restricted YAML subset is supported (see :func:`load_config`); this
+script is stdlib-only on purpose, so it can run from a bare checkout with no
+dependency install step.
 
 ## Usage
 
-Pre-commit (staged-file mode, invoked once per commit with the staged
-markdown files as positional args — status is read from the index vs HEAD):
+Pre-commit (staged-file mode — status is read from the index vs HEAD)::
 
     kb_doc_gate.py --staged FILE [FILE ...]
 
-CI (ref-diff mode, invoked against a full or partially-fetched checkout):
+CI (ref-diff mode, three-dot/merge-base semantics matching the PR diff)::
 
     kb_doc_gate.py --base-ref origin/dev --head-ref HEAD
 
+In ``strict`` mode neither is consulted: the check is a whole-tree scan of
+``git ls-files``, which is the index under pre-commit and the branch content
+under CI — the same answer from both call sites.
+
 ## Exit codes
 
-  0 — no violations (or nothing to evaluate)
+  0 — no violations
   1 — one or more violations
-  2 — usage error (e.g. neither --staged nor --base-ref given)
+  2 — usage or config error (the gate did not run; never read as a pass)
 """
 
 from __future__ import annotations
@@ -80,27 +97,33 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-STUB_LINE_CAP = 30
+MODES = ("diff", "strict")
 
-# Root-anchored: only the top-level README is presumed load-bearing (GitHub
-# renders it, contributors expect it). Nested READMEs (src/README.md, etc.)
-# are NOT automatically exempt — they are ordinary docs subject to both checks.
-DEFAULT_EXEMPTIONS: tuple[str, ...] = (
+# The operator ruling's allowed set, as path globs. Root-anchored patterns are
+# deliberate: only the TOP-LEVEL README.md and SECURITY.md are presumed
+# load-bearing (GitHub renders them there). A nested README.md is an ordinary
+# doc and must leave with the rest.
+#
+# Not present, and deliberately so: CONTRIBUTING.md and CODE_OF_CONDUCT.md at
+# the repo root (the ruling allows SECURITY.md only, "if GitHub requires it
+# there"; both of the others are still allowed under `.github/`, which is
+# where GitHub also reads them from), `rules/**` and `hooks/**` (named by the
+# OMN-16589 pilot default but not by the ruling), and a blanket `tests/**`
+# (narrowed to the three fixture subtrees the ruling names).
+DEFAULT_ALLOWED: tuple[str, ...] = (
     "README.md",
-    "**/CLAUDE.md",
+    "CLAUDE.md",
     "**/.claude/**",
+    "**/CHANGELOG*.md",
+    "**/LICENSE*",
+    "SECURITY.md",
     "**/.github/**",
     "**/skills/**",
-    "**/agents/**",
     "**/commands/**",
-    "**/rules/**",
-    "**/hooks/**",
-    "**/LICENSE*",
-    "**/SECURITY.md",
-    "**/CODE_OF_CONDUCT.md",
-    "**/CONTRIBUTING.md",
-    "**/CHANGELOG.md",
-    "**/tests/**",
+    "**/agents/**",
+    "**/tests/**/fixtures/**",
+    "**/tests/**/data/**",
+    "**/tests/**/golden/**",
 )
 
 
@@ -160,8 +183,12 @@ def _compile_glob(pattern: str) -> re.Pattern[str]:
     return compiled
 
 
-def is_exempt(path: str, patterns: tuple[str, ...]) -> bool:
+def is_allowed(path: str, patterns: tuple[str, ...]) -> bool:
     return any(_compile_glob(pattern).match(path) is not None for pattern in patterns)
+
+
+def is_markdown(path: str) -> bool:
+    return path.lower().endswith(".md")
 
 
 # ---------------------------------------------------------------------------
@@ -178,14 +205,14 @@ def _strip_quotes(value: str) -> str:
 def load_config(path: Path) -> tuple[str | None, tuple[str, ...]]:
     """Parse a repo's ``.kb-doc-gate.yaml``.
 
-    Returns ``(mode, extra_exemptions)``. ``mode`` is ``None`` when the file
-    is absent or does not set ``mode`` — callers apply their own default in
-    that case, never here, so config-file precedence stays unambiguous.
+    Returns ``(mode, extra_allowed)``. ``mode`` is ``None`` when the file is
+    absent or does not set ``mode`` — callers apply their own default in that
+    case, never here, so config-file precedence stays unambiguous.
 
-    Supports only:
+    Supports only::
 
-        mode: strict|transition
-        exemptions:
+        mode: diff|strict
+        allowed:
           - "glob/pattern/**"
           - 'another/pattern'
 
@@ -197,7 +224,7 @@ def load_config(path: Path) -> tuple[str | None, tuple[str, ...]]:
         return None, ()
 
     mode: str | None = None
-    exemptions: list[str] = []
+    allowed: list[str] = []
     section: str | None = None
 
     for lineno, raw in enumerate(
@@ -207,11 +234,11 @@ def load_config(path: Path) -> tuple[str | None, tuple[str, ...]]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("- "):
-            if section != "exemptions":
+            if section != "allowed":
                 raise ValueError(
-                    f"{path}:{lineno}: list item outside an 'exemptions:' section"
+                    f"{path}:{lineno}: list item outside an 'allowed:' section"
                 )
-            exemptions.append(_strip_quotes(line[2:].strip()))
+            allowed.append(_strip_quotes(line[2:].strip()))
             continue
         if ":" in line:
             key, _, value = line.partition(":")
@@ -219,26 +246,26 @@ def load_config(path: Path) -> tuple[str | None, tuple[str, ...]]:
             value = value.strip()
             if key == "mode":
                 value = _strip_quotes(value)
-                if value not in ("transition", "strict"):
+                if value not in MODES:
                     raise ValueError(
-                        f"{path}:{lineno}: mode must be 'transition' or 'strict', got {value!r}"
+                        f"{path}:{lineno}: mode must be one of {MODES}, got {value!r}"
                     )
                 mode = value
                 section = None
                 continue
-            if key == "exemptions":
+            if key == "allowed":
                 if value:
                     raise ValueError(
-                        f"{path}:{lineno}: 'exemptions:' must be followed by a '- ' list, not an inline value"
+                        f"{path}:{lineno}: 'allowed:' must be followed by a '- ' list, not an inline value"
                     )
-                section = "exemptions"
+                section = "allowed"
                 continue
             raise ValueError(
-                f"{path}:{lineno}: unknown key {key!r} (expected 'mode' or 'exemptions')"
+                f"{path}:{lineno}: unknown key {key!r} (expected 'mode' or 'allowed')"
             )
         raise ValueError(f"{path}:{lineno}: unrecognized line: {raw!r}")
 
-    return mode, tuple(exemptions)
+    return mode, tuple(allowed)
 
 
 # ---------------------------------------------------------------------------
@@ -246,16 +273,21 @@ def load_config(path: Path) -> tuple[str | None, tuple[str, ...]]:
 # ---------------------------------------------------------------------------
 
 
-def _git_name_status(repo_root: Path, *diff_args: str) -> list[ChangedFile]:
+def _git(repo_root: Path, *args: str) -> str:
     proc = subprocess.run(
-        ["git", "diff", "--no-color", "--name-status", "-M", *diff_args],
+        ["git", *args],
         cwd=repo_root,
         capture_output=True,
         text=True,
         check=True,
     )
+    return proc.stdout
+
+
+def _git_name_status(repo_root: Path, *diff_args: str) -> list[ChangedFile]:
+    out = _git(repo_root, "diff", "--no-color", "--name-status", "-M", *diff_args)
     changed: list[ChangedFile] = []
-    for line in proc.stdout.splitlines():
+    for line in out.splitlines():
         if not line.strip():
             continue
         parts = line.split("\t")
@@ -287,61 +319,61 @@ def ref_diff_changed_files(
     return _git_name_status(repo_root, f"{base_ref}...{head_ref}")
 
 
+def tracked_markdown(repo_root: Path) -> list[str]:
+    """Every tracked markdown path on the branch, POSIX-style, repo-relative.
+
+    ``git ls-files`` reads the INDEX, which is the right answer at both call
+    sites: under pre-commit the index is what is about to become the commit,
+    and under CI the index of a fresh checkout is the branch content. Listing
+    is unfiltered by pathspec and filtered in Python instead, because a
+    ``*.md`` pathspec is case-sensitive on a case-sensitive filesystem and
+    would miss a ``.MD`` file on Linux while catching it on macOS.
+    """
+    out = _git(repo_root, "ls-files", "-z")
+    return sorted(p for p in out.split("\0") if p and is_markdown(p))
+
+
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
 
 
-def _line_count(path: Path) -> int:
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except (FileNotFoundError, IsADirectoryError):
-        return 0
-    if text == "":
-        return 0
-    return len(text.splitlines())
-
-
-def evaluate(
-    changed: list[ChangedFile],
-    *,
-    mode: str,
-    extra_exemptions: tuple[str, ...],
-    repo_root: Path,
+def evaluate_diff(
+    changed: list[ChangedFile], *, allowed: tuple[str, ...]
 ) -> list[Violation]:
-    patterns = DEFAULT_EXEMPTIONS + tuple(extra_exemptions)
-    violations: list[Violation] = []
+    """``diff`` mode: any changed markdown whose post-image is outside the set.
 
+    Deletions are the only status that is always fine. A rename/copy is judged
+    on its destination, so ``git mv docs/a.md docs/b.md`` cannot launder a doc
+    past the gate.
+    """
+    violations: list[Violation] = []
     for cf in changed:
-        if not cf.path.lower().endswith(".md"):
+        if not is_markdown(cf.path):
             continue
         if cf.status == "D":
-            continue  # deletions always allowed
-        if cf.status in ("R", "C"):
-            continue  # renames/copies always allowed regardless of content
-        if is_exempt(cf.path, patterns):
+            continue
+        if is_allowed(cf.path, allowed):
             continue
         if cf.status == "A":
-            violations.append(
-                Violation(
-                    cf.path, "new non-KB markdown file (not in the exemption set)"
-                )
+            reason = "new markdown file outside the allowed set"
+        elif cf.status in ("R", "C"):
+            reason = (
+                f"markdown moved to a path outside the allowed set (from {cf.old_path})"
             )
-            continue
-        # Everything else (M, T, and any other git status) is "modified in
-        # place" semantics: only checked under strict mode's stub-size cap.
-        if mode == "strict":
-            line_count = _line_count(repo_root / cf.path)
-            if line_count > STUB_LINE_CAP:
-                violations.append(
-                    Violation(
-                        cf.path,
-                        f"modified doc exceeds the {STUB_LINE_CAP}-line stub cap "
-                        f"({line_count} lines) in strict mode",
-                    )
-                )
-
+        else:
+            reason = "existing markdown outside the allowed set was modified"
+        violations.append(Violation(cf.path, reason))
     return violations
+
+
+def evaluate_tree(paths: list[str], *, allowed: tuple[str, ...]) -> list[Violation]:
+    """``strict`` mode: any tracked markdown on the branch outside the set."""
+    return [
+        Violation(path, "markdown outside the allowed set exists on this branch")
+        for path in paths
+        if not is_allowed(path, allowed)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -355,9 +387,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["transition", "strict"],
+        choices=list(MODES),
         default=None,
-        help="fallback mode when the repo's .kb-doc-gate.yaml does not set 'mode' (default: transition)",
+        help="fallback mode when the repo's .kb-doc-gate.yaml does not set 'mode' (default: diff)",
     )
     parser.add_argument(
         "--config",
@@ -374,13 +406,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--staged",
         action="store_true",
-        help="pre-commit mode: evaluate staged FILES (positional) against HEAD",
+        help="diff mode: evaluate staged FILES (positional) against HEAD",
     )
     parser.add_argument(
-        "--base-ref", default=None, help="CI mode: diff base ref, e.g. origin/dev"
+        "--base-ref", default=None, help="diff mode: diff base ref, e.g. origin/dev"
     )
     parser.add_argument(
-        "--head-ref", default="HEAD", help="CI mode: diff head ref (default: HEAD)"
+        "--head-ref", default="HEAD", help="diff mode: diff head ref (default: HEAD)"
     )
     parser.add_argument(
         "files", nargs="*", help="staged files to evaluate (only used with --staged)"
@@ -394,29 +426,34 @@ def main(argv: list[str] | None = None) -> int:
     config_path = args.config or (repo_root / ".kb-doc-gate.yaml")
 
     try:
-        file_mode, extra_exemptions = load_config(config_path)
+        file_mode, extra_allowed = load_config(config_path)
     except ValueError as exc:
         print(f"kb-doc-gate: config error: {exc}", file=sys.stderr)
         return 2
 
-    mode = file_mode or args.mode or "transition"
+    mode = file_mode or args.mode or "diff"
+    allowed = DEFAULT_ALLOWED + tuple(extra_allowed)
 
-    if args.staged:
-        changed = staged_changed_files(repo_root, args.files)
-    elif args.base_ref:
-        changed = ref_diff_changed_files(repo_root, args.base_ref, args.head_ref)
+    if mode == "strict":
+        paths = tracked_markdown(repo_root)
+        violations = evaluate_tree(paths, allowed=allowed)
+        inspected = f"{len(paths)} tracked markdown file(s)"
     else:
-        print("kb-doc-gate: one of --staged or --base-ref is required", file=sys.stderr)
-        return 2
-
-    violations = evaluate(
-        changed, mode=mode, extra_exemptions=extra_exemptions, repo_root=repo_root
-    )
+        if args.staged:
+            changed = staged_changed_files(repo_root, args.files)
+        elif args.base_ref:
+            changed = ref_diff_changed_files(repo_root, args.base_ref, args.head_ref)
+        else:
+            print(
+                "kb-doc-gate: diff mode needs one of --staged or --base-ref",
+                file=sys.stderr,
+            )
+            return 2
+        violations = evaluate_diff(changed, allowed=allowed)
+        inspected = f"{len(changed)} changed file(s)"
 
     if not violations:
-        print(
-            f"kb-doc-gate: OK ({mode} mode, {len(changed)} changed file(s) inspected)"
-        )
+        print(f"kb-doc-gate: OK ({mode} mode, {inspected} inspected)")
         return 0
 
     print(
@@ -426,9 +463,12 @@ def main(argv: list[str] | None = None) -> int:
     for v in violations:
         print(f"  {v.path}: {v.reason}", file=sys.stderr)
     print(
-        "Canonical docs live in the knowledge-base repo. New/regrown local markdown is "
-        "blocked outside the exemption set — see omniclaude/scripts/kb_doc_gate.py "
-        "DEFAULT_EXEMPTIONS, or add a repo-scoped .kb-doc-gate.yaml (OMN-16589).",
+        "Canonical docs live in the knowledge-base repo, not here. Move the content "
+        "there and DELETE the local file — a pointer stub is not a removal, the root "
+        "README's knowledge-base link already carries that role. Genuinely local, "
+        "repo-specific markdown goes in the allowed set: see DEFAULT_ALLOWED in "
+        "omniclaude/scripts/kb_doc_gate.py, or add a path glob under 'allowed:' in "
+        "this repo's .kb-doc-gate.yaml (OMN-16589, OMN-17172).",
         file=sys.stderr,
     )
     return 1
