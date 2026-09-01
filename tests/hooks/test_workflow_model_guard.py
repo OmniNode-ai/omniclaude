@@ -435,6 +435,38 @@ def test_hook_script_is_registered_and_executable() -> None:
     assert os.access(_HOOK_SCRIPT, os.X_OK), f"{_HOOK_SCRIPT} is not executable"
 
 
+def test_the_borrowed_mask_bit_gates_only_this_guard() -> None:
+    """`PRE_TOOL_AGENT_DISPATCH_GATE` must remain a one-control switch.
+
+    This guard borrows that bit because a dedicated one is not mintable in this
+    repo: `EnumHookBit` lives in omnibase_core, all 60 default-mask ordinals are
+    allocated, 60-62 are the disabled-by-default trio, and
+    `docs/hook-bit-inventory.md` rule 7 forbids ordinal 63 (the sign bit of a
+    signed 64-bit integer) outright.
+
+    The borrow is only honest while the bit's namesake script stays
+    unregistered. If someone re-registers `pre_tool_use_agent_dispatch_gate.sh`,
+    then `onex hooks disable PRE_TOOL_AGENT_DISPATCH_GATE` -- documented in this
+    guard's own block message as the way to turn *this* guard off -- would
+    silently disable two controls at once. That is precisely the quiet
+    switch-mismatch the OMN-17020 inventory exists to refuse, so it fails here
+    rather than being discovered from a hook that stopped firing.
+    """
+    data = json.loads(_HOOKS_JSON.read_text(encoding="utf-8"))
+    registered = {
+        hook["command"].rsplit("/", 1)[-1]
+        for group in data["hooks"].get("PreToolUse", [])
+        for hook in group["hooks"]
+    }
+    assert "pre_tool_use_agent_dispatch_gate.sh" not in registered, (
+        "pre_tool_use_agent_dispatch_gate.sh has been registered, so "
+        "PRE_TOOL_AGENT_DISPATCH_GATE now gates two controls. Either give the "
+        "model guard its own EnumHookBit (an omnibase_core change plus an "
+        "architecture review per hook-bit-inventory rule 7), or move one of the "
+        "two to a different bit. Do not leave two guards behind one switch."
+    )
+
+
 def test_jq_is_available() -> None:
     """The hook renders its decision with ``jq -n``, as every sibling guard does.
 
