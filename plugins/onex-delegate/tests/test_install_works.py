@@ -217,6 +217,27 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
     )
     assert "delegate" in run.stdout
 
+    # OMN-17354: the published consumer plugin also exposes cloud_delegate.
+    # This remains a registration-only check: it never sends a request or reads
+    # a credential, but catches a fresh install that lacks the CLI group the
+    # skill is documented to invoke.
+    cloud = subprocess.run(  # nosec B603
+        [str(onex), "cloud", "delegate", "--help"],
+        cwd=scratch,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=_RUN_TIMEOUT_SECONDS,
+    )
+    assert cloud.returncode == 0, (
+        "`onex cloud delegate --help` did not exit 0 after installing the "
+        f"declared pins {requirements}. The customer cloud_delegate plugin "
+        f"skill would be published with no registered CLI path.\nstdout:\n"
+        f"{cloud.stdout}\nstderr:\n{cloud.stderr}"
+    )
+    assert "delegate" in cloud.stdout
+
     # --help proves the subcommand is registered; it does not prove it can run,
     # because click answers --help before any dispatch. Resolve the backing node
     # through the resolver the real invocation uses, so a missing node_package
