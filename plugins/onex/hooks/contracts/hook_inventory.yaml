@@ -222,10 +222,59 @@ expected_hooks:
           - "REFUSED"
         stdout_absent: []
 
+  - script: "pre_tool_use_agent_model_guard.sh"
+    event: "PreToolUse"
+    matcher: "^(Workflow|Agent)$"
+    order: 3
+    ticket: "OMN-17499"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Workflow dispatch whose agent() calls do not each name an
+      allowed background model, and an Agent dispatch with no allowed model or
+      with subagent_type "fork" (a fork always inherits the parent's model).
+      The allowlist is config, not code, and carries no "inherit" spelling:
+      an inherited model is the defect. Registered AHEAD of
+      pre_tool_use_lane_open.sh so a refused dispatch does not first write a
+      phantom OPEN lane record.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      # BORROWED BIT, recorded rather than left for a reader to infer. This
+      # gate_call names a bit whose own script (pre_tool_use_agent_dispatch_gate.sh)
+      # is on disk and UNREGISTERED under the OMN-13244 baseline, so
+      # `onex hooks disable PRE_TOOL_AGENT_DISPATCH_GATE` disables exactly this
+      # guard and nothing else that is live. A dedicated bit is unavailable:
+      # EnumHookBit lives in omnibase_core, all 60 default-mask ordinals are
+      # allocated, 60-62 are the disabled-by-default trio, and
+      # docs/hook-bit-inventory.md rule 7 forbids ordinal 63 (the sign bit of a
+      # signed 64-bit integer) outright. Same constraint, same resolution
+      # pre_tool_use_pr_ownership_guard.sh recorded for BASH_GUARD.
+      #
+      # The borrow is only safe while the namesake stays unregistered, so
+      # tests/hooks/test_workflow_model_guard.py pins that: re-registering
+      # pre_tool_use_agent_dispatch_gate.sh would silently put two controls
+      # behind one switch, and turns the suite red instead.
+      gate_call: "PRE_TOOL_AGENT_DISPATCH_GATE"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Workflow"
+        tool_input:
+          script: "await agent(`hook-inventory canary`, { label: 'canary' })\n"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "background agent model not chosen explicitly"
+        stdout_absent: []
+
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 3
+    order: 4
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -254,7 +303,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 4
+    order: 5
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -285,7 +334,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 5
+    order: 6
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
