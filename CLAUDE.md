@@ -77,6 +77,32 @@ description is "Validates dispatch envelope before any `Agent()` call is made", 
 script (`pre_tool_use_agent_dispatch_gate.sh`) is unregistered under the OMN-13244 baseline, so
 nothing else is gated by it.
 
+**What the parser guarantees (OMN-17499 follow-up).** The scan is structural, and the first
+shipped revision's stated residual — "a regex literal the scanner does not tokenise ... yields an
+unresolvable_call finding, it fails closed" — was **false**, so it is corrected here rather than
+left standing. A regex is ordinary code to a scanner that cannot see it: `/^https?:\/\//` read
+as a line comment and blanked the rest of its line (the `agent(` token with it), and `/[^'"]+/`
+opened a "string" at the quote in the character class that ran until some later line's quote,
+blanking every `agent(` in between. Both exited **0**. The claim held only when the
+desynchronisation landed *inside* an argument list; when it landed before the call, the call
+stopped existing. The guard now:
+
+- tokenises regular-expression literals, with character classes and escapes, and classifies `/`
+  the way a JavaScript lexer does (pattern in expression position, division after a value);
+- refuses the **whole script** when the scan cannot be trusted — an ambiguous `/` after `)`, `]`
+  or `}` whose two readings disagree about the rest of the file, an unterminated string,
+  template or block comment. A desynchronised mask does not lose one construct, it reclassifies
+  every byte after it, so the refusal is of the scan, not of the calls it happened to see;
+- refuses a *reference* to the `agent` helper that is not a call (`const a = agent`, `[agent]`,
+  a destructure) — a dispatch through an alias is invisible to a scanner looking for `agent(`;
+- checks **both** `script` and `scriptPath` when a payload carries both. The shipped revision
+  preferred the inline body and never opened the path, so a clean inline script was a cover for
+  a dirty one on disk.
+
+Calibrated against the live corpus of 1895 workflow scripts: the new refusals fire on **zero** of
+them, and exactly one script's verdict changes — `pr-backlog-drain`, which the shipped revision
+wrongly refused as `<unparsed>` because of a real `.replace(/'/g, '')`.
+
 **How to see a block.** Feed the hook a violating payload directly:
 
 ```bash
