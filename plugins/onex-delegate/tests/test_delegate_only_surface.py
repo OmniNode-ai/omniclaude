@@ -1,18 +1,19 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""TDD tests for the delegate-only consumer plugin surface (OMN-14688, epic OMN-14686).
+"""TDD tests for the slim consumer plugin surface (OMN-14688, OMN-17354).
 
-Operator directive (2026-08-09): "only expose one plug-in and that is delegate."
 The marketplace/plugin.json manifest schema has no per-skill allowlist, so
-scoping the CONSUMER-facing plugin to delegate-only required a second,
-physically-slim plugin source (`plugins/onex-delegate/`) rather than an
-in-place filter on `plugins/onex/`. This test proves:
+scoping the CONSUMER-facing plugin to a physically-slim source
+(`plugins/onex-delegate/`) rather than an in-place filter on `plugins/onex/`
+keeps internal tooling out of customer installs. This test proves:
 
   1. Both consumer marketplace.json copies source ONLY the slim plugin, with
      matching (reconciled) versions -- closing the OMN-15496-class drift
      (root 1.0.0 vs plugins/ 1.1.0) that existed before this ticket.
-  2. `plugins/onex-delegate/` ships exactly one skill (delegate), zero hooks,
-     zero agents -- the Phase 1 exit gate from OMN-14688's original scope.
+  2. `plugins/onex-delegate/` ships exactly the customer delegation siblings:
+     `delegate` (customer-local) and `cloud_delegate` (dashboard-key gateway),
+     plus zero hooks and zero agents. OMN-17354 adds the cloud sibling required
+     for beta U4 without exposing the internal/dev skill tree.
   3. The internal/dev skill tree (`plugins/onex/`, 100+ skills) is preserved
      on disk and reachable via a SEPARATE, non-consumer marketplace file
      (`plugins/onex-dev-marketplace/`) so local dev sessions do not lose
@@ -47,12 +48,11 @@ def _load(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
-class TestConsumerMarketplaceIsDelegateOnly:
+class TestConsumerMarketplaceIsSlim:
     def test_root_marketplace_has_exactly_one_plugin(self) -> None:
         manifest = _load(ROOT_MARKETPLACE)
         assert len(manifest["plugins"]) == 1, (
-            "consumer marketplace must expose exactly one plugin (delegate-only "
-            "directive, OMN-14688)"
+            "consumer marketplace must expose exactly one slim plugin (OMN-14688)"
         )
 
     def test_root_marketplace_sources_slim_plugin(self) -> None:
@@ -108,20 +108,59 @@ class TestConsumerMarketplaceIsDelegateOnly:
         assert root_cli["package"] == scoped_cli["package"] == compat["package"]
 
 
-class TestSlimPluginShipsDelegateOnly:
+class TestSlimPluginShipsCustomerDelegationSkills:
     def test_plugin_json_exists(self) -> None:
         assert (DELEGATE_PLUGIN_DIR / ".claude-plugin" / "plugin.json").exists()
 
-    def test_exactly_one_skill_directory(self) -> None:
+    def test_exactly_the_customer_delegation_skill_directories(self) -> None:
         skills_dir = DELEGATE_PLUGIN_DIR / "skills"
         assert skills_dir.exists(), f"missing {skills_dir}"
         skill_dirs = sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
-        assert skill_dirs == ["delegate"], (
-            f"onex-delegate must ship exactly one skill (delegate), found: {skill_dirs}"
+        assert skill_dirs == ["cloud_delegate", "delegate"], (
+            "onex-delegate must ship only the customer delegation siblings "
+            f"(delegate, cloud_delegate), found: {skill_dirs}"
         )
 
     def test_delegate_skill_md_exists(self) -> None:
         assert (DELEGATE_PLUGIN_DIR / "skills" / "delegate" / "SKILL.md").exists()
+
+    def test_cloud_delegate_skill_files_exist(self) -> None:
+        cloud_skill_dir = DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate"
+        assert (cloud_skill_dir / "SKILL.md").exists()
+        assert (cloud_skill_dir / "prompt.md").exists()
+
+    def test_cloud_delegate_is_the_canonical_thin_shim(self) -> None:
+        """The published copy must not drift into its own transport implementation."""
+        source = DEV_PLUGIN_DIR / "skills" / "cloud_delegate"
+        shipped = DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate"
+        for name in ("SKILL.md", "prompt.md"):
+            assert (shipped / name).read_text() == (source / name).read_text(), (
+                f"{name} must stay byte-identical to the canonical cloud_delegate "
+                "skill; update both through the shared thin-shim contract"
+            )
+
+    def test_cloud_delegate_keeps_dashboard_key_and_gateway_boundaries(self) -> None:
+        skill_text = (
+            DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate" / "SKILL.md"
+        ).read_text()
+        prompt_text = (
+            DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate" / "prompt.md"
+        ).read_text()
+        published_text = f"{skill_text}\n{prompt_text}"
+
+        for required in (
+            "onex cloud delegate",
+            "onxk_",
+            "--api-key-stdin",
+            "result.txt",
+            "receipt.json",
+            "run.json",
+        ):
+            assert required in published_text
+        for forbidden in ("ANTHROPIC_API_KEY", "api.anthropic.com", "curl "):
+            assert forbidden not in published_text, (
+                f"published cloud_delegate must not introduce {forbidden!r}"
+            )
 
     def test_zero_hooks(self) -> None:
         assert not (DELEGATE_PLUGIN_DIR / "hooks").exists(), (
@@ -139,7 +178,7 @@ class TestSlimPluginShipsDelegateOnly:
 
 
 class TestInternalDevSurfacePreserved:
-    """Verify the delegate-only directive scoped the CONSUMER plugin, not dev
+    """Verify slim consumer scoping does not expose or delete dev
     tooling: the full skill tree stays on disk and reachable via a distinct,
     non-consumer marketplace name so local sessions do not lose skills.
     """
@@ -150,8 +189,7 @@ class TestInternalDevSurfacePreserved:
         skill_dirs = [p for p in skills_dir.iterdir() if p.is_dir()]
         assert len(skill_dirs) > 50, (
             "plugins/onex (internal dev tree) must retain its full skill set "
-            "-- the delegate-only directive scopes the consumer marketplace "
-            "only, per operator note in OMN-14688"
+            "-- the slim consumer package scopes the marketplace only"
         )
 
     def test_dev_marketplace_exists_and_is_distinct_from_consumer(self) -> None:

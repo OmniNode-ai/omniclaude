@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# plugin-compat.yaml — onex-delegate (consumer-facing, delegate-only) plugin
+# plugin-compat.yaml — onex-delegate (consumer-facing delegation) plugin
 # compatibility matrix.
 #
 # This is the slim, consumer-distributed plugin's OWN compat surface — separate
@@ -13,10 +13,11 @@
 # plugins/onex-delegate/tests/) as the source of truth for the `onex` CLI pin
 # that plugin.json and marketplace.json must agree with.
 #
-# OMN-14688 (Phase 1 of epic OMN-14686): minimal stable package.
+# OMN-14688 established the physically-slim customer package. OMN-17354 adds
+# the cloud sibling needed by beta U4 without publishing internal tooling.
 
 plugin: onex
-plugin_version: "0.1.0"
+plugin_version: "0.2.0"
 
 # Compatibility window: plugin works with runtimes in [min, max).
 min_runtime_version: "0.2.0"

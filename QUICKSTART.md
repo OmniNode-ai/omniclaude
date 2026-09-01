@@ -1,7 +1,8 @@
 # OmniClaude Quickstart
 
-OmniClaude ships as a single Claude Code plugin, **`onex@omninode-tools`**. As of OMN-14688
-it is **delegate-only**: one skill (`/onex:delegate`), no hooks, no agents. It does **not**
+OmniClaude ships as a single Claude Code plugin, **`onex@omninode-tools`**. It exposes two
+customer delegation siblings: `/onex:delegate` for customer-local work and
+`/onex:cloud_delegate` for the dashboard-key gateway path. It has no hooks and no agents. It does **not**
 inject a SessionStart capability banner or auto-load 100+ skills — that described an older,
 larger plugin (`plugins/onex`, now `NO_AUTOLOAD`/dead source) that this file used to document.
 If you're looking for that plugin's hooks/agents/routing architecture, see
@@ -27,15 +28,15 @@ Verify: `claude plugin list` shows `onex@omninode-tools` with status `enabled`.
 
 ---
 
-## Configure — install the `onex` CLI
+## Configure — install the `onex` CLI and dashboard key
 
-The `/onex:delegate` skill shells out to the `onex` CLI. The CLI is **not** bundled with the
+Both skills shell out to the `onex` CLI. The CLI is **not** bundled with the
 plugin and must be installed separately into an environment on `PATH`:
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.7' 'omnibase-core>=0.46.8'
+uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev' 'omnibase-core>=0.46.8'
 # or:
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.7'
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev'
 ```
 
 `omnibase-core` provides the `onex` console script; `omnibase-infra` provides the `delegate`
@@ -45,20 +46,13 @@ lookup resolves via `onex.nodes` entry points over installed distributions, so i
 package is sufficient — there is **no** `$OMNI_HOME`/local-clone requirement despite what an
 earlier revision of this file said.
 
-> **Unpublished pin, as of 2026-08-18.** `omnimarket>=0.4.7` does not exist on PyPI yet.
-> `omnimarket` had a runtime dependency on `onex_change_control` (an internal governance repo,
-> never published to PyPI) blocking any publish; the operator ruled to cut that dependency
-> rather than publish `onex_change_control` ("omnimarket shouldn't rely on OCC — nothing
-> should"). That decoupling is written but not yet merged as of this writing. The pin number is
-> correct for when it ships; the timing is not — check PyPI or OMN-16191 before assuming this
-> note is stale.
-
 Pins above are the current values from
 [`plugins/onex-delegate/plugin-compat.yaml`](plugins/onex-delegate/plugin-compat.yaml), the
 source of truth — check that file if these look stale.
 
-Package presence check: `onex delegate --help` exits 0 from any directory. **This is not proof
-the install works** — see the callout below.
+Package presence checks: `onex delegate --help` and `onex cloud delegate --help` exit 0 from
+any directory. **These are not proof a live run works** — they establish only that both customer
+command paths are registered in the installed CLI.
 
 **`--help` exiting 0 does not mean the command works.** Click answers `--help` before any
 dispatch happens, so `--help` succeeds even with `omnimarket` missing entirely. The first real
@@ -72,7 +66,28 @@ co-install `omnibase-infra`. Install the CLI as a tool (above) and call the bare
 
 ---
 
-## Run
+## Run — cloud first for a dashboard-only customer
+
+Create an `onxk_` key in the dashboard, then give it to the CLI through stdin — never put the
+key in a Claude prompt, command argument, or environment variable:
+
+```bash
+read -rs ONXK && printf '%s' "$ONXK" | \
+  onex cloud login --base-url https://dev.api.omninode.ai --api-key-stdin
+```
+
+Inside Claude Code, run:
+
+```
+/onex:cloud_delegate --task-type summarization summarize this changelog
+```
+
+The CLI, not the plugin, submits over HTTPS. It prints the result and writes
+`result.txt`, `receipt.json`, and `run.json` under `onex-delegations/<workflow_id>/` by default.
+Keep and report those paths; they are the run evidence. A missing or rejected dashboard key is a
+typed refusal, never a fallback to a direct provider call or to Claude answering the task.
+
+## Run — customer-local
 
 ```
 /onex:delegate explain what a calendar app needs
@@ -83,14 +98,7 @@ zero Kafka/Postgres configuration, delegation runs the orchestrator in-process a
 in-memory event bus, with SQLite as the evidence fallback — no external services required to
 try it.
 
-> **Known gap 1 (tracked in OMN-16191, open as of 2026-08-18).** Until the `omnimarket` pin
-> above is published (see the callout in Configure), a clean install following only the steps
-> in this file omits `omnimarket` and `onex delegate` fails with
-> `Error: Unknown node 'node_delegate_skill_orchestrator'`. Earlier text here attributed this to
-> a missing `$OMNI_HOME`/workspace setup — that was wrong; it's simply a missing package, and
-> installing `omnimarket` (once published) resolves it with no workspace convention needed.
-
-> **Known gap 2 (tracked in OMN-16200, open as of 2026-08-18).** Even with all three packages
+> **Known local-path gap (tracked in OMN-16200, open as of 2026-08-18).** Even with all three packages
 > installed, `onex delegate` currently fails at startup with
 > `[ONEX_CORE_041_INVALID_CONFIGURATION] DELEGATION_ROUTING_TIERS_PATH is not bound` — there is
 > no packaged template for this config value and no doc explaining what it should point to.
@@ -124,7 +132,7 @@ describes; the old instructions were removed rather than left stale.)
 |---------|-------------|
 | `onex: command not found` | The `uv tool install`/`pipx` step above hasn't run, or its install bin dir isn't on `PATH`. |
 | `Error: No such command 'delegate'. Did you mean 'gate'?` | Only `omnibase-core` is installed — `omnibase-infra` provides the `delegate` subcommand; both must be in the same environment (see Configure above). |
-| `Error: Unknown node 'node_delegate_skill_orchestrator'` | `omnimarket` isn't installed, or its qualifying version isn't published yet. See Known gap 1 (OMN-16191) above. |
+| `Error: Unknown node 'node_delegate_skill_orchestrator'` | `omnimarket` is not installed in the same environment as `omnibase-core`; use the direct-git install command above. |
 | `[ONEX_CORE_041_INVALID_CONFIGURATION] DELEGATION_ROUTING_TIERS_PATH is not bound` | See Known gap 2 (OMN-16200) above — no packaged template exists yet. |
 | `claude plugin install` can't find `onex@omninode-tools` | Marketplace not registered — re-run the `marketplace add` step above; `claude plugin marketplace list` should show `omninode-tools`. |
 
@@ -134,4 +142,5 @@ describes; the old instructions were removed rather than left stale.)
 
 - [CLAUDE.md](CLAUDE.md) — development/architecture reference for OmniNode's internal tooling (insider-oriented; assumes an OmniNode canonical-clone workspace)
 - [plugins/onex-delegate/skills/delegate/SKILL.md](plugins/onex-delegate/skills/delegate/SKILL.md) — the delegate skill's full usage reference
+- [plugins/onex-delegate/skills/cloud_delegate/SKILL.md](plugins/onex-delegate/skills/cloud_delegate/SKILL.md) — dashboard-key cloud delegation and receipt-file reference
 - [plugins/onex-delegate/plugin-compat.yaml](plugins/onex-delegate/plugin-compat.yaml) — source of truth for the `onex` CLI version pins above

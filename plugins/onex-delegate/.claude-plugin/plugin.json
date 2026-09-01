@@ -1,7 +1,7 @@
 {
   "name": "onex",
-  "description": "ONEX single-command local LLM delegation. Ships exactly one skill (delegate) — no hooks, no agents. The full ONEX dev skill surface (108+ skills, hooks, agents) is internal tooling and is not part of this consumer-facing package as of OMN-14688.",
-  "version": "0.1.0",
+  "description": "ONEX customer delegation: local delegate and dashboard-key cloud_delegate. Ships exactly two delegation skills — no hooks, no agents. The full ONEX dev skill surface (108+ skills, hooks, agents) remains internal tooling and is not part of this consumer-facing package.",
+  "version": "0.2.0",
   "author": {
     "name": "OmniNode",
     "email": "dev@omninode.ai"
