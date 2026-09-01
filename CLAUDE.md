@@ -22,7 +22,7 @@ Then paste the printed one-liner into the Claude Code session.
 OMN-13244 measurement baseline **with carve-outs** — every context-injection/measurement hook
 stays DISABLED; the only registered hooks are:
 
-- PreToolUse: `pre_tool_use_done_flip_guard.sh` (OMN-13856 Done-flip durable-evidence guard), `pre_tool_use_worktree_guard.sh` (OMN-14330 worktree canonical-root guard), `pre_tool_use_lane_open.sh` (matcher `^(Task|Agent|Workflow)$`, OMN-16471 — writes a durable OPEN lane record at the dispatch seam. A pure **observer**: always exits 0 and always emits nothing, so it can neither refuse a dispatch nor inject context into the launching turn), and `pre_tool_use_lane_liveness_guard.sh` (OMN-16478 lane-liveness guard, matcher `^SendMessage$` — refuses a bare harness ref used as an address, and blocks a message declaring another lane dead or authorizing a takeover of its work unless `lane_liveness.py` independently returns `DEAD`. `UNREACHABLE` is a distinct verdict that blocks as hard as `ALIVE`: a lane you cannot reach may be mid-push. Closes friction F-10, where a lane was declared dead and its in-flight OMN-16432 push nearly taken over while it was alive)
+- PreToolUse: `pre_tool_use_done_flip_guard.sh` (OMN-13856 Done-flip durable-evidence guard), `pre_tool_use_worktree_guard.sh` (OMN-14330 worktree canonical-root guard), `pre_tool_use_agent_model_guard.sh` (matcher `^(Workflow|Agent)$`, OMN-17499 background-agent model guard — see below; registered **ahead of** the lane-open recorder so a refused dispatch never writes a phantom OPEN lane record), `pre_tool_use_lane_open.sh` (matcher `^(Task|Agent|Workflow)$`, OMN-16471 — writes a durable OPEN lane record at the dispatch seam. A pure **observer**: always exits 0 and always emits nothing, so it can neither refuse a dispatch nor inject context into the launching turn), and `pre_tool_use_lane_liveness_guard.sh` (OMN-16478 lane-liveness guard, matcher `^SendMessage$` — refuses a bare harness ref used as an address, and blocks a message declaring another lane dead or authorizing a takeover of its work unless `lane_liveness.py` independently returns `DEAD`. `UNREACHABLE` is a distinct verdict that blocks as hard as `ALIVE`: a lane you cannot reach may be mid-push. Closes friction F-10, where a lane was declared dead and its in-flight OMN-16432 push nearly taken over while it was alive)
 - PostToolUse (matcher `Bash`): `post_tool_use_secret_redact_guard.sh` (OMN-16277 — masks secret-shaped patterns in raw Bash `tool_response` text via `hookSpecificOutput.updatedToolOutput` before it lands in the transcript; two-strike fix for the 2026-08-19 kubectl-jsonpath `clientSecret` leak + `env|grep`-sed-gap Postgres-URL leak. Runs on every Bash call unconditionally — no size/command-type/exit-code gate, unlike the on-disk-but-unregistered token-budget backstop `post_tool_use_output_suppressor.sh`/OMN-13089, which this hook's wire protocol was modeled on)
 - SubagentStop: `subagent_stop_secret_leak_guard.sh` (OMN-15062), `subagent_stop_report_contract_guard.sh` (OMN-15213 golden-chain report-contract guard — bare-Done-class final returns block the lane RED), and `subagent_stop_lane_termination_guard.sh` (OMN-16471 lane-death guard — classifies *how* the lane ended from transcript evidence and writes the terminal half of the lane record)
 
@@ -40,6 +40,60 @@ exact envelope shape (OMN-13090 probe), so a "clean" emission would be worse tha
 All other hook scripts (`plugins/onex/hooks/scripts/`) and handler modules
 (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change.
 Verify live: `jq '.hooks' plugins/onex/hooks/hooks.json`.
+
+### Background-agent model guard (OMN-17499)
+
+**The rule: every background agent names its own model.** A `Workflow` dispatch is refused
+unless *every* `agent()` call in the script carries an explicit `model:` whose value is a
+quoted string literal in the allowlist. An `Agent` dispatch is refused unless it carries an
+allowed `model`, and `subagent_type: "fork"` is refused outright — a fork resumes the parent
+conversation and therefore always inherits the parent's model, so no value of `model` can make
+the choice explicit.
+
+**Why it is a hook and not a validator.** Workflow scripts live under
+`~/.claude/projects/<project>/workflows/scripts/` and are in **no repository**, so no
+pre-commit hook and no repo CI job ever sees them. On 2026-09-01 one session dispatched 41
+workflow scripts whose `agent()` calls omitted `model:`; every one inherited the parent
+session's model, which is banned for background work. The control in place was a memory entry,
+and it failed 41 times silently in that single session — 131 `agent()` call sites across 101
+scripts, 38 with no explicit model on a structural re-count, a 29 percent miss rate that
+surfaced only in a forensics pass hours later. The dispatch seam is the only place the
+omission is observable before the cost is paid.
+
+**Allowlist file**: `plugins/onex/hooks/config/agent_model_allowlist.json` — ships `opus`,
+`sonnet`, `haiku`. It is JSON, not YAML like its neighbours, on purpose: the checker sits on a
+fail-closed path and must parse its own policy with the standard library alone, or a missing
+PyYAML would refuse every dispatch on the machine. There is deliberately **no `inherit`
+entry** — an inherited model is the defect, so no spelling of it passes.
+
+**Mask bit**: `PRE_TOOL_AGENT_DISPATCH_GATE` (`0x80000000`, ordinal 31). Disable with
+`onex hooks disable PRE_TOOL_AGENT_DISPATCH_GATE`. It borrows that bit rather than minting its
+own: `EnumHookBit` lives in `omnibase_core`, all 60 default-mask ordinals are allocated, 60–62
+are the disabled-by-default trio, and `docs/hook-bit-inventory.md` rule 7 forbids ordinal 63
+outright (it is the sign bit of a signed 64-bit integer), so a new bit is a cross-repo release
+chain plus an architecture review. This is the same constraint and the same resolution
+`pre_tool_use_pr_ownership_guard.sh` recorded for `BASH_GUARD`; the borrowed bit's contract
+description is "Validates dispatch envelope before any `Agent()` call is made", and its own
+script (`pre_tool_use_agent_dispatch_gate.sh`) is unregistered under the OMN-13244 baseline, so
+nothing else is gated by it.
+
+**How to see a block.** Feed the hook a violating payload directly:
+
+```bash
+cat <<'PAYLOAD' | CLAUDE_PLUGIN_ROOT="$PWD/plugins/onex" CLAUDE_PROJECT_DIR="$PWD" \
+  bash plugins/onex/hooks/scripts/pre_tool_use_agent_model_guard.sh; echo "exit=$?"
+{"tool_name":"Workflow","tool_input":{"script":"await agent(`x`, { label: 'demo' })"}}
+PAYLOAD
+```
+
+Exit 2 with a `{"decision": "block", ...}` payload naming every offending call — label, line,
+reason — plus the one-line fix. A clean dispatch exits 0 and prints **nothing**: the Workflow
+payload carries the whole script body, and echoing it back would copy every prompt into the
+hook output stream. Anything the guard cannot evaluate (unparseable payload, missing decision
+core, unreadable `scriptPath`, unresolvable interpreter, unreadable allowlist) also blocks —
+an unverified model choice is refused, never assumed. Tools other than `Workflow`/`Agent`, and
+non-OmniNode repos, are passed through untouched.
+
 
 ---
 

@@ -183,6 +183,9 @@ _SUBAGENT_STOP_SECRET_LEAK_GUARD_COMMAND = (
 _SUBAGENT_STOP_REPORT_CONTRACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_report_contract_guard.sh"
 )
+_AGENT_MODEL_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_agent_model_guard.sh"
+)
 _LANE_OPEN_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_open.sh"
 _SUBAGENT_STOP_LANE_TERMINATION_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_lane_termination_guard.sh"
@@ -266,9 +269,15 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly five PreToolUse commands are wired: Done-flip guard, worktree
-    # guard, PR lane-ownership guard (OMN-16485), lane-open recorder, then
-    # lane-liveness guard.
+    # Exactly seven PreToolUse commands are wired: Done-flip guard, worktree
+    # guard, PR lane-ownership guard (OMN-16485), background-agent model guard
+    # (OMN-17499), lane-open recorder, lane-liveness guard, then the overseer
+    # foreground-block guard.
+    #
+    # The model guard's position is behaviour, not taste: it is registered
+    # AHEAD of the lane-open recorder so a refused dispatch does not first
+    # write a phantom OPEN lane record that no terminal record will ever
+    # close.
     commands = [
         hook.get("command", "")
         for group in hooks["PreToolUse"]
@@ -278,15 +287,17 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _DONE_FLIP_GUARD_COMMAND,
         _WORKTREE_GUARD_COMMAND,
         _PR_OWNERSHIP_GUARD_COMMAND,
+        _AGENT_MODEL_GUARD_COMMAND,
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
         _OVERSEER_FOREGROUND_BLOCK_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the worktree canonical-root guard, the PR lane-ownership guard, "
-        "the lane-dispatch recorder, the lane-liveness guard, and the overseer "
-        "foreground-block guard, and nothing else (OMN-13856 + OMN-14330 + "
-        "OMN-16485 + OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
+        "the background-agent model guard, the lane-dispatch recorder, the "
+        "lane-liveness guard, and the overseer foreground-block guard, and "
+        "nothing else (OMN-13856 + OMN-14330 + OMN-16485 + OMN-17499 + "
+        "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
         "A different or additional command means either the measurement baseline "
         "was re-enabled without an operator decision (OMN-13846) or one of the "
         f"guards regressed. Found: {commands!r}"
@@ -298,12 +309,16 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert matchers == [
         "^mcp__linear-server__(save_issue|update_issue)$",
         "Bash",
+        "^(Workflow|Agent)$",
         "^(Task|Agent|Workflow)$",
         "^SendMessage$",
         "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$",
     ], (
         f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
-        f"guard must match Bash, the lane recorder must match the dispatch tools, "
+        f"guard must match Bash, the background-agent model guard must match "
+        f"exactly the two dispatch tools that choose a background model "
+        f"(Workflow and Agent, never Task), the lane recorder must match the "
+        f"dispatch tools, "
         f"the lane-liveness guard must match SendMessage, and the overseer "
         f"foreground-block guard must match exactly the BLOCK_TOOLS set in "
         f"overseer_foreground_block.py. Found: {matchers!r}"

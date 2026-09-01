@@ -1,0 +1,31 @@
+{
+  "$comment": [
+    "OMN-17499. The set of models a BACKGROUND agent may run on.",
+    "",
+    "Read by plugins/onex/hooks/lib/workflow_model_guard.py, which is invoked by",
+    "the pre_tool_use_agent_model_guard.sh PreToolUse hook. The list lives here,",
+    "not in the checker, so changing policy is a config edit rather than a code",
+    "change -- and so the policy is visible in one place instead of inferred from",
+    "a Python literal.",
+    "",
+    "JSON rather than YAML deliberately, unlike the sibling .yaml files in this",
+    "directory: the checker sits on a fail-closed enforcement path, so it must",
+    "parse its own policy with the standard library alone. A missing PyYAML in",
+    "the resolved interpreter would otherwise turn into a refusal of every",
+    "Workflow and Agent dispatch on the machine.",
+    "",
+    "There is deliberately NO 'inherit' entry. An inherited model is the defect",
+    "this guard exists to refuse: on 2026-09-01, 41 agent() calls with no model:",
+    "silently inherited the parent session's banned model. Adding a spelling that",
+    "passes would reintroduce exactly that. Every background agent names its own",
+    "model.",
+    "",
+    "Fable is absent on purpose (memory feedback_fable_foreground_orchestration_only):",
+    "Fable is a foreground-orchestration model and is banned for background work."
+  ],
+  "allowed_models": [
+    "opus",
+    "sonnet",
+    "haiku"
+  ]
+}

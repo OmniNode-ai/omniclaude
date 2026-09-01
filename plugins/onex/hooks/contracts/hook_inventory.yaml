@@ -222,10 +222,44 @@ expected_hooks:
           - "REFUSED"
         stdout_absent: []
 
+  - script: "pre_tool_use_agent_model_guard.sh"
+    event: "PreToolUse"
+    matcher: "^(Workflow|Agent)$"
+    order: 3
+    ticket: "OMN-17499"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Workflow dispatch whose agent() calls do not each name an
+      allowed background model, and an Agent dispatch with no allowed model or
+      with subagent_type "fork" (a fork always inherits the parent's model).
+      The allowlist is config, not code, and carries no "inherit" spelling:
+      an inherited model is the defect. Registered AHEAD of
+      pre_tool_use_lane_open.sh so a refused dispatch does not first write a
+      phantom OPEN lane record.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      gate_call: "PRE_TOOL_AGENT_DISPATCH_GATE"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Workflow"
+        tool_input:
+          script: "await agent(`hook-inventory canary`, { label: 'canary' })\n"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "background agent model not chosen explicitly"
+        stdout_absent: []
+
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 3
+    order: 4
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -254,7 +288,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 4
+    order: 5
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -285,7 +319,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 5
+    order: 6
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
