@@ -583,8 +583,6 @@ context without requiring the user to repeat it.
 Context injection has a 1s timeout. If the database is unreachable,
 the hook proceeds without patterns (data loss acceptable; UI freeze is not).
 
-See `docs/observability/AGENT_TRACEABILITY.md` for enrichment observability.
-
 ### Compliance Enforcement
 
 `PostToolUse` hooks run a quality check on every tool call. The enforcement
@@ -613,7 +611,7 @@ The delegation orchestrator (`delegation_orchestrator.py`) coordinates the
 request, validates the response, and injects the result into
 `additionalContext`.
 
-See `docs/decisions/ADR-005-delegation-orchestrator.md` for the decision
+See [knowledge-base: adrs/ADR-0048-delegation-orchestrator-quality-gate.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/adrs/ADR-0048-delegation-orchestrator-quality-gate.md) for the decision
 record.
 
 ---

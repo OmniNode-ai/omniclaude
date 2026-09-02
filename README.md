@@ -206,7 +206,7 @@ belongs in an omnimarket node, not in this repo.
 | Add an agent | [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-an-agent.md) |
 | Add a skill | [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) |
 | Write tests for hooks | [knowledge-base: guides/omniclaude-testing-guide.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/omniclaude-testing-guide.md) |
-| Look up Kafka topics | [docs/reference/KAFKA_TOPICS_REFERENCE.md](docs/reference/KAFKA_TOPICS_REFERENCE.md) |
+| Look up Kafka topics | [knowledge-base-internal: reference/onex-kafka-topic-catalog.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/reference/onex-kafka-topic-catalog.md) |
 | Read the knowledge base docs index | [knowledge-base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) |
 | Understand CI/CD pipeline | [knowledge-base: reference/omniclaude-ci-cd-standards.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-ci-cd-standards.md) |
 | Report a security vulnerability | [SECURITY.md](SECURITY.md) |

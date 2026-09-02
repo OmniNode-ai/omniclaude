@@ -24,10 +24,9 @@ omniclaude is the Claude Code agent plugin for the ONEX platform. It contains ho
 
 ### First Steps
 
-1. Read [CLAUDE.md](CLAUDE.md) for operating rules and architectural constraints.
-2. Read [AGENT.md](AGENT.md) for agent behavioral guidelines.
-3. Browse [docs/](docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) for the full doc map.
-4. Review [QUICKSTART.md](QUICKSTART.md) for initial setup.
+1. Read [CLAUDE.md](CLAUDE.md) for operating rules, architectural constraints, and agent behavioral guidelines.
+2. Browse [docs/](docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) for the full doc map.
+3. Review [QUICKSTART.md](QUICKSTART.md) for initial setup.
 
 ## Development Setup
 

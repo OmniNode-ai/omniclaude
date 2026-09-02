@@ -91,8 +91,6 @@ cat /tmp/database_verification_latest.txt
 cat /tmp/database_verification_latest.txt
 ```
 
-**Documentation**: See `DATABASE_VERIFICATION_GUIDE.md` for complete details.
-
 **Health Score**:
 - ≥95%: Excellent
 - 85-94%: Good
@@ -331,9 +329,7 @@ Optional tools:
 ## Related Documentation
 
 - **Main Documentation**: `../CLAUDE.md`
-- **Database Guide**: `DATABASE_VERIFICATION_GUIDE.md`
 - **Infrastructure Guide**: `~/.claude/CLAUDE.md`
-- **Observability**: `../docs/observability/AGENT_TRACEABILITY.md`
 - **Configuration**: `../config/README.md`
 
 ## Maintenance Schedule

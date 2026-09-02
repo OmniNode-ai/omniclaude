@@ -534,9 +534,6 @@ ORDER BY time;
 
 ## Additional Resources
 
-**Related Documentation**:
-- [Agent Traceability Guide](../../docs/observability/AGENT_TRACEABILITY.md)
-
 **Database Schema**:
 - See `agent_execution_logs` table in `omnibase_infra` database
 - Indexes: correlation_id, agent_name, started_at, status

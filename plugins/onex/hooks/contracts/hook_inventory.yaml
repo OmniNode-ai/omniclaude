@@ -246,7 +246,7 @@ expected_hooks:
       # guard and nothing else that is live. A dedicated bit is unavailable:
       # EnumHookBit lives in omnibase_core, all 60 default-mask ordinals are
       # allocated, 60-62 are the disabled-by-default trio, and
-      # docs/hook-bit-inventory.md rule 7 forbids ordinal 63 (the sign bit of a
+      # knowledge-base-internal reference/hook-bitmask-bit-governance.md rule 7 forbids ordinal 63 (the sign bit of a
       # signed 64-bit integer) outright. Same constraint, same resolution
       # pre_tool_use_pr_ownership_guard.sh recorded for BASH_GUARD.
       #

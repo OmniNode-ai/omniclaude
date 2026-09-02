@@ -42,7 +42,7 @@ Full prompt content is published **only** to `onex.cmd.omniintelligence.*` topic
 (restricted access). Observability topics (`onex.evt.*`) receive only the
 sanitized preview.
 
-See [ADR-004: Dual-Emission Privacy Split](decisions/ADR-004-dual-emission-privacy-split.md).
+See [ADR-0047: Dual-Emission Privacy Split](https://github.com/OmniNode-ai/knowledge-base/blob/main/adrs/ADR-0047-dual-emission-privacy-split.md).
 
 ### 2. SQL Injection Prevention
 
@@ -163,7 +163,7 @@ If a security issue is discovered in production:
 ## References
 
 - [Root security policy](../SECURITY.md) — vulnerability reporting contact
-- [ADR-004: Dual-Emission Privacy Split](decisions/ADR-004-dual-emission-privacy-split.md)
+- [ADR-0047: Dual-Emission Privacy Split](https://github.com/OmniNode-ai/knowledge-base/blob/main/adrs/ADR-0047-dual-emission-privacy-split.md)
 - [CLAUDE.md Failure Modes](../CLAUDE.md) — hook degradation behavior
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [Bandit Documentation](https://bandit.readthedocs.io/)

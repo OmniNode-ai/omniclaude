@@ -69,7 +69,7 @@ entry** — an inherited model is the defect, so no spelling of it passes.
 **Mask bit**: `PRE_TOOL_AGENT_DISPATCH_GATE` (`0x80000000`, ordinal 31). Disable with
 `onex hooks disable PRE_TOOL_AGENT_DISPATCH_GATE`. It borrows that bit rather than minting its
 own: `EnumHookBit` lives in `omnibase_core`, all 60 default-mask ordinals are allocated, 60–62
-are the disabled-by-default trio, and `docs/hook-bit-inventory.md` rule 7 forbids ordinal 63
+are the disabled-by-default trio, and knowledge-base-internal `reference/hook-bitmask-bit-governance.md` rule 7 forbids ordinal 63
 outright (it is the sign bit of a signed 64-bit integer), so a new bit is a cross-repo release
 chain plus an architecture review. This is the same constraint and the same resolution
 `pre_tool_use_pr_ownership_guard.sh` recorded for `BASH_GUARD`; the borrowed bit's contract
@@ -149,7 +149,7 @@ delegation thresholds via per-session markers under `$ONEX_STATE_DIR/hooks/subag
 Hook wrappers read `ONEX_HOOKS_MASK` and exit silently (exit 0, no side effect) when their bit
 is cleared. Bit positions: `EnumHookBit` in
 `omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`; name → ordinal inventory:
-`docs/hook-bit-inventory.md`. Default is all bits on, recomputed from the current enum width.
+knowledge-base-internal `reference/hook-bitmask-bit-governance.md`. Default is all bits on, recomputed from the current enum width.
 
 - **Trap:** once a hex literal is saved to `~/.omnibase/.env` it is fixed — hooks added later are OFF for you. Run `onex hooks enable <NAME>` or delete the `ONEX_HOOKS_MASK` line to restore the all-on default.
 - CLI: `onex hooks list | mask [--format dec|bin] | enable <NAME> | disable <NAME>` — reads/writes `~/.omnibase/.env` (or `OMNIBASE_ENV_FILE`). `disable` persists; `export ONEX_HOOKS_MASK=0x...` is session-only.
@@ -294,7 +294,7 @@ For parallel background work use the **Workflow tool** (multi-agent fan-out) per
 in older docs is **not available** in this harness. For overnight/cron work use headless
 `claude -p` with checkpoint-resume. For verification and simple tasks, delegate to local LLMs.
 Routing model and agent config schema: knowledge-base `architecture/agent-routing-architecture.md`,
-`docs/reference/AGENT_YAML_SCHEMA.md`.
+knowledge-base-internal `reference/agent-yaml-schema.md`.
 
 ### Headless mode (`claude -p`)
 
@@ -420,7 +420,7 @@ Event payload models (`ModelHook*Payload`): `src/omniclaude/hooks/schemas.py`. T
 ## Agents & Skills
 
 Agents: `plugins/onex/agents/configs/*.yaml` — selected by matching `activation_patterns`
-against prompts (schema: `docs/reference/AGENT_YAML_SCHEMA.md`). Skills:
+against prompts (schema: knowledge-base-internal `reference/agent-yaml-schema.md`). Skills:
 `plugins/onex/skills/*/SKILL.md`.
 
 ---
@@ -433,6 +433,8 @@ pytest tests/ -m unit -v                            # unit (no services; Kafka m
 KAFKA_INTEGRATION_TESTS=1 pytest -m integration     # integration (needs Kafka)
 ruff check src/ tests/ && ruff format src/ tests/
 mypy src/omniclaude/ && bandit -r src/omniclaude/
+mypy src/omniclaude/hooks/ src/omniclaude/config/       # hook/config surfaces, targeted
+pre-commit run --all-files
 ```
 
 Plugin install (marketplace reads the canonical clone):

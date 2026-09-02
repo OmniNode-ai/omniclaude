@@ -452,7 +452,7 @@ def test_the_borrowed_mask_bit_gates_only_this_guard() -> None:
     This guard borrows that bit because a dedicated one is not mintable in this
     repo: `EnumHookBit` lives in omnibase_core, all 60 default-mask ordinals are
     allocated, 60-62 are the disabled-by-default trio, and
-    `docs/hook-bit-inventory.md` rule 7 forbids ordinal 63 (the sign bit of a
+    knowledge-base-internal `reference/hook-bitmask-bit-governance.md` rule 7 forbids ordinal 63 (the sign bit of a
     signed 64-bit integer) outright.
 
     The borrow is only honest while the bit's namesake script stays
@@ -473,7 +473,7 @@ def test_the_borrowed_mask_bit_gates_only_this_guard() -> None:
         "pre_tool_use_agent_dispatch_gate.sh has been registered, so "
         "PRE_TOOL_AGENT_DISPATCH_GATE now gates two controls. Either give the "
         "model guard its own EnumHookBit (an omnibase_core change plus an "
-        "architecture review per hook-bit-inventory rule 7), or move one of the "
+        "architecture review per knowledge-base-internal reference/hook-bitmask-bit-governance.md rule 7), or move one of the "
         "two to a different bit. Do not leave two guards behind one switch."
     )
 
