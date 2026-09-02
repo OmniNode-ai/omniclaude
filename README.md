@@ -193,7 +193,15 @@ belongs in an omnimarket node, not in this repo.
 
 ---
 
-## Documentation Map
+## Documentation
+
+omniclaude keeps no prose documentation of its own. The single home for it is the
+knowledge base — [knowledge-base](https://github.com/OmniNode-ai/knowledge-base) for
+anything public, and
+[knowledge-base-internal](https://github.com/OmniNode-ai/knowledge-base-internal) for
+pages that carry internal hosts, ports, or deployment topology. What stays in this repo
+is this README, `CLAUDE.md`, `CHANGELOG.md`, `SECURITY.md`, `.github/**`, and the
+executable agent configuration under `plugins/**` — never prose.
 
 | I want to... | Go to |
 |---|---|
@@ -243,5 +251,6 @@ uv run onex spdx fix --check src tests scripts
 ## Security, Contributing, and License
 
 - [Security policy](SECURITY.md) — how to report vulnerabilities
+- [Contributing](.github/CONTRIBUTING.md) and the [code of conduct](.github/CODE_OF_CONDUCT.md)
 - [CI/CD standards](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-ci-cd-standards.md) — pipeline gates and branch protection
 - [License: MIT](LICENSE)

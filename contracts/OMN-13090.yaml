@@ -14,12 +14,15 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: "dod-probe-doc"
-    description: "The updatedToolOutput shape probe document exists in docs/research."
+    description: >-
+      The updatedToolOutput shape probe document exists. OMN-16609 migrated it out of
+      docs/research/ into the knowledge base at
+      reference/claude-code-posttooluse-output-shape.md; this repo carries the citation.
     source: "manual"
     status: "verified"
     checks:
       - check_type: "command"
-        check_value: "test -f docs/research/2026-06-12-updated-tool-output-shape-probe.md"
+        check_value: "grep -q 'knowledge-base:reference/claude-code-posttooluse-output-shape.md' plugins/onex/hooks/lib/post_tool_use_secret_redact_guard.py"
   - id: "dod-deploy-not-required"
     description: "No live deploy is required for this evidence-only probe and comment/header cleanup."
     source: "manual"

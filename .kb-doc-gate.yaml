@@ -4,11 +4,11 @@
 # .github/workflows/kb-doc-gate-reusable.yml (this repo). The default allowed
 # set lives in DEFAULT_ALLOWED in that script; this file is ADDITIVE to it.
 
-# 'diff' blocks adding or modifying markdown outside the allowed set.
-# Flip to 'strict' (blocks its mere existence, tree-wide) once this repo's
-# Wave-4 doc migration OMN-16609 has landed — 131 residual docs as of
-# 2026-09-01, so strict today would block every unrelated PR.
-mode: diff
+# 'strict' blocks the mere existence, tree-wide, of markdown outside the
+# allowed set — not just its addition or modification. Flipped from 'diff' by
+# OMN-16609, the change that landed this repo's Wave-4 doc migration and took
+# residual markdown outside the allowed set from 100 to 0.
+mode: strict
 
 allowed:
   # omniclaude ships the org's Claude Code plugin. Everything under plugins/
