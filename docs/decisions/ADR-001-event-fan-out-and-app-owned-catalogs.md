@@ -324,7 +324,6 @@ Extend infra with `FanOutRule` support. **Rejected** because:
 ### Related Documentation
 
 - **[ADR-005 (omnibase_core)](https://github.com/OmniNode-ai/omnibase_core/blob/main/docs/decisions/ADR-005-core-infra-dependency-boundary.md)**: Core-Infra Dependency Boundary — establishes the principle that core/infra provides abstractions, not application content
-- **[Handoff Doc](../handoff-publisher-topic-resolution.md)**: Detailed handoff notes from the publisher rewiring work
 
 ### Related Code
 

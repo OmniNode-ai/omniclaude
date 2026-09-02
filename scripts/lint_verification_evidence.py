@@ -4,7 +4,7 @@
 """Lint gate: reject local-clone / ticket-text / statusCheckRollup citations as proof of state.
 
 Retro enforcement R6 (OMN-13341), child of OMN-13325. Doctrine:
-``docs/standards/VERIFICATION_DOCTRINE.md``.
+``knowledge-base reference/omniclaude-verification-doctrine.md``.
 
 A claim about system state is only true if verified against an authoritative,
 live truth surface: ``origin/dev`` for existence, the live materialized
@@ -46,7 +46,7 @@ live), passed as args (pre-commit) or discovered under the repo (CI):
 - ``docs/receipts/**`` and ``**/*receipt*.md`` / ``**/*receipt*.txt``
 - ``.onex_state/evidence/**``           (committed evidence text)
 
-Source code, tests, and this doctrine doc are out of scope.
+Source code and tests are out of scope; the doctrine now lives in the knowledge base.
 
 ## Suppression
 
@@ -67,7 +67,7 @@ must be a real justification, not a free-text bypass of the doctrine.
 ## Refs
 
 - OMN-13341 (this gate) / OMN-13325 (epic)
-- docs/standards/VERIFICATION_DOCTRINE.md
+- knowledge-base reference/omniclaude-verification-doctrine.md
 - omni_home/docs/audits/2026-06-19-ratchet-enforcement-audit.md
 """
 
@@ -80,10 +80,11 @@ from pathlib import Path
 
 SUPPRESSION = "verification-evidence-ok:"
 
-# This doctrine doc and this lint itself necessarily quote the forbidden phrasing
-# to document it; exclude them from scanning so they do not self-trip.
+# This lint itself necessarily quotes the forbidden phrasing to document it;
+# exclude it from scanning so it does not self-trip. The doctrine doc used to
+# live in-repo and share this exclusion; it now lives in the knowledge base
+# (reference/omniclaude-verification-doctrine.md), out of this repo's scan scope.
 SELF_EXCLUDE_SUFFIXES = (
-    "docs/standards/VERIFICATION_DOCTRINE.md",
     "scripts/lint_verification_evidence.py",
     "tests/unit/scripts/test_lint_verification_evidence.py",
 )
@@ -241,7 +242,7 @@ def main(argv: Iterable[str]) -> int:
         "not ticket prose\n"
         "  - PR check verdict -> gh pr checks <num>, not statusCheckRollup\n"
         "\n"
-        "See docs/standards/VERIFICATION_DOCTRINE.md.\n"
+        "See knowledge-base reference/omniclaude-verification-doctrine.md.\n"
         f"Suppress a false positive with: # {SUPPRESSION} <reason>\n"
     )
     return 1

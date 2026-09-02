@@ -26,7 +26,7 @@ omniclaude is the Claude Code agent plugin for the ONEX platform. It contains ho
 
 1. Read [CLAUDE.md](CLAUDE.md) for operating rules and architectural constraints.
 2. Read [AGENT.md](AGENT.md) for agent behavioral guidelines.
-3. Browse [docs/](docs/) — especially [docs/INDEX.md](docs/INDEX.md) for the full doc map.
+3. Browse [docs/](docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) for the full doc map.
 4. Review [QUICKSTART.md](QUICKSTART.md) for initial setup.
 
 ## Development Setup
@@ -97,9 +97,9 @@ Skills use kebab-case directories matching the slash command: `/onex:my_skill` �
 1. Create `plugins/onex/skills/<name>/SKILL.md` and `prompt.md`.
 2. Follow the authoring guide: [docs/reference/SKILL_AUTHORING_GUIDE.md](docs/reference/SKILL_AUTHORING_GUIDE.md).
 3. Skills must be thin: extract node logic to `omnimarket`, not inline in `prompt.md`.
-4. Add an entry to `plugins/onex/skills/README.md` (if it exists) and `docs/INDEX.md`.
+4. Add an entry to `plugins/onex/skills/README.md` (if it exists) and the knowledge base docs index.
 
-See [docs/guides/ADDING_A_SKILL.md](docs/guides/ADDING_A_SKILL.md) for the step-by-step guide.
+See [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) for the step-by-step guide.
 
 ## Hook Conventions
 
@@ -110,11 +110,11 @@ Hooks implement `PreToolUse`, `PostToolUse`, or `Stop` interfaces. Key rules:
 - Hooks must be idempotent and must not block the tool call path for >500ms.
 - Hook logic that spans >50 lines belongs in an `omnimarket` node, not inline.
 
-See [docs/architecture/HOOK_DATA_FLOW.md](docs/architecture/HOOK_DATA_FLOW.md) for the data flow diagram.
+See [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md) for the data flow diagram.
 
 ### Adding a Hook Handler
 
-Follow [docs/guides/ADDING_A_HOOK_HANDLER.md](docs/guides/ADDING_A_HOOK_HANDLER.md).
+Follow [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-hook-handler.md).
 
 ## Testing Requirements
 

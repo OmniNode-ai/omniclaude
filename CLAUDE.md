@@ -166,7 +166,7 @@ Precedence: kill-switch (where the script honors one) → mask bit → hook logi
 This repo owns Claude Code hooks, agent YAML definitions (`plugins/onex/agents/configs/`),
 skills (`plugins/onex/skills/`), event emission via the Unix-socket daemon, context injection,
 and agent routing. Intelligence processing → omniintelligence; ONEX runtime/contracts →
-omnibase_core; deploy/infra → omnibase_infra. Full charter: `docs/architecture/charter.md`.
+omnibase_core; deploy/infra → omnibase_infra. Full charter: knowledge-base `architecture/omniclaude-repo-charter.md`.
 
 ---
 
@@ -250,7 +250,7 @@ gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_chec
 python3 -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.yml'))['jobs']))"
 ```
 
-- Branch protection aggregates through gate jobs (**Quality Gate**, **Tests Gate**, **Security Gate**, CI Summary) declared in `.github/required-checks.yaml`. Gate names are API-stable — do not rename without the Branch Protection Migration Safety procedure in `docs/standards/CI_CD_STANDARDS.md`.
+- Branch protection aggregates through gate jobs (**Quality Gate**, **Tests Gate**, **Security Gate**, CI Summary) declared in `.github/required-checks.yaml`. Gate names are API-stable — do not rename without the Branch Protection Migration Safety procedure in knowledge-base `reference/omniclaude-ci-cd-standards.md`.
 - Standalone lint gates (hook log paths, skill MCP references, verification evidence, plan verified-state) live in their own workflows AND run as pre-commit hooks; if one fires, fix the underlying issue, never bypass.
 - CI uv version: read the pin from `.github/workflows/ci.yml` before lock-file changes; ruff behavior may differ local vs CI.
 - Never remove branch-protection rules after adding them; flag temporary rules to the user.
@@ -259,7 +259,7 @@ python3 -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.ym
 
 Prove claims against a **live truth surface**: `origin/dev` for existence (not a local clone),
 the live materialized projection for runtime/data state (not ticket prose), `gh pr checks` for
-PR verdicts (not `statusCheckRollup`). Full rules: `docs/standards/VERIFICATION_DOCTRINE.md`
+PR verdicts (not `statusCheckRollup`). Full rules: knowledge-base `reference/omniclaude-verification-doctrine.md`
 (mechanically enforced by the verification-evidence lint).
 
 ---
@@ -293,7 +293,7 @@ For parallel background work use the **Workflow tool** (multi-agent fan-out) per
 `omni_home/CLAUDE.md` — the async named-teammate `Agent(name=...)`/TeamCreate surface referenced
 in older docs is **not available** in this harness. For overnight/cron work use headless
 `claude -p` with checkpoint-resume. For verification and simple tasks, delegate to local LLMs.
-Routing model and agent config schema: `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md`,
+Routing model and agent config schema: knowledge-base `architecture/agent-routing-architecture.md`,
 `docs/reference/AGENT_YAML_SCHEMA.md`.
 
 ### Headless mode (`claude -p`)

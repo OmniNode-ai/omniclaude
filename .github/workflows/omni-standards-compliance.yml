@@ -422,7 +422,7 @@ jobs:
   # GATE AGGREGATOR
   # Gate name is API-stable per CI/CD Standards (Invariant 1).
   # Do NOT rename without following the Branch Protection Migration Safety
-  # procedure in docs/standards/CI_CD_STANDARDS.md.
+  # procedure in knowledge-base reference/omniclaude-ci-cd-standards.md.
   # ============================================================================
 
   omni-standards-gate:
