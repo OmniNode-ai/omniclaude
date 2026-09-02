@@ -120,7 +120,7 @@ fi
 
 # -----------------------------------------------------------------------
 # Emit NOTHING. Plain PostToolUse stdout is debug-log-only
-# (docs/research/2026-06-12-updated-tool-output-shape-probe.md), and echoing
+# (knowledge-base:reference/claude-code-posttooluse-output-shape.md), and echoing
 # $TOOL_INFO back would re-emit the raw tool_response that the OMN-16277
 # secret-redaction guard masks on this same Bash matcher. The checkpoint file
 # is the only output of this hook.

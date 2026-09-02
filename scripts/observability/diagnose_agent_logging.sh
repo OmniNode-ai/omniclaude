@@ -32,7 +32,7 @@
 #   POSTGRES_DATABASE (required)
 #   KAFKA_BOOTSTRAP_SERVERS (required)
 #
-# Exit Codes (see scripts/observability/EXIT_CODES.md):
+# Exit Codes (see knowledge-base-internal:reference/omniclaude-observability-exit-codes.md):
 #   0 - All checks passed
 #   1 - Critical issues found
 #   2 - Warnings found (non-critical)

@@ -10,7 +10,7 @@
 # Queries: routing_metrics.sql
 # Correlation ID: 60d7acac-8d46-4041-ae43-49f1aa7fdccc
 #
-# Exit Codes (see scripts/observability/EXIT_CODES.md):
+# Exit Codes (see knowledge-base-internal:reference/omniclaude-observability-exit-codes.md):
 #   0 - All checks passed, routing system healthy
 #   1 - Threshold violations found, system degraded
 #   3 - Configuration error (missing .env, SQL file, or credentials)

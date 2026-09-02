@@ -13,7 +13,4 @@
 # Enforced by: scripts/lint_plan_verified_state.py
 #              .github/workflows/plan-verified-state-gate.yml (CI)
 #              .pre-commit-hooks lint-plan-verified-state (pre-commit)
-allowed:
-  - docs/plans/manifest-injector-deletion-plan.md
-  - docs/plans/2026-04-09-skill-rename-mapping.md
-  - docs/tracking/auto-merge-implementation.md
+allowed: []

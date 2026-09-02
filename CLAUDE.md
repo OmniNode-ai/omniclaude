@@ -69,7 +69,7 @@ entry** — an inherited model is the defect, so no spelling of it passes.
 **Mask bit**: `PRE_TOOL_AGENT_DISPATCH_GATE` (`0x80000000`, ordinal 31). Disable with
 `onex hooks disable PRE_TOOL_AGENT_DISPATCH_GATE`. It borrows that bit rather than minting its
 own: `EnumHookBit` lives in `omnibase_core`, all 60 default-mask ordinals are allocated, 60–62
-are the disabled-by-default trio, and `docs/hook-bit-inventory.md` rule 7 forbids ordinal 63
+are the disabled-by-default trio, and knowledge-base-internal `reference/hook-bitmask-bit-governance.md` rule 7 forbids ordinal 63
 outright (it is the sign bit of a signed 64-bit integer), so a new bit is a cross-repo release
 chain plus an architecture review. This is the same constraint and the same resolution
 `pre_tool_use_pr_ownership_guard.sh` recorded for `BASH_GUARD`; the borrowed bit's contract
@@ -149,7 +149,7 @@ delegation thresholds via per-session markers under `$ONEX_STATE_DIR/hooks/subag
 Hook wrappers read `ONEX_HOOKS_MASK` and exit silently (exit 0, no side effect) when their bit
 is cleared. Bit positions: `EnumHookBit` in
 `omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`; name → ordinal inventory:
-`docs/hook-bit-inventory.md`. Default is all bits on, recomputed from the current enum width.
+knowledge-base-internal `reference/hook-bitmask-bit-governance.md`. Default is all bits on, recomputed from the current enum width.
 
 - **Trap:** once a hex literal is saved to `~/.omnibase/.env` it is fixed — hooks added later are OFF for you. Run `onex hooks enable <NAME>` or delete the `ONEX_HOOKS_MASK` line to restore the all-on default.
 - CLI: `onex hooks list | mask [--format dec|bin] | enable <NAME> | disable <NAME>` — reads/writes `~/.omnibase/.env` (or `OMNIBASE_ENV_FILE`). `disable` persists; `export ONEX_HOOKS_MASK=0x...` is session-only.
@@ -166,7 +166,7 @@ Precedence: kill-switch (where the script honors one) → mask bit → hook logi
 This repo owns Claude Code hooks, agent YAML definitions (`plugins/onex/agents/configs/`),
 skills (`plugins/onex/skills/`), event emission via the Unix-socket daemon, context injection,
 and agent routing. Intelligence processing → omniintelligence; ONEX runtime/contracts →
-omnibase_core; deploy/infra → omnibase_infra. Full charter: `docs/architecture/charter.md`.
+omnibase_core; deploy/infra → omnibase_infra. Full charter: knowledge-base `architecture/omniclaude-repo-charter.md`.
 
 ---
 
@@ -250,7 +250,7 @@ gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_chec
 python3 -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.yml'))['jobs']))"
 ```
 
-- Branch protection aggregates through gate jobs (**Quality Gate**, **Tests Gate**, **Security Gate**, CI Summary) declared in `.github/required-checks.yaml`. Gate names are API-stable — do not rename without the Branch Protection Migration Safety procedure in `docs/standards/CI_CD_STANDARDS.md`.
+- Branch protection aggregates through gate jobs (**Quality Gate**, **Tests Gate**, **Security Gate**, CI Summary) declared in `.github/required-checks.yaml`. Gate names are API-stable — do not rename without the Branch Protection Migration Safety procedure in knowledge-base `reference/omniclaude-ci-cd-standards.md`.
 - Standalone lint gates (hook log paths, skill MCP references, verification evidence, plan verified-state) live in their own workflows AND run as pre-commit hooks; if one fires, fix the underlying issue, never bypass.
 - CI uv version: read the pin from `.github/workflows/ci.yml` before lock-file changes; ruff behavior may differ local vs CI.
 - Never remove branch-protection rules after adding them; flag temporary rules to the user.
@@ -259,7 +259,7 @@ python3 -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.ym
 
 Prove claims against a **live truth surface**: `origin/dev` for existence (not a local clone),
 the live materialized projection for runtime/data state (not ticket prose), `gh pr checks` for
-PR verdicts (not `statusCheckRollup`). Full rules: `docs/standards/VERIFICATION_DOCTRINE.md`
+PR verdicts (not `statusCheckRollup`). Full rules: knowledge-base `reference/omniclaude-verification-doctrine.md`
 (mechanically enforced by the verification-evidence lint).
 
 ---
@@ -293,13 +293,13 @@ For parallel background work use the **Workflow tool** (multi-agent fan-out) per
 `omni_home/CLAUDE.md` — the async named-teammate `Agent(name=...)`/TeamCreate surface referenced
 in older docs is **not available** in this harness. For overnight/cron work use headless
 `claude -p` with checkpoint-resume. For verification and simple tasks, delegate to local LLMs.
-Routing model and agent config schema: `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md`,
-`docs/reference/AGENT_YAML_SCHEMA.md`.
+Routing model and agent config schema: knowledge-base `architecture/agent-routing-architecture.md`,
+knowledge-base-internal `reference/agent-yaml-schema.md`.
 
 ### Headless mode (`claude -p`)
 
 Full env tables, invocation examples, resume-after-rate-limit, and trigger surfaces:
-`docs/runbooks/headless-mode.md`. The two things people get wrong:
+[knowledge-base-internal: runbooks/omniclaude-headless-mode.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/runbooks/omniclaude-headless-mode.md). The two things people get wrong:
 
 - `ONEX_RUN_ID` is **mandatory** — it is the correlation key for pipeline state and duplicate prevention; the pipeline refuses to start without it.
 - `ANTHROPIC_API_KEY` is **NOT required** — Claude Code sessions (including `claude -p`) authenticate via OAuth. Do not add it as a required env var or preflight check.
@@ -420,7 +420,7 @@ Event payload models (`ModelHook*Payload`): `src/omniclaude/hooks/schemas.py`. T
 ## Agents & Skills
 
 Agents: `plugins/onex/agents/configs/*.yaml` — selected by matching `activation_patterns`
-against prompts (schema: `docs/reference/AGENT_YAML_SCHEMA.md`). Skills:
+against prompts (schema: knowledge-base-internal `reference/agent-yaml-schema.md`). Skills:
 `plugins/onex/skills/*/SKILL.md`.
 
 ---
@@ -433,6 +433,8 @@ pytest tests/ -m unit -v                            # unit (no services; Kafka m
 KAFKA_INTEGRATION_TESTS=1 pytest -m integration     # integration (needs Kafka)
 ruff check src/ tests/ && ruff format src/ tests/
 mypy src/omniclaude/ && bandit -r src/omniclaude/
+mypy src/omniclaude/hooks/ src/omniclaude/config/       # hook/config surfaces, targeted
+pre-commit run --all-files
 ```
 
 Plugin install (marketplace reads the canonical clone):

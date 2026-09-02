@@ -357,7 +357,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
 
     # The OMN-17207 local-capture hooks MUST be registered AFTER the
     # secret-redaction guard. `updatedToolOutput` is last-writer-wins
-    # (docs/research/2026-06-12-updated-tool-output-shape-probe.md, probe 3),
+    # (knowledge-base:reference/claude-code-posttooluse-output-shape.md, probe 3),
     # so the redaction guard may only be overwritten by a hook that emits the
     # field -- and these two emit nothing at all. Pinning the order here keeps
     # a future reorder from silently un-redacting Bash output.

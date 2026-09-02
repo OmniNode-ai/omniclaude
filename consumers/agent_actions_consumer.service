@@ -1,6 +1,6 @@
 [Unit]
 Description=Agent Actions Kafka Consumer - PostgreSQL Persistence
-Documentation=file:///opt/omniclaude/consumers/README.md
+Documentation=https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/runbooks/agent-actions-consumer.md
 After=network.target kafka.service postgresql.service
 Wants=kafka.service postgresql.service
 

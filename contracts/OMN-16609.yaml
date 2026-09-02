@@ -1,0 +1,53 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-16609"
+title: "KB Wave 4: omniclaude doc scrub — migrate to the knowledge base, README-only end state"
+summary: >
+  Removes every markdown file outside the kb-doc-gate allowed set from this repo after migrating
+  what a reader still needs into the public knowledge base (15 pages) and knowledge-base-internal
+  (25 pages), deleting the rest as historical, dated planning, audits, or pointer stubs. Points the
+  root README at both knowledge bases and flips this repo's .kb-doc-gate.yaml from mode diff to
+  mode strict so the scrubbed state is mechanically held. No runtime behaviour changes: the only
+  non-markdown edits are dangling-reference repairs in scripts, workflows and two contracts.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-strict-gate-clean"
+    description: >-
+      The kb-doc-gate passes in strict mode on this branch — no tracked markdown outside the allowed
+      set survives. The same scan on origin/dev before this change reported 100 violations.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "python scripts/kb_doc_gate.py --mode strict"
+  - id: "dod-gate-mode-strict"
+    description: "This repo's kb-doc-gate config declares mode strict, not diff."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -qx 'mode: strict' .kb-doc-gate.yaml"
+  - id: "dod-readme-points-at-knowledge-base"
+    description: >-
+      The root README carries a Documentation section naming the knowledge base as the single home
+      for this repo's prose.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'OmniNode-ai/knowledge-base' README.md"
+  - id: "dod-deploy-not-required"
+    description: >-
+      No live deploy is required. The change deletes documentation and repairs references to it;
+      no node, handler, contract-driven runtime path, or deployed artifact changes behaviour.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'No live deploy is required' contracts/OMN-16609.yaml"

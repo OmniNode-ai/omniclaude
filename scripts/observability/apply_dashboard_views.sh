@@ -228,7 +228,7 @@ echo "  1. Run dashboard: ./scripts/observability/dashboard_stats.sh"
 echo "  2. Check summary: ./scripts/observability/dashboard_stats.sh summary"
 echo "  3. View all stats: ./scripts/observability/dashboard_stats.sh all"
 echo ""
-echo "Documentation: scripts/observability/DASHBOARD_USAGE.md"
+echo "Documentation: knowledge-base-internal:runbooks/omniclaude-agent-execution-dashboard.md"
 echo ""
 
 exit 0

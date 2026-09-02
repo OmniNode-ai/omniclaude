@@ -70,7 +70,7 @@ and portable workflow packages belong in [omnimarket](https://github.com/OmniNod
 > consume it is not complete — do not treat the local enum as removed.
 
 Skills that contain more than invocation routing belong in omnimarket.
-See [Skill Lifecycle](docs/architecture/skill-lifecycle.md) for the decision rule.
+See [Skill Lifecycle](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-skill-lifecycle.md) for the decision rule.
 
 ---
 
@@ -87,7 +87,7 @@ claude plugin install onex@omninode-tools
 # Restart the Claude Code session to pick up the skill
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for the full walkthrough, including installing the `onex`
+See [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) for the full walkthrough, including installing the `onex`
 CLI the plugin depends on and known gaps.
 
 To refresh an already-registered marketplace (e.g. after a plugin update):
@@ -141,7 +141,7 @@ uv run mypy src/omniclaude/
 3. Deploy: reinstall plugin (see above)
 4. Invoke: `/<name>` in Claude Code
 
-See [Adding a Skill](docs/guides/ADDING_A_SKILL.md) and [Skill Lifecycle](docs/architecture/skill-lifecycle.md).
+See [Adding a Skill](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) and [Skill Lifecycle](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-skill-lifecycle.md).
 
 ### Adding a hook handler
 
@@ -150,7 +150,7 @@ See [Adding a Skill](docs/guides/ADDING_A_SKILL.md) and [Skill Lifecycle](docs/a
 3. Register in `plugins/onex/hooks/hooks.json`
 4. Run `uv run pytest tests/ -v` before deploying
 
-See [Adding a Hook Handler](docs/guides/ADDING_A_HOOK_HANDLER.md).
+See [Adding a Hook Handler](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-hook-handler.md).
 
 ### Disabling all hooks (emergency kill-switch)
 
@@ -193,22 +193,30 @@ belongs in an omnimarket node, not in this repo.
 
 ---
 
-## Documentation Map
+## Documentation
+
+omniclaude keeps no prose documentation of its own. The single home for it is the
+knowledge base — [knowledge-base](https://github.com/OmniNode-ai/knowledge-base) for
+anything public, and
+[knowledge-base-internal](https://github.com/OmniNode-ai/knowledge-base-internal) for
+pages that carry internal hosts, ports, or deployment topology. What stays in this repo
+is this README, `CLAUDE.md`, `CHANGELOG.md`, `SECURITY.md`, `.github/**`, and the
+executable agent configuration under `plugins/**` — never prose.
 
 | I want to... | Go to |
 |---|---|
-| Install the delegate-only plugin (`onex@omninode-tools`, what actually ships today) | [QUICKSTART.md](QUICKSTART.md) |
-| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | [docs/getting-started/INSTALLATION.md](docs/getting-started/INSTALLATION.md) |
-| Understand the hook data flow | [docs/architecture/HOOK_DATA_FLOW.md](docs/architecture/HOOK_DATA_FLOW.md) |
-| Understand agent routing | [docs/architecture/AGENT_ROUTING_ARCHITECTURE.md](docs/architecture/AGENT_ROUTING_ARCHITECTURE.md) |
-| Know when a skill moves to omnimarket | [docs/architecture/skill-lifecycle.md](docs/architecture/skill-lifecycle.md) |
-| Add a hook handler | [docs/guides/ADDING_A_HOOK_HANDLER.md](docs/guides/ADDING_A_HOOK_HANDLER.md) |
-| Add an agent | [docs/guides/ADDING_AN_AGENT.md](docs/guides/ADDING_AN_AGENT.md) |
-| Add a skill | [docs/guides/ADDING_A_SKILL.md](docs/guides/ADDING_A_SKILL.md) |
-| Write tests for hooks | [docs/guides/TESTING_GUIDE.md](docs/guides/TESTING_GUIDE.md) |
-| Look up Kafka topics | [docs/reference/KAFKA_TOPICS_REFERENCE.md](docs/reference/KAFKA_TOPICS_REFERENCE.md) |
-| Read the full docs index | [docs/INDEX.md](docs/INDEX.md) |
-| Understand CI/CD pipeline | [docs/standards/CI_CD_STANDARDS.md](docs/standards/CI_CD_STANDARDS.md) |
+| Install the delegate-only plugin (`onex@omninode-tools`, what actually ships today) | [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) |
+| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | [knowledge-base-internal: guides/omniclaude-legacy-plugin-installation.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/guides/omniclaude-legacy-plugin-installation.md) |
+| Understand the hook data flow | [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md) |
+| Understand agent routing | [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/agent-routing-architecture.md) |
+| Know when a skill moves to omnimarket | [knowledge-base: architecture/omniclaude-skill-lifecycle.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-skill-lifecycle.md) |
+| Add a hook handler | [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-hook-handler.md) |
+| Add an agent | [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-an-agent.md) |
+| Add a skill | [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) |
+| Write tests for hooks | [knowledge-base: guides/omniclaude-testing-guide.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/omniclaude-testing-guide.md) |
+| Look up Kafka topics | [knowledge-base-internal: reference/onex-kafka-topic-catalog.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/reference/onex-kafka-topic-catalog.md) |
+| Read the knowledge base docs index | [knowledge-base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) |
+| Understand CI/CD pipeline | [knowledge-base: reference/omniclaude-ci-cd-standards.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-ci-cd-standards.md) |
 | Report a security vulnerability | [SECURITY.md](SECURITY.md) |
 
 ---
@@ -243,5 +251,6 @@ uv run onex spdx fix --check src tests scripts
 ## Security, Contributing, and License
 
 - [Security policy](SECURITY.md) — how to report vulnerabilities
-- [CI/CD standards](docs/standards/CI_CD_STANDARDS.md) — pipeline gates and branch protection
+- [Contributing](.github/CONTRIBUTING.md) and the [code of conduct](.github/CODE_OF_CONDUCT.md)
+- [CI/CD standards](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-ci-cd-standards.md) — pipeline gates and branch protection
 - [License: MIT](LICENSE)

@@ -232,7 +232,7 @@ node_transition_selector_effect = "omniclaude.nodes.node_transition_selector_eff
 [project.urls]
 Homepage = "https://github.com/OmniNode-ai/omniclaude"
 Repository = "https://github.com/OmniNode-ai/omniclaude"
-Documentation = "https://github.com/OmniNode-ai/omniclaude/tree/main/docs"
+Documentation = "https://github.com/OmniNode-ai/knowledge-base"
 Issues = "https://github.com/OmniNode-ai/omniclaude/issues"
 Changelog = "https://github.com/OmniNode-ai/omniclaude/blob/main/CHANGELOG.md"
 

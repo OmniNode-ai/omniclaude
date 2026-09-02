@@ -10,7 +10,7 @@
 # Database: Configured via .env file (POSTGRES_* variables)
 # Usage: ./agent_activity_dashboard.sh [--routing|--manifests|--actions|--summary|--all]
 #
-# Exit Codes (see scripts/observability/EXIT_CODES.md):
+# Exit Codes (see knowledge-base-internal:reference/omniclaude-observability-exit-codes.md):
 #   0 - Dashboard displayed successfully
 #   1 - Invalid mode/argument
 #   3 - Configuration error (missing .env or credentials)

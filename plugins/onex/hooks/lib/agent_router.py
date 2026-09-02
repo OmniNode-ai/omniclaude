@@ -112,7 +112,7 @@ _SENSITIVE_PREFIXES = frozenset(
 
 
 # Safety invariant for candidate filtering. Not agent- or registry-configurable.
-# Changes require code review. See docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md.
+# Changes require code review. See knowledge-base:reference/agent-routing-score-semantics.md.
 HARD_FLOOR = 0.55
 
 
@@ -552,7 +552,7 @@ class TriggerMatcher:
         keywords = self._extract_keywords(user_request)
 
         # Sort agents by name for deterministic iteration order.
-        # See docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md (Determinism Guarantees).
+        # See knowledge-base:reference/agent-routing-score-semantics.md (Determinism Guarantees).
         for agent_name, agent_data in sorted(self.registry.get("agents", {}).items()):
             triggers = agent_data.get("activation_triggers", [])
             scores: list[tuple[float, str]] = []

@@ -17,7 +17,7 @@
 # Usage: ./scripts/health_check.sh
 # Output: Saves to {REPO}/tmp/health_check_latest.txt and appends to {REPO}/tmp/health_check_history.log
 #
-# Exit Codes (see scripts/observability/EXIT_CODES.md):
+# Exit Codes (see knowledge-base-internal:reference/omniclaude-observability-exit-codes.md):
 #   0 - All checks passed, system healthy
 #   1 - Some checks failed, system degraded
 #   2 - Critical failure, system unavailable

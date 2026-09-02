@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for the verification-evidence lint gate (OMN-13341, R6).
 
-Doctrine: docs/standards/VERIFICATION_DOCTRINE.md.
+Doctrine: knowledge-base reference/omniclaude-verification-doctrine.md.
 The lint flags worker prompts / receipts / handoffs / evidence docs that cite a
 local-clone path, ticket text, or a statusCheckRollup verdict AS proof of state.
 """
@@ -100,10 +100,9 @@ def test_in_scope_documents(path: str) -> None:
     [
         "src/omniclaude/foo.py",
         "tests/unit/scripts/test_lint_verification_evidence.py",
-        "docs/standards/VERIFICATION_DOCTRINE.md",  # self-excluded
         "scripts/lint_verification_evidence.py",  # self-excluded
         "README.md",
-        "docs/architecture/charter.md",
+        "docs/reference/AGENT_YAML_SCHEMA.md",
     ],
 )
 def test_out_of_scope_documents(path: str) -> None:

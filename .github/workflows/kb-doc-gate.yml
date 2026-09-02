@@ -23,4 +23,6 @@ jobs:
   kb-doc-gate:
     uses: ./.github/workflows/kb-doc-gate-reusable.yml
     with:
-      mode: diff
+      # Fallback only — .kb-doc-gate.yaml pins `mode: strict` and the config
+      # always wins over this input. Kept in sync so the two never disagree.
+      mode: strict

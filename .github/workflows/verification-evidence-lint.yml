@@ -7,7 +7,7 @@ name: Verification Evidence Lint
 # handoff/evidence docs that cite a local-clone path, ticket text, or a
 # statusCheckRollup verdict AS proof of system state. Authoritative truth
 # surfaces are origin/dev (existence), the live materialized projection (state),
-# and `gh pr checks` (PR verdict). Doctrine: docs/standards/VERIFICATION_DOCTRINE.md.
+# and `gh pr checks` (PR verdict). Doctrine: knowledge-base reference/omniclaude-verification-doctrine.md.
 
 on:
   push:
@@ -19,7 +19,6 @@ on:
       - 'docs/**/*receipt*.md'
       - '.onex_state/evidence/**'
       - 'scripts/lint_verification_evidence.py'
-      - 'docs/standards/VERIFICATION_DOCTRINE.md'
       - '.github/workflows/verification-evidence-lint.yml'
   pull_request:
     branches: [main, dev]
@@ -30,7 +29,6 @@ on:
       - 'docs/**/*receipt*.md'
       - '.onex_state/evidence/**'
       - 'scripts/lint_verification_evidence.py'
-      - 'docs/standards/VERIFICATION_DOCTRINE.md'
       - '.github/workflows/verification-evidence-lint.yml'
 
 permissions:
