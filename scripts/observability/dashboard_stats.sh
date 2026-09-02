@@ -9,7 +9,7 @@
 # Database: Configured via .env file (POSTGRES_* variables)
 # Usage: ./dashboard_stats.sh [--summary|--active|--performance|--errors|--trends|--all]
 #
-# Exit Codes (see scripts/observability/EXIT_CODES.md):
+# Exit Codes (see knowledge-base-internal:reference/omniclaude-observability-exit-codes.md):
 #   0 - Dashboard displayed successfully
 #   1 - Invalid mode/argument, database query failed (non-fatal)
 #   3 - Configuration error (missing .env or credentials)

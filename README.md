@@ -87,7 +87,7 @@ claude plugin install onex@omninode-tools
 # Restart the Claude Code session to pick up the skill
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for the full walkthrough, including installing the `onex`
+See [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) for the full walkthrough, including installing the `onex`
 CLI the plugin depends on and known gaps.
 
 To refresh an already-registered marketplace (e.g. after a plugin update):
@@ -197,8 +197,8 @@ belongs in an omnimarket node, not in this repo.
 
 | I want to... | Go to |
 |---|---|
-| Install the delegate-only plugin (`onex@omninode-tools`, what actually ships today) | [QUICKSTART.md](QUICKSTART.md) |
-| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | [docs/getting-started/INSTALLATION.md](docs/getting-started/INSTALLATION.md) |
+| Install the delegate-only plugin (`onex@omninode-tools`, what actually ships today) | [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) |
+| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | [knowledge-base-internal: guides/omniclaude-legacy-plugin-installation.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/guides/omniclaude-legacy-plugin-installation.md) |
 | Understand the hook data flow | [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md) |
 | Understand agent routing | [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/agent-routing-architecture.md) |
 | Know when a skill moves to omnimarket | [knowledge-base: architecture/omniclaude-skill-lifecycle.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-skill-lifecycle.md) |

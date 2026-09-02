@@ -156,7 +156,7 @@ refactor, and needs operator sign-off.
     path depends on the deploy-agent revival (<TICKET>/<TICKET>); if the
     deploy-agent is unavailable, report the PR as authored-only and flag the
     build/runtime-verify step as blocked — do not fall back to in-sandbox docker.
-    Full procedure: `docs/runbooks/docker-build-worker-routing.md`.
+    Full procedure: `knowledge-base-internal:runbooks/docker-build-worker-routing.md`.
 
 ---
 ```

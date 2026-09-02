@@ -28,7 +28,7 @@ Claude sees before it lands in the transcript.
 Wire protocol (probe-verified on Claude Code CLI 2.1.175, same contract
 already proven by the token-budget PostToolUse backstop
 ``skill_output_suppressor.py`` / OMN-13089/13095/13090 --
-``docs/research/2026-06-12-updated-tool-output-shape-probe.md``):
+``knowledge-base:reference/claude-code-posttooluse-output-shape.md``):
 
 - Passthrough emits NOTHING on stdout (plain PostToolUse stdout is
   debug-log-only).

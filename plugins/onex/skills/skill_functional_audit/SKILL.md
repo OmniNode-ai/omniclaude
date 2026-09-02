@@ -352,13 +352,13 @@ If the audit FAILS (untracked facades found), it writes a friction event to `${O
 
 ## Integration with skill-catalog-gap-sweep
 
-The existing `skill-catalog-gap-sweep` (if it exists) should be updated to call this skill as its functional verification step. File existence alone is no longer sufficient. See `docs/process/skill-audit-methodology.md`.
+The existing `skill-catalog-gap-sweep` (if it exists) should be updated to call this skill as its functional verification step. File existence alone is no longer sufficient. See `knowledge-base-internal:reference/skill-audit-methodology.md`.
 
 ---
 
 ## Related
 
 - **Audit report**: `docs/briefs/skill-functional-audit-2026-04-14.md`
-- **Process doc**: `docs/process/skill-audit-methodology.md`
+- **Process doc**: `knowledge-base-internal:reference/skill-audit-methodology.md`
 - **Prior gap**: `docs/briefs/skill-catalog-2026-04-14.md` (false-clean sweep)
 - **Tickets**: Filed 2026-04-14 for session Phase 2+3, pipeline_fill, and delegate (all resolved)

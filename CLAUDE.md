@@ -299,7 +299,7 @@ knowledge-base-internal `reference/agent-yaml-schema.md`.
 ### Headless mode (`claude -p`)
 
 Full env tables, invocation examples, resume-after-rate-limit, and trigger surfaces:
-`docs/runbooks/headless-mode.md`. The two things people get wrong:
+[knowledge-base-internal: runbooks/omniclaude-headless-mode.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/runbooks/omniclaude-headless-mode.md). The two things people get wrong:
 
 - `ONEX_RUN_ID` is **mandatory** — it is the correlation key for pipeline state and duplicate prevention; the pipeline refuses to start without it.
 - `ANTHROPIC_API_KEY` is **NOT required** — Claude Code sessions (including `claude -p`) authenticate via OAuth. Do not add it as a required env var or preflight check.

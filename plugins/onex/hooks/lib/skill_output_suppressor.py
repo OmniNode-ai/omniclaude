@@ -11,7 +11,7 @@ to the model (probe OMN-13090, facts F1/F2 — 71,000+ fires, zero effect),
 and its pattern list matched no ``onex`` dispatch form (F5).
 
 Protocol contract (pinned by the OMN-13090 probe on Claude Code CLI 2.1.175,
-``docs/research/2026-06-12-updated-tool-output-shape-probe.md``):
+``knowledge-base:reference/claude-code-posttooluse-output-shape.md``):
 
 - **Passthrough emits NOTHING** — empty stdout. Plain JSON on PostToolUse
   stdout is debug-log-only; echoing the tool_info dict is noise.

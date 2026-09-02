@@ -276,7 +276,7 @@ def cmd_check() -> int:
         return 0
     else:
         print(
-            f"  {_RED}Some checks failed. See Troubleshooting in docs/demo/INVESTOR_DEMO.md{_RESET}"
+            f"  {_RED}Some checks failed. See Troubleshooting in knowledge-base-internal:guides/omniclaude-hook-emission-demo.md{_RESET}"
         )
         return 1
 

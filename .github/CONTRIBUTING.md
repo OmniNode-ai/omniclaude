@@ -24,9 +24,9 @@ omniclaude is the Claude Code agent plugin for the ONEX platform. It contains ho
 
 ### First Steps
 
-1. Read [CLAUDE.md](CLAUDE.md) for operating rules, architectural constraints, and agent behavioral guidelines.
-2. Browse [docs/](docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) for the full doc map.
-3. Review [QUICKSTART.md](QUICKSTART.md) for initial setup.
+1. Read [CLAUDE.md](../CLAUDE.md) for operating rules, architectural constraints, and agent behavioral guidelines.
+2. Browse [docs/](../docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) for the full doc map.
+3. Review [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) for initial setup.
 
 ## Development Setup
 
@@ -94,7 +94,7 @@ Skills use kebab-case directories matching the slash command: `/onex:my_skill` �
 ### Authoring a Skill
 
 1. Create `plugins/onex/skills/<name>/SKILL.md` and `prompt.md`.
-2. Follow the authoring guide: [docs/reference/SKILL_AUTHORING_GUIDE.md](docs/reference/SKILL_AUTHORING_GUIDE.md).
+2. Follow the authoring guide: [knowledge-base: guides/authoring-an-onex-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/authoring-an-onex-skill.md).
 3. Skills must be thin: extract node logic to `omnimarket`, not inline in `prompt.md`.
 4. Add an entry to `plugins/onex/skills/README.md` (if it exists) and the knowledge base docs index.
 
@@ -158,7 +158,7 @@ uv run pytest tests/ -v               # no -k filter
 4. PR title must contain the Linear ticket: `feat(OMN-XXXX): description`.
 5. PR body must cite the ticket with `## DoD evidence`.
 
-See [CLAUDE.md](CLAUDE.md) for the full PR CI requirements.
+See [CLAUDE.md](../CLAUDE.md) for the full PR CI requirements.
 
 ## Commit Messages
 
