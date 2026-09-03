@@ -448,3 +448,195 @@ def test_e2e_no_changes_is_ok(git_repo):
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Merge awareness (OMN-17827)
+#
+# The defect: `--staged` diffs the index against HEAD, and during a merge HEAD
+# is only the FIRST parent. Everything the incoming branch carries in reads as
+# A/M, so the merge author is charged for markdown that already existed on the
+# other side — while CI, which evaluates the three-dot `base...head` diff,
+# excludes exactly those files. Measured 2026-09-03: an omni_home `main` ->
+# refresh-branch merge was refused locally with 21 violations, all 21 being
+# main's own pre-gate markdown arriving through the merge.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def merge_repo(tmp_path):
+    """base commit -> a `feature` branch and a `main` that adds an out-of-set doc.
+
+    `main`'s doc is deliberately markdown OUTSIDE the allowed set and NOT
+    touched by the feature branch: it is the pre-existing corpus a merge drags
+    across, i.e. the thing the gate must not attribute to the merge author.
+    """
+    repo = tmp_path / "merge-repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test")
+    (repo / "README.md").write_text("# Repo\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / "src.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "feature work")
+
+    _git(repo, "checkout", "-q", "main")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "main-pre-gate.md").write_text("written before the gate existed\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main adds a pre-gate doc")
+
+    _git(repo, "checkout", "-q", "feature")
+    return repo
+
+
+def _begin_merge(repo: Path) -> None:
+    # --no-commit leaves MERGE_HEAD in place, which is exactly the state the
+    # hook runs in. check=False: a conflicted merge exits non-zero and that is
+    # still a valid pre-commit state.
+    subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", "main"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_e2e_merge_does_not_flag_markdown_carried_in_from_the_incoming_branch(
+    merge_repo,
+):
+    """The 21-violation false positive, reproduced and fixed.
+
+    docs/main-pre-gate.md is outside the allowed set, but it is not this
+    merge's doing: it is already on MERGE_HEAD, and the three-dot diff CI runs
+    would not show it at all.
+    """
+    _begin_merge(merge_repo)
+    assert (merge_repo / ".git" / "MERGE_HEAD").is_file(), (
+        "fixture did not enter a merge"
+    )
+
+    result = _run_cli(
+        ["--staged", "--repo-root", str(merge_repo), "docs/main-pre-gate.md"]
+    )
+
+    assert result.returncode == 0, (
+        "the merge was charged for the incoming branch's own pre-existing "
+        f"markdown:\n{result.stderr}"
+    )
+
+
+def test_e2e_merge_still_flags_a_doc_the_resolution_itself_introduces(merge_repo):
+    """Merge-awareness must not become a laundering path.
+
+    A file that exists on NEITHER parent is introduced by the merge commit and
+    is a violation exactly as it would be in an ordinary commit.
+    """
+    _begin_merge(merge_repo)
+    (merge_repo / "docs" / "written-during-the-merge.md").write_text("new doc\n")
+    _git(merge_repo, "add", "docs/written-during-the-merge.md")
+
+    result = _run_cli(["--staged", "--repo-root", str(merge_repo)])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "docs/written-during-the-merge.md" in result.stderr
+    assert "docs/main-pre-gate.md" not in result.stderr, (
+        "the incoming branch's own doc was flagged alongside the real violation"
+    )
+
+
+def test_e2e_merge_flags_a_rewrite_of_the_incoming_docs_content(merge_repo):
+    """Presence at MERGE_HEAD is not the test — introduction is.
+
+    Excluding by PATH alone would let a merge resolution rewrite any of the
+    incoming branch's out-of-set docs with impunity, which is the same
+    one-command bypass the rename rule already closes. The content must be
+    unchanged relative to the other parent to be 'carried in'.
+    """
+    _begin_merge(merge_repo)
+    (merge_repo / "docs" / "main-pre-gate.md").write_text("rewritten in the merge\n")
+    _git(merge_repo, "add", "docs/main-pre-gate.md")
+
+    result = _run_cli(["--staged", "--repo-root", str(merge_repo)])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "docs/main-pre-gate.md" in result.stderr
+
+
+def test_e2e_merge_allows_a_resolution_that_lands_inside_the_allowed_set(merge_repo):
+    _begin_merge(merge_repo)
+    (merge_repo / ".claude").mkdir(exist_ok=True)
+    (merge_repo / ".claude" / "note.md").write_text("agent note\n")
+    _git(merge_repo, "add", ".claude/note.md")
+
+    result = _run_cli(["--staged", "--repo-root", str(merge_repo)])
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_merge_heads_is_empty_outside_a_merge(mod, git_repo):
+    assert mod.merge_heads(git_repo) == ()
+
+
+def test_merge_heads_reports_the_incoming_parent(mod, merge_repo):
+    _begin_merge(merge_repo)
+    heads = mod.merge_heads(merge_repo)
+
+    assert len(heads) == 1
+    expected = _git(merge_repo, "rev-parse", "main").stdout.strip()
+    assert heads[0] == expected
+
+
+# ---------------------------------------------------------------------------
+# Backward compatibility: 14 repos pin this validator, so the ORDINARY commit
+# path must be untouched by the merge work above — same verdict, same bytes.
+# ---------------------------------------------------------------------------
+
+
+def test_ordinary_staged_evaluation_output_is_unchanged_on_a_pass(git_repo):
+    (git_repo / ".claude").mkdir()
+    (git_repo / ".claude" / "note.md").write_text("agent note\n")
+    _git(git_repo, "add", ".claude/note.md")
+
+    result = _run_cli(["--staged", "--repo-root", str(git_repo), ".claude/note.md"])
+
+    assert result.returncode == 0
+    assert result.stdout == "kb-doc-gate: OK (diff mode, 1 changed file(s) inspected)\n"
+    assert result.stderr == ""
+
+
+def test_ordinary_staged_evaluation_output_is_unchanged_on_a_failure(git_repo):
+    (git_repo / "docs" / "sneaky.md").write_text("nope\n")
+    _git(git_repo, "add", "docs/sneaky.md")
+
+    result = _run_cli(["--staged", "--repo-root", str(git_repo), "docs/sneaky.md"])
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.startswith(
+        "kb-doc-gate: FAILED (diff mode) — 1 violation(s):\n"
+        "  docs/sneaky.md: new markdown file outside the allowed set\n"
+    )
+    # No merge in progress means the merge branch must stay completely silent.
+    assert "merge" not in result.stdout.lower()
+
+
+def test_hook_manifest_declares_both_the_commit_and_merge_stages():
+    """A gate that only fires on `pre-commit` misses every CLEAN merge.
+
+    Git runs `pre-commit` for the manual commit that ends a CONFLICTED merge
+    and `pre-merge-commit` for one that auto-commits, so declaring only the
+    former gates the loud case and lets the silent one through (OMN-17827).
+    """
+    import yaml
+
+    manifest = Path(__file__).resolve().parents[2] / ".pre-commit-hooks.yaml"
+    hooks = {h["id"]: h for h in yaml.safe_load(manifest.read_text(encoding="utf-8"))}
+
+    assert set(hooks["kb-doc-gate"]["stages"]) == {"pre-commit", "pre-merge-commit"}

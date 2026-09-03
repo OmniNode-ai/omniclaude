@@ -20,4 +20,15 @@
   entry: scripts/kb_doc_gate.py --staged
   types: [markdown]
   pass_filenames: true
-  stages: [pre-commit]
+  # pre-merge-commit is here for a reason (OMN-17827): git runs `pre-commit`
+  # for the manual commit that ends a CONFLICTED merge, but a CLEAN merge
+  # commits itself and only fires `pre-merge-commit`. Declaring just
+  # `pre-commit` therefore gates the loud case and waves the silent one
+  # through -- merge enforcement by accident of which hook happened to be
+  # installed. The validator is merge-aware at both stages: with MERGE_HEAD
+  # present it charges the merge only for what it introduces relative to EVERY
+  # parent, so the incoming branch's own pre-existing markdown is not the
+  # merge author's violation. A consuming repo still has to install the hook
+  # type (`pre-commit install --hook-type pre-merge-commit`); listing the
+  # stage here is what makes that install do anything.
+  stages: [pre-commit, pre-merge-commit]
