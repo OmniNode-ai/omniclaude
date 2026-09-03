@@ -67,9 +67,34 @@ Only that restricted YAML subset is supported (see :func:`load_config`); this
 script is stdlib-only on purpose, so it can run from a bare checkout with no
 dependency install step.
 
+## Merges
+
+A merge commit is the one case where "the index vs ``HEAD``" is the wrong
+question. During a merge ``HEAD`` is only the FIRST parent, so every file the
+incoming branch carries in reads as ``A``/``M`` and the merge author is charged
+for markdown that already existed on the other side — while CI, evaluating the
+three-dot ``base...head`` diff, does not see those files at all. Measured
+2026-09-03 (OMN-17827): an ``omni_home`` ``main`` -> refresh-branch merge was
+refused locally with 21 violations, all 21 of them ``main``'s own pre-gate
+markdown arriving through the merge, with no resolution available that did not
+either delete ``main``'s files or bypass the hook.
+
+So when ``.git/MERGE_HEAD`` exists, ``--staged`` narrows the violation set to
+what the merge commit introduces relative to **every** parent: the staged diff
+against ``HEAD`` intersected with the staged diff against each ``MERGE_HEAD``
+(all of them, for an octopus merge). A path is exempt only when its staged
+content is IDENTICAL to some other parent's — mere presence there is not
+enough, or a resolution could rewrite any of the incoming branch's out-of-set
+docs untouched, the same one-command bypass the rename rule already closes.
+
+This is the local equivalent of the three-dot semantics CI runs, which is why
+the two verdicts agree on a merge commit. Outside a merge nothing changes: no
+``MERGE_HEAD``, no filtering, byte-identical output.
+
 ## Usage
 
-Pre-commit (staged-file mode — status is read from the index vs HEAD)::
+Pre-commit (staged-file mode — status is read from the index vs HEAD, or, in a
+merge, vs every parent; see Merges above)::
 
     kb_doc_gate.py --staged FILE [FILE ...]
 
@@ -319,6 +344,47 @@ def ref_diff_changed_files(
     return _git_name_status(repo_root, f"{base_ref}...{head_ref}")
 
 
+def merge_heads(repo_root: Path) -> tuple[str, ...]:
+    """The incoming parent(s) of an in-progress merge; ``()`` when not merging.
+
+    Read through ``git rev-parse --git-path`` rather than assuming
+    ``<root>/.git/MERGE_HEAD``: in a worktree ``.git`` is a FILE pointing at
+    the real git dir, and hardcoding the path would silently report "no merge"
+    there — the exact place per-ticket work happens (CLAUDE.md rule 9).
+    ``MERGE_HEAD`` holds one sha per line, so an octopus merge yields several.
+    """
+    raw = _git(repo_root, "rev-parse", "--git-path", "MERGE_HEAD").strip()
+    path = Path(raw)
+    if not path.is_absolute():
+        path = repo_root / path
+    if not path.is_file():
+        return ()
+    return tuple(
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
+
+
+def merge_introduced(
+    repo_root: Path, changed: list[ChangedFile], parents: tuple[str, ...]
+) -> list[ChangedFile]:
+    """Narrow a merge's staged diff to what the merge commit itself introduces.
+
+    ``changed`` is the staged diff against ``HEAD`` (the first parent). Keep
+    only the entries that ALSO differ from every other parent: a path whose
+    staged content matches some parent was carried in by the merge, not written
+    by it, and is that parent's problem — which is precisely what CI's
+    three-dot diff concludes. Comparison is by content, not by path presence.
+    """
+    for parent in parents:
+        differs_from_parent = {
+            cf.path for cf in _git_name_status(repo_root, "--cached", parent)
+        }
+        changed = [cf for cf in changed if cf.path in differs_from_parent]
+    return changed
+
+
 def tracked_markdown(repo_root: Path) -> list[str]:
     """Every tracked markdown path on the branch, POSIX-style, repo-relative.
 
@@ -441,6 +507,16 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if args.staged:
             changed = staged_changed_files(repo_root, args.files)
+            parents = merge_heads(repo_root)
+            if parents:
+                staged_count = len(changed)
+                changed = merge_introduced(repo_root, changed, parents)
+                print(
+                    f"kb-doc-gate: merge in progress ({len(parents)} incoming "
+                    f"parent(s)) — {staged_count - len(changed)} of {staged_count} "
+                    "staged path(s) came in unchanged from the incoming side and "
+                    "are not attributed to this merge (three-dot/CI semantics)."
+                )
         elif args.base_ref:
             changed = ref_diff_changed_files(repo_root, args.base_ref, args.head_ref)
         else:
