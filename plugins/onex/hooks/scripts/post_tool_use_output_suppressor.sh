@@ -57,12 +57,6 @@ if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
     PROJECT_ROOT="${CLAUDE_PROJECT_DIR}"
 fi
 
-# --- Artifact store root injection [OMN-13095, probe OMN-13090 Probe 4] ---
-# Hook processes inherit ONEX_STATE_DIR but NOT ONEX_ARTIFACT_STORE_ROOT.
-# The artifact store fails fast (KeyError) without it, so derive it here
-# from the canonical state convention. No hardcoded absolute paths.
-export ONEX_ARTIFACT_STORE_ROOT="${ONEX_ARTIFACT_STORE_ROOT:-${ONEX_STATE_DIR}/artifacts}"
-
 # Source common.sh for PYTHON_CMD
 source "${HOOKS_DIR}/scripts/common.sh"
 onex_hook_gate POST_TOOL_OUTPUT_SUPPRESSOR || exit 0

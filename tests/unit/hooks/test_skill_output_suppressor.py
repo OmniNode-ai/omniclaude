@@ -418,7 +418,11 @@ def test_is_receipt_output_accepts_skill_result_envelope() -> None:
 
 
 def _run_suppressor_subprocess(stdin_text: str) -> subprocess.CompletedProcess[str]:
-    env = {k: v for k, v in os.environ.items() if k != "ONEX_ARTIFACT_STORE_ROOT"}
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"ONEX_ARTIFACT_STORE_ROOT", "ONEX_STATE_DIR"}
+    }
     return subprocess.run(  # noqa: S603 - fixed argv, test-only
         [sys.executable, str(_SUPPRESSOR)],
         input=stdin_text,
@@ -440,14 +444,7 @@ def test_replay_passthrough_fixtures_emit_nothing(fixture_name: str) -> None:
 
 @pytest.mark.unit
 def test_replay_suppress_fixture_without_store_passes_through() -> None:
-    """Default store factory fail-closed pin.
-
-    With the current core pin the store module is not importable; once the
-    pin advances past OMN-13093 the stripped ONEX_ARTIFACT_STORE_ROOT makes
-    the store constructor raise. Either way: capture unavailable -> NO
-    suppression -> empty stdout. This pins the fail-closed default across
-    both pin generations.
-    """
+    """An unresolved configured state root keeps the full output visible."""
     proc = _run_suppressor_subprocess(
         (_FIXTURES / "bash_onex_node_large.json").read_text()
     )
@@ -463,20 +460,20 @@ def test_replay_malformed_stdin_is_silent_and_exits_zero() -> None:
 
 
 @pytest.mark.unit
-def test_real_artifact_store_roundtrip(
+def test_real_artifact_store_roundtrip_uses_state_root_not_ambient_artifact_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     captured_events: list[tuple[str, dict]],
 ) -> None:
-    """End-to-end with the real omnibase_core store when importable.
-
-    Skipped until the omniclaude core pin advances past OMN-13093; activates
-    automatically on pin bump (no code change).
-    """
+    """The process boundary injects ONEX_STATE_DIR/artifacts explicitly."""
     artifact_store = pytest.importorskip("omnibase_core.artifacts.artifact_store")
     from skill_output_suppressor import process_hook_payload
 
-    monkeypatch.setenv("ONEX_ARTIFACT_STORE_ROOT", str(tmp_path))
+    state_root = tmp_path / "configured-state"
+    expected_root = state_root / "artifacts"
+    ambient_root = tmp_path / "ambient-artifact-root"
+    monkeypatch.setenv("ONEX_STATE_DIR", str(state_root))
+    monkeypatch.setenv("ONEX_ARTIFACT_STORE_ROOT", str(ambient_root))
     payload = _load_fixture("bash_onex_node_large.json")
     original = payload["tool_response"]["stdout"]
 
@@ -486,13 +483,32 @@ def test_real_artifact_store_roundtrip(
     expected_hex = hashlib.sha256(original.encode("utf-8")).hexdigest()
     summary = json.loads(emission)["hookSpecificOutput"]["updatedToolOutput"]["stdout"]
     assert f"sha256:{expected_hex}" in summary
+    assert "ArtifactStore(root=state_path" in summary
+    assert "ONEX_STATE_DIR/artifacts" in summary
+    assert "ONEX_ARTIFACT_STORE_ROOT" not in summary
 
     # Artifact is retrievable and hash-verified by the real store.
     from omnibase_core.models.artifacts.model_artifact_ref import ModelArtifactRef
 
-    store = artifact_store.ArtifactStore()
+    store = artifact_store.ArtifactStore(root=expected_root)
     blob = store.read_blob(ModelArtifactRef(ref=f"sha256:{expected_hex}"))
     assert blob == original.encode("utf-8")
+    assert not ambient_root.exists()
+
+
+@pytest.mark.unit
+def test_ambient_artifact_root_cannot_replace_missing_state_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The removed ambient variable is never a compatibility authority."""
+    from skill_output_suppressor import CaptureUnavailableError, _open_artifact_store
+
+    monkeypatch.delenv("ONEX_STATE_DIR", raising=False)
+    monkeypatch.setenv("ONEX_ARTIFACT_STORE_ROOT", str(tmp_path / "ambient"))
+
+    with pytest.raises(CaptureUnavailableError, match="configured ONEX_STATE_DIR"):
+        _open_artifact_store()
 
 
 # =============================================================================

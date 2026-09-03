@@ -51,12 +51,10 @@ Suppression rules (all must hold, in order):
    transient daemon outage must never re-flood Claude when the artifact
    exists.
 
-Dependency note: ``omnibase_core.artifacts`` ships in omnibase_core > v0.44.2
-(OMN-13093, merged to core dev). Until the omniclaude core pin advances past
-that landing, the import raises and this backstop passes everything through
-unmodified — which is exactly the fail-closed-for-capture behavior above and
-no worse than the prior no-op. Capture activates automatically on pin bump;
-no code change required here.
+Dependency note: after OMN-17555, ``ArtifactStore`` requires an explicit
+``Path`` root. This hook owns that process boundary: it resolves the canonical
+``ONEX_STATE_DIR/artifacts`` path and injects it into the store. The legacy
+``ONEX_ARTIFACT_STORE_ROOT`` environment variable is not an authority.
 """
 
 from __future__ import annotations
@@ -111,9 +109,8 @@ class CaptureUnavailableError(RuntimeError):
     """The artifact store cannot be opened — capture is impossible.
 
     Raised by the default store factory when ``omnibase_core.artifacts`` is
-    not importable (core pin predates OMN-13093) or when
-    ``ONEX_ARTIFACT_STORE_ROOT`` is unset (the wrapper script must export
-    it). Callers MUST respond by passing the output through unmodified.
+    not importable or the configured ``ONEX_STATE_DIR`` cannot be resolved.
+    Callers MUST respond by passing the output through unmodified.
     """
 
 
@@ -234,26 +231,31 @@ def _open_artifact_store() -> ProtocolBlobStore:
 
     Raises:
         CaptureUnavailableError: when the store module is not importable
-            (core pin predates OMN-13093) or ``ONEX_ARTIFACT_STORE_ROOT``
-            is unset. Either way capture is impossible and the caller must
-            pass the output through unmodified.
+            or the configured ONEX state root cannot be resolved. Either way
+            capture is impossible and the caller must pass the output through
+            unmodified.
     """
     try:
         from omnibase_core.artifacts.artifact_store import ArtifactStore
     except ImportError as exc:
         msg = (
-            "artifact store unavailable: omnibase_core.artifacts not "
-            f"importable (core pin predates OMN-13093): {exc}"
+            "artifact store unavailable: omnibase_core.artifacts could not "
+            f"be imported: {exc}"
         )
         raise CaptureUnavailableError(msg) from exc
+
     try:
-        return ArtifactStore()
-    except KeyError as exc:
+        from onex_state import state_path  # type: ignore[import-not-found]
+
+        artifact_root = state_path("artifacts")
+    except (ImportError, RuntimeError) as exc:
         msg = (
-            "artifact store unavailable: ONEX_ARTIFACT_STORE_ROOT unset "
-            "(the wrapper script must export it from ONEX_STATE_DIR)"
+            "artifact store unavailable: configured ONEX_STATE_DIR could not "
+            f"resolve the artifact root: {exc}"
         )
         raise CaptureUnavailableError(msg) from exc
+
+    return ArtifactStore(root=artifact_root)
 
 
 def _resolve_correlation_id() -> str:
@@ -401,9 +403,10 @@ def _build_summary(
         ),
         f"artifact_ref: {artifact_ref}",
         (
-            "full output: ArtifactStore().read_blob(ModelArtifactRef("
+            'full output: ArtifactStore(root=state_path("artifacts")).read_blob('
+            "ModelArtifactRef("
             f'ref="{artifact_ref}")) '
-            "[store root: $ONEX_ARTIFACT_STORE_ROOT]"
+            "[store root: configured ONEX_STATE_DIR/artifacts]"
         ),
     ]
     tool_summary = _tool_summary(command_type, output)
