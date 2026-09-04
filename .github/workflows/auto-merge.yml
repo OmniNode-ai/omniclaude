@@ -43,6 +43,88 @@
 # workflow is NOT a required status check on dev, so narrowing it cannot
 # wedge branch protection (verified live via required_status_checks readback
 # before landing).
+#
+# OMN-17875 (2026-09-04): THE ARMING TOKEN MUST BE `secrets.CROSS_REPO_PAT`,
+# NOT `secrets.GITHUB_TOKEN`. GitHub's auto-merge system performs the eventual
+# squash merge as whatever identity ARMED it; when that identity is the default
+# `GITHUB_TOKEN`, GitHub's documented Actions-recursion prevention fires no
+# `push` event for the resulting commit on `dev`. Every push-triggered dev
+# workflow was therefore silently starved on every PR that landed through this
+# job.
+#
+#   Measured on THIS repo 2026-09-04T15:25-15:35Z over the last 40 merged dev
+#   PRs (#2060-#2103). The split is total, with no overlap:
+#     mergedBy github-actions[bot] : 21 merges, ALL 0 push-event runs
+#     mergedBy jonahgabriel (User) : 19 merges, ALL 3-6 push-event runs
+#   Representative rows:
+#     8fbb52e08b5be3b38bcc9d6663fb78fa31e6a40e (#2102, bot)  -> 0 push runs
+#     a78b103e55f1ad595572ecde6ea818c2c585f025 (#2099, bot)  -> 0
+#     78c4eaa29e5c8a8b37f0caece2bc729342dbcaea (#2097, bot)  -> 0
+#     ca98494acb400c6dcaa60ba46965c6130cdd59d6 (#2103, user) -> 4
+#     6bfba15f7d103ddaa9e949c459e95153b1ca6a94 (#2101, user) -> 6
+#   Query — pass the FULL 40-char sha; a short sha returns a FALSE 0 from this
+#   endpoint (verified: ca98494ac -> 0, ca98494acb40..59d6 -> 4), so a
+#   truncated sha reads as suppression that is not there:
+#     gh api "repos/OmniNode-ai/omniclaude/actions/runs?head_sha=<sha>&event=push" --jq .total_count
+#   The 19 user merges are the positive control for the 21 zeros: the same
+#   query, same window, returns 3-6 every time an identity that is not the
+#   default token completes the merge.
+#
+# WHAT WAS SKIPPED (push-on-`dev` workflows in this repo). Four declare
+# `push: branches: [dev]` with NO `paths:` key, so they were owed a run on
+# every one of those 21 bot merges and got none:
+#   hook-edge-lane-gate.yml (Hook Edge Lane Gate),
+#   required-check-manifest-reconcile.yml (Required-Check Manifest Reconcile —
+#   the branch-protection manifest-vs-live reconciler, so live protection
+#   drift went unreconciled after every bot merge),
+#   validate-validator-requirements.yml (Validate Validator Requirements),
+#   validator-runtime-profiles.yml (Runtime Profiles).
+# Six more are dev-push-triggered behind `paths:` filters and were skipped
+# whenever a bot-merged diff matched them: daemon-venv-skew-gate.yml,
+# omnimarket-dispatch-drift-gate.yml, precommit-fail-loud-gate.yml,
+# plan-canonical-scripts-gate.yml, plan-hard-fields-gate.yml and
+# plan-verified-state-gate.yml.
+# `release.yml` is deliberately NOT in that set: its only push trigger is
+# `tags: ['v[0-9]*.[0-9]*.[0-9]*']` with no `branches:` key, so a dev merge
+# never fires it regardless of merger identity.
+#
+# WHY A PAT AND NOT A GITHUB APP TOKEN (OMN-16373): the org-wide CROSS_REPO_PAT
+# retirement moved other call sites to a short-lived `onexbot-occ-writer` App
+# installation token. That substitution does NOT work here. A controlled probe
+# on 2026-08-22 (branch test/omn16373-suppression-probe-1, since deleted)
+# isolated the identities against a push-triggered marker workflow:
+#   - CONTROL (ambient `jonahgabriel` auth): commit fd534b2a -> marker workflow
+#     FIRED (run 32562988366, event=push, conclusion=success).
+#   - APP TOKEN (onexbot-occ-writer[bot]): commit 38ffe1f4 on the same branch
+#     -> marker workflow did NOT fire; zero event=push runs at that head_sha.
+# App-token-authored pushes suppress push-triggered runs on this org exactly
+# like GITHUB_TOKEN-authored ones, so migrating this site to the App token
+# would reintroduce this defect on a different credential. omninode_infra's
+# own auto-merge.yml is the precedent: it kept CROSS_REPO_PAT for this exact
+# reason (OMN-15769, then re-affirmed by OMN-16373) and its dev merges have
+# never suffered this suppression.
+#
+# NO NEW CREDENTIAL IS MINTED. `CROSS_REPO_PAT` is an existing org secret with
+# `visibility: all` (readback 2026-09-04T15:19Z:
+# `gh api orgs/OmniNode-ai/actions/secrets/CROSS_REPO_PAT` ->
+# {"name":"CROSS_REPO_PAT","visibility":"all"}), and this repo already consumes
+# it in ci.yml, release.yml, required-check-manifest-reconcile.yml and
+# sibling-lock-refresh.yml.
+#
+# SCOPE OF THE SWAP: only the two steps that MUTATE merge state carry the PAT
+# (the arming step, which arms the squash merge, and the enqueue/verify step,
+# which both pushes a branch update and hands the merge to a queue via
+# enqueuePullRequest). The read-only PR/author resolve step stays on
+# `GITHUB_TOKEN` — it only runs `gh pr view` / `gh repo view` and creates no
+# commit, so the suppression mechanism cannot apply to it. This workflow is not
+# a required status check on `dev` (readback 2026-09-04: 61 contexts, none
+# matching Auto-Merge), so the swap cannot wedge branch protection. Enforced by
+# TestAutoMergeArmingTokenOmn17875 in
+# tests/workflows/test_auto_merge_workflow.py.
+#
+# PRECEDENT: omnibase_infra#3178 made exactly this change on that repo — merged
+# 2026-09-04T12:32:53Z, squash b71159f3e0b1fb59a26c593fa4be2f78118ff51c. This
+# file is the omniclaude port of it.
 name: Auto-Merge
 
 on:
@@ -150,7 +232,15 @@ jobs:
       - name: Enable auto-merge
         if: steps.resolve.outputs.skip != 'true' && steps.resolve.outputs.actor == 'jonahgabriel'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # OMN-17875: MUST be CROSS_REPO_PAT. GitHub completes an armed
+          # auto-merge as the arming identity, and GITHUB_TOKEN-authored
+          # commits fire no `push` event — that starved every push-on-dev
+          # workflow (Hook Edge Lane Gate, Required-Check Manifest Reconcile,
+          # Validate Validator Requirements, Runtime Profiles) on all 21
+          # bot-armed merges in the sampled 40. An onexbot-occ-writer App token
+          # is NOT a substitute: it suppresses identically (OMN-16373 probe).
+          # Do not "modernise" this back to GITHUB_TOKEN or an App token.
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ steps.resolve.outputs.pr }}
         working-directory: ${{ github.workspace }}
@@ -196,7 +286,14 @@ jobs:
       - name: Enqueue armed PR and verify it entered the queue
         if: steps.resolve.outputs.skip != 'true' && steps.resolve.outputs.actor == 'jonahgabriel'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # OMN-17875: this step MUTATES merge state twice — `gh pr
+          # update-branch` pushes a merge commit onto the PR head branch, and
+          # `enqueuePullRequest` hands the eventual merge to a merge queue. Both
+          # land commits attributed to this token, so it carries the same
+          # non-suppressing identity as the arming step above. (This repo has no
+          # merge queue on dev today, so the enqueue path exits early — the PAT
+          # here is for the update-branch push and for the day a queue returns.)
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ steps.resolve.outputs.pr }}
         working-directory: ${{ github.workspace }}
