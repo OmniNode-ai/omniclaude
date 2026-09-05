@@ -261,3 +261,72 @@ def pytest_configure(config: pytest.Config) -> None:
             "Set POSTGRES_USER in the test environment to fix this.",
             stacklevel=1,
         )
+
+
+# =============================================================================
+# Outbound-alert containment (OMN-17958)
+# =============================================================================
+
+#: Every environment variable that can turn a hook test into a real outbound
+#: notification. Scrubbing these from ``os.environ`` covers BOTH in-process
+#: harnesses (which read ``os.environ`` directly) and subprocess harnesses
+#: (which inherit it), so one fixture closes the whole tree.
+#:
+#: Why this exists: on 2026-09-05T13:48:28-30Z a hook-suite run on a developer
+#: Mac delivered twelve real HARD_BLOCK alerts into #omninode-notifications —
+#: the six ``test_main_hard_blocks_*`` fixtures in ``test_bash_guard.py``
+#: (``rm -rf /``, ``mkfs.ext4 /dev/sda``, ``dd of=/dev/sda1``,
+#: ``base64 -d … | sh``, ``git commit --no-verify``, ``git push --no-verify``),
+#: each twice because ``TestMainIntegrationViapytest`` re-runs the inherited
+#: class. Those tests call ``bash_guard.main()`` for real and neither cleared
+#: the environment nor patched the notifier, so the ambient developer shell's
+#: ``SLACK_BOT_TOKEN`` / ``SLACK_CHANNEL_ID`` made delivery succeed.
+OUTBOUND_ALERT_ENV_VARS: tuple[str, ...] = (
+    "SLACK_BOT_TOKEN",
+    "SLACK_CHANNEL_ID",
+    "SLACK_WEBHOOK_URL",
+    "SLACK_APP_TOKEN",
+    "SLACK_SIGNING_SECRET",
+    "SLACK_USER_TOKEN",
+    "DISCORD_WEBHOOK_URL",
+    "PAGERDUTY_ROUTING_KEY",
+    "LINEAR_WEBHOOK_SECRET",
+    "ONEX_ALERT_LOCAL_NOTIFY_CMD",
+)
+
+#: Marker the hooks read to make notification delivery a no-op. Test-only:
+#: set here by the harness, never by product code or a shell wrapper.
+HOOK_TEST_MODE_ENV = "ONEX_HOOK_TEST_MODE"
+
+#: Any residual code path that still builds a Slack URL is pointed at a
+#: reserved-for-documentation address (RFC 5737 TEST-NET-1) rather than the
+#: real API host, so a missed call site fails to connect instead of posting.
+UNREACHABLE_SLACK_API_BASE = "http://192.0.2.1:9/api"  # onex-allow-internal-ip: RFC 5737 TEST-NET-1 blackhole, deliberately unroutable
+
+
+@pytest.fixture(autouse=True)
+def _contain_outbound_alerts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Make it impossible for a hook test to notify a live channel.
+
+    Autouse across the whole ``tests/hooks`` tree, and deliberately belt-and-
+    braces:
+
+    1. Every credential in :data:`OUTBOUND_ALERT_ENV_VARS` is deleted, so no
+       call site can authenticate — this is what actually stops delivery, and
+       it protects subprocess harnesses too, since a child inherits the
+       scrubbed environment.
+    2. :data:`HOOK_TEST_MODE_ENV` is set, so the guards refuse to deliver even
+       if a credential is ever reintroduced, and record the refusal on the
+       hook ledger instead of dropping it silently.
+    3. Any leftover Slack base URL points at an unroutable blackhole.
+
+    A test that genuinely needs to exercise delivery must patch the sender
+    (``patch.object(module, "_send_slack_alert")``) — never re-add a real
+    token to the environment.
+    """
+    for var in OUTBOUND_ALERT_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv(HOOK_TEST_MODE_ENV, "1")
+    monkeypatch.setenv("SLACK_API_BASE_URL", UNREACHABLE_SLACK_API_BASE)
