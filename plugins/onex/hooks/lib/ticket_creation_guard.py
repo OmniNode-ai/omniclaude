@@ -50,6 +50,40 @@ A create is admitted only when all four hold:
 
 4. The title does not read as a residual, follow-up or nit -- unless (3) is a
    live-gate defect.
+5. If the create declares an IN-PROGRESS-class state, the description carries
+   an executable probe line, on a line of its own::
+
+       Probe: uv run pytest tests/unit/test_x.py -q => exits 0
+
+   Rule 5 exists because of what the evidence closer can and cannot see. The
+   scheduled closer (OMN-16106) re-runs ``onex skill dod_verify`` against the
+   checks a ticket's OCC contract declares. A ticket whose definition of done
+   is prose -- "write the PRD", "document the doctrine" -- declares no check
+   the closer can run, so it is structurally unreachable by every closing
+   mechanism and can only ever be closed by a person reading it. Four tickets
+   in the 2026-08-31 sprint are in exactly that state. The probe line is the
+   one thing that has to exist at the START for a ticket to be mechanically
+   closeable at the end.
+
+What rule 5 enforces, and what it cannot
+----------------------------------------
+It enforces the SHAPE of a probe -- a command, then ``=>``, then the
+observation that settles it -- on a line of its own. It does not, and cannot,
+prove the command runs: this module has the payload and nothing else, and a
+guard that shelled out to try the probe would be a PreToolUse hook executing
+attacker-controlled text. Shape is what a gate at this seam can hold; whether
+the command is the RIGHT one is what the OCC contract and dod_verify settle
+later.
+
+The transition surface is deliberately NOT covered
+--------------------------------------------------
+Rule 5 binds a create that names its state. A ticket created in ``Backlog`` and
+moved to In Progress later moves by an UPDATE, and updates are never gated here
+(see below) -- so the common path into In Progress is not gated by this module,
+and saying otherwise would be a control that reports green while enforcing
+nothing. Closing that path needs a rule scoped to a state-field transition on
+an update, which is a different admission question from *is this ticket bound
+to a commitment?* and is not answered here.
 
 Rule 4's exemption is narrow on purpose. A residual belongs as a comment on its
 parent. A *live gate that is broken* is not a residual: it is a control
@@ -138,6 +172,24 @@ _GATE_LINE_GRAMMAR: Final[str] = (
     "Gate: <C-id | OMN-<parent> AC-<n> | live-gate defect: <check name>>"
 )
 
+#: ``Probe: <command> => <observation>`` -- the executable close probe. Anchored
+#: to a whole line for the same reason ``_GATE_LINE`` is (CLAUDE.md rule 15):
+#: a substring rule passes on prose that mentions a probe in order to say the
+#: ticket has none. A bullet is refused, because a bullet is how a line ends up
+#: inside a checklist that nothing binds.
+_PROBE_LINE: Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*Probe:[ \t]*(?P<probe>.*?)[ \t]*$", re.MULTILINE
+)
+
+#: The two halves of a probe. ``=>`` separates the command from the observation
+#: that settles it. BOTH are required: a command with no expected observation
+#: cannot be adjudicated by anything except a person reading the output, which
+#: is the state rule 5 exists to prevent, and an observation with no command is
+#: a wish.
+_PROBE_SPLIT: Final[str] = "=>"
+
+_PROBE_LINE_GRAMMAR: Final[str] = "Probe: <command> => <observation that settles it>"
+
 
 class PolicyError(RuntimeError):
     """The admission policy could not be read.
@@ -155,6 +207,7 @@ class Policy:
     criterion_ids: frozenset[str]
     epic_markers: tuple[str, ...]
     residual_title_terms: tuple[str, ...]
+    in_progress_state_names: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +271,12 @@ def load_policy(path: Path | None = None) -> Policy:
         residual_title_terms=_string_list(
             raw.get("residual_title_terms"), "residual_title_terms", source
         ),
+        in_progress_state_names=frozenset(
+            n.lower()
+            for n in _string_list(
+                raw.get("in_progress_state_names"), "in_progress_state_names", source
+            )
+        ),
     )
 
 
@@ -279,6 +338,86 @@ def _residual_terms_in(title: str, policy: Policy) -> list[str]:
         if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", title, re.IGNORECASE):
             hits.append(term)
     return hits
+
+
+def _declares_in_progress(tool_input: dict[str, Any], policy: Policy) -> bool:
+    """True when this create names an IN-PROGRESS-class state.
+
+    Reads both spellings the Linear write surface accepts: ``state`` (a state
+    type, name or id) and ``stateId``. A raw uuid in either field is NOT
+    matched -- the guard has no workspace lookup and will not guess what a uuid
+    resolves to. That is the fail-OPEN direction for this one rule and it is
+    deliberate: rule 5 must never refuse a create it cannot classify, because
+    the classification depends on data this module cannot see, and refusing on
+    a uuid would make every id-shaped create unfileable. The refusal it does
+    make is on a create that says, in words, that it starts In Progress.
+    """
+    names = {
+        str(tool_input.get(field, "")).strip().lower()
+        for field in ("state", "stateId", "status", "statusType")
+    }
+    return bool(names & policy.in_progress_state_names)
+
+
+def _probe_line_findings(description: str) -> list[Finding]:
+    """Rule 5's verdict on the probe line, if any.
+
+    Returns the findings for: no probe line at all, a probe line missing its
+    ``=>`` separator, and a probe line with a blank half. A body may carry
+    several ``Probe:`` lines (a quoted example above the real one); ONE
+    well-formed line satisfies the rule, matching how ``_binding_kind`` treats
+    several ``Gate:`` lines.
+    """
+    candidates = [
+        match.group("probe").strip() for match in _PROBE_LINE.finditer(description)
+    ]
+    candidates = [candidate for candidate in candidates if candidate]
+    if not candidates:
+        return [
+            Finding(
+                code="missing_probe_line",
+                field="description",
+                reason=(
+                    "this ticket starts In Progress but declares no executable "
+                    "probe, so nothing that closes tickets mechanically can "
+                    "ever reach it -- the scheduled evidence closer re-runs "
+                    "dod_verify against declared checks and a prose definition "
+                    "of done declares none"
+                ),
+                fix=(
+                    f"add a line of its own, unbulleted, reading "
+                    f"'{_PROBE_LINE_GRAMMAR}' -- e.g. "
+                    "'Probe: uv run pytest tests/unit/test_x.py -q => exits 0', "
+                    "or 'Probe: gh api repos/O/r/branches/main/protection "
+                    "--jq .required_status_checks.contexts => contains "
+                    "deploy-gate'. If the deliverable genuinely has no "
+                    "executable probe, it is not ready to be In Progress: the "
+                    "probe is what makes it closeable at the end"
+                ),
+            )
+        ]
+    for candidate in candidates:
+        head, separator, tail = candidate.partition(_PROBE_SPLIT)
+        if separator and head.strip() and tail.strip():
+            return []
+    return [
+        Finding(
+            code="malformed_probe_line",
+            field="description",
+            reason=(
+                "a Probe: line is present but no line carries BOTH a command "
+                f"and the observation that settles it, separated by "
+                f"'{_PROBE_SPLIT}'. A command with no expected observation can "
+                "only be adjudicated by a person reading its output, which is "
+                "the state this rule exists to prevent"
+            ),
+            fix=(
+                f"write it as '{_PROBE_LINE_GRAMMAR}' -- the observation is "
+                "what a later dod_verify check asserts, so make it something a "
+                "machine can compare, not a judgement"
+            ),
+        )
+    ]
 
 
 def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
@@ -440,6 +579,14 @@ def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
                     ),
                 )
             )
+
+    # Rule 5 -- a create that STARTS In Progress needs an executable probe.
+    # Scoped to a declared state rather than to every create on purpose: a
+    # ticket parked in Backlog has not yet claimed to be work in flight, and a
+    # probe demanded at filing time for work nobody has scoped yet is a field a
+    # lane fills in with something plausible to get past the check.
+    if description_readable and _declares_in_progress(tool_input, policy):
+        findings.extend(_probe_line_findings(description))
 
     return findings
 

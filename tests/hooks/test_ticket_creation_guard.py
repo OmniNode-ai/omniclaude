@@ -130,6 +130,7 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 "criterion_ids": ["C1"],
                 "epic_markers": ["issue_class: epic"],
                 "residual_title_terms": ["nit"],
+                "in_progress_state_names": ["in progress"],
             }
         ),
         encoding="utf-8",
@@ -137,6 +138,7 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
     policy = _GUARD.load_policy(override)
     assert policy.criterion_ids == frozenset({"C1"})
     assert policy.residual_title_terms == ("nit",)
+    assert policy.in_progress_state_names == frozenset({"in progress"})
 
 
 @pytest.mark.parametrize(
@@ -756,3 +758,154 @@ def test_a_refusal_is_recorded_in_the_hook_log(tmp_path: Path) -> None:
     log = _hook_ledger(tmp_path).read_text(encoding="utf-8")
     assert "BLOCKED" in log
     assert "ticket-creation-gate" in log
+
+
+# ---------------------------------------------------------------------------
+# Rule 5 — a create that STARTS In Progress needs an executable probe
+# ---------------------------------------------------------------------------
+#
+# Why: the scheduled evidence closer (OMN-16106) re-runs `onex skill dod_verify`
+# against the checks a ticket's OCC contract declares. A ticket whose definition
+# of done is prose declares no check it can run, so it is structurally
+# unreachable by every closing mechanism and can only ever be closed by a person
+# reading it — four such tickets sit In Progress in the 2026-08-31 sprint. The
+# probe line is the one thing that must exist at the START for a ticket to be
+# mechanically closeable at the end.
+
+_PROBE = "Probe: uv run pytest tests/hooks/test_ticket_creation_guard.py -q => exits 0"
+
+
+def _in_progress(**overrides: Any) -> dict[str, Any]:
+    payload = _create(state="In Progress")
+    payload.update(overrides)
+    return payload
+
+
+def test_in_progress_create_without_a_probe_is_refused() -> None:
+    codes = {finding.code for finding in _check(_in_progress())}
+    assert "missing_probe_line" in codes
+
+
+def test_in_progress_create_with_a_probe_is_admitted() -> None:
+    payload = _in_progress(description=f"{_GOOD_DESCRIPTION}\n{_PROBE}\n")
+    assert _check(payload) == []
+
+
+@pytest.mark.parametrize(
+    "state_value",
+    ["In Progress", "in progress", "  IN-PROGRESS  ", "started", "inprogress"],
+)
+def test_every_configured_in_progress_spelling_fires(state_value: str) -> None:
+    codes = {finding.code for finding in _check(_create(state=state_value))}
+    assert "missing_probe_line" in codes
+
+
+@pytest.mark.parametrize("field", ["state", "stateId", "status", "statusType"])
+def test_the_rule_reads_every_state_spelling_the_write_surface_accepts(
+    field: str,
+) -> None:
+    codes = {finding.code for finding in _check(_create(**{field: "In Progress"}))}
+    assert "missing_probe_line" in codes
+
+
+def test_a_backlog_create_needs_no_probe() -> None:
+    """Rule 5 is scoped to work claimed to be in flight, not to every create.
+
+    A probe demanded at filing time for work nobody has scoped yet is a field a
+    lane fills in with something plausible to get past the check.
+    """
+    assert _check(_create(state="Backlog")) == []
+    assert _check(_create()) == []
+
+
+def test_a_state_uuid_is_not_classified_and_not_refused() -> None:
+    """The one fail-OPEN direction, bounded to rule 5 and stated on purpose.
+
+    This module has no workspace lookup, so it cannot resolve a state uuid.
+    Refusing on one would make every id-shaped create unfileable; the refusal
+    it does make is on a create that says, in words, that it starts In Progress.
+    """
+    payload = _create(stateId="f1a2b3c4-0000-4d5e-8f90-abcdefabcdef")
+    assert _check(payload) == []
+
+
+def test_a_probe_missing_its_expected_observation_is_refused() -> None:
+    """A command with no expected observation is adjudicated by a human read."""
+    payload = _in_progress(
+        description=f"{_GOOD_DESCRIPTION}\nProbe: uv run pytest tests/unit -q\n"
+    )
+    codes = {finding.code for finding in _check(payload)}
+    assert "malformed_probe_line" in codes
+
+
+@pytest.mark.parametrize(
+    "probe_body",
+    ["=> exits 0", "uv run pytest -q =>", "   =>   "],
+)
+def test_a_probe_with_a_blank_half_is_refused(probe_body: str) -> None:
+    payload = _in_progress(description=f"{_GOOD_DESCRIPTION}\nProbe: {probe_body}\n")
+    codes = {finding.code for finding in _check(payload)}
+    assert "malformed_probe_line" in codes
+
+
+def test_a_bulleted_probe_does_not_count() -> None:
+    """CLAUDE.md rule 15: a bullet is how a line lands inside a checklist.
+
+    The line must bind, not appear in a list of things someone might do.
+    """
+    payload = _in_progress(description=f"{_GOOD_DESCRIPTION}\n- {_PROBE}\n")
+    codes = {finding.code for finding in _check(payload)}
+    assert "missing_probe_line" in codes
+
+
+def test_prose_mentioning_a_probe_does_not_satisfy_the_rule() -> None:
+    """The direction that matters for an admission gate.
+
+    A substring rule *passes* on prose that mentions the trigger while meaning
+    the opposite — "this ticket has no Probe: line yet" would satisfy it.
+    """
+    payload = _in_progress(
+        description=(
+            f"{_GOOD_DESCRIPTION}\n"
+            "This ticket has no Probe: line yet because the deliverable is prose.\n"
+        )
+    )
+    codes = {finding.code for finding in _check(payload)}
+    assert "malformed_probe_line" in codes or "missing_probe_line" in codes
+
+
+def test_one_well_formed_probe_among_several_lines_satisfies_the_rule() -> None:
+    """Matches how several `Gate:` lines are treated — the strongest one wins."""
+    payload = _in_progress(
+        description=f"{_GOOD_DESCRIPTION}\nProbe: an example with no arrow\n{_PROBE}\n"
+    )
+    assert _check(payload) == []
+
+
+def test_an_update_that_moves_a_ticket_to_in_progress_is_still_not_gated() -> None:
+    """The transition surface this module deliberately does not cover.
+
+    A ticket created in Backlog and moved to In Progress later moves by an
+    UPDATE, and updates are never gated here. Recording it as a test so the
+    scope of rule 5 is a pinned fact rather than a claim in a docstring — if a
+    later change starts gating updates, this test is the one that has to be
+    deliberately rewritten.
+    """
+    assert _check({"id": "OMN-16106", "state": "In Progress"}) == []
+
+
+def test_the_shipped_policy_configures_the_in_progress_vocabulary() -> None:
+    assert POLICY.in_progress_state_names
+    assert "in progress" in POLICY.in_progress_state_names
+
+
+def test_a_policy_missing_the_in_progress_vocabulary_is_refused(
+    tmp_path: Path,
+) -> None:
+    """No default in code: an unreadable policy refuses, never widens."""
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    del raw["in_progress_state_names"]
+    bad = tmp_path / "policy.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(bad)
