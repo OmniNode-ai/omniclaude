@@ -165,6 +165,9 @@ _GUARD_FILES = (
 _DONE_FLIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_done_flip_guard.sh"
 )
+_TICKET_CREATION_GATE_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_ticket_creation_gate.sh"
+)
 _WORKTREE_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_worktree_guard.sh"
 )
@@ -269,8 +272,9 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly seven PreToolUse commands are wired: Done-flip guard, worktree
-    # guard, PR lane-ownership guard (OMN-16485), background-agent model guard
+    # Exactly eight PreToolUse commands are wired: Done-flip guard,
+    # ticket-creation admission gate (OMN-17942), worktree guard, PR
+    # lane-ownership guard (OMN-16485), background-agent model guard
     # (OMN-17499), lane-open recorder, lane-liveness guard, then the overseer
     # foreground-block guard.
     #
@@ -278,6 +282,14 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     # AHEAD of the lane-open recorder so a refused dispatch does not first
     # write a phantom OPEN lane record that no terminal record will ever
     # close.
+    #
+    # The ticket-creation gate's position is behaviour too: it shares the
+    # Linear-write matcher with the Done-flip guard and is registered AFTER it.
+    # The two never contend for the same call -- the Done-flip guard only ever
+    # inspects an UPDATE (save_issue WITH an id) and this gate only ever
+    # inspects a CREATE (save_issue with no id) -- so the order is a stated
+    # precedence rather than an accident: the older, narrower guard keeps first
+    # refusal on the surface it already owned.
     commands = [
         hook.get("command", "")
         for group in hooks["PreToolUse"]
@@ -285,6 +297,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     ]
     assert commands == [
         _DONE_FLIP_GUARD_COMMAND,
+        _TICKET_CREATION_GATE_COMMAND,
         _WORKTREE_GUARD_COMMAND,
         _PR_OWNERSHIP_GUARD_COMMAND,
         _AGENT_MODEL_GUARD_COMMAND,
@@ -293,10 +306,11 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _OVERSEER_FOREGROUND_BLOCK_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
-        "guard, the worktree canonical-root guard, the PR lane-ownership guard, "
+        "guard, the ticket-creation admission gate, the worktree canonical-root "
+        "guard, the PR lane-ownership guard, "
         "the background-agent model guard, the lane-dispatch recorder, the "
         "lane-liveness guard, and the overseer foreground-block guard, and "
-        "nothing else (OMN-13856 + OMN-14330 + OMN-16485 + OMN-17499 + "
+        "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
         "A different or additional command means either the measurement baseline "
         "was re-enabled without an operator decision (OMN-13846) or one of the "
