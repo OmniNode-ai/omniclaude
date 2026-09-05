@@ -1,0 +1,239 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+---
+#
+# CAPTURE REDACTION CONTRACT (OMN-17209, landed via the OMN-17399 residual).
+#
+# This file is the redaction posture. It is not documentation of one, and it is
+# not a mirror of one that lives in Python. `redaction.py` resolves THIS file;
+# it holds no field names, no topic names and no secret patterns of its own,
+# and `test_capture_redaction_contract.py` asserts that by scanning the module.
+#
+# WHY IT EXISTS. OMN-17209's framing: "widening the payload without landing
+# this contract first ships a credential pipeline." Three dated live incidents
+# are its RED corpus -- OMN-17154 (`valkey-cli config get requirepass` printed
+# a plaintext password), 2026-08-19 morning (`kubectl get secret -o json`
+# printed a `clientSecret`), 2026-08-19 evening (`env | grep POSTGRES` printed
+# a `postgresql://user:pw@host` URL). In all three the control was a regex
+# added AFTER the leak, so it was always one incident behind.
+#
+# WHAT IS ACTUALLY ON THE WIRE TODAY (live readback, .201 stability lane,
+# 2026-09-04T14:22Z, `rpk topic consume ... -o -2`):
+#
+#   tool-executed.v1   {duration_ms, hook_source, interrupted, session_id,
+#                       tool_name, working_directory} + enrichment
+#   prompt-submitted.v1{hook_source, prompt_length, session_id,
+#                       working_directory} + enrichment
+#
+# Both are already content-free: the hook scripts emit length-only and
+# name-only payloads. So this contract removes nothing from today's traffic --
+# and that is the point. It is the FAIL-CLOSED FLOOR that OMN-17206 (C10, tool
+# args) and OMN-17207 (C11, diff bodies) land on top of. Any field those
+# tickets add that is not named `capture_verbatim` here is hashed on arrival,
+# with no further action by their authors.
+#
+# HOW TO WIDEN CAPTURE. Add the field here, with a class and a reason. Adding
+# a pattern to a Python constant is not a substitute and is rejected by
+# `test_no_python_side_pattern_constants`.
+
+contract_version: {major: 1, minor: 0, patch: 0}
+ticket: OMN-17209
+
+# ---------------------------------------------------------------------------
+# Capture classes
+# ---------------------------------------------------------------------------
+# capture_verbatim   value crosses unchanged (the secret scrub below still runs
+#                    on top of it -- verbatim is not exempt from scrubbing)
+# capture_hashed     value replaced by sha256:<64 hex> over its canonical JSON
+#                    form. Deterministic and unsalted ON PURPOSE: a salt would
+#                    make the record unreplayable, which the deterministic
+#                    truth doctrine forbids. An unsalted hash of a LOW-entropy
+#                    value is brute-forceable, so hashing is the fail-closed
+#                    default for fields nobody has classified -- it is NOT the
+#                    protection for a field known to hold a secret. Use
+#                    never_capture for those.
+# capture_shape_only value replaced by {type, length} -- no content, no hash,
+#                    so not even a lookup handle for a short value
+# never_capture      field is dropped from the payload entirely
+
+# FAIL-CLOSED DEFAULT. Any field on a governed topic that is not named below.
+# A new tool, or a field a future ticket adds, cannot leak by being forgotten.
+default_field_class: capture_hashed
+
+# ---------------------------------------------------------------------------
+# Always-hashed output classes (OMN-17209 scope 2)
+# ---------------------------------------------------------------------------
+# These hash BECAUSE OF WHAT THEY ARE, never because a pattern fired. DoD probe
+# 4 is the whole point: an SSM send-command result containing no secret-shaped
+# text at all is still hashed. A regex that has not been written yet cannot
+# save you; a class does not need to recognise the secret to refuse it.
+#
+# `content_fields` names the fields a matched record forces to capture_hashed,
+# overriding any per-field class. They are listed here BEFORE OMN-17206 /
+# OMN-17207 emit them, which is the sequencing this ticket exists to enforce.
+always_hashed_output_classes:
+  - name: ssm_send_command
+    reason: >
+      SSM send-command output is a class of output that should never be
+      captured verbatim regardless of whether a pattern matches it -- it
+      routinely carries whatever the remote command printed.
+    tool_names: ["Bash"]
+    command_pattern: '(?i)\baws\s+ssm\s+(send-command|get-command-invocation)\b'
+  - name: kubectl_secret_read
+    reason: >
+      2026-08-19 morning incident: `kubectl get secret -o json` printed a
+      `clientSecret`. The camelCase key pattern was added reactively after.
+    tool_names: ["Bash"]
+    command_pattern: '(?i)\bkubectl\s+(get|describe)\s+secret'
+  - name: redis_valkey_config_get
+    reason: >
+      OMN-17154: `valkey-cli config get requirepass` printed the plaintext
+      credential. The value has no key=value framing and no prefix, so the
+      pattern set does not reliably catch it -- the class does.
+    tool_names: ["Bash"]
+    command_pattern: '(?i)\b(valkey-cli|redis-cli)\b.*\bconfig\s+get\b'
+  - name: environment_dump
+    reason: >
+      2026-08-19 evening incident: `env | grep -i POSTGRES` printed a
+      PostgreSQL URL with credentials in the authority.
+    tool_names: ["Bash"]
+    command_pattern: '(?i)(^|[;&|]\s*)(env|printenv|set)\b'
+  - name: aws_credential_command
+    reason: >
+      `aws sts get-session-token` / `aws sso` output carries live session
+      credentials by construction.
+    tool_names: ["Bash"]
+    command_pattern: '(?i)\baws\s+(sts|sso|secretsmanager|ssm\s+get-parameter)\b'
+  - name: secret_path_read
+    reason: >
+      The tool INPUT (a path) is innocuous; the OUTPUT is not. Applies to any
+      tool that reads file content, not just Bash.
+    tool_names: ["Read", "Bash", "Grep"]
+    command_pattern: '(?i)(\.env(\.[A-Za-z0-9_.-]+)?$|\.env[/\s"'']|/\.aws/credentials|/\.ssh/id_[a-z0-9]+$|\.pem$|\.p12$|\.kubeconfig$|/secrets?/)'
+
+  # The field the class matcher reads to decide. Declared here rather than
+  # hardcoded so a producer that names its command field differently is a
+  # contract edit, not a code edit.
+command_fields: ["command", "tool_input_command", "tool_input"]
+tool_name_field: "tool_name"
+
+# Fields any matched class forces to capture_hashed. Not emitted by any hook
+# today (verified live 2026-09-04) -- listed so OMN-17206 / OMN-17207 land
+# inside the floor rather than beside it.
+content_fields:
+  - "command"
+  - "tool_input"
+  - "tool_input_command"
+  - "tool_response"
+  - "tool_output"
+  - "stdout"
+  - "stderr"
+  - "output"
+  - "result"
+  - "diff"
+  - "content"
+  - "new_string"
+  - "old_string"
+
+# ---------------------------------------------------------------------------
+# Secret-pattern scrub (OMN-17209 scope 3)
+# ---------------------------------------------------------------------------
+# Applied ON TOP of every class, including capture_verbatim. A field that was
+# going to cross verbatim and matches one of these is hashed instead, and the
+# record's redaction_state becomes `secret_detected`.
+#
+# This is the ONE shared pattern set. It is deliberately the weakest of the
+# three controls here, and is listed last for that reason: the incident record
+# says every one of these was written after the leak it would have caught.
+secret_patterns:
+  - name: url_authority_credentials
+    pattern: '[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:[^/\s@]+@'
+  - name: labelled_secret_assignment
+    pattern: '(?i)\b(pass(word|wd)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|requirepass|client[_-]?secret|auth)\b\s*[:=]\s*\S+'
+  - name: camel_case_secret_key
+    pattern: '"(?:[a-z]+)?(?:Secret|Token|Password|ApiKey|AccessKey|PrivateKey)"\s*:\s*"[^"]+"'
+  - name: aws_access_key_id
+    pattern: '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
+  - name: bearer_token
+    pattern: '(?i)\bbearer\s+[A-Za-z0-9._~+/-]{16,}'
+  - name: pem_private_key_block
+    pattern: '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  - name: jwt
+    pattern: '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b'
+
+# ---------------------------------------------------------------------------
+# Governed topics
+# ---------------------------------------------------------------------------
+# A topic is governed when its fan_out rule in the event registry names the
+# `redact_capture` transform. A rule that names it and has no entry here is a
+# hard refusal (UngovernedTopicError) -- an empty policy would silently mean
+# "hash everything", which reads identical to a working one.
+#
+# Enrichment fields (correlation_id, causation_id, emitted_at, entity_id,
+# schema_version) are injected BEFORE the transform runs, so they must be
+# declared or they would be hashed. session_id in particular is the declared
+# partition_key_field for both topics and the key is derived POST-transform:
+# hashing it would silently repartition the topic.
+topics:
+  "onex.evt.omniclaude.tool-executed.v1":
+    ticket: OMN-16979
+    reason: >
+      Coarse tool-execution telemetry. Every field below is a name, a count or
+      an identifier -- no tool argument and no tool output. Verified against
+      the live payload on the .201 stability lane 2026-09-04T14:22Z.
+    fields:
+      session_id: capture_verbatim
+      tool_name: capture_verbatim
+      duration_ms: capture_verbatim
+      interrupted: capture_verbatim
+      hook_source: capture_verbatim
+      working_directory: capture_verbatim
+      correlation_id: capture_verbatim
+      causation_id: capture_verbatim
+      emitted_at: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+
+  "onex.evt.omniclaude.prompt-submitted.v1":
+    ticket: OMN-16979
+    reason: >
+      Prompt telemetry. The prompt body never crosses: `prompt` and
+      `prompt_b64` are dropped outright rather than hashed, because a hash of
+      a short prompt is a lookup handle. `prompt_preview` -- which the legacy
+      `strip_prompt` transform truncates to 100 chars and which OMN-16019
+      identified as the disclosure surface -- is reduced to its shape.
+    fields:
+      session_id: capture_verbatim
+      prompt_length: capture_verbatim
+      hook_source: capture_verbatim
+      working_directory: capture_verbatim
+      correlation_id: capture_verbatim
+      causation_id: capture_verbatim
+      emitted_at: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+      prompt: never_capture
+      prompt_b64: never_capture
+      prompt_preview: capture_shape_only
+    # The transform this rule replaces (`strip_prompt`) did not only drop
+    # `prompt` -- it derived `prompt_length` from it when the producer had not
+    # supplied one. Dropping a field is a redaction; silently dropping the
+    # SIGNAL that survived the redaction is a regression, so the derivation is
+    # declared here rather than lost. It runs only when the target is absent
+    # and the source is present, matching strip_prompt's own
+    # `if "prompt_length" not in result` guard, and it reads the source
+    # BEFORE that source is dropped.
+    derived_fields:
+      prompt_length:
+        from: prompt
+        derive: length
+
+# ---------------------------------------------------------------------------
+# Mandatory redaction state (OMN-17209 scope 4)
+# ---------------------------------------------------------------------------
+# Stamped on every governed record under this key. Values mirror
+# omnibase_core's EnumArtifactRedactionState (OMN-13152) exactly; parity is
+# asserted by test, and the enum is re-declared rather than imported so the
+# emit seam keeps its stdlib-only import cost (OMN-17224).
+redaction_state_field: "redaction_state"

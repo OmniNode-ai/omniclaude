@@ -80,7 +80,39 @@ TRANSFORM_NAME_TO_CALLABLE: dict[str, str | None] = {
     "passthrough": None,
     "strip_prompt": "transform_for_observability",
     "strip_body": "_transform_chat_broadcast",
+    "redact_capture": "redact_capture",
 }
+
+# OMN-17959: `redact_capture` resolves a posture that lives in a YAML contract,
+# and omnimarket owns that contract the same way it owns topics.yaml. omniclaude
+# carries a mirror (the pinned `omnimarket` dependency predates the contract, and
+# the emit seam must stay off the Pydantic import chain), so the mirror needs the
+# same mechanical drift gate the registry itself has -- otherwise the two halves
+# of one posture could silently diverge, which is the exact failure class this
+# ticket exists to close.
+#
+# The comparison is of the RESOLVED POSTURE, not of bytes. A byte gate was tried
+# first and is wrong here: this repo's own mandated pre-commit hooks rewrite the
+# file on arrival (the SPDX stamper normalises the copyright year and moves the
+# YAML document marker; detect-secrets appends an allowlist pragma to the line
+# quoting the 2026-08-19 incident URL). Those are header and prose edits that
+# cannot change what is captured. Gating on bytes would therefore fail every
+# build for a reason unrelated to disclosure, and the pressure would be to
+# weaken the gate. Gating on the parsed contract -- field classes, output
+# classes, command/content fields, secret patterns, governed topics, derived
+# fields and the state field -- fails if and only if the POSTURE differs, which
+# is the thing that must not drift. Prose `reason` text is deliberately outside
+# the comparison: it is documentation, and the resolver does not store it.
+CAPTURE_REDACTION_TRANSFORM = "redact_capture"
+VENDORED_CAPTURE_CONTRACT = (
+    REPO_ROOT / "src" / "omniclaude" / "hooks" / "contracts" / "capture_redaction.yaml"
+)
+# Path of the owning contract RELATIVE TO the daemon registry's `nodes/` dir,
+# so it is resolved from whatever omnimarket checkout the caller passed rather
+# than from a second hardcoded location.
+OWNING_CAPTURE_CONTRACT_RELPATH = Path(
+    "node_event_emit_effect/contracts/capture_redaction.yaml"
+)
 
 
 def load_daemon_events(daemon_registry_path: Path) -> dict[str, Any]:
@@ -142,6 +174,7 @@ def load_committed_registry_as_data() -> dict[str, dict[str, Any]]:
     """Import the committed EVENT_REGISTRY and reduce it to the same plain-data
     shape ``build_projected_registry`` produces, for structural comparison."""
     sys.path.insert(0, str(REPO_ROOT / "src"))
+    from omniclaude.hooks.capture_redaction import redact_capture  # noqa: PLC0415
     from omniclaude.hooks.event_registry import (  # noqa: PLC0415
         EVENT_REGISTRY,
         _transform_chat_broadcast,
@@ -155,6 +188,8 @@ def load_committed_registry_as_data() -> dict[str, dict[str, Any]]:
             return "transform_for_observability"
         if transform is _transform_chat_broadcast:
             return "_transform_chat_broadcast"
+        if transform is redact_capture:
+            return "redact_capture"
         return f"UNKNOWN:{transform!r}"
 
     data: dict[str, dict[str, Any]] = {}
@@ -174,6 +209,99 @@ def load_committed_registry_as_data() -> dict[str, dict[str, Any]]:
             "required_fields": list(reg.required_fields),
         }
     return data
+
+
+def _resolved_posture(contract_path: Path) -> dict[str, Any]:
+    """Reduce a capture-redaction contract to its comparable posture.
+
+    Uses omniclaude's own resolver, so anything the resolver refuses to load is
+    a refusal here too rather than a silently-empty comparison.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+    from omniclaude.hooks.capture_redaction import load_contract  # noqa: PLC0415
+
+    contract = load_contract(contract_path)
+    return {
+        "default_field_class": contract.default_field_class.value,
+        "output_classes": [
+            (oc.name, sorted(oc.tool_names), oc.command_pattern.pattern)
+            for oc in contract.output_classes
+        ],
+        "command_fields": list(contract.command_fields),
+        "tool_name_field": contract.tool_name_field,
+        "content_fields": sorted(contract.content_fields),
+        "secret_patterns": [
+            (name, pattern.pattern) for name, pattern in contract.secret_patterns
+        ],
+        "topics": {
+            topic: {
+                "fields": {f: c.value for f, c in policy.fields.items()},
+                "derived": [(d.target, d.source, d.derive) for d in policy.derived],
+            }
+            for topic, policy in contract.topics.items()
+        },
+        "redaction_state_field": contract.redaction_state_field,
+    }
+
+
+def check_vendored_capture_contract(
+    generated: dict[str, dict[str, Any]], daemon_registry_path: Path
+) -> list[str]:
+    """Hold omniclaude's mirrored redaction contract to omnimarket's owning copy.
+
+    Returns a list of violations; empty means either the transform is not in
+    use, or the mirror is byte-identical to the owner.
+
+    Fail-closed in both directions: a projection that names the transform with
+    no resolvable owning contract is a violation, not a pass. An unresolvable
+    owner means the check silently verified nothing, which reads exactly like
+    a clean result.
+    """
+    in_use = any(
+        rule["transform"] == CAPTURE_REDACTION_TRANSFORM
+        for registration in generated.values()
+        for rule in registration["fan_out"]
+    )
+    if not in_use:
+        return []
+
+    violations: list[str] = []
+    if not VENDORED_CAPTURE_CONTRACT.is_file():
+        violations.append(
+            f"{CAPTURE_REDACTION_TRANSFORM} is declared by the daemon registry but "
+            f"the mirrored contract is missing at "
+            f"{VENDORED_CAPTURE_CONTRACT.relative_to(REPO_ROOT)}"
+        )
+        return violations
+
+    # nodes/<node>/registries/topics.yaml -> nodes/
+    owner = daemon_registry_path.resolve().parents[2] / OWNING_CAPTURE_CONTRACT_RELPATH
+    if not owner.is_file():
+        violations.append(
+            f"cannot resolve omnimarket's owning capture-redaction contract at "
+            f"{owner} — refusing to report the mirror as verified against nothing"
+        )
+        return violations
+
+    try:
+        mirrored = _resolved_posture(VENDORED_CAPTURE_CONTRACT)
+        owned = _resolved_posture(owner)
+    except Exception as exc:  # noqa: BLE001 - any resolution failure is a refusal
+        violations.append(
+            f"cannot resolve the capture-redaction posture for comparison: {exc}"
+        )
+        return violations
+
+    if mirrored != owned:
+        differing = sorted(
+            key for key in owned if mirrored.get(key) != owned.get(key)
+        ) or ["<key set>"]
+        violations.append(
+            f"{VENDORED_CAPTURE_CONTRACT.relative_to(REPO_ROOT)} has drifted from "
+            f"omnimarket's owning copy at {owner}: {differing}. omnimarket owns "
+            f"this contract; copy the posture over rather than editing the mirror."
+        )
+    return violations
 
 
 def diff_registries(
@@ -240,6 +368,14 @@ def main(argv: list[str] | None = None) -> int:
 
     daemon_events = load_daemon_events(args.daemon_registry)
     generated = build_projected_registry(daemon_events)
+
+    contract_violations = check_vendored_capture_contract(
+        generated, args.daemon_registry
+    )
+    if contract_violations:
+        for violation in contract_violations:
+            print(f"- {violation}")
+        return 1
 
     if args.write:
         import json  # noqa: PLC0415
