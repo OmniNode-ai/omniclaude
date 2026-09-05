@@ -161,10 +161,70 @@ expected_hooks:
           - "no_durable_evidence"
         stdout_absent: []
 
+  - script: "pre_tool_use_ticket_creation_gate.sh"
+    event: "PreToolUse"
+    matcher: "^mcp__linear-server__(save_issue|update_issue)$"
+    order: 1
+    ticket: "OMN-17942"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Linear issue CREATE (save_issue with no id) that is not bound
+      to a commitment: no parentId and no epic declaration, no project, no
+      "Gate:" binding line, or a residual-shaped title with no
+      live-gate-defect binding. An UPDATE (save_issue with an id) is never
+      gated -- gating it would block every state flip and parent re-link the
+      OMN-16729 board-truth work depends on. Measured cause: 1553 tickets
+      created in the fourteen days to 2026-09-04 against ~35/day closed, 1537
+      of them under the single API identity every lane writes as. Registered
+      AFTER pre_tool_use_done_flip_guard.sh on the same matcher, which only
+      ever inspects updates, so the two never contend for the same call.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      # BORROWED BIT, recorded rather than left for a reader to infer. This
+      # gate_call names a bit whose own script (pre_tool_use_linear_done_verify.sh)
+      # is on disk and UNREGISTERED under the OMN-13244 baseline -- its
+      # merged-PR semantics were folded into pre_tool_use_done_flip_guard.sh by
+      # OMN-13856 -- so `onex hooks disable LINEAR_DONE_VERIFY` disables exactly
+      # this guard and nothing else that is live. A dedicated bit is
+      # unavailable: EnumHookBit lives in omnibase_core, all 60 default-mask
+      # ordinals are allocated, 60-62 are the disabled-by-default trio, and
+      # knowledge-base-internal reference/hook-bitmask-bit-governance.md rule 7
+      # forbids ordinal 63 (the sign bit of a signed 64-bit integer) outright.
+      # Same constraint, same resolution pre_tool_use_agent_model_guard.sh
+      # recorded for PRE_TOOL_AGENT_DISPATCH_GATE.
+      #
+      # The sibling on this same matcher was NOT a candidate: it calls
+      # onex_hook_gate DONE_FLIP_GUARD, a name hook_bits.sh does not define, so
+      # that gate can never fire and its bit is not a switch at all. Borrowing
+      # it would have shipped a guard with no working disable.
+      #
+      # The borrow is only safe while the namesake stays unregistered, so
+      # tests/hooks/test_ticket_creation_guard.py pins that: re-registering
+      # pre_tool_use_linear_done_verify.sh would silently put two controls
+      # behind one switch, and turns the suite red instead.
+      gate_call: "LINEAR_DONE_VERIFY"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "mcp__linear-server__save_issue"
+        tool_input:
+          team: "Omninode"
+          title: "hook-inventory canary"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "not bound to a commitment"
+        stdout_absent: []
+
   - script: "pre_tool_use_worktree_guard.sh"
     event: "PreToolUse"
     matcher: "Bash"
-    order: 1
+    order: 2
     ticket: "OMN-14330"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -195,7 +255,7 @@ expected_hooks:
   - script: "pre_tool_use_pr_ownership_guard.sh"
     event: "PreToolUse"
     matcher: "Bash"
-    order: 2
+    order: 3
     ticket: "OMN-16485"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -225,7 +285,7 @@ expected_hooks:
   - script: "pre_tool_use_agent_model_guard.sh"
     event: "PreToolUse"
     matcher: "^(Workflow|Agent)$"
-    order: 3
+    order: 4
     ticket: "OMN-17499"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -274,7 +334,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 4
+    order: 5
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -303,7 +363,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 5
+    order: 6
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -334,7 +394,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 6
+    order: 7
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
