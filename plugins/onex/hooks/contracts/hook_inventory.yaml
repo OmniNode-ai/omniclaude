@@ -282,10 +282,83 @@ expected_hooks:
           - "REFUSED"
         stdout_absent: []
 
+  - script: "pre_tool_use_credential_rotation_guard.sh"
+    event: "PreToolUse"
+    matcher: "Bash"
+    order: 4
+    ticket: "OMN-17957"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Bash command that rotates, re-issues or revokes a credential
+      unless it carries "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:
+      <line>" resolving to an OPERATOR-CONSENT row (omni_home CLAUDE.md rule 18,
+      extended by rule 22 with approved_by=<operator|jake>) whose APPROVED SCOPE
+      names the credential and which carries a non-empty OUT OF SCOPE list.
+      Operator ruling 2026-09-05: a value in a local transcript, log, scratch
+      file or ledger is NOT exposure; rotation is for real exposure only, with
+      the exposure path recorded first, approved by the operator or Jake and by
+      nobody else, and every consumer enumerated and restarted in the same
+      action. Measured cause: the 2026-08-30 rotation of the Infisical
+      operator-k8s org-admin client secret, taken on an internal scope finding
+      with no claim the value had left the machine, restarted the three
+      application Deployments but not the Infisical operator itself and froze
+      managed secret sync cluster-wide for five days. Reads are never gated and
+      are not allowlisted -- every configured shape names only mutating
+      subcommands, so get/describe/list, -o name, get-secret-value, gh secret
+      list and kcadm get match nothing; kubectl rollout restart is outside the
+      vocabulary deliberately, because it is the consumer-restart half of the
+      remedy the ruling requires. Registered AFTER
+      pre_tool_use_pr_ownership_guard.sh on the same matcher, which never
+      inspects a credential shape, so the two never contend for the same call.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      # BORROWED BIT, recorded rather than left for a reader to infer. This
+      # gate_call names a bit whose own script (pre_tool_use_authorization_shim.sh)
+      # is on disk and UNREGISTERED under the OMN-13244 baseline, and no other
+      # registered script gates on it, so `onex hooks disable
+      # PRE_TOOL_AUTHORIZATION_SHIM` disables exactly this guard and nothing
+      # else that is live. It is the faithful borrow rather than an arbitrary
+      # one: the namesake is this plugin's PreToolUse AUTHORIZATION gate, and
+      # this guard refuses an action for want of an authorization record.
+      #
+      # A dedicated bit is unavailable: EnumHookBit lives in omnibase_core, all
+      # 60 default-mask ordinals are allocated, 60-62 are the disabled-by-default
+      # trio, and knowledge-base-internal reference/hook-bitmask-bit-governance.md
+      # rule 7 forbids ordinal 63 (the sign bit of a signed 64-bit integer)
+      # outright. Same constraint, same resolution
+      # pre_tool_use_pr_ownership_guard.sh recorded for BASH_GUARD and
+      # pre_tool_use_ticket_creation_gate.sh recorded for LINEAR_DONE_VERIFY.
+      #
+      # BASH_GUARD was NOT a candidate even though this is a Bash-matcher guard:
+      # pre_tool_use_pr_ownership_guard.sh already borrows it, and putting two
+      # independent controls behind one switch means disabling either one
+      # silently disables both.
+      #
+      # The borrow is only safe while the namesake stays unregistered, so
+      # tests/hooks/test_credential_rotation_guard.py pins that: re-registering
+      # pre_tool_use_authorization_shim.sh turns the suite red instead.
+      gate_call: "PRE_TOOL_AUTHORIZATION_SHIM"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "aws secretsmanager rotate-secret --secret-id hook-inventory-canary"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "ROTATION-CONSENT"
+        stdout_absent: []
+
   - script: "pre_tool_use_agent_model_guard.sh"
     event: "PreToolUse"
     matcher: "^(Workflow|Agent)$"
-    order: 4
+    order: 5
     ticket: "OMN-17499"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -334,7 +407,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 5
+    order: 6
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -363,7 +436,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 6
+    order: 7
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -394,7 +467,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 7
+    order: 8
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
