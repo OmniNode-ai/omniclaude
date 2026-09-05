@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-17958",
+  "status": "PASS",
+  "run_timestamp": "2026-09-05T14:24:02Z",
+  "summary": "PASS: the omniclaude hook test suite no longer delivers real notifications to a live Slack channel. On 2026-09-05T13:48:28-30Z a tests/hooks run posted twelve genuine HARD_BLOCK alerts into #omninode-notifications (C08PRL6BRQE) — the six test_main_hard_blocks_* fixtures in tests/hooks/test_bash_guard.py, each twice because TestMainIntegrationViapytest re-runs the inherited class, all reading 'Session: unknown' because the fixtures carry no session_id. Those tests call bash_guard.main() in-process and, unlike their SOFT_ALERT siblings, neither cleared os.environ nor patched the notifier, so _slack_configured resolved true from the ambient developer shell's SLACK_BOT_TOKEN/SLACK_CHANNEL_ID and the guard spawned a real delivery thread. blocked_notifier leaked an 'Agent Blocked' message from the same run. Fixed in two independent layers: an autouse fixture in tests/hooks/conftest.py scrubs every outbound-alert credential from os.environ (which subprocess harnesses inherit, so the whole tree is covered), sets a test-only marker and points any residual Slack base URL at an RFC 5737 blackhole; and bash_guard itself refuses delivery under that marker inside _send_slack_alert (the sole delivery function) while recording 'alert suppressed: test mode' on the hook ledger so a suppressed alert stays visible rather than silently dropped. The marker is set by the test harness and by nothing else, and carries no product behaviour. Shipped in omniclaude PR #2108, evidence companion OCC#8282.",
+  "checks": [
+    {
+      "name": "Red first: the regression test fails on origin/dev source",
+      "status": "PASS",
+      "command": "git stash push -- plugins/onex/hooks/lib/bash_guard.py tests/hooks/conftest.py && env -u SLACK_BOT_TOKEN -u SLACK_CHANNEL_ID uv run pytest tests/hooks/test_hook_alert_suppression.py -q  # 11 failed, 3 passed — including all six leaked fixtures recorded attempting delivery"
+    },
+    {
+      "name": "Green: the same test passes with the fix, real developer environment present",
+      "status": "PASS",
+      "command": "uv run pytest tests/hooks/test_hook_alert_suppression.py -q  # 14 passed in 0.36s"
+    },
+    {
+      "name": "The previously-leaking suites now run silently with the real environment",
+      "status": "PASS",
+      "command": "uv run pytest tests/hooks/test_bash_guard.py tests/hooks/test_blocked_notifier.py -q  # 369 passed in 6.99s at 2026-09-05T13:57:35-43Z, SLACK_BOT_TOKEN and SLACK_CHANNEL_ID both set in the ambient shell"
+    },
+    {
+      "name": "Every hook module with a Slack sender is covered and silent",
+      "status": "PASS",
+      "command": "uv run pytest tests/hooks/test_bash_guard.py tests/hooks/test_bash_guard_worktree.py tests/hooks/test_blocked_notifier.py tests/hooks/test_hook_policy.py tests/hooks/test_pre_tool_use_bash_guard_worktree.py tests/hooks/test_hook_alert_suppression.py -q  # 494 passed at 2026-09-05T14:05:07-17Z; the one failure, test_mask_with_worktree_guard_cleared_short_circuits, reproduces identically on clean origin/dev (OMN-14798 / OMN-17257 lineage, unrelated)"
+    },
+    {
+      "name": "Zero new Slack messages after the runs, with the leak burst as positive control",
+      "status": "PASS",
+      "command": "slack_read_channel C08PRL6BRQE oldest=1788612512  # newest message remains the 2026-09-05T13:48:29Z HARD_BLOCK burst; no rows at or after 13:57Z or 14:05Z. The burst itself is the positive control proving the read surfaces rows when they exist."
+    },
+    {
+      "name": "Guard-layer defence holds independently of the harness scrub",
+      "status": "PASS",
+      "command": "uv run pytest tests/hooks/test_hook_alert_suppression.py::TestGuardSuppressesDeliveryInTestMode -q  # credentials are deliberately re-added by a fixture and delivery is still refused, proving the guard does not depend on the environment scrub"
+    },
+    {
+      "name": "Suppressed alerts are visible on the hook ledger",
+      "status": "PASS",
+      "command": "uv run pytest tests/hooks/test_hook_alert_suppression.py::TestSuppressionIsVisibleOnTheHookLedger -q  # asserts 'alert suppressed: test mode', the tier and the command reach $ONEX_HOOK_LOG, and that ledger I/O failure never breaks the hook"
+    },
+    {
+      "name": "Lint, format and types clean; no new mypy errors",
+      "status": "PASS",
+      "command": "uv run ruff format --check && uv run ruff check && uv run mypy plugins/onex/hooks/lib/bash_guard.py --strict  # 9 errors, identical to the origin/dev baseline of 9 — zero added; CI's mypy scope is src/ only"
+    },
+    {
+      "name": "Pre-commit passes on every changed file",
+      "status": "PASS",
+      "command": "pre-commit run --files plugins/onex/hooks/lib/bash_guard.py tests/hooks/conftest.py tests/hooks/test_hook_alert_suppression.py .env.allowlist  # no Failed hooks; ONEX_HOOK_LOG and ONEX_HOOK_TEST_MODE registered in .env.allowlist to satisfy the Env Var Registry gate"
+    },
+    {
+      "name": "No new environment variable carries product behaviour",
+      "status": "PASS",
+      "command": "grep -n ONEX_HOOK_TEST_MODE tests/hooks/conftest.py plugins/onex/hooks/lib/bash_guard.py  # set only by the test harness; read only to suppress delivery; no product code path sets it"
+    }
+  ]
+}

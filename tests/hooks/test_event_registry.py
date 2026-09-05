@@ -876,11 +876,17 @@ class TestEventRegistryIntegration:
         assert TopicBase.PROMPT_SUBMITTED in topic_bases
 
     def test_prompt_submitted_has_transforms(self) -> None:
-        """Verify prompt.submitted has correct transforms configured."""
-        from omniclaude.hooks.event_registry import (
-            EVENT_REGISTRY,
-            transform_for_observability,
-        )
+        """Verify prompt.submitted has correct transforms configured.
+
+        OMN-17209/OMN-17959: the observability rule carried
+        ``transform_for_observability`` (strip_prompt), which kept the 100-char
+        preview OMN-16019 named as the disclosure surface. The daemon registry
+        now declares ``redact_capture`` on this rule, so the contract-resolved
+        transform is what belongs here — asserting the superseded one would
+        pin the disclosure surface back open.
+        """
+        from omniclaude.hooks.capture_redaction import redact_capture
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
         reg = EVENT_REGISTRY["prompt.submitted"]
 
@@ -896,10 +902,11 @@ class TestEventRegistryIntegration:
         assert obs_rule is not None
         assert intel_rule is not None
 
-        # Observability should have transform
-        assert obs_rule.transform == transform_for_observability
+        # Observability carries the contract-resolved capture redaction
+        assert obs_rule.transform is redact_capture
 
-        # Intelligence should be passthrough (None)
+        # Intelligence should be passthrough (None) — the restricted cmd topic
+        # is where the full prompt is allowed to go.
         assert intel_rule.transform is None
 
     def test_session_outcome_fan_out_to_both_cmd_and_evt(self) -> None:
