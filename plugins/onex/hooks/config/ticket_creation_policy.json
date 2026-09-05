@@ -40,6 +40,16 @@
     "  a prefix rule the ticket most tightly bound to a parent would be the one",
     "  admitted as parentless.",
     "",
+    "in_progress_state_names -- the state names/types that mean WORK IN FLIGHT.",
+    "  Rule 5 fires only on a create that names one of these, matched exactly",
+    "  after trimming and lowercasing against 'state', 'stateId', 'status' and",
+    "  'statusType'. 'started' is Linear's state TYPE for the in-progress band,",
+    "  so a create naming the type rather than the state is caught too. A raw",
+    "  uuid is deliberately NOT matched: this guard has no workspace lookup and",
+    "  refusing on an id it cannot resolve would make every id-shaped create",
+    "  unfileable. That is the one fail-OPEN direction in this policy and it is",
+    "  bounded to rule 5.",
+    "",
     "residual_title_terms -- title shapes that read as work spun out of other",
     "  work rather than work bound to a commitment. Matched on word boundaries,",
     "  so 'minor' does not fire on 'minority' and 'nit' does not fire on",
@@ -50,6 +60,12 @@
     "  in a comment thread is how it stays unfixed."
   ],
   "criterion_ids": ["C1", "C2", "C3", "C4", "C5", "C6"],
+  "in_progress_state_names": [
+    "in progress",
+    "in-progress",
+    "inprogress",
+    "started"
+  ],
   "epic_markers": ["issue_class: epic"],
   "residual_title_terms": [
     "follow-up",
