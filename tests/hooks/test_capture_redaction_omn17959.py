@@ -24,6 +24,7 @@ is refused rather than passed through.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -512,3 +513,85 @@ def test_every_daemon_transform_name_is_mapped() -> None:
     assert not unmapped, (
         f"daemon transform names with no omniclaude callable: {unmapped}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 6. OMN-17969 -- the secret scrub must see a value that is not a string
+# ---------------------------------------------------------------------------
+#
+# Mirrors omnimarket's owning fix. `_matches_secret` early-returned None for
+# any non-str value, so a credential nested in a list or a dict under a field
+# the contract declares `capture_verbatim` crossed the seam unchanged and was
+# stamped `raw` -- while the contract says the scrub is "applied ON TOP of
+# every class, including capture_verbatim". The sibling class matcher in the
+# same module already canonicalises a non-str candidate before matching.
+
+# Documentation-reserved host (RFC 2606 `.invalid`) and AWS's own published
+# example key id -- neither resolves to anything and neither is a live value.
+NESTED_URL_SECRET = "postgresql://onex:pgpw2026@db.example.invalid:5432/onex"
+NESTED_AWS_KEY_ID = "AKIA" + "IOSFODNN7EXAMPLE"
+
+NESTED_VERBATIM_SHAPES: list[tuple[str, Any]] = [
+    ("list", ["/repo/omniclaude", NESTED_URL_SECRET]),
+    ("nested_dict", {"env": {"DATABASE_URL": NESTED_URL_SECRET}}),
+    ("dict_with_aws_key_shaped_value", {"profile": "default", "id": NESTED_AWS_KEY_ID}),
+]
+
+
+@pytest.mark.parametrize(
+    ("shape", "value"),
+    NESTED_VERBATIM_SHAPES,
+    ids=[shape for shape, _ in NESTED_VERBATIM_SHAPES],
+)
+def test_secret_nested_under_a_verbatim_field_is_scrubbed(
+    shape: str, value: Any
+) -> None:
+    """A container under a `capture_verbatim` field is not exempt from the scrub."""
+    contract = load_contract()
+    assert contract.topics[TOOL_TOPIC].fields["working_directory"] is (
+        EnumCaptureClass.CAPTURE_VERBATIM
+    ), "fixture must ride a verbatim field or it proves nothing"
+
+    out = redact_capture(
+        {"session_id": "s-1", "tool_name": "Grep", "working_directory": value},
+        topic=TOOL_TOPIC,
+    )
+
+    assert SHA256_FIELD.match(str(out["working_directory"])), (
+        f"{shape}: a nested credential crossed unchanged"
+    )
+    assert out["redaction_state"] == EnumRedactionState.SECRET_DETECTED.value
+    rendered = json.dumps(out, sort_keys=True, default=str)
+    for literal in (NESTED_URL_SECRET, NESTED_AWS_KEY_ID, "pgpw2026"):
+        assert literal not in rendered
+
+
+def test_a_match_anywhere_in_a_container_redacts_the_whole_field() -> None:
+    """Fail-closed: one bad leaf does not get to travel with its clean siblings."""
+    out = redact_capture(
+        {
+            "session_id": "s-1",
+            "tool_name": "Grep",
+            "working_directory": {
+                "cwd": "/repo/omniclaude",
+                "branch": "jonah/omn-17969",
+                "leaked": {"deep": [NESTED_URL_SECRET]},
+            },
+        },
+        topic=TOOL_TOPIC,
+    )
+    rendered = json.dumps(out, sort_keys=True, default=str)
+    assert SHA256_FIELD.match(str(out["working_directory"]))
+    assert "/repo/omniclaude" not in rendered
+    assert "jonah/omn-17969" not in rendered
+
+
+def test_a_benign_container_under_a_verbatim_field_still_crosses_verbatim() -> None:
+    """Positive control: the widened scrub does not degrade into hash-everything."""
+    benign = {"cwd": "/repo/omniclaude", "parts": ["repo", "omniclaude"], "depth": 2}
+    out = redact_capture(
+        {"session_id": "s-1", "tool_name": "Grep", "working_directory": benign},
+        topic=TOOL_TOPIC,
+    )
+    assert out["working_directory"] == benign
+    assert out["redaction_state"] == EnumRedactionState.RAW.value

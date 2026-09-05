@@ -62,7 +62,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -487,12 +487,41 @@ def _state_rank(state: EnumRedactionState) -> int:
     return _STATE_RANK[state.value]
 
 
+def _string_leaves(value: object) -> Iterator[str]:
+    """Every string reachable inside a container, at any depth."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _string_leaves(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from _string_leaves(item)
+
+
+def _scrub_targets(value: object) -> Iterator[str]:
+    """The texts the secret scrub must see for one field's value.
+
+    A string is matched as itself. Anything else is matched BOTH as its
+    canonical JSON form -- so key/value framing a pattern needs is visible
+    even when the framing is structural rather than textual -- and leaf by
+    leaf, so a leaf whose JSON escaping would break a pattern is still seen
+    raw. A hit anywhere redacts the whole field: a container is redacted as a
+    unit because splitting it would publish the clean half of a value the
+    scrub has already refused.
+    """
+    if isinstance(value, str):
+        yield value
+        return
+    yield _canonical(value)
+    yield from _string_leaves(value)
+
+
 def _matches_secret(value: object, contract: RedactionContract) -> str | None:
-    if not isinstance(value, str):
-        return None
-    for name, pattern in contract.secret_patterns:
-        if pattern.search(value):
-            return name
+    for target in _scrub_targets(value):
+        for name, pattern in contract.secret_patterns:
+            if pattern.search(target):
+                return name
     return None
 
 
