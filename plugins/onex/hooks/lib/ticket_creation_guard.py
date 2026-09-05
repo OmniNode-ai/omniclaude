@@ -44,9 +44,16 @@ A create is admitted only when all four hold:
    REST spelling; either satisfies it.
 3. The description carries a binding line, on a line of its own::
 
-       Gate: C3
+       Gate: C9
+       Gate: INV-103
        Gate: OMN-16729 AC-5
        Gate: live-gate defect: kb-doc-gate
+
+   ``C<n>`` and ``INV-<nnn>`` are read from the beta PRD -- section 6's
+   release-criteria table and the front matter's ``invariant-coverage``
+   block respectively -- at the revision the admission policy pins. See that
+   policy's ``$comment`` for why the coverage block and not every ``INV-``
+   token in the document.
 
 4. The title does not read as a residual, follow-up or nit -- unless (3) is a
    live-gate defect.
@@ -160,6 +167,12 @@ _LIVE_GATE_DEFECT: Final[re.Pattern[str]] = re.compile(
 #: ``C3`` -- shape only; membership is checked against the configured set.
 _CRITERION: Final[re.Pattern[str]] = re.compile(r"^C\d+$", re.IGNORECASE)
 
+#: ``INV-103`` -- shape only; membership is checked against the configured set.
+#: Zero-padded to at least three digits because that is the invariant
+#: registry's own spelling, so ``INV-12`` is a typo for ``INV-012`` and is
+#: refused rather than guessed at.
+_INVARIANT: Final[re.Pattern[str]] = re.compile(r"^INV-\d{3,}$", re.IGNORECASE)
+
 #: A binding line, anchored to the start of a line. Leading whitespace is
 #: tolerated (a lane indenting inside a block quote is not the failure mode this
 #: guards against); a list bullet is NOT, because a bullet is how a line ends up
@@ -169,8 +182,23 @@ _GATE_LINE: Final[re.Pattern[str]] = re.compile(
 )
 
 _GATE_LINE_GRAMMAR: Final[str] = (
-    "Gate: <C-id | OMN-<parent> AC-<n> | live-gate defect: <check name>>"
+    "Gate: <C-id | INV-id | OMN-<parent> AC-<n> | live-gate defect: <check name>>"
 )
+
+
+def _render_ids(ids: frozenset[str]) -> str:
+    """Sort ids by their numeric tail so ``C9`` precedes ``C10``.
+
+    Lexical order renders ``C1, C10, C11, ... C2``, which reads as a corrupted
+    set and makes a refusal harder to act on than it needs to be.
+    """
+
+    def key(value: str) -> tuple[str, int]:
+        digits = "".join(c for c in value if c.isdigit())
+        return (value.rstrip("0123456789"), int(digits) if digits else 0)
+
+    return ", ".join(sorted(ids, key=key)) or "(none configured)"
+
 
 #: ``Probe: <command> => <observation>`` -- the executable close probe. Anchored
 #: to a whole line for the same reason ``_GATE_LINE`` is (CLAUDE.md rule 15):
@@ -205,6 +233,7 @@ class Policy:
     """The admission vocabulary, read from config."""
 
     criterion_ids: frozenset[str]
+    invariant_ids: frozenset[str]
     epic_markers: tuple[str, ...]
     residual_title_terms: tuple[str, ...]
     in_progress_state_names: frozenset[str]
@@ -262,8 +291,15 @@ def load_policy(path: Path | None = None) -> Policy:
     for cid in criterion_ids:
         if not _CRITERION.match(cid):
             raise PolicyError(f"{source}: criterion id {cid!r} is not of the form C<n>")
+    invariant_ids = _string_list(raw.get("invariant_ids"), "invariant_ids", source)
+    for inv in invariant_ids:
+        if not _INVARIANT.match(inv):
+            raise PolicyError(
+                f"{source}: invariant id {inv!r} is not of the form INV-<nnn>"
+            )
     return Policy(
         criterion_ids=frozenset(c.upper() for c in criterion_ids),
+        invariant_ids=frozenset(i.upper() for i in invariant_ids),
         epic_markers=tuple(
             m.lower()
             for m in _string_list(raw.get("epic_markers"), "epic_markers", source)
@@ -303,8 +339,8 @@ def _declares_epic(description: str, policy: Policy) -> bool:
 def _binding_kind(description: str, policy: Policy) -> str | None:
     """Classify the strongest binding line in ``description``.
 
-    Returns ``"criterion"``, ``"parent_ac"``, ``"live_gate_defect"``, or
-    ``None`` when no line binds. A body may carry several ``Gate:`` lines (a
+    Returns ``"criterion"``, ``"invariant"``, ``"parent_ac"``,
+    ``"live_gate_defect"``, or ``None`` when no line binds. A body may carry several ``Gate:`` lines (a
     quoted example above the real one, say); a live-gate-defect binding wins,
     because it is the one that carries an exemption and rule 4 must not depend
     on which line happened to come first.
@@ -320,7 +356,9 @@ def _binding_kind(description: str, policy: Policy) -> str | None:
             kinds.add("parent_ac")
         elif _CRITERION.match(binding) and binding.upper() in policy.criterion_ids:
             kinds.add("criterion")
-    for preferred in ("live_gate_defect", "parent_ac", "criterion"):
+        elif _INVARIANT.match(binding) and binding.upper() in policy.invariant_ids:
+            kinds.add("invariant")
+    for preferred in ("live_gate_defect", "parent_ac", "criterion", "invariant"):
         if preferred in kinds:
             return preferred
     return None
@@ -537,7 +575,6 @@ def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
     # Rule 3 -- a binding line.
     binding = _binding_kind(description, policy) if description_readable else None
     if binding is None:
-        criteria = ", ".join(sorted(policy.criterion_ids)) or "(none configured)"
         findings.append(
             Finding(
                 code="missing_gate_line",
@@ -548,11 +585,15 @@ def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
                 ),
                 fix=(
                     f"add a line of its own, unbulleted, reading "
-                    f"'{_GATE_LINE_GRAMMAR}'. The configured criterion ids are "
-                    f"{criteria}. A parent AC reference names an acceptance "
-                    "criterion on the parent issue, e.g. 'Gate: OMN-16729 AC-5'. "
-                    "A live-gate defect names the check that is broken, e.g. "
-                    "'Gate: live-gate defect: kb-doc-gate'"
+                    f"'{_GATE_LINE_GRAMMAR}'. The accepted release-criterion "
+                    f"ids are {_render_ids(policy.criterion_ids)}. The accepted "
+                    f"invariant ids are {_render_ids(policy.invariant_ids)}. "
+                    "Both sets are read from the beta PRD at the revision the "
+                    "admission policy pins, so an id the PRD does not carry is "
+                    "refused on purpose. A parent AC reference names an "
+                    "acceptance criterion on the parent issue, e.g. "
+                    "'Gate: OMN-16729 AC-5'. A live-gate defect names the check "
+                    "that is broken, e.g. 'Gate: live-gate defect: kb-doc-gate'"
                 ),
             )
         )

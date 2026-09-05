@@ -32,6 +32,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -128,6 +129,7 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
         json.dumps(
             {
                 "criterion_ids": ["C1"],
+                "invariant_ids": ["INV-001"],
                 "epic_markers": ["issue_class: epic"],
                 "residual_title_terms": ["nit"],
                 "in_progress_state_names": ["in progress"],
@@ -137,6 +139,7 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
     )
     policy = _GUARD.load_policy(override)
     assert policy.criterion_ids == frozenset({"C1"})
+    assert policy.invariant_ids == frozenset({"INV-001"})
     assert policy.residual_title_terms == ("nit",)
     assert policy.in_progress_state_names == frozenset({"in progress"})
 
@@ -147,13 +150,32 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
         ("{}", "no keys at all"),
         ('{"criterion_ids": []}', "missing epic_markers and residual terms"),
         (
-            '{"criterion_ids": ["C1"], "epic_markers": [], "residual_title_terms": ["nit"]}',
+            '{"criterion_ids": ["C1"], "invariant_ids": ["INV-001"], '
+            '"epic_markers": [], "residual_title_terms": ["nit"]}',
             "an empty epic_markers list makes the epic escape unreachable, "
             "which is a policy change disguised as a blank",
         ),
         (
-            '{"criterion_ids": "C1", "epic_markers": ["e"], "residual_title_terms": ["nit"]}',
+            '{"criterion_ids": "C1", "invariant_ids": ["INV-001"], '
+            '"epic_markers": ["e"], "residual_title_terms": ["nit"]}',
             "criterion_ids is not a list",
+        ),
+        (
+            '{"criterion_ids": ["C1"], "epic_markers": ["e"], '
+            '"residual_title_terms": ["nit"]}',
+            "invariant_ids is absent -- half the vocabulary silently missing "
+            "would refuse every INV binding while the gate reported healthy",
+        ),
+        (
+            '{"criterion_ids": ["C1"], "invariant_ids": ["INV-103", "103"], '
+            '"epic_markers": ["e"], "residual_title_terms": ["nit"]}',
+            "an invariant id that is not of the form INV-<nnn>",
+        ),
+        (
+            '{"criterion_ids": ["C1"], "invariant_ids": ["INV-12"], '
+            '"epic_markers": ["e"], "residual_title_terms": ["nit"]}',
+            "the registry spells invariants zero-padded to three digits, so a "
+            "two-digit id is a typo and is refused rather than guessed at",
         ),
         ("not json at all", "unparseable"),
     ],
@@ -176,6 +198,259 @@ def test_shipped_residual_vocabulary_covers_the_named_terms() -> None:
     terms = set(POLICY.residual_title_terms)
     for expected in ("follow-up", "residual", "nit", "minor", "cleanup", "noted"):
         assert expected in terms, f"{expected!r} missing from the shipped vocabulary"
+
+
+# ---------------------------------------------------------------------------
+# The admission vocabulary is sourced from the beta PRD, not the charter
+# ---------------------------------------------------------------------------
+#
+# The gate shipped bound to C1..C6 from
+# beta/plans/customer-plane-validation-charter-plan.md, because at the time the
+# guard landed the beta PRD existed only on a draft PR and no C-id enumeration
+# was reachable at origin/main. That PR merged
+# (knowledge-base-internal#125 -> main cac690c3), so the citable set is now the
+# PRD's own, and the charter is no longer a source: INV-109 rules the
+# customer-plane validation probes tests rather than ship conditions, so a
+# charter probe id is not a commitment a ticket can bind to.
+#
+# No charter id had to be DROPPED. The PRD's section 6 table spells C1..C27,
+# which covers the six charter spellings; what changed is what each id resolves
+# to, not whether the string is admitted.
+
+
+_PRD_REPO: Final[str] = "OmniNode-ai/knowledge-base-internal"
+_PRD_PATH: Final[str] = "beta/requirements/2026-09-04-beta-prd.md"
+
+#: Section 6 release-criteria table rows: ``| **C9** | ... |``.
+_PRD_CRITERION_ROW: Final[re.Pattern[str]] = re.compile(
+    r"^\|\s*\*\*(C\d+)\*\*\s*\|", re.MULTILINE
+)
+#: The machine-readable coverage block in the PRD front matter.
+_PRD_COVERAGE_BLOCK: Final[re.Pattern[str]] = re.compile(
+    r"<!--\s*invariant-coverage:start\s*-->(?P<body>.*?)<!--\s*invariant-coverage:end\s*-->",
+    re.DOTALL,
+)
+_PRD_COVERAGE_ENTRY: Final[re.Pattern[str]] = re.compile(
+    r"^-\s*(INV-\d+)\s*$", re.MULTILINE
+)
+
+
+def _prd_source() -> dict[str, Any]:
+    """The ``prd_source`` pin shipped alongside the vocabulary."""
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    source = raw.get("prd_source")
+    assert isinstance(source, dict), (
+        f"{_POLICY_JSON} carries no 'prd_source' object. The vocabulary is "
+        "sourced from a document in another repository, so the exact revision "
+        "it was read from has to ship with it -- otherwise 'the ids come from "
+        "the PRD' is a claim no one can check."
+    )
+    return source
+
+
+def _ids_in_prd(text: str) -> tuple[list[str], list[str]]:
+    """Extract the criterion and invariant ids the PRD actually carries.
+
+    Two different surfaces on purpose. The criteria are the rows of the
+    section 6 release table, so a C-id mentioned in prose elsewhere is not
+    admitted by accident. The invariants are the ``invariant-coverage`` block,
+    NOT every ``INV-`` token in the document: the PRD cites deploy- and
+    security-scope invariants by reference while explicitly declining to carry
+    those scopes, and section 9.2 names INV-108 as process-scoped and carried
+    by a different document. Binding a ticket to an id the PRD only mentions
+    would be a binding to a commitment this document does not make.
+    """
+    criteria = _PRD_CRITERION_ROW.findall(text)
+    block = _PRD_COVERAGE_BLOCK.search(text)
+    invariants = _PRD_COVERAGE_ENTRY.findall(block.group("body")) if block else []
+    return criteria, invariants
+
+
+def _kb_checkout() -> Path | None:
+    """A local clone of the PRD's repository, or ``None``.
+
+    Fail-fast on the variable is the omni_home rule for a lane WRITING to that
+    repo. Here the checkout is test input, not a destination, and CI runners
+    for this repo have no clone of a private sibling -- so the absence is a
+    skip with a stated reason, never a silent pass.
+    """
+    raw = os.environ.get("KNOWLEDGE_BASE_INTERNAL_PATH")
+    candidates = [Path(raw)] if raw else []
+    omni_home = os.environ.get("OMNI_HOME")
+    if omni_home:
+        candidates.append(Path(omni_home) / "knowledge-base-internal")
+    for candidate in candidates:
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _prd_at(checkout: Path, revision: str) -> str | None:
+    """``git show <revision>:<path>``, or ``None`` when the revision is absent."""
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{_PRD_PATH}"],
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        timeout=_TIMEOUT_S,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def test_the_shipped_vocabulary_pins_the_revision_it_was_read_from() -> None:
+    source = _prd_source()
+    assert source.get("repo") == _PRD_REPO
+    assert source.get("path") == _PRD_PATH
+    commit = source.get("commit")
+    assert isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit), (
+        f"'prd_source.commit' must be a full 40-character sha, got {commit!r}. "
+        "An abbreviated or absent sha cannot be resolved back to one document "
+        "state, so the drift check below has nothing to compare against."
+    )
+
+
+def test_the_shipped_criterion_ids_are_the_prd_release_criteria() -> None:
+    """C1..C27, contiguous, with no gap and nothing outside the table.
+
+    Offline half of the drift check: it pins the SHAPE of the set on every
+    runner, including the ones with no clone of the PRD's repository.
+    """
+    expected = {f"C{n}" for n in range(1, 28)}
+    assert set(POLICY.criterion_ids) == expected, (
+        "the shipped criterion ids are not the PRD's section 6 table "
+        f"(C1..C27); difference: {set(POLICY.criterion_ids) ^ expected}"
+    )
+
+
+def test_the_shipped_invariant_ids_are_the_prd_coverage_block() -> None:
+    """42 ids, and the five the PRD declines to carry are not among them."""
+    assert len(POLICY.invariant_ids) == 42, (
+        f"expected the PRD's 42-entry invariant-coverage block, got "
+        f"{len(POLICY.invariant_ids)} ids"
+    )
+    for carried in ("INV-012", "INV-103", "INV-109", "INV-113"):
+        assert carried in POLICY.invariant_ids
+    for not_carried, why in (
+        ("INV-108", "process-scoped; section 9.2 says it is carried elsewhere"),
+        ("INV-032", "deploy scope, cited by reference only"),
+        ("INV-071", "deploy scope, cited by reference only"),
+        ("INV-086", "security scope, cited by reference only"),
+    ):
+        assert not_carried not in POLICY.invariant_ids, (
+            f"{not_carried} must not be bindable: {why}"
+        )
+
+
+def test_a_prd_criterion_id_binds() -> None:
+    """The whole point of the repoint: C7..C27 did not exist in the charter."""
+    for cid in ("C7", "C9", "C17", "C27"):
+        assert "missing_gate_line" not in _codes(
+            _create(description=f"Gate: {cid}\n\nbody\n")
+        ), f"Gate: {cid} is a PRD release criterion and must bind"
+
+
+def test_a_prd_invariant_id_binds() -> None:
+    for inv in ("INV-103", "INV-109", "INV-113", "INV-012"):
+        assert "missing_gate_line" not in _codes(
+            _create(description=f"Gate: {inv}\n\nbody\n")
+        ), f"Gate: {inv} is carried by the PRD and must bind"
+
+
+@pytest.mark.parametrize(
+    ("line", "why"),
+    [
+        ("Gate: C28", "one past the end of the PRD table"),
+        ("Gate: C0", "the table starts at C1"),
+        ("Gate: INV-108", "mentioned by the PRD but deliberately not carried"),
+        ("Gate: INV-032", "cited by reference from a scope the PRD does not claim"),
+        ("Gate: INV-999", "not an invariant at all"),
+        ("Gate: INV-12", "not the registry's zero-padded spelling"),
+    ],
+)
+def test_an_id_the_prd_does_not_carry_is_refused(line: str, why: str) -> None:
+    assert "missing_gate_line" in _codes(_create(description=f"{line}\n\nbody\n")), (
+        f"expected a refusal for {why}"
+    )
+
+
+def test_the_charter_spellings_survive_because_the_prd_spells_them_too() -> None:
+    """C1..C6 stay admitted -- what changed is what they resolve to.
+
+    The charter is no longer a source (INV-109), so if the PRD table had
+    started at C7 these six would have been dropped. It does not; the note in
+    the policy records that this is why they stand.
+    """
+    for cid in ("C1", "C2", "C3", "C4", "C5", "C6"):
+        assert cid in POLICY.criterion_ids
+
+
+def test_the_pinned_revision_carries_the_shipped_ids() -> None:
+    """Drift check, against the exact revision the policy names."""
+    checkout = _kb_checkout()
+    if checkout is None:
+        pytest.skip(
+            "no local checkout of "
+            f"{_PRD_REPO}: neither KNOWLEDGE_BASE_INTERNAL_PATH nor "
+            "$OMNI_HOME/knowledge-base-internal resolves to a git clone. The "
+            "PRD lives in a private sibling repository that this repo's CI "
+            "runners do not clone, so the drift check is a local-lane check; "
+            "the offline shape assertions above still run everywhere."
+        )
+    source = _prd_source()
+    commit = source["commit"]
+    text = _prd_at(checkout, commit)
+    if text is None:
+        pytest.skip(
+            f"commit {commit} is not present in {checkout}; run "
+            "'git fetch origin' in that clone to make the pinned revision "
+            "resolvable, then re-run this check."
+        )
+    criteria, invariants = _ids_in_prd(text)
+    assert set(criteria) == set(POLICY.criterion_ids), (
+        f"criterion ids drifted from {_PRD_PATH} at {commit[:8]}: "
+        f"{set(criteria) ^ set(POLICY.criterion_ids)}"
+    )
+    assert set(invariants) == set(POLICY.invariant_ids), (
+        f"invariant ids drifted from {_PRD_PATH} at {commit[:8]}: "
+        f"{set(invariants) ^ set(POLICY.invariant_ids)}"
+    )
+
+
+def test_the_pin_is_still_current_with_the_prd_on_origin_main() -> None:
+    """The PRD moved and the pin did not: bump both in one change.
+
+    Distinct from the check above, which only proves the pin is honest about
+    the revision it names. This one is the reason the pin does not quietly rot
+    into a description of a document state nobody has read for months.
+    """
+    checkout = _kb_checkout()
+    if checkout is None:
+        pytest.skip(
+            f"no local checkout of {_PRD_REPO} (see the pinned-revision check "
+            "for why this is a skip and not a pass)"
+        )
+    text = _prd_at(checkout, "origin/main")
+    if text is None:
+        pytest.skip(
+            f"{checkout} has no origin/main ref carrying {_PRD_PATH}; run "
+            "'git fetch origin' in that clone."
+        )
+    criteria, invariants = _ids_in_prd(text)
+    source = _prd_source()
+    assert set(criteria) == set(POLICY.criterion_ids) and set(invariants) == set(
+        POLICY.invariant_ids
+    ), (
+        f"{_PRD_PATH} at origin/main no longer matches the ids pinned at "
+        f"{source['commit'][:8]}. Criterion delta: "
+        f"{set(criteria) ^ set(POLICY.criterion_ids)}; invariant delta: "
+        f"{set(invariants) ^ set(POLICY.invariant_ids)}. Update "
+        "criterion_ids, invariant_ids and prd_source.commit together -- a "
+        "vocabulary that lags its source admits bindings to commitments the "
+        "document no longer makes, and refuses the ones it does."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +564,8 @@ def test_create_with_no_description_at_all_is_refused() -> None:
     "line",
     [
         "Gate: C1",
+        "Gate: C27",
+        "Gate: INV-103",
         "Gate: OMN-16729 AC-5",
         "Gate: OMN-16106 AC-12",
         "Gate: live-gate defect: kb-doc-gate",
