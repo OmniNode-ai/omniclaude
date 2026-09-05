@@ -640,6 +640,77 @@ def matches_any(command: str, patterns: list[re.Pattern[str]]) -> bool:
     return False
 
 
+#: Environment marker set by the hook test harness itself (never by product
+#: code, never by a user, never by the shell wrapper). Its only job is to make
+#: outbound alert delivery a no-op while the guard's *classification* logic
+#: stays fully exercised.
+#:
+#: This exists because the hook suite calls :func:`main` for real: OMN-17958
+#: found six HARD_BLOCK fixtures (``rm -rf /``, ``mkfs.ext4 /dev/sda``, ...)
+#: delivered twice each into the live #omninode-notifications channel at
+#: 2026-09-05T13:48:28-30Z, because the ambient developer shell exports
+#: ``SLACK_BOT_TOKEN`` and ``SLACK_CHANNEL_ID``.
+#:
+#: Defence in depth, deliberately: ``tests/hooks/conftest.py`` scrubs the
+#: credentials so nothing *can* be delivered, and this marker makes the guard
+#: refuse to deliver even if that scrub is ever removed or bypassed.
+HOOK_TEST_MODE_ENV = "ONEX_HOOK_TEST_MODE"
+
+#: Wording asserted by ``tests/hooks/test_hook_alert_suppression.py``.
+ALERT_SUPPRESSED_LEDGER_MESSAGE = "alert suppressed: test mode"
+
+
+def _in_hook_test_mode() -> bool:
+    """True when the hook test harness has marked this process as a test run."""
+    return os.environ.get(HOOK_TEST_MODE_ENV, "").strip() not in ("", "0", "false")
+
+
+def _hook_ledger_path() -> Path:
+    """Resolve the hook ledger the shell wrappers append to.
+
+    Mirrors ``scripts/onex-paths.sh`` exactly, so the Python guard and its
+    shell wrapper write to the same file: ``ONEX_HOOK_LOG`` when exported,
+    otherwise ``$ONEX_STATE_DIR/logs/hooks.log``, otherwise the
+    ``~/.onex_state`` default that the shell resolver falls back to on fresh
+    installs.
+    """
+    explicit = os.environ.get("ONEX_HOOK_LOG", "").strip()
+    if explicit:
+        return Path(explicit)
+    state_dir = os.environ.get("ONEX_STATE_DIR", "").strip()
+    root = Path(state_dir) if state_dir else Path.home() / ".onex_state"
+    return root / "logs" / "hooks.log"
+
+
+def _log_alert_suppressed(tier: str, command: str, session_id: str) -> None:
+    """Record a suppressed alert on the hook ledger.
+
+    A suppressed alert must stay *visible*. Dropping the notification silently
+    would make "the guard fired but nobody was told" indistinguishable from
+    "the guard never fired" — which is the failure mode this whole ticket is
+    about, just relocated.
+    """
+    stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = (
+        f"[{stamp}] bash_guard: {ALERT_SUPPRESSED_LEDGER_MESSAGE} "
+        f"(tier={tier} session={session_id[:16]} command={command[:200]!r})"
+    )
+    logger.info(
+        "%s (tier=%s session=%s)",
+        ALERT_SUPPRESSED_LEDGER_MESSAGE,
+        tier,
+        session_id[:16],
+    )
+    ledger = _hook_ledger_path()
+    try:
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    except OSError:
+        # Never let ledger I/O affect the hook outcome.
+        logger.debug("could not append suppression line to %s", ledger, exc_info=True)
+
+
 def _send_slack_alert(
     command: str,
     tier: str,
@@ -667,6 +738,13 @@ def _send_slack_alert(
         session_id: Claude Code session identifier (truncated to 16 chars in
             the message for readability).
     """
+    # OMN-17958: the sole delivery function is the single choke point, so the
+    # check lives here rather than at the two call sites — a future caller
+    # cannot reintroduce the leak by forgetting it.
+    if _in_hook_test_mode():
+        _log_alert_suppressed(tier, command, session_id)
+        return
+
     try:
         emoji = ":no_entry:" if tier == "HARD_BLOCK" else ":warning:"
         action = (
