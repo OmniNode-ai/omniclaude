@@ -93,7 +93,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Protocol, cast
 
+from omniclaude.hooks.capture_redaction import redact_capture
 from omniclaude.hooks.schemas import (
     PROMPT_PREVIEW_MAX_LENGTH,
     _sanitize_prompt_preview,
@@ -103,6 +105,27 @@ from omniclaude.hooks.topics import TopicBase
 # Type alias for payload transform functions
 # Transform: dict -> dict (receives payload, returns transformed payload)
 PayloadTransform = Callable[[dict[str, object]], dict[str, object]]
+
+
+class TopicScopedTransform(Protocol):
+    """A transform whose behaviour is declared per target topic (OMN-17959).
+
+    ``redact_capture`` is the first of these: the capture-redaction contract
+    declares a different field policy for each governed topic, so a
+    topic-blind ``dict -> dict`` transform could not select the right one.
+    The keyword name is part of the contract this Protocol pins, not an
+    incidental parameter name.
+    """
+
+    def __call__(
+        self, payload: dict[str, object], *, topic: str
+    ) -> dict[str, object]: ...
+
+
+#: Transforms that take their rule's target topic. ``FanOutRule.apply_transform``
+#: consults this rather than inspecting a signature, so registering a
+#: topic-scoped transform is an explicit act.
+TOPIC_SCOPED_TRANSFORMS: frozenset[object] = frozenset({redact_capture})
 
 
 # =============================================================================
@@ -251,11 +274,16 @@ class FanOutRule:
     """
 
     topic_base: TopicBase
-    transform: PayloadTransform | None = None
+    transform: PayloadTransform | TopicScopedTransform | None = None
     description: str = ""
 
     def apply_transform(self, payload: dict[str, object]) -> dict[str, object]:
         """Apply the transform to the payload.
+
+        A transform registered in ``TOPIC_SCOPED_TRANSFORMS`` is handed this
+        rule's own target topic, because its posture is declared per topic
+        (OMN-17959). Every other transform keeps the plain ``dict -> dict``
+        signature.
 
         Args:
             payload: The original event payload.
@@ -265,7 +293,11 @@ class FanOutRule:
         """
         if self.transform is None:
             return dict(payload)
-        return self.transform(payload)
+        if self.transform in TOPIC_SCOPED_TRANSFORMS:
+            scoped = cast("TopicScopedTransform", self.transform)
+            return scoped(payload, topic=str(self.topic_base.value))
+        plain = cast("PayloadTransform", self.transform)
+        return plain(payload)
 
 
 @dataclass(frozen=True)
@@ -493,15 +525,15 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
                 transform=None,  # Passthrough - full prompt
                 description="Full prompt to intelligence service for analysis",
             ),
-            # Target 2: Observability topic - Sanitized preview
-            # The observability topic receives only:
-            # - prompt_preview: 100-char sanitized preview with secrets redacted
-            # - prompt_length: Original prompt length
-            # This allows metrics and dashboards without storing sensitive data
+            # Target 2: Observability topic - contract-redacted telemetry.
+            # OMN-17209 superseded strip_prompt (transform_for_observability)
+            # on this rule: it kept the 100-char preview that OMN-16019 named
+            # as the disclosure surface. The capture-redaction contract
+            # reduces that preview to a shape and drops the prompt outright.
             FanOutRule(
                 topic_base=TopicBase.PROMPT_SUBMITTED,
-                transform=transform_for_observability,
-                description="Sanitized 100-char preview for observability",
+                transform=redact_capture,
+                description="Contract-redacted prompt telemetry (OMN-17209)",
             ),
         ],
         partition_key_field="session_id",
@@ -513,10 +545,14 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     "tool.executed": EventRegistration(
         event_type="tool.executed",
         fan_out=[
+            # OMN-17209: previously no transform at all. This topic is one of
+            # the two OMN-16979 widens onto the cloud relay, so it crosses the
+            # trust boundary and needs a declared capture posture, not an
+            # omitted one.
             FanOutRule(
                 topic_base=TopicBase.TOOL_EXECUTED,
-                transform=None,  # Passthrough
-                description="Tool execution event for observability",
+                transform=redact_capture,
+                description="Contract-redacted tool telemetry (OMN-17209)",
             ),
         ],
         partition_key_field="session_id",
