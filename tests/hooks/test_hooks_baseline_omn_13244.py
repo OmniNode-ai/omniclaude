@@ -177,6 +177,9 @@ _LANE_LIVENESS_GUARD_COMMAND = (
 _PR_OWNERSHIP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_pr_ownership_guard.sh"
 )
+_CREDENTIAL_ROTATION_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_credential_rotation_guard.sh"
+)
 _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
 )
@@ -272,11 +275,19 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly eight PreToolUse commands are wired: Done-flip guard,
+    # Exactly nine PreToolUse commands are wired: Done-flip guard,
     # ticket-creation admission gate (OMN-17942), worktree guard, PR
-    # lane-ownership guard (OMN-16485), background-agent model guard
-    # (OMN-17499), lane-open recorder, lane-liveness guard, then the overseer
-    # foreground-block guard.
+    # lane-ownership guard (OMN-16485), credential-rotation admission gate
+    # (OMN-17957), background-agent model guard (OMN-17499), lane-open
+    # recorder, lane-liveness guard, then the overseer foreground-block guard.
+    #
+    # The credential-rotation gate's position is behaviour too: it shares the
+    # Bash matcher with the worktree and PR-ownership guards and is registered
+    # LAST of the three. The other two never inspect a credential shape, so the
+    # order is a stated precedence rather than an accident -- the older,
+    # narrower guards keep first refusal on the surfaces they already owned,
+    # and the rotation gate is the only one of the three that pays for a Python
+    # start on a command carrying the credential vocabulary.
     #
     # The model guard's position is behaviour, not taste: it is registered
     # AHEAD of the lane-open recorder so a refused dispatch does not first
@@ -300,6 +311,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _TICKET_CREATION_GATE_COMMAND,
         _WORKTREE_GUARD_COMMAND,
         _PR_OWNERSHIP_GUARD_COMMAND,
+        _CREDENTIAL_ROTATION_GUARD_COMMAND,
         _AGENT_MODEL_GUARD_COMMAND,
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
@@ -307,10 +319,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the ticket-creation admission gate, the worktree canonical-root "
-        "guard, the PR lane-ownership guard, "
+        "guard, the PR lane-ownership guard, the credential-rotation admission "
+        "gate, "
         "the background-agent model guard, the lane-dispatch recorder, the "
         "lane-liveness guard, and the overseer foreground-block guard, and "
-        "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17499 + "
+        "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17957 + "
+        "OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
         "A different or additional command means either the measurement baseline "
         "was re-enabled without an operator decision (OMN-13846) or one of the "
