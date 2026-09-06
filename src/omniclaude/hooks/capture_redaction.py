@@ -475,18 +475,6 @@ def shape_of(value: object) -> JsonDict:
     return shape
 
 
-_STATE_RANK: dict[str, int] = {
-    EnumRedactionState.RAW.value: 0,
-    EnumRedactionState.RESTRICTED.value: 1,
-    EnumRedactionState.REDACTED.value: 2,
-    EnumRedactionState.SECRET_DETECTED.value: 3,
-}
-
-
-def _state_rank(state: EnumRedactionState) -> int:
-    return _STATE_RANK[state.value]
-
-
 def _string_leaves(value: object) -> Iterator[str]:
     """Every string reachable inside a container, at any depth."""
     if isinstance(value, str):
@@ -598,7 +586,24 @@ def redact_capture(
         )
 
     forced = _matched_output_class(payload, contract)
-    state = EnumRedactionState.RAW
+    # OMN-17201: REDACTED is the FLOOR, not the outcome of having removed
+    # something. ``EnumArtifactRedactionState.REDACTED`` is defined in
+    # omnibase_core as "a redaction transform has been applied; the stored
+    # bytes are sanitized", and that is true of every record leaving this
+    # function: each field was resolved against a declared class, an
+    # undeclared one was hashed by the fail-closed default, and the scrub ran
+    # over everything that survived verbatim. ``raw`` means no posture was
+    # applied, so it is not a reachable output here.
+    #
+    # Load-bearing downstream, not cosmetic. The OMN-16979 egress gate
+    # (omnibase_infra node_bus_forwarder_effect) refuses ``raw``
+    # structurally -- it is ArtifactStore's default, so admitting it would
+    # gate nothing -- while the same contract states that once this seam
+    # stamps, the two governed hook topics cross. Both hold only if this
+    # function never stamps ``raw``. It did, and the live tool-executed
+    # payload is entirely capture_verbatim, so 100% of that topic was refused
+    # at the boundary. Mirrors omnimarket's owning copy.
+    state = EnumRedactionState.REDACTED
     result: JsonDict = {}
 
     # Derivations read the SOURCE before it is redacted, and only fill a
@@ -612,7 +617,6 @@ def redact_capture(
     for field, value in list(payload.items()) + list(derived_values.items()):
         if field == contract.redaction_state_field:
             # A producer does not get to declare its own posture.
-            state = max(state, EnumRedactionState.REDACTED, key=_state_rank)
             continue
 
         capture_class = policy.fields.get(field, contract.default_field_class)
@@ -620,15 +624,12 @@ def redact_capture(
             capture_class = EnumCaptureClass.CAPTURE_HASHED
 
         if capture_class is EnumCaptureClass.NEVER_CAPTURE:
-            state = max(state, EnumRedactionState.REDACTED, key=_state_rank)
             continue
         if capture_class is EnumCaptureClass.CAPTURE_HASHED:
             result[field] = hash_value(value)
-            state = max(state, EnumRedactionState.REDACTED, key=_state_rank)
             continue
         if capture_class is EnumCaptureClass.CAPTURE_SHAPE_ONLY:
             result[field] = shape_of(value)
-            state = max(state, EnumRedactionState.REDACTED, key=_state_rank)
             continue
 
         # The verbatim class -- still subject to the scrub.

@@ -272,9 +272,15 @@ def test_secret_scrub_runs_on_top_of_capture_verbatim() -> None:
 
 
 def test_redaction_state_is_always_stamped() -> None:
-    """An unstamped record must not exist -- downstream refuses one."""
+    """An unstamped record must not exist -- downstream refuses one.
+
+    OMN-17201: and neither must a ``raw`` one. The OMN-16979 egress gate
+    refuses that state structurally, so stamping it is equivalent to not
+    stamping at all; REDACTED is the floor for anything this transform has
+    processed.
+    """
     result = redact_capture({"session_id": "s"}, topic=TOOL_TOPIC)
-    assert result["redaction_state"] == EnumRedactionState.RAW.value
+    assert result["redaction_state"] == EnumRedactionState.REDACTED.value
 
     redacted = redact_capture({"session_id": "s", "prompt": "x"}, topic=PROMPT_TOPIC)
     assert redacted["redaction_state"] == EnumRedactionState.REDACTED.value
@@ -594,4 +600,6 @@ def test_a_benign_container_under_a_verbatim_field_still_crosses_verbatim() -> N
         topic=TOOL_TOPIC,
     )
     assert out["working_directory"] == benign
-    assert out["redaction_state"] == EnumRedactionState.RAW.value
+    # OMN-17201: the verbatim value is the assertion here; the state floor is
+    # REDACTED because the transform ran, not because something was removed.
+    assert out["redaction_state"] == EnumRedactionState.REDACTED.value

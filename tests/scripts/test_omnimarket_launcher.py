@@ -3,6 +3,7 @@
 
 """Tests for OMN-10117: session-start.sh must launch the omnimarket runner."""
 
+import sys
 from pathlib import Path
 
 import yaml
@@ -13,8 +14,24 @@ SESSION_END = REPO_ROOT / "plugins/onex/hooks/scripts/session-end.sh"
 COMMON = REPO_ROOT / "plugins/onex/hooks/scripts/common.sh"
 EVENT_REGISTRY_PATH = REPO_ROOT / "plugins/onex/lib/event_registry/omniclaude.yaml"
 
-# Transforms allowed in TRANSFORM_REGISTRY (omnimarket event_registry.py)
-_KNOWN_TRANSFORMS = {"passthrough", "strip_prompt", "strip_body"}
+
+def _known_transforms() -> set[str]:
+    """The daemon transform names this repo knows, read from the one map that owns them.
+
+    OMN-17201: this was a hardcoded literal, and it went stale the moment
+    OMN-17209 added ``redact_capture`` -- so the gate that was supposed to
+    catch an unrecognised transform in the deployed registry instead blocked
+    the recognised one from being declared there. The generator's
+    ``TRANSFORM_NAME_TO_CALLABLE`` is the single place the daemon's names are
+    mapped to this repo's callables; deriving from it means adding a transform
+    is one edit, not two.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "scripts" / "validation"))
+    from generate_event_registry import (  # noqa: PLC0415
+        TRANSFORM_NAME_TO_CALLABLE,
+    )
+
+    return set(TRANSFORM_NAME_TO_CALLABLE)
 
 
 def test_launcher_invokes_omnimarket_node() -> None:
@@ -91,10 +108,11 @@ def test_event_registry_transforms_are_known() -> None:
             continue
         for rule in event_def.get("fan_out", []):
             transform = rule.get("transform")
-            if transform and transform not in _KNOWN_TRANSFORMS:
+            known = _known_transforms()
+            if transform and transform not in known:
                 raise AssertionError(
                     f"Unknown transform '{transform}' for event '{event_type}'. "
-                    f"Must be one of: {sorted(_KNOWN_TRANSFORMS)}"
+                    f"Must be one of: {sorted(known)}"
                 )
 
 

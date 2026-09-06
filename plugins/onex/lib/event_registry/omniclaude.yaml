@@ -62,8 +62,15 @@ events:
         description: "Full prompt to intelligence service for analysis"
       - topic: "onex.evt.omniclaude.prompt-submitted.v1"
         tier: telemetry
-        transform: strip_prompt
-        description: "Sanitized 100-char preview for observability"
+        # OMN-17209: the capture-redaction contract supersedes strip_prompt on
+        # this rule. strip_prompt kept the 100-char preview, which OMN-16019
+        # named as the disclosure surface; the contract reduces it to a shape.
+        # OMN-17201: this file is the registry the RUNNING daemon loads
+        # (ONEX_EMIT_EVENT_REGISTRY -> --event-registry), so until it named the
+        # transform the posture existed only in files that do not run and every
+        # record crossed the emit seam unstamped.
+        transform: redact_capture
+        description: "Contract-redacted prompt telemetry (OMN-17209)"
     partition_key_field: session_id
     required_fields: [prompt_preview, session_id]
 
@@ -74,7 +81,11 @@ events:
     fan_out:
       - topic: "onex.evt.omniclaude.tool-executed.v1"
         tier: telemetry
-        description: "Tool execution event for observability"
+        # OMN-17209: previously no transform at all. This topic is one of the
+        # two OMN-16979 widens onto the cloud relay, so it crosses the trust
+        # boundary and needs a declared capture posture, not an omitted one.
+        transform: redact_capture
+        description: "Contract-redacted tool telemetry (OMN-17209)"
     partition_key_field: session_id
     required_fields: [tool_name, session_id]
 
