@@ -32,3 +32,35 @@
   # type (`pre-commit install --hook-type pre-merge-commit`); listing the
   # stage here is what makes that install do anything.
   stages: [pre-commit, pre-merge-commit]
+
+- id: public-repo-hygiene
+  name: Public-repo hygiene gate — path allowlist + extension-agnostic denylist (OMN-18014)
+  description: >
+    Refuses internal operating detail landing in a public repository: an
+    undeclared top-level directory, an agent-state or evidence tree, a
+    misplaced dated document, a brand asset, an env file, cloud identity, a
+    private address, an operator machine path, a private repository name, and
+    internal-KB prose in a public README. Never Markdown-only — the path and
+    content classes apply to every file type, which is the point.
+    Per-repo permitted roots: .public-repo-hygiene.yaml at the consuming
+    repo's root. Suppressions resolve against a CODEOWNERS-reviewed registry
+    with an expiry; a self-written annotation is not an approval. Five content
+    classes accept no annotation at all. Requires OMNI_HOME to locate the
+    PRIVATE denylist vocabulary, and fails closed without it.
+    See scripts/public_repo_hygiene_gate.py for the full rules.
+  language: script
+  entry: scripts/public_repo_hygiene_gate.py --repo-root .
+  # WHOLE-TREE, not staged-files. This is the whole lesson of OMN-17993: the
+  # omnibase_core local-path check was staged-files-only, so it reported green
+  # on every commit for months while .mcp.json at the tracked ROOT carried an
+  # operator-home clone path -- nobody had staged that file again since it
+  # landed. A gate whose invariant is over the tracked set and whose hook only
+  # inspects the diff reports green over everything that landed before it
+  # existed, which is the OMN-17992 residue exactly.
+  #
+  # Cost, stated rather than discovered: roughly 9 seconds on a 3,200-file
+  # repository. That is the price of the invariant, and it is the right trade
+  # against a gate that cannot see what it is supposed to govern.
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit, pre-merge-commit]

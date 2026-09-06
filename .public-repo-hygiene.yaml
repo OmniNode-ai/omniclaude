@@ -1,0 +1,69 @@
+# Public-repository hygiene gate — this repo's declaration (OMN-18014).
+#
+# Layer (a) of the gate: the TOP-LEVEL PATH ALLOWLIST. Anything tracked at the
+# repository root that is not named below fails. This is the half that refuses
+# .onex/, .onex_state/, .evidence/, drift/, merge-sweep/ and the next junk
+# directory nobody has invented yet — a denylist must anticipate that
+# directory, an allowlist does not.
+#
+# Adopting the gate is one decision per repo: declare the root once, and hold
+# it. Adding an entry here is a decision to publish that directory.
+#
+# DELIBERATELY ABSENT, and they must stay absent: .evidence and .onex_state.
+# Both are tracked in this repo today and both are OMN-17992 wave-A deletion
+# targets (plan section 6.1). Listing them would convert a finding this gate
+# exists to raise into a decision nobody made.
+
+mode: report
+suppression_registry: ".public-repo-hygiene-suppressions.yaml"
+
+allowed_top_level:
+  - ".bandit"
+  - ".claude"
+  - ".claude-plugin"
+  - ".cross-repo-policy.yaml"
+  - ".env.allowlist"
+  - ".env.example"
+  - ".github"
+  - ".gitignore"
+  - ".kb-doc-gate.yaml"
+  - ".markdown-link-check.json"
+  - ".onex_ratchets"
+  - ".pre-commit-config.yaml"
+  - ".pre-commit-hooks"
+  - ".pre-commit-hooks.yaml"
+  - ".public-repo-hygiene.yaml"
+  - ".public-repo-hygiene-suppressions.yaml"
+  - ".ruffignore"
+  - ".secrets.baseline"
+  - ".yamllint.yml"
+  - "app"
+  - "architecture-handshakes"
+  - "CHANGELOG.md"
+  - "claude-providers.json"
+  - "CLAUDE.md"
+  - "config"
+  - "conftest.py"
+  - "consumers"
+  - "contracts"
+  - "deployment"
+  - "docker"
+  - "docker-compose.yml"
+  - "docs"
+  - "examples"
+  - "grafana"
+  - "LICENSE"
+  - "monitoring"
+  - "mypy.ini"
+  - "plugins"
+  - "pyproject.toml"
+  - "pyrightconfig.json"
+  - "README.md"
+  - "schemas"
+  - "scripts"
+  - "SECURITY.md"
+  - "sql"
+  - "src"
+  - "tests"
+  - "uv.lock"
+  - "validation"

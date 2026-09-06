@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Public Repo Hygiene -- thin caller. OMN-18014, epic OMN-17992.
+#
+# omniclaude both SHIPS this gate and is governed by it. A gate whose own
+# repository is exempt is the subtree-scoping failure (root cause 4.4) wearing
+# a different hat.
+#
+# mode: report. This repository carries a large pre-existing residue that the
+# OMN-17992 wave-A cleanup is working through; report mode records every
+# finding with a per-class count and exits 0, so the gate lands without
+# blocking unrelated PRs. It flips to enforce when the residue is FIXED --
+# never by moving the residue into an allowlist, which is the recurrence
+# mechanism this programme exists to remove.
+#
+# The reusable workflow and the validator live in this repo and are pinned by
+# the caller's `uses:` SHA (see the reusable workflow's header). Within
+# omniclaude itself the reusable resolves to the PR's own commit, which is
+# what makes a change to the gate testable in the PR that makes it.
+
+name: Public Repo Hygiene
+
+on:
+  pull_request:
+    branches: [dev]
+
+jobs:
+  public-repo-hygiene:
+    uses: ./.github/workflows/public-repo-hygiene-reusable.yml
+    with:
+      mode: report
+    secrets: inherit
