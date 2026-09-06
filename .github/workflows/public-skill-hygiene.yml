@@ -3,7 +3,8 @@
 
 name: Public Skill Hygiene
 
-# OMN-14105: plugins/onex/skills/ is published/public. aislop_sweep
+# OMN-14105 / OMN-17993: this repository is public.
+# plugins/onex/skills/ is published/public. aislop_sweep
 # intentionally tolerates OmniNode-internal operating detail there (ticket
 # refs, omni_home paths, # local-path-ok escapes) because it exists to keep
 # our own dev loop clean, not to gate what an outside reader sees. This is a
@@ -11,21 +12,14 @@ name: Public Skill Hygiene
 # specific paths, and internal doc citations do not belong in a skill a
 # stranger might read. Detect-only, no auto-fix.
 
+# OMN-17993: NO paths: filter. The gate is a whole-tree invariant over the
+# tracked set; a paths: filter scoped to plugins/onex/skills/ is exactly how it
+# reported green over every HIGH public-exposure finding in this repository.
 on:
   push:
     branches: [main, 'hotfix/**']
-    paths:
-      - 'plugins/onex/skills/**'
-      - 'scripts/check_public_skill_hygiene.py'
-      - 'scripts/public_skill_hygiene_allowlist.yaml'
-      - '.github/workflows/public-skill-hygiene.yml'
   pull_request:
     branches: [main, dev]
-    paths:
-      - 'plugins/onex/skills/**'
-      - 'scripts/check_public_skill_hygiene.py'
-      - 'scripts/public_skill_hygiene_allowlist.yaml'
-      - '.github/workflows/public-skill-hygiene.yml'
   merge_group:
 
 permissions:
@@ -47,10 +41,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # The scanned surface is `git ls-files`; a partial checkout would
+          # shrink it silently.
+          fetch-depth: 1
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Scan plugins/onex/skills/ for public-exposure hygiene violations
+      - name: Scan the tracked tree for public-exposure hygiene violations
         working-directory: ${{ github.workspace }}
         run: uv run --with pyyaml python3 scripts/check_public_skill_hygiene.py

@@ -5,7 +5,14 @@
 # ban-hardcoded-runner-ip.yml
 #
 # CI gate: reject PRs that introduce literal 192.168.86.201 (or variant  # onex-allow-internal-ip
-# "\.201") references inside .github/workflows/**/*.yml files.
+# "\.201") references inside the scanned path set.
+#
+# Scanned paths (OMN-17993): .github/workflows/** AND tests/**.
+# Until OMN-17993 this gate scanned workflow files only. omnibase_compat — a
+# repo that ships this very workflow — carried the exact banned literal as a
+# fixture value in tests/unit/contracts/delegation/, and the gate reported
+# green over it. Every repo that inherited this workflow had the same blind
+# spot. A gate scoped to a subtree reports green over the rest of the tree.
 #
 # Runner routing must be config/variable-driven (vars.OMNI_TRUSTED_CI_RUNS_ON_JSON).
 # Direct IP literals in workflow files create non-portable, incident-fragile
@@ -38,6 +45,7 @@ on:
     branches: [main, dev]
     paths:
       - '.github/workflows/**'
+      - 'tests/**'
 
 jobs:
   occ-preflight:
@@ -68,28 +76,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reject hardcoded runner IP literals in workflow files
+      - name: Reject hardcoded runner IP literals in scanned paths
         shell: bash
+        env:
+          # OMN-17993: the scanned path set. Workflow files were the original
+          # scope; tests/ was the blind spot that carried the live CRITICAL.
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
           VIOLATIONS=""
           VIOLATION_COUNT=0
 
-          # Scan only changed workflow files on PRs; full scan otherwise
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            WORKFLOW_FILES=$(git diff --name-only origin/main...HEAD -- '.github/workflows/*.yml' '.github/workflows/**/*.yml' 2>/dev/null || true)
+          # Scan only changed files in the scanned path set on PRs; full scan
+          # otherwise.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            SCAN_FILES=$(git diff --name-only origin/main...HEAD \
+              -- '.github/workflows/*.yml' '.github/workflows/**/*.yml' \
+                 '.github/workflows/*.yaml' '.github/workflows/**/*.yaml' \
+                 'tests/**' 2>/dev/null || true)
           else
-            WORKFLOW_FILES=$(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null || true)
+            SCAN_FILES=$( { find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null || true; \
+                            find tests -type f 2>/dev/null || true; } )
           fi
 
-          if [ -z "$WORKFLOW_FILES" ]; then
-            echo "No workflow files to check."
+          if [ -z "$SCAN_FILES" ]; then
+            echo "No files in the scanned path set (.github/workflows/**, tests/**)."
             exit 0
           fi
 
           while IFS= read -r wf; do
             [ -f "$wf" ] || continue
+            # Binary files produce no useful match; grep -I skips them.
 
             # Check for literal 192.168.86.201 — skip lines with allow annotation  # onex-allow-internal-ip
             while IFS= read -r line; do
@@ -101,16 +119,17 @@ jobs:
               fi
               VIOLATIONS="${VIOLATIONS}  ${wf}:${LINE_NUM}: ${LINE_CONTENT}"$'\n'
               VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
-            done < <(grep -n "192\.168\.86\.201" "$wf" 2>/dev/null || true)  # onex-allow-internal-ip
+            done < <(grep -In "192\.168\.86\.201" "$wf" 2>/dev/null || true)  # onex-allow-internal-ip
 
-          done <<< "$WORKFLOW_FILES"
+          done <<< "$SCAN_FILES"
 
           if [ "$VIOLATION_COUNT" -gt 0 ]; then
-            echo "::error::Found ${VIOLATION_COUNT} hardcoded runner IP literal(s) in workflow files:"
+            echo "::error::Found ${VIOLATION_COUNT} hardcoded runner IP literal(s) in .github/workflows/** or tests/**:"
             echo ""
             echo "$VIOLATIONS"
             echo ""
             echo "Runner routing must use vars.OMNI_TRUSTED_CI_RUNS_ON_JSON (see OMN-10603)."
+            echo "A test fixture must use a non-routable placeholder, never the real lab address (see OMN-17993)."
             echo "If a comment must reference the IP for documentation, add '# onex-allow-internal-ip' on that line."
             echo ""
             echo "To temporarily disable this gate during a runner incident:"
@@ -119,4 +138,4 @@ jobs:
             exit 1
           fi
 
-          echo "No hardcoded runner IP literals found in workflow files."
+          echo "No hardcoded runner IP literals found in .github/workflows/** or tests/**."
