@@ -360,11 +360,17 @@ repos:
       # auto-fix. Allowlist decided keeps in
       # scripts/public_skill_hygiene_allowlist.yaml or inline with
       # `# public-skill-ok: <reason>`.
+      # OMN-17993: this is a WHOLE-TREE invariant over the tracked set, not a
+      # diff check. The previous 'files:' regex scoped it to plugins/onex/skills/
+      # — 465 of 3,203 tracked files — and every one of this repo's HIGH
+      # public-exposure findings lived outside that subtree, with the gate
+      # reporting green over all of them. always_run keeps a staged change
+      # anywhere in the repo from skipping it.
       - id: check-public-skill-hygiene
-        name: public-skill hygiene gate (OMN-14105)
+        name: public-repo hygiene gate (OMN-14105, widened OMN-17993)
         entry: python3 scripts/check_public_skill_hygiene.py
         language: system
-        files: '^(plugins/onex/skills/|scripts/check_public_skill_hygiene\.py|scripts/public_skill_hygiene_allowlist\.yaml)'
+        always_run: true
         pass_filenames: false
         stages: [pre-commit]
 
