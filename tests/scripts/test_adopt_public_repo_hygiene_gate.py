@@ -205,3 +205,38 @@ def test_the_caller_inherits_secrets_because_the_vocabulary_is_private() -> None
 def test_the_caller_targets_the_repos_own_default_branch() -> None:
     workflow = adopt_mod.render_workflow("somerepo", "main", "abc123")
     assert "branches: [main]" in workflow
+
+
+@pytest.mark.unit
+def test_dot_github_is_seeded_even_when_the_repo_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The script WRITES .github/workflows/public-repo-hygiene.yml.
+
+    Three public repos (omnibot, omnigemini, omnibase) carry no ``.github``
+    directory at all, so seeding the allowlist from the live tree omitted it —
+    and the very first run of the gate then reported the caller workflow the
+    adoption had just written as ``top-level-not-allowed``. A gate whose
+    adoption makes the gate fail is not a finding, it is a self-inflicted
+    wound; in enforce mode it would refuse the commit that installs it.
+
+    ``.github`` therefore belongs in ALWAYS_SEED for exactly the reason the
+    other two entries do: the script creates it, so the tree cannot supply it.
+    """
+    _stub_tree(monkeypatch, ["README.md"])
+    entries = adopt_mod.root_entries("somerepo", "dev")
+    config, _ = adopt_mod.render_config("somerepo", "dev", entries)
+
+    assert '- ".github"' in config
+
+
+@pytest.mark.unit
+def test_seeding_dot_github_does_not_bless_a_withheld_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Positive control: ALWAYS_SEED must never intersect NEVER_SEED.
+
+    Widening the always-seeded set is the exact move that would quietly bless
+    a junk directory, which is the failure this script exists to prevent.
+    """
+    assert not (set(adopt_mod.ALWAYS_SEED) & adopt_mod.NEVER_SEED)

@@ -346,6 +346,17 @@ def parse_restricted_yaml(text: str, origin: str) -> dict[str, object]:
     for lineno, raw in enumerate(text.splitlines(), start=1):
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
+        # `---` (document start) and `...` (document end) are YAML DOCUMENT
+        # MARKERS, not content. Several repos run a `yamlfmt` pre-commit hook
+        # that PREPENDS `---` to every YAML file it touches, so the adoption
+        # script writes a config without one and the hook adds it on the very
+        # first commit. Before this, the gate then died with "unrecognized
+        # top-level line" and exit 2 -- a red check that reads like a verdict
+        # and is actually "the gate did not run". Skipping them changes
+        # nothing else: an unparseable line is still a hard, fail-closed
+        # error (OMN-18016).
+        if raw.strip() in ("---", "..."):
+            continue
         indent = len(raw) - len(raw.lstrip())
         line = raw.strip()
         where = f"{origin}:{lineno}"
@@ -810,10 +821,18 @@ def build_content_patterns(vocab: Vocabulary) -> dict[str, re.Pattern[str]]:
             rf"|{_raw_alternation(vocab.host_nicknames)}",
             re.IGNORECASE,
         ),
+        # The three filesystem prefixes are matched CASE-SENSITIVELY via a
+        # scoped ``(?-i:...)`` group, while the vocabulary fragments keep the
+        # class-wide IGNORECASE. The two macOS home/mounted-volume prefixes
+        # carry fixed capitalisation and the Linux home prefix is lowercase;
+        # matching them case-insensitively turned every REST URL path segment
+        # bearing those words into a NEVER-EXEMPTABLE finding that no
+        # annotation could waive and only a rewrite of correct product code
+        # could clear.
         "machine-path": re.compile(
-            r"/Users/[a-z0-9_.-]+"
-            r"|/Volumes/"  # public-skill-ok: this IS the machine-path detector
-            r"|/home/[a-z0-9_.-]+/"
+            r"(?-i:/Users/)[a-z0-9_.-]+"
+            r"|(?-i:/Volumes/)"  # public-skill-ok: this IS the machine-path detector
+            r"|(?-i:/home/)[a-z0-9_.-]+/"
             rf"|{_raw_alternation(vocab.machine_path_patterns)}",
             re.IGNORECASE,
         ),

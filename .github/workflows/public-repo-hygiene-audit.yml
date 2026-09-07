@@ -76,7 +76,16 @@ jobs:
           owner: ${{ github.repository_owner }}
           permission-contents: read
           permission-metadata: read
-          permission-administration: read
+          # NO `permission-administration: read`. It is needed for exactly one
+          # probe -- reading required_status_checks -- and that probe is off
+          # below via --skip-required-check while required-check registration
+          # is parked (prevention plan section 7.2). The installation does not
+          # grant administration, so requesting it returned 422 "The
+          # permissions requested are not granted to this installation" and the
+          # audit failed on its FIRST step, every day, never reaching its own
+          # positive control. Restore this line in the SAME change that drops
+          # --skip-required-check; the coupling is pinned by
+          # test_audit_token_requests_no_permission_the_installation_lacks.
 
       # POSITIVE CONTROL, and it runs BEFORE the audit on purpose. A zero-drift
       # result is only evidence if the detector can be shown to fire at all --
