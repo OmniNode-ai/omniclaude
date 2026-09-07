@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Daily public-repo hygiene rollout audit. OMN-18016, epic OMN-17992.
+#
+# The gate itself (OMN-18014) runs on a pull request. That leaves three ways
+# for the rollout to decay silently, and this audit is the only thing that
+# sees any of them:
+#
+#   1. A NEW PUBLIC REPOSITORY lands in the org without the gate. Nothing in
+#      the PR path can notice a repository that has no PRs yet. Two repos in
+#      the org today ship with no gate, no LICENSE and no SECURITY.md, which
+#      is the standing proof that repository creation does not carry a
+#      template.
+#   2. A REQUIRED STATUS CHECK is removed. Branch protection is mutable by
+#      anyone with admin, and a context silently dropped leaves a gate that
+#      still runs and no longer blocks. Two repos are worse: they assert
+#      external contexts through a CI-summary umbrella instead, so a context
+#      missing from that constant tuple is unenforced with NO
+#      branch-protection signal that it is missing.
+#   3. A PUBLIC BRANCH IS PUSHED WITH NO PR. The gate runs on the pushed ref
+#      of a pull request; a branch that never opens one is unreviewed public
+#      surface. The first live run of this audit found 286 such branches
+#      across 12 repositories.
+#
+# READ-ONLY. This workflow mutates nothing -- it reads visibility, branch
+# protection, workflow-file presence and branch/PR listings. Flipping a
+# setting it reports is a separate, gated decision.
+#
+# NOT `continue-on-error`, and no `|| true` anywhere in the run block. An
+# errored sweep whose failure is swallowed returns zero rows and reads exactly
+# like a clean bill of health; that reading produced four consecutive
+# confident false zeroes during the trusted-CI re-flip canary. The script
+# checks every API call's exit status and exits 2 on failure, which is a
+# distinct signal from "no drift".
+
+name: Public Repo Hygiene Audit
+
+on:
+  schedule:
+    # 06:20 UTC daily. Off the hour on purpose: the top of the hour is the
+    # busiest scheduling slot on GitHub-hosted runners and a scheduled job
+    # queued there can be delayed by many minutes.
+    - cron: "20 6 * * *"
+  workflow_dispatch:
+    inputs:
+      report_only:
+        description: "Print findings and exit 0 rather than failing the run"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The audit enumerates repositories across the org, which the workflow
+      # GITHUB_TOKEN cannot do beyond this repository. Same app the other
+      # cross-repo workflows here already mint from.
+      - name: Mint org-read token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+          permission-metadata: read
+          permission-administration: read
+
+      # POSITIVE CONTROL, and it runs BEFORE the audit on purpose. A zero-drift
+      # result is only evidence if the detector can be shown to fire at all --
+      # every zero-row result gets a control before the zero is reported as a
+      # finding. This step failing means the audit's verdict is untrustworthy,
+      # not that the org is clean.
+      - name: Positive control — prove the detector fires
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: python3 scripts/audit_public_repo_hygiene_rollout.py --self-test
+
+      - name: Audit the rollout
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPORT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.report_only || 'true' }}
+        run: |
+          set -euo pipefail
+          # --skip-required-check while the required-check registration is
+          # parked on an operator decision (prevention plan section 7.2: a lane
+          # may write the PR that PROPOSES a required check; it does not flip
+          # the setting). Drop the flag in the same change that registers the
+          # contexts, or the audit reports 18 copies of a known open item and
+          # the real drift is lost in it -- exactly the masking that made an
+          # hourly runner-routing audit useless.
+          args="--skip-required-check"
+          if [ "${REPORT_ONLY}" = "true" ]; then
+            args="${args} --report-only"
+          fi
+          python3 scripts/audit_public_repo_hygiene_rollout.py ${args}
