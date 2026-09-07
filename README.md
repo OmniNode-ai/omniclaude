@@ -195,18 +195,15 @@ belongs in an omnimarket node, not in this repo.
 
 ## Documentation
 
-omniclaude keeps no prose documentation of its own. The single home for it is the
-knowledge base — [knowledge-base](https://github.com/OmniNode-ai/knowledge-base) for
-anything public, and
-[knowledge-base-internal](https://github.com/OmniNode-ai/knowledge-base-internal) for
-pages that carry internal hosts, ports, or deployment topology. What stays in this repo
+omniclaude keeps no prose documentation of its own. Its documentation home is the
+[knowledge base](https://github.com/OmniNode-ai/knowledge-base). What stays in this repo
 is this README, `CLAUDE.md`, `CHANGELOG.md`, `SECURITY.md`, `.github/**`, and the
 executable agent configuration under `plugins/**` — never prose.
 
 | I want to... | Go to |
 |---|---|
 | Install the delegate-only plugin (`onex@omninode-tools`, what actually ships today) | [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) |
-| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | [knowledge-base-internal: guides/omniclaude-legacy-plugin-installation.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/guides/omniclaude-legacy-plugin-installation.md) |
+| Configure the legacy internal hooks/agents plugin (`plugins/onex`, not marketplace-distributed as of OMN-14688) | Not part of this repository (OMN-14688) |
 | Understand the hook data flow | [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md) |
 | Understand agent routing | [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/agent-routing-architecture.md) |
 | Know when a skill moves to omnimarket | [knowledge-base: architecture/omniclaude-skill-lifecycle.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/omniclaude-skill-lifecycle.md) |
@@ -214,7 +211,7 @@ executable agent configuration under `plugins/**` — never prose.
 | Add an agent | [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-an-agent.md) |
 | Add a skill | [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) |
 | Write tests for hooks | [knowledge-base: guides/omniclaude-testing-guide.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/omniclaude-testing-guide.md) |
-| Look up Kafka topics | [knowledge-base-internal: reference/onex-kafka-topic-catalog.md](https://github.com/OmniNode-ai/knowledge-base-internal/blob/main/reference/onex-kafka-topic-catalog.md) |
+| Look up Kafka topics | Not part of this repository; topic names are resolved from contracts at runtime, never hardcoded |
 | Read the knowledge base docs index | [knowledge-base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) |
 | Understand CI/CD pipeline | [knowledge-base: reference/omniclaude-ci-cd-standards.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/reference/omniclaude-ci-cd-standards.md) |
 | Report a security vulnerability | [SECURITY.md](SECURITY.md) |
