@@ -38,15 +38,30 @@
 #   for an unresolvable lane / missing-or-mismatched broker / undelivered message,
 #   instead of a silent green no-op.
 #
-# LANE RESOLUTION (OMN-14801 / incident OMN-14800):
+# LANE RESOLUTION (OMN-14801 / incident OMN-14800; corrected OMN-14813, OMN-18012):
 #   The caller passes `lane` (default `dev`). The script resolves it against the
-#   checked-out `config/ci_bus_lanes.yaml` overlay to pick the bus target and to
-#   fail-loud-check the injected `secrets.KAFKA_BOOTSTRAP_SERVERS` against the
-#   lane's declared broker (silent dev->stability repoint guard). `dev` is
-#   declared `from-secret` while a KAFKA_BOOTSTRAP_SERVERS rotation is in flight,
-#   so the injected secret remains the broker; this workflow does NOT remove or
-#   bypass the secret. A caller repo therefore needs a repo-level
-#   `KAFKA_BOOTSTRAP_SERVERS` secret pointed at the DEV broker (never stability).
+#   checked-out `config/ci_bus_lanes.yaml` overlay to pick the bus target and, if
+#   a `KAFKA_BOOTSTRAP_SERVERS` secret is injected anyway, to fail-loud-check it
+#   against the lane's declared broker (the silent dev->stability repoint guard).
+#
+#   TWO STALE ASSERTIONS CORRECTED HERE, both of which read as current fact until
+#   this edit:
+#     1. "`dev` is declared `from-secret` ... a caller repo therefore needs a
+#        repo-level KAFKA_BOOTSTRAP_SERVERS secret." Not true since OMN-14813:
+#        `dev` declares a CONCRETE broker in the committed overlay and the
+#        publisher uses it directly. No caller repo needs that secret; omnibase_infra
+#        run 34150470410 logged "KAFKA_BOOTSTRAP_SERVERS is not injected; publishing
+#        to the overlay-declared broker", which is the intended path.
+#     2. The dev listener being plaintext with SASL unused. Not true since
+#        ~16:40Z on 2026-09-07: OMN-18012 Phase B enabled SASL/SCRAM-SHA-256 on
+#        it. The overlay now DECLARES `security_protocol: SASL_PLAINTEXT` /
+#        `sasl_mechanism: SCRAM-SHA-256` and omnimarket's publisher reads the
+#        protocol from there. Before that fix the publisher inferred SASL_SSL from
+#        the mere presence of credentials and every mint died in an SSL handshake
+#        against a listener with no TLS.
+#
+#   What a caller repo needs today: `secrets: inherit` so KAFKA_SASL_USERNAME and
+#   KAFKA_SASL_PASSWORD reach the publish step. NOT a broker secret.
 #
 # Usage in caller repos:
 #   jobs:
@@ -89,8 +104,10 @@ on:
         required: false
         # re-pin to `main` after OMN-14801 promotes to omnimarket main (follow-up OMN-14812)
         default: dev
-    # Secrets (KAFKA_BOOTSTRAP_SERVERS, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD)
-    # are passed by the caller via `secrets: inherit`.
+    # Secrets are passed by the caller via `secrets: inherit`. The ones that
+    # matter are KAFKA_SASL_USERNAME / KAFKA_SASL_PASSWORD (the declared SASL
+    # lane's credentials, OMN-18012). KAFKA_BOOTSTRAP_SERVERS is legacy and
+    # normally unset — the broker is committed config (OMN-14813).
 
 permissions:
   contents: read
@@ -221,10 +238,18 @@ jobs:
         # All potentially attacker-controlled inputs (branch name, PR title) are
         # passed through environment variables to prevent shell injection.
         #
-        # KAFKA_BOOTSTRAP_SERVERS comes from the caller's repo secret (the dev-lane
-        # broker; `dev` is `from-secret` in the overlay). On a fork/cloud runner it
-        # is absent and the publisher skips gracefully; on the trusted runner it is
-        # required and a miss fails loud (OMN-14451/OMN-14801).
+        # KAFKA_BOOTSTRAP_SERVERS is normally ABSENT (OMN-14813: `dev` declares a
+        # concrete broker in the committed overlay, so the publisher resolves it
+        # from config rather than a secret). It is left wired only so that a caller
+        # repo that still holds the legacy secret gets the fail-loud drift check
+        # rather than a silent divergence.
+        #
+        # KAFKA_SASL_{USERNAME,PASSWORD} are the credentials for the lane's
+        # DECLARED transport (SASL_PLAINTEXT / SCRAM-SHA-256 since OMN-18012 Phase
+        # B). They are credentials, not a broker address: the publisher never
+        # infers the protocol from their presence — it reads it from the overlay.
+        # On a fork/cloud runner they are absent and the publisher skips before
+        # building a producer.
         env:
           KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
           KAFKA_SASL_USERNAME: ${{ secrets.KAFKA_SASL_USERNAME }}
