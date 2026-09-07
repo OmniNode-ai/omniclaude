@@ -68,8 +68,15 @@ NEVER_SEED: frozenset[str] = frozenset(
 )
 
 # Entries the gate creates, so they must be permitted even though they are not
-# in the tree yet.
+# in the tree yet. ``.github`` is here for the same reason the other two are:
+# this script WRITES .github/workflows/public-repo-hygiene.yml, and three
+# public repos (omnibot, omnigemini, omnibase) carry no ``.github`` directory
+# at all -- so a tree-seeded allowlist omitted it and the gate's first run
+# reported the caller workflow the adoption had just written as
+# ``top-level-not-allowed``. In enforce mode that gate would refuse the commit
+# that installs it.
 ALWAYS_SEED: tuple[str, ...] = (
+    ".github",
     ".public-repo-hygiene.yaml",
     ".public-repo-hygiene-suppressions.yaml",
 )
