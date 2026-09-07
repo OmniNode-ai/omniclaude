@@ -228,3 +228,88 @@ def test_umbrella_repos_are_exempt_from_the_required_check_class(
         )
         findings = _run_audit(monkeypatch, responses)
         assert findings == [], f"{repo}: {findings}"
+
+
+# --------------------------------------------------------------------------
+# The audit workflow's minted token (OMN-18016, third rollout defect)
+# --------------------------------------------------------------------------
+#
+# The audit ran daily and FAILED daily, on its very first step, with a 422
+# "The permissions requested are not granted to this installation." A daily
+# audit that never completes is not a mechanism — it is a red check nobody
+# reads, which is the same failure mode as a gate reporting green over an
+# unscanned path.
+#
+# The cause is a COUPLING, so that is what these two tests pin rather than the
+# literal permission list. `administration: read` is needed for exactly one
+# probe: reading `required_status_checks` on a protected branch. That probe is
+# switched off today by `--skip-required-check`, because required-check
+# registration is parked on an operator decision (prevention plan section 7.2).
+# So the workflow must not request the permission today, and MUST request it in
+# the same change that drops the flag.
+#
+# Dropping the flag without restoring the permission would not read as a
+# missing permission: `_required_contexts` would raise AuditError on the 403,
+# so the audit fails closed rather than reporting eighteen phantom rows. These
+# tests exist so the failure never has to be diagnosed from CI a second time.
+
+AUDIT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "public-repo-hygiene-audit.yml"
+
+_ADMIN_PERMISSION = "permission-administration:"
+_SKIP_REQUIRED_FLAG = "--skip-required-check"
+
+
+def _audit_workflow_text() -> str:
+    assert AUDIT_WORKFLOW.is_file(), f"{AUDIT_WORKFLOW} is missing"
+    return AUDIT_WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_audit_token_requests_no_permission_the_installation_lacks() -> None:
+    """RED before the fix: the workflow asked for `administration: read`.
+
+    The app installation does not grant it, so `create-github-app-token`
+    returned 422 and the audit never reached its own positive control.
+    """
+    text = _audit_workflow_text()
+    requests_admin = any(
+        line.strip().startswith(_ADMIN_PERMISSION) for line in text.splitlines()
+    )
+    runs_the_required_check_probe = _SKIP_REQUIRED_FLAG not in text
+
+    assert requests_admin == runs_the_required_check_probe, (
+        "the audit workflow must request `administration: read` if and only if "
+        "it actually runs the required_status_checks probe. It currently "
+        f"requests it: {requests_admin}; it runs the probe: "
+        f"{runs_the_required_check_probe}. Requesting a permission the "
+        "installation does not grant fails the token step with a 422 and the "
+        "audit never runs; dropping the permission while the probe is live "
+        "makes every repo raise AuditError on a 403."
+    )
+
+
+def test_the_probe_this_permission_exists_for_still_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Positive control for the test above.
+
+    Narrowing a token is one careless edit away from narrowing it below what a
+    live probe needs. If that ever happens, the audit must ERROR, never report
+    a clean org — so pin that a permission-denied protection read is an
+    AuditError and not a `None` that reads as "carries no branch protection".
+    """
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _stub(
+            {},
+            _Proc(
+                1,
+                stderr=("gh: Resource not accessible by integration (HTTP 403)"),
+            ),
+        ),
+    )
+
+    with pytest.raises(audit_mod.AuditError) as excinfo:
+        audit_mod._required_contexts("omniclaude", "dev")
+
+    assert "403" in str(excinfo.value)
