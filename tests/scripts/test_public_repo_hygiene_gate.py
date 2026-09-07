@@ -604,3 +604,43 @@ def test_vocabulary_missing_a_required_class_is_a_refusal(tmp_path: Path) -> Non
     root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
     with pytest.raises(gate.ConfigError, match="missing required vocabulary"):
         _run(root, bad)
+
+
+@pytest.mark.unit
+def test_a_yaml_document_start_marker_is_not_a_parse_error() -> None:
+    """`---` and `...` are document markers, not content. OMN-18016.
+
+    Several repositories run a `yamlfmt` pre-commit hook that PREPENDS `---`
+    to every YAML file it touches. The adoption script writes a config without
+    one; the hook adds it on the very first commit; the gate then died with
+    `unrecognized top-level line: '---'` and exit 2 -- which surfaces as a red
+    check that reads like a verdict and is actually "the gate did not run".
+
+    Measured on omnimemory, omniintelligence, omnibase_compat and omnidash: in
+    each the adoption commit was rewritten by that hook and every one of those
+    four gate runs failed this way, while omnibase_spi (no such hook) passed.
+
+    A gate that cannot be adopted in a repo that formats its YAML is not a
+    gate. Both markers are skipped, exactly like a blank line or a comment --
+    and nothing else about the fail-closed posture changes: an unparseable
+    line is still exit 2.
+    """
+    parsed = gate.parse_restricted_yaml(
+        '---\nmode: report\nallowed_top_level:\n  - "README.md"\n...\n',
+        "fixture.yaml",
+    )
+
+    assert parsed["mode"] == "report"
+    assert parsed["allowed_top_level"] == ["README.md"]
+
+
+@pytest.mark.unit
+def test_a_genuinely_unparseable_line_is_still_a_hard_error() -> None:
+    """Positive control for the skip above.
+
+    Skipping `---` must not become skipping anything the parser dislikes. If
+    this assertion ever stops holding, the fail-closed parser has become a
+    fail-open one and the previous test is what let it happen.
+    """
+    with pytest.raises(gate.ConfigError):
+        gate.parse_restricted_yaml("mode: report\n@ not yaml at all\n", "fixture.yaml")

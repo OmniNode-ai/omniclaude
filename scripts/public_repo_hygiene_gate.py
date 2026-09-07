@@ -346,6 +346,17 @@ def parse_restricted_yaml(text: str, origin: str) -> dict[str, object]:
     for lineno, raw in enumerate(text.splitlines(), start=1):
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
+        # `---` (document start) and `...` (document end) are YAML DOCUMENT
+        # MARKERS, not content. Several repos run a `yamlfmt` pre-commit hook
+        # that PREPENDS `---` to every YAML file it touches, so the adoption
+        # script writes a config without one and the hook adds it on the very
+        # first commit. Before this, the gate then died with "unrecognized
+        # top-level line" and exit 2 -- a red check that reads like a verdict
+        # and is actually "the gate did not run". Skipping them changes
+        # nothing else: an unparseable line is still a hard, fail-closed
+        # error (OMN-18016).
+        if raw.strip() in ("---", "..."):
+            continue
         indent = len(raw) - len(raw.lstrip())
         line = raw.strip()
         where = f"{origin}:{lineno}"
