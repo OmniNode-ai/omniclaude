@@ -821,10 +821,18 @@ def build_content_patterns(vocab: Vocabulary) -> dict[str, re.Pattern[str]]:
             rf"|{_raw_alternation(vocab.host_nicknames)}",
             re.IGNORECASE,
         ),
+        # The three filesystem prefixes are matched CASE-SENSITIVELY via a
+        # scoped ``(?-i:...)`` group, while the vocabulary fragments keep the
+        # class-wide IGNORECASE. The two macOS home/mounted-volume prefixes
+        # carry fixed capitalisation and the Linux home prefix is lowercase;
+        # matching them case-insensitively turned every REST URL path segment
+        # bearing those words into a NEVER-EXEMPTABLE finding that no
+        # annotation could waive and only a rewrite of correct product code
+        # could clear.
         "machine-path": re.compile(
-            r"/Users/[a-z0-9_.-]+"
-            r"|/Volumes/"  # public-skill-ok: this IS the machine-path detector
-            r"|/home/[a-z0-9_.-]+/"
+            r"(?-i:/Users/)[a-z0-9_.-]+"
+            r"|(?-i:/Volumes/)"  # public-skill-ok: this IS the machine-path detector
+            r"|(?-i:/home/)[a-z0-9_.-]+/"
             rf"|{_raw_alternation(vocab.machine_path_patterns)}",
             re.IGNORECASE,
         ),

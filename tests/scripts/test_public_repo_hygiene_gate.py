@@ -270,6 +270,58 @@ def test_bare_ticket_id_is_not_a_violation(tmp_path: Path, vocab: Path) -> None:
     assert code == 0, [f"{f.path}:{f.class_name}:{f.snippet}" for f in blocking]
 
 
+def test_rest_url_path_segments_are_not_machine_paths(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """``machine-path`` is NEVER-EXEMPTABLE, so a false positive in it cannot
+    be waived — it can only be fixed by rewriting correct product code.
+
+    The macOS home and mounted-volume prefixes are case-SENSITIVE in reality,
+    as is the lowercase Linux home prefix. Compiling the whole class with
+    IGNORECASE made every lowercase REST path segment bearing those words a
+    never-exemptable finding. Measured live 2026-09-07 against the adoption
+    branches: 11 such findings across knowledge-base (5), omnidash (4),
+    omnibase_spi (1) and RSD (1) — and in RSD that one false positive was
+    100% of the repo's residue, i.e. the difference between "can flip to
+    enforce" and "can never be green".
+    """
+    root = _make_repo(
+        tmp_path / "r",
+        {
+            "src/client.py": (
+                'get("/api/v1/users/123")\n'
+                'post(f"{prefix}/volumes/create")\n'
+                'delete("/HOME/legacy/x")\n'
+            )
+        },
+    )
+    code, blocking, _ = _run(root, vocab)
+    assert "machine-path" not in _classes(blocking), [
+        f"{f.path}:{f.snippet}" for f in blocking if f.class_name == "machine-path"
+    ]
+    assert code == 0, [f"{f.path}:{f.class_name}:{f.snippet}" for f in blocking]
+
+
+def test_real_machine_path_prefixes_still_fire_after_the_case_fix(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """Positive control for the test above: narrowing the case sensitivity
+    must not disarm the class it narrows. A zero is only evidence when the
+    same probe returns rows against input known to carry them.
+    """
+    root = _make_repo(
+        tmp_path / "r",
+        {
+            "src/a.py": f"p = {OPERATOR_HOME!r}\n",
+            "src/b.py": f"p = {MOUNTED_VOLUME_PATH!r}\n",
+            "src/c.py": f"p = {LINUX_HOME_PATH!r}\n",
+        },
+    )
+    _, blocking, _ = _run(root, vocab)
+    hits = {f.path for f in blocking if f.class_name == "machine-path"}
+    assert hits == {"src/a.py", "src/b.py", "src/c.py"}, hits
+
+
 def test_secret_false_positive_glob_suppresses_only_the_secret_class(
     tmp_path: Path, vocab: Path
 ) -> None:
