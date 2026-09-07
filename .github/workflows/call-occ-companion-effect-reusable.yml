@@ -23,16 +23,33 @@
 # runs the publisher verbatim. omnimarket is PUBLIC, so the caller's default
 # GITHUB_TOKEN can check it out (persist-credentials: false).
 #
-# SECRET-FREE (deliberate delta vs call-occ-autobind-reusable.yml): the dev
-# lane's broker is declared DIRECTLY in the committed omnimarket
-# `config/ci_bus_lanes.yaml` overlay (OMN-14813 — config-not-secret, the
-# OMN-14800 silent-repoint fix). This workflow therefore injects no Kafka
-# bootstrap or SASL values from caller-repo secrets, and caller repos need no
-# Kafka-related secrets at all. Do NOT reintroduce the caller-repo
-# bootstrap-servers secret env here: the publisher prefers the committed
-# overlay value and fail-loud-checks any injected value against it; the
-# dev-lane listener is plaintext, so SASL is unused. The static regression
-# test (tests/workflows/test_call_occ_companion_effect_reusable.py) pins this.
+# BROKER-SECRET-FREE, SASL-CREDENTIALLED (OMN-14813 + OMN-18012). Two halves,
+# and they are NOT the same rule:
+#
+#   * The BROKER stays out of secrets, permanently. It is declared DIRECTLY in
+#     the committed omnimarket `config/ci_bus_lanes.yaml` overlay (OMN-14813 —
+#     config-not-secret, the OMN-14800 silent-repoint fix). Do NOT reintroduce a
+#     caller-repo bootstrap-servers secret env here: an opaque broker secret is
+#     precisely the drift surface that let a dev->stability repoint run green.
+#     The static regression test
+#     (tests/workflows/test_call_occ_companion_effect_reusable.py) pins this.
+#
+#   * The SASL CREDENTIALS are secrets and are now injected. The header this
+#     paragraph replaces asserted "the dev-lane listener is plaintext, so SASL
+#     is unused". That stopped being true at ~16:40Z on 2026-09-07, when
+#     OMN-18012 Phase B enabled SASL/SCRAM-SHA-256 on the dev-lane external
+#     listener. The lane overlay now DECLARES that transport
+#     (`security_protocol: SASL_PLAINTEXT`, `sasl_mechanism: SCRAM-SHA-256` —
+#     authenticated, not encrypted), and omnimarket's publisher reads the
+#     protocol from there instead of inferring TLS from credential presence.
+#     A credential is not a broker address: it cannot be committed, it carries
+#     no lane-routing information, and injecting it re-creates none of the
+#     OMN-14800 surface. Without it the publisher fail-fasts on a declared SASL
+#     lane rather than publishing unauthenticated.
+#
+# Caller repos must therefore pass `secrets: inherit` (the autobind sibling
+# already requires it). A caller that does not will red this non-blocking
+# publisher with a message naming the missing credentials.
 #
 # BROKER / RUNNER BIFURCATION (OMN-14451, identical to the autobind reusable;
 # runner carve-out OMN-16691 / OMN-16682 constraint 8): trusted (non-fork) PR
@@ -65,10 +82,13 @@
 # The grep list and the `exit 1` are pinned by
 # tests/workflows/test_call_occ_companion_effect_reusable.py.
 #
-# Usage in caller repos (no Kafka secrets required):
+# Usage in caller repos (OMN-18012: `secrets: inherit` is now required — the
+# dev lane declares SASL, and only the credentials come from secrets; the broker
+# still does not):
 #   jobs:
 #     occ-companion-effect:
 #       uses: OmniNode-ai/omniclaude/.github/workflows/call-occ-companion-effect-reusable.yml@dev
+#       secrets: inherit
 #       with:
 #         lane: dev
 #
@@ -108,7 +128,9 @@ on:
         # re-pin to `main` after OMN-14941 promotes to omnimarket main
         # (OMN-14812-style follow-up)
         default: dev
-    # No `secrets:` block, deliberately — see SECRET-FREE header note.
+    # No `secrets:` block: KAFKA_SASL_USERNAME / KAFKA_SASL_PASSWORD arrive via
+    # the caller's `secrets: inherit`, exactly as they do for the autobind
+    # sibling. The BROKER is still never a secret (OMN-14813) — see the header.
 
 permissions:
   contents: read
@@ -289,6 +311,13 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           LANE: ${{ inputs.lane }}
           GH_TOKEN: ${{ github.token }}
+          # OMN-18012: the dev lane declares SASL_PLAINTEXT/SCRAM-SHA-256 in
+          # omnimarket config/ci_bus_lanes.yaml. Only the CREDENTIALS come
+          # from the caller's inherited secrets; the broker still comes from
+          # the committed overlay. Absent on a fork runner, where the
+          # publisher skips before it ever builds a producer.
+          KAFKA_SASL_USERNAME: ${{ secrets.KAFKA_SASL_USERNAME }}
+          KAFKA_SASL_PASSWORD: ${{ secrets.KAFKA_SASL_PASSWORD }}
         working-directory: .occ-companion-effect-src
         # AC7 (OMN-15615) — SUCCESS stops being vacuous. The publisher prints
         # exactly one machine-readable verdict marker on every exit-0 path:

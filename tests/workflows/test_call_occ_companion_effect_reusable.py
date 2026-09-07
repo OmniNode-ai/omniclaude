@@ -6,11 +6,18 @@ OMN-14941: the born path for the canonical RSD-3 OCC writer. These tests pin
 the three properties that make this reusable a faithful, secret-free thin
 publisher rather than a drifted copy of the occ-autobind reusable:
 
-* SECRET-FREE — the dev-lane broker comes from omnimarket's committed
+* BROKER-SECRET-FREE — the dev-lane broker comes from omnimarket's committed
   ``config/ci_bus_lanes.yaml`` overlay (OMN-14813). Reintroducing the
   caller-repo Kafka bootstrap-servers secret (the pre-OMN-14813 posture) would
-  silently re-create the OMN-14800 opaque-secret drift surface and force every
-  caller repo to provision a secret it does not need.
+  silently re-create the OMN-14800 opaque-secret drift surface. NARROWED by
+  OMN-18012: this invariant is about the BROKER, never about credentials. The
+  original test asserted the workflow consumed no secret of any kind, on the
+  premise that "the dev listener is plaintext (no SASL)". That premise expired
+  at ~16:40Z on 2026-09-07 when OMN-18012 Phase B enabled SASL/SCRAM-SHA-256 on
+  the dev-lane listener, and the blanket assertion would now pin the workflow
+  into publishing unauthenticated to a broker that refuses it. SASL credentials
+  cannot be committed, carry no lane-routing information, and re-create none of
+  the OMN-14800 surface; the broker-shaped variables remain forbidden.
 * RESOLVABLE PIN — the ``omnimarket-ref`` input defaults to ``dev``, the only
   ref where the companion-effect publisher exists (the E1/OMN-14811 verifier
   failure class was a reusable pinning a ref where the sourced files were a
@@ -23,6 +30,7 @@ publisher rather than a drifted copy of the occ-autobind reusable:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -86,33 +94,56 @@ def test_workflow_is_workflow_call_only() -> None:
     )
 
 
-def test_workflow_is_secret_free() -> None:
-    """OMN-14813: no caller-repo secret may feed the broker resolution."""
+# Every secret expression the workflow is allowed to reference (OMN-18012).
+# Credentials only: a broker address is config, not a secret, and any
+# bootstrap/broker/server-shaped secret re-opens the OMN-14800 drift surface.
+_ALLOWED_SECRET_REFS = frozenset(
+    {"secrets.KAFKA_SASL_USERNAME", "secrets.KAFKA_SASL_PASSWORD"}
+)
+_SECRET_REF_RE = re.compile(r"secrets\.[A-Za-z0-9_]+")
+
+
+def test_workflow_takes_no_broker_secret() -> None:
+    """OMN-14813 (narrowed by OMN-18012): no caller secret may feed the BROKER.
+
+    The broker is committed config. Credentials are not, and since the dev lane
+    declares SASL_PLAINTEXT/SCRAM-SHA-256 the publisher needs them or it
+    fail-fasts. So this pins an allowlist rather than a blanket ban: exactly the
+    two SASL credential secrets, and nothing that could carry an address.
+    """
     workflow = _load_workflow()
     raw = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    # No GitHub secrets expression anywhere in the workflow.
-    assert "${{ secrets." not in raw, (
-        "the reusable must not consume ANY caller secret — the dev-lane "
-        "broker is committed in omnimarket config/ci_bus_lanes.yaml "
-        "(OMN-14813) and the dev listener is plaintext (no SASL)"
+    referenced = set(_SECRET_REF_RE.findall(raw))
+    assert referenced <= _ALLOWED_SECRET_REFS, (
+        "the reusable may consume ONLY the SASL credential secrets "
+        f"{sorted(_ALLOWED_SECRET_REFS)}; found {sorted(referenced)}. The "
+        "dev-lane broker is committed in omnimarket config/ci_bus_lanes.yaml "
+        "(OMN-14813) and must never come from a caller secret — that opaque "
+        "broker value is the OMN-14800 silent-repoint surface."
     )
+    for ref in referenced:
+        name = ref.split(".", 1)[1].lower()
+        assert not any(
+            token in name for token in ("bootstrap", "broker", "server", "lane")
+        ), f"{ref} is broker-shaped; the broker is config, never a secret"
 
-    # workflow_call declares no secrets contract.
+    # workflow_call still declares no secrets contract: the credentials arrive
+    # through the caller's `secrets: inherit`, exactly as they do for the
+    # autobind sibling, so no per-secret plumbing is added to the interface.
     on_block = _on_block(workflow)
     workflow_call = on_block["workflow_call"]
     assert isinstance(workflow_call, dict)
     assert "secrets" not in workflow_call, (
-        "workflow_call must not declare a secrets: block (secret-free by "
-        "construction, OMN-14813)"
+        "workflow_call must not declare a secrets: block — credentials arrive "
+        "via the caller's `secrets: inherit` (OMN-14813 / OMN-18012)"
     )
 
-    # The publish step env carries exactly the PR context + lane + the
-    # citation-resolution token — nothing broker-shaped, and nothing sourced
-    # from `secrets.`. GH_TOKEN is `${{ github.token }}` (OMN-15615): the
-    # caller's own default token, used solely for a PUBLIC-repo pulls read,
-    # under unchanged `permissions: contents: read`. Pinned as an exact set so
-    # a broker-shaped variable cannot be slipped in beside it.
+    # The publish step env is pinned as an exact set so a broker-shaped variable
+    # cannot be slipped in beside the PR context. GH_TOKEN is
+    # `${{ github.token }}` (OMN-15615): the caller's own default token, used
+    # solely for a PUBLIC-repo pulls read, under unchanged
+    # `permissions: contents: read`.
     step = _step(
         _publish_job(workflow),
         "Publish onex.cmd.omnimarket.occ-companion-effect-requested.v1",
@@ -126,8 +157,30 @@ def test_workflow_is_secret_free() -> None:
         "PR_BODY",
         "LANE",
         "GH_TOKEN",
+        "KAFKA_SASL_USERNAME",
+        "KAFKA_SASL_PASSWORD",
     }
     assert "secrets." not in str(env["GH_TOKEN"])
+    assert "KAFKA_BOOTSTRAP_SERVERS" not in env, (
+        "the broker never comes from the caller (OMN-14813)"
+    )
+
+
+def test_publish_step_carries_the_sasl_credentials() -> None:
+    """OMN-18012: the dev lane declares SASL, so the credentials must be wired.
+
+    Without these two env entries the publisher fail-fasts on the declared SASL
+    lane — which is correct behaviour, and exactly why this workflow has to
+    supply them rather than leave the born path permanently red.
+    """
+    step = _step(
+        _publish_job(_load_workflow()),
+        "Publish onex.cmd.omnimarket.occ-companion-effect-requested.v1",
+    )
+    env = step.get("env")
+    assert isinstance(env, dict)
+    assert env["KAFKA_SASL_USERNAME"] == "${{ secrets.KAFKA_SASL_USERNAME }}"
+    assert env["KAFKA_SASL_PASSWORD"] == "${{ secrets.KAFKA_SASL_PASSWORD }}"
 
 
 def test_omnimarket_ref_defaults_to_dev_the_only_resolvable_ref() -> None:
