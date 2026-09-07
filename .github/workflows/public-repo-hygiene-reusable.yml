@@ -1,0 +1,237 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Public-repository hygiene gate (reusable). OMN-18014, epic OMN-17992.
+#
+# ONE gate, fail-closed, for every public OmniNode repository. Consumed by
+# each public repo through `uses:`, exactly as deploy-gate-reusable.yml and
+# kb-doc-gate-reusable.yml already are. The canonical rules live in
+# scripts/public_repo_hygiene_gate.py in THIS repo; the exported
+# `public-repo-hygiene` pre-commit hook runs the same script, so a local
+# verdict and a CI verdict can never diverge.
+#
+# WHAT IT ENFORCES
+#
+# Layer (a): the caller repo's checked-in .public-repo-hygiene.yaml declares
+# its permitted TOP-LEVEL entries. Anything else at the root fails. That is
+# the half that refuses .onex/, .onex_state/, .evidence/, drift/ and the next
+# junk directory nobody has invented yet -- a denylist must anticipate that
+# directory, an allowlist does not.
+#
+# Layer (b): an EXTENSION-AGNOSTIC path and content denylist, applied to every
+# tracked file regardless of suffix. The doc gate reads .md only, and that one
+# line is why every misplaced artifact in the OMN-17992 inventory is a YAML,
+# JSON, CSV, TSV, TXT, PNG or SVG.
+#
+# Usage in caller repos:
+#   jobs:
+#     public-repo-hygiene:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/public-repo-hygiene-reusable.yml@<immutable-sha>
+#       with:
+#         mode: report   # or 'enforce'; the repo's own .public-repo-hygiene.yaml 'mode:' wins
+#       secrets: inherit
+#
+# Surfaced check context in the caller: `public-repo-hygiene / public-repo-hygiene`
+# (caller job id / this job's name).
+#
+# ONE pin, not two: the validator checkout defaults to `github.job_workflow_sha`
+# -- the SHA this reusable workflow was resolved at -- so the caller's `uses:`
+# SHA is the single source of truth for both the workflow and the script. Pin
+# to an omniclaude commit on `dev`; `main` is release-synced and does not carry
+# the gate. This is not a style preference: pinning kb-doc-gate to `@main` and
+# to `github.sha` each broke that gate in production, both times silently, and
+# both times as an exit-2 that read like a verdict.
+#
+# `secrets: inherit` IS REQUIRED. The denylist vocabulary lives in a PRIVATE
+# repository (it names private repositories and collaborators; publishing it
+# would be the disclosure it protects against), and this job mints an
+# installation token to read it. Without the secrets the token step fails and
+# the gate fails CLOSED -- see the vocabulary step's comment.
+
+name: Public Repo Hygiene (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: >-
+          Fallback mode when the caller repo's .public-repo-hygiene.yaml does
+          not set 'mode' ('report' or 'enforce'). A config-file mode always
+          wins. An unrecognized value is an argparse error (exit 2) inside the
+          validator, not a silent pass -- the gate fails closed.
+        type: string
+        required: false
+        default: report
+      validator_ref:
+        description: >-
+          Optional override for the omniclaude ref used to fetch the validator
+          for external caller repos. Leave unset in normal use: the default is
+          github.job_workflow_sha, already the exact SHA the caller pinned.
+        type: string
+        required: false
+      vocabulary_repo_name:
+        description: >-
+          Name (NOT owner/name) of the PRIVATE repository holding the denylist
+          vocabulary; the owner is always github.repository_owner. Leave unset
+          in normal use -- it resolves from the org Actions variable
+          OMNI_HYGIENE_VOCAB_REPO.
+
+          THE NAME IS NOT WRITTEN HERE, DELIBERATELY. This is a public
+          repository, and `private-repo-name` is one of this gate's own
+          never-exemptable classes. A gate that had to name a private
+          repository in public source to enforce "do not name a private
+          repository in public source" would be refuting itself in its own
+          plumbing. The name lives in an org variable; only the shape of the
+          lookup is public.
+
+          A bare name rather than owner/name because the GitHub Actions
+          expression language has no `split`, and
+          actions/create-github-app-token needs the repository name alone.
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  public-repo-hygiene:
+    name: public-repo-hygiene
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks / dev-base PRs default to ubuntu-latest
+    runs-on: >-
+      ${{
+        ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+         (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v7
+        with:
+          # The scanned surface is the TRACKED set (`git ls-files`), which a
+          # depth-1 checkout still gives in full -- unlike kb-doc-gate this
+          # validator does not diff against a base ref, so fetch-depth: 0 is
+          # not needed. It is a whole-tree invariant by design: a gate that
+          # only inspects the diff reports green over everything that landed
+          # before it existed, which is the OMN-17992 residue exactly.
+          persist-credentials: false
+
+      # The validator lives in omniclaude. When called from another repo,
+      # GITHUB_WORKSPACE holds the CALLER's tree, so pull just the script into
+      # a side path -- mirrors kb-doc-gate-reusable.yml.
+      - name: Fetch hygiene validator (omniclaude canonical source)
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ inputs.validator_ref || github.job_workflow_sha }}
+          path: .omniclaude-public-repo-hygiene
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/public_repo_hygiene_gate.py
+          sparse-checkout-cone-mode: false
+
+      # The vocabulary is PRIVATE on purpose (OMN-18015). Reading it needs an
+      # installation token; the workflow GITHUB_TOKEN cannot reach another
+      # repository, least of all a private one.
+      # Resolve the vocabulary repo name from the org variable, and REFUSE if
+      # it is unset. An empty name would make the checkout below fetch
+      # `owner/` -- a request that fails in a way that reads like a transient
+      # network problem rather than a missing configuration. Name the cause.
+      - name: Resolve the private vocabulary repo
+        id: vocab-repo
+        env:
+          EXPLICIT: ${{ inputs.vocabulary_repo_name }}
+          FROM_VARS: ${{ vars.OMNI_HYGIENE_VOCAB_REPO }}
+        run: |
+          set -euo pipefail
+          resolved="${EXPLICIT:-${FROM_VARS:-}}"
+          if [ -z "${resolved}" ]; then
+            echo "::error::neither the 'vocabulary_repo_name' input nor the org" \
+                 "variable OMNI_HYGIENE_VOCAB_REPO is set, so the PRIVATE" \
+                 "denylist vocabulary cannot be located. The gate refuses" \
+                 "rather than scanning with no vocabulary: an unreachable" \
+                 "denylist returns zero findings and reads exactly like a" \
+                 "clean bill of health. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "name=${resolved}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint token for the private vocabulary repo
+        id: vocab-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.vocab-repo.outputs.name }}
+          permission-contents: read
+
+      # DELIBERATELY UNPINNED, and pinning it would be the defect.
+      #
+      # reusable-checkout-ref-ok: public-repo-hygiene OMN-18015 the vocabulary
+      # carries a live-resolved private-repo visibility cache with a max age;
+      # a pinned SHA freezes that cache and the gate then refuses every caller
+      # as stale, so freshness and pinning are mutually exclusive here.
+      #
+      # The security trade is explicit: this checkout reads DATA (a denylist)
+      # from a PRIVATE first-party repository, never executable code, and the
+      # gate re-validates what it reads -- an undated or stale cache is exit 2,
+      # a malformed file is exit 2. The two things a pin protects against
+      # (executing a moved ref, and silently drifting rules) are covered by
+      # the validator itself.
+      - name: Fetch the private denylist vocabulary
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.vocab-repo.outputs.name }}
+          token: ${{ steps.vocab-token.outputs.token }}
+          path: .public-repo-hygiene-vocabulary
+          persist-credentials: false
+          sparse-checkout: |
+            docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+          sparse-checkout-cone-mode: false
+
+      - name: Run the public-repo hygiene gate
+        env:
+          MODE: ${{ inputs.mode }}
+          SCRIPT_PATH: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
+                || 'scripts/public_repo_hygiene_gate.py' }}
+          VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+        run: |
+          set -euo pipefail
+          # Fail LOUD, not with a bare "python3: can't open file ... Errno 2".
+          # A sparse checkout of a path that does not exist at the requested
+          # ref SUCCEEDS and leaves an empty side path, so a bad ref surfaces
+          # only here, as an exit-2 that reads like a gate verdict but is
+          # actually "the gate never ran". Name the cause explicitly -- this
+          # exact confusion is why kb-doc-gate carries the same guard.
+          if [ ! -f "${SCRIPT_PATH}" ]; then
+            echo "::error::hygiene validator not found at ${SCRIPT_PATH}." \
+                 "The omniclaude ref this workflow was fetched from does not" \
+                 "carry scripts/public_repo_hygiene_gate.py. Pin the caller's" \
+                 "'uses:' to an omniclaude commit that contains the validator" \
+                 "(or pass validator_ref explicitly). THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ ! -f "${VOCAB_PATH}" ]; then
+            echo "::error::the private denylist vocabulary was not fetched to" \
+                 "${VOCAB_PATH}. The gate cannot scan without it and refuses" \
+                 "rather than reporting green -- an unreachable vocabulary" \
+                 "returns zero rows and reads exactly like a clean bill of" \
+                 "health. Check that the app installation covers" \
+                 "the resolved vocabulary repository and that the" \
+                 "caller passed" \
+                 "'secrets: inherit'. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          # Never suppress stderr on a verification sweep, and never `|| true`
+          # a gate: both convert a failure into a confident zero.
+          python3 "${SCRIPT_PATH}" \
+            --repo-root . \
+            --vocabulary "${VOCAB_PATH}" \
+            --mode "${MODE}"
