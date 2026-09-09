@@ -303,6 +303,7 @@ class CheckRunState:
     conclusion: str | None  # success | failure | cancelled | skipped | ... | None
     id: int | None = None  # GitHub check-run id -- monotonically increasing
     started_at: str | None = None  # ISO8601; sorts chronologically as a string
+    head_sha: str | None = None  # the commit this row is a verdict about
 
 
 def _check_run_states(check_runs: list[dict[str, object]]) -> list[CheckRunState]:
@@ -318,6 +319,7 @@ def _check_run_states(check_runs: list[dict[str, object]]) -> list[CheckRunState
         except (TypeError, ValueError):
             run_id = None
         started_at = raw.get("started_at")
+        head_sha = raw.get("head_sha")
         states.append(
             CheckRunState(
                 name=name,
@@ -325,6 +327,7 @@ def _check_run_states(check_runs: list[dict[str, object]]) -> list[CheckRunState
                 conclusion=None if conclusion is None else str(conclusion),
                 id=run_id,
                 started_at=str(started_at) if started_at else None,
+                head_sha=str(head_sha) if head_sha else None,
             )
         )
     return states
@@ -406,15 +409,33 @@ def drop_superseded_skips(rows: list[CheckRunState]) -> list[CheckRunState]:
       PENDING into a stale green, and it never collapses the OMN-16236
       ambiguity rule: filtering happens BEFORE :func:`_select_latest`, which
       still refuses to pick a winner when recency is undeterminable or tied.
+    * A skip on a DIFFERENT head SHA. Supersession is partitioned by
+      ``head_sha`` as well as by name (``rows`` here is already one name's
+      rows). The head is load-bearing, not decoration: a non-skipped row on
+      another commit is a verdict about THAT commit, and letting it clear a
+      ``skipped`` on the head actually being gated would re-open the exact
+      skip-as-pass vector (OMN-15057 / OMN-14854) the strict external bar
+      exists for. Rows carrying no ``head_sha`` share the ``None`` partition,
+      so a payload without head SHAs behaves as it did before this guard;
+      unreachable through the sanctioned caller, which fetches one head's
+      ``commits/{sha}/check-runs``, but that safety rested on convention and
+      is now a property of the function.
     """
 
-    if any(row.status == "completed" and row.conclusion != "skipped" for row in rows):
-        return [
-            row
-            for row in rows
-            if not (row.status == "completed" and row.conclusion == "skipped")
-        ]
-    return rows
+    heads_with_a_verdict = {
+        row.head_sha
+        for row in rows
+        if row.status == "completed" and row.conclusion != "skipped"
+    }
+    return [
+        row
+        for row in rows
+        if not (
+            row.status == "completed"
+            and row.conclusion == "skipped"
+            and row.head_sha in heads_with_a_verdict
+        )
+    ]
 
 
 def _effective_rows(rows: list[CheckRunState]) -> list[CheckRunState]:

@@ -914,3 +914,73 @@ class TestSupersededSkipOnUnchangedHead:
             CheckRunState(name="x", status="completed", conclusion="skipped", id=2),
         ]
         assert drop_superseded_skips(rows) == rows
+
+
+@pytest.mark.unit
+class TestSupersededSkipIsPartitionedByHeadSha:
+    """OMN-18062 follow-up -- the head SHA partitions supersession.
+
+    The original fix keyed :func:`drop_superseded_skips` on the context NAME
+    alone (``rows`` here is already one name's rows, so the name half was
+    implicit). A ``success`` recorded on head A would then clear a ``skipped``
+    recorded on head B, re-opening the skip-as-pass vector (OMN-15057 /
+    OMN-14854) on the head actually being gated. That is unreachable through
+    the sanctioned caller -- it fetches ``commits/{sha}/check-runs`` for ONE
+    head -- but the safety rested on convention. These tests make it a
+    property of the function.
+    """
+
+    HEAD_A = "a" * 40
+    HEAD_B = "b" * 40
+
+    def _rows_on_heads(self, first_head: str, second_head: str) -> tuple[str, list]:
+        target, rows = TestSupersededSkipOnUnchangedHead()._rows("skipped")
+        stamped = [{**row, "head_sha": first_head} for row in rows]
+        stamped[-1] = {**stamped[-1], "head_sha": second_head}
+        return target, stamped
+
+    def test_skip_on_a_different_head_is_not_superseded(self) -> None:
+        """RED: success@headA + skipped@headB must FAIL, not read SUCCESS."""
+        target, rows = self._rows_on_heads(self.HEAD_A, self.HEAD_B)
+        verdict, failures, _pending = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert any(target in f for f in failures)
+
+    def test_same_head_supersession_still_works(self) -> None:
+        """POSITIVE CONTROL: the partition does not break the fix it guards."""
+        _target, rows = self._rows_on_heads(self.HEAD_A, self.HEAD_A)
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS", (failures, pending)
+
+    def test_rows_without_a_head_sha_still_supersede(self) -> None:
+        """POSITIVE CONTROL: rows carrying no ``head_sha`` share the ``None``
+        partition, so a payload without head SHAs behaves exactly as it did
+        before this guard -- the shape every other test in this file uses."""
+        from scripts.ci.ci_summary_gate import CheckRunState
+
+        rows = [
+            CheckRunState(name="x", status="completed", conclusion="success", id=1),
+            CheckRunState(name="x", status="completed", conclusion="skipped", id=2),
+        ]
+        assert [r.conclusion for r in drop_superseded_skips(rows)] == ["success"]
+
+    def test_head_sha_is_carried_off_the_raw_payload(self) -> None:
+        """POSITIVE CONTROL for the plumbing: the field is actually read.
+
+        A partition key the parser never populates would silently degrade to
+        one bucket and the RED case above would pass for the wrong reason.
+        """
+        from scripts.ci.ci_summary_gate import _check_run_states
+
+        states = _check_run_states(
+            [
+                {
+                    "name": "x",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "id": 1,
+                    "head_sha": self.HEAD_A,
+                }
+            ]
+        )
+        assert states[0].head_sha == self.HEAD_A
