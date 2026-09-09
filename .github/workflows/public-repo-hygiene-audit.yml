@@ -65,14 +65,15 @@ jobs:
           persist-credentials: false
 
       # The audit enumerates repositories across the org, which the workflow
-      # GITHUB_TOKEN cannot do beyond this repository. Same app the other
-      # cross-repo workflows here already mint from.
+      # GITHUB_TOKEN cannot do beyond this repository. Use the org-wide
+      # OnexBot app credentials, since this public governance path also runs
+      # in repos that do not receive the selected OCC app secrets.
       - name: Mint org-read token
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
-          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           permission-contents: read
           permission-metadata: read

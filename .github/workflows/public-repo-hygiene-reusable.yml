@@ -164,8 +164,8 @@ jobs:
         id: vocab-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
-          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ steps.vocab-repo.outputs.name }}
           permission-contents: read
