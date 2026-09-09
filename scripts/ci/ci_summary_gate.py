@@ -222,7 +222,7 @@ class JobState:
 
 
 def _job_states(
-    jobs: list[dict],
+    jobs: list[dict[str, object]],
     *,
     run_attempt: int | None = None,
 ) -> list[JobState]:
@@ -244,7 +244,7 @@ def _job_states(
         if not name:
             continue
         try:
-            attempt = int(raw.get("run_attempt") or 1)
+            attempt = int(str(raw.get("run_attempt") or 1))
         except (TypeError, ValueError):
             attempt = 1
         if run_attempt is not None and attempt != run_attempt:
@@ -276,7 +276,7 @@ def _job_states(
 
 
 def dedup_latest(
-    jobs: list[dict],
+    jobs: list[dict[str, object]],
     *,
     run_attempt: int | None = None,
 ) -> dict[str, JobState]:
@@ -305,7 +305,7 @@ class CheckRunState:
     started_at: str | None = None  # ISO8601; sorts chronologically as a string
 
 
-def _check_run_states(check_runs: list[dict]) -> list[CheckRunState]:
+def _check_run_states(check_runs: list[dict[str, object]]) -> list[CheckRunState]:
     states: list[CheckRunState] = []
     for raw in check_runs:
         name = str(raw.get("name") or "")
@@ -314,7 +314,7 @@ def _check_run_states(check_runs: list[dict]) -> list[CheckRunState]:
         conclusion = raw.get("conclusion")
         raw_id = raw.get("id")
         try:
-            run_id = int(raw_id) if raw_id is not None else None
+            run_id = int(str(raw_id)) if raw_id is not None else None
         except (TypeError, ValueError):
             run_id = None
         started_at = raw.get("started_at")
@@ -371,18 +371,70 @@ def _select_latest(rows: list[CheckRunState]) -> CheckRunState | None:
     return None
 
 
+def drop_superseded_skips(rows: list[CheckRunState]) -> list[CheckRunState]:
+    """Drop ``skipped`` rows for a NAME that also carries a non-skipped row.
+
+    OMN-18062. MECHANISM this closes, measured on onex_change_control#8709
+    (2026-09-08): a ``gh pr edit`` of the PR body fires a SECOND
+    ``pull_request`` run of a workflow whose ``types:`` include ``edited``. A
+    job in that run whose own ``if:`` excludes ``edited`` is SKIPPED, and
+    GitHub writes a FRESH check-run with conclusion ``skipped`` onto the same,
+    unchanged head SHA where that very job reported ``success`` 64 seconds
+    earlier. Latest-wins resolution picks the skip,
+    :data:`EXTERNAL_GOOD_CONCLUSIONS` admits only ``success``, and
+    ``CI Summary`` fails closed on a head nothing regressed on. Re-running
+    ``CI Summary`` cannot clear it -- the skip is and stays the newest row for
+    that name -- so only a new head SHA can, and every lane that edits a PR
+    body pays a re-push cycle. This repo is exposed through the same door:
+    eight of its own producers carry ``edited`` in their ``pull_request``
+    ``types:``.
+
+    A ``skipped`` row is evidence about a WORKFLOW RUN -- a job's ``if:`` was
+    false for that run's event -- not about the head. When a non-skipped row
+    for the same name exists on the same head, that row is the verdict about
+    the head and the skip is a re-trigger artifact.
+
+    What this deliberately does NOT relax:
+
+    * ``skipped`` with **no** non-skipped row for that name still stands and
+      still fails closed -- a producer whose ``if:`` was false for the whole
+      life of the head never ran, which is exactly the skip-as-pass vector
+      (OMN-15057 / OMN-14854) the strict external bar exists for.
+    * A ``failure``/``cancelled`` after a ``success`` still wins on recency --
+      a failure IS a verdict about the head.
+    * A still-running row is non-skipped, so a later skip can never suppress
+      PENDING into a stale green, and it never collapses the OMN-16236
+      ambiguity rule: filtering happens BEFORE :func:`_select_latest`, which
+      still refuses to pick a winner when recency is undeterminable or tied.
+    """
+
+    if any(row.status == "completed" and row.conclusion != "skipped" for row in rows):
+        return [
+            row
+            for row in rows
+            if not (row.status == "completed" and row.conclusion == "skipped")
+        ]
+    return rows
+
+
 def _effective_rows(rows: list[CheckRunState]) -> list[CheckRunState]:
     """Collapse ``rows`` for one context NAME to the single latest row when
     recency is determinable across all of them; otherwise return every row
     unchanged so ambiguous/missing recency data stays conservative (all must
-    be good) rather than silently narrowing to a guess (OMN-16236)."""
+    be good) rather than silently narrowing to a guess (OMN-16236).
 
-    latest = _select_latest(rows)
-    return [latest] if latest is not None else rows
+    Re-trigger ``skipped`` rows are removed first (:func:`drop_superseded_skips`,
+    OMN-18062) so a skip minted by a later run of the producer cannot supersede
+    -- or, under the ambiguity rule, be conjoined with -- a real conclusion
+    already recorded for that name on this head."""
+
+    candidates = drop_superseded_skips(rows)
+    latest = _select_latest(candidates)
+    return [latest] if latest is not None else candidates
 
 
 def evaluate_external(
-    check_runs: list[dict] | None,
+    check_runs: list[dict[str, object]] | None,
     *,
     expected: tuple[str, ...] = EXPECTED_EXTERNAL_CONTEXTS,
     all_must_succeed: frozenset[str] = ALL_MUST_SUCCEED_EXTERNAL_NAMES,
@@ -484,7 +536,7 @@ def combine_verdicts(
 
 
 def evaluate(
-    jobs: list[dict],
+    jobs: list[dict[str, object]],
     *,
     run_attempt: int | None = None,
     self_name: str = SELF_JOB_NAME,
@@ -571,7 +623,7 @@ def _report(
     return "\n".join(lines)
 
 
-def _load_jobs(path: str | None) -> list[dict]:
+def _load_jobs(path: str | None) -> list[dict[str, object]]:
     if path is None or path == "-":
         raw = sys.stdin.read()
     else:
@@ -588,7 +640,7 @@ def _load_jobs(path: str | None) -> list[dict]:
     return jobs
 
 
-def _load_check_runs(path: str) -> list[dict] | None:
+def _load_check_runs(path: str) -> list[dict[str, object]] | None:
     """Load the L4 check-runs payload.
 
     A JSON literal ``null`` means the fetch failed upstream (the caller
