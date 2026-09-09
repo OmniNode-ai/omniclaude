@@ -30,6 +30,7 @@ from scripts.ci.ci_summary_gate import (  # noqa: E402
     SOFT_ALLOWLIST,
     STRICT_SUCCESS_JOBS,
     combine_verdicts,
+    drop_superseded_skips,
     evaluate,
     evaluate_external,
 )
@@ -798,3 +799,118 @@ class TestExternalContextCompleteness:
         assert not phantoms, (
             f"L4-classified name(s) absent from live required contexts: {sorted(phantoms)}"
         )
+
+
+@pytest.mark.unit
+class TestSupersededSkipOnUnchangedHead:
+    """OMN-18062 -- a re-trigger ``skipped`` is not a verdict about the head.
+
+    Live shape being pinned (onex_change_control#8709, 2026-09-08): ``gh pr
+    edit`` fired a second ``guards.yml`` ``pull_request`` run with
+    ``action == "edited"``; ``dep-provenance-gate``'s ``if:`` admits only
+    ["opened","synchronize","reopened","ready_for_review"], so that run SKIPPED
+    it and GitHub wrote a fresh ``skipped`` check-run onto the unchanged head 64
+    seconds after the same job reported ``success``. ``CI Summary`` read the
+    newest row and failed closed; a re-run could not clear it, only a new head.
+
+    This repo is exposed through the same door: eight of its own producers carry
+    ``edited`` in their ``pull_request`` ``types:``.
+
+    Every relaxation is paired with a positive control that must still fail.
+    """
+
+    T0 = "2026-09-08T20:47:00Z"
+    T0_PLUS_64 = "2026-09-08T20:48:04Z"
+
+    def _row(
+        self,
+        name: str,
+        conclusion: str | None,
+        *,
+        status: str = "completed",
+        started_at: str | None = None,
+        run_id: int | None = None,
+    ) -> dict:
+        return {
+            "name": name,
+            "status": status,
+            "conclusion": conclusion,
+            "started_at": started_at or self.T0,
+            "id": run_id if run_id is not None else 1,
+        }
+
+    def _rows(
+        self, second_conclusion: str | None, *, second_status: str = "completed"
+    ) -> tuple[str, list[dict]]:
+        target = EXPECTED_EXTERNAL_CONTEXTS[0]
+        rows = [
+            self._row(name, "success", run_id=i)
+            for i, name in enumerate(EXPECTED_EXTERNAL_CONTEXTS, start=1)
+        ]
+        rows.extend(
+            self._row(name, "success", run_id=500 + i)
+            for i, name in enumerate(sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES))
+        )
+        rows.append(
+            self._row(
+                target,
+                second_conclusion,
+                status=second_status,
+                started_at=self.T0_PLUS_64,
+                run_id=10_000,
+            )
+        )
+        return target, rows
+
+    def test_skip_after_success_on_same_head_is_not_a_regression(self) -> None:
+        """RED CONTROL: success at t0, skipped at t0+64s, same head."""
+        target, rows = self._rows("skipped")
+        verdict, failures, pending = evaluate_external(rows)
+        assert verdict == "SUCCESS", (failures, pending)
+        assert failures == []
+        assert pending == []
+
+    def test_failure_after_success_on_same_head_still_fails(self) -> None:
+        """POSITIVE CONTROL: a real verdict at t0+64s still wins on recency."""
+        target, rows = self._rows("failure")
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert any(target in f for f in failures)
+
+    def test_skipped_with_no_prior_conclusion_still_fails(self) -> None:
+        """POSITIVE CONTROL: a name whose ONLY row is `skipped` fails closed."""
+        target, rows = self._rows("skipped")
+        rows = [
+            r for r in rows if not (r["name"] == target and r["started_at"] == self.T0)
+        ]
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert any(target in f for f in failures)
+
+    def test_in_progress_after_success_is_still_pending(self) -> None:
+        """POSITIVE CONTROL: a live re-run stays PENDING, never stale-green."""
+        target, rows = self._rows(None, second_status="in_progress")
+        verdict, _, pending = evaluate_external(rows)
+        assert verdict == "PENDING"
+        assert any(target in p for p in pending)
+
+    def test_ambiguous_recency_still_conjoins_when_no_skip_is_present(self) -> None:
+        """POSITIVE CONTROL for OMN-16236: filtering does not weaken the
+        all-must-be-good rule when recency is undeterminable."""
+        target, rows = self._rows("failure")
+        for row in rows:
+            row.pop("id", None)
+            row.pop("started_at", None)
+        verdict, failures, _ = evaluate_external(rows)
+        assert verdict == "FAILURE"
+        assert any(target in f for f in failures)
+
+    def test_drop_superseded_skips_is_a_no_op_without_a_real_conclusion(self) -> None:
+        """Skips alone are never dropped -- there is nothing to supersede them."""
+        from scripts.ci.ci_summary_gate import CheckRunState
+
+        rows = [
+            CheckRunState(name="x", status="completed", conclusion="skipped", id=1),
+            CheckRunState(name="x", status="completed", conclusion="skipped", id=2),
+        ]
+        assert drop_superseded_skips(rows) == rows
