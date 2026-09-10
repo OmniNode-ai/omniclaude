@@ -28,17 +28,48 @@
 # that stops being true.
 #
 # ---------------------------------------------------------------------------
-# Scope boundary: this is the RULE, not the INSTANCE
+# Scope boundary: this file was the RULE; OMN-17034 owned the INSTANCE
 # ---------------------------------------------------------------------------
-# OMN-17034 owns the instance — the live `omninode-gateway-forwarder` is
-# attached to the DEV lane network while the hook edge publishes to the
-# STABILITY lane, so no hook event can currently cross to the cloud relay.
-# This file deliberately does NOT silently repoint the publisher to make that
-# symptom disappear: repointing would move hook rows off the lane the .201
-# projection (OMN-16994/16993) reads, which is a behaviour ruling OMN-17034
-# has to make explicitly. What this file changes is that the pairing is now
-# declared and machine-checked, so the mismatch is a check failure with a
-# named cause instead of a zero row count someone has to interpret.
+# OMN-17204 declared the pairing and made a publisher/consumer split a failing
+# check, but deliberately left the lane CHOICE open. The instance defect was
+# real: the live `omninode-gateway-forwarder` was attached to the DEV lane
+# network while the hook edge published to the STABILITY lane, so no hook
+# event could cross to the cloud relay on its own. Repointing the publisher is
+# a behaviour decision, not a declaration cleanup, so this file recorded that
+# it would not make that decision silently — it belonged to OMN-17034. What
+# OMN-17204 shipped is that the mismatch became a check failure with a named
+# cause instead of a zero row count someone had to interpret.
+#
+# ---------------------------------------------------------------------------
+# THE RULING — the operator, 2026-09-10, in session (OMN-17034)
+# ---------------------------------------------------------------------------
+# The local hook producer targets the DEV lane DIRECTLY. `lane` is therefore
+# "dev", and relay.required_network is the dev lane's network. The decision is
+# recorded durably as an OPERATOR-CONSENT row in the fleet coordination
+# ledger (docs/tracking/ROLLING_WORK_LEDGER.md) timestamped
+# 2026-09-10T16:45:39Z, whose approved scope reads in part: "standing ruling:
+# the local hook producer targets the dev lane directly (OMN-17034)".
+#
+# The projection concern the pre-ruling revision of this header raised is now
+# resolved in the direction that FAVOURS the ruling rather than against it.
+# `node_projection_work_events` reads the bare-canonical hook topics on the
+# DEV lane — that is the lane `omninode_internal.work_events` is written from.
+# Measured on the lab host at 2026-09-10T18:17Z: the dev-lane tool-executed topic
+# advanced 599687 -> 599711 while omninode_internal.work_events took real
+# INSERTs over the same window (n_tup_ins 71208 -> 71237) carrying fresh
+# emitted_at values in that minute. Publishing to dev therefore puts hook rows
+# ON the lane the projection already reads, instead of off it.
+#
+# The stability -> dev gateway mirror is RETAINED as a SECONDARY path, not
+# deleted. It is what carried hook rows across while the producer sat on the
+# stability lane, and it went dark from 2026-09-06: the lab dev broker moved
+# to SASL-only (OMN-18012) while the forwarder's dev legs stayed plaintext, so
+# they were refused at handshake while the forwarder still logged "delivered".
+# That leg was repaired on 2026-09-10T18:17Z — the forwarder now authenticates
+# as the dev-lane SCRAM identity and the mirror delivers again. It stays in
+# place as a secondary path until OMN-18134 brings the gateway compose project
+# under the deploy agent's dev scope, at which point that path is governed
+# rather than hand-maintained and can be re-assessed on its own merits.
 #
 # ---------------------------------------------------------------------------
 # Maintenance
@@ -71,7 +102,7 @@ summary: >
 # The publisher's broker and the relay's required network are both DERIVED
 # from this single field via `known_lanes`, so a declaration in which the
 # publisher and the consumer disagree is unrepresentable.
-lane: "stability-test"
+lane: "dev"
 
 # The host the operator Mac dials. Lane ports below are host-side published
 # ports on that host; containers on a lane network use redpanda:9092 instead.
@@ -99,7 +130,7 @@ known_lanes:
 # different lanes" from an offset-reading exercise into a failing check.
 relay:
   container: "omninode-gateway-forwarder"
-  required_network: "omnibase-infra-stability-test-network"
+  required_network: "omnibase-infra-network"
   role: >
     Sole process bridging a local .201 broker to the cloud MSK relay. Anything
     it cannot see on its attached lane network can never reach the cloud
@@ -140,7 +171,7 @@ non_authoritative_surfaces:
 # ---------------------------------------------------------------------------
 golden_path:
   - A *_bus_mirror.sh sources common.sh (which loads ~/.omnibase/.env under `set -a`), then sources hook_edge_lane.sh — the declared lane wins and KAFKA_BOOTSTRAP_SERVERS is the contract's answer, whatever .env said
-  - A hook invoked with KAFKA_BOOTSTRAP_SERVERS preset to another lane still publishes to the declared lane — proven live 2026-08-30T15:50:34Z, marker OMN17204LaneProof-1788105033 read back 8 hits on stability, 0 on dev
+  - A hook invoked with KAFKA_BOOTSTRAP_SERVERS preset to another lane still publishes to the declared lane — proven live 2026-08-30T15:50:34Z, marker OMN17204LaneProof-1788105033 read back 8 hits on the then-declared lane (stability at that date), 0 on the other; the proof is of resolver precedence, and it does not move when the declared lane moves
   - relay.required_network disagrees with known_lanes[lane].network — validate_hook_edge_lane.py exits 1 naming the publisher/consumer split (the OMN-17034 defect, made checkable)
   - A bus-mirror script drops the resolver, or sources it BEFORE common.sh — validate_hook_edge_lane.py exits 1 naming the file and both line numbers
   - A governed topic constant leaves src/omniclaude/hooks/topic_registry.yaml — validate_hook_edge_lane.py exits 1 rather than governing an empty topic set

@@ -101,6 +101,56 @@ def test_contract_declares_one_lane_for_both_sides() -> None:
     ), "relay network must be the declared lane's network, not an independent value"
 
 
+def test_contract_declares_the_dev_lane_per_the_ruling() -> None:
+    """OMN-17034's behaviour ruling, made 2026-09-10 by the operator.
+
+    OMN-17204 declared the pairing but deliberately left the lane CHOICE to
+    OMN-17034, because repointing the publisher is a behaviour decision, not a
+    declaration cleanup. The operator made that decision on 2026-09-10: the
+    local hook producer targets the DEV lane directly, rather than depending on
+    the stability -> dev gateway mirror to carry its rows across.
+
+    This test pins the decided value. Without it the lane is a free field again
+    and the next edit that flips it back is indistinguishable from a typo.
+    """
+    lib = _load_lib()
+    contract = lib.load_contract(_CONTRACT_PATH)
+
+    assert contract.lane == "dev", (
+        f"the hook edge declares lane {contract.lane!r}; the 2026-09-10 operator "
+        "ruling (OMN-17034) is that the local hook producer publishes to the DEV "
+        "lane directly, which is also the lane node_projection_work_events reads "
+        "omninode_internal.work_events from"
+    )
+    # Derived, never re-spelled: the network literal has one home, known_lanes.
+    assert contract.relay_required_network == contract.known_lanes["dev"].network, (
+        "the relay must consume the same dev lane the publisher writes to"
+    )
+    assert contract.bootstrap_servers == contract.known_lanes["dev"].bootstrap_servers
+
+
+def test_contract_prose_records_the_ruling_rather_than_the_old_refusal() -> None:
+    """The header cannot still say the file refuses to make the lane choice.
+
+    Prose that contradicts the declaration below it is how a reader ends up
+    trusting the wrong half of the same file. The refusal sentence was correct
+    while the ruling was outstanding; it is false the moment ``lane`` moves.
+    """
+    text = _CONTRACT_PATH.read_text(encoding="utf-8")
+    assert "deliberately does NOT silently repoint the publisher" not in text, (
+        "the contract still carries OMN-17204's refusal-to-rule prose while "
+        "declaring a repointed lane — amend the header to record the ruling"
+    )
+    assert "2026-09-10" in text, (
+        "the header must date the ruling that moved the lane, so a later reader "
+        "can tell a decision from a drive-by edit"
+    )
+    assert "OMN-18134" in text, (
+        "the header must name the ticket that retires the secondary "
+        "stability -> dev gateway mirror path"
+    )
+
+
 def test_contract_bootstrap_servers_matches_declared_lane() -> None:
     """The exported broker is the declared lane's broker, not a free-text value."""
     lib = _load_lib()
@@ -280,16 +330,28 @@ def test_validator_fails_when_relay_network_diverges_from_lane(tmp_path: Path) -
     fake_root = tmp_path / "repo"
     _copy_gate_tree(fake_root)
 
-    contract = (
+    contract_path = (
         fake_root / "plugins" / "onex" / "hooks" / "contracts" / "hook_edge_lane.yaml"
     )
-    text = contract.read_text(encoding="utf-8")
-    # Point the relay at a different declared lane's network.
-    text = text.replace(
-        'required_network: "omnibase-infra-stability-test-network"',
-        'required_network: "omnibase-infra-network"',
+    # The networks are DERIVED from the contract's own known_lanes rather than
+    # spelled here. A literal would silently stop matching the day the declared
+    # lane moves -- the replacement would no-op, the tree would stay valid, and
+    # this negative test would pass while proving nothing.
+    lib = _load_lib()
+    contract = lib.load_contract(contract_path)
+    other_lane = next(
+        name for name in sorted(contract.known_lanes) if name != contract.lane
     )
-    contract.write_text(text, encoding="utf-8")
+    text = contract_path.read_text(encoding="utf-8")
+    mutated = text.replace(
+        f'required_network: "{contract.known_lanes[contract.lane].network}"',
+        f'required_network: "{contract.known_lanes[other_lane].network}"',
+    )
+    assert mutated != text, (
+        "the relay's required_network line was not found, so the mismatch this "
+        "test injects was never injected"
+    )
+    contract_path.write_text(mutated, encoding="utf-8")
 
     proc = subprocess.run(
         [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
@@ -356,11 +418,21 @@ def test_surface_disagreement_is_reported_not_obeyed() -> None:
     lib = _load_lib()
     contract = lib.load_contract(_CONTRACT_PATH)
 
+    # The conflicting value is DERIVED from another declared lane, never spelled
+    # as a literal: a literal endpoint here would agree with the contract the
+    # day the declared lane moves onto it, and this test would then assert that
+    # a disagreement nobody injected was reported.
+    other_lane = next(
+        name for name in sorted(contract.known_lanes) if name != contract.lane
+    )
+    conflicting = contract.known_lanes[other_lane].bootstrap_servers
+    assert conflicting != contract.bootstrap_servers
+
     findings = lib.audit_surfaces(
         contract,
         surfaces={
             "~/.omnibase/.env": contract.bootstrap_servers,
-            "~/.claude/settings.json": "192.168.86.201:19092",  # onex-allow-internal-ip
+            "~/.claude/settings.json": conflicting,
         },
     )
     disagreeing = {f.surface for f in findings if not f.agrees}
