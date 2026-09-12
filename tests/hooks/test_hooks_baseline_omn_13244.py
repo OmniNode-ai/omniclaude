@@ -463,10 +463,25 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
 
 
 def test_hooks_json_retains_metadata_keys() -> None:
-    """The baseline keeps the $schema/description/version metadata keys."""
+    """The baseline keeps the ``description`` metadata key.
+
+    ``$schema`` and ``version`` were dropped under OMN-18203: the Claude Code
+    harness's own plugin hooks.json loader accepts exactly ``description``,
+    ``hooks``, and ``modules`` at the top level and silently drops anything
+    else with a startup warning naming the stray key(s)
+    (``onex: hooks.json: unknown keys "$schema", "version" ignored``). This
+    test asserted the OMN-13244-era shape, which happened to include two keys
+    the harness never recognized; it now asserts only what the harness
+    actually accepts and omniclaude actually reads, per
+    ``hook_inventory.HARNESS_HOOKS_JSON_TOP_LEVEL_KEYS``.
+    """
     data = json.loads(_HOOKS_JSON.read_text())
-    for key in ("$schema", "description", "version"):
-        assert key in data, f"hooks.json baseline missing metadata key: {key!r}"
+    assert "description" in data, (
+        "hooks.json baseline missing metadata key: 'description'"
+    )
+    assert set(data) <= {"description", "hooks", "modules"}, (
+        f"hooks.json carries a top-level key the harness does not accept: {sorted(data)}"
+    )
 
 
 @pytest.mark.parametrize("rel_path", _GUARD_FILES)
