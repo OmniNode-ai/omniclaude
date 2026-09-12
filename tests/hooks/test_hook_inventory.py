@@ -148,6 +148,63 @@ def test_inventory_parses_and_the_live_tree_is_green() -> None:
     )
 
 
+def test_hooks_json_top_level_keys_are_harness_accepted() -> None:
+    """OMN-18203: the live hooks.json carries only harness-accepted keys.
+
+    The Claude Code harness's own plugin hooks.json loader accepts exactly
+    ``description``, ``hooks`` and ``modules`` at the top level and silently
+    drops anything else with a startup warning naming the stray key(s)
+    (``onex: hooks.json: unknown keys "$schema", "version" ignored`` was the
+    observed defect). This is a live-gate defect fix in THIS gate: it already
+    runs on every push touching hooks.json but never checked the shape the
+    harness itself enforces.
+    """
+    findings = _LIB.top_level_key_findings(_REPO_ROOT / _HOOKS_JSON_REL)
+    assert findings == (), (
+        "plugins/onex/hooks/hooks.json carries a top-level key the harness "
+        f"does not accept: {[f.render() for f in findings]}"
+    )
+
+
+def test_hooks_json_unknown_top_level_key_is_caught(mirror: Path) -> None:
+    """Positive control for the check above.
+
+    Proves the checker actually detects a real unknown key rather than
+    passing vacuously — the same discipline CLAUDE.md rule 16 requires of
+    every zero-finding result.
+    """
+
+    def inject(data: dict) -> None:  # type: ignore[type-arg]
+        data["$schema"] = "https://claude.ai/schemas/hooks.json"
+        data["version"] = "1.17.0"
+
+    _edit_hooks_json(mirror, inject)
+    findings = _LIB.top_level_key_findings(mirror / _HOOKS_JSON_REL)
+    assert [f.code for f in findings] == ["UNKNOWN_TOP_LEVEL_KEY"]
+    assert '"$schema"' in findings[0].detail
+    assert '"version"' in findings[0].detail
+
+
+def test_hooks_json_top_level_check_is_wired_into_the_gate(mirror: Path) -> None:
+    """The check must fire through the same path CI and pre-commit run.
+
+    A checker that exists but is only ever called directly by its own test
+    is exactly the DORMANT class OMN-16876 measured 47 of across the org —
+    runnable, wired to nothing. This asserts it is reachable from
+    ``check_parity``, which ``validate_hook_inventory.py`` (the CI job and
+    pre-commit hook) calls.
+    """
+
+    def inject(data: dict) -> None:  # type: ignore[type-arg]
+        data["$schema"] = "https://claude.ai/schemas/hooks.json"
+
+    _edit_hooks_json(mirror, inject)
+    result = _run_gate(mirror)
+    assert result.returncode == 1
+    assert "UNKNOWN_TOP_LEVEL_KEY" in result.stderr
+    assert '"$schema"' in result.stderr
+
+
 def test_every_registered_hook_is_declared() -> None:
     """Nothing may be registered that the inventory does not name."""
     inventory = _LIB.load_inventory(_REPO_ROOT / _INVENTORY_REL)
