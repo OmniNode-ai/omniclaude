@@ -67,6 +67,8 @@ __all__ = [
     "mask_findings",
     "mode_findings",
     "parse_mask",
+    "top_level_key_findings",
+    "HARNESS_HOOKS_JSON_TOP_LEVEL_KEYS",
 ]
 
 #: Canary kinds. ``block`` = refuses the call (exit 2 + a block decision).
@@ -94,6 +96,18 @@ _GATE_CALL_RE: Final = re.compile(r"onex_hook_gate\s+([A-Z0-9_]+)")
 _LITE_MODE_RE: Final = re.compile(r"""\$\(omniclaude_mode\)"?\s*==\s*"?lite""")
 _BIT_TABLE_RE: Final = re.compile(
     r"^\s+([A-Z0-9_]+)\)\s*echo\s+(0x[0-9a-fA-F]+)\s*;;", re.MULTILINE
+)
+
+#: The Claude Code harness's own plugin hooks.json loader recognizes exactly
+#: these top-level keys (confirmed 2026-09 by disassembling the installed
+#: harness binary: the loader's warning template is literally
+#: ``"hooks.json: unknown " ... " ignored "``). Anything else is silently
+#: dropped with a startup warning naming it — OMN-18203, a live-gate defect in
+#: THIS gate: it already runs on every push touching hooks.json but never
+#: checked the harness-accepted top-level shape, so ``$schema``/``version``
+#: shipped for a full cycle before anyone noticed the warning.
+HARNESS_HOOKS_JSON_TOP_LEVEL_KEYS: Final = frozenset(
+    {"description", "hooks", "modules"}
 )
 
 
@@ -452,6 +466,41 @@ def load_inventory(path: Path) -> HookInventory:
     )
 
 
+def top_level_key_findings(hooks_json_path: Path) -> tuple[Finding, ...]:
+    """Flag any top-level key the harness's own loader does not accept.
+
+    Standalone from :func:`load_registrations` so a hooks.json carrying an
+    unknown key still gets a named finding even though ``hooks`` itself may
+    parse fine — the harness warns and silently drops the key, it does not
+    refuse the file, so nothing else in this module would ever notice.
+    """
+    try:
+        data = json.loads(hooks_json_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise HookInventoryError(f"cannot read {hooks_json_path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise HookInventoryError(f"{hooks_json_path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise HookInventoryError(f"{hooks_json_path}: top level must be a mapping")
+
+    unknown = sorted(set(data) - HARNESS_HOOKS_JSON_TOP_LEVEL_KEYS)
+    if not unknown:
+        return ()
+    keys = ", ".join(f'"{key}"' for key in unknown)
+    return (
+        Finding(
+            "UNKNOWN_TOP_LEVEL_KEY",
+            hooks_json_path.name,
+            f"top-level key(s) {keys} are not part of the harness-accepted set "
+            f"{sorted(HARNESS_HOOKS_JSON_TOP_LEVEL_KEYS)}. The harness loader "
+            "silently drops them and prints "
+            f"'onex: hooks.json: unknown keys {keys} ignored' at every session "
+            "start (OMN-18203). Remove the key(s); the harness has no sidecar "
+            "or comment-equivalent for this file format.",
+        ),
+    )
+
+
 def load_registrations(hooks_json_path: Path) -> tuple[Registration, ...]:
     """Flatten ``hooks.json`` into one record per registered command."""
     try:
@@ -547,6 +596,7 @@ def check_parity(
     findings: list[Finding] = []
     hooks_json_path = repo_root / inventory.hooks_json
     scripts_dir = repo_root / inventory.scripts_dir
+    findings.extend(top_level_key_findings(hooks_json_path))
     registrations = load_registrations(hooks_json_path)
     registered_by_script: dict[str, list[Registration]] = {}
     for reg in registrations:
