@@ -1,0 +1,135 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-18263 -- the gate over the branch-claim RESOLUTION itself.
+#
+# Distinct from `branch-claim-check.yml`, which APPLIES the resolution to this
+# repository's own pull requests. This one protects the resolution's behaviour:
+# the four fixtures the phase turns on -- a branch held by the same lane, held by
+# another lane with a release row, held by another lane without one, and
+# unclaimed -- plus the cases that must not read as clean, which is where the
+# real risk sits. A resolution that answered "clean" for an unreadable store, an
+# unresolvable commit range or a commit with no lane trailer would report green
+# over the entire corpus while proving nothing.
+#
+# The tests import the claim index module from the PRIVATE workspace repository
+# and FAIL rather than skip when it cannot be found. That is the point: a skipped
+# test is a green run, and a green run for a gate that could not execute is the
+# exact failure mode this phase exists to remove. The repository is not named
+# here -- it resolves from an organization variable, as in the reusable check.
+
+name: Branch Claim Gate
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'scripts/branch_claim.py'
+      - 'scripts/lane_identity.py'
+      - 'tests/scripts/test_branch_claim.py'
+      - '.github/workflows/branch-claim-gate.yml'
+      - '.github/workflows/branch-claim-check-reusable.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'scripts/branch_claim.py'
+      - 'scripts/lane_identity.py'
+      - 'tests/scripts/test_branch_claim.py'
+      - '.github/workflows/branch-claim-gate.yml'
+      - '.github/workflows/branch-claim-check-reusable.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  branch-claim-gate:
+    needs: occ-preflight
+    name: Branch Claim Gate
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks / dev-base PRs default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Resolve the private claim store repo
+        id: store-repo
+        env:
+          FROM_VARS: ${{ vars.OMNI_LEDGER_REPO }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FROM_VARS:-}" ]; then
+            echo "::error::the organization variable OMNI_LEDGER_REPO is unset, so the" \
+                 "claim index module these tests exercise cannot be located." \
+                 "THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "name=${FROM_VARS}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint token for the private claim store repo
+        id: store-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.store-repo.outputs.name }}
+          permission-contents: read
+
+      # reusable-checkout-ref-ok: branch-claim-gate OMN-18263 the tests exercise the claim index
+      # module as it is on the store's default branch; pinning it would let this
+      # gate report green against a module the live check no longer runs.
+      - name: Fetch the claim index module
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.store-repo.outputs.name }}
+          token: ${{ steps.store-token.outputs.token }}
+          path: .branch-claim-store
+          persist-credentials: false
+          sparse-checkout: |
+            docs/workflows/_shared/claim_index.py
+          sparse-checkout-cone-mode: false
+
+      # uv sync, not a bare pytest install: this repo's tests/conftest.py imports
+      # project dependencies, so `pip install pytest` alone fails at collection
+      # with a ModuleNotFoundError -- a gate that cannot run, not one that passed.
+      # Measured on the first CI run of the lane-identity gate.
+      - name: Install dependencies
+        run: uv sync --frozen --group dev --python 3.13
+
+      - name: Branch-claim resolution behaviour
+        env:
+          ONEX_CLAIM_INDEX_MODULE: .branch-claim-store/docs/workflows/_shared/claim_index.py
+        run: |
+          set -euo pipefail
+          if [ ! -f "${ONEX_CLAIM_INDEX_MODULE}" ]; then
+            echo "::error::the claim index module was not fetched to" \
+                 "${ONEX_CLAIM_INDEX_MODULE}. These tests FAIL rather than skip" \
+                 "without it. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          uv run pytest tests/scripts/test_branch_claim.py -q
