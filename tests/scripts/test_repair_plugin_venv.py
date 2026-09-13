@@ -18,12 +18,87 @@ def test_repair_script_delegates_to_session_start_builder():
     )
 
 
-def test_repair_script_forces_rebuild_by_clearing_marker():
+def test_repair_script_requests_rebuild_inside_the_builder_transaction():
     script = Path("scripts/repair-plugin-venv.sh").read_text()
     assert 'VENV_DIR="${CLAUDE_PLUGIN_DATA}/.venv"' in script
-    assert 'rm -f "${VENV_DIR}/.built-from"' in script, (
-        "repair-plugin-venv.sh must clear the marker so ensure-plugin-venv.sh rebuilds"
+    assert "export ONEX_FORCE_PLUGIN_VENV_REBUILD=1" in script, (
+        "repair-plugin-venv.sh must request transactional invalidation from the builder"
     )
+    assert 'rm -f "${VENV_DIR}/.built-from"' not in script
+
+
+def test_repair_failed_builder_preserves_prior_marker_and_interpreter(tmp_path: Path):
+    """A failed forced repair restores the complete prior verifiable venv."""
+    repo = tmp_path / "repo"
+    repair_script = repo / "scripts" / "repair-plugin-venv.sh"
+    repair_script.parent.mkdir(parents=True)
+    repair_script.write_bytes(Path("scripts/repair-plugin-venv.sh").read_bytes())
+
+    plugin_root = repo / "plugins" / "onex"
+    builder = plugin_root / "hooks" / "scripts" / "ensure-plugin-venv.sh"
+    builder.parent.mkdir(parents=True)
+    builder.write_bytes(
+        Path("plugins/onex/hooks/scripts/ensure-plugin-venv.sh").read_bytes()
+    )
+    builder.chmod(builder.stat().st_mode | 0o100)
+    (plugin_root / ".claude-plugin").mkdir(parents=True)
+    (plugin_root / ".claude-plugin" / "plugin.json").write_text(
+        '{"version": "test"}\n', encoding="utf-8"
+    )
+
+    workspace = tmp_path / "workspace"
+    project = workspace / "omniclaude"
+    project.mkdir(parents=True)
+    (project / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\n", encoding="utf-8"
+    )
+    (project / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+
+    data_dir = tmp_path / "plugin-data"
+    venv_bin = data_dir / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    prior_python = venv_bin / "python3"
+    prior_python.write_text("#!/usr/bin/env bash\necho prior\n", encoding="utf-8")
+    prior_python.chmod(0o755)
+    (venv_bin / "onex").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (venv_bin / "onex").chmod(0o755)
+    marker = data_dir / ".venv" / ".built-from"
+    marker.write_text("prior-marker", encoding="utf-8")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "$1" == venv ]]; then\n'
+        '  destination="${@: -1}"; mkdir -p "${destination}/bin"\n'
+        '  printf candidate > "${destination}/bin/python3"; exit 0\n'
+        "fi\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    env = os.environ | {
+        "OMNI_HOME": str(workspace),
+        "CLAUDE_PLUGIN_DATA": str(data_dir),
+        "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+        "PATH": os.pathsep.join([str(venv_bin), str(fake_bin), os.environ["PATH"]]),
+    }
+    result = subprocess.run(
+        ["bash", str(repair_script)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert (
+        prior_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\necho prior\n"
+    )
+    assert marker.read_text(encoding="utf-8") == "prior-marker"
 
 
 def test_repair_script_documents_path_shadow_preflight():
@@ -206,7 +281,7 @@ def test_repair_succeeds_when_plugin_bin_is_first_but_onex_wrapper_is_missing(
     assert result.returncode == 0, output
     assert (data_dir / "ensure-invoked").exists()
     assert (venv_bin / "onex").exists()
-    assert not marker.exists()
+    assert marker.read_text(encoding="utf-8") == "rebuild-required"
 
 
 @pytest.mark.parametrize("include_plugin_bin", [False, True])

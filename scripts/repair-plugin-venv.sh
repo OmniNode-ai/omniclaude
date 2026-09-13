@@ -5,8 +5,8 @@
 # repair-plugin-venv.sh — Force-rebuild plugin venv in CLAUDE_PLUGIN_DATA
 #
 # Manual escape hatch for when the SessionStart hook can't run or the venv
-# is corrupted. Delegates to ensure-plugin-venv.sh after clearing the marker
-# so a rebuild is forced.
+# is corrupted. Delegates to ensure-plugin-venv.sh and requests a rebuild inside
+# the builder's transaction so a failed candidate preserves the prior marker.
 # Refuses repair if the plugin venv bin is missing from PATH or an earlier onex
 # shadows its wrapper. A missing wrapper is allowed when the venv bin is already
 # ahead of other onex commands, so repair can recreate a corrupted environment.
@@ -82,7 +82,7 @@ echo "Forcing plugin venv rebuild..."
 echo "  CLAUDE_PLUGIN_DATA: ${CLAUDE_PLUGIN_DATA}"
 echo "  OMNI_HOME: ${OMNI_HOME}"
 
-rm -f "${VENV_DIR}/.built-from"
+export ONEX_FORCE_PLUGIN_VENV_REBUILD=1
 
 if bash "${REPO_ROOT}/plugins/onex/hooks/scripts/ensure-plugin-venv.sh"; then
     if ! PATH_ONEX="$(type -P onex)" || [[ ! -x "${PATH_ONEX}" || ! "${PATH_ONEX}" -ef "${PLUGIN_ONEX}" ]]; then

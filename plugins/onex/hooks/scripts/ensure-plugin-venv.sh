@@ -69,6 +69,7 @@ EXPECTED_LOCK="$(lockfile_hash)"
 EXPECTED_MARKER="${EXPECTED_VERSION}:${EXPECTED_LOCK}:3.13"
 
 venv_is_fresh() {
+    [[ "${ONEX_FORCE_PLUGIN_VENV_REBUILD:-}" != "1" ]] || return 1
     [[ -x "${VENV_DIR}/bin/python3" ]] || return 1
     [[ -f "$MARKER" ]] || return 1
     [[ "$(cat "$MARKER" 2>/dev/null)" == "$EXPECTED_MARKER" ]] || return 1
