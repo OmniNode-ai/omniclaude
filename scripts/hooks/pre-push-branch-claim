@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-18262 — refuse a push to a branch whose ticket another lane holds.
+#
+# Install with:
+#   python3 scripts/branch_claim.py install-hook --repo <clone>
+#
+# Installed once per CLONE, not per worktree: git worktrees share the main
+# clone's hooks directory, so one install covers every worktree of that repo.
+# That is exactly why the registration gate below exists.
+#
+# SHIPPED DISABLED, TWO INDEPENDENT WAYS.
+#
+#   1. It is installed NOWHERE. Installation is its own explicit verb, separate
+#      from the lane-identity installer, so arming a clone is a decision
+#      somebody makes rather than a side effect of installing something else.
+#   2. Even installed, it does NOTHING for a worktree that is not REGISTERED as
+#      a lane. That is the same registration the stamping hook already uses, so
+#      opting in costs a lane one command it already runs.
+#
+# The second is the one that matters operationally. On 2026-09-13 a leaked
+# GIT_DIR pointed the lane-identity installer at the SHARED canonical-clone hooks
+# directory and every canonical clone began refusing commits from unregistered
+# worktrees for about ten minutes. A refusing hook whose default for an
+# unregistered worktree is REFUSE is that incident waiting to recur at fleet
+# scale. This one's default is silence.
+#
+# THERE IS NO BYPASS VARIABLE, and that is deliberate. `--no-verify`,
+# `core.hooksPath` and a `SKIP=` style switch each convert a governed result into
+# degraded evidence that later reads as proof. The escape from a refusal is the
+# RELEASE PATH, which the refusal prints in full with the holder, the citable row
+# and the ticket already filled in. The two `ONEX_BRANCH_CLAIM_*` variables below
+# relocate the claim store for tests; they are not a bypass, because a path that
+# does not resolve REFUSES rather than skipping — see the fail-closed note.
+#
+# WHAT IT REFUSES, and what it only reports: the wrong-lane case and a commit
+# whose fence is behind the live claim. A commit carrying NO lane trailer is
+# reported and allowed, because measured 2026-09-13 that is every commit in the
+# fleet, and refusing it here would be a fleet-wide push freeze on install day.
+
+set -euo pipefail
+
+REMOTE_NAME="${1:-origin}"
+
+# The installer rewrites the line below with the absolute path of the module it
+# installed from. A hook copied into .git/hooks sits beside no source tree, and
+# discovering its own module from the environment at push time is the shape that
+# fails silently on the one box where the variable is not exported.
+INSTALLED_BRANCH_CLAIM="@BRANCH_CLAIM_PATH@"
+
+# Resolved with shell parameter expansion rather than `dirname`: a git hook runs
+# with whatever PATH git has, and depending on an external binary for something
+# bash can do itself is one more way to fail on a thin environment.
+SCRIPT_SELF="${BASH_SOURCE[0]}"
+case "$SCRIPT_SELF" in */*) SCRIPT_DIR="${SCRIPT_SELF%/*}" ;; *) SCRIPT_DIR="." ;; esac
+SCRIPT_DIR="$(cd "$SCRIPT_DIR" && pwd)"
+
+BRANCH_CLAIM=""
+for candidate in \
+  "${ONEX_BRANCH_CLAIM_SCRIPT:-}" \
+  "$INSTALLED_BRANCH_CLAIM" \
+  "$SCRIPT_DIR/../branch_claim.py"
+do
+  # Skip the empty slot and the UNREPLACED placeholder. The pattern matches a
+  # leading "@" rather than spelling the placeholder: the installer rewrites
+  # every occurrence of that token in this file, so a literal copy inside this
+  # guard would be rewritten into the real path and make the loop skip the very
+  # candidate it just baked in. That defect cost OMN-18260 a day and was
+  # invisible to every test that only read the script. No path begins with "@".
+  case "$candidate" in ""|@*) continue ;; esac
+  if [ -f "$candidate" ]; then
+    BRANCH_CLAIM="$candidate"
+    break
+  fi
+done
+
+if [ ! -f "$BRANCH_CLAIM" ]; then
+  echo "pre-push: cannot find branch_claim.py; set ONEX_BRANCH_CLAIM_SCRIPT" >&2
+  exit 1
+fi
+
+case "$BRANCH_CLAIM" in */*) MODULE_DIR="${BRANCH_CLAIM%/*}" ;; *) MODULE_DIR="." ;; esac
+
+# INTERPRETER RESOLUTION. A git hook runs with whatever PATH git happens to
+# have, which on macOS is frequently the system python3 — 3.9. The module this
+# calls is written against the repository's 3.12+ baseline, so a bare `python3`
+# produced an ImportError traceback and a refused push on a correct worktree.
+PYTHON=""
+for candidate in "${ONEX_LANE_PYTHON:-}" python3.13 python3.12 python3.11 python3; do
+  [ -n "$candidate" ] || continue
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  echo "pre-push: no Python 3.11 or newer is on this hook's PATH, so the branch" >&2
+  echo "  claim cannot be resolved and the push is refused. Point the hook at an" >&2
+  echo "  interpreter explicitly with ONEX_LANE_PYTHON." >&2
+  exit 1
+fi
+
+# GATE 1 — REGISTRATION. An unregistered worktree is silent, always. This is the
+# opt-in, and it is checked before anything else so an unarmed clone costs a push
+# nothing but one interpreter probe.
+if ! "$PYTHON" "$MODULE_DIR/lane_identity.py" resolve --worktree . >/dev/null 2>&1; then
+  exit 0
+fi
+
+# THE CLAIM STORE. Resolved fail-fast from the workspace root, with no default
+# path: a silent default would point at a file that does not exist, and the
+# resolution would then refuse every push on the box rather than skip — loud, but
+# for the wrong reason. Name the cause here instead.
+LEDGER="${ONEX_BRANCH_CLAIM_LEDGER:-}"
+LEDGER_NAME="${ONEX_BRANCH_CLAIM_LEDGER_NAME:-docs/tracking/ROLLING_WORK_LEDGER.md}"
+CLAIM_INDEX="${ONEX_BRANCH_CLAIM_INDEX_MODULE:-}"
+if [ -z "$LEDGER" ] || [ -z "$CLAIM_INDEX" ]; then
+  if [ -z "${OMNI_HOME:-}" ]; then
+    echo "pre-push: this worktree is registered as a lane but the workspace root is" >&2
+    echo "  not set, so the claim store cannot be located and the push is refused." >&2
+    echo "  Set OMNI_HOME, or unregister this worktree if it is not a lane." >&2
+    exit 1
+  fi
+  LEDGER="${LEDGER:-$OMNI_HOME/$LEDGER_NAME}"
+  CLAIM_INDEX="${CLAIM_INDEX:-$OMNI_HOME/docs/workflows/_shared/claim_index.py}"
+fi
+
+# git feeds one line per ref on stdin: <local ref> <local sha> <remote ref> <remote sha>
+ZERO="0000000000000000000000000000000000000000"
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # A deletion pushes no commits. Refusing it would make the hook fire on the one
+  # operation that cannot carry a lane.
+  [ "$local_sha" = "$ZERO" ] && continue
+  # Branches only. A tag has no ticket and no claim.
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  branch="${remote_ref#refs/heads/}"
+
+  if [ "$remote_sha" = "$ZERO" ]; then
+    # A NEW branch. There is no remote tip to diff against, so the range is
+    # "everything on this tip that is not already on the remote". Using the
+    # branch's whole history instead would read commits this push is not
+    # introducing and attribute somebody else's unstamped commit to this lane.
+    args=(--range "$local_sha" --not-on-remote "$REMOTE_NAME")
+  else
+    args=(--range "$remote_sha..$local_sha")
+  fi
+
+  if ! "$PYTHON" "$BRANCH_CLAIM" check \
+      --mode refuse \
+      --branch "$branch" \
+      --repo . \
+      "${args[@]}" \
+      --ledger "$LEDGER" \
+      --ledger-name "$LEDGER_NAME" \
+      --claim-index-module "$CLAIM_INDEX"; then
+    status=1
+  fi
+done
+
+exit "$status"

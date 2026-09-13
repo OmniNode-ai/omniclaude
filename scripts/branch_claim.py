@@ -311,17 +311,49 @@ def _commits_from_args(args: argparse.Namespace) -> list[tuple[str, str]]:
         return [("(local)", path.read_text(encoding="utf-8"))]
     if not args.rev_range:
         raise ResolutionUnavailable("one of --range or --messages-from is required")
+    revs: list[str] = [args.rev_range]
+    if args.not_on_remote:
+        revs += ["--not", f"--remotes={args.not_on_remote}"]
     try:
         return [
             (sha, message)
-            for sha, _subject, message in li.commits_in_range(
-                Path(args.repo), args.rev_range
-            )
+            for sha, _subject, message in li.commits_in_range(Path(args.repo), revs)
         ]
     except li.BadRange as exc:
         # An unresolvable range yields no commits, and no commits reads exactly
         # like "every commit is fine". Error instead.
         raise ResolutionUnavailable(str(exc)) from exc
+
+
+def _install_hook(repo: Path) -> int:
+    """Install the pre-push hook into `repo`'s OWN hooks directory.
+
+    The shared-directory refusal is `lane_identity.own_hooks_dir`, imported
+    rather than re-implemented. A second, weaker copy of the one check that
+    stopped the 2026-09-13 fleet incident is exactly the drift this phase is
+    about -- and a pre-push hook installed into a shared directory would arm
+    every repository that shares it, which is a worse version of the incident
+    that check was written for.
+    """
+    try:
+        hooks = li.own_hooks_dir(repo)
+    except li.SharedHooksDirectory as exc:
+        print(f"branch_claim: {exc}", file=sys.stderr)
+        return 2
+    hooks.mkdir(parents=True, exist_ok=True)
+    source = Path(__file__).resolve().parent / "hooks" / "pre-push-branch-claim"
+    target = hooks / "pre-push"
+    body = source.read_text(encoding="utf-8").replace(
+        "@BRANCH_CLAIM_PATH@", str(Path(__file__).resolve())
+    )
+    target.write_text(body, encoding="utf-8")
+    target.chmod(0o755)
+    print(f"branch_claim: installed {target}")
+    print(
+        "  It refuses NOTHING until a worktree is registered as a lane:\n"
+        "    python3 scripts/lane_identity.py register --lane <slug> --ticket OMN-XXXX"
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -332,6 +364,14 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--branch", required=True)
     check.add_argument("--repo", default=".")
     check.add_argument("--range", dest="rev_range", help="e.g. origin/dev..HEAD")
+    check.add_argument(
+        "--not-on-remote",
+        help=(
+            "exclude commits already on this remote's branches. For a NEW branch "
+            "there is no remote tip to diff against, and reading the branch's whole "
+            "history instead would attribute somebody else's commits to this push."
+        ),
+    )
     check.add_argument("--messages-from", help="a file holding one commit message")
     check.add_argument("--ledger", required=True)
     check.add_argument(
@@ -357,7 +397,22 @@ def main(argv: list[str] | None = None) -> int:
         help="emit findings as workflow-command annotations as well as text",
     )
 
+    install = sub.add_parser(
+        "install-hook",
+        help="install the pre-push branch-claim hook in a clone",
+        description=(
+            "Arms one CLONE. Separate from the lane-identity installer on purpose: "
+            "a refusing pre-push hook is a decision somebody makes, never a side "
+            "effect of installing the stamping hook. Even once installed it does "
+            "nothing for a worktree that is not registered as a lane."
+        ),
+    )
+    install.add_argument("--repo", default=".")
+
     args = parser.parse_args(argv)
+
+    if args.command == "install-hook":
+        return _install_hook(Path(args.repo))
 
     try:
         claim_index = load_claim_index(Path(args.claim_index_module))
