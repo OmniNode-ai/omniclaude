@@ -241,6 +241,12 @@ PR_DESCRIPTION.md
 # Project-specific
 /backups
 *_report*.json
+# ...except the DoD evidence receipts. `DoD Evidence Check` is a REQUIRED
+# status check on dev and it reads this exact path out of the repository, so
+# the broad rule above was quietly ignoring the one report file the merge
+# gate cannot do without -- every receipt already in the tree had to be added
+# with a force flag to get past it (OMN-18323).
+!.onex_state/evidence/*/dod_report.json
 *_analysis*.json
 *_errors*.txt
 mypy_*.txt

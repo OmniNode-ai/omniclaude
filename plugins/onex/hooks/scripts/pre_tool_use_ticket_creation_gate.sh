@@ -10,6 +10,17 @@
 # live-gate-defect binding. An UPDATE (`save_issue` with an `id`) is never
 # gated.
 #
+# It also refuses a create whose named parent already carries more than
+# `unstarted_children_cap` children in an unstarted state (rule 8, OMN-18323).
+# That is the one rule here that reads state outside the payload, and it is the
+# reason this script's decision core may make ONE outbound request: rules 1-7
+# bound a ticket's SHAPE, and the backlog trend they were built to stop is a
+# question of VOLUME. Measured 2026-09-13, across a window lying entirely after
+# this gate shipped: created against Done at 3.1 : 1 over fifteen days, a net
+# +815, and 59 parents already carrying more than ten children nobody started.
+# With no `LINEAR_API_KEY` reachable, rule 8 is skipped and rules 1-7 still run
+# -- see the decision core's docstring for why that direction and not the other.
+#
 # Why a hook and not a validator
 # ------------------------------
 # Measured over Linear 2026-08-22..2026-09-04: 1553 tickets created in fourteen
@@ -35,9 +46,10 @@
 #     and an external user of this plugin never sees an ONEX rule fire.
 #   * A save_issue call this guard cannot evaluate -- unparseable hook JSON, a
 #     missing decision core, an unresolvable interpreter, an unreadable policy,
-#     a body filled in server-side from a `template` the guard never sees -- is
-#     BLOCKED. A create whose binding cannot be verified is refused, never
-#     assumed clean. The blast radius of that decision is exactly one tool name.
+#     a body filled in server-side from a `template` the guard never sees, or a
+#     parent whose queue the tracker will not report -- is BLOCKED. A create
+#     whose binding cannot be verified is refused, never assumed clean. The
+#     blast radius of that decision is exactly one tool name.
 #
 # Gating: the LINEAR_DONE_VERIFY bit (0x80000000000). A brand-new bit is not
 # available: EnumHookBit lives in omnibase_core, all 60 default-mask ordinals
