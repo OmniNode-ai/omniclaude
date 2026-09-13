@@ -50,6 +50,7 @@ import re
 import subprocess
 import sys
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -61,9 +62,11 @@ __all__ = [
     "BadRange",
     "UnregisteredLane",
     "apply_trailers",
+    "SharedHooksDirectory",
     "commit_identity",
     "commit_trailers",
     "commits_in_range",
+    "own_hooks_dir",
     "record_path",
     "register",
     "registry_root_from_env",
@@ -312,6 +315,56 @@ def commit_identity(message: str) -> tuple[str, str] | None:
     return lane, session
 
 
+class SharedHooksDirectory(RuntimeError):
+    """The resolved hooks directory is shared with other repositories."""
+
+
+def own_hooks_dir(repo: Path) -> Path:
+    """This repository OWN hooks directory, or raise.
+
+    REFUSES a hooks directory that is not inside the repository own git
+    directory. A clone can set core.hooksPath to a SHARED directory -- this
+    workspace points every canonical clone at one -- and installing there
+    silently arms a refusing hook for every repository that shares it. That is
+    not hypothetical: it happened during OMN-18260 development, when an inherited
+    GIT_DIR pointed the installer at the shared directory and every canonical
+    clone started refusing commits until the file was removed by hand.
+
+    Extracted from the installer (OMN-18262) so the pre-push installer cannot
+    ship a second, weaker copy of the one check that stopped that recurring.
+    """
+    hooks = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--git-path", "hooks"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=_git_env(),
+        ).stdout.strip()
+    )
+    if not hooks.is_absolute():
+        hooks = repo / hooks
+    common = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=_git_env(),
+        ).stdout.strip()
+    )
+    if not hooks.resolve().is_relative_to(common.resolve()):
+        raise SharedHooksDirectory(
+            f"refusing to install into {hooks} -- that directory is outside this "
+            f"repository git directory ({common}), so it is shared with other "
+            "repositories and a refusing hook there would arm all of them. Install "
+            "per clone, into its own hooks directory."
+        )
+    return hooks
+
+
 def _git_env() -> dict[str, str]:
     """The ambient environment with every GIT_* variable removed.
 
@@ -346,7 +399,9 @@ def unstamped_commits(repo: Path, rev_range: str) -> list[tuple[str, str]]:
     ]
 
 
-def commits_in_range(repo: Path, rev_range: str) -> list[tuple[str, str, str]]:
+def commits_in_range(
+    repo: Path, rev_range: str | Sequence[str]
+) -> list[tuple[str, str, str]]:
     """Every non-merge commit in `rev_range` as (sha, subject, full message).
 
     Extracted from `unstamped_commits` (OMN-18263) so the branch-claim
@@ -357,8 +412,9 @@ def commits_in_range(repo: Path, rev_range: str) -> list[tuple[str, str, str]]:
     second chance to omit the scrub.
     """
     separator = "\x1e"
+    revs = [rev_range] if isinstance(rev_range, str) else list(rev_range)
     completed = subprocess.run(
-        ["git", "log", "--no-merges", f"--format=%H%x1f%s%x1f%B{separator}", rev_range],
+        ["git", "log", "--no-merges", f"--format=%H%x1f%s%x1f%B{separator}", *revs],
         cwd=repo,
         check=False,
         capture_output=True,
@@ -372,9 +428,7 @@ def commits_in_range(repo: Path, rev_range: str) -> list[tuple[str, str, str]]:
         # (CLAUDE.md rule 16). Found by running the check with a bad range
         # against a one-commit repository, where it raised an unhandled
         # traceback instead of saying so.
-        raise BadRange(
-            f"git could not resolve {rev_range!r}: {completed.stderr.strip()}"
-        )
+        raise BadRange(f"git could not resolve {revs!r}: {completed.stderr.strip()}")
     out = completed.stdout
     commits: list[tuple[str, str, str]] = []
     for chunk in out.split(separator):
@@ -502,44 +556,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "install-hook":
         repo = Path(args.repo)
-        hooks = Path(
-            subprocess.run(
-                ["git", "rev-parse", "--git-path", "hooks"],
-                cwd=repo,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=_git_env(),
-            ).stdout.strip()
-        )
-        if not hooks.is_absolute():
-            hooks = repo / hooks
-        # REFUSE a hooks directory that is not inside this repository own git
-        # directory. A clone can set core.hooksPath to a SHARED directory --
-        # this workspace points every canonical clone at one -- and installing
-        # there silently arms a commit-refusing hook for every repository that
-        # shares it. That is not hypothetical: it happened during this ticket
-        # development, when an inherited GIT_DIR pointed the installer at the
-        # shared directory and every canonical clone started refusing commits
-        # until the file was removed by hand.
-        common = Path(
-            subprocess.run(
-                ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                cwd=repo,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=_git_env(),
-            ).stdout.strip()
-        )
-        if not hooks.resolve().is_relative_to(common.resolve()):
-            print(
-                f"lane_identity: refusing to install into {hooks} -- that directory is "
-                f"outside this repository git directory ({common}), so it is shared with "
-                "other repositories and a refusing hook there would arm all of them. "
-                "Install per clone, into its own hooks directory.",
-                file=sys.stderr,
-            )
+        try:
+            hooks = own_hooks_dir(repo)
+        except SharedHooksDirectory as exc:
+            print(f"lane_identity: {exc}", file=sys.stderr)
             return 2
         hooks.mkdir(parents=True, exist_ok=True)
         source = Path(__file__).resolve().parent / "hooks" / "prepare-commit-msg-lane"
