@@ -295,7 +295,9 @@ _OVERRIDE_LINE: Final[re.Pattern[str]] = re.compile(
 #: CLAIM row whose free text mentions a ruling is not a ruling.
 _REQUIRED_OVERRIDE_ROW_KIND: Final[str] = "RULING"
 
-_LINEAR_API_URL: Final[str] = "https://api.linear.app/graphql"
+_LINEAR_API_URL: Final[str] = (
+    "https://api.linear.app/graphql"  # url-authority-ok: the tracker's single documented GraphQL endpoint, read-only child-state lookups from a PreToolUse decision core that is standard-library-only by construction (it must resolve its own interpreter and refuse when it cannot, so it cannot import a routing authority or an integration catalog to resolve from); same endpoint and same reasoning as scripts/worktree_auto_prune.py
+)
 
 #: Per-request timeout and page bounds for the children census. Small on
 #: purpose: this runs inside a PreToolUse hook, in front of a human waiting on a
