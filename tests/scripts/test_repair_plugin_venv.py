@@ -268,17 +268,17 @@ def test_repair_refuses_missing_wrapper_when_plugin_bin_is_absent_or_late(
     assert not (data_dir / "ensure-invoked").exists()
 
 
-def test_session_start_builder_owns_python_pin_and_cleanup():
+def test_session_start_builder_owns_brew_resolver_and_transactional_cleanup():
     script = Path("plugins/onex/hooks/scripts/ensure-plugin-venv.sh").read_text()
-    assert 'BREW_PY="/opt/homebrew/bin/python3.13"' in script, (
-        "ensure-plugin-venv.sh must pin /opt/homebrew/bin/python3.13"
-    )
+    assert 'BREW_PY="${ONEX_BREW_PYTHON:-}"' in script
+    assert "for candidate in" in script
+    assert "python3.13" in script
     assert 'uv venv --python "$BREW_PY"' in script, (
-        "venv creation must use the pinned Homebrew Python"
+        "venv creation must use the selected Homebrew Python"
     )
-    assert 'rm -rf "$VENV_DIR"' in script, (
-        "ensure-plugin-venv.sh must remove stale or hollow .venv before recreating"
-    )
+    assert 'mv "$VENV_DIR" "$PREVIOUS_VENV"' in script
+    assert "fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)" in script
+    assert "pass_fds=(lock_file.fileno(),)" in script
 
 
 def test_session_start_builder_fails_fast_if_python_missing():

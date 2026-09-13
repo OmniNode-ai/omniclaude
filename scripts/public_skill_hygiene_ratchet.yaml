@@ -17,9 +17,9 @@
 #   python3 scripts/check_public_skill_hygiene.py --tighten
 
 tree_surface_budgets:
-  host-nick: 107  # public-skill-ok: detection-class name, not prose
-  machine-path: 72  # public-skill-ok: detection-class name, not prose
-  memory-cite: 39  # public-skill-ok: detection-class name, not prose
+  host-nick: 106  # public-skill-ok: detection-class name, not prose
+  machine-path: 71  # public-skill-ok: detection-class name, not prose
+  memory-cite: 38  # public-skill-ok: detection-class name, not prose
   omni_home-prose: 450  # public-skill-ok: detection-class name, not prose
   operator-email: 32  # public-skill-ok: detection-class name, not prose
   operator-name: 175  # public-skill-ok: detection-class name, not prose
