@@ -439,6 +439,24 @@ def _program_of(segment: list[str]) -> tuple[str, list[str]]:
     return "", []
 
 
+#: ``--body "$(cat path)"`` and its backtick spelling. A lane composing a body
+#: in a file and handing it to ``--body`` through a substitution is the most
+#: common real spelling of this command, and the shell has not expanded it by
+#: the time the guard sees it. Reading the named file is what keeps the guard
+#: from refusing a legitimate edit it simply could not see -- the plan's
+#: constraint 5, a guard whose false refusals outnumber its true ones is one
+#: that gets routed around.
+_CAT_SUBSTITUTION = re.compile(
+    r"""^(?:\$\((?:\s*cat\s+)|`(?:\s*cat\s+))(?P<path>[^)`]+?)\s*(?:\)|`)$"""
+)
+
+#: Any OTHER unexpanded shell construct in the replacement body. The guard
+#: cannot resolve it, so it does not know what the new body says -- and must
+#: not report that as a dropped line, which would be a specific accusation it
+#: has no evidence for.
+_UNEXPANDED = re.compile(r"\$\(|`|\$\{|\$[A-Za-z_]")
+
+
 def _read_body_file(raw: str) -> tuple[str | None, str | None]:
     """Return ``(text, unreadable_reason)`` for a ``--body-file`` argument."""
     if raw == "-":
@@ -450,6 +468,33 @@ def _read_body_file(raw: str) -> tuple[str | None, str | None]:
         return Path(raw).expanduser().read_text(encoding="utf-8"), None
     except (OSError, UnicodeDecodeError) as exc:
         return None, f"the replacement body file {raw} could not be read: {exc}"
+
+
+def _resolve_body_argument(raw: str) -> tuple[str | None, str | None]:
+    """Resolve a ``--body`` argument the shell has not expanded yet.
+
+    Three outcomes, and the middle one is the reason this exists:
+
+    * plain text -> itself;
+    * ``$(cat path)`` / ``` `cat path` ``` -> the file's contents, because that
+      is how a lane that composed the body in a file actually spells this
+      command, and refusing it would be a false accusation against the most
+      common legitimate shape; and
+    * any other unexpanded construct -> UNREADABLE, not "dropped". The guard
+      cannot see what the body says, and reporting a dropped line it has no
+      evidence for would send the author hunting for a line they did not
+      remove.
+    """
+    match = _CAT_SUBSTITUTION.match(raw.strip())
+    if match is not None:
+        return _read_body_file(match.group("path").strip().strip("'\""))
+    if _UNEXPANDED.search(raw):
+        return None, (
+            "the replacement body is an unexpanded shell substitution "
+            f"({raw[:80]!r}), so its text cannot be read here. Pass the body "
+            "with --body-file <path> instead, which this guard can read"
+        )
+    return raw, None
 
 
 def _parse_gh_pr_edit(tokens: list[str], shape: _GhPrEditShape) -> PrBodyEdit | None:
@@ -472,13 +517,18 @@ def _parse_gh_pr_edit(tokens: list[str], shape: _GhPrEditShape) -> PrBodyEdit | 
         if flag in shape.body_flags:
             found_body = True
             origin = "--body"
+            raw_value: str | None
             if has_inline:
-                new_body = inline
+                raw_value = inline
             elif index + 1 < len(rest):
                 index += 1
-                new_body = rest[index]
+                raw_value = rest[index]
             else:
+                raw_value = None
+            if raw_value is None:
                 unreadable = "the body flag was given no value"
+            else:
+                new_body, unreadable = _resolve_body_argument(raw_value)
             index += 1
             continue
         if flag in shape.body_file_flags:

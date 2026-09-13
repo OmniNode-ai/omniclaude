@@ -230,6 +230,65 @@ def test_a_stamp_inside_a_fenced_block_is_not_protected(policy: Policy) -> None:
 
 
 # --------------------------------------------------------------------------
+# Unexpanded shell arguments -- a body the guard cannot SEE is not a body it
+# may accuse the author of having emptied
+# --------------------------------------------------------------------------
+
+
+def test_a_cat_substitution_body_is_read_from_the_named_file(
+    policy: Policy, tmp_path: Path
+) -> None:
+    """``--body "$(cat path)"`` is how a composed body is actually passed.
+
+    The shell has not expanded it by the time the guard sees the command, so a
+    guard that could not read it would refuse the single most common
+    legitimate spelling -- and get switched off.
+    """
+    body_file = tmp_path / "body.md"
+    body_file.write_text(RETAINING_BODY, encoding="utf-8")
+    bodies = {"OmniNode-ai/omniclaude#42": LIVE_BODY}
+    command = f'gh pr edit 42 --repo OmniNode-ai/omniclaude --body "$(cat {body_file})"'
+    assert check_bash_command(command, policy, reader_for(bodies)) == []
+
+
+def test_a_lossy_cat_substitution_is_still_refused(
+    policy: Policy, tmp_path: Path
+) -> None:
+    body_file = tmp_path / "body.md"
+    body_file.write_text(LOSSY_BODY, encoding="utf-8")
+    bodies = {"OmniNode-ai/omniclaude#42": LIVE_BODY}
+    command = f'gh pr edit 42 --repo OmniNode-ai/omniclaude --body "$(cat {body_file})"'
+    findings = check_bash_command(command, policy, reader_for(bodies))
+    assert findings and findings[0].kind == "dropped_stamp"
+
+
+def test_a_backtick_cat_substitution_is_read_too(
+    policy: Policy, tmp_path: Path
+) -> None:
+    body_file = tmp_path / "body.md"
+    body_file.write_text(RETAINING_BODY, encoding="utf-8")
+    bodies = {"OmniNode-ai/omniclaude#42": LIVE_BODY}
+    command = f'gh pr edit 42 --repo OmniNode-ai/omniclaude --body "`cat {body_file}`"'
+    assert check_bash_command(command, policy, reader_for(bodies)) == []
+
+
+def test_an_unresolvable_substitution_is_unreadable_not_a_dropped_line(
+    policy: Policy,
+) -> None:
+    """The distinction is the whole point: the guard did not SEE the body.
+
+    Reporting a dropped line here would send the author hunting for a line
+    they never removed, and the remedy the message names has to be one they
+    can actually take.
+    """
+    bodies = {"OmniNode-ai/omniclaude#42": LIVE_BODY}
+    command = 'gh pr edit 42 --repo OmniNode-ai/omniclaude --body "$BODY"'
+    findings = check_bash_command(command, policy, reader_for(bodies))
+    assert findings and findings[0].kind == "unreadable_new_body"
+    assert "--body-file" in render_block_reason(findings)
+
+
+# --------------------------------------------------------------------------
 # AC4 -- the live body is read at evaluation time, not cached or assumed
 # --------------------------------------------------------------------------
 
