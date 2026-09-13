@@ -7,6 +7,8 @@
 # Manual escape hatch for when the SessionStart hook can't run or the venv
 # is corrupted. Delegates to ensure-plugin-venv.sh after clearing the marker
 # so a rebuild is forced.
+# Refuses repair when PATH resolves onex before the plugin venv wrapper; fix PATH
+# ordering first so the repaired environment is the one non-interactive calls use.
 #
 # Usage:
 #   bash scripts/repair-plugin-venv.sh
@@ -29,6 +31,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 export OMNI_HOME CLAUDE_PLUGIN_DATA CLAUDE_PLUGIN_ROOT
 
 VENV_DIR="${CLAUDE_PLUGIN_DATA}/.venv"
+PLUGIN_ONEX="${VENV_DIR}/bin/onex"
+
+if PATH_ONEX="$(type -P onex)"; then
+    if [[ "${PATH_ONEX}" != "${PLUGIN_ONEX}" ]]; then
+        echo "[onex] ERROR: PATH resolves onex to ${PATH_ONEX}, ahead of the canonical plugin wrapper ${PLUGIN_ONEX}. Put the plugin venv bin directory first in PATH before repairing." >&2
+        exit 1
+    fi
+fi
 
 echo "Forcing plugin venv rebuild..."
 echo "  CLAUDE_PLUGIN_DATA: ${CLAUDE_PLUGIN_DATA}"
