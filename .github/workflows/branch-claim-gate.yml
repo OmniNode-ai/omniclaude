@@ -17,6 +17,14 @@
 # test is a green run, and a green run for a gate that could not execute is the
 # exact failure mode this phase exists to remove. The repository is not named
 # here -- it resolves from an organization variable, as in the reusable check.
+#
+# THIS IS THE ONLY CI HOME FOR THESE TESTS, verified rather than assumed. The
+# consolidated test job does not collect `tests/scripts/` at all: a search of both
+# split jobs' logs on a run that exercised this very directory returned zero
+# mentions of the branch-claim tests AND zero of `test_lane_identity.py`, which is
+# the positive control -- that suite is known to run only in its own gate, for the
+# same reason. A test file added here and left out of this workflow therefore runs
+# nowhere, which is why both files are named below rather than a directory.
 
 name: Branch Claim Gate
 
@@ -26,7 +34,9 @@ on:
     paths:
       - 'scripts/branch_claim.py'
       - 'scripts/lane_identity.py'
+      - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
+      - 'tests/scripts/test_branch_claim_hook.py'
       - '.github/workflows/branch-claim-gate.yml'
       - '.github/workflows/branch-claim-check-reusable.yml'
   pull_request:
@@ -34,7 +44,9 @@ on:
     paths:
       - 'scripts/branch_claim.py'
       - 'scripts/lane_identity.py'
+      - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
+      - 'tests/scripts/test_branch_claim_hook.py'
       - '.github/workflows/branch-claim-gate.yml'
       - '.github/workflows/branch-claim-check-reusable.yml'
 
@@ -121,7 +133,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev --python 3.13
 
-      - name: Branch-claim resolution behaviour
+      - name: Branch-claim resolution and the pre-push hook
         env:
           ONEX_CLAIM_INDEX_MODULE: .branch-claim-store/docs/workflows/_shared/claim_index.py
         run: |
@@ -132,4 +144,11 @@ jobs:
                  "without it. THE GATE DID NOT RUN."
             exit 1
           fi
-          uv run pytest tests/scripts/test_branch_claim.py -q
+          # The hook tests drive a real `git push` through the installed hook, so
+          # they need an identity git will accept and a default branch name.
+          git config --global init.defaultBranch main
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          uv run pytest \
+            tests/scripts/test_branch_claim.py \
+            tests/scripts/test_branch_claim_hook.py -q
