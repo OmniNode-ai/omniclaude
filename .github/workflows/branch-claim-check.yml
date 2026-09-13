@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-18263 -- this repository's own caller for the branch-claim check.
+#
+# The reusable workflow it calls lives in this repository, so the `uses:` is a
+# local path rather than a pinned cross-repository SHA. Caller repositories pin
+# an immutable omniclaude SHA instead; see the reusable workflow's header.
+#
+# It RECORDS. The operator ruling of 2026-09-13T09:11:33Z put the refusing half
+# behind a measurement of the release path, so `mode` stays at its default here.
+
+name: Branch Claim Check
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-claim-check:
+    uses: ./.github/workflows/branch-claim-check-reusable.yml
+    secrets: inherit

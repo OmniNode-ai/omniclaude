@@ -1,0 +1,251 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Branch-claim check (reusable). OMN-18263, phase 5 item 26 of the 2026-09-12
+# process-friction remediation plan.
+#
+# WHAT IT ANSWERS. For a pull request whose branch names a ticket: is that ticket
+# currently claimed by a lane other than the one that stamped these commits? On
+# 2026-09-12 at 14:17Z a lane from a peer session pushed three commits to one
+# repository's branch and four to another's, both under a ticket held by a
+# different lane's claim row. The claim row was the only ownership record and it
+# stopped nothing; two lanes then fixed the same thing within an hour and one of
+# the two pull requests was closed unmerged.
+#
+# WHY A CHECK AND NOT ONLY A HOOK. A hook runs only where it is installed, and
+# the 14:17Z lane came from a peer session -- exactly the case a locally
+# installed hook cannot be relied on to cover. This check sees every pull
+# request regardless of what is installed on the machine that produced it.
+#
+# IT RECORDS. IT DOES NOT FAIL THE PULL REQUEST. Operator ruling,
+# 2026-09-13T09:11:33Z: the check lands first and only records; the pre-push
+# refusal (OMN-18262) lands only after the release path has been shown easy in
+# practice, measured rather than asserted. The `mode` input carries the other
+# half so arming it later is a one-word change in the caller, not a rewrite --
+# but nothing should pass `refuse` until that measurement exists.
+#
+# ONE RESOLUTION, NOT TWO. Everything this job decides is decided by
+# `scripts/branch_claim.py` in this repository, which is the same module the
+# pre-push hook runs. A second implementation of the comparison is a second
+# place for it to drift, and a local refusal that disagrees with a remote check
+# is invisible until they disagree about a real push.
+#
+# `secrets: inherit` IS REQUIRED. The claim store and its index module live in a
+# PRIVATE workspace repository, and this job mints an installation token to read
+# them. Without the secrets the token step fails and the job fails CLOSED -- see
+# the store steps below. The repository is NOT named here: this repository is
+# public, and naming a private repository in public source is a never-exemptable
+# hygiene class. The name lives in an organization variable; only the shape of
+# the lookup is public.
+#
+# Usage in caller repos:
+#   jobs:
+#     branch-claim-check:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/branch-claim-check-reusable.yml@<immutable-sha>
+#       secrets: inherit
+#
+# Surfaced check context in the caller: `branch-claim-check / branch-claim-check`.
+
+name: Branch Claim Check (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: >-
+          'record' (default) reports findings and exits 0. 'refuse' fails the
+          job. Leave it at the default: the refusing half is OMN-18262 and is
+          gated on a measurement of the release path, not on taste.
+        type: string
+        required: false
+        default: record
+      resolver_ref:
+        description: >-
+          Optional override for the omniclaude ref the resolution is fetched
+          from. Leave unset in normal use: the default is
+          github.job_workflow_sha, already the exact SHA the caller pinned, so
+          the caller's `uses:` is the single source of truth for the workflow
+          and the script it runs.
+        type: string
+        required: false
+      store_repo_name:
+        description: >-
+          Name (NOT owner/name) of the PRIVATE repository holding the claim
+          store and its index module; the owner is always
+          github.repository_owner. Leave unset in normal use -- it resolves from
+          the organization variable OMNI_LEDGER_REPO.
+
+          A bare name rather than owner/name because the Actions expression
+          language has no `split`, and the token action needs the name alone.
+        type: string
+        required: false
+        default: ""
+      ledger_path:
+        description: Path to the claim store inside that repository.
+        type: string
+        required: false
+        default: docs/tracking/ROLLING_WORK_LEDGER.md
+      claim_index_path:
+        description: Path to the claim index module inside that repository.
+        type: string
+        required: false
+        default: docs/workflows/_shared/claim_index.py
+
+permissions:
+  contents: read
+
+jobs:
+  branch-claim-check:
+    name: branch-claim-check
+    if: github.event_name == 'pull_request'
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks / dev-base PRs default to ubuntu-latest
+    runs-on: >-
+      ${{
+        ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+         (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    steps:
+      # The HEAD commits, not the merge commit. The resolution reads the lane
+      # trailers of the commits the branch actually carries; a merge commit git
+      # synthesised carries none, and reading it would report every pull request
+      # as unidentified.
+      - name: Checkout the pull request head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Full history: the range is base..head, and a shallow clone makes the
+          # base unreachable. An unresolvable range is an ERROR in the resolution
+          # rather than an empty commit list, precisely so that case cannot read
+          # as "every commit is fine".
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # The resolution lives in omniclaude. When called from another repository
+      # GITHUB_WORKSPACE holds the CALLER's tree, so pull the two modules into a
+      # side path -- mirrors public-repo-hygiene-reusable.yml and
+      # kb-doc-gate-reusable.yml.
+      - name: Fetch the resolution (omniclaude canonical source)
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ inputs.resolver_ref || github.job_workflow_sha }}
+          path: .omniclaude-branch-claim
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/branch_claim.py
+            scripts/lane_identity.py
+          sparse-checkout-cone-mode: false
+
+      # Resolve the private store repository from the organization variable, and
+      # REFUSE if it is unset. An empty name would make the checkout below
+      # request `owner/`, which fails in a way that reads like a transient
+      # network problem rather than a missing configuration. Name the cause.
+      - name: Resolve the private claim store repo
+        id: store-repo
+        env:
+          EXPLICIT: ${{ inputs.store_repo_name }}
+          FROM_VARS: ${{ vars.OMNI_LEDGER_REPO }}
+        run: |
+          set -euo pipefail
+          resolved="${EXPLICIT:-${FROM_VARS:-}}"
+          if [ -z "${resolved}" ]; then
+            echo "::error::neither the 'store_repo_name' input nor the organization" \
+                 "variable OMNI_LEDGER_REPO is set, so the PRIVATE claim store cannot" \
+                 "be located. The check refuses rather than resolving against an" \
+                 "absent store: no holders reads exactly like every branch being" \
+                 "unclaimed, which is a clean bill of health over the whole corpus." \
+                 "THE CHECK DID NOT RUN."
+            exit 1
+          fi
+          echo "name=${resolved}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint token for the private claim store repo
+        id: store-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.store-repo.outputs.name }}
+          permission-contents: read
+
+      # reusable-checkout-ref-ok: branch-claim-check OMN-18263 the claim store is live state; a pinned ref answers who held a ticket in the past, which is the one question this check must not ask
+      #
+      # DELIBERATELY UNPINNED, and pinning it would be the defect. The claim
+      # store is LIVE STATE: a pinned SHA would answer about who held a ticket at
+      # some past moment rather than who holds it now, which is the one question
+      # this check exists to ask. The security trade is explicit: this reads a
+      # markdown store and one first-party module from a PRIVATE first-party
+      # repository, and the resolution validates what it reads -- a module
+      # missing its entry points is a refusal, an unreadable store is a refusal.
+      - name: Fetch the claim store and its index module
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.store-repo.outputs.name }}
+          token: ${{ steps.store-token.outputs.token }}
+          path: .branch-claim-store
+          persist-credentials: false
+          sparse-checkout: |
+            ${{ inputs.ledger_path }}
+            ${{ inputs.claim_index_path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve this branch against the claim store
+        env:
+          MODE: ${{ inputs.mode }}
+          BRANCH: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RESOLVER: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-branch-claim/scripts/branch_claim.py'
+                || 'scripts/branch_claim.py' }}
+          # Asserted alongside the resolver, not assumed. The resolver imports it
+          # as a sibling file, and a sparse checkout that silently missed it would
+          # surface as an ImportError traceback rather than as a named cause.
+          IDENTITY: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-branch-claim/scripts/lane_identity.py'
+                || 'scripts/lane_identity.py' }}
+          LEDGER: .branch-claim-store/${{ inputs.ledger_path }}
+          LEDGER_NAME: ${{ inputs.ledger_path }}
+          CLAIM_INDEX: .branch-claim-store/${{ inputs.claim_index_path }}
+        run: |
+          set -euo pipefail
+          # Fail LOUD, not with a bare "can't open file ... Errno 2". A sparse
+          # checkout of a path that does not exist at the requested ref SUCCEEDS
+          # and leaves an empty side path, so a bad ref surfaces only here, as an
+          # exit that reads like a verdict but is actually "the check never ran".
+          for required in "${RESOLVER}" "${IDENTITY}" "${LEDGER}" "${CLAIM_INDEX}"; do
+            if [ ! -f "${required}" ]; then
+              echo "::error::${required} was not fetched. The check refuses rather" \
+                   "than resolving against a missing input -- an unreachable claim" \
+                   "store returns zero holders and reads exactly like a clean bill" \
+                   "of health. Check that the app installation covers the resolved" \
+                   "store repository and that the caller passed 'secrets: inherit'." \
+                   "THE CHECK DID NOT RUN."
+              exit 1
+            fi
+          done
+          # Never `|| true` a gate and never suppress stderr: both convert a
+          # failure into a confident zero. Record mode's exit 0 comes from the
+          # resolution itself, which distinguishes a FINDING (exit 0 in record
+          # mode) from a check that could not run (exit 2 in either mode).
+          python3 "${RESOLVER}" check \
+            --mode "${MODE}" \
+            --branch "${BRANCH}" \
+            --repo . \
+            --range "${BASE_SHA}..HEAD" \
+            --ledger "${LEDGER}" \
+            --ledger-name "${LEDGER_NAME}" \
+            --claim-index-module "${CLAIM_INDEX}" \
+            --annotate

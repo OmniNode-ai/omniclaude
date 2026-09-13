@@ -62,6 +62,8 @@ __all__ = [
     "UnregisteredLane",
     "apply_trailers",
     "commit_identity",
+    "commit_trailers",
+    "commits_in_range",
     "record_path",
     "register",
     "registry_root_from_env",
@@ -272,13 +274,16 @@ def apply_trailers(message: str, lines: list[str]) -> str:
     return body + comments
 
 
-def commit_identity(message: str) -> tuple[str, str] | None:
-    """The (lane, session) a commit message declares, or None.
+def commit_trailers(message: str) -> dict[str, str]:
+    """Every trailer in the message's FINAL trailer block, as a mapping.
 
-    Read from the message's final trailer block only. A mention in the body is
-    not a declaration, and a trailer whose lane value is not a valid slug is not
-    one either: an identifier that cannot be compared against a claim row fails
-    the check exactly as an absent one does.
+    Extracted from `commit_identity` (OMN-18263) so a reader that needs another
+    trailer -- the fencing token, say -- does not parse the block a second way.
+    Two parsers of one format is two places for it to disagree about what counts
+    as a trailer, and "counts as a trailer" is the whole of CLAUDE.md rule 15.
+
+    The final block only. A `Key: value` line in the body is prose that happens
+    to look like a trailer, and git would not treat it as one either.
     """
     body, _ = _split_comments(message)
     lines = [line for line in body.splitlines() if line.strip()]
@@ -288,6 +293,18 @@ def commit_identity(message: str) -> tuple[str, str] | None:
         if match is None:
             break
         trailers.setdefault(match.group(1), match.group(2).strip())
+    return trailers
+
+
+def commit_identity(message: str) -> tuple[str, str] | None:
+    """The (lane, session) a commit message declares, or None.
+
+    Read from the message's final trailer block only. A mention in the body is
+    not a declaration, and a trailer whose lane value is not a valid slug is not
+    one either: an identifier that cannot be compared against a claim row fails
+    the check exactly as an absent one does.
+    """
+    trailers = commit_trailers(message)
     lane = trailers.get(LANE_TRAILER)
     session = trailers.get(SESSION_TRAILER)
     if not lane or not session or not valid_lane(lane):
@@ -322,6 +339,23 @@ def unstamped_commits(repo: Path, rev_range: str) -> list[tuple[str, str]]:
     half proves, and saying so is better than implying the whole criterion is
     closed here.
     """
+    return [
+        (sha, subject)
+        for sha, subject, message in commits_in_range(repo, rev_range)
+        if commit_identity(message) is None
+    ]
+
+
+def commits_in_range(repo: Path, rev_range: str) -> list[tuple[str, str, str]]:
+    """Every non-merge commit in `rev_range` as (sha, subject, full message).
+
+    Extracted from `unstamped_commits` (OMN-18263) so the branch-claim
+    resolution reads commits through the SAME invocation. That matters for one
+    measured reason: the environment scrub below. A `git log` launched from
+    inside a hook inherits GIT_DIR and answers about the HOOK OWNER repository
+    whatever directory it is pointed at, and a second copy of this call is a
+    second chance to omit the scrub.
+    """
     separator = "\x1e"
     completed = subprocess.run(
         ["git", "log", "--no-merges", f"--format=%H%x1f%s%x1f%B{separator}", rev_range],
@@ -342,15 +376,14 @@ def unstamped_commits(repo: Path, rev_range: str) -> list[tuple[str, str]]:
             f"git could not resolve {rev_range!r}: {completed.stderr.strip()}"
         )
     out = completed.stdout
-    findings: list[tuple[str, str]] = []
+    commits: list[tuple[str, str, str]] = []
     for chunk in out.split(separator):
         if not chunk.strip():
             continue
         sha, _, rest = chunk.lstrip("\n").partition("\x1f")
         subject, _, message = rest.partition("\x1f")
-        if commit_identity(message) is None:
-            findings.append((sha, subject))
-    return findings
+        commits.append((sha, subject, message))
+    return commits
 
 
 # ---------------------------------------------------------------------------
