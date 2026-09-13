@@ -36,7 +36,7 @@ An **UPDATE** is never gated: ``save_issue`` with an ``id`` edits a row that
 already exists, and gating it would block every state flip, description repair
 and parent re-link the board-truth work (OMN-16729) depends on.
 
-A create is admitted only when all four hold:
+A create is admitted only when all eight hold:
 
 1. ``parentId`` is present, **or** the description declares the issue an epic
    on a line of its own.
@@ -71,6 +71,142 @@ A create is admitted only when all four hold:
    in the 2026-08-31 sprint are in exactly that state. The probe line is the
    one thing that has to exist at the START for a ticket to be mechanically
    closeable at the end.
+
+6. Every acceptance criterion the description lists carries a **named
+   falsifier** -- the check that would settle it -- written as part of the
+   criterion::
+
+       * AC1 -- the guard refuses an unfalsified create. -- falsifier: a guard
+         test feeding a create with one unfalsified criterion asserts refusal
+
+   A create whose criterion list has an unfalsified criterion is refused,
+   naming that criterion.
+
+7. A criterion that is **behaviour-shaped** may not name a **merge-state read**
+   as its falsifier. "The companion PR is merged to main" may; "the guard
+   refuses an unfalsified create" may not, because a merged pull request is not
+   evidence that the guard refuses anything.
+
+Rules 6 and 7 are the primary mechanism of OMN-18331's plan, and the argument
+for putting them HERE rather than anywhere later in the lifecycle is worth
+stating, because it is the whole reason the rules exist. A binding between a
+criterion and the check that settles it has to be declared **before the
+evidence exists, by the party that knows the intent, and attributably**. At
+pull-request time the outcome is already known, so a binding written then can
+be shaped to the result. At companion-mint time a machine would be inferring,
+which OMN-18238 forbids outright. Ticket-creation time is the only point that
+satisfies all three: the author writes the criterion and its falsifier in one
+act, before any code exists, attributed to the creator with the ticket's own
+timestamp.
+
+The falsifier is a check name or a command shape -- **never a result**. It is a
+claim about what WOULD settle the criterion, made before anything is built.
+
+What rules 6 and 7 enforce, and what they cannot
+------------------------------------------------
+Rule 6 enforces that a falsifier was NAMED. It cannot judge whether the named
+check is a good one, and it cannot run it. An author who names something
+trivially true defeats it. That residual is real, it is recorded in the plan
+rather than papered over, and it is bounded by three things this gate does
+supply: the falsifier is written before the outcome is known, it is attributable
+to a named creator, and rule 7 refuses the single commonest weak shape.
+
+Rule 7 is that one shape. It reuses the OMN-18135 proof-class vocabulary --
+transcribed into the policy file with its source revision pinned, because this
+module parses its own policy with the standard library alone and can import
+nothing from another repository. It does NOT re-implement proof
+classification, and must not grow toward doing so: the classifier that decides
+what a check PROVED runs later, over a receipt, with the command's real exit
+status in hand. This one reads a sentence.
+
+**The tie-break is inverted relative to its source, deliberately.** The source
+asks whether a readback may discharge a criterion and answers yes only on a
+state marker with no behaviour marker, so an ambiguous criterion falls to
+behaviour and HOLDS a flip. This asks whether a criterion must be refused a
+merge-state falsifier and answers yes only on a behaviour marker with no state
+marker, so an ambiguous criterion is ADMITTED. Same wordlist, opposite default,
+because the cost of the error is opposite: there a misread costs a comment,
+here it costs a refused create, and a gate that refuses correct work is one
+lanes learn to route around.
+
+**Rule 7's conjunction, and why it is not an exemption.** A merge-state-shaped
+falsifier is refused only when it names no test runner. That is OMN-18135's own
+measured finding: ``gh api repos/<owner>/<repo>/commits/<sha> --jq .sha &&
+uv run pytest ...`` is the form that satisfies receipt hardening AND keeps its
+behaviour class, and a rule refusing every falsifier that mentions ``gh`` would
+refuse the one shape that clears both gates. A lane meeting that refusal would
+be right that the gate was wrong.
+
+**Rule 6's scope, stated as a fail-open direction rather than implied.** It
+fires only on a description carrying a recognised acceptance-criteria heading.
+The closer's own parser falls back to reading the WHOLE BODY when it finds no
+heading, because there an over-count holds a flip and holding is safe. Here an
+over-count REFUSES a create, so the fallback is dropped. A create with no
+criteria section is therefore not gated by rule 6. That is not a hole opened
+here: such a ticket declares no map, the autobinder transcribes nothing, and
+the closer holds it on an unbound criterion -- which is today's behaviour for
+the entire corpus, and the hold is a comment on the ticket, not a silence.
+
+The hashing unit, because a later mechanism depends on it
+---------------------------------------------------------
+The plan's next step transcribes each criterion's declared falsifier into a
+companion contract as an ACCEPTED binding, whose ``criterion_hash`` pins the
+criterion text as it read when the binding was accepted -- so a criterion
+silently rewritten afterwards no longer satisfies a binding accepted against
+its older wording. That only works if each criterion is independently
+hashable: editing one criterion must not disturb the hash of any other.
+
+This module therefore EXPORTS the unit rather than leaving the downstream
+mechanism to re-derive it from markdown. :func:`criterion_units` returns one
+:class:`CriterionUnit` per criterion -- its label, its canonical text, its
+falsifier, and the hash of that canonical text. The unit is **one criterion
+item**: its own bullet or ``AC<n>`` line plus any continuation lines before the
+next item, which is exactly the span rule 6 already reads a falsifier from. Two
+parsers would be two places to disagree about where one criterion ends, and a
+disagreement there binds a criterion to a check declared for its neighbour.
+Independence is a pinned property, not an incidental one: a test edits one
+criterion and asserts every other hash is byte-identical.
+
+**The canonical form is whitespace normalisation and nothing else** -- Unicode
+NFC, runs of whitespace collapsed to single spaces, ends stripped. It
+deliberately does NOT lowercase, strip emphasis, or drop the label: the hash
+exists to detect that a criterion was rewritten, so anything it normalises away
+is a rewrite it can no longer detect. Re-wrapping is the one edit that changes
+the bytes without changing what the criterion says, which is why it is the one
+thing normalised.
+
+**The falsifier is inside the hash, deliberately.** What an author accepts is
+the PAIR -- this criterion, settled by this check -- so a falsifier swapped
+afterwards is exactly as much a rewrite as a reworded criterion, and a hash
+covering only the criterion half would let the check change silently under an
+accepted binding.
+
+Rule 6 also does not require a criterion LABEL. An unlabelled criterion is
+unbindable downstream and holds there, which is a ticket-authoring problem the
+closer already reports; adding a second refusal for it here would refuse
+creates for a defect that is already visible where it bites.
+
+8. The parent it names does not already carry more than N children in an
+   UNSTARTED state, N being ``unstarted_children_cap`` in the admission policy.
+
+   Rules 1-7 bound a ticket's SHAPE and say nothing about VOLUME, so a parent
+   can accumulate an unbounded queue of correctly-bound tickets nobody will
+   ever start and every one of them passes. That is not hypothetical: the
+   friction trend report of 2026-09-13 measured created against Done at
+   **3.1 : 1** over fifteen days -- a net **+815** -- with 31 of 58 new friction
+   tickets never started, across a window lying ENTIRELY AFTER this guard
+   shipped. A live read the same day found **59 parents** already over a cap of
+   ten, the deepest carrying 62, some children filed in March and never touched.
+
+   The refusal names the parent, the count, the cap and the oldest unstarted
+   child, and it names three routes out: start a child, cancel a child, or
+   record an operator RULING row in the rolling work ledger and cite it on the
+   create as ``Admission-Override: <ledger>:<line>``. That citation is resolved
+   exactly the way OMN-17957's credential guard resolves a rotation consent --
+   canonical path, the line exists, the row's second field is ``RULING``, and
+   the row names this parent -- because authorisation has to outlive the session
+   that granted it. There is no environment variable and no policy flag that
+   turns rule 8 off; the disable is the mask bit, and a disabled run is logged.
 
 What rule 5 enforces, and what it cannot
 ----------------------------------------
@@ -117,29 +253,65 @@ Fail-closed boundary, stated deliberately
   REFUSED. An unverifiable create is refused, never assumed clean. The blast
   radius of that decision is exactly one tool name.
 
+The one read outside the payload, and its fail direction
+--------------------------------------------------------
+Rules 1-7 answer *is this ticket bound to a commitment?* from the payload alone.
+Rule 8 cannot: *how long is this parent's queue already?* is not a property of
+the call in front of it. So it takes a ``children_lookup`` -- an argument, not
+an import, so this module stays a pure function of what it is given and the
+network lives in one bindable seam. ``main`` binds it to the tracker; a test
+binds it to a fixture; nothing else calls it.
+
+Its fail direction is stated rather than discovered:
+
+* **The lookup fails, or the parent does not resolve** -- REFUSE. A create the
+  tracker cannot resolve would not have succeeded anyway, so the refusal costs a
+  round trip and nothing else.
+* **The enumeration truncates below the cap** -- REFUSE. A lower bound is not a
+  count, and a cap applied to a number that might be wrong fires at random.
+* **No read credential is configured on this machine** -- ADMIT, and say so on
+  stderr. This is the second bounded fail-OPEN in this module, beside rule 5's
+  uuid, and it is bounded to rule 8. Refusing here would make rules 1-7 --
+  payload-only and always enforceable -- collateral damage of a missing key, and
+  a guard that refuses every create on a machine with no key is a guard that
+  gets disabled wholesale rather than repaired.
+
 Deliberately NOT built here
 ---------------------------
 No duplicate detection, no per-lane quota, no rate limit. Those need state this
-module does not have and would make a refusal depend on history rather than on
-the call in front of it. This gate answers one question -- *is this ticket bound
-to a commitment?* -- and answers it from the payload alone.
+module does not have and would make a refusal depend on the history of who filed
+what, rather than on the board the ticket is about to land on.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
+import unicodedata
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
 __all__ = [
+    "OVERRIDE_CITATION_GRAMMAR",
+    "ChildrenLookup",
+    "CriterionUnit",
     "Finding",
+    "ParentCensus",
     "Policy",
     "PolicyError",
+    "UnstartedChild",
+    "build_census",
+    "canonical_criterion_text",
     "check_save_issue",
+    "criterion_units",
     "load_policy",
     "render_block_reason",
 ]
@@ -218,6 +390,94 @@ _PROBE_SPLIT: Final[str] = "=>"
 
 _PROBE_LINE_GRAMMAR: Final[str] = "Probe: <command> => <observation that settles it>"
 
+#: ``Admission-Override: docs/tracking/ROLLING_WORK_LEDGER.md:<line>`` -- the ONE
+#: route past rule 8 that is not "start a child" or "cancel a child". Same
+#: construction as OMN-17957's ``ROTATION-CONSENT:`` citation, and for the same
+#: reason: authorisation has to be a durable, citable row that outlives the
+#: session that granted it, because a lane's own assertion that it was allowed
+#: is not evidence of anything. There is deliberately no environment variable
+#: and no policy flag -- a gate with an off switch is a gate that is off.
+OVERRIDE_CITATION_GRAMMAR: Final[str] = (
+    "Admission-Override: docs/tracking/ROLLING_WORK_LEDGER.md:<line>"
+)
+
+#: Anchored to a whole line, like every other textual rule here (CLAUDE.md rule
+#: 15). A bullet is refused for the same reason a bulleted ``Gate:`` line is.
+_OVERRIDE_LINE: Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*Admission-Override:[ \t]*(?P<path>[^\s:'\"]+):(?P<line>\d+)[ \t]*$",
+    re.MULTILINE,
+)
+
+#: The ledger row kind that authorises. A CLAIM, NOTE, PROGRESS or TERMINAL row
+#: records what a lane DID; only a RULING decides anything. The kind is read
+#: from the row's SECOND field rather than from anywhere in the row, because a
+#: CLAIM row whose free text mentions a ruling is not a ruling.
+_REQUIRED_OVERRIDE_ROW_KIND: Final[str] = "RULING"
+
+_LINEAR_API_URL: Final[str] = (
+    "https://api.linear.app/graphql"  # url-authority-ok: the tracker's single documented GraphQL endpoint, read-only child-state lookups from a PreToolUse decision core that is standard-library-only by construction (it must resolve its own interpreter and refuse when it cannot, so it cannot import a routing authority or an integration catalog to resolve from); same endpoint and same reasoning as scripts/worktree_auto_prune.py
+)
+
+#: Per-request timeout and page bounds for the children census. Small on
+#: purpose: this runs inside a PreToolUse hook, in front of a human waiting on a
+#: tool call, and a slow census is indistinguishable from a hung session.
+_CENSUS_TIMEOUT_S: Final[float] = 8.0
+_CENSUS_PAGE_SIZE: Final[int] = 100
+_CENSUS_MAX_PAGES: Final[int] = 12
+
+_CENSUS_QUERY: Final[str] = """
+query($id: String!, $after: String, $first: Int!) {
+  issue(id: $id) {
+    identifier
+    children(first: $first, after: $after) {
+      nodes { identifier title createdAt state { name type } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+""".strip()
+
+#: A bullet or numbered list item, and an unbulleted ``AC1 ...`` line. Both
+#: transcribed from the closer's own criteria parser so the two mechanisms read
+#: the same tickets the same way: a criterion this gate demands a falsifier for
+#: must be one the closer will later look for a binding on, or the gate is
+#: enforcing against a population nothing downstream reads.
+_LIST_ITEM: Final[re.Pattern[str]] = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(.*)$")
+_AC_ITEM: Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*([*_]*)[ \t]*(AC[-_ ]?\d+)(?!\d)[*_]*(.*?)[ \t]*$", re.IGNORECASE
+)
+_TRAILING_EMPHASIS: Final[re.Pattern[str]] = re.compile(r"[*_]+$")
+_TASK_MARKER: Final[re.Pattern[str]] = re.compile(r"^\[[ \t xX]\][ \t]*")
+_TRAILING_QUALIFIER: Final[re.Pattern[str]] = re.compile(r"\s*\([^)]*\)\s*$")
+_HEADING_ENUM: Final[re.Pattern[str]] = re.compile(r"^\d+[.)]\s*")
+
+#: How much of a criterion is quoted back in a refusal. A description whose
+#: criteria are paragraphs must not turn one refusal into an unreadable wall,
+#: and an unbounded splice is how a message hits a transport limit.
+_MAX_CRITERION_QUOTED: Final[int] = 160
+
+#: How many unfalsified criteria are named individually. Past this the refusal
+#: says how many more there are: forty quoted criteria do not make the point
+#: forty times better, and the remedy is the same edit either way.
+_MAX_CRITERIA_NAMED: Final[int] = 8
+
+#: The label a downstream binding entry can point AT. Matched against the item
+#: text this module returns, which has already had its bullet and any task
+#: marker stripped -- so ``**AC1** ...``, ``AC-2: ...``, ``DoD3 -- ...`` and
+#: ``ac 4)`` all reach here with the label leading. A criterion with no label
+#: is NOT a parse failure: it is an UNBINDABLE criterion, because a binding
+#: needs something stable to point at and an ordinal derived from parse
+#: position renumbers every binding below it the moment a bullet is inserted.
+#: Rule 6 does not refuse it -- that is a ticket-authoring problem reported
+#: downstream, where it actually bites.
+_CRITERION_LABEL: Final[re.Pattern[str]] = re.compile(
+    r"^[\s>*_+-]*(?:\*\*)?\s*(AC|DOD)[-_ .]?(\d+)\b", re.IGNORECASE
+)
+
+_FALSIFIER_GRAMMAR: Final[str] = (
+    "<criterion text> -- falsifier: <check name or command shape that would settle it>"
+)
+
 
 class PolicyError(RuntimeError):
     """The admission policy could not be read.
@@ -237,6 +497,16 @@ class Policy:
     epic_markers: tuple[str, ...]
     residual_title_terms: tuple[str, ...]
     in_progress_state_names: frozenset[str]
+    falsifier_markers: tuple[str, ...]
+    acceptance_criteria_headings: frozenset[str]
+    state_criterion_markers: tuple[re.Pattern[str], ...]
+    behaviour_criterion_markers: tuple[re.Pattern[str], ...]
+    merge_state_falsifier_markers: tuple[re.Pattern[str], ...]
+    behaviour_runner_words: tuple[str, ...]
+    unstarted_children_cap: int
+    unstarted_state_types: frozenset[str]
+    override_ledger_paths: frozenset[str]
+    override_ledger_path_prefixes: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +525,77 @@ class Finding:
     fix: str
 
 
+@dataclass(frozen=True, slots=True)
+class UnstartedChild:
+    """One child of a parent that nobody has started.
+
+    ``created_at`` is Linear's own ISO-8601 UTC spelling
+    (``2026-08-01T00:00:00.000Z``). It is compared as a string rather than
+    parsed: that format sorts lexically in chronological order, and a guard on
+    an enforcement path does not need a datetime parser to say which of two
+    timestamps came first.
+    """
+
+    identifier: str
+    title: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ParentCensus:
+    """What a parent's queue looks like right now.
+
+    ``complete`` is False when the enumeration was truncated -- then
+    ``unstarted`` is a LOWER BOUND, not a count. Rule 8 refuses a create it
+    cannot settle from a lower bound rather than guessing, because a cap
+    applied to a number that might be wrong is a cap that fires at random.
+    """
+
+    parent: str
+    unstarted: tuple[UnstartedChild, ...]
+    complete: bool = True
+
+
+#: Resolve a parent reference -- an identifier like ``OMN-18232`` or a uuid --
+#: to its census, or ``None`` when it cannot be resolved at all. The seam is a
+#: callable so the decision core stays a pure function of its arguments and the
+#: network lives in exactly one place, which is what makes rule 8 testable
+#: without a workspace.
+ChildrenLookup = Callable[[str], "ParentCensus | None"]
+
+
+def build_census(
+    parent: str, nodes: list[dict[str, Any]], policy: Policy, complete: bool = True
+) -> ParentCensus:
+    """Classify raw Linear child nodes into a census.
+
+    Classification is by state **type**, never by state name: a workspace that
+    renames its Backlog column keeps the type, and Linear's own unstarted band
+    is exactly the configured set. A node whose state cannot be read is counted
+    as unstarted -- the conservative direction for a cap, and the one that
+    cannot be gamed by a malformed state.
+    """
+    unstarted: list[UnstartedChild] = []
+    for node in nodes:
+        # Non-dict entries are dropped by the fetch, which is the only producer
+        # of this list that does not construct it by hand.
+        state = node.get("state")
+        state_type = ""
+        if isinstance(state, dict):
+            state_type = str(state.get("type") or "").strip().lower()
+        if state_type and state_type not in policy.unstarted_state_types:
+            continue
+        unstarted.append(
+            UnstartedChild(
+                identifier=str(node.get("identifier") or "(unnamed)"),
+                title=str(node.get("title") or ""),
+                created_at=str(node.get("createdAt") or ""),
+            )
+        )
+    unstarted.sort(key=lambda child: (child.created_at, child.identifier))
+    return ParentCensus(parent=parent, unstarted=tuple(unstarted), complete=complete)
+
+
 def _string_list(raw: Any, key: str, source: Path) -> tuple[str, ...]:
     if not isinstance(raw, list) or not raw:
         raise PolicyError(
@@ -268,6 +609,42 @@ def _string_list(raw: Any, key: str, source: Path) -> tuple[str, ...]:
             )
         out.append(entry.strip())
     return tuple(out)
+
+
+def _compiled_markers(raw: Any, key: str, source: Path) -> tuple[re.Pattern[str], ...]:
+    """Compile a configured marker list, or raise.
+
+    A marker that will not compile is refused here rather than at match time.
+    A regex error raised from inside a rule would surface as an unhandled
+    exception in a PreToolUse hook, and the wrapper treats that as a block --
+    so every Linear create on the machine would fail with a traceback instead
+    of with a policy error naming the offending pattern.
+    """
+    patterns: list[re.Pattern[str]] = []
+    for entry in _string_list(raw, key, source):
+        try:
+            patterns.append(re.compile(entry, re.IGNORECASE))
+        except re.error as exc:
+            raise PolicyError(
+                f"{source}: '{key}' entry {entry!r} is not a regex ({exc})"
+            ) from exc
+    return tuple(patterns)
+
+
+def _positive_int(raw: Any, key: str, source: Path) -> int:
+    """Read a count, or raise.
+
+    ``bool`` is rejected explicitly because it is an ``int`` subclass in Python
+    and ``"unstarted_children_cap": true`` would otherwise configure a cap of
+    one. Zero and negatives are rejected because a cap of zero refuses every
+    create under every parent, which is a workspace-wide outage spelled as a
+    config typo.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise PolicyError(
+            f"{source}: '{key}' must be an integer of at least 1, got {raw!r}"
+        )
+    return int(raw)
 
 
 def load_policy(path: Path | None = None) -> Policy:
@@ -312,6 +689,58 @@ def load_policy(path: Path | None = None) -> Policy:
             for n in _string_list(
                 raw.get("in_progress_state_names"), "in_progress_state_names", source
             )
+        ),
+        falsifier_markers=tuple(
+            m.lower()
+            for m in _string_list(
+                raw.get("falsifier_markers"), "falsifier_markers", source
+            )
+        ),
+        acceptance_criteria_headings=frozenset(
+            h.lower()
+            for h in _string_list(
+                raw.get("acceptance_criteria_headings"),
+                "acceptance_criteria_headings",
+                source,
+            )
+        ),
+        state_criterion_markers=_compiled_markers(
+            raw.get("state_criterion_markers"), "state_criterion_markers", source
+        ),
+        behaviour_criterion_markers=_compiled_markers(
+            raw.get("behaviour_criterion_markers"),
+            "behaviour_criterion_markers",
+            source,
+        ),
+        merge_state_falsifier_markers=_compiled_markers(
+            raw.get("merge_state_falsifier_markers"),
+            "merge_state_falsifier_markers",
+            source,
+        ),
+        behaviour_runner_words=tuple(
+            w.lower()
+            for w in _string_list(
+                raw.get("behaviour_runner_words"), "behaviour_runner_words", source
+            )
+        ),
+        unstarted_children_cap=_positive_int(
+            raw.get("unstarted_children_cap"), "unstarted_children_cap", source
+        ),
+        unstarted_state_types=frozenset(
+            t.lower()
+            for t in _string_list(
+                raw.get("unstarted_state_types"), "unstarted_state_types", source
+            )
+        ),
+        override_ledger_paths=frozenset(
+            _string_list(
+                raw.get("override_ledger_paths"), "override_ledger_paths", source
+            )
+        ),
+        override_ledger_path_prefixes=_string_list(
+            raw.get("override_ledger_path_prefixes"),
+            "override_ledger_path_prefixes",
+            source,
         ),
     )
 
@@ -458,11 +887,552 @@ def _probe_line_findings(description: str) -> list[Finding]:
     ]
 
 
-def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
+def _is_criteria_heading(line: str, policy: Policy) -> bool:
+    """True when ``line`` opens an acceptance-criteria section.
+
+    Tolerates ``## Acceptance Criteria``, ``**Acceptance criteria:**``,
+    ``### 3. Acceptance criteria`` and a bare ``AC``, and strips a trailing
+    parenthetical qualifier -- ``Acceptance criteria (falsifiable)`` names the
+    section as surely as the bare spelling does. Membership is against the
+    configured closed set, never a prefix: a heading reading "Acceptance
+    criteria coverage report" is about the section, not the section itself.
+    """
+    trimmed = line.strip()
+    if not trimmed:
+        return False
+    trimmed = trimmed.lstrip("#").strip()
+    trimmed = trimmed.strip("*_").strip()
+    trimmed = _HEADING_ENUM.sub("", trimmed).strip()
+    trimmed = trimmed.rstrip(":").strip()
+    folded = trimmed.lower()
+    if folded in policy.acceptance_criteria_headings:
+        return True
+    return (
+        _TRAILING_QUALIFIER.sub("", folded).strip()
+        in policy.acceptance_criteria_headings
+    )
+
+
+def _acceptance_criteria_items(description: str, policy: Policy) -> list[str]:
+    """The criterion items listed under an acceptance-criteria heading.
+
+    The section runs from the heading to the next markdown heading, or to the
+    end of the body. An item spans its own line plus any continuation lines
+    that follow it before the next item -- so a criterion whose falsifier is
+    written on a wrapped line still carries it, and a falsifier belonging to
+    the criterion above never discharges the one below.
+
+    Returns an EMPTY list when no recognised heading is present. That differs
+    from the closer's parser, which reads the whole body in that case; the
+    divergence and its reason are in this module's docstring and in the policy
+    file's own comment. Diverging silently would be the defect.
+    """
+    if not any(_is_criteria_heading(line, policy) for line in description.splitlines()):
+        return []
+
+    items: list[list[str]] = []
+    in_section = False
+    open_item = False
+    for line in description.splitlines():
+        if _is_criteria_heading(line, policy):
+            in_section = True
+            open_item = False
+            continue
+        if not in_section:
+            continue
+        if line.lstrip().startswith("#"):
+            break
+        text: str | None = None
+        list_match = _LIST_ITEM.match(line)
+        if list_match:
+            text = _TASK_MARKER.sub("", list_match.group(1)).strip()
+        else:
+            ac_match = _AC_ITEM.match(line)
+            if ac_match:
+                lead, token, rest = ac_match.groups()
+                text = f"{token}{rest}".strip()
+                if lead:
+                    text = _TRAILING_EMPHASIS.sub("", text).strip()
+        if text is not None:
+            if text:
+                items.append([text])
+                open_item = True
+            else:
+                open_item = False
+            continue
+        if not line.strip():
+            continue
+        if open_item:
+            items[-1].append(line.strip())
+    return [" ".join(parts).strip() for parts in items if " ".join(parts).strip()]
+
+
+def _falsifier_of(item: str, policy: Policy) -> str | None:
+    """The text a criterion names as its falsifier, or ``None``.
+
+    Matched inside the item rather than on a line of its own -- the one place
+    this module departs from whole-line anchoring, for the reason the policy
+    file records: the falsifier has to be part of the criterion, written in the
+    same act, and the item boundary supplies the anchoring instead. The LAST
+    marker wins, so a criterion whose prose happens to use the word before
+    naming the real one is read the way its author meant it.
+    """
+    best: str | None = None
+    folded = item.lower()
+    for marker in policy.falsifier_markers:
+        start = folded.rfind(marker)
+        if start == -1:
+            continue
+        tail = item[start + len(marker) :].strip(" \t:-*_")
+        if tail and (best is None or start > folded.rfind(best.lower())):
+            best = tail
+    return best
+
+
+def _criterion_is_behaviour_shaped(item: str, policy: Policy) -> bool:
+    """True only on POSITIVE behaviour language with no live-state language.
+
+    The inverted tie-break, stated once more where it is applied: an ambiguous
+    criterion is NOT behaviour-shaped, so rule 7 does not fire on it. The
+    source classifier resolves ties the other way because there a tie holds a
+    flip and here it refuses a create.
+    """
+    if any(marker.search(item) for marker in policy.state_criterion_markers):
+        return False
+    return any(marker.search(item) for marker in policy.behaviour_criterion_markers)
+
+
+def _falsifier_is_merge_state_read(falsifier: str, policy: Policy) -> bool:
+    """True when a falsifier reads merge state and names no test runner.
+
+    The conjunction is load-bearing and is OMN-18135's measured finding, not a
+    softening: ``gh api repos/<owner>/<repo>/commits/<sha> --jq .sha &&
+    uv run pytest ...`` reads merge state AND proves behaviour, and refusing it
+    would refuse the one shape that satisfies receipt hardening and the
+    proof-class rule at the same time.
+    """
+    if not any(
+        marker.search(falsifier) for marker in policy.merge_state_falsifier_markers
+    ):
+        return False
+    folded = falsifier.lower()
+    return not any(
+        re.search(rf"(?<!\w){re.escape(word)}(?!\w)", folded)
+        for word in policy.behaviour_runner_words
+    )
+
+
+def canonical_criterion_text(item: str) -> str:
+    """The form a criterion is hashed in.
+
+    Unicode NFC, whitespace runs collapsed to single spaces, ends stripped --
+    and nothing else. See the module docstring for why the normalisation is
+    this narrow.
+    """
+    return " ".join(unicodedata.normalize("NFC", item).split())
+
+
+@dataclass(frozen=True, slots=True)
+class CriterionUnit:
+    """One acceptance criterion, as a self-contained hashable unit.
+
+    ``label`` is ``None`` for a criterion carrying no ``AC<n>``/``DoD<n>``
+    ordinal -- unbindable downstream, but not refused here.
+
+    ``falsifier`` is ``None`` for a criterion naming no check, which is exactly
+    the population rule 6 refuses, so a consumer never re-derives it.
+
+    ``criterion_hash`` is the SHA-256 of ``text`` encoded UTF-8, hex.
+    """
+
+    label: str | None
+    text: str
+    falsifier: str | None
+    criterion_hash: str
+
+
+def criterion_units(description: str, policy: Policy) -> list[CriterionUnit]:
+    """Every acceptance criterion in ``description``, one hashable unit each.
+
+    Exported for the binding transcriber. Returns an empty list for a
+    description with no recognised criteria heading -- the same scope rule 6
+    has.
+    """
+    units: list[CriterionUnit] = []
+    for item in _acceptance_criteria_items(description, policy):
+        text = canonical_criterion_text(item)
+        match = _CRITERION_LABEL.match(text)
+        units.append(
+            CriterionUnit(
+                label=f"{match.group(1).upper()}{match.group(2)}" if match else None,
+                text=text,
+                falsifier=_falsifier_of(item, policy),
+                criterion_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            )
+        )
+    return units
+
+
+def _quote(item: str) -> str:
+    """One criterion, trimmed to a readable length for a refusal message."""
+    flat = " ".join(item.split())
+    if len(flat) <= _MAX_CRITERION_QUOTED:
+        return flat
+    return flat[: _MAX_CRITERION_QUOTED - 1].rstrip() + "\u2026"
+
+
+def _criterion_findings(description: str, policy: Policy) -> list[Finding]:
+    """Rules 6 and 7, over every criterion the description lists."""
+    items = criterion_units(description, policy)
+    if not items:
+        return []
+
+    unfalsified: list[str] = []
+    merge_state: list[tuple[str, str]] = []
+    for unit in items:
+        if unit.falsifier is None:
+            unfalsified.append(unit.text)
+            continue
+        if _criterion_is_behaviour_shaped(
+            unit.text, policy
+        ) and _falsifier_is_merge_state_read(unit.falsifier, policy):
+            merge_state.append((unit.text, unit.falsifier))
+
+    findings: list[Finding] = []
+    canonical = policy.falsifier_markers[0]
+    if unfalsified:
+        named = unfalsified[:_MAX_CRITERIA_NAMED]
+        remainder = len(unfalsified) - len(named)
+        quoted = "; ".join(f'"{_quote(item)}"' for item in named)
+        if remainder:
+            quoted += f"; and {remainder} more"
+        findings.append(
+            Finding(
+                code="unfalsified_criterion",
+                field="description",
+                reason=(
+                    f"{len(unfalsified)} of {len(items)} acceptance criteria name "
+                    f"no check that would settle them: {quoted}. A criterion with "
+                    "no named falsifier cannot be bound to an evidence item, so "
+                    "nothing that closes tickets mechanically can ever discharge "
+                    "it -- and a binding written later, once the outcome is "
+                    "known, can be shaped to that outcome, which is the thing "
+                    "declaring it now prevents"
+                ),
+                fix=(
+                    f"write each criterion as '{_FALSIFIER_GRAMMAR}' -- e.g. "
+                    "'AC1 -- the guard refuses an unfalsified create. -- "
+                    f"{canonical} a guard test feeding a create with one "
+                    "unfalsified criterion asserts a non-zero refusal'. The "
+                    "falsifier is a check name or a command shape, never a "
+                    "result: it says what WOULD settle the criterion, not what "
+                    "did. If a criterion has no such check, it is not yet an "
+                    "acceptance criterion"
+                ),
+            )
+        )
+    for item, falsifier in merge_state[:_MAX_CRITERIA_NAMED]:
+        findings.append(
+            Finding(
+                code="merge_state_falsifier_on_behaviour_criterion",
+                field="description",
+                reason=(
+                    f'the criterion "{_quote(item)}" asks what the code DOES, '
+                    f'but its falsifier "{_quote(falsifier)}" reads merge state. '
+                    "A merged pull request and a green check say a change landed; "
+                    "neither says the behaviour the criterion claims actually "
+                    "happens, so a criterion settled that way is settled by "
+                    "nothing"
+                ),
+                fix=(
+                    "name a check that EXERCISES the behaviour -- a test runner "
+                    f"({', '.join(policy.behaviour_runner_words[:5])}, ...) or the "
+                    "onex CLI running the node or skill. A merge-state read is a "
+                    "legitimate falsifier for a criterion about merge state "
+                    "('the companion is merged to main and read back'), which "
+                    "this rule does not touch. A falsifier that carries BOTH -- "
+                    "'gh api repos/<owner>/<repo>/commits/<sha> --jq .sha && "
+                    "uv run pytest ...' -- is admitted: it satisfies receipt "
+                    "hardening and still proves behaviour"
+                ),
+            )
+        )
+    return findings
+
+
+def _override_path_is_canonical(cited: str, policy: Policy) -> bool:
+    """True when the citation names the append-only coordination surface.
+
+    A lane that may cite any file it can write has not been authorised by
+    anybody -- it has written itself a permission slip. Same check, and the same
+    reasoning, as OMN-17957's ``_citation_path_is_canonical``.
+    """
+    normalised = cited.strip().lstrip("./")
+    if ".." in Path(normalised).parts or Path(normalised).is_absolute():
+        return False
+    if normalised in policy.override_ledger_paths:
+        return True
+    return any(
+        normalised.startswith(prefix) for prefix in policy.override_ledger_path_prefixes
+    )
+
+
+def _row_names(row: str, subject: str) -> bool:
+    """True when ``row`` names ``subject``, matched on word boundaries."""
+    if not subject:
+        return False
+    return (
+        re.search(rf"(?<![\w.-]){re.escape(subject)}(?![\w.-])", row, re.IGNORECASE)
+        is not None
+    )
+
+
+def _resolve_override(
+    description: str,
+    parents: tuple[str, ...],
+    policy: Policy,
+    ledger_root: Path | None,
+) -> Finding | bool:
+    """Resolve an ``Admission-Override:`` citation.
+
+    Returns ``False`` when no citation is present, ``True`` when one resolves to
+    a RULING row naming the parent, and a :class:`Finding` when a citation IS
+    present and does not resolve. That last case is deliberately not "ignore it
+    and fall through to the cap": a lane that cited a row and got refused for
+    being over the cap would read the refusal as the citation being unnecessary,
+    when in fact the citation was wrong. The reason has to name which half
+    failed.
+    """
+    match = _OVERRIDE_LINE.search(description)
+    if match is None:
+        return False
+
+    cited = match.group("path")
+    if not _override_path_is_canonical(cited, policy):
+        allowed = ", ".join(sorted(policy.override_ledger_paths))
+        return Finding(
+            code="override_path_not_canonical",
+            field="description",
+            reason=(
+                f"the override citation names {cited!r}, which is not the "
+                "append-only coordination surface a ruling lives in"
+            ),
+            fix=(
+                f"cite a row in {allowed} (or a docs/tracking/archive/ roll), "
+                "appended through scripts/ledger_lock.py"
+            ),
+        )
+
+    if ledger_root is None:
+        return Finding(
+            code="override_ledger_unreadable",
+            field="description",
+            reason=(
+                "the override cites a ledger row, but OMNI_HOME is not set in "
+                "this environment, so the row cannot be read and the "
+                "authorisation cannot be checked"
+            ),
+            fix=(
+                "set OMNI_HOME to the registry clone whose ledger carries the "
+                "ruling. An override nobody can resolve is not an override"
+            ),
+        )
+
+    ledger = ledger_root / cited.strip().lstrip("./")
+    try:
+        rows = ledger.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return Finding(
+            code="override_ledger_unreadable",
+            field="description",
+            reason=f"the cited ledger {ledger} could not be read ({exc})",
+            fix=(
+                "cite a line that exists in the rolling ledger of the clone "
+                "OMNI_HOME names"
+            ),
+        )
+
+    line_no = int(match.group("line"))
+    if line_no < 1 or line_no > len(rows):
+        return Finding(
+            code="override_line_absent",
+            field="description",
+            reason=(
+                f"the override cites line {line_no} of {cited}, which has "
+                f"{len(rows)} lines"
+            ),
+            fix=(
+                "cite the line number the RULING row actually occupies. The "
+                "ledger is append-only, so a row's line number does not move"
+            ),
+        )
+
+    row = rows[line_no - 1]
+    fields = [field.strip() for field in row.split("|")]
+    kind = fields[1] if len(fields) > 1 else ""
+    if kind.upper() != _REQUIRED_OVERRIDE_ROW_KIND:
+        return Finding(
+            code="override_row_not_ruling",
+            field="description",
+            reason=(
+                f"{cited}:{line_no} is a {kind or '(no kind)'} row, not a "
+                f"{_REQUIRED_OVERRIDE_ROW_KIND} row"
+            ),
+            fix=(
+                f"cite a row whose second field is exactly "
+                f"{_REQUIRED_OVERRIDE_ROW_KIND}. A CLAIM, NOTE, PROGRESS or "
+                "TERMINAL row records what a lane DID; only a RULING decides "
+                "anything, and a row that merely mentions a ruling in its free "
+                "text decides nothing"
+            ),
+        )
+
+    if not any(_row_names(row, parent) for parent in parents if parent):
+        named = " or ".join(p for p in parents if p)
+        return Finding(
+            code="override_row_does_not_name_parent",
+            field="description",
+            reason=(
+                f"{cited}:{line_no} is a RULING row, but it does not name "
+                f"{named} -- so it rules on some other subject"
+            ),
+            fix=(
+                "a waiver has to name the parent whose queue it waives. A "
+                "ruling about another subject is not a blanket permission, and "
+                "a citation that resolves to one is how a single ruling ends up "
+                "waiving the cap for every parent on the board"
+            ),
+        )
+
+    return True
+
+
+def _unstarted_cap_findings(
+    tool_input: dict[str, Any],
+    description: str,
+    policy: Policy,
+    children_lookup: ChildrenLookup | None,
+    ledger_root: Path | None,
+) -> list[Finding]:
+    """Rule 8's verdict on the parent's queue."""
+    parent_ref = tool_input.get("parentId")
+    if not _is_present(parent_ref):
+        # No parent named -- an epic declaring itself one under rule 1. It has
+        # no queue to be over, and looking one up would be a network call on a
+        # question nobody asked.
+        return []
+    assert isinstance(parent_ref, str)
+
+    if children_lookup is None:
+        # The one bounded fail-OPEN in this module outside rule 5, and it is
+        # stated rather than discovered: no census source is configured on this
+        # machine (no Linear read credential). Refusing here would make rules
+        # 1-7 -- payload-only and always enforceable -- collateral damage of a
+        # missing key, and a guard that refuses every create on a laptop with no
+        # key is a guard that gets disabled wholesale rather than repaired.
+        return []
+
+    census = children_lookup(parent_ref.strip())
+    if census is None:
+        return [
+            Finding(
+                code="unstarted_cap_unresolved",
+                field="parentId",
+                reason=(
+                    f"the queue of parent {parent_ref!r} could not be counted -- "
+                    "the tracker did not answer, or it does not carry that "
+                    "parent. The cap is unverified, so the create is refused "
+                    "rather than assumed clean"
+                ),
+                fix=(
+                    "check the parentId names a real issue, and that the "
+                    "tracker is reachable. A create the tracker cannot resolve "
+                    "would not have succeeded anyway, so this refusal costs "
+                    "nothing but the round trip"
+                ),
+            )
+        ]
+
+    count = len(census.unstarted)
+    cap = policy.unstarted_children_cap
+
+    if count <= cap and not census.complete:
+        return [
+            Finding(
+                code="unstarted_cap_unresolved",
+                field="parentId",
+                reason=(
+                    f"the enumeration of {census.parent}'s children was "
+                    f"truncated, so {count} is a lower bound and not a count. A "
+                    "cap applied to a number that might be wrong fires at random"
+                ),
+                fix=(
+                    "re-issue the create; if it keeps happening the parent "
+                    "carries more children than the census will page through, "
+                    "which is itself the condition this rule exists to refuse"
+                ),
+            )
+        ]
+
+    if count <= cap:
+        return []
+
+    override = _resolve_override(
+        description, (census.parent, parent_ref.strip()), policy, ledger_root
+    )
+    if override is True:
+        return []
+    if isinstance(override, Finding):
+        return [override]
+
+    oldest = census.unstarted[0]
+    filed = oldest.created_at[:10] or "(date unknown)"
+    return [
+        Finding(
+            code="unstarted_children_cap",
+            field="parentId",
+            reason=(
+                f"{census.parent} already carries {count} children in an "
+                f"unstarted state, over the cap of {cap}. The oldest is "
+                f"{oldest.identifier}, filed {filed}, and still nobody has "
+                "started it. A queue this long is not a plan -- measured across "
+                "the workspace on 2026-09-13, 59 parents were over this cap and "
+                "the deepest carried 62, some filed in March"
+            ),
+            fix=(
+                "do one of three things, in this order of preference. (1) START "
+                "a child of this parent -- if this new ticket is the most "
+                "important thing under it, that is an argument for starting it "
+                "now, not for queueing it behind ten others. (2) CANCEL the "
+                "children that are not going to be done; a ticket nobody will "
+                "start is a decision already made and not recorded. (3) If the "
+                "queue is deliberate, record an operator RULING row in the "
+                "rolling ledger through scripts/ledger_lock.py, naming this "
+                f"parent, and cite it on this create as "
+                f"'{OVERRIDE_CITATION_GRAMMAR}'. There is no environment "
+                "variable and no policy flag that turns this off"
+            ),
+        )
+    ]
+
+
+def check_save_issue(
+    tool_input: Any,
+    policy: Policy,
+    children_lookup: ChildrenLookup | None = None,
+    ledger_root: Path | None = None,
+) -> list[Finding]:
     """Return every failing admission rule for one ``save_issue`` call.
 
     An empty list admits the call. Updates always return an empty list.
+
+    ``children_lookup`` is rule 8's only window onto anything outside the
+    payload, and it is an argument rather than an import so this function stays
+    a pure function of what it is given. ``None`` means no census source is
+    configured; see :func:`_unstarted_cap_findings` for why that admits rather
+    than refuses. ``ledger_root`` is where an override citation is resolved from.
     """
+
     if not isinstance(tool_input, dict):
         return [
             Finding(
@@ -629,6 +1599,24 @@ def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
     if description_readable and _declares_in_progress(tool_input, policy):
         findings.extend(_probe_line_findings(description))
 
+    # Rules 6 and 7 -- every listed criterion names the check that would settle
+    # it, and a behaviour-shaped criterion does not name a merge-state read.
+    if description_readable:
+        findings.extend(_criterion_findings(description, policy))
+
+    # Rule 8 -- a parent may not carry more than N children nobody has started.
+    # The one rule here that reads state outside the payload, because the
+    # question it answers -- how long is this parent's queue already? -- is not
+    # answerable from the call in front of it. That is a real departure from
+    # this module's original "from the payload alone" boundary, and it is
+    # bounded to one lookup of one parent, behind a seam this function is given
+    # rather than one it reaches for.
+    findings.extend(
+        _unstarted_cap_findings(
+            tool_input, description, policy, children_lookup, ledger_root
+        )
+    )
+
     return findings
 
 
@@ -661,6 +1649,115 @@ def render_block_reason(findings: list[Finding], policy: Policy) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _resolve_api_key() -> str:
+    """The tracker read credential, from the environment or the ONEX env file.
+
+    The environment first. A PreToolUse hook inherits the session environment,
+    which on a dispatched lane often does not carry it, so the same
+    ``~/.omnibase/.env`` fallback ``scripts/worktree_auto_prune.py`` uses is read
+    second. Returns ``""`` when neither carries one, which switches rule 8 off
+    for this machine -- see :func:`_unstarted_cap_findings`.
+
+    The value is never written anywhere: not to stdout, not to stderr, not to
+    the refusal text.
+    """
+    key = os.environ.get("LINEAR_API_KEY", "").strip()
+    if key:
+        return key
+    env_file = Path.home() / ".omnibase" / ".env"
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("LINEAR_API_KEY="):
+            return stripped.partition("=")[2].strip().strip("'\"")
+    return ""
+
+
+def _fetch_children_nodes(
+    parent_ref: str, api_key: str
+) -> tuple[str, list[dict[str, Any]], bool] | None:
+    """Enumerate a parent's children, or ``None`` when it cannot be resolved.
+
+    Returns the parent's resolved identifier -- so a payload carrying a uuid
+    still produces a refusal naming something a person can open -- its child
+    nodes, and whether the enumeration ran to completion.
+
+    Every failure mode collapses to ``None`` on purpose: a transport error, a
+    non-200, a GraphQL error body, an unknown issue and an unparseable response
+    are all "the tracker did not tell us", and the caller refuses on that
+    uniformly rather than branching on which flavour of unknown it got.
+    """
+    identifier = parent_ref
+    nodes: list[dict[str, Any]] = []
+    after: str | None = None
+    for _page in range(_CENSUS_MAX_PAGES):
+        body = json.dumps(
+            {
+                "query": _CENSUS_QUERY,
+                "variables": {
+                    "id": parent_ref,
+                    "after": after,
+                    "first": _CENSUS_PAGE_SIZE,
+                },
+            }
+        ).encode()
+        request = urllib.request.Request(  # noqa: S310
+            _LINEAR_API_URL,
+            data=body,
+            headers={"Authorization": api_key, "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(  # noqa: S310
+                request, timeout=_CENSUS_TIMEOUT_S
+            ) as response:
+                if response.status != 200:
+                    return None
+                raw = response.read()
+        except (urllib.error.URLError, OSError):
+            # HTTPError subclasses URLError, so a 400 on an unknown issue lands
+            # here too.
+            return None
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        if payload.get("errors"):
+            return None
+        issue = (payload.get("data") or {}).get("issue")
+        if not isinstance(issue, dict):
+            return None
+        identifier = str(issue.get("identifier") or parent_ref)
+        children = issue.get("children") or {}
+        page_nodes = children.get("nodes")
+        if not isinstance(page_nodes, list):
+            return None
+        nodes.extend(node for node in page_nodes if isinstance(node, dict))
+        page_info = children.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            return identifier, nodes, True
+        after = page_info.get("endCursor")
+        if not isinstance(after, str) or not after:
+            return None
+    return identifier, nodes, False
+
+
+def _network_lookup(api_key: str, policy: Policy) -> ChildrenLookup:
+    """Bind the census seam to the live tracker."""
+
+    def lookup(parent_ref: str) -> ParentCensus | None:
+        fetched = _fetch_children_nodes(parent_ref, api_key)
+        if fetched is None:
+            return None
+        identifier, nodes, complete = fetched
+        return build_census(identifier, nodes, policy, complete=complete)
+
+    return lookup
 
 
 def _block(reason: str) -> int:
@@ -705,9 +1802,30 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"{exc}\n")
         return 1
 
-    findings = check_save_issue(payload.get("tool_input"), policy)
+    api_key = _resolve_api_key()
+    lookup = _network_lookup(api_key, policy) if api_key else None
+    ledger_root_raw = os.environ.get("OMNI_HOME", "").strip()
+    ledger_root = Path(ledger_root_raw) if ledger_root_raw else None
+
+    findings = check_save_issue(
+        payload.get("tool_input"),
+        policy,
+        children_lookup=lookup,
+        ledger_root=ledger_root,
+    )
     if findings:
+        # Nothing is written to stderr on this path. The shell wrapper captures
+        # stdout and stderr TOGETHER and then reads `.reason` out of the result
+        # with jq, so a diagnostic line here would not be a diagnostic -- it
+        # would corrupt the refusal into the wrapper's generic fallback text and
+        # throw away every finding this function just computed.
         return _block(render_block_reason(findings, policy))
+    if lookup is None:
+        sys.stderr.write(
+            "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "
+            "~/.omnibase/.env, so rule 8 (the unstarted-children cap) was not "
+            "evaluated for this create. Rules 1-7 ran normally.\n"
+        )
     return 0
 
 
