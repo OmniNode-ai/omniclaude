@@ -178,6 +178,27 @@ expected_hooks:
       of them under the single API identity every lane writes as. Registered
       AFTER pre_tool_use_done_flip_guard.sh on the same matcher, which only
       ever inspects updates, so the two never contend for the same call.
+
+      OMN-18331 adds two rules over the description's acceptance criteria.
+      Rule 6: every criterion listed under an acceptance-criteria heading
+      carries a NAMED FALSIFIER -- the check that would settle it -- written
+      as part of the criterion, canonically "-- falsifier: <check name or
+      command shape>". A create with an unfalsified criterion is refused and
+      the refusal quotes that criterion. Rule 7: a behaviour-shaped criterion
+      may not name a merge-state read as its falsifier, because a merged pull
+      request says a change landed and not that the behaviour happens; a
+      falsifier carrying BOTH a merge read and a test runner is admitted,
+      which is OMN-18135's measured finding about the one form that satisfies
+      receipt hardening and the proof-class rule at once.
+
+      Both rules fire on CREATE only, so history is untouched, and rule 6
+      fires only on a description carrying a recognised criteria heading --
+      a stated fail-OPEN direction, bounded to rule 6, recorded in the guard's
+      module docstring and the policy file rather than left to be inferred.
+      The classification vocabulary is transcribed from the OMN-18135 proof-
+      class classifier with its source revision pinned in the policy file's
+      proof_class_source block, and a drift test fails on either divergence.
+      There is no exemption key and no opt-in flag for either rule.
     enforcement: true
     lite_mode_exit: false
     mask:

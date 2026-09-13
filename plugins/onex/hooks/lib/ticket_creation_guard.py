@@ -72,6 +72,86 @@ A create is admitted only when all four hold:
    one thing that has to exist at the START for a ticket to be mechanically
    closeable at the end.
 
+6. Every acceptance criterion the description lists carries a **named
+   falsifier** -- the check that would settle it -- written as part of the
+   criterion::
+
+       * AC1 -- the guard refuses an unfalsified create. -- falsifier: a guard
+         test feeding a create with one unfalsified criterion asserts refusal
+
+   A create whose criterion list has an unfalsified criterion is refused,
+   naming that criterion.
+
+7. A criterion that is **behaviour-shaped** may not name a **merge-state read**
+   as its falsifier. "The companion PR is merged to main" may; "the guard
+   refuses an unfalsified create" may not, because a merged pull request is not
+   evidence that the guard refuses anything.
+
+Rules 6 and 7 are the primary mechanism of OMN-18331's plan, and the argument
+for putting them HERE rather than anywhere later in the lifecycle is worth
+stating, because it is the whole reason the rules exist. A binding between a
+criterion and the check that settles it has to be declared **before the
+evidence exists, by the party that knows the intent, and attributably**. At
+pull-request time the outcome is already known, so a binding written then can
+be shaped to the result. At companion-mint time a machine would be inferring,
+which OMN-18238 forbids outright. Ticket-creation time is the only point that
+satisfies all three: the author writes the criterion and its falsifier in one
+act, before any code exists, attributed to the creator with the ticket's own
+timestamp.
+
+The falsifier is a check name or a command shape -- **never a result**. It is a
+claim about what WOULD settle the criterion, made before anything is built.
+
+What rules 6 and 7 enforce, and what they cannot
+------------------------------------------------
+Rule 6 enforces that a falsifier was NAMED. It cannot judge whether the named
+check is a good one, and it cannot run it. An author who names something
+trivially true defeats it. That residual is real, it is recorded in the plan
+rather than papered over, and it is bounded by three things this gate does
+supply: the falsifier is written before the outcome is known, it is attributable
+to a named creator, and rule 7 refuses the single commonest weak shape.
+
+Rule 7 is that one shape. It reuses the OMN-18135 proof-class vocabulary --
+transcribed into the policy file with its source revision pinned, because this
+module parses its own policy with the standard library alone and can import
+nothing from another repository. It does NOT re-implement proof
+classification, and must not grow toward doing so: the classifier that decides
+what a check PROVED runs later, over a receipt, with the command's real exit
+status in hand. This one reads a sentence.
+
+**The tie-break is inverted relative to its source, deliberately.** The source
+asks whether a readback may discharge a criterion and answers yes only on a
+state marker with no behaviour marker, so an ambiguous criterion falls to
+behaviour and HOLDS a flip. This asks whether a criterion must be refused a
+merge-state falsifier and answers yes only on a behaviour marker with no state
+marker, so an ambiguous criterion is ADMITTED. Same wordlist, opposite default,
+because the cost of the error is opposite: there a misread costs a comment,
+here it costs a refused create, and a gate that refuses correct work is one
+lanes learn to route around.
+
+**Rule 7's conjunction, and why it is not an exemption.** A merge-state-shaped
+falsifier is refused only when it names no test runner. That is OMN-18135's own
+measured finding: ``gh api repos/<owner>/<repo>/commits/<sha> --jq .sha &&
+uv run pytest ...`` is the form that satisfies receipt hardening AND keeps its
+behaviour class, and a rule refusing every falsifier that mentions ``gh`` would
+refuse the one shape that clears both gates. A lane meeting that refusal would
+be right that the gate was wrong.
+
+**Rule 6's scope, stated as a fail-open direction rather than implied.** It
+fires only on a description carrying a recognised acceptance-criteria heading.
+The closer's own parser falls back to reading the WHOLE BODY when it finds no
+heading, because there an over-count holds a flip and holding is safe. Here an
+over-count REFUSES a create, so the fallback is dropped. A create with no
+criteria section is therefore not gated by rule 6. That is not a hole opened
+here: such a ticket declares no map, the autobinder transcribes nothing, and
+the closer holds it on an unbound criterion -- which is today's behaviour for
+the entire corpus, and the hold is a comment on the ticket, not a silence.
+
+Rule 6 also does not require a criterion LABEL. An unlabelled criterion is
+unbindable downstream and holds there, which is a ticket-authoring problem the
+closer already reports; adding a second refusal for it here would refuse
+creates for a defect that is already visible where it bites.
+
 What rule 5 enforces, and what it cannot
 ----------------------------------------
 It enforces the SHAPE of a probe -- a command, then ``=>``, then the
@@ -218,6 +298,34 @@ _PROBE_SPLIT: Final[str] = "=>"
 
 _PROBE_LINE_GRAMMAR: Final[str] = "Probe: <command> => <observation that settles it>"
 
+#: A bullet or numbered list item, and an unbulleted ``AC1 ...`` line. Both
+#: transcribed from the closer's own criteria parser so the two mechanisms read
+#: the same tickets the same way: a criterion this gate demands a falsifier for
+#: must be one the closer will later look for a binding on, or the gate is
+#: enforcing against a population nothing downstream reads.
+_LIST_ITEM: Final[re.Pattern[str]] = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(.*)$")
+_AC_ITEM: Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*([*_]*)[ \t]*(AC[-_ ]?\d+)(?!\d)[*_]*(.*?)[ \t]*$", re.IGNORECASE
+)
+_TRAILING_EMPHASIS: Final[re.Pattern[str]] = re.compile(r"[*_]+$")
+_TASK_MARKER: Final[re.Pattern[str]] = re.compile(r"^\[[ \t xX]\][ \t]*")
+_TRAILING_QUALIFIER: Final[re.Pattern[str]] = re.compile(r"\s*\([^)]*\)\s*$")
+_HEADING_ENUM: Final[re.Pattern[str]] = re.compile(r"^\d+[.)]\s*")
+
+#: How much of a criterion is quoted back in a refusal. A description whose
+#: criteria are paragraphs must not turn one refusal into an unreadable wall,
+#: and an unbounded splice is how a message hits a transport limit.
+_MAX_CRITERION_QUOTED: Final[int] = 160
+
+#: How many unfalsified criteria are named individually. Past this the refusal
+#: says how many more there are: forty quoted criteria do not make the point
+#: forty times better, and the remedy is the same edit either way.
+_MAX_CRITERIA_NAMED: Final[int] = 8
+
+_FALSIFIER_GRAMMAR: Final[str] = (
+    "<criterion text> -- falsifier: <check name or command shape that would settle it>"
+)
+
 
 class PolicyError(RuntimeError):
     """The admission policy could not be read.
@@ -237,6 +345,12 @@ class Policy:
     epic_markers: tuple[str, ...]
     residual_title_terms: tuple[str, ...]
     in_progress_state_names: frozenset[str]
+    falsifier_markers: tuple[str, ...]
+    acceptance_criteria_headings: frozenset[str]
+    state_criterion_markers: tuple[re.Pattern[str], ...]
+    behaviour_criterion_markers: tuple[re.Pattern[str], ...]
+    merge_state_falsifier_markers: tuple[re.Pattern[str], ...]
+    behaviour_runner_words: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +382,26 @@ def _string_list(raw: Any, key: str, source: Path) -> tuple[str, ...]:
             )
         out.append(entry.strip())
     return tuple(out)
+
+
+def _compiled_markers(raw: Any, key: str, source: Path) -> tuple[re.Pattern[str], ...]:
+    """Compile a configured marker list, or raise.
+
+    A marker that will not compile is refused here rather than at match time.
+    A regex error raised from inside a rule would surface as an unhandled
+    exception in a PreToolUse hook, and the wrapper treats that as a block --
+    so every Linear create on the machine would fail with a traceback instead
+    of with a policy error naming the offending pattern.
+    """
+    patterns: list[re.Pattern[str]] = []
+    for entry in _string_list(raw, key, source):
+        try:
+            patterns.append(re.compile(entry, re.IGNORECASE))
+        except re.error as exc:
+            raise PolicyError(
+                f"{source}: '{key}' entry {entry!r} is not a regex ({exc})"
+            ) from exc
+    return tuple(patterns)
 
 
 def load_policy(path: Path | None = None) -> Policy:
@@ -311,6 +445,39 @@ def load_policy(path: Path | None = None) -> Policy:
             n.lower()
             for n in _string_list(
                 raw.get("in_progress_state_names"), "in_progress_state_names", source
+            )
+        ),
+        falsifier_markers=tuple(
+            m.lower()
+            for m in _string_list(
+                raw.get("falsifier_markers"), "falsifier_markers", source
+            )
+        ),
+        acceptance_criteria_headings=frozenset(
+            h.lower()
+            for h in _string_list(
+                raw.get("acceptance_criteria_headings"),
+                "acceptance_criteria_headings",
+                source,
+            )
+        ),
+        state_criterion_markers=_compiled_markers(
+            raw.get("state_criterion_markers"), "state_criterion_markers", source
+        ),
+        behaviour_criterion_markers=_compiled_markers(
+            raw.get("behaviour_criterion_markers"),
+            "behaviour_criterion_markers",
+            source,
+        ),
+        merge_state_falsifier_markers=_compiled_markers(
+            raw.get("merge_state_falsifier_markers"),
+            "merge_state_falsifier_markers",
+            source,
+        ),
+        behaviour_runner_words=tuple(
+            w.lower()
+            for w in _string_list(
+                raw.get("behaviour_runner_words"), "behaviour_runner_words", source
             )
         ),
     )
@@ -456,6 +623,229 @@ def _probe_line_findings(description: str) -> list[Finding]:
             ),
         )
     ]
+
+
+def _is_criteria_heading(line: str, policy: Policy) -> bool:
+    """True when ``line`` opens an acceptance-criteria section.
+
+    Tolerates ``## Acceptance Criteria``, ``**Acceptance criteria:**``,
+    ``### 3. Acceptance criteria`` and a bare ``AC``, and strips a trailing
+    parenthetical qualifier -- ``Acceptance criteria (falsifiable)`` names the
+    section as surely as the bare spelling does. Membership is against the
+    configured closed set, never a prefix: a heading reading "Acceptance
+    criteria coverage report" is about the section, not the section itself.
+    """
+    trimmed = line.strip()
+    if not trimmed:
+        return False
+    trimmed = trimmed.lstrip("#").strip()
+    trimmed = trimmed.strip("*_").strip()
+    trimmed = _HEADING_ENUM.sub("", trimmed).strip()
+    trimmed = trimmed.rstrip(":").strip()
+    folded = trimmed.lower()
+    if folded in policy.acceptance_criteria_headings:
+        return True
+    return (
+        _TRAILING_QUALIFIER.sub("", folded).strip()
+        in policy.acceptance_criteria_headings
+    )
+
+
+def _acceptance_criteria_items(description: str, policy: Policy) -> list[str]:
+    """The criterion items listed under an acceptance-criteria heading.
+
+    The section runs from the heading to the next markdown heading, or to the
+    end of the body. An item spans its own line plus any continuation lines
+    that follow it before the next item -- so a criterion whose falsifier is
+    written on a wrapped line still carries it, and a falsifier belonging to
+    the criterion above never discharges the one below.
+
+    Returns an EMPTY list when no recognised heading is present. That differs
+    from the closer's parser, which reads the whole body in that case; the
+    divergence and its reason are in this module's docstring and in the policy
+    file's own comment. Diverging silently would be the defect.
+    """
+    if not any(_is_criteria_heading(line, policy) for line in description.splitlines()):
+        return []
+
+    items: list[list[str]] = []
+    in_section = False
+    open_item = False
+    for line in description.splitlines():
+        if _is_criteria_heading(line, policy):
+            in_section = True
+            open_item = False
+            continue
+        if not in_section:
+            continue
+        if line.lstrip().startswith("#"):
+            break
+        text: str | None = None
+        list_match = _LIST_ITEM.match(line)
+        if list_match:
+            text = _TASK_MARKER.sub("", list_match.group(1)).strip()
+        else:
+            ac_match = _AC_ITEM.match(line)
+            if ac_match:
+                lead, token, rest = ac_match.groups()
+                text = f"{token}{rest}".strip()
+                if lead:
+                    text = _TRAILING_EMPHASIS.sub("", text).strip()
+        if text is not None:
+            if text:
+                items.append([text])
+                open_item = True
+            else:
+                open_item = False
+            continue
+        if not line.strip():
+            continue
+        if open_item:
+            items[-1].append(line.strip())
+    return [" ".join(parts).strip() for parts in items if " ".join(parts).strip()]
+
+
+def _falsifier_of(item: str, policy: Policy) -> str | None:
+    """The text a criterion names as its falsifier, or ``None``.
+
+    Matched inside the item rather than on a line of its own -- the one place
+    this module departs from whole-line anchoring, for the reason the policy
+    file records: the falsifier has to be part of the criterion, written in the
+    same act, and the item boundary supplies the anchoring instead. The LAST
+    marker wins, so a criterion whose prose happens to use the word before
+    naming the real one is read the way its author meant it.
+    """
+    best: str | None = None
+    folded = item.lower()
+    for marker in policy.falsifier_markers:
+        start = folded.rfind(marker)
+        if start == -1:
+            continue
+        tail = item[start + len(marker) :].strip(" \t:-*_")
+        if tail and (best is None or start > folded.rfind(best.lower())):
+            best = tail
+    return best
+
+
+def _criterion_is_behaviour_shaped(item: str, policy: Policy) -> bool:
+    """True only on POSITIVE behaviour language with no live-state language.
+
+    The inverted tie-break, stated once more where it is applied: an ambiguous
+    criterion is NOT behaviour-shaped, so rule 7 does not fire on it. The
+    source classifier resolves ties the other way because there a tie holds a
+    flip and here it refuses a create.
+    """
+    if any(marker.search(item) for marker in policy.state_criterion_markers):
+        return False
+    return any(marker.search(item) for marker in policy.behaviour_criterion_markers)
+
+
+def _falsifier_is_merge_state_read(falsifier: str, policy: Policy) -> bool:
+    """True when a falsifier reads merge state and names no test runner.
+
+    The conjunction is load-bearing and is OMN-18135's measured finding, not a
+    softening: ``gh api repos/<owner>/<repo>/commits/<sha> --jq .sha &&
+    uv run pytest ...`` reads merge state AND proves behaviour, and refusing it
+    would refuse the one shape that satisfies receipt hardening and the
+    proof-class rule at the same time.
+    """
+    if not any(
+        marker.search(falsifier) for marker in policy.merge_state_falsifier_markers
+    ):
+        return False
+    folded = falsifier.lower()
+    return not any(
+        re.search(rf"(?<!\w){re.escape(word)}(?!\w)", folded)
+        for word in policy.behaviour_runner_words
+    )
+
+
+def _quote(item: str) -> str:
+    """One criterion, trimmed to a readable length for a refusal message."""
+    flat = " ".join(item.split())
+    if len(flat) <= _MAX_CRITERION_QUOTED:
+        return flat
+    return flat[: _MAX_CRITERION_QUOTED - 1].rstrip() + "\u2026"
+
+
+def _criterion_findings(description: str, policy: Policy) -> list[Finding]:
+    """Rules 6 and 7, over every criterion the description lists."""
+    items = _acceptance_criteria_items(description, policy)
+    if not items:
+        return []
+
+    unfalsified: list[str] = []
+    merge_state: list[tuple[str, str]] = []
+    for item in items:
+        falsifier = _falsifier_of(item, policy)
+        if falsifier is None:
+            unfalsified.append(item)
+            continue
+        if _criterion_is_behaviour_shaped(
+            item, policy
+        ) and _falsifier_is_merge_state_read(falsifier, policy):
+            merge_state.append((item, falsifier))
+
+    findings: list[Finding] = []
+    canonical = policy.falsifier_markers[0]
+    if unfalsified:
+        named = unfalsified[:_MAX_CRITERIA_NAMED]
+        remainder = len(unfalsified) - len(named)
+        quoted = "; ".join(f'"{_quote(item)}"' for item in named)
+        if remainder:
+            quoted += f"; and {remainder} more"
+        findings.append(
+            Finding(
+                code="unfalsified_criterion",
+                field="description",
+                reason=(
+                    f"{len(unfalsified)} of {len(items)} acceptance criteria name "
+                    f"no check that would settle them: {quoted}. A criterion with "
+                    "no named falsifier cannot be bound to an evidence item, so "
+                    "nothing that closes tickets mechanically can ever discharge "
+                    "it -- and a binding written later, once the outcome is "
+                    "known, can be shaped to that outcome, which is the thing "
+                    "declaring it now prevents"
+                ),
+                fix=(
+                    f"write each criterion as '{_FALSIFIER_GRAMMAR}' -- e.g. "
+                    "'AC1 -- the guard refuses an unfalsified create. -- "
+                    f"{canonical} a guard test feeding a create with one "
+                    "unfalsified criterion asserts a non-zero refusal'. The "
+                    "falsifier is a check name or a command shape, never a "
+                    "result: it says what WOULD settle the criterion, not what "
+                    "did. If a criterion has no such check, it is not yet an "
+                    "acceptance criterion"
+                ),
+            )
+        )
+    for item, falsifier in merge_state[:_MAX_CRITERIA_NAMED]:
+        findings.append(
+            Finding(
+                code="merge_state_falsifier_on_behaviour_criterion",
+                field="description",
+                reason=(
+                    f'the criterion "{_quote(item)}" asks what the code DOES, '
+                    f'but its falsifier "{_quote(falsifier)}" reads merge state. '
+                    "A merged pull request and a green check say a change landed; "
+                    "neither says the behaviour the criterion claims actually "
+                    "happens, so a criterion settled that way is settled by "
+                    "nothing"
+                ),
+                fix=(
+                    "name a check that EXERCISES the behaviour -- a test runner "
+                    f"({', '.join(policy.behaviour_runner_words[:5])}, ...) or the "
+                    "onex CLI running the node or skill. A merge-state read is a "
+                    "legitimate falsifier for a criterion about merge state "
+                    "('the companion is merged to main and read back'), which "
+                    "this rule does not touch. A falsifier that carries BOTH -- "
+                    "'gh api repos/<owner>/<repo>/commits/<sha> --jq .sha && "
+                    "uv run pytest ...' -- is admitted: it satisfies receipt "
+                    "hardening and still proves behaviour"
+                ),
+            )
+        )
+    return findings
 
 
 def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
@@ -628,6 +1018,11 @@ def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
     # lane fills in with something plausible to get past the check.
     if description_readable and _declares_in_progress(tool_input, policy):
         findings.extend(_probe_line_findings(description))
+
+    # Rules 6 and 7 -- every listed criterion names the check that would settle
+    # it, and a behaviour-shaped criterion does not name a merge-state read.
+    if description_readable:
+        findings.extend(_criterion_findings(description, policy))
 
     return findings
 
