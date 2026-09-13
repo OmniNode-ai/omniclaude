@@ -68,11 +68,22 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Shell syntax of the stamping hook
         run: bash -n scripts/hooks/prepare-commit-msg-lane
 
+      # uv sync, not a bare pytest install. This repo's tests/conftest.py imports
+      # project dependencies, so `pip install pytest` alone fails at collection
+      # with a ModuleNotFoundError -- which is a gate that cannot run, not a gate
+      # that passed. Found on the first CI run of this workflow.
+      - name: Install dependencies
+        run: uv sync --frozen --group dev --python 3.13
+
       - name: Lane identity behaviour
         run: |
-          python -m pip install --upgrade pip pytest
           git config --global init.defaultBranch main
-          python -m pytest tests/scripts/test_lane_identity.py -q
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          uv run pytest tests/scripts/test_lane_identity.py -q
