@@ -36,7 +36,7 @@ An **UPDATE** is never gated: ``save_issue`` with an ``id`` edits a row that
 already exists, and gating it would block every state flip, description repair
 and parent re-link the board-truth work (OMN-16729) depends on.
 
-A create is admitted only when all four hold:
+A create is admitted only when all six hold:
 
 1. ``parentId`` is present, **or** the description declares the issue an epic
    on a line of its own.
@@ -71,6 +71,28 @@ A create is admitted only when all four hold:
    in the 2026-08-31 sprint are in exactly that state. The probe line is the
    one thing that has to exist at the START for a ticket to be mechanically
    closeable at the end.
+
+6. The parent it names does not already carry more than N children in an
+   UNSTARTED state, N being ``unstarted_children_cap`` in the admission policy.
+
+   Rules 1-5 bound a ticket's SHAPE and say nothing about VOLUME, so a parent
+   can accumulate an unbounded queue of correctly-bound tickets nobody will
+   ever start and every one of them passes. That is not hypothetical: the
+   friction trend report of 2026-09-13 measured created against Done at
+   **3.1 : 1** over fifteen days -- a net **+815** -- with 31 of 58 new friction
+   tickets never started, across a window lying ENTIRELY AFTER this guard
+   shipped. A live read the same day found **59 parents** already over a cap of
+   ten, the deepest carrying 62, some children filed in March and never touched.
+
+   The refusal names the parent, the count, the cap and the oldest unstarted
+   child, and it names three routes out: start a child, cancel a child, or
+   record an operator RULING row in the rolling work ledger and cite it on the
+   create as ``Admission-Override: <ledger>:<line>``. That citation is resolved
+   exactly the way OMN-17957's credential guard resolves a rotation consent --
+   canonical path, the line exists, the row's second field is ``RULING``, and
+   the row names this parent -- because authorisation has to outlive the session
+   that granted it. There is no environment variable and no policy flag that
+   turns rule 6 off; the disable is the mask bit, and a disabled run is logged.
 
 What rule 5 enforces, and what it cannot
 ----------------------------------------
@@ -117,28 +139,59 @@ Fail-closed boundary, stated deliberately
   REFUSED. An unverifiable create is refused, never assumed clean. The blast
   radius of that decision is exactly one tool name.
 
+The one read outside the payload, and its fail direction
+--------------------------------------------------------
+Rules 1-5 answer *is this ticket bound to a commitment?* from the payload alone.
+Rule 6 cannot: *how long is this parent's queue already?* is not a property of
+the call in front of it. So it takes a ``children_lookup`` -- an argument, not
+an import, so this module stays a pure function of what it is given and the
+network lives in one bindable seam. ``main`` binds it to the tracker; a test
+binds it to a fixture; nothing else calls it.
+
+Its fail direction is stated rather than discovered:
+
+* **The lookup fails, or the parent does not resolve** -- REFUSE. A create the
+  tracker cannot resolve would not have succeeded anyway, so the refusal costs a
+  round trip and nothing else.
+* **The enumeration truncates below the cap** -- REFUSE. A lower bound is not a
+  count, and a cap applied to a number that might be wrong fires at random.
+* **No read credential is configured on this machine** -- ADMIT, and say so on
+  stderr. This is the second bounded fail-OPEN in this module, beside rule 5's
+  uuid, and it is bounded to rule 6. Refusing here would make rules 1-5 --
+  payload-only and always enforceable -- collateral damage of a missing key, and
+  a guard that refuses every create on a machine with no key is a guard that
+  gets disabled wholesale rather than repaired.
+
 Deliberately NOT built here
 ---------------------------
 No duplicate detection, no per-lane quota, no rate limit. Those need state this
-module does not have and would make a refusal depend on history rather than on
-the call in front of it. This gate answers one question -- *is this ticket bound
-to a commitment?* -- and answers it from the payload alone.
+module does not have and would make a refusal depend on the history of who filed
+what, rather than on the board the ticket is about to land on.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
 __all__ = [
+    "OVERRIDE_CITATION_GRAMMAR",
+    "ChildrenLookup",
     "Finding",
+    "ParentCensus",
     "Policy",
     "PolicyError",
+    "UnstartedChild",
+    "build_census",
     "check_save_issue",
     "load_policy",
     "render_block_reason",
@@ -218,6 +271,51 @@ _PROBE_SPLIT: Final[str] = "=>"
 
 _PROBE_LINE_GRAMMAR: Final[str] = "Probe: <command> => <observation that settles it>"
 
+#: ``Admission-Override: docs/tracking/ROLLING_WORK_LEDGER.md:<line>`` -- the ONE
+#: route past rule 6 that is not "start a child" or "cancel a child". Same
+#: construction as OMN-17957's ``ROTATION-CONSENT:`` citation, and for the same
+#: reason: authorisation has to be a durable, citable row that outlives the
+#: session that granted it, because a lane's own assertion that it was allowed
+#: is not evidence of anything. There is deliberately no environment variable
+#: and no policy flag -- a gate with an off switch is a gate that is off.
+OVERRIDE_CITATION_GRAMMAR: Final[str] = (
+    "Admission-Override: docs/tracking/ROLLING_WORK_LEDGER.md:<line>"
+)
+
+#: Anchored to a whole line, like every other textual rule here (CLAUDE.md rule
+#: 15). A bullet is refused for the same reason a bulleted ``Gate:`` line is.
+_OVERRIDE_LINE: Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*Admission-Override:[ \t]*(?P<path>[^\s:'\"]+):(?P<line>\d+)[ \t]*$",
+    re.MULTILINE,
+)
+
+#: The ledger row kind that authorises. A CLAIM, NOTE, PROGRESS or TERMINAL row
+#: records what a lane DID; only a RULING decides anything. The kind is read
+#: from the row's SECOND field rather than from anywhere in the row, because a
+#: CLAIM row whose free text mentions a ruling is not a ruling.
+_REQUIRED_OVERRIDE_ROW_KIND: Final[str] = "RULING"
+
+_LINEAR_API_URL: Final[str] = "https://api.linear.app/graphql"
+
+#: Per-request timeout and page bounds for the children census. Small on
+#: purpose: this runs inside a PreToolUse hook, in front of a human waiting on a
+#: tool call, and a slow census is indistinguishable from a hung session.
+_CENSUS_TIMEOUT_S: Final[float] = 8.0
+_CENSUS_PAGE_SIZE: Final[int] = 100
+_CENSUS_MAX_PAGES: Final[int] = 12
+
+_CENSUS_QUERY: Final[str] = """
+query($id: String!, $after: String, $first: Int!) {
+  issue(id: $id) {
+    identifier
+    children(first: $first, after: $after) {
+      nodes { identifier title createdAt state { name type } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+""".strip()
+
 
 class PolicyError(RuntimeError):
     """The admission policy could not be read.
@@ -237,6 +335,10 @@ class Policy:
     epic_markers: tuple[str, ...]
     residual_title_terms: tuple[str, ...]
     in_progress_state_names: frozenset[str]
+    unstarted_children_cap: int
+    unstarted_state_types: frozenset[str]
+    override_ledger_paths: frozenset[str]
+    override_ledger_path_prefixes: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +357,77 @@ class Finding:
     fix: str
 
 
+@dataclass(frozen=True, slots=True)
+class UnstartedChild:
+    """One child of a parent that nobody has started.
+
+    ``created_at`` is Linear's own ISO-8601 UTC spelling
+    (``2026-08-01T00:00:00.000Z``). It is compared as a string rather than
+    parsed: that format sorts lexically in chronological order, and a guard on
+    an enforcement path does not need a datetime parser to say which of two
+    timestamps came first.
+    """
+
+    identifier: str
+    title: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ParentCensus:
+    """What a parent's queue looks like right now.
+
+    ``complete`` is False when the enumeration was truncated -- then
+    ``unstarted`` is a LOWER BOUND, not a count. Rule 6 refuses a create it
+    cannot settle from a lower bound rather than guessing, because a cap
+    applied to a number that might be wrong is a cap that fires at random.
+    """
+
+    parent: str
+    unstarted: tuple[UnstartedChild, ...]
+    complete: bool = True
+
+
+#: Resolve a parent reference -- an identifier like ``OMN-18232`` or a uuid --
+#: to its census, or ``None`` when it cannot be resolved at all. The seam is a
+#: callable so the decision core stays a pure function of its arguments and the
+#: network lives in exactly one place, which is what makes rule 6 testable
+#: without a workspace.
+ChildrenLookup = Callable[[str], "ParentCensus | None"]
+
+
+def build_census(
+    parent: str, nodes: list[dict[str, Any]], policy: Policy, complete: bool = True
+) -> ParentCensus:
+    """Classify raw Linear child nodes into a census.
+
+    Classification is by state **type**, never by state name: a workspace that
+    renames its Backlog column keeps the type, and Linear's own unstarted band
+    is exactly the configured set. A node whose state cannot be read is counted
+    as unstarted -- the conservative direction for a cap, and the one that
+    cannot be gamed by a malformed state.
+    """
+    unstarted: list[UnstartedChild] = []
+    for node in nodes:
+        # Non-dict entries are dropped by the fetch, which is the only producer
+        # of this list that does not construct it by hand.
+        state = node.get("state")
+        state_type = ""
+        if isinstance(state, dict):
+            state_type = str(state.get("type") or "").strip().lower()
+        if state_type and state_type not in policy.unstarted_state_types:
+            continue
+        unstarted.append(
+            UnstartedChild(
+                identifier=str(node.get("identifier") or "(unnamed)"),
+                title=str(node.get("title") or ""),
+                created_at=str(node.get("createdAt") or ""),
+            )
+        )
+    unstarted.sort(key=lambda child: (child.created_at, child.identifier))
+    return ParentCensus(parent=parent, unstarted=tuple(unstarted), complete=complete)
+
+
 def _string_list(raw: Any, key: str, source: Path) -> tuple[str, ...]:
     if not isinstance(raw, list) or not raw:
         raise PolicyError(
@@ -268,6 +441,22 @@ def _string_list(raw: Any, key: str, source: Path) -> tuple[str, ...]:
             )
         out.append(entry.strip())
     return tuple(out)
+
+
+def _positive_int(raw: Any, key: str, source: Path) -> int:
+    """Read a count, or raise.
+
+    ``bool`` is rejected explicitly because it is an ``int`` subclass in Python
+    and ``"unstarted_children_cap": true`` would otherwise configure a cap of
+    one. Zero and negatives are rejected because a cap of zero refuses every
+    create under every parent, which is a workspace-wide outage spelled as a
+    config typo.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise PolicyError(
+            f"{source}: '{key}' must be an integer of at least 1, got {raw!r}"
+        )
+    return int(raw)
 
 
 def load_policy(path: Path | None = None) -> Policy:
@@ -312,6 +501,25 @@ def load_policy(path: Path | None = None) -> Policy:
             for n in _string_list(
                 raw.get("in_progress_state_names"), "in_progress_state_names", source
             )
+        ),
+        unstarted_children_cap=_positive_int(
+            raw.get("unstarted_children_cap"), "unstarted_children_cap", source
+        ),
+        unstarted_state_types=frozenset(
+            t.lower()
+            for t in _string_list(
+                raw.get("unstarted_state_types"), "unstarted_state_types", source
+            )
+        ),
+        override_ledger_paths=frozenset(
+            _string_list(
+                raw.get("override_ledger_paths"), "override_ledger_paths", source
+            )
+        ),
+        override_ledger_path_prefixes=_string_list(
+            raw.get("override_ledger_path_prefixes"),
+            "override_ledger_path_prefixes",
+            source,
         ),
     )
 
@@ -458,10 +666,277 @@ def _probe_line_findings(description: str) -> list[Finding]:
     ]
 
 
-def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
+def _override_path_is_canonical(cited: str, policy: Policy) -> bool:
+    """True when the citation names the append-only coordination surface.
+
+    A lane that may cite any file it can write has not been authorised by
+    anybody -- it has written itself a permission slip. Same check, and the same
+    reasoning, as OMN-17957's ``_citation_path_is_canonical``.
+    """
+    normalised = cited.strip().lstrip("./")
+    if ".." in Path(normalised).parts or Path(normalised).is_absolute():
+        return False
+    if normalised in policy.override_ledger_paths:
+        return True
+    return any(
+        normalised.startswith(prefix) for prefix in policy.override_ledger_path_prefixes
+    )
+
+
+def _row_names(row: str, subject: str) -> bool:
+    """True when ``row`` names ``subject``, matched on word boundaries."""
+    if not subject:
+        return False
+    return (
+        re.search(rf"(?<![\w.-]){re.escape(subject)}(?![\w.-])", row, re.IGNORECASE)
+        is not None
+    )
+
+
+def _resolve_override(
+    description: str,
+    parents: tuple[str, ...],
+    policy: Policy,
+    ledger_root: Path | None,
+) -> Finding | bool:
+    """Resolve an ``Admission-Override:`` citation.
+
+    Returns ``False`` when no citation is present, ``True`` when one resolves to
+    a RULING row naming the parent, and a :class:`Finding` when a citation IS
+    present and does not resolve. That last case is deliberately not "ignore it
+    and fall through to the cap": a lane that cited a row and got refused for
+    being over the cap would read the refusal as the citation being unnecessary,
+    when in fact the citation was wrong. The reason has to name which half
+    failed.
+    """
+    match = _OVERRIDE_LINE.search(description)
+    if match is None:
+        return False
+
+    cited = match.group("path")
+    if not _override_path_is_canonical(cited, policy):
+        allowed = ", ".join(sorted(policy.override_ledger_paths))
+        return Finding(
+            code="override_path_not_canonical",
+            field="description",
+            reason=(
+                f"the override citation names {cited!r}, which is not the "
+                "append-only coordination surface a ruling lives in"
+            ),
+            fix=(
+                f"cite a row in {allowed} (or a docs/tracking/archive/ roll), "
+                "appended through scripts/ledger_lock.py"
+            ),
+        )
+
+    if ledger_root is None:
+        return Finding(
+            code="override_ledger_unreadable",
+            field="description",
+            reason=(
+                "the override cites a ledger row, but OMNI_HOME is not set in "
+                "this environment, so the row cannot be read and the "
+                "authorisation cannot be checked"
+            ),
+            fix=(
+                "set OMNI_HOME to the registry clone whose ledger carries the "
+                "ruling. An override nobody can resolve is not an override"
+            ),
+        )
+
+    ledger = ledger_root / cited.strip().lstrip("./")
+    try:
+        rows = ledger.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return Finding(
+            code="override_ledger_unreadable",
+            field="description",
+            reason=f"the cited ledger {ledger} could not be read ({exc})",
+            fix=(
+                "cite a line that exists in the rolling ledger of the clone "
+                "OMNI_HOME names"
+            ),
+        )
+
+    line_no = int(match.group("line"))
+    if line_no < 1 or line_no > len(rows):
+        return Finding(
+            code="override_line_absent",
+            field="description",
+            reason=(
+                f"the override cites line {line_no} of {cited}, which has "
+                f"{len(rows)} lines"
+            ),
+            fix=(
+                "cite the line number the RULING row actually occupies. The "
+                "ledger is append-only, so a row's line number does not move"
+            ),
+        )
+
+    row = rows[line_no - 1]
+    fields = [field.strip() for field in row.split("|")]
+    kind = fields[1] if len(fields) > 1 else ""
+    if kind.upper() != _REQUIRED_OVERRIDE_ROW_KIND:
+        return Finding(
+            code="override_row_not_ruling",
+            field="description",
+            reason=(
+                f"{cited}:{line_no} is a {kind or '(no kind)'} row, not a "
+                f"{_REQUIRED_OVERRIDE_ROW_KIND} row"
+            ),
+            fix=(
+                f"cite a row whose second field is exactly "
+                f"{_REQUIRED_OVERRIDE_ROW_KIND}. A CLAIM, NOTE, PROGRESS or "
+                "TERMINAL row records what a lane DID; only a RULING decides "
+                "anything, and a row that merely mentions a ruling in its free "
+                "text decides nothing"
+            ),
+        )
+
+    if not any(_row_names(row, parent) for parent in parents if parent):
+        named = " or ".join(p for p in parents if p)
+        return Finding(
+            code="override_row_does_not_name_parent",
+            field="description",
+            reason=(
+                f"{cited}:{line_no} is a RULING row, but it does not name "
+                f"{named} -- so it rules on some other subject"
+            ),
+            fix=(
+                "a waiver has to name the parent whose queue it waives. A "
+                "ruling about another subject is not a blanket permission, and "
+                "a citation that resolves to one is how a single ruling ends up "
+                "waiving the cap for every parent on the board"
+            ),
+        )
+
+    return True
+
+
+def _unstarted_cap_findings(
+    tool_input: dict[str, Any],
+    description: str,
+    policy: Policy,
+    children_lookup: ChildrenLookup | None,
+    ledger_root: Path | None,
+) -> list[Finding]:
+    """Rule 6's verdict on the parent's queue."""
+    parent_ref = tool_input.get("parentId")
+    if not _is_present(parent_ref):
+        # No parent named -- an epic declaring itself one under rule 1. It has
+        # no queue to be over, and looking one up would be a network call on a
+        # question nobody asked.
+        return []
+    assert isinstance(parent_ref, str)
+
+    if children_lookup is None:
+        # The one bounded fail-OPEN in this module outside rule 5, and it is
+        # stated rather than discovered: no census source is configured on this
+        # machine (no Linear read credential). Refusing here would make rules
+        # 1-5 -- payload-only and always enforceable -- collateral damage of a
+        # missing key, and a guard that refuses every create on a laptop with no
+        # key is a guard that gets disabled wholesale rather than repaired.
+        return []
+
+    census = children_lookup(parent_ref.strip())
+    if census is None:
+        return [
+            Finding(
+                code="unstarted_cap_unresolved",
+                field="parentId",
+                reason=(
+                    f"the queue of parent {parent_ref!r} could not be counted -- "
+                    "the tracker did not answer, or it does not carry that "
+                    "parent. The cap is unverified, so the create is refused "
+                    "rather than assumed clean"
+                ),
+                fix=(
+                    "check the parentId names a real issue, and that the "
+                    "tracker is reachable. A create the tracker cannot resolve "
+                    "would not have succeeded anyway, so this refusal costs "
+                    "nothing but the round trip"
+                ),
+            )
+        ]
+
+    count = len(census.unstarted)
+    cap = policy.unstarted_children_cap
+
+    if count <= cap and not census.complete:
+        return [
+            Finding(
+                code="unstarted_cap_unresolved",
+                field="parentId",
+                reason=(
+                    f"the enumeration of {census.parent}'s children was "
+                    f"truncated, so {count} is a lower bound and not a count. A "
+                    "cap applied to a number that might be wrong fires at random"
+                ),
+                fix=(
+                    "re-issue the create; if it keeps happening the parent "
+                    "carries more children than the census will page through, "
+                    "which is itself the condition this rule exists to refuse"
+                ),
+            )
+        ]
+
+    if count <= cap:
+        return []
+
+    override = _resolve_override(
+        description, (census.parent, parent_ref.strip()), policy, ledger_root
+    )
+    if override is True:
+        return []
+    if isinstance(override, Finding):
+        return [override]
+
+    oldest = census.unstarted[0]
+    filed = oldest.created_at[:10] or "(date unknown)"
+    return [
+        Finding(
+            code="unstarted_children_cap",
+            field="parentId",
+            reason=(
+                f"{census.parent} already carries {count} children in an "
+                f"unstarted state, over the cap of {cap}. The oldest is "
+                f"{oldest.identifier}, filed {filed}, and still nobody has "
+                "started it. A queue this long is not a plan -- measured across "
+                "the workspace on 2026-09-13, 59 parents were over this cap and "
+                "the deepest carried 62, some filed in March"
+            ),
+            fix=(
+                "do one of three things, in this order of preference. (1) START "
+                "a child of this parent -- if this new ticket is the most "
+                "important thing under it, that is an argument for starting it "
+                "now, not for queueing it behind ten others. (2) CANCEL the "
+                "children that are not going to be done; a ticket nobody will "
+                "start is a decision already made and not recorded. (3) If the "
+                "queue is deliberate, record an operator RULING row in the "
+                "rolling ledger through scripts/ledger_lock.py, naming this "
+                f"parent, and cite it on this create as "
+                f"'{OVERRIDE_CITATION_GRAMMAR}'. There is no environment "
+                "variable and no policy flag that turns this off"
+            ),
+        )
+    ]
+
+
+def check_save_issue(
+    tool_input: Any,
+    policy: Policy,
+    children_lookup: ChildrenLookup | None = None,
+    ledger_root: Path | None = None,
+) -> list[Finding]:
     """Return every failing admission rule for one ``save_issue`` call.
 
     An empty list admits the call. Updates always return an empty list.
+
+    ``children_lookup`` is rule 6's only window onto anything outside the
+    payload, and it is an argument rather than an import so this function stays
+    a pure function of what it is given. ``None`` means no census source is
+    configured; see :func:`_unstarted_cap_findings` for why that admits rather
+    than refuses. ``ledger_root`` is where an override citation is resolved from.
     """
     if not isinstance(tool_input, dict):
         return [
@@ -629,6 +1104,19 @@ def check_save_issue(tool_input: Any, policy: Policy) -> list[Finding]:
     if description_readable and _declares_in_progress(tool_input, policy):
         findings.extend(_probe_line_findings(description))
 
+    # Rule 6 -- a parent may not carry more than N children nobody has started.
+    # The one rule here that reads state outside the payload, because the
+    # question it answers -- how long is this parent's queue already? -- is not
+    # answerable from the call in front of it. That is a real departure from
+    # this module's original "from the payload alone" boundary, and it is
+    # bounded to one lookup of one parent, behind a seam this function is given
+    # rather than one it reaches for.
+    findings.extend(
+        _unstarted_cap_findings(
+            tool_input, description, policy, children_lookup, ledger_root
+        )
+    )
+
     return findings
 
 
@@ -661,6 +1149,115 @@ def render_block_reason(findings: list[Finding], policy: Policy) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _resolve_api_key() -> str:
+    """The tracker read credential, from the environment or the ONEX env file.
+
+    The environment first. A PreToolUse hook inherits the session environment,
+    which on a dispatched lane often does not carry it, so the same
+    ``~/.omnibase/.env`` fallback ``scripts/worktree_auto_prune.py`` uses is read
+    second. Returns ``""`` when neither carries one, which switches rule 6 off
+    for this machine -- see :func:`_unstarted_cap_findings`.
+
+    The value is never written anywhere: not to stdout, not to stderr, not to
+    the refusal text.
+    """
+    key = os.environ.get("LINEAR_API_KEY", "").strip()
+    if key:
+        return key
+    env_file = Path.home() / ".omnibase" / ".env"
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("LINEAR_API_KEY="):
+            return stripped.partition("=")[2].strip().strip("'\"")
+    return ""
+
+
+def _fetch_children_nodes(
+    parent_ref: str, api_key: str
+) -> tuple[str, list[dict[str, Any]], bool] | None:
+    """Enumerate a parent's children, or ``None`` when it cannot be resolved.
+
+    Returns the parent's resolved identifier -- so a payload carrying a uuid
+    still produces a refusal naming something a person can open -- its child
+    nodes, and whether the enumeration ran to completion.
+
+    Every failure mode collapses to ``None`` on purpose: a transport error, a
+    non-200, a GraphQL error body, an unknown issue and an unparseable response
+    are all "the tracker did not tell us", and the caller refuses on that
+    uniformly rather than branching on which flavour of unknown it got.
+    """
+    identifier = parent_ref
+    nodes: list[dict[str, Any]] = []
+    after: str | None = None
+    for _page in range(_CENSUS_MAX_PAGES):
+        body = json.dumps(
+            {
+                "query": _CENSUS_QUERY,
+                "variables": {
+                    "id": parent_ref,
+                    "after": after,
+                    "first": _CENSUS_PAGE_SIZE,
+                },
+            }
+        ).encode()
+        request = urllib.request.Request(  # noqa: S310
+            _LINEAR_API_URL,
+            data=body,
+            headers={"Authorization": api_key, "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(  # noqa: S310
+                request, timeout=_CENSUS_TIMEOUT_S
+            ) as response:
+                if response.status != 200:
+                    return None
+                raw = response.read()
+        except (urllib.error.URLError, OSError):
+            # HTTPError subclasses URLError, so a 400 on an unknown issue lands
+            # here too.
+            return None
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        if payload.get("errors"):
+            return None
+        issue = (payload.get("data") or {}).get("issue")
+        if not isinstance(issue, dict):
+            return None
+        identifier = str(issue.get("identifier") or parent_ref)
+        children = issue.get("children") or {}
+        page_nodes = children.get("nodes")
+        if not isinstance(page_nodes, list):
+            return None
+        nodes.extend(node for node in page_nodes if isinstance(node, dict))
+        page_info = children.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            return identifier, nodes, True
+        after = page_info.get("endCursor")
+        if not isinstance(after, str) or not after:
+            return None
+    return identifier, nodes, False
+
+
+def _network_lookup(api_key: str, policy: Policy) -> ChildrenLookup:
+    """Bind the census seam to the live tracker."""
+
+    def lookup(parent_ref: str) -> ParentCensus | None:
+        fetched = _fetch_children_nodes(parent_ref, api_key)
+        if fetched is None:
+            return None
+        identifier, nodes, complete = fetched
+        return build_census(identifier, nodes, policy, complete=complete)
+
+    return lookup
 
 
 def _block(reason: str) -> int:
@@ -705,9 +1302,30 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"{exc}\n")
         return 1
 
-    findings = check_save_issue(payload.get("tool_input"), policy)
+    api_key = _resolve_api_key()
+    lookup = _network_lookup(api_key, policy) if api_key else None
+    ledger_root_raw = os.environ.get("OMNI_HOME", "").strip()
+    ledger_root = Path(ledger_root_raw) if ledger_root_raw else None
+
+    findings = check_save_issue(
+        payload.get("tool_input"),
+        policy,
+        children_lookup=lookup,
+        ledger_root=ledger_root,
+    )
     if findings:
+        # Nothing is written to stderr on this path. The shell wrapper captures
+        # stdout and stderr TOGETHER and then reads `.reason` out of the result
+        # with jq, so a diagnostic line here would not be a diagnostic -- it
+        # would corrupt the refusal into the wrapper's generic fallback text and
+        # throw away every finding this function just computed.
         return _block(render_block_reason(findings, policy))
+    if lookup is None:
+        sys.stderr.write(
+            "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "
+            "~/.omnibase/.env, so rule 6 (the unstarted-children cap) was not "
+            "evaluated for this create. Rules 1-5 ran normally.\n"
+        )
     return 0
 
 

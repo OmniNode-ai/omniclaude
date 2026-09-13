@@ -133,6 +133,10 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 "epic_markers": ["issue_class: epic"],
                 "residual_title_terms": ["nit"],
                 "in_progress_state_names": ["in progress"],
+                "unstarted_children_cap": 3,
+                "unstarted_state_types": ["backlog"],
+                "override_ledger_paths": ["docs/tracking/ROLLING_WORK_LEDGER.md"],
+                "override_ledger_path_prefixes": ["docs/tracking/archive/"],
             }
         ),
         encoding="utf-8",
@@ -142,6 +146,8 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
     assert policy.invariant_ids == frozenset({"INV-001"})
     assert policy.residual_title_terms == ("nit",)
     assert policy.in_progress_state_names == frozenset({"in progress"})
+    assert policy.unstarted_children_cap == 3
+    assert policy.unstarted_state_types == frozenset({"backlog"})
 
 
 @pytest.mark.parametrize(
@@ -313,25 +319,25 @@ def test_the_shipped_vocabulary_pins_the_revision_it_was_read_from() -> None:
 
 
 def test_the_shipped_criterion_ids_are_the_prd_release_criteria() -> None:
-    """C1..C27, contiguous, with no gap and nothing outside the table.
+    """C1..C28, contiguous, with no gap and nothing outside the table.
 
     Offline half of the drift check: it pins the SHAPE of the set on every
     runner, including the ones with no clone of the PRD's repository.
     """
-    expected = {f"C{n}" for n in range(1, 28)}
+    expected = {f"C{n}" for n in range(1, 29)}
     assert set(POLICY.criterion_ids) == expected, (
         "the shipped criterion ids are not the PRD's section 6 table "
-        f"(C1..C27); difference: {set(POLICY.criterion_ids) ^ expected}"
+        f"(C1..C28); difference: {set(POLICY.criterion_ids) ^ expected}"
     )
 
 
 def test_the_shipped_invariant_ids_are_the_prd_coverage_block() -> None:
-    """42 ids, and the five the PRD declines to carry are not among them."""
-    assert len(POLICY.invariant_ids) == 42, (
-        f"expected the PRD's 42-entry invariant-coverage block, got "
+    """43 ids, and the five the PRD declines to carry are not among them."""
+    assert len(POLICY.invariant_ids) == 43, (
+        f"expected the PRD's 43-entry invariant-coverage block, got "
         f"{len(POLICY.invariant_ids)} ids"
     )
-    for carried in ("INV-012", "INV-103", "INV-109", "INV-113"):
+    for carried in ("INV-012", "INV-103", "INV-109", "INV-113", "INV-115"):
         assert carried in POLICY.invariant_ids
     for not_carried, why in (
         ("INV-108", "process-scoped; section 9.2 says it is carried elsewhere"),
@@ -346,7 +352,7 @@ def test_the_shipped_invariant_ids_are_the_prd_coverage_block() -> None:
 
 def test_a_prd_criterion_id_binds() -> None:
     """The whole point of the repoint: C7..C27 did not exist in the charter."""
-    for cid in ("C7", "C9", "C17", "C27"):
+    for cid in ("C7", "C9", "C17", "C27", "C28"):
         assert "missing_gate_line" not in _codes(
             _create(description=f"Gate: {cid}\n\nbody\n")
         ), f"Gate: {cid} is a PRD release criterion and must bind"
@@ -362,7 +368,7 @@ def test_a_prd_invariant_id_binds() -> None:
 @pytest.mark.parametrize(
     ("line", "why"),
     [
-        ("Gate: C28", "one past the end of the PRD table"),
+        ("Gate: C29", "one past the end of the PRD table"),
         ("Gate: C0", "the table starts at C1"),
         ("Gate: INV-108", "mentioned by the PRD but deliberately not carried"),
         ("Gate: INV-032", "cited by reference from a scope the PRD does not claim"),
@@ -1186,3 +1192,455 @@ def test_a_policy_missing_the_in_progress_vocabulary_is_refused(
     bad.write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(_GUARD.PolicyError):
         _GUARD.load_policy(bad)
+
+
+# ---------------------------------------------------------------------------
+# Rule 6 — a parent may not carry more than N children nobody has started
+# ---------------------------------------------------------------------------
+#
+# Why: rules 1-5 bound the SHAPE of a ticket and say nothing about VOLUME. A
+# parent can accumulate an unbounded queue of correctly-bound tickets nobody
+# will ever start, and every one of them passes. The friction trend report
+# (knowledge-base-internal, 2026-09-13, sections 4 and 7) measured created
+# against Done at 3.1 : 1 over fifteen days -- a net +815 -- with 31 of 58 new
+# friction tickets never started, across a window that lies ENTIRELY AFTER this
+# guard shipped. The guard was green on every one of those creates.
+#
+# The cap is a single declared constant in the shipped policy, not a literal in
+# the checker, so raising it is a config edit an operator can see in one place.
+
+_UNSTARTED_NODE_STATE: Final[dict[str, str]] = {"name": "Backlog", "type": "backlog"}
+_STARTED_NODE_STATE: Final[dict[str, str]] = {"name": "In Progress", "type": "started"}
+
+_RULING_ROWS: Final[str] = "\n".join(
+    [
+        "2026-09-13T00:00:00Z | NOTE | lane=other | filler row",
+        "2026-09-13T01:00:00Z | RULING | lane=orchestrator | OMN-16729 may carry a "
+        "deliberate queue through the end of the sprint; the cap is waived for it "
+        "and for nothing else.",
+        "2026-09-13T02:00:00Z | CLAIM | lane=other | this row mentions a RULING for "
+        "OMN-16729 in its free text and authorises nothing",
+        "2026-09-13T03:00:00Z | RULING | lane=orchestrator | a ruling about some "
+        "other subject entirely",
+    ]
+)
+
+#: Line numbers inside :data:`_RULING_ROWS`, 1-based.
+_RULING_LINE: Final[int] = 2
+_CLAIM_LINE: Final[int] = 3
+_RULING_OTHER_SUBJECT_LINE: Final[int] = 4
+
+_LEDGER_REL: Final[str] = "docs/tracking/ROLLING_WORK_LEDGER.md"
+
+
+def _cap() -> int:
+    return POLICY.unstarted_children_cap
+
+
+def _nodes(count: int, started: int = 0) -> list[dict[str, Any]]:
+    """``count`` children, ``started`` of which are In Progress.
+
+    ``createdAt`` increases with the index, so the child at index 0 is the
+    oldest and the refusal's "oldest unstarted child" is deterministic.
+    """
+    out: list[dict[str, Any]] = []
+    for index in range(count):
+        state = _STARTED_NODE_STATE if index < started else _UNSTARTED_NODE_STATE
+        out.append(
+            {
+                "identifier": f"OMN-9{index:03d}",
+                "title": f"child number {index}",
+                "createdAt": f"2026-08-{(index % 28) + 1:02d}T00:00:00.000Z",
+                "state": dict(state),
+            }
+        )
+    return out
+
+
+def _census(count: int, started: int = 0, parent: str = "OMN-16729") -> Any:
+    return _GUARD.build_census(parent, _nodes(count, started), POLICY)
+
+
+def _lookup_for(census: Any) -> Any:
+    def lookup(_parent_ref: str) -> Any:
+        return census
+
+    return lookup
+
+
+def _check_capped(
+    tool_input: dict[str, Any],
+    lookup: Any,
+    ledger_root: Path | None = None,
+    policy: Any = None,
+) -> list[Any]:
+    return list(
+        _GUARD.check_save_issue(
+            tool_input,
+            policy or POLICY,
+            children_lookup=lookup,
+            ledger_root=ledger_root,
+        )
+    )
+
+
+def _cap_codes(tool_input: dict[str, Any], lookup: Any, **kwargs: Any) -> set[str]:
+    return {finding.code for finding in _check_capped(tool_input, lookup, **kwargs)}
+
+
+# --- the cap itself --------------------------------------------------------
+
+
+def test_the_shipped_policy_declares_one_cap_constant() -> None:
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    assert isinstance(raw["unstarted_children_cap"], int)
+    assert raw["unstarted_children_cap"] >= 1
+    assert POLICY.unstarted_children_cap == raw["unstarted_children_cap"]
+    rationale = "\n".join(raw["$comment"])
+    assert "unstarted_children_cap" in rationale, (
+        "the cap's rationale belongs beside it in the policy, not in a commit "
+        "message nobody reads when they change the number"
+    )
+
+
+def test_the_shipped_policy_declares_the_unstarted_state_vocabulary() -> None:
+    assert "backlog" in POLICY.unstarted_state_types
+    assert "unstarted" in POLICY.unstarted_state_types
+    assert "started" not in POLICY.unstarted_state_types
+    assert "completed" not in POLICY.unstarted_state_types
+
+
+def test_a_parent_exactly_at_the_cap_is_admitted() -> None:
+    assert _check_capped(_create(), _lookup_for(_census(_cap()))) == []
+
+
+def test_a_parent_one_over_the_cap_is_refused() -> None:
+    codes = _cap_codes(_create(), _lookup_for(_census(_cap() + 1)))
+    assert "unstarted_children_cap" in codes
+
+
+def test_a_started_child_does_not_count_toward_the_cap() -> None:
+    """N+1 children, one of them In Progress, is N unstarted and is admitted.
+
+    This is the case that distinguishes a cap on *work nobody has started* from
+    a cap on children, which would refuse a parent whose queue is being worked.
+    """
+    census = _census(_cap() + 1, started=1)
+    assert len(census.unstarted) == _cap()
+    assert _check_capped(_create(), _lookup_for(census)) == []
+
+
+def test_the_cap_comes_from_config_and_not_from_a_literal(tmp_path: Path) -> None:
+    """Lower the configured cap and the same census now refuses."""
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    raw["unstarted_children_cap"] = 2
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    tightened = _GUARD.load_policy(path)
+    census = _GUARD.build_census("OMN-16729", _nodes(3), tightened)
+    codes = {
+        finding.code
+        for finding in _GUARD.check_save_issue(
+            _create(), tightened, children_lookup=_lookup_for(census)
+        )
+    }
+    assert "unstarted_children_cap" in codes
+
+
+@pytest.mark.parametrize(
+    ("mutation", "why"),
+    [
+        ({"unstarted_children_cap": 0}, "a cap of zero refuses every create"),
+        ({"unstarted_children_cap": -1}, "a negative cap is meaningless"),
+        ({"unstarted_children_cap": "10"}, "a string is not a count"),
+        ({"unstarted_children_cap": None}, "absent is not a default"),
+    ],
+)
+def test_a_policy_with_an_unusable_cap_is_refused(
+    tmp_path: Path, mutation: dict[str, Any], why: str
+) -> None:
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    raw.update(mutation)
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(path)
+
+
+# --- what the refusal has to say -------------------------------------------
+
+
+def test_the_refusal_names_the_parent_the_count_and_the_oldest_child() -> None:
+    findings = _check_capped(_create(), _lookup_for(_census(_cap() + 1)))
+    rendered = _GUARD.render_block_reason(findings, POLICY)
+    assert "OMN-16729" in rendered, "the refusal must name the parent"
+    assert str(_cap() + 1) in rendered, "the refusal must name the count"
+    assert str(_cap()) in rendered, "the refusal must name the cap it applied"
+    assert "OMN-9000" in rendered, "the refusal must name the oldest unstarted child"
+    assert "2026-08-01" in rendered, "and when that child was filed"
+
+
+def test_the_refusal_states_every_route_that_unblocks_it() -> None:
+    findings = _check_capped(_create(), _lookup_for(_census(_cap() + 1)))
+    rendered = _GUARD.render_block_reason(findings, POLICY).lower()
+    assert "start" in rendered
+    assert "cancel" in rendered
+    assert "ruling" in rendered
+    assert _GUARD.OVERRIDE_CITATION_GRAMMAR.split(":")[0].lower() in rendered
+
+
+def test_there_is_no_environment_variable_bypass() -> None:
+    """The only environment this guard reads is where to find things, never whether to run.
+
+    A gate with an env-var off switch is a gate every lane turns off. The
+    documented disable is the mask bit, which is logged.
+    """
+    source = _GUARD_PY.read_text(encoding="utf-8")
+    named = set(re.findall(r"environ(?:\.get)?[\[(]\s*\"([A-Z0-9_]+)\"", source))
+    assert named <= {"LINEAR_API_KEY", "OMNI_HOME"}, (
+        f"the guard reads {sorted(named)}; anything beyond locating the read "
+        "credential and the ledger is a bypass surface"
+    )
+    assert "SKIP" not in source.upper().replace("SKIPPING", "")
+
+
+# --- the override ----------------------------------------------------------
+
+
+def _with_override(line: int, path: str = _LEDGER_REL) -> dict[str, Any]:
+    return _create(
+        description=f"{_GOOD_DESCRIPTION}\nAdmission-Override: {path}:{line}\n"
+    )
+
+
+def _ledger_at(tmp_path: Path) -> Path:
+    ledger = tmp_path / _LEDGER_REL
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text(_RULING_ROWS + "\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_a_ruling_row_naming_the_parent_admits_an_over_cap_create(
+    tmp_path: Path,
+) -> None:
+    home = _ledger_at(tmp_path)
+    assert (
+        _check_capped(
+            _with_override(_RULING_LINE),
+            _lookup_for(_census(_cap() + 1)),
+            ledger_root=home,
+        )
+        == []
+    )
+
+
+def test_a_claim_row_is_not_a_ruling(tmp_path: Path) -> None:
+    home = _ledger_at(tmp_path)
+    codes = _cap_codes(
+        _with_override(_CLAIM_LINE),
+        _lookup_for(_census(_cap() + 1)),
+        ledger_root=home,
+    )
+    assert "override_row_not_ruling" in codes
+
+
+def test_a_ruling_about_another_subject_does_not_waive_this_parent(
+    tmp_path: Path,
+) -> None:
+    home = _ledger_at(tmp_path)
+    codes = _cap_codes(
+        _with_override(_RULING_OTHER_SUBJECT_LINE),
+        _lookup_for(_census(_cap() + 1)),
+        ledger_root=home,
+    )
+    assert "override_row_does_not_name_parent" in codes
+
+
+def test_a_citation_past_the_end_of_the_ledger_is_refused(tmp_path: Path) -> None:
+    home = _ledger_at(tmp_path)
+    codes = _cap_codes(
+        _with_override(9999), _lookup_for(_census(_cap() + 1)), ledger_root=home
+    )
+    assert "override_line_absent" in codes
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["docs/notes/my-own-file.md", "/etc/passwd", "../elsewhere/ledger.md"],
+)
+def test_a_citation_to_a_file_the_lane_can_write_is_refused(
+    tmp_path: Path, path: str
+) -> None:
+    home = _ledger_at(tmp_path)
+    codes = _cap_codes(
+        _with_override(_RULING_LINE, path=path),
+        _lookup_for(_census(_cap() + 1)),
+        ledger_root=home,
+    )
+    assert "override_path_not_canonical" in codes
+
+
+def test_an_override_with_no_resolvable_ledger_root_is_refused() -> None:
+    codes = _cap_codes(
+        _with_override(_RULING_LINE), _lookup_for(_census(_cap() + 1)), ledger_root=None
+    )
+    assert "override_ledger_unreadable" in codes
+
+
+def test_prose_mentioning_the_override_does_not_waive_the_cap(tmp_path: Path) -> None:
+    """Rule 15, the direction that matters for an admission gate.
+
+    A substring rule passes on prose that names the trigger while meaning the
+    opposite -- "this create carries no Admission-Override: ... citation" would
+    satisfy it by describing its own absence.
+    """
+    home = _ledger_at(tmp_path)
+    payload = _create(
+        description=(
+            f"{_GOOD_DESCRIPTION}\n"
+            f"This create carries no Admission-Override: {_LEDGER_REL}:"
+            f"{_RULING_LINE} citation, deliberately.\n"
+        )
+    )
+    codes = _cap_codes(payload, _lookup_for(_census(_cap() + 1)), ledger_root=home)
+    assert "unstarted_children_cap" in codes
+
+
+def test_a_bulleted_override_does_not_count(tmp_path: Path) -> None:
+    home = _ledger_at(tmp_path)
+    payload = _create(
+        description=(
+            f"{_GOOD_DESCRIPTION}\n- Admission-Override: {_LEDGER_REL}:{_RULING_LINE}\n"
+        )
+    )
+    codes = _cap_codes(payload, _lookup_for(_census(_cap() + 1)), ledger_root=home)
+    assert "unstarted_children_cap" in codes
+
+
+def test_an_override_does_not_waive_the_other_rules(tmp_path: Path) -> None:
+    """The override waives the CAP, never the binding."""
+    home = _ledger_at(tmp_path)
+    payload = _with_override(_RULING_LINE)
+    payload["description"] = payload["description"].replace("Gate: OMN-16729 AC-5", "")
+    codes = _cap_codes(payload, _lookup_for(_census(_cap() + 1)), ledger_root=home)
+    assert "missing_gate_line" in codes
+
+
+# --- the fail direction, stated and pinned ---------------------------------
+
+
+def test_without_a_lookup_the_rule_is_not_evaluated() -> None:
+    """The one bounded fail-open: a machine with no Linear read credential.
+
+    Refusing every create there would make rules 1-5 -- which are payload-only
+    and always enforceable -- collateral damage of a missing key, and the guard
+    would be disabled wholesale rather than repaired.
+    """
+    assert _check_capped(_create(), None) == []
+
+
+def test_a_lookup_that_cannot_resolve_the_parent_refuses() -> None:
+    """A network or API failure refuses: the create could not have succeeded anyway."""
+    codes = _cap_codes(_create(), _lookup_for(None))
+    assert "unstarted_cap_unresolved" in codes
+
+
+def test_a_truncated_census_below_the_cap_refuses() -> None:
+    """A lower bound is not a count, and this guard does not guess."""
+    census = _GUARD.ParentCensus(
+        parent="OMN-16729",
+        unstarted=_census(2).unstarted,
+        complete=False,
+    )
+    codes = _cap_codes(_create(), _lookup_for(census))
+    assert "unstarted_cap_unresolved" in codes
+
+
+def test_a_truncated_census_over_the_cap_still_refuses_on_the_cap() -> None:
+    census = _GUARD.ParentCensus(
+        parent="OMN-16729",
+        unstarted=_census(_cap() + 1).unstarted,
+        complete=False,
+    )
+    codes = _cap_codes(_create(), _lookup_for(census))
+    assert "unstarted_children_cap" in codes
+
+
+def test_an_epic_create_with_no_parent_is_not_capped() -> None:
+    """Rule 6 counts a parent's queue. A create declaring itself an epic has none."""
+
+    def explode(_parent_ref: str) -> Any:  # pragma: no cover - must not be called
+        raise AssertionError("rule 6 looked up a parent that was never named")
+
+    payload = _create(
+        parentId=None, description=f"issue_class: epic\n{_GOOD_DESCRIPTION}"
+    )
+    assert _check_capped(payload, explode) == []
+
+
+def test_an_update_is_not_capped() -> None:
+    def explode(_parent_ref: str) -> Any:  # pragma: no cover - must not be called
+        raise AssertionError("rule 6 ran on an update")
+
+    assert _check_capped(_create(id="OMN-1234"), explode) == []
+
+
+def test_the_census_classifies_by_state_type_not_by_state_name() -> None:
+    """A team that renames Backlog keeps the same Linear state TYPE."""
+    nodes = _nodes(2)
+    nodes[0]["state"] = {"name": "Icebox", "type": "backlog"}
+    nodes[1]["state"] = {"name": "Backlog", "type": "completed"}
+    census = _GUARD.build_census("OMN-16729", nodes, POLICY)
+    assert [child.identifier for child in census.unstarted] == ["OMN-9000"]
+
+
+def test_the_census_names_the_parent_linear_resolved_not_the_payload_spelling() -> None:
+    """A payload may carry a uuid; the refusal has to name something a human can open."""
+    census = _GUARD.build_census("OMN-16729", _nodes(1), POLICY)
+    assert census.parent == "OMN-16729"
+
+
+# --- end to end through the registered hook --------------------------------
+
+
+def test_registered_hook_allows_a_create_when_no_read_credential_is_present(
+    tmp_path: Path,
+) -> None:
+    """The absent-credential fail-open, proven through the command the harness runs.
+
+    Also proves the hook does not hang waiting on a network call it cannot make.
+    """
+    payload = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": _create(),
+    }
+    env = dict(os.environ)
+    env.pop("LINEAR_API_KEY", None)
+    env["ONEX_HOOK_LOG"] = str(tmp_path / "hooks.log")
+    env["HOME"] = str(tmp_path)
+    result = subprocess.run(
+        ["bash", str(_HOOK_SCRIPT)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=_TIMEOUT_S,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_main_wires_the_real_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The default lookup is not optional in production -- main() supplies it."""
+    monkeypatch.setenv("LINEAR_API_KEY", "lin_api_test")
+    monkeypatch.setattr(
+        _GUARD,
+        "_fetch_children_nodes",
+        lambda parent_ref, api_key: ("OMN-16729", _nodes(_cap() + 1), True),
+    )
+    payload = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": _create(),
+    }
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(payload)))
+    assert _GUARD.main([]) == 3
