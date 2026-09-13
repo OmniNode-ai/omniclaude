@@ -385,8 +385,10 @@ def test_deregistering_a_hook_fails_the_gate_and_names_it(mirror: Path) -> None:
     )
 
 
-def test_deregistering_a_hook_leaves_the_others_green(mirror: Path) -> None:
-    """One dark hook must not smear into a wall of findings nobody reads."""
+def test_deregistering_a_hook_reports_only_it_and_later_order_dependents(
+    mirror: Path,
+) -> None:
+    """Order is behaviour, so only later hooks in that event may also drift."""
     victim = "pre_tool_use_overseer_foreground_block.sh"
 
     def drop(data: dict) -> None:  # type: ignore[type-arg]
@@ -398,7 +400,10 @@ def test_deregistering_a_hook_leaves_the_others_green(mirror: Path) -> None:
 
     _edit_hooks_json(mirror, drop)
     findings = _findings(mirror)
-    assert [f.subject for f in findings] == [victim]
+    assert [f.subject for f in findings] == [
+        victim,
+        "pre_tool_use_skill_started.sh",
+    ]
 
 
 # ---------------------------------------------------------------------------

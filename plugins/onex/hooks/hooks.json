@@ -71,6 +71,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_overseer_foreground_block.sh"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_skill_started.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -111,6 +120,19 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_changeset_guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_output_capture_metadata.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-use-quality.sh"
           }
         ]
       }

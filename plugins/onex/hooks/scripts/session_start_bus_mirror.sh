@@ -163,7 +163,7 @@ _EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
     (
         "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
-            --event-type "onex.evt.omniclaude.session-started.v1" \
+            --event-type "session.started" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
             >>"$LOG_FILE" 2>&1

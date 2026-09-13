@@ -119,8 +119,8 @@ def _check_static(repo_root: Path) -> list[str]:
     # contract: the topic string has one home, and a constant the registry no
     # longer carries is a violation rather than a silently-empty policy.
     try:
-        declared_topics = set(
-            lib.resolve_governed_topics(contract, repo_root=repo_root).values()
+        declared_event_types = set(
+            lib.resolve_governed_event_types(contract, repo_root=repo_root).values()
         )
     except Exception as exc:  # noqa: BLE001 - reported, not swallowed
         return [f"{contract_path}: {exc}"]
@@ -137,7 +137,7 @@ def _check_static(repo_root: Path) -> list[str]:
             if len(parts) < 2:
                 continue
             topic = parts[1]
-            if topic not in declared_topics:
+            if topic not in declared_event_types:
                 violations.append(
                     f"{path}:{lineno}: emits {topic!r}, which the hook-edge lane "
                     f"contract does not declare. A hook cannot join the edge "
