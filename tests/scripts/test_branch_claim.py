@@ -70,7 +70,12 @@ def _claim_index_module() -> Path:
     """
     explicit = os.environ.get("ONEX_CLAIM_INDEX_MODULE")
     if explicit:
-        return Path(explicit)
+        # Resolved, never passed through as given. The hook tests hand this path
+        # to a `git push` running in a scratch clone elsewhere on disk, so a
+        # relative value would resolve against a different directory there than
+        # here -- which is exactly how ten of them failed the first time they ran
+        # in continuous integration.
+        return Path(explicit).resolve()
     workspace = os.environ.get("OMNI_HOME")
     if workspace:
         return Path(workspace) / "docs" / "workflows" / "_shared" / "claim_index.py"

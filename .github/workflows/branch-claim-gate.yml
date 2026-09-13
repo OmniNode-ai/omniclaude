@@ -135,7 +135,14 @@ jobs:
 
       - name: Branch-claim resolution and the pre-push hook
         env:
-          ONEX_CLAIM_INDEX_MODULE: .branch-claim-store/docs/workflows/_shared/claim_index.py
+          # ABSOLUTE, and that is load-bearing. The hook tests spawn `git push`
+          # with the working directory set to a scratch clone under the temp
+          # directory, and the hook passes this value straight through to the
+          # resolution. A relative path resolves against the runner workspace for
+          # the resolution tests and against the scratch clone for the hook tests,
+          # so ten of the sixteen failed with "the claim index module is not at
+          # ..." on the first run that included them.
+          ONEX_CLAIM_INDEX_MODULE: ${{ github.workspace }}/.branch-claim-store/docs/workflows/_shared/claim_index.py
         run: |
           set -euo pipefail
           if [ ! -f "${ONEX_CLAIM_INDEX_MODULE}" ]; then
