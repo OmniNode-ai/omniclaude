@@ -1797,3 +1797,152 @@ def test_the_runner_allowlist_has_not_drifted_from_its_source() -> None:
         "_BEHAVIOR_WORDS. Bump the commit in proof_class_source and the words "
         "in ONE change."
     )
+
+
+# ---------------------------------------------------------------------------
+# AC6 — each criterion is one independently hashable unit (OMN-18331)
+# ---------------------------------------------------------------------------
+#
+# The plan's next step transcribes each criterion's declared falsifier into a
+# companion contract as an ACCEPTED binding, pinning `criterion_hash` to the
+# criterion text as it read when the binding was accepted. That only works if
+# editing one criterion cannot disturb another's hash, so independence is a
+# pinned property here rather than an incidental one downstream.
+
+
+def test_each_criterion_round_trips_to_a_label_a_falsifier_and_a_hash() -> None:
+    units = _GUARD.criterion_units(_FALSIFIED_BODY, POLICY)
+    assert [unit.label for unit in units] == ["AC1", "AC2"]
+    assert all(unit.falsifier for unit in units)
+    assert all(len(unit.criterion_hash) == 64 for unit in units)
+    assert len({unit.criterion_hash for unit in units}) == 2
+
+
+def test_the_hash_is_the_sha256_of_the_canonical_text() -> None:
+    """Stated as an equation, not as "some hash", so a consumer in another
+    repository can compute it without importing this module."""
+    import hashlib
+
+    unit = _GUARD.criterion_units(_FALSIFIED_BODY, POLICY)[0]
+    assert unit.criterion_hash == hashlib.sha256(unit.text.encode("utf-8")).hexdigest()
+
+
+def test_editing_one_criterion_leaves_every_other_hash_byte_identical() -> None:
+    """The independence property the whole unit exists for.
+
+    A shared hash over the section would invalidate every accepted binding on
+    a ticket whenever any one criterion was reworded, which would make the
+    acceptance worthless the first time an author fixed a typo.
+    """
+    before = _GUARD.criterion_units(
+        _with_criteria(
+            "AC1 — first. — falsifier: uv run pytest tests/a.py -q",
+            "AC2 — second. — falsifier: uv run pytest tests/b.py -q",
+            "AC3 — third. — falsifier: uv run pytest tests/c.py -q",
+        ),
+        POLICY,
+    )
+    after = _GUARD.criterion_units(
+        _with_criteria(
+            "AC1 — first. — falsifier: uv run pytest tests/a.py -q",
+            "AC2 — second, reworded entirely. — falsifier: uv run pytest tests/z.py -q",
+            "AC3 — third. — falsifier: uv run pytest tests/c.py -q",
+        ),
+        POLICY,
+    )
+    assert before[0].criterion_hash == after[0].criterion_hash
+    assert before[2].criterion_hash == after[2].criterion_hash
+    assert before[1].criterion_hash != after[1].criterion_hash
+
+
+def test_rewrapping_a_criterion_does_not_change_its_hash() -> None:
+    """The one edit that changes the bytes without changing what the criterion
+    says. Markdown re-wraps; a hash that moved on a re-wrap would report a
+    rewrite that never happened."""
+    one_line = _with_criteria(
+        "AC1 — the guard reads a wrapped criterion. "
+        "— falsifier: uv run pytest tests/hooks/test_x.py -q"
+    )
+    wrapped = (
+        "Gate: OMN-16729 AC-5\n\n## Acceptance criteria\n\n"
+        "* AC1 — the guard reads a wrapped\n"
+        "  criterion.\n"
+        "  — falsifier: uv run pytest tests/hooks/test_x.py -q\n"
+    )
+    assert (
+        _GUARD.criterion_units(one_line, POLICY)[0].criterion_hash
+        == _GUARD.criterion_units(wrapped, POLICY)[0].criterion_hash
+    )
+
+
+def test_rewording_a_criterion_does_change_its_hash() -> None:
+    """The control for the case above. A normalisation broad enough to absorb a
+    rewrite would make the pin unable to detect the thing it exists for."""
+    first = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard refuses. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )[0]
+    second = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard admits. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )[0]
+    assert first.criterion_hash != second.criterion_hash
+
+
+def test_swapping_the_falsifier_changes_the_hash() -> None:
+    """The falsifier is inside the hash on purpose.
+
+    What an author accepts is the PAIR — this criterion, settled by this check.
+    A hash covering only the criterion half would let the check change silently
+    under a binding already accepted.
+    """
+    first = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard refuses. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )[0]
+    second = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard refuses. — falsifier: uv run pytest b.py"),
+        POLICY,
+    )[0]
+    assert first.criterion_hash != second.criterion_hash
+
+
+def test_a_malformed_criterion_is_reported_not_silently_hashed() -> None:
+    """A unit with no falsifier is surfaced as such.
+
+    Handing a consumer a hash with no falsifier and no signal would let the
+    transcriber mint a binding to a criterion that named no check — the exact
+    thing rule 6 refuses, laundered one repository over.
+    """
+    units = _GUARD.criterion_units(
+        _with_criteria(
+            "AC1 — falsified. — falsifier: uv run pytest a.py",
+            "AC2 — this one names no check at all.",
+        ),
+        POLICY,
+    )
+    assert units[0].falsifier is not None
+    assert units[1].falsifier is None
+    assert units[1].criterion_hash  # still hashable; it is the falsifier that is absent
+
+
+def test_an_unlabelled_criterion_yields_no_label_rather_than_a_positional_one() -> None:
+    """An ordinal derived from parse position renumbers every binding below it
+    the moment a bullet is inserted, which is worse than having none."""
+    units = _GUARD.criterion_units(
+        _with_criteria("a criterion with no ordinal. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )
+    assert units[0].label is None
+
+
+def test_the_gate_and_the_exported_unit_share_one_parse() -> None:
+    """Two parsers would be two places to disagree about where one criterion
+    ends, and a disagreement there binds a criterion to its neighbour's check."""
+    body = _with_criteria(
+        "AC1 — falsified. — falsifier: uv run pytest a.py",
+        "AC2 — unfalsified.",
+    )
+    units = _GUARD.criterion_units(body, POLICY)
+    reason = _reason(_create(description=body))
+    assert f"1 of {len(units)} acceptance criteria" in reason

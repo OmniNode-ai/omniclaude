@@ -199,6 +199,17 @@ expected_hooks:
       class classifier with its source revision pinned in the policy file's
       proof_class_source block, and a drift test fails on either divergence.
       There is no exemption key and no opt-in flag for either rule.
+
+      The guard also EXPORTS the parse the rules run on: criterion_units()
+      returns one unit per criterion carrying its label, its canonical text,
+      its falsifier and the SHA-256 of that text. A later mechanism pins an
+      accepted binding to that hash, so the unit has to be independently
+      hashable -- editing one criterion leaves every other criterion's hash
+      byte-identical -- and it is exported rather than re-derived so the gate
+      and the transcriber cannot disagree about where one criterion ends. The
+      canonical form is Unicode NFC plus whitespace collapse and nothing else,
+      and the falsifier is inside the hash; both choices and their reasons are
+      recorded in the policy file's hashing-unit comment.
     enforcement: true
     lite_mode_exit: false
     mask:

@@ -147,6 +147,40 @@ here: such a ticket declares no map, the autobinder transcribes nothing, and
 the closer holds it on an unbound criterion -- which is today's behaviour for
 the entire corpus, and the hold is a comment on the ticket, not a silence.
 
+The hashing unit, because a later mechanism depends on it
+---------------------------------------------------------
+The plan's next step transcribes each criterion's declared falsifier into a
+companion contract as an ACCEPTED binding, whose ``criterion_hash`` pins the
+criterion text as it read when the binding was accepted -- so a criterion
+silently rewritten afterwards no longer satisfies a binding accepted against
+its older wording. That only works if each criterion is independently
+hashable: editing one criterion must not disturb the hash of any other.
+
+This module therefore EXPORTS the unit rather than leaving the downstream
+mechanism to re-derive it from markdown. :func:`criterion_units` returns one
+:class:`CriterionUnit` per criterion -- its label, its canonical text, its
+falsifier, and the hash of that canonical text. The unit is **one criterion
+item**: its own bullet or ``AC<n>`` line plus any continuation lines before the
+next item, which is exactly the span rule 6 already reads a falsifier from. Two
+parsers would be two places to disagree about where one criterion ends, and a
+disagreement there binds a criterion to a check declared for its neighbour.
+Independence is a pinned property, not an incidental one: a test edits one
+criterion and asserts every other hash is byte-identical.
+
+**The canonical form is whitespace normalisation and nothing else** -- Unicode
+NFC, runs of whitespace collapsed to single spaces, ends stripped. It
+deliberately does NOT lowercase, strip emphasis, or drop the label: the hash
+exists to detect that a criterion was rewritten, so anything it normalises away
+is a rewrite it can no longer detect. Re-wrapping is the one edit that changes
+the bytes without changing what the criterion says, which is why it is the one
+thing normalised.
+
+**The falsifier is inside the hash, deliberately.** What an author accepts is
+the PAIR -- this criterion, settled by this check -- so a falsifier swapped
+afterwards is exactly as much a rewrite as a reworded criterion, and a hash
+covering only the criterion half would let the check change silently under an
+accepted binding.
+
 Rule 6 also does not require a criterion LABEL. An unlabelled criterion is
 unbindable downstream and holds there, which is a ticket-authoring problem the
 closer already reports; adding a second refusal for it here would refuse
@@ -208,18 +242,23 @@ to a commitment?* -- and answers it from the payload alone.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
 __all__ = [
+    "CriterionUnit",
     "Finding",
     "Policy",
     "PolicyError",
+    "canonical_criterion_text",
     "check_save_issue",
+    "criterion_units",
     "load_policy",
     "render_block_reason",
 ]
@@ -321,6 +360,19 @@ _MAX_CRITERION_QUOTED: Final[int] = 160
 #: says how many more there are: forty quoted criteria do not make the point
 #: forty times better, and the remedy is the same edit either way.
 _MAX_CRITERIA_NAMED: Final[int] = 8
+
+#: The label a downstream binding entry can point AT. Matched against the item
+#: text this module returns, which has already had its bullet and any task
+#: marker stripped -- so ``**AC1** ...``, ``AC-2: ...``, ``DoD3 -- ...`` and
+#: ``ac 4)`` all reach here with the label leading. A criterion with no label
+#: is NOT a parse failure: it is an UNBINDABLE criterion, because a binding
+#: needs something stable to point at and an ordinal derived from parse
+#: position renumbers every binding below it the moment a bullet is inserted.
+#: Rule 6 does not refuse it -- that is a ticket-authoring problem reported
+#: downstream, where it actually bites.
+_CRITERION_LABEL: Final[re.Pattern[str]] = re.compile(
+    r"^[\s>*_+-]*(?:\*\*)?\s*(AC|DOD)[-_ .]?(\d+)\b", re.IGNORECASE
+)
 
 _FALSIFIER_GRAMMAR: Final[str] = (
     "<criterion text> -- falsifier: <check name or command shape that would settle it>"
@@ -760,6 +812,57 @@ def _falsifier_is_merge_state_read(falsifier: str, policy: Policy) -> bool:
     )
 
 
+def canonical_criterion_text(item: str) -> str:
+    """The form a criterion is hashed in.
+
+    Unicode NFC, whitespace runs collapsed to single spaces, ends stripped --
+    and nothing else. See the module docstring for why the normalisation is
+    this narrow.
+    """
+    return " ".join(unicodedata.normalize("NFC", item).split())
+
+
+@dataclass(frozen=True, slots=True)
+class CriterionUnit:
+    """One acceptance criterion, as a self-contained hashable unit.
+
+    ``label`` is ``None`` for a criterion carrying no ``AC<n>``/``DoD<n>``
+    ordinal -- unbindable downstream, but not refused here.
+
+    ``falsifier`` is ``None`` for a criterion naming no check, which is exactly
+    the population rule 6 refuses, so a consumer never re-derives it.
+
+    ``criterion_hash`` is the SHA-256 of ``text`` encoded UTF-8, hex.
+    """
+
+    label: str | None
+    text: str
+    falsifier: str | None
+    criterion_hash: str
+
+
+def criterion_units(description: str, policy: Policy) -> list[CriterionUnit]:
+    """Every acceptance criterion in ``description``, one hashable unit each.
+
+    Exported for the binding transcriber. Returns an empty list for a
+    description with no recognised criteria heading -- the same scope rule 6
+    has.
+    """
+    units: list[CriterionUnit] = []
+    for item in _acceptance_criteria_items(description, policy):
+        text = canonical_criterion_text(item)
+        match = _CRITERION_LABEL.match(text)
+        units.append(
+            CriterionUnit(
+                label=f"{match.group(1).upper()}{match.group(2)}" if match else None,
+                text=text,
+                falsifier=_falsifier_of(item, policy),
+                criterion_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            )
+        )
+    return units
+
+
 def _quote(item: str) -> str:
     """One criterion, trimmed to a readable length for a refusal message."""
     flat = " ".join(item.split())
@@ -770,21 +873,20 @@ def _quote(item: str) -> str:
 
 def _criterion_findings(description: str, policy: Policy) -> list[Finding]:
     """Rules 6 and 7, over every criterion the description lists."""
-    items = _acceptance_criteria_items(description, policy)
+    items = criterion_units(description, policy)
     if not items:
         return []
 
     unfalsified: list[str] = []
     merge_state: list[tuple[str, str]] = []
-    for item in items:
-        falsifier = _falsifier_of(item, policy)
-        if falsifier is None:
-            unfalsified.append(item)
+    for unit in items:
+        if unit.falsifier is None:
+            unfalsified.append(unit.text)
             continue
         if _criterion_is_behaviour_shaped(
-            item, policy
-        ) and _falsifier_is_merge_state_read(falsifier, policy):
-            merge_state.append((item, falsifier))
+            unit.text, policy
+        ) and _falsifier_is_merge_state_read(unit.falsifier, policy):
+            merge_state.append((unit.text, unit.falsifier))
 
     findings: list[Finding] = []
     canonical = policy.falsifier_markers[0]
