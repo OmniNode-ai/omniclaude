@@ -11,14 +11,14 @@
 # gated.
 #
 # It also refuses a create whose named parent already carries more than
-# `unstarted_children_cap` children in an unstarted state (rule 6, OMN-18323).
+# `unstarted_children_cap` children in an unstarted state (rule 8, OMN-18323).
 # That is the one rule here that reads state outside the payload, and it is the
-# reason this script's decision core may make ONE outbound request: rules 1-5
+# reason this script's decision core may make ONE outbound request: rules 1-7
 # bound a ticket's SHAPE, and the backlog trend they were built to stop is a
 # question of VOLUME. Measured 2026-09-13, across a window lying entirely after
 # this gate shipped: created against Done at 3.1 : 1 over fifteen days, a net
 # +815, and 59 parents already carrying more than ten children nobody started.
-# With no `LINEAR_API_KEY` reachable, rule 6 is skipped and rules 1-5 still run
+# With no `LINEAR_API_KEY` reachable, rule 8 is skipped and rules 1-7 still run
 # -- see the decision core's docstring for why that direction and not the other.
 #
 # Why a hook and not a validator

@@ -133,6 +133,12 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 "epic_markers": ["issue_class: epic"],
                 "residual_title_terms": ["nit"],
                 "in_progress_state_names": ["in progress"],
+                "falsifier_markers": ["falsifier:"],
+                "acceptance_criteria_headings": ["acceptance criteria"],
+                "state_criterion_markers": [r"\bread back\b"],
+                "behaviour_criterion_markers": [r"\brefuses?\b"],
+                "merge_state_falsifier_markers": [r"\bgh pr\b"],
+                "behaviour_runner_words": ["pytest"],
                 "unstarted_children_cap": 3,
                 "unstarted_state_types": ["backlog"],
                 "override_ledger_paths": ["docs/tracking/ROLLING_WORK_LEDGER.md"],
@@ -142,12 +148,14 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     policy = _GUARD.load_policy(override)
+    assert policy.unstarted_children_cap == 3
+    assert policy.unstarted_state_types == frozenset({"backlog"})
     assert policy.criterion_ids == frozenset({"C1"})
     assert policy.invariant_ids == frozenset({"INV-001"})
     assert policy.residual_title_terms == ("nit",)
     assert policy.in_progress_state_names == frozenset({"in progress"})
-    assert policy.unstarted_children_cap == 3
-    assert policy.unstarted_state_types == frozenset({"backlog"})
+    assert policy.falsifier_markers == ("falsifier:",)
+    assert policy.behaviour_runner_words == ("pytest",)
 
 
 @pytest.mark.parametrize(
@@ -323,6 +331,11 @@ def test_the_shipped_criterion_ids_are_the_prd_release_criteria() -> None:
 
     Offline half of the drift check: it pins the SHAPE of the set on every
     runner, including the ones with no clone of the PRD's repository.
+
+    Was C1..C27 until 2026-09-13. The PRD grew a C28 row and the pin lagged it,
+    so a ticket binding to a commitment the document does make was refused --
+    found by the origin/main half of this check and repaired under OMN-18331
+    rather than carried forward as a red test nobody owns.
     """
     expected = {f"C{n}" for n in range(1, 29)}
     assert set(POLICY.criterion_ids) == expected, (
@@ -332,7 +345,11 @@ def test_the_shipped_criterion_ids_are_the_prd_release_criteria() -> None:
 
 
 def test_the_shipped_invariant_ids_are_the_prd_coverage_block() -> None:
-    """43 ids, and the five the PRD declines to carry are not among them."""
+    """43 ids, and the ones the PRD declines to carry are not among them.
+
+    42 until 2026-09-13, when the coverage block gained INV-115; see the
+    criterion-id check above for why the bump landed under OMN-18331.
+    """
     assert len(POLICY.invariant_ids) == 43, (
         f"expected the PRD's 43-entry invariant-coverage block, got "
         f"{len(POLICY.invariant_ids)} ids"
@@ -352,7 +369,7 @@ def test_the_shipped_invariant_ids_are_the_prd_coverage_block() -> None:
 
 def test_a_prd_criterion_id_binds() -> None:
     """The whole point of the repoint: C7..C27 did not exist in the charter."""
-    for cid in ("C7", "C9", "C17", "C27", "C28"):
+    for cid in ("C7", "C9", "C17", "C27"):
         assert "missing_gate_line" not in _codes(
             _create(description=f"Gate: {cid}\n\nbody\n")
         ), f"Gate: {cid} is a PRD release criterion and must bind"
@@ -1195,10 +1212,753 @@ def test_a_policy_missing_the_in_progress_vocabulary_is_refused(
 
 
 # ---------------------------------------------------------------------------
-# Rule 6 — a parent may not carry more than N children nobody has started
+# Rules 6 and 7 — a named falsifier per acceptance criterion (OMN-18331)
 # ---------------------------------------------------------------------------
 #
-# Why: rules 1-5 bound the SHAPE of a ticket and say nothing about VOLUME. A
+# The plan these two rules implement puts the criterion-to-check binding at
+# ticket-creation time for one reason: it is the only point in the lifecycle
+# where the binding is declared BEFORE the evidence exists, BY the party that
+# knows the intent, and ATTRIBUTABLY. Every case below is written against that
+# claim rather than against the regexes, so a later refactor that keeps the
+# rules and moves the machinery leaves these green.
+
+_FALSIFIED_BODY = (
+    "Gate: OMN-16729 AC-5\n"
+    "\n"
+    "## Acceptance criteria\n"
+    "\n"
+    "* **AC1 — the guard refuses an unfalsified create.** RED first. "
+    "— falsifier: a guard test feeding a create with one unfalsified "
+    "criterion asserts a non-zero refusal\n"
+    "* **AC2 — the shipped policy carries the vocabulary.** "
+    "— falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+)
+
+_UNFALSIFIED_CRITERION = "AC3 — the refusal names the criterion it refused."
+
+
+def _with_criteria(*criteria: str, gate: str = "Gate: OMN-16729 AC-5") -> str:
+    body = [gate, "", "## Acceptance criteria", ""]
+    body.extend(f"* {criterion}" for criterion in criteria)
+    body.append("")
+    return "\n".join(body)
+
+
+def _reason(payload: dict[str, Any]) -> str:
+    return _GUARD.render_block_reason(_check(payload), POLICY)
+
+
+# -- AC1: an unfalsified criterion is refused, and the refusal names it ------
+
+
+def test_a_criterion_naming_no_check_is_refused() -> None:
+    """The rule itself. RED before OMN-18331: this create is admitted today."""
+    payload = _create(description=_FALSIFIED_BODY + f"* {_UNFALSIFIED_CRITERION}\n")
+    assert "unfalsified_criterion" in _codes(payload)
+
+
+def test_the_refusal_quotes_the_offending_criterion() -> None:
+    """A refusal naming a count and not a criterion is one a lane cannot act on.
+
+    The whole design constraint on this gate is that the remedy must be cheaper
+    than the workaround. "one of your criteria is unfalsified" fails that; the
+    author has to re-read all of them to find which.
+    """
+    payload = _create(description=_FALSIFIED_BODY + f"* {_UNFALSIFIED_CRITERION}\n")
+    reason = _reason(payload)
+    assert "the refusal names the criterion it refused" in reason
+    assert "AC1" not in reason.split("unfalsified_criterion")[1].split("fix:")[0], (
+        "the falsified criteria must not be quoted as offenders — quoting all "
+        "of them is the same as quoting none"
+    )
+
+
+def test_the_refusal_counts_the_criteria_it_read() -> None:
+    """So an author can tell a rule that read three criteria from one that read
+    thirty because a stray bullet list landed inside the section."""
+    payload = _create(description=_FALSIFIED_BODY + f"* {_UNFALSIFIED_CRITERION}\n")
+    assert "1 of 3 acceptance criteria" in _reason(payload)
+
+
+def test_many_unfalsified_criteria_are_named_up_to_a_cap() -> None:
+    """An unbounded splice is how a refusal hits a transport limit."""
+    payload = _create(
+        description=_with_criteria(*[f"AC{n} — a criterion." for n in range(1, 21)])
+    )
+    reason = _reason(payload)
+    assert "and 12 more" in reason, reason
+
+
+# -- AC2: the positive control ----------------------------------------------
+
+
+def test_a_create_whose_every_criterion_is_falsified_is_admitted() -> None:
+    """The control that proves the rule does not simply refuse everything.
+
+    Without this, a guard that blocked every create carrying a criteria section
+    would pass every other case in this file.
+    """
+    assert _check(_create(description=_FALSIFIED_BODY)) == []
+
+
+def test_the_second_falsifier_spelling_is_admitted() -> None:
+    """`Falsified by` is the form already in the corpus (OMN-18135's own
+    criteria are written with it). Refusing it would refuse tickets written the
+    way the minting lanes already write them."""
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the guard refuses an unfalsified create. "
+            "**Falsified by** a guard test green at the parent commit."
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_a_falsifier_marker_with_nothing_after_it_does_not_count() -> None:
+    """A field filled in to get past a check is the failure mode, not a typo."""
+    payload = _create(description=_with_criteria("AC1 — a criterion. — falsifier:"))
+    assert "unfalsified_criterion" in _codes(payload)
+
+
+# -- AC3: a merge-state falsifier on a behaviour criterion ------------------
+
+
+def test_a_behaviour_criterion_falsified_by_a_merge_state_read_is_refused() -> None:
+    """A merged pull request says a change landed. It does not say the
+    behaviour the criterion claims actually happens."""
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the guard refuses a create whose criterion names no check. "
+            "— falsifier: gh pr view 2150 --json merged --jq .merged"
+        )
+    )
+    assert "merge_state_falsifier_on_behaviour_criterion" in _codes(payload)
+
+
+def test_the_same_falsifier_on_a_merge_shaped_criterion_is_admitted() -> None:
+    """The control that separates rule 7 from "refuse every gh command".
+
+    A criterion ABOUT merge state is settled by a merge-state read. Refusing
+    that would be the gate being wrong, and a lane meeting it would be right.
+    """
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the companion is merged to `main` and read back. "
+            "— falsifier: gh pr view 2150 --json merged --jq .merged"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_a_falsifier_carrying_both_a_merge_read_and_a_runner_is_admitted() -> None:
+    """OMN-18135's measured finding, pinned.
+
+    The repo-qualified `gh api repos/<owner>/<repo>/...` anchor is what receipt
+    hardening asks for, and the proof-class module classifies the combined form
+    as behaviour because the walk continues past the merge-state segment. A
+    rule refusing any falsifier that mentions `gh` would refuse the one shape
+    that clears both gates.
+    """
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the guard refuses an unfalsified create. — falsifier: "
+            "gh api repos/OmniNode-ai/omniclaude/commits/$SHA --jq .sha && "
+            "uv run pytest tests/hooks/test_ticket_creation_guard.py -q"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_the_refusal_names_both_the_criterion_and_its_falsifier() -> None:
+    """Rule 7's refusal has to say which half to change, because either half
+    is a legitimate edit: reword the criterion, or name a real check."""
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the guard refuses an unfalsified create. "
+            "— falsifier: gh pr view 2150 --json merged"
+        )
+    )
+    reason = _reason(payload)
+    assert "the guard refuses an unfalsified create" in reason
+    assert "gh pr view 2150 --json merged" in reason
+
+
+def test_an_ambiguous_criterion_is_admitted_rather_than_refused() -> None:
+    """The inverted tie-break, pinned as behaviour rather than left in prose.
+
+    The source classifier resolves a criterion carrying BOTH marker classes to
+    "not state-shaped", because there a tie holds a flip. Here a tie must be
+    ADMITTED, because here it refuses a create. Same wordlist, opposite
+    default — if a later change makes this file's classifier agree with its
+    source's tie-break, this test is the one that goes red.
+    """
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the handler refuses the write and the row is read back "
+            "from the live database. — falsifier: gh pr view 2150 --json merged"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_a_criterion_with_no_marker_either_way_is_admitted() -> None:
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the document records the ruling. "
+            "— falsifier: gh pr view 2150 --json merged"
+        )
+    )
+    assert _check(payload) == []
+
+
+# -- the item boundary does the anchoring work ------------------------------
+
+
+def test_a_falsifier_on_one_criterion_does_not_discharge_the_next() -> None:
+    """Rules 3 and 5 anchor to a whole line; this rule anchors to an ITEM.
+
+    That is the one departure from whole-line matching in this module, so the
+    property it trades for has to be a pinned fact: a body-wide substring rule
+    would let one falsifier satisfy every criterion in the list, which is the
+    exact shape CLAUDE.md rule 15 exists to refuse.
+    """
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — a criterion. — falsifier: uv run pytest tests/x.py -q",
+            "AC2 — a second criterion with no check of its own.",
+        )
+    )
+    reason = _reason(payload)
+    assert "unfalsified_criterion" in _codes(payload)
+    assert "a second criterion with no check of its own" in reason
+
+
+def test_a_wrapped_falsifier_on_a_continuation_line_is_read() -> None:
+    """Markdown wraps. A rule that only read the first physical line of an item
+    would refuse correctly-written tickets, which is design constraint 5."""
+    payload = _create(
+        description=(
+            "Gate: OMN-16729 AC-5\n"
+            "\n"
+            "## Acceptance criteria\n"
+            "\n"
+            "* **AC1 — the guard refuses an unfalsified create.**\n"
+            "  RED first, then green.\n"
+            "  — falsifier: uv run pytest tests/hooks/test_x.py -q\n"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_criteria_stop_at_the_next_markdown_heading() -> None:
+    """An `## Out of scope` list is not a list of acceptance criteria."""
+    payload = _create(
+        description=(
+            _FALSIFIED_BODY
+            + "\n## Out of scope\n\n"
+            + "* Judging whether a declared falsifier is a good one.\n"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_an_unbulleted_ac_line_is_read_as_a_criterion() -> None:
+    """`**AC1** — ...` with no bullet is a shape that exists in this corpus and
+    that a list-item-only parser silently counts as zero."""
+    payload = _create(
+        description=(
+            "Gate: OMN-16729 AC-5\n\n## Acceptance criteria\n\n"
+            "**AC1** — a criterion with no named check.\n"
+        )
+    )
+    assert "unfalsified_criterion" in _codes(payload)
+
+
+# -- the stated fail-open direction, bounded to rule 6 ----------------------
+
+
+def test_a_description_with_no_criteria_heading_is_not_gated() -> None:
+    """The deliberate divergence from the closer's parser, pinned.
+
+    That parser reads the WHOLE BODY when it finds no heading, because there an
+    over-count HOLDS a flip. Here an over-count REFUSES a create, so the
+    fallback is dropped: a bullet list in a Why section is not a criterion
+    list, and refusing on one is how a gate teaches lanes to route around it.
+
+    This is a fail-OPEN direction and it is bounded to rule 6. Such a ticket
+    declares no map, the autobinder transcribes nothing, and the closer holds
+    it on an unbound criterion — today's behaviour for the whole corpus.
+    """
+    payload = _create(
+        description=(
+            "Gate: OMN-16729 AC-5\n\n"
+            "## Why\n\n"
+            "* the board grows faster than any projection can classify it\n"
+            "* the manual sweep cannot be retired until admission is controlled\n"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_a_criteria_heading_under_its_other_standing_name_is_read() -> None:
+    """`Definition of done` makes the identical statement, and reading only one
+    spelling is the formatting-dependence the closer's parser already removed."""
+    payload = _create(
+        description=(
+            "Gate: OMN-16729 AC-5\n\n## Definition of done\n\n"
+            "* AC1 — a criterion with no named check.\n"
+        )
+    )
+    assert "unfalsified_criterion" in _codes(payload)
+
+
+def test_a_heading_with_a_trailing_qualifier_still_opens_the_section() -> None:
+    payload = _create(
+        description=(
+            "Gate: OMN-16729 AC-5\n\n## Acceptance criteria (falsifiable)\n\n"
+            "* AC1 — a criterion with no named check.\n"
+        )
+    )
+    assert "unfalsified_criterion" in _codes(payload)
+
+
+def test_a_heading_that_merely_mentions_the_section_does_not_open_it() -> None:
+    """Closed-set membership, not a prefix match — the same reason rule 1
+    refuses a prefix rule on the epic marker."""
+    payload = _create(
+        description=(
+            "Gate: OMN-16729 AC-5\n\n## Acceptance criteria coverage report\n\n"
+            "* a bullet that is not a criterion\n"
+        )
+    )
+    assert _check(payload) == []
+
+
+def test_an_update_is_never_gated_on_falsifiers() -> None:
+    """Only creation is gated, so history is untouched.
+
+    Gating updates would refuse every repair of a pre-OMN-18331 ticket, which
+    would make the remedy for the whole existing corpus impossible — the
+    opposite of design constraint 5.
+    """
+    assert (
+        _check(
+            {
+                "id": "OMN-16106",
+                "description": _with_criteria("AC1 — a criterion with no check."),
+            }
+        )
+        == []
+    )
+
+
+# -- AC5: the refusal is legible enough that the remedy is the cheaper path --
+
+
+def test_the_refusal_shows_an_example_falsifier_line() -> None:
+    """A refusal that names a problem without naming its remedy is one a lane
+    routes around. The grammar and a worked example both have to be in it."""
+    payload = _create(description=_with_criteria("AC1 — a criterion with no check."))
+    reason = _reason(payload)
+    assert "falsifier:" in reason
+    assert "check name or a command shape" in reason
+    assert "never a result" in reason
+
+
+def test_the_merge_state_refusal_names_the_shape_that_clears_both_gates() -> None:
+    """The combined form is the thing an author most needs told, because the
+    two gates look mutually exclusive and are not."""
+    payload = _create(
+        description=_with_criteria(
+            "AC1 — the guard refuses an unfalsified create. "
+            "— falsifier: gh pr view 2150 --json merged"
+        )
+    )
+    reason = _reason(payload)
+    assert "gh api repos/<owner>/<repo>/commits/<sha>" in reason
+    assert "uv run pytest" in reason
+
+
+# -- AC4: wired as the hook, with no exemption ------------------------------
+
+
+def test_the_registered_hook_blocks_an_unfalsified_create(tmp_path: Path) -> None:
+    """The rule ships wired into the pre-tool-use path, not as a sweep.
+
+    Not redundant with the checker cases: OMN-8928 is the counterexample this
+    harness exists for — correct Python, and the registered hook still exited
+    0 because an EXIT trap converted the non-zero exit.
+    """
+    result = _run_hook(
+        {
+            "tool_name": "mcp__linear-server__save_issue",
+            "tool_input": _create(
+                description=_with_criteria("AC1 — a criterion with no named check.")
+            ),
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert '"decision": "block"' in result.stdout
+    assert "a criterion with no named check" in result.stdout
+
+
+def test_the_registered_hook_admits_a_fully_falsified_create(tmp_path: Path) -> None:
+    """The end-to-end positive control. Without it, a hook that blocked every
+    create would satisfy the case above."""
+    result = _run_hook(
+        {
+            "tool_name": "mcp__linear-server__save_issue",
+            "tool_input": _create(description=_FALSIFIED_BODY),
+        },
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_new_rules_have_no_exemption_or_allowlist_key() -> None:
+    """There is no sanctioned spelling for an unfalsified criterion.
+
+    A create that cannot be evaluated is refused; a create that declares no
+    criteria section is out of rule 6's scope by a stated boundary, which is
+    not the same thing as an exemption an author can write into a ticket.
+    """
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    forbidden = {
+        "falsifier_exempt",
+        "falsifier_allowlist",
+        "skip_falsifier",
+        "unfalsified_allowed",
+        "criteria_exempt",
+    }
+    assert not forbidden & set(raw), (
+        f"an escape hatch was added: {forbidden & set(raw)}"
+    )
+    source = _GUARD_PY.read_text(encoding="utf-8")
+    for token in ("ONEX_SKIP_FALSIFIER", "allow_unfalsified", "FALSIFIER_OPT_IN"):
+        assert token not in source, f"{token} is an opt-in; rule 6 has none"
+
+
+def test_the_inventory_contract_records_the_new_rules() -> None:
+    """The guard's own inventory contract is what a reader consults to learn
+    what this hook enforces. A rule absent from it is a rule nobody finds."""
+    inventory = yaml.safe_load(_INVENTORY.read_text(encoding="utf-8"))
+    entry = next(
+        item
+        for group in inventory.values()
+        if isinstance(group, list)
+        for item in group
+        if isinstance(item, dict) and item.get("script") == _HOOK_SCRIPT.name
+    )
+    purpose = entry["purpose"]
+    assert "falsifier" in purpose.lower(), purpose
+    assert "OMN-18331" in purpose, purpose
+
+
+# -- the vocabulary is config, and it is pinned to its source ---------------
+
+
+def test_the_shipped_policy_configures_the_falsifier_vocabulary() -> None:
+    assert POLICY.falsifier_markers[0] == "falsifier:"
+    assert "falsified by" in POLICY.falsifier_markers
+    assert POLICY.acceptance_criteria_headings
+    assert POLICY.state_criterion_markers
+    assert POLICY.behaviour_criterion_markers
+    assert POLICY.merge_state_falsifier_markers
+    assert "pytest" in POLICY.behaviour_runner_words
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "falsifier_markers",
+        "acceptance_criteria_headings",
+        "state_criterion_markers",
+        "behaviour_criterion_markers",
+        "merge_state_falsifier_markers",
+        "behaviour_runner_words",
+    ],
+)
+def test_a_policy_missing_a_falsifier_key_is_refused(tmp_path: Path, key: str) -> None:
+    """No default in code, for the new vocabulary as for the old: a policy that
+    cannot be read must not silently become a permissive one."""
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    del raw[key]
+    bad = tmp_path / "policy.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(bad)
+
+
+def test_a_marker_that_is_not_a_regex_is_refused_at_load(tmp_path: Path) -> None:
+    """A regex error raised from inside a rule would surface as an unhandled
+    exception, which the wrapper treats as a block — every Linear create on the
+    machine failing with a traceback instead of a policy error naming the
+    pattern."""
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    raw["state_criterion_markers"] = [r"\bunbalanced("]
+    bad = tmp_path / "policy.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(bad)
+
+
+def _sibling_clone(repo: str) -> Path | None:
+    """A sibling clone of ``repo``, or ``None`` when none is present.
+
+    Resolved from OMNI_HOME, falling back to this repo's own parent directory.
+    No default path and no guess: an absent clone SKIPS with a stated reason
+    (this repo's CI runners clone neither source repository), and a wrong path
+    would compare against a file that is not the source.
+    """
+    roots = []
+    workspace_root = os.environ.get("OMNI_HOME")
+    if workspace_root:
+        roots.append(Path(workspace_root))
+    roots.append(_REPO_ROOT.parent)
+    for root in roots:
+        candidate = root / repo
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _verbose_alternatives(source: str, symbol: str) -> list[str]:
+    """The alternation branches of a verbose regex literal in ``source``.
+
+    Reads the branches the way ``re.VERBOSE`` does — one per line, trailing
+    comments and whitespace dropped — so a drift in either direction shows up
+    as a list difference naming the branch rather than as an opaque mismatch.
+    """
+    start = source.index(f"{symbol}: re.Pattern[str] = re.compile(")
+    body = source[
+        source.index('r"""', start) + 4 : source.index(
+            '"""', source.index('r"""', start) + 4
+        )
+    ]
+    branches: list[str] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("(?") or stripped.startswith("#"):
+            continue
+        stripped = re.split(r"\s+#", stripped, maxsplit=1)[0].strip()
+        if not stripped:
+            continue
+        branches.append(stripped.lstrip("|").strip())
+    return branches
+
+
+def test_the_criterion_vocabulary_has_not_drifted_from_its_source() -> None:
+    """Transcribed, not imported — so the transcription is tested.
+
+    This guard parses its own policy with the standard library alone and can
+    take no dependency on another repository's package, which is why the
+    marker sets live in config. The cost of that is drift: a vocabulary that
+    lags its source classifies criteria the authoring repo no longer would, in
+    BOTH directions. So the pin is checked against the live file when a clone
+    is present and skipped, with the reason stated, when one is not.
+    """
+    pinned = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))["proof_class_source"]
+    classifier = pinned["criterion_classifier"]
+    clone = _sibling_clone(classifier["repo"].split("/")[-1])
+    if clone is None:
+        pytest.skip(
+            f"no clone of {classifier['repo']} is present; this repo's CI "
+            "runners do not clone it, so the pin is checked where one exists"
+        )
+    source_path = clone / classifier["path"]
+    if not source_path.is_file():
+        pytest.skip(f"{source_path} is absent from the clone")
+    source = source_path.read_text(encoding="utf-8")
+    policy_raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    for symbol, key in (
+        ("_STATE_MARKER_RE", "state_criterion_markers"),
+        ("_BEHAVIOUR_MARKER_RE", "behaviour_criterion_markers"),
+    ):
+        assert _verbose_alternatives(source, symbol) == policy_raw[key], (
+            f"{key} has drifted from {classifier['repo']} {symbol}. Bump the "
+            "commit in proof_class_source and the markers in ONE change."
+        )
+
+
+def test_the_runner_allowlist_has_not_drifted_from_its_source() -> None:
+    """The same pin, for the tight positive runner allowlist rule 7 conjoins on."""
+    pinned = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))["proof_class_source"]
+    allowlist = pinned["runner_allowlist"]
+    clone = _sibling_clone(allowlist["repo"].split("/")[-1])
+    if clone is None:
+        pytest.skip(
+            f"no clone of {allowlist['repo']} is present; this repo's CI "
+            "runners do not clone it"
+        )
+    source_path = clone / allowlist["path"]
+    if not source_path.is_file():
+        pytest.skip(f"{source_path} is absent from the clone")
+    source = source_path.read_text(encoding="utf-8")
+    block = source[source.index("_BEHAVIOR_WORDS") :]
+    block = block[block.index("{") : block.index("}")]
+    words = sorted(re.findall(r'"([^"]+)"', block))
+    assert words == sorted(POLICY.behaviour_runner_words), (
+        "behaviour_runner_words has drifted from the proof-class module's "
+        "_BEHAVIOR_WORDS. Bump the commit in proof_class_source and the words "
+        "in ONE change."
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC6 — each criterion is one independently hashable unit (OMN-18331)
+# ---------------------------------------------------------------------------
+#
+# The plan's next step transcribes each criterion's declared falsifier into a
+# companion contract as an ACCEPTED binding, pinning `criterion_hash` to the
+# criterion text as it read when the binding was accepted. That only works if
+# editing one criterion cannot disturb another's hash, so independence is a
+# pinned property here rather than an incidental one downstream.
+
+
+def test_each_criterion_round_trips_to_a_label_a_falsifier_and_a_hash() -> None:
+    units = _GUARD.criterion_units(_FALSIFIED_BODY, POLICY)
+    assert [unit.label for unit in units] == ["AC1", "AC2"]
+    assert all(unit.falsifier for unit in units)
+    assert all(len(unit.criterion_hash) == 64 for unit in units)
+    assert len({unit.criterion_hash for unit in units}) == 2
+
+
+def test_the_hash_is_the_sha256_of_the_canonical_text() -> None:
+    """Stated as an equation, not as "some hash", so a consumer in another
+    repository can compute it without importing this module."""
+    import hashlib
+
+    unit = _GUARD.criterion_units(_FALSIFIED_BODY, POLICY)[0]
+    assert unit.criterion_hash == hashlib.sha256(unit.text.encode("utf-8")).hexdigest()
+
+
+def test_editing_one_criterion_leaves_every_other_hash_byte_identical() -> None:
+    """The independence property the whole unit exists for.
+
+    A shared hash over the section would invalidate every accepted binding on
+    a ticket whenever any one criterion was reworded, which would make the
+    acceptance worthless the first time an author fixed a typo.
+    """
+    before = _GUARD.criterion_units(
+        _with_criteria(
+            "AC1 — first. — falsifier: uv run pytest tests/a.py -q",
+            "AC2 — second. — falsifier: uv run pytest tests/b.py -q",
+            "AC3 — third. — falsifier: uv run pytest tests/c.py -q",
+        ),
+        POLICY,
+    )
+    after = _GUARD.criterion_units(
+        _with_criteria(
+            "AC1 — first. — falsifier: uv run pytest tests/a.py -q",
+            "AC2 — second, reworded entirely. — falsifier: uv run pytest tests/z.py -q",
+            "AC3 — third. — falsifier: uv run pytest tests/c.py -q",
+        ),
+        POLICY,
+    )
+    assert before[0].criterion_hash == after[0].criterion_hash
+    assert before[2].criterion_hash == after[2].criterion_hash
+    assert before[1].criterion_hash != after[1].criterion_hash
+
+
+def test_rewrapping_a_criterion_does_not_change_its_hash() -> None:
+    """The one edit that changes the bytes without changing what the criterion
+    says. Markdown re-wraps; a hash that moved on a re-wrap would report a
+    rewrite that never happened."""
+    one_line = _with_criteria(
+        "AC1 — the guard reads a wrapped criterion. "
+        "— falsifier: uv run pytest tests/hooks/test_x.py -q"
+    )
+    wrapped = (
+        "Gate: OMN-16729 AC-5\n\n## Acceptance criteria\n\n"
+        "* AC1 — the guard reads a wrapped\n"
+        "  criterion.\n"
+        "  — falsifier: uv run pytest tests/hooks/test_x.py -q\n"
+    )
+    assert (
+        _GUARD.criterion_units(one_line, POLICY)[0].criterion_hash
+        == _GUARD.criterion_units(wrapped, POLICY)[0].criterion_hash
+    )
+
+
+def test_rewording_a_criterion_does_change_its_hash() -> None:
+    """The control for the case above. A normalisation broad enough to absorb a
+    rewrite would make the pin unable to detect the thing it exists for."""
+    first = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard refuses. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )[0]
+    second = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard admits. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )[0]
+    assert first.criterion_hash != second.criterion_hash
+
+
+def test_swapping_the_falsifier_changes_the_hash() -> None:
+    """The falsifier is inside the hash on purpose.
+
+    What an author accepts is the PAIR — this criterion, settled by this check.
+    A hash covering only the criterion half would let the check change silently
+    under a binding already accepted.
+    """
+    first = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard refuses. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )[0]
+    second = _GUARD.criterion_units(
+        _with_criteria("AC1 — the guard refuses. — falsifier: uv run pytest b.py"),
+        POLICY,
+    )[0]
+    assert first.criterion_hash != second.criterion_hash
+
+
+def test_a_malformed_criterion_is_reported_not_silently_hashed() -> None:
+    """A unit with no falsifier is surfaced as such.
+
+    Handing a consumer a hash with no falsifier and no signal would let the
+    transcriber mint a binding to a criterion that named no check — the exact
+    thing rule 6 refuses, laundered one repository over.
+    """
+    units = _GUARD.criterion_units(
+        _with_criteria(
+            "AC1 — falsified. — falsifier: uv run pytest a.py",
+            "AC2 — this one names no check at all.",
+        ),
+        POLICY,
+    )
+    assert units[0].falsifier is not None
+    assert units[1].falsifier is None
+    assert units[1].criterion_hash  # still hashable; it is the falsifier that is absent
+
+
+def test_an_unlabelled_criterion_yields_no_label_rather_than_a_positional_one() -> None:
+    """An ordinal derived from parse position renumbers every binding below it
+    the moment a bullet is inserted, which is worse than having none."""
+    units = _GUARD.criterion_units(
+        _with_criteria("a criterion with no ordinal. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )
+    assert units[0].label is None
+
+
+def test_the_gate_and_the_exported_unit_share_one_parse() -> None:
+    """Two parsers would be two places to disagree about where one criterion
+    ends, and a disagreement there binds a criterion to its neighbour's check."""
+    body = _with_criteria(
+        "AC1 — falsified. — falsifier: uv run pytest a.py",
+        "AC2 — unfalsified.",
+    )
+    units = _GUARD.criterion_units(body, POLICY)
+    reason = _reason(_create(description=body))
+    assert f"1 of {len(units)} acceptance criteria" in reason
+
+
+# ---------------------------------------------------------------------------
+# Rule 8 — a parent may not carry more than N children nobody has started
+# ---------------------------------------------------------------------------
+#
+# Why: rules 1-7 bound the SHAPE of a ticket and say nothing about VOLUME. A
 # parent can accumulate an unbounded queue of correctly-bound tickets nobody
 # will ever start, and every one of them passes. The friction trend report
 # (knowledge-base-internal, 2026-09-13, sections 4 and 7) measured created
