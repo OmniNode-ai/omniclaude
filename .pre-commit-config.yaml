@@ -278,6 +278,15 @@ repos:
       # Wrapper fails loud (exit 1) if omnibase_core.validation.validator_local_paths
       # is not importable — a missing validator is a config error, not a pass.
       # OMN-9043: changed from silent skip to hard fail.
+      - id: lane-identity
+        name: lane identity — registry, trailers, and the window check (OMN-18260)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          tests/scripts/test_lane_identity.py -q'
+        language: system
+        pass_filenames: false
+        files: '^(scripts/lane_identity\.py|scripts/hooks/prepare-commit-msg-lane|tests/scripts/test_lane_identity\.py)$'
+        stages: [pre-commit]
       - id: check-local-paths
         name: check for local path references
         entry: bash scripts/check_local_paths_wrapper.sh
