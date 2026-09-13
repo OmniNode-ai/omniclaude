@@ -102,6 +102,19 @@ _SEVERITY = (
     "no-ticket",
 )
 
+# What `--mode refuse` actually refuses, and why it is NOT every finding.
+#
+# OMN-18262's criterion is the wrong-lane case: "a push to a claimed branch from
+# a non-holding lane is refused". An `unidentified` push -- commits carrying no
+# lane trailer -- is a DIFFERENT and far wider policy, because measured
+# 2026-09-13 that is every commit in the fleet. Refusing it by default would turn
+# a targeted refusal into a fleet-wide push freeze on the day the hook is
+# installed, which is how a gate gets routed around rather than obeyed. It is
+# still REPORTED in both modes, so the gap is visible rather than silent; making
+# it refusable is `--refuse-outcomes`, and that belongs with the stamping
+# rollout, not with this refusal.
+_DEFAULT_REFUSE_ON = ("held-elsewhere", "fence-behind")
+
 _REQUIRED_ENTRY_POINTS = (
     "ticket_from_branch",
     "build_index",
@@ -330,6 +343,15 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--index", help="optional cache path for the resolved index")
     check.add_argument("--mode", choices=("record", "refuse"), default="record")
     check.add_argument(
+        "--refuse-outcomes",
+        default=",".join(_DEFAULT_REFUSE_ON),
+        help=(
+            "comma-separated outcomes that make 'refuse' mode exit non-zero "
+            f"(default: {','.join(_DEFAULT_REFUSE_ON)}). Findings outside the set "
+            "are still printed."
+        ),
+    )
+    check.add_argument(
         "--annotate",
         action="store_true",
         help="emit findings as workflow-command annotations as well as text",
@@ -392,8 +414,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.annotate:
             print(f"::warning title=branch-claim::{finding.splitlines()[0]}")
 
+    refusable = {
+        name.strip() for name in args.refuse_outcomes.split(",") if name.strip()
+    }
     if args.mode == "refuse":
-        return 1
+        if verdict.outcome in refusable:
+            return 1
+        print(
+            f"branch-claim: {verdict.outcome} is reported but not refused "
+            f"(refusing on: {', '.join(sorted(refusable))})."
+        )
+        return 0
     print(
         "branch-claim: recorded, not refused. The pull-request check reports; the "
         "pre-push refusal is the separate, later half (operator ruling 2026-09-13)."

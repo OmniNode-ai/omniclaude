@@ -446,3 +446,86 @@ def test_an_unreadable_ledger_fails_closed_in_both_modes(
         )
         assert result.returncode == 2, f"mode={mode}: {result.stdout}{result.stderr}"
         assert "absent-ledger.md" in result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# What refuse mode refuses, and what it only reports
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def unstamped_message_file(tmp_path: Path) -> Path:
+    path = tmp_path / "unstamped.txt"
+    path.write_text("fix(OMN-9999): a change with no trailers\n", encoding="utf-8")
+    return path
+
+
+def test_refuse_mode_reports_but_does_not_refuse_an_unidentified_push(
+    collision_ledger: Path, unstamped_message_file: Path
+) -> None:
+    """The wrong-lane case is the criterion. An unstamped push is a different and
+    far wider policy -- measured 2026-09-13 that is every commit in the fleet --
+    so refusing it by default would be a fleet-wide push freeze on the day the
+    hook is installed. It is still printed, so the gap is visible."""
+    result = _run_cli(
+        [
+            "check",
+            "--mode",
+            "refuse",
+            "--branch",
+            "lane/omn-9999-thing",
+            "--messages-from",
+            str(unstamped_message_file),
+        ],
+        collision_ledger,
+        _claim_index_module(),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    combined = result.stdout + result.stderr
+    assert "no resolvable lane identity" in combined
+    assert "not refused" in combined
+
+
+def test_refuse_mode_refuses_an_unidentified_push_when_asked(
+    collision_ledger: Path, unstamped_message_file: Path
+) -> None:
+    result = _run_cli(
+        [
+            "check",
+            "--mode",
+            "refuse",
+            "--refuse-outcomes",
+            "held-elsewhere,fence-behind,unidentified",
+            "--branch",
+            "lane/omn-9999-thing",
+            "--messages-from",
+            str(unstamped_message_file),
+        ],
+        collision_ledger,
+        _claim_index_module(),
+    )
+    assert result.returncode == 1
+
+
+def test_record_mode_never_refuses_even_on_the_wrong_lane(
+    collision_ledger: Path, stamped_message_file: Path
+) -> None:
+    """A positive control for the mode split: the same input that exits 1 under
+    refuse mode exits 0 under record mode, so 'record' is a real mode rather
+    than a label on the same behaviour."""
+    result = _run_cli(
+        [
+            "check",
+            "--mode",
+            "record",
+            "--refuse-outcomes",
+            "held-elsewhere",
+            "--branch",
+            "lane/omn-9999-thing",
+            "--messages-from",
+            str(stamped_message_file),
+        ],
+        collision_ledger,
+        _claim_index_module(),
+    )
+    assert result.returncode == 0

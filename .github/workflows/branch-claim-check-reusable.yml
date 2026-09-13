@@ -44,6 +44,16 @@
 #       uses: OmniNode-ai/omniclaude/.github/workflows/branch-claim-check-reusable.yml@<immutable-sha>
 #       secrets: inherit
 #
+# WHAT THIS CHECK CANNOT SEE, measured on its own first run. The store is read
+# from the private repository's DEFAULT BRANCH, so a claim row that exists only in
+# a lane's working copy is invisible here until it is committed and merged. The
+# first run of this workflow resolved its own branch as `unclaimed` for exactly
+# that reason, while the same resolution against the local working copy read
+# `held-by-pusher`. That lag is the honest argument for the pre-push half of
+# OMN-18262, which reads the working copy and has no lag at all -- it is not a
+# reason to distrust this check, whose job is the peer-session push a local hook
+# never sees.
+#
 # Surfaced check context in the caller: `branch-claim-check / branch-claim-check`.
 
 name: Branch Claim Check (reusable)
