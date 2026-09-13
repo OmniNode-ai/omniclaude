@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Lane Identity Gate
+
+# OMN-18260, phase 5 item 3 of the 2026-09-12 process-friction remediation plan.
+#
+# What this protects. A pre-push refusal on a branch claimed by another lane
+# (OMN-18262) compares the claim holder against the pushing lane. Measured on
+# 2026-09-13, no artifact records the pushing lane: zero commits carry a lane
+# trailer across the last 200 commits of each of three worked repositories. This
+# gate protects the module that supplies that missing operand — the registry,
+# the trailer stamping, and the window check that fails a commit carrying no
+# resolvable lane identity.
+#
+# The hook itself is exercised here, not merely imported: the tests drive real
+# `git commit` calls through the installed copy, because the defect that mattered
+# most in development — the installer rewriting the placeholder inside its own
+# guard pattern, so the hook skipped the path it had just baked in — was
+# invisible to every test that only read the script.
+
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+    paths:
+      - 'scripts/lane_identity.py'
+      - 'scripts/hooks/prepare-commit-msg-lane'
+      - 'tests/scripts/test_lane_identity.py'
+      - '.github/workflows/lane-identity-gate.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'scripts/lane_identity.py'
+      - 'scripts/hooks/prepare-commit-msg-lane'
+      - 'tests/scripts/test_lane_identity.py'
+      - '.github/workflows/lane-identity-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  occ-preflight:
+    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      contracts-dir: contracts
+      receipts-dir: drift/dod_receipts
+
+  lane-identity-gate:
+    needs: occ-preflight
+    name: Lane Identity Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Shell syntax of the stamping hook
+        run: bash -n scripts/hooks/prepare-commit-msg-lane
+
+      - name: Lane identity behaviour
+        run: |
+          python -m pip install --upgrade pip pytest
+          git config --global init.defaultBranch main
+          python -m pytest tests/scripts/test_lane_identity.py -q

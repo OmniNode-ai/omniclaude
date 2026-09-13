@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-18260 — stamp the committing lane's identity into the commit message.
+#
+# Install with:
+#   python3 scripts/lane_identity.py install-hook --repo <clone>
+#
+# Installed once per CLONE, not per worktree: git worktrees share the main
+# clone's hooks directory, so one install covers every worktree of that repo.
+#
+# Automatic on purpose. A trailer a lane has to remember is a trailer that is
+# absent exactly when it matters — the lane that pushed into another lane's
+# branch on 2026-09-12 would not have added one by hand.
+#
+# It REFUSES an unregistered worktree rather than stamping an "unknown" lane. A
+# trailer that can be wrong is worse than one that is absent: the check
+# downstream cannot tell the two apart, and a gate that cannot tell them apart
+# passes the case it exists to catch. The refusal prints the one command that
+# resolves it, so it costs a command rather than a search.
+
+set -euo pipefail
+
+MESSAGE_FILE="${1:-}"
+SOURCE="${2:-}"
+
+[ -n "$MESSAGE_FILE" ] || exit 0
+
+# Messages git writes itself carry no lane. A merge, a squash, or a
+# cherry-picked commit's message is not this lane's authored text, and refusing
+# them would make the hook fire on correct behaviour.
+case "$SOURCE" in
+  merge|squash) exit 0 ;;
+esac
+
+# The installer rewrites the line below with the absolute path of the module it
+# installed from. That is deliberate: a hook copied into .git/hooks sits beside
+# no source tree, and discovering its own module from the environment at commit
+# time is exactly the shape that fails silently on the one box where the
+# variable is not exported. Resolution order is explicit override, baked-in
+# path, source-tree sibling, workspace fallback — and if every one misses, the
+# hook FAILS rather than skipping the stamp.
+INSTALLED_LANE_IDENTITY="@LANE_IDENTITY_PATH@"
+
+# Resolved with shell parameter expansion rather than `dirname`. A git hook
+# runs with whatever PATH git has, and depending on an external binary for
+# something bash can do itself is one more way for the hook to fail on a box
+# whose environment is thinner than the author's.
+SCRIPT_SELF="${BASH_SOURCE[0]}"
+case "$SCRIPT_SELF" in */*) SCRIPT_DIR="${SCRIPT_SELF%/*}" ;; *) SCRIPT_DIR="." ;; esac
+SCRIPT_DIR="$(cd "$SCRIPT_DIR" && pwd)"
+LANE_IDENTITY=""
+for candidate in \
+  "${ONEX_LANE_IDENTITY_SCRIPT:-}" \
+  "$INSTALLED_LANE_IDENTITY" \
+  "$SCRIPT_DIR/../lane_identity.py" \
+  "${OMNI_HOME:-}/omniclaude/scripts/lane_identity.py"
+do
+  # Skip the empty slot and the UNREPLACED placeholder. The pattern matches a
+  # leading "@" rather than spelling the placeholder: the installer rewrites
+  # every occurrence of that token in this file, so a literal copy inside this
+  # guard would be rewritten into the real path and make the loop skip the very
+  # candidate it just baked in. Caught by running a real `git commit`, not by
+  # reading the script. No filesystem path begins with "@".
+  case "$candidate" in ""|@*) continue ;; esac
+  if [ -f "$candidate" ]; then
+    LANE_IDENTITY="$candidate"
+    break
+  fi
+done
+
+if [ ! -f "$LANE_IDENTITY" ]; then
+  echo "prepare-commit-msg: cannot find lane_identity.py; set ONEX_LANE_IDENTITY_SCRIPT" >&2
+  exit 1
+fi
+
+# INTERPRETER RESOLUTION, and why it is not just `python3`.
+#
+# A git hook runs with whatever PATH git happens to have, which on macOS is
+# frequently the system `python3` — 3.9. The module this hook calls is written
+# against the repository's 3.12+ baseline, so a bare `python3` produced an
+# ImportError traceback and a refused commit on a correctly registered
+# worktree. That was found by running a real `git commit` under the restricted
+# environment, not by reading either file.
+#
+# So: take the first candidate that is actually new enough, and if none is, FAIL
+# with a message naming the requirement. Never fall through to stamping nothing
+# — a hook that silently skips its own work is the failure mode this phase
+# exists to remove.
+PYTHON=""
+for candidate in "${ONEX_LANE_PYTHON:-}" python3.13 python3.12 python3.11 python3; do
+  [ -n "$candidate" ] || continue
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  cat >&2 <<MSG
+prepare-commit-msg: no Python 3.11 or newer is on this hook's PATH, so the lane
+identity cannot be resolved and the commit is refused.
+
+  Point the hook at an interpreter explicitly, using the absolute path of a
+  Python 3.11+ binary on THIS machine (paths differ per machine, so there is
+  deliberately no example here):
+    export ONEX_LANE_PYTHON="$(command -v python3.13)"
+
+Refused rather than skipped on purpose: a commit that silently carries no lane
+trailer is exactly what the downstream refusal cannot tell from a wrong one.
+MSG
+  exit 1
+fi
+
+if ! TRAILERS="$("$PYTHON" "$LANE_IDENTITY" trailers --worktree . 2>/dev/null)"; then
+  cat >&2 <<MSG
+prepare-commit-msg: this worktree has no lane identity, so the commit is refused.
+
+  Register it once, then commit again:
+    $PYTHON $LANE_IDENTITY register --lane <slug> --ticket OMN-XXXX
+
+Why this refuses instead of stamping "unknown": a lane trailer that can be wrong
+is worse than one that is absent — the pre-push refusal and its matching check
+cannot tell a wrong lane from a missing one, and a gate that cannot tell them
+apart passes the case it exists to catch (OMN-18260).
+MSG
+  exit 1
+fi
+
+
+# Apply through the module itself so the hook and the tests share one
+# implementation of "append idempotently, above git's comment block".
+"$PYTHON" -c '
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]).resolve().parent))
+import lane_identity as li
+message_file = Path(sys.argv[2])
+lines = [line for line in sys.argv[3].splitlines() if line.strip()]
+message_file.write_text(li.apply_trailers(message_file.read_text(encoding="utf-8"), lines), encoding="utf-8")
+' "$LANE_IDENTITY" "$MESSAGE_FILE" "$TRAILERS"
