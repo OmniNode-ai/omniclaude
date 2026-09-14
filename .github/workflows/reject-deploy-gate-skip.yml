@@ -48,11 +48,21 @@ jobs:
   scan-skip-tokens:
     needs: occ-preflight
     name: scan / reject-skip-gate-token
+    # OMN-18205: the untrusted test is the FORK test, and only the fork test.
+    # It used to also send every same-repo pull request whose base is `dev`
+    # to the public class. That is not a trust boundary -- a same-repo pull
+    # request is written by someone who can already push to this repository,
+    # and the sibling pr-title reusable has always used the fork test alone.
+    # What the extra clause actually did was pin every private repository's
+    # required checks to GitHub-hosted runners, which the 2026-09-14 operator
+    # ruling forbids and which the enterprise hosted-runner switch has since
+    # made unrunnable. A genuine fork pull request still resolves to
+    # OMNI_PUBLIC_PR_RUNS_ON_JSON, so the boundary OMN-16683 exists to hold
+    # is unchanged.
     runs-on: >-
       ${{
-        ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
-         (github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name != github.repository))
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
