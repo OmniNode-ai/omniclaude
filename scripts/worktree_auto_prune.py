@@ -1230,6 +1230,20 @@ def cleanup_empty_ticket_dirs(root: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _portable(text: str, root: Path) -> str:
+    """Strip the operator-machine prefix from every path in ``text``.
+
+    The report is published to a shared repository whose readers cannot resolve
+    a path on this machine, and the shared scrub refuses a document carrying
+    one. Every path this report emits is under the worktrees root or its parent
+    registry, so the prefix is pure noise — but it appears in the Removals
+    section inside a full git command line, not only in a path column, which is
+    why a column-only fix left the report unpublishable.
+    """
+    registry = str(root.parent).rstrip("/") + "/"
+    return text.replace(registry, "")
+
+
 def render_report(
     decisions: Sequence[ModelWorktreePruneDecision],
     *,
@@ -1414,7 +1428,7 @@ def render_report(
             )
 
     lines.append("")
-    return "\n".join(lines)
+    return _portable("\n".join(lines), root)
 
 
 def decision_to_json(decision: ModelWorktreePruneDecision) -> dict[str, Any]:

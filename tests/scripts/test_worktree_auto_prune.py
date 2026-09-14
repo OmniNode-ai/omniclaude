@@ -716,6 +716,57 @@ class TestRemovalTimeRevalidation:
         assert worktree.is_dir()
 
 
+class TestReportIsPathPortable:
+    def test_no_operator_machine_path_survives_into_the_report(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        """The report is published to a shared repository whose readers cannot
+        resolve a path on this machine, and the shared scrub refuses a document
+        carrying one. The Removals section embeds a full git command line, not
+        just a path column, so a column-only fix left the report unpublishable."""
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-2" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-report",
+        )
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text("", encoding="utf-8")
+        report_md = tmp_path / "report.md"
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--execute",
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+                "--report-md",
+                str(report_md),
+            ]
+        )
+
+        assert exit_code == 0
+        body = report_md.read_text(encoding="utf-8")
+        registry_prefix = str(root.parent).rstrip("/") + "/"
+        assert registry_prefix not in body, (
+            "the report still carries the operator-machine prefix"
+        )
+        assert "omni_worktrees/OMN-2/omnibase_infra" in body, (
+            "the portable form of the path must survive"
+        )
+
+
 class TestNoDebrisFlag:
     def test_no_debris_skips_the_pass_and_removes_nothing_extra(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
