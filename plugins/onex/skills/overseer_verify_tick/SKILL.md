@@ -14,6 +14,7 @@ author: OmniClaude Team
 composable: false
 user_invocable: true
 process_catalogue_row: overseer_verify_tick
+skill_kind: methodology
 overlay_env: OVERSEER_VERIFY_TICK_OVERLAY_PATH
 args:
   - name: --intent

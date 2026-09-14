@@ -27,6 +27,11 @@ node_version:
   minor: 0
   patch: 0
 
+# Runtime lane this node runs on. The runtime-profiles gate requires it on
+# every command-consuming contract; a generated node that omits it lands as a
+# new orphan the baseline allowlist was never meant to absorb.
+runtime_profiles: [main]
+
 # Node type
 node_type: ORCHESTRATOR_GENERIC
 

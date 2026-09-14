@@ -15,6 +15,7 @@ author: OmniClaude Team
 composable: false
 user_invocable: true
 process_catalogue_row: comment_sweep
+skill_kind: methodology
 overlay_env: COMMENT_SWEEP_OVERLAY_PATH
 args:
   - name: --intent

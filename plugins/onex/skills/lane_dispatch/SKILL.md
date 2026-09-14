@@ -14,6 +14,7 @@ author: OmniClaude Team
 composable: false
 user_invocable: true
 process_catalogue_row: lane_dispatch
+skill_kind: methodology
 overlay_env: LANE_DISPATCH_OVERLAY_PATH
 args:
   - name: --brief

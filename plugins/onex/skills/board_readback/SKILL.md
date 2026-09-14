@@ -14,6 +14,7 @@ author: OmniClaude Team
 composable: false
 user_invocable: true
 process_catalogue_row: board_readback
+skill_kind: methodology
 overlay_env: BOARD_READBACK_OVERLAY_PATH
 args:
   - name: --intent
