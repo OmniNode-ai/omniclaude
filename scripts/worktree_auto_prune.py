@@ -1489,6 +1489,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--no-debris",
+        action="store_true",
+        help=(
+            "Skip the partial-mutation-debris pass. That pass proves every "
+            "remaining file's content is already a blob in the owning clone, at "
+            "two git subprocesses PER FILE, so a candidate that is a whole repo "
+            "tree costs tens of thousands of spawns and it runs BEFORE any "
+            "removal. Measured 2026-09-14: it held a --execute run for over 25 "
+            "minutes on one candidate while every approved removal waited behind "
+            "it. Skipping reports no debris and removes no debris; it never "
+            "widens what is removed."
+        ),
+    )
+    parser.add_argument(
         "--no-fetch",
         action="store_true",
         help="Skip refreshing origin/dev in each canonical clone before classifying",
@@ -1603,20 +1617,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     # (much narrower) predicate — see worktree_prune_policy.classify_
     # partial_mutation_debris. Cheap even at registry scale: one `git
     # worktree list` per canonical clone, not per worktree.
-    canonicals_for_debris = discover_canonical_clones(root.parent)
-    owner_lookup: dict[str, tuple[Path, str]] = {}
-    for canonical in canonicals_for_debris:
-        for path_str, state in collect_worktree_list_entries(canonical).items():
-            owner_lookup[path_str] = (canonical, state)
-
-    debris_candidates = discover_debris_directories(root, set(worktrees))
-    print(
-        f"Found {len(debris_candidates)} partial-mutation-debris candidate(s) "
-        f"across {len(canonicals_for_debris)} canonical clone(s)",
-        flush=True,
-    )
     debris_decisions: list[ModelPartialMutationDebrisDecision] = []
     debris_owner_by_path: dict[str, Path] = {}
+    canonicals_for_debris: list[Path] = []
+    debris_candidates: list[Path] = []
+    owner_lookup: dict[str, tuple[Path, str]] = {}
+    if args.no_debris:
+        print("Skipping the partial-mutation-debris pass (--no-debris)", flush=True)
+    else:
+        canonicals_for_debris = discover_canonical_clones(root.parent)
+        for canonical in canonicals_for_debris:
+            for path_str, state in collect_worktree_list_entries(canonical).items():
+                owner_lookup[path_str] = (canonical, state)
+
+        debris_candidates = discover_debris_directories(root, set(worktrees))
+        print(
+            f"Found {len(debris_candidates)} partial-mutation-debris candidate(s) "
+            f"across {len(canonicals_for_debris)} canonical clone(s)",
+            flush=True,
+        )
     for candidate in debris_candidates:
         facts = collect_debris_facts(candidate, root, owner_lookup)
         debris_decision = classify_partial_mutation_debris(facts)

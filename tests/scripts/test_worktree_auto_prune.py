@@ -716,6 +716,42 @@ class TestRemovalTimeRevalidation:
         assert worktree.is_dir()
 
 
+class TestNoDebrisFlag:
+    def test_no_debris_skips_the_pass_and_removes_nothing_extra(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The debris pass runs BEFORE any removal and costs two git subprocesses
+        per file of every candidate, so one whole-repo candidate can hold an
+        --execute run for tens of minutes while approved removals wait behind it.
+        Skipping it must report no debris and leave the directory alone — it can
+        never widen what is removed."""
+        root = tmp_path / "omni_worktrees"
+        debris = root / "OMN-9" / "omnibase_infra"
+        debris.mkdir(parents=True)
+        (debris / "app.py").write_text("x = 1\n", encoding="utf-8")
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text("", encoding="utf-8")
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--execute",
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+            ]
+        )
+
+        assert exit_code == 0
+        assert "--no-debris" in capsys.readouterr().out
+        assert debris.is_dir()
+        assert (debris / "app.py").exists()
+
+
 # =============================================================================
 # Defect 2 — partial-mutation debris: detection + the narrow auto-remove case
 # =============================================================================
