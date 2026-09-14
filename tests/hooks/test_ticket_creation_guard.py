@@ -1955,6 +1955,80 @@ def test_the_gate_and_the_exported_unit_share_one_parse() -> None:
 
 
 # ---------------------------------------------------------------------------
+# A suffixed ordinal (AC2b, AC10a) binds as its own unit, not UNLABELLED
+# ---------------------------------------------------------------------------
+#
+# OMN-18356. `_CRITERION_LABEL` required a word boundary directly after the
+# ordinal digits. A suffix letter sits immediately after the digits with no
+# boundary between them (both are word characters), so the whole match failed
+# and the criterion came back with label=None -- the same shape as a criterion
+# carrying no ordinal at all. Found live transcribing OMN-18332: 6 of its 12
+# criteria (AC2b/c/d/e/f/g) parsed unlabelled and were silently skipped by the
+# autobinder rather than bound.
+
+
+def test_a_suffixed_ordinal_binds_as_its_own_labelled_unit() -> None:
+    units = _GUARD.criterion_units(
+        _with_criteria(
+            "AC2 — the base criterion.  — falsifier: uv run pytest a.py",
+            "AC2b — NEGATIVE CONTROL, must not close the ticket. "
+            "— falsifier: uv run pytest b.py",
+            "AC10a — a double-digit ordinal with a suffix. "
+            "— falsifier: uv run pytest c.py",
+        ),
+        POLICY,
+    )
+    assert [unit.label for unit in units] == ["AC2", "AC2b", "AC10a"]
+    # Never merged into the base ordinal's unit: three units, three hashes.
+    assert len({unit.criterion_hash for unit in units}) == 3
+
+
+def test_a_suffixed_label_is_not_merged_into_its_base_ordinal_neighbour() -> None:
+    """The dangerous failure mode this fixes: a suffixed criterion silently
+    absorbed into (or dropped alongside) its numeric neighbour rather than
+    surfacing as its own bindable unit."""
+    units = _GUARD.criterion_units(
+        _with_criteria(
+            "AC2 — the base criterion. — falsifier: uv run pytest a.py",
+            "AC2b — a distinct sibling criterion. — falsifier: uv run pytest b.py",
+        ),
+        POLICY,
+    )
+    assert len(units) == 2
+    assert units[0].label == "AC2"
+    assert units[1].label == "AC2b"
+    assert units[0].text != units[1].text
+    assert units[0].criterion_hash != units[1].criterion_hash
+
+
+def test_an_uppercase_suffix_is_preserved_as_written() -> None:
+    """The suffix is part of the stable label an external binding points at,
+    so it is read verbatim rather than case-normalised away."""
+    units = _GUARD.criterion_units(
+        _with_criteria("AC2B — an uppercase suffix. — falsifier: uv run pytest a.py"),
+        POLICY,
+    )
+    assert units[0].label == "AC2B"
+
+
+def test_a_criterion_with_no_parseable_ordinal_is_reported_unlabelled_not_dropped() -> (
+    None
+):
+    """The population this defect could have hidden a second way: an
+    unparsable label must still surface as an explicit unlabelled unit in the
+    returned list, never silently absent from it."""
+    body = _with_criteria(
+        "AC1 — falsified. — falsifier: uv run pytest a.py",
+        "this criterion names no ordinal at all. — falsifier: uv run pytest b.py",
+    )
+    units = _GUARD.criterion_units(body, POLICY)
+    assert len(units) == 2
+    assert units[0].label == "AC1"
+    assert units[1].label is None
+    assert units[1].criterion_hash
+
+
+# ---------------------------------------------------------------------------
 # Rule 8 — a parent may not carry more than N children nobody has started
 # ---------------------------------------------------------------------------
 #
