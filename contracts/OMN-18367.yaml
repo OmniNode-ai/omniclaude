@@ -1,0 +1,64 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18367
+title: "Generic weekly_review skill with a base-plus-overlay rubric contract"
+summary: >
+  Adds a generic weekly_review methodology skill that owns the method and no
+  rubric content. Roles, criteria, anchors, score bands, identity sources,
+  output location and trend measures all arrive from a contract overlay named by
+  an environment selector, deep-merged over a committed base that is fail-closed
+  on its own. Five defects found by a second live trial against two real subjects
+  are fixed here: declared paths are anchored or refused, one identity match
+  means one exact match on a declared field, a promotion clause needs bands to be
+  promoted from, a band score cannot be taken without its sample size, and a run
+  stops rather than writing over a previous review.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+evidence_requirements:
+  - kind: tests
+    description: "The weekly_review rubric contract, loader and skill tests pass"
+    command: "uv run pytest tests/skills/test_weekly_review_skill.py -q"
+  - kind: ci
+    description: "omniclaude PR #2164 CI green across required gates"
+    command: "gh pr checks 2164 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-weekly-review-contract-tests
+    description: >
+      The rubric contract holds its two enforced properties and the five trial
+      defects each have a test that fails without the fix.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_weekly_review_skill.py -q"
+  - id: dod-weekly-review-base-is-fail-closed
+    description: >
+      The committed base declares structure and no content, so loading it with no
+      overlay raises and names every missing field rather than returning an empty
+      rubric a review could be scored against.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_weekly_review_skill.py -q -k 'bare_base_is_fail_closed or committed_base_declares_structure'"
+  - id: dod-weekly-review-paths-are-anchored
+    description: >
+      A declared path that is neither absolute nor anchored on an environment
+      variable is refused, and an unset variable is refused by name, so a
+      personnel document cannot be written relative to the working directory.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_weekly_review_skill.py -q -k 'declared_path or output_directory or rubric_document'"
+  - id: dod-weekly-review-node-contract
+    description: >
+      The generated orchestrator node carries a contract, a runtime profile and a
+      canonical handler routed from that contract.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f src/omniclaude/nodes/node_skill_weekly_review_orchestrator/handler_weekly_review_skill.py && grep -q 'runtime_profiles' src/omniclaude/nodes/node_skill_weekly_review_orchestrator/contract.yaml"
