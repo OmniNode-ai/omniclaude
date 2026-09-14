@@ -1999,10 +1999,54 @@ jobs:
       POSTGRES_PASSWORD: test
       POSTGRES_DATABASE: test_db
       TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
+      ONEX_CLAIM_INDEX_MODULE: ${{ github.workspace }}/.branch-claim-store/docs/workflows/_shared/claim_index.py
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      - name: Resolve the private claim store repo
+        id: branch-claim-store-repo
+        env:
+          FROM_VARS: ${{ vars.OMNI_LEDGER_REPO }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FROM_VARS:-}" ]; then
+            echo "::error::organization variable OMNI_LEDGER_REPO is unset, so the branch-claim tests cannot fetch the live claim index. THE TESTS DID NOT RUN."
+            exit 1
+          fi
+          echo "name=${FROM_VARS}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint token for the private claim store repo
+        id: branch-claim-store-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.branch-claim-store-repo.outputs.name }}
+          permission-contents: read
+
+      # reusable-checkout-ref-ok: OMN-18263 branch-claim tests exercise the live
+      # claim-index module; pinning it would make the full suite validate stale ownership logic.
+      - name: Fetch the claim index module
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.branch-claim-store-repo.outputs.name }}
+          token: ${{ steps.branch-claim-store-token.outputs.token }}
+          path: .branch-claim-store
+          persist-credentials: false
+          sparse-checkout: |
+            docs/workflows/_shared/claim_index.py
+          sparse-checkout-cone-mode: false
+
+      - name: Verify claim index module
+        run: |
+          set -euo pipefail
+          if [ ! -f "${ONEX_CLAIM_INDEX_MODULE}" ]; then
+            echo "::error::the claim index module was not fetched to ${ONEX_CLAIM_INDEX_MODULE}. THE TESTS DID NOT RUN."
+            exit 1
+          fi
 
       - name: Export service ports
         working-directory: ${{ github.workspace }}

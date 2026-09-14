@@ -371,8 +371,9 @@ def _run_cli(
 @pytest.fixture
 def collision_ledger(tmp_path: Path) -> Path:
     path = tmp_path / "LEDGER.md"
+    fresh_stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     path.write_text(
-        _ledger(f"{_stamp(0)} | CLAIM | lane=beta | tickets=OMN-9999 | taking it"),
+        _ledger(f"{fresh_stamp} | CLAIM | lane=beta | tickets=OMN-9999 | taking it"),
         encoding="utf-8",
     )
     return path
