@@ -84,4 +84,5 @@ runs:
         python "$ACTION_PATH/validate_pr_deploy_required.py" \
           --changed-files "$changed_files" \
           --pr-body "$(gh pr view "$PR_NUMBER" --json body -q '.body')" \
-          --contracts-dir "$CONTRACTS_DIR"
+          --contracts-dir "$CONTRACTS_DIR" \
+          --repository "$GITHUB_REPOSITORY"
