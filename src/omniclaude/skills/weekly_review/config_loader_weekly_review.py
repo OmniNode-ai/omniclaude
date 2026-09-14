@@ -20,13 +20,20 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 import yaml
 
 from omniclaude.skills.weekly_review.model_weekly_review_rubric import (
     ModelWeeklyReviewRubric,
 )
+
+#: What a YAML document can hold, spelled out rather than left as an untyped
+#: mapping. The rubric's own shape is enforced by the model; this alias exists
+#: only so the merge below is typed end to end before validation runs.
+type YamlScalar = str | int | float | bool | None
+type YamlValue = YamlScalar | list[YamlValue] | dict[str, YamlValue]
+type YamlMapping = dict[str, YamlValue]
 
 __all__ = [
     "IDENTITY_KEYS",
@@ -62,7 +69,7 @@ def default_base_path() -> Path:
     return Path(__file__).resolve().parent / _BASE_FILENAME
 
 
-def _read_yaml_mapping(path: Path, label: str) -> dict[str, Any]:
+def _read_yaml_mapping(path: Path, label: str) -> YamlMapping:
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -83,9 +90,23 @@ def _read_yaml_mapping(path: Path, label: str) -> dict[str, Any]:
     return parsed
 
 
+def _identity_of(entry: YamlValue, identity_key: str) -> str | None:
+    """The identity value of a list entry, when it has a usable one.
+
+    Only a string identity is honoured. A mapping whose identity field is a
+    number, a list or absent has nothing stable to merge on, so it is appended
+    rather than matched — a guess here would silently fold two unrelated entries
+    into one.
+    """
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get(identity_key)
+    return value if isinstance(value, str) else None
+
+
 def _merge_lists(
-    base: Sequence[Any], overlay: Sequence[Any], identity_key: str | None
-) -> list[Any]:
+    base: Sequence[YamlValue], overlay: Sequence[YamlValue], identity_key: str | None
+) -> list[YamlValue]:
     """Merge two lists by identity key, preserving base order.
 
     With no identity key, or with entries that are not mappings, the overlay
@@ -96,27 +117,34 @@ def _merge_lists(
         return list(overlay)
     if not all(isinstance(entry, dict) for entry in (*base, *overlay)):
         return list(overlay)
-    merged: list[Any] = []
-    overlay_by_id = {
-        entry[identity_key]: entry for entry in overlay if identity_key in entry
-    }
-    consumed: set[Any] = set()
+    overlay_by_id: dict[str, dict[str, YamlValue]] = {}
+    for entry in overlay:
+        key = _identity_of(entry, identity_key)
+        if key is not None and isinstance(entry, dict):
+            overlay_by_id[key] = entry
+    merged: list[YamlValue] = []
+    consumed: set[str] = set()
     for entry in base:
-        key = entry.get(identity_key)
-        if key in overlay_by_id:
+        if not isinstance(entry, dict):
+            merged.append(entry)
+            continue
+        key = _identity_of(entry, identity_key)
+        if key is not None and key in overlay_by_id:
             merged.append(_deep_merge(entry, overlay_by_id[key]))
             consumed.add(key)
         else:
             merged.append(dict(entry))
     for entry in overlay:
-        key = entry.get(identity_key)
-        if key not in consumed:
-            merged.append(dict(entry))
+        key = _identity_of(entry, identity_key)
+        if key is None or key not in consumed:
+            merged.append(dict(entry) if isinstance(entry, dict) else entry)
     return merged
 
 
-def _deep_merge(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
-    merged: dict[str, Any] = dict(base)
+def _deep_merge(
+    base: Mapping[str, YamlValue], overlay: Mapping[str, YamlValue]
+) -> YamlMapping:
+    merged: YamlMapping = dict(base)
     for key, overlay_value in overlay.items():
         base_value = merged.get(key)
         if isinstance(base_value, dict) and isinstance(overlay_value, dict):
@@ -131,8 +159,8 @@ def _deep_merge(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str
 
 
 def deep_merge_weekly_review_rubric(
-    base: Mapping[str, Any], overlay: Mapping[str, Any]
-) -> dict[str, Any]:
+    base: Mapping[str, YamlValue], overlay: Mapping[str, YamlValue]
+) -> YamlMapping:
     """Deep-merge an overlay mapping over a base mapping. Pure compute."""
     return _deep_merge(base, overlay)
 
