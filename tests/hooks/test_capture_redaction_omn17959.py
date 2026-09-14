@@ -323,7 +323,10 @@ def test_ungoverned_topic_is_refused_not_passed_through() -> None:
     with pytest.raises(UngovernedTopicError):
         redact_capture(
             {"session_id": "s", "prompt": "leak me"},
-            topic="onex.evt.omniclaude.session-started.v1",
+            # OMN-18357: session-started used to be the example here and is now
+            # governed (omnimarket#2518), so the refusal needed a topic that is
+            # real, canonical, and deliberately NOT in the contract.
+            topic=TopicBase.AGENT_ACTION.value,
         )
 
 
@@ -403,10 +406,39 @@ def test_no_python_side_policy_constants() -> None:
     assert not hits, f"policy literals leaked into the resolver: {hits}"
 
 
-def test_governed_topics_are_exactly_the_two_relay_topics() -> None:
+def test_governed_topics_are_exactly_what_the_owner_governs() -> None:
+    """The governed set is omnimarket's to decide; this repo must not fork it.
+
+    OMN-18357: the earlier form of this test hardcoded the two relay topics, so
+    when omnimarket#2518 widened the owning contract to seven governed topics,
+    this test failed for the same reason the drift gate did -- and a literal set
+    that has to be re-typed on every owning-side change is exactly the second
+    hand-maintained copy the mirror exists to avoid. The count is read from the
+    owner; what stays pinned here is the fail-closed default, which is this
+    repo's business because its resolver implements it.
+    """
     contract = load_contract()
-    assert set(contract.topics) == {PROMPT_TOPIC, TOOL_TOPIC}
     assert contract.default_field_class is EnumCaptureClass.CAPTURE_HASHED
+    assert {PROMPT_TOPIC, TOOL_TOPIC} <= set(contract.topics), (
+        "the two relay topics OMN-16019 named must stay governed"
+    )
+
+    root = _omnimarket_root()
+    if root is None:
+        pytest.skip(
+            "no canonical omnimarket checkout resolvable; the drift gate that "
+            "actually blocks merge is generate_event_registry.py --check"
+        )
+    owner = (
+        root
+        / "src"
+        / "omnimarket"
+        / "nodes"
+        / "node_event_emit_effect"
+        / "contracts"
+        / "capture_redaction.yaml"
+    )
+    assert set(contract.topics) == set(load_contract(owner).topics)
 
 
 def test_mirrored_contract_posture_matches_the_omnimarket_owner() -> None:
