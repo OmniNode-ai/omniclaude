@@ -54,6 +54,12 @@ winning, and the merged mapping validates into one model.
   never carries rubric content.
 - **Loader**: `omniclaude.skills.weekly_review.load_weekly_review_rubric`.
 
+**Where the overlay comes from is the operator's answer, not this skill's.** No overlay ships here
+and none is discovered. The selector takes an absolute path to a file the reviewer already has, and
+an organization that keeps its rubric in a private repository points the selector into that clone.
+If you do not know which file to name, that is the question to ask before the run, not a gap to fill
+with a guess.
+
 **Fail-fast, first step, before anything else.** Resolve `WEEKLY_REVIEW_OVERLAY_PATH` and stop if it
 is unset, empty, or names a file that does not exist. Report the variable by name and stop. There is
 no default overlay and no fallback rubric: a bare base declares no role, no criterion, no identity
@@ -89,6 +95,13 @@ against an identity known to be busy — and confirm it returns many rows.
   returns zero rows and reads exactly like a clean bill of health.
 - Count matching event nodes, never a timeline total. A total ignores type filters and inflates the
   number, and an inflated count of that kind reads as a process failure that never happened.
+- **Window every count to `--window`, including event nodes.** An event attached to an artifact
+  created inside the window can itself fall outside it. Filter on each event's own timestamp, not on
+  the artifact's. An unwindowed count reads as a real number and is wrong in the direction that
+  makes the person look worse.
+- **Follow the cursor on every paged source.** A search that returns exactly one page has not said
+  there is no second page. Page until the source says the listing is exhausted, and if it cannot,
+  record the result as a sample of a stated size rather than as the whole window.
 - State every sample size. Never imply an exhaustive read that did not happen.
 
 ## Step 3 — collect the window
@@ -113,7 +126,11 @@ the same number.
 
 Then, and only with named evidence:
 
-- Apply `promotion_to_five` if its condition is met.
+- Apply `promotion_to_five` **from the top band only**, via
+  `criterion.promoted_score(base, condition_met=...)`. A promotion is a step off the top of the
+  bands, not a bypass of them: a base below the top band is returned unchanged even when the
+  condition holds, because a promotion clause that lifts any base to five makes the bands
+  decorative. If the evidence warrants more than the band gives, say so as a stated override.
 - Apply any `caps` entry whose condition is met; a cap overrides the band downward.
 - If the written anchor is met on its literal text but the evidence reads higher or lower, **state
   the override** in that criterion's section with the reason. Stating the override is better than
@@ -150,6 +167,10 @@ Each entry declares its `voice`, what it `may_contain` and what it `must_not_con
 must-not-contain list is the half that matters: it is what keeps a score out of a file meant for the
 person and a private note out of a shared one. Check each written file against its own list before
 finishing, and rewrite rather than shipping a violation.
+
+**A length bound in `voice` is a real constraint and nothing measures it for you.** Where an entry
+states a word range, count the words of the file you actually wrote and cut until it complies.
+Writing long and trimming afterwards costs several passes; write to the bound.
 
 Write every declared file every run. A file meant for the person is never skipped and never replaced
 by handing them a file written for someone else.

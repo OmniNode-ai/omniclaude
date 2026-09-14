@@ -192,6 +192,43 @@ class ModelReviewCriterion(BaseModel):
             f"criterion '{self.criterion_id}' has no band containing {value}"
         )
 
+    @property
+    def top_band_score(self) -> int:
+        """The highest score the declared bands can produce.
+
+        A promotion to five is a step off the top of the bands, so the top band
+        has to be nameable before a promotion can be judged legitimate.
+        """
+        if self.measure is None:
+            raise ValueError(
+                f"criterion '{self.criterion_id}' is a judgement criterion and "
+                "declares no bands, so it has no top band score"
+            )
+        return max(band.score for band in self.bands)
+
+    def promoted_score(self, base: int, *, condition_met: bool) -> int:
+        """The score after the overlay's promotion clause is considered.
+
+        A promotion lifts the **top band to five** and nothing else. Read
+        without this precondition, "apply the promotion if its condition is met"
+        turns any base into a five and makes the bands decorative, which is the
+        drift the band contract exists to remove. A base below the top band is
+        returned unchanged whether or not the condition holds, and a reviewer
+        who believes the evidence warrants more says so as a stated override in
+        the review rather than getting it for free here.
+        """
+        declared = {band.score for band in self.bands}
+        if base not in declared:
+            raise ValueError(
+                f"criterion '{self.criterion_id}': {base} is not a band score; "
+                f"declared band scores are {sorted(declared)}"
+            )
+        if not condition_met or self.promotion_to_five is None:
+            return base
+        if base != self.top_band_score:
+            return base
+        return 5
+
 
 class ModelIdentitySource(BaseModel):
     """One surface an identity is resolved on, with its positive control.

@@ -372,3 +372,63 @@ def test_every_band_boundary_moves_the_score(
         f"expected nine boundary pairs across three countable criteria, "
         f"checked {checked_pairs}"
     )
+
+
+# ---------------------------------------------------------------------------
+# A promotion to five applies only from the top band — OMN-18367 trial finding.
+#
+# Read literally, "apply promotion_to_five if its condition is met" lifts ANY
+# base score straight to 5. In the first live trial that would have turned a
+# measured base of 3 into a 5 on a criterion whose ratio was 0.50, because the
+# promotion condition happened to be satisfied. A five-point scale where the
+# band is decorative is the drift this contract exists to remove, so the
+# precondition is enforced here rather than left to a reviewer to remember.
+# ---------------------------------------------------------------------------
+
+
+def test_promotion_applies_only_from_the_top_band(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    countable = [c for c in example_rubric.criteria if c.measure is not None]
+    assert countable, "fixture declares no countable criterion"
+    criterion = countable[0]
+    top = criterion.top_band_score
+    assert criterion.promoted_score(top, condition_met=True) == 5
+    assert criterion.promoted_score(top, condition_met=False) == top
+    for below in range(1, top):
+        assert criterion.promoted_score(below, condition_met=True) == below, (
+            f"a base of {below} was promoted to 5 from below the top band "
+            f"{top}; the promotion clause is not a bypass of the bands"
+        )
+
+
+def test_promotion_is_refused_when_the_overlay_declares_none() -> None:
+    criterion = ModelReviewCriterion(
+        criterion_id="no_promotion",
+        title="No promotion declared",
+        what_to_read="anything",
+        anchors={1: "a", 2: "b", 3: "c", 4: "d", 5: "e"},
+        measure="ratio",
+        bands=(
+            ModelScoreBand(score=1, max_exclusive=0.5),
+            ModelScoreBand(score=4, min_inclusive=0.5),
+        ),
+    )
+    assert criterion.top_band_score == 4
+    assert criterion.promoted_score(4, condition_met=True) == 4
+
+
+def test_promoted_score_rejects_a_base_outside_the_declared_bands(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    criterion = next(c for c in example_rubric.criteria if c.measure is not None)
+    with pytest.raises(ValueError, match="not a band score"):
+        criterion.promoted_score(5, condition_met=True)
+
+
+def test_top_band_score_is_refused_on_a_judgement_criterion(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    judgement = next(c for c in example_rubric.criteria if c.measure is None)
+    with pytest.raises(ValueError, match="judgement criterion"):
+        _ = judgement.top_band_score
