@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Protocol
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
-    from omnibase_core.protocols.event_bus.protocol_event_bus import ProtocolEventBus
+    from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 
     from omniclaude.nodes.node_local_llm_inference_effect.backends import (
         VllmInferenceBackend,
@@ -41,7 +41,7 @@ class _ManagedPublisher(Protocol):
     """Runtime-managed emit daemon surface used by lifecycle hooks."""
 
     @property
-    def event_bus(self) -> ProtocolEventBus | None: ...
+    def event_bus(self) -> EventBusKafka | None: ...
 
     async def start(self) -> None: ...
 
@@ -85,7 +85,7 @@ class _OmnimarketEmitDaemon:
             kafka_bootstrap_servers=kafka_bootstrap_servers,
         )
         self._pid_path = Path(pid_path)
-        self._event_bus: ProtocolEventBus | None = None
+        self._event_bus: EventBusKafka | None = None
 
         registry_path = _default_event_registry_path()
         registry = (
@@ -121,7 +121,7 @@ class _OmnimarketEmitDaemon:
         )
 
     @property
-    def event_bus(self) -> ProtocolEventBus | None:
+    def event_bus(self) -> EventBusKafka | None:
         return self._event_bus
 
     async def start(self) -> None:

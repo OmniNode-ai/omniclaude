@@ -24,12 +24,14 @@ asyncpg-backed adapters in the production path.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 from omnibase_infra.event_bus.event_bus_inmemory import EventBusInmemory
 from omnibase_infra.models import ModelNodeIdentity
+from omnimarket.projection import ProtocolProjectionDatabaseSync
 
 from omniclaude.hooks.topics import TopicBase
 
@@ -37,30 +39,6 @@ if TYPE_CHECKING:
     from omnibase_infra.event_bus.models import ModelEventMessage
 
 logger = logging.getLogger(__name__)
-
-
-@runtime_checkable
-class ProtocolProjectionDatabaseSync(Protocol):
-    """Minimal projection-database protocol consumed by the bootstrap.
-
-    Structurally compatible with
-    ``omnimarket.projection.protocol_database.ProtocolProjectionDatabaseSync``
-    so the bootstrap can be type-checked and runtime-checked without a hard
-    import on omnimarket at module load time.
-    """
-
-    def upsert(
-        self,
-        table: str,
-        conflict_key: str,
-        row: dict[str, object],
-    ) -> bool: ...
-
-    def query(
-        self,
-        table: str,
-        filters: dict[str, object] | None = None,
-    ) -> list[dict[str, object]]: ...
 
 
 async def bootstrap_delegation_bus(
@@ -149,7 +127,7 @@ async def bootstrap_delegation_bus(
         try:
             event = ModelTaskDelegatedEvent(**data)
             handler = HandlerProjectionDelegation()
-            handler.project(event, db_adapter)
+            await asyncio.to_thread(handler.project, event, db_adapter)
         except Exception:
             logger.exception(
                 "Failed to project task-delegated event (correlation_id=%s)",
