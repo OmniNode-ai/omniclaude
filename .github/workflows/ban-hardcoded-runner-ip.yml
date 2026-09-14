@@ -62,11 +62,20 @@ jobs:
     needs: occ-preflight
     name: ban-hardcoded-runner-ip
     # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
+    # OMN-18205: the untrusted test is the FORK test, and only the fork test.
+    # This selector sent EVERY pull request to the public class, same-repo ones
+    # included, so every repository consuming this reusable had the check
+    # pinned to GitHub-hosted runners regardless of its own routing shadow.
+    # That is what the 2026-09-14 operator ruling forbids for private
+    # repositories, and the enterprise hosted-runner switch has since made the
+    # placement unrunnable outright. A genuine fork pull request still resolves
+    # to OMNI_PUBLIC_PR_RUNS_ON_JSON, so the OMN-16683 boundary is unchanged.
     runs-on: >-
       ${{
-        github.event_name != 'pull_request'
-        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-        || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     if: needs.occ-preflight.result == 'success' && (vars.SKIP_RUNNER_IP_GATE != '1')
 
