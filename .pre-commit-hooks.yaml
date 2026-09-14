@@ -64,3 +64,27 @@
   pass_filenames: false
   always_run: true
   stages: [pre-commit, pre-merge-commit]
+
+- id: private-repo-runner-placement
+  name: Private repos never run CI on GitHub-hosted runners (OMN-18205)
+  description: >
+    Operator ruling, 2026-09-14: a PRIVATE repository runs its CI on the lab
+    fleet, never on GitHub-hosted Actions runners; hosted is for PUBLIC repos,
+    where the minutes are free. Reads each job's PARSED runs-on and RESOLVES
+    an expression against the repository's live variable scopes, so neither a
+    prose mention of a hosted label nor an unresolved expression can read as a
+    pass. Repository visibility is resolved live from the GitHub API, never
+    from a list that goes stale. A job the fleet genuinely cannot carry is
+    excused only by a per-job annotation naming the reason AND a ticket:
+    `# private-repo-hosted-ok: <reason> (OMN-nnnnn)`. There is no allowlist
+    file and no force flag. Unreadable visibility, an unresolvable variable
+    and a missing workflow directory are all exit 2, never a pass.
+    See scripts/private_repo_runner_placement_gate.py.
+  language: script
+  entry: scripts/private_repo_runner_placement_gate.py --repo-root .
+  # WHOLE-TREE, not staged-files, for the OMN-17993 reason: the invariant is
+  # over every workflow in the repository, and a hook that inspects only the
+  # diff reports green over every hosted pin that landed before it existed.
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
