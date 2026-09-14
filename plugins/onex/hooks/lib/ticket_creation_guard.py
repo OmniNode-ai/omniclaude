@@ -470,8 +470,20 @@ _MAX_CRITERIA_NAMED: Final[int] = 8
 #: position renumbers every binding below it the moment a bullet is inserted.
 #: Rule 6 does not refuse it -- that is a ticket-authoring problem reported
 #: downstream, where it actually bites.
+#:
+#: OMN-18356: the optional single-letter SUFFIX group is the fix. A round
+#: split into ``AC2b``/``AC2c``/... sits a letter directly after the ordinal
+#: digits, with no boundary between them (both are word characters), so a
+#: bare ``(\d+)\b`` never matched past the digits and the whole label was
+#: lost -- the criterion came back indistinguishable from one with no ordinal
+#: at all, and downstream never bound it. The suffix
+#: is captured, not discarded, and is read verbatim (case preserved) because
+#: it is part of the stable label a binding points at: ``AC2b`` and ``AC2B``
+#: are different labels, not the same criterion written twice. A plain
+#: ``AC2`` is unaffected -- the suffix group matches zero characters and the
+#: boundary check falls back to its original position.
 _CRITERION_LABEL: Final[re.Pattern[str]] = re.compile(
-    r"^[\s>*_+-]*(?:\*\*)?\s*(AC|DOD)[-_ .]?(\d+)\b", re.IGNORECASE
+    r"^[\s>*_+-]*(?:\*\*)?\s*(AC|DOD)[-_ .]?(\d+)([a-zA-Z]?)\b", re.IGNORECASE
 )
 
 _FALSIFIER_GRAMMAR: Final[str] = (
@@ -1064,7 +1076,11 @@ def criterion_units(description: str, policy: Policy) -> list[CriterionUnit]:
         match = _CRITERION_LABEL.match(text)
         units.append(
             CriterionUnit(
-                label=f"{match.group(1).upper()}{match.group(2)}" if match else None,
+                label=(
+                    f"{match.group(1).upper()}{match.group(2)}{match.group(3)}"
+                    if match
+                    else None
+                ),
                 text=text,
                 falsifier=_falsifier_of(item, policy),
                 criterion_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
