@@ -834,6 +834,30 @@ def collect_facts(
 
     has_terminal, open_claim = ledger.get(ticket or "", (False, None))
 
+    # Limb (c): the branch is on origin at this exact HEAD. The expensive live
+    # confirmation runs ONLY when the cheap local remote-tracking ref already
+    # agrees, because a local ref can name a branch origin no longer has and the
+    # whole point of the limb is that origin is really holding the commits.
+    origin_head_oid: str | None = None
+    if branch is not None and head_oid is not None:
+        tracking = _git_run(
+            worktree,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            f"refs/remotes/origin/{branch}",
+        )
+        if tracking.ok and tracking.stdout == head_oid:
+            remote = _git_run(worktree, "ls-remote", "--heads", "origin", branch)
+            if remote.ok and remote.stdout:
+                first = remote.stdout.split("\n", 1)[0].split("\t", 1)[0].strip()
+                if first == head_oid:
+                    origin_head_oid = first
+            elif remote.timed_out:
+                timed_out_probes.append(f"git ls-remote --heads origin {branch}")
+                if load_at_timeout is None:
+                    load_at_timeout = remote.load_average
+
     pr_state = EnumBranchPrState.UNKNOWN
     pr_head_oid: str | None = None
     if branch is not None and canonical is not None and pr_state_cache is not None:
@@ -865,6 +889,7 @@ def collect_facts(
         tree_diff_vs_base_empty=tree_diff_empty,
         pr_state=pr_state,
         pr_head_oid=pr_head_oid,
+        origin_head_oid=origin_head_oid,
         head_oid=head_oid,
         attributed_stash_count=count_attributed_stashes(stashes, branch),
         unreadable_probes=tuple(unreadable_probes),

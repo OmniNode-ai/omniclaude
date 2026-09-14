@@ -12,12 +12,16 @@ A worktree is removable when, and only when, one of two limbs holds:
 * **(a)** the working tree is clean, it is zero commits ahead of its base, and
   no ledger ``CLAIM`` is open on its ticket; or
 * **(b)** the working tree is clean, its branch's pull request is **MERGED**,
-  and no ledger ``CLAIM`` is open on its ticket.
+  and no ledger ``CLAIM`` is open on its ticket; or
+* **(c)** the working tree is clean and the branch is **pushed to origin at this
+  exact HEAD**, with no ledger ``CLAIM`` open on its ticket. The ruling names
+  pushing as the one sanctioned way to clear an unmerged commit, so a commit that
+  is on origin is no longer only-local and the worktree no longer holds it.
 
-Still protected, in both limbs: any uncommitted edit, any commit that is neither
-in the base nor covered by a merged PR, any open ``CLAIM``. Pushing the branch to
-origin is the only sanctioned way to clear an unmerged commit — this module never
-launders one.
+Still protected, in every limb: any uncommitted edit, any commit that is in
+neither the base, a merged PR, nor origin, and any open ``CLAIM``. This module
+never launders an unmerged commit — it only recognises the three places the
+ruling accepts as already holding it.
 
 This **supersedes** the ticket-close-keyed rule the module shipped with. That
 rule refused 186 provably-empty or provably-merged worktrees on 2026-09-14 (82 of
@@ -337,6 +341,16 @@ class ModelWorktreePruneFacts(BaseModel):
             "no merged PR or the field could not be read"
         ),
     )
+    origin_head_oid: str | None = Field(
+        default=None,
+        description=(
+            "Commit `origin` currently holds for this branch, read LIVE with "
+            "`git ls-remote`. None when the confirmation was not performed or "
+            "the branch is not on origin — limb (c) is then unavailable, never "
+            "assumed. A local remote-tracking ref is deliberately NOT accepted "
+            "here: it can name a branch origin no longer has."
+        ),
+    )
     head_oid: str | None = Field(
         ...,
         description="This worktree's HEAD commit, or None when it could not be read",
@@ -505,15 +519,21 @@ def is_prune_safe(
         and facts.head_oid is not None
         and facts.pr_head_oid == facts.head_oid
     )
-    # Ahead-ness is forgiven exactly three ways, each meaning the content is
+    origin_covers_head = (
+        facts.origin_head_oid is not None
+        and facts.head_oid is not None
+        and facts.origin_head_oid == facts.head_oid
+    )
+    # Ahead-ness is forgiven exactly four ways, each meaning the content is
     # already preserved somewhere other than this worktree: every ahead commit
     # has a content-equivalent in the base, the branch contributes no net tree
-    # change over its merge base, or a merged pull request carries this exact
-    # HEAD.
+    # change over its merge base, a merged pull request carries this exact HEAD,
+    # or origin holds this exact HEAD.
     content_already_preserved = (
         not facts.unmerged_ahead_commits
         or facts.tree_diff_vs_base_empty
         or merged_pr_covers_head
+        or origin_covers_head
     )
     if facts.commits_ahead > 0 and not content_already_preserved:
         reasons.append(EnumPruneBlockReason.AHEAD_UNMERGED)
@@ -528,6 +548,12 @@ def is_prune_safe(
         ahead_evidence = (
             f"limb (b): {facts.commits_ahead} commit(s) ahead of {base}, and a "
             f"MERGED pull request carries this exact HEAD {facts.head_oid}"
+        )
+    elif origin_covers_head:
+        ahead_evidence = (
+            f"limb (c): {facts.commits_ahead} commit(s) ahead of {base}, and "
+            f"origin holds this exact HEAD {facts.head_oid} (read live with "
+            "git ls-remote), so the commits are no longer only local"
         )
     elif not facts.unmerged_ahead_commits:
         ahead_evidence = (

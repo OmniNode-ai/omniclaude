@@ -302,6 +302,49 @@ class TestSafety:
         assert safe is False
         assert EnumPruneBlockReason.AHEAD_UNMERGED in reasons
 
+    def test_a_branch_pushed_to_origin_at_this_head_is_safe(self) -> None:
+        """Limb (c). The ruling names pushing as the way to clear an unmerged commit."""
+        safe, reasons, evidence = is_prune_safe(
+            _facts(
+                commits_ahead=4,
+                unmerged_ahead_commits=("abc1234",),
+                tree_diff_vs_base_empty=False,
+                head_oid="d" * 40,
+                origin_head_oid="d" * 40,
+            )
+        )
+        assert safe is True
+        assert reasons == ()
+        assert "limb (c)" in evidence
+
+    def test_origin_holding_an_older_commit_does_not_forgive_the_newer_one(
+        self,
+    ) -> None:
+        """A commit made after the push is still only local, and still protected."""
+        safe, reasons, _ = is_prune_safe(
+            _facts(
+                commits_ahead=5,
+                unmerged_ahead_commits=("abc1234",),
+                tree_diff_vs_base_empty=False,
+                head_oid="e" * 40,
+                origin_head_oid="d" * 40,
+            )
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.AHEAD_UNMERGED in reasons
+
+    def test_an_unpushed_branch_has_no_limb_c(self) -> None:
+        safe, reasons, _ = is_prune_safe(
+            _facts(
+                commits_ahead=1,
+                unmerged_ahead_commits=("abc1234",),
+                tree_diff_vs_base_empty=False,
+                origin_head_oid=None,
+            )
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.AHEAD_UNMERGED in reasons
+
     def test_dirty_tree_is_never_safe_even_with_a_merged_pull_request(self) -> None:
         safe, reasons, _ = is_prune_safe(_merged_pr_facts(dirty_files=("src/a.py",)))
         assert safe is False
