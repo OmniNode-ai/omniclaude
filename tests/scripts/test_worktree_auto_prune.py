@@ -57,29 +57,84 @@ mod = _load_module()
 
 
 class TestParseLedgerClaims:
-    def test_terminal_row_without_later_claim_is_closed(self, tmp_path: Path) -> None:
+    """[OMN-18380] A CLAIM is keyed by (lane, line), never by ticket alone."""
+
+    def test_terminal_with_matching_lane_closes_its_own_claim(
+        self, tmp_path: Path
+    ) -> None:
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
-            "| 2026-08-01T10:00:00Z | lane-a | OMN-1234 | CLAIM | started |\n"
-            "| 2026-08-02T10:00:00Z | lane-a | OMN-1234 | TERMINAL | landed |\n",
+            "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
+            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a | ticket=OMN-1234 | landed\n",
             encoding="utf-8",
         )
-        has_terminal, open_claim = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
         assert has_terminal is True
-        assert open_claim is None
+        assert open_claims == ()
+
+    def test_terminal_with_closes_claim_citation_closes_that_exact_line(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
+            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a | closes-CLAIM=ledger.md:1"
+            " | ticket=OMN-1234 | landed\n",
+            encoding="utf-8",
+        )
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        assert has_terminal is True
+        assert open_claims == ()
+
+    def test_peer_lanes_terminal_does_not_clear_a_different_lanes_claim(
+        self, tmp_path: Path
+    ) -> None:
+        """The exact OMN-18380 hazard: a peer TERMINAL on the same ticket, no
+        closes-CLAIM, a DIFFERENT lane — must never close lane A's claim."""
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
+            "2026-08-02T10:00:00Z | CLAIM | lane=lane-b | ticket=OMN-1234 | started too\n"
+            "2026-08-03T10:00:00Z | TERMINAL | lane=lane-a"
+            " | closes-CLAIM=ledger.md:1 | ticket=OMN-1234 | lane a landed\n",
+            encoding="utf-8",
+        )
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        assert has_terminal is True
+        assert len(open_claims) == 1
+        assert open_claims[0].lane == "lane-b"
+        assert "started too" in open_claims[0].text
+
+    def test_terminal_naming_only_the_ticket_closes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """Rule 8: no closes-CLAIM, no matching lane -> closes NOTHING. This is
+        the exact defect fixed by AC1 — the old code let ANY TERMINAL on the
+        ticket close every open CLAIM on it."""
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
+            "2026-08-02T10:00:00Z | TERMINAL | lane=unrelated-lane | ticket=OMN-1234"
+            " | unrelated work finished\n",
+            encoding="utf-8",
+        )
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        assert has_terminal is True
+        assert len(open_claims) == 1
+        assert open_claims[0].lane == "lane-a"
 
     def test_claim_after_terminal_reopens_the_ticket(self, tmp_path: Path) -> None:
         """The OMN-15551 hazard: a live lane resumed work on a closed ticket."""
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
-            "| 2026-08-02T10:00:00Z | lane-a | OMN-1234 | TERMINAL | landed |\n"
-            "| 2026-08-03T10:00:00Z | lane-b | OMN-1234 | CLAIM | repair lane |\n",
+            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a | ticket=OMN-1234 | landed\n"
+            "2026-08-03T10:00:00Z | CLAIM | lane=lane-b | ticket=OMN-1234 | repair lane\n",
             encoding="utf-8",
         )
-        has_terminal, open_claim = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
         assert has_terminal is True
-        assert open_claim is not None
-        assert "repair lane" in open_claim
+        assert len(open_claims) == 1
+        assert "repair lane" in open_claims[0].text
 
     def test_claim_plus_terminal_on_one_line_resolves_to_terminal(
         self, tmp_path: Path
@@ -89,9 +144,9 @@ class TestParseLedgerClaims:
             "### OMN-1234 — a lane\n\n- **Status:** CLAIM+TERMINAL\n",
             encoding="utf-8",
         )
-        has_terminal, open_claim = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
         assert has_terminal is True
-        assert open_claim is None
+        assert open_claims == ()
 
     def test_section_body_inherits_the_ticket_from_its_heading(
         self, tmp_path: Path
@@ -99,14 +154,14 @@ class TestParseLedgerClaims:
         """`- **Status:** IN PROGRESS.` carries no ticket id of its own."""
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
-            "### OMN-1234 — a lane (CLAIM)\n\n"
+            "### OMN-1234 — a lane\n\n"
             "- **Scope:** something\n"
             "- **Status:** IN PROGRESS.\n",
             encoding="utf-8",
         )
-        has_terminal, open_claim = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
         assert has_terminal is False
-        assert open_claim is not None
+        assert len(open_claims) == 1
 
     def test_prose_mentioning_a_ticket_is_not_a_claim(self, tmp_path: Path) -> None:
         ledger = tmp_path / "ledger.md"
@@ -122,14 +177,123 @@ class TestParseLedgerClaims:
     def test_tickets_are_tracked_independently(self, tmp_path: Path) -> None:
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
-            "| t1 | lane | OMN-1 | TERMINAL | done |\n"
-            "| t2 | lane | OMN-2 | CLAIM | live |\n",
+            "2026-08-01T10:00:00Z | TERMINAL | lane=lane-x | ticket=OMN-1 | done\n"
+            "2026-08-01T10:00:01Z | CLAIM | lane=lane-y | ticket=OMN-2 | live\n",
             encoding="utf-8",
         )
         parsed = mod.parse_ledger_claims(ledger)
-        assert parsed["OMN-1"] == (True, None)
+        assert parsed["OMN-1"] == (True, ())
         assert parsed["OMN-2"][0] is False
-        assert parsed["OMN-2"][1] is not None
+        assert len(parsed["OMN-2"][1]) == 1
+
+
+class TestParseLedgerClaimsRealFixtureOMN18380:
+    """[OMN-18380 AC4] RED/GREEN using the verbatim 2026-09-14 rows that
+    exposed the defect: CLAIM :7871 (lane=worktree-cleanup-phase2, tickets
+    OMN-16901+OMN-18370), the peer TERMINAL :7902 (lane=unshipped-judgment-
+    rescore, ticket=OMN-16901, no closes-CLAIM) that wrongly cleared it under
+    the parent commit's ticket-keyed rule, and the FRICTION row :7963 that
+    recorded the incident (not a CLAIM/TERMINAL row; included for context and
+    to prove a FRICTION row naming both markers in prose is never mistaken
+    for one). Falsifier: this test passes against the parent commit, because
+    the parent's ticket-keyed comparison sees TERMINAL line 7902 > CLAIM line
+    7871 and reports OMN-16901 closed.
+    """
+
+    _CLAIM_7871 = (
+        "2026-09-14T15:26:04Z | CLAIM | lane=worktree-cleanup-phase2 | "
+        "actor=claude:opus5:subagent | ticket=OMN-16901,OMN-18370 | "
+        "ruling=docs/tracking/ROLLING_WORK_LEDGER.md:7870 | SCOPE: rewrite "
+        "the worktree_auto_prune eligibility predicate to the 2026-09-14 "
+        "operator ruling"
+    )
+    _PEER_TERMINAL_7902 = (
+        "2026-09-14T17:39:48Z | TERMINAL | lane=unshipped-judgment-rescore | "
+        "ticket=OMN-16901 | rescore complete: 8 RESUME->MERGED, 2 "
+        "UNKNOWN->SUPERSEDED | friction=none"
+    )
+    _FRICTION_7963 = (
+        "2026-09-14T21:03:13Z | FRICTION | lane=worktree-cleanup-phase2 | "
+        "ticket=OMN-16901 | existing=OMN-16901 | "
+        "class=claim-awareness-is-ticket-keyed-so-a-peer-lanes-terminal-"
+        "clears-your-claim | symptom=parse_ledger_claims maps each TICKET to "
+        "(has_terminal, open_claim) by comparing the newest CLAIM line "
+        "number against the newest TERMINAL line number"
+    )
+
+    def test_peer_terminal_on_shared_ticket_leaves_the_real_claim_open(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            self._CLAIM_7871
+            + "\n"
+            + self._PEER_TERMINAL_7902
+            + "\n"
+            + self._FRICTION_7963
+            + "\n",
+            encoding="utf-8",
+        )
+        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-16901"]
+        assert has_terminal is True  # the peer TERMINAL did cite OMN-16901
+        assert len(open_claims) == 1  # but it did NOT close this lane's CLAIM
+        assert open_claims[0].lane == "worktree-cleanup-phase2"
+        assert "worktree_auto_prune eligibility predicate" in open_claims[0].text
+
+    def test_friction_row_is_never_mistaken_for_a_claim_or_terminal(
+        self, tmp_path: Path
+    ) -> None:
+        """The FRICTION row's own body says 'CLAIM' and 'TERMINAL' in prose
+        (describing the bug) — it must not itself open or close anything."""
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(self._FRICTION_7963 + "\n", encoding="utf-8")
+        assert mod.parse_ledger_claims(ledger) == {}
+
+
+class TestSelectBlockingClaim:
+    """[OMN-18380 AC2] A worktree named by path or branch in an open claim is
+    never prune-eligible, regardless of other lanes' TERMINALs on the ticket."""
+
+    def test_no_open_claims_blocks_nothing(self) -> None:
+        assert mod.select_blocking_claim((), "/wt/OMN-1", "lane-a/omn-1-x") is None
+
+    def test_a_claim_naming_this_exact_worktree_path_blocks(self) -> None:
+        claim = mod.LedgerClaimRow(
+            lineno=1,
+            lane="lane-a",
+            tickets=frozenset({"OMN-1"}),
+            text="CLAIM | lane=lane-a | worktree=/wt/OMN-1/repo | ticket=OMN-1",
+        )
+        result = mod.select_blocking_claim((claim,), "/wt/OMN-1/repo", "some-branch")
+        assert result is not None
+        assert "worktree=/wt/OMN-1/repo" in result
+
+    def test_a_claim_naming_this_worktrees_branch_blocks(self) -> None:
+        claim = mod.LedgerClaimRow(
+            lineno=1,
+            lane="lane-a",
+            tickets=frozenset({"OMN-1"}),
+            text="CLAIM | lane=lane-a | branch lane-a/omn-1-fix-thing | ticket=OMN-1",
+        )
+        result = mod.select_blocking_claim(
+            (claim,), "/wt/OMN-1/repo", "lane-a/omn-1-fix-thing"
+        )
+        assert result is not None
+        assert "lane-a/omn-1-fix-thing" in result
+
+    def test_an_unnamed_open_claim_still_blocks_conservatively(self) -> None:
+        """Absent an explicit path/branch match, ANY open claim on the ticket
+        still blocks — un-named is not proof of exclusion (OMN-15551)."""
+        claim = mod.LedgerClaimRow(
+            lineno=1,
+            lane="lane-a",
+            tickets=frozenset({"OMN-1"}),
+            text="CLAIM | lane=lane-a | ticket=OMN-1 | generic scope, no paths",
+        )
+        result = mod.select_blocking_claim(
+            (claim,), "/wt/OMN-1/other-repo", "unrelated-branch"
+        )
+        assert result is not None
 
 
 # =============================================================================
