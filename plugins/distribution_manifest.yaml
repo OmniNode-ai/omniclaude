@@ -103,6 +103,14 @@ components:
   - node_baseline_capture
   - node_baseline_compare
   rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_baseline_capture'', ''node_baseline_compare'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: board_readback
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/board_readback/SKILL.md
+  backing_nodes: []
+  rationale: Prose process interface for the board readback catalogue row (OMN-18368). Overlay-configured; no committed organization content.
 - id: build_loop
   kind: skill
   exposure: beta
@@ -173,6 +181,14 @@ components:
   backing_nodes:
   - node_coderabbit_triage
   rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_coderabbit_triage'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: comment_sweep
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/comment_sweep/SKILL.md
+  backing_nodes: []
+  rationale: Prose process interface for the recurring comment sweep catalogue row (OMN-18368). Overlay-configured; read-only on the tracker.
 - id: compliance_sweep
   kind: skill
   exposure: beta
@@ -518,6 +534,14 @@ components:
   backing_nodes:
   - node_integration_sweep_orchestrator
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: lane_dispatch
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/lane_dispatch/SKILL.md
+  backing_nodes: []
+  rationale: Prose process interface for the lane dispatch catalogue row (OMN-18368). Overlay-configured; injects the standing rules block.
 - id: linear_housekeeping
   kind: skill
   exposure: beta
@@ -579,6 +603,14 @@ components:
   backing_nodes:
   - node_onboarding
   rationale: 'class=dispatch with disqualifying findings: [''direct_handler_import''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: overseer_verify_tick
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/overseer_verify_tick/SKILL.md
+  backing_nodes: []
+  rationale: Prose process interface for the overseer verify tick catalogue row (OMN-18368). Overlay-configured; wraps the dispatch watchdog.
 - id: pipeline_audit
   kind: skill
   exposure: hidden
@@ -615,6 +647,14 @@ components:
   backing_nodes:
   - node_plan_to_tickets
   rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_plan_to_tickets'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: plans_board_refresh
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/plans_board_refresh/SKILL.md
+  backing_nodes: []
+  rationale: Prose process interface for the plans board refresh catalogue row (OMN-18368). Overlay-configured; no committed generator.
 - id: platform_readiness
   kind: skill
   exposure: beta
