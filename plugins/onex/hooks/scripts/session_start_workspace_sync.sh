@@ -171,6 +171,30 @@ _load_path_alarm() {
         say "    repair: git -C \"$root\" pull --ff-only"
         say "  Then start a NEW session: updating files does not reload hooks.json."
     fi
+
+    # HALF-APPLIED (OMN-18358). The OMN-16497 reference-transaction guard used
+    # to abort a refused branch switch AFTER git had already written the target
+    # tree and index, leaving the clone on the TARGET tree with HEAD behind and
+    # every changed path staged. git writes no reflog entry for an aborted
+    # transaction, so the only visible trace was phantom staged paths in a clone
+    # nobody was watching -- measured here 2026-09-14T07:0xZ as 420 staged, 0
+    # worktree-modified, 0 untracked. The guard now restores the tree itself;
+    # this is the backstop for the case it declines, and for a clone
+    # half-applied before the fix reached this host.
+    #
+    # The signature is specific and cheap to test: the index differs from HEAD
+    # while the worktree agrees with the index. An ordinary unstaged edit fails
+    # the second half, which is what keeps this from firing on every session
+    # where somebody is mid-edit. Two plumbing calls, both local, both silent.
+    if ! git -C "$root" diff-index --quiet --cached HEAD -- 2>/dev/null &&
+        git -C "$root" diff-files --quiet 2>/dev/null; then
+        say "ALARM: the tree these hooks load from looks half-applied: its index"
+        say "  differs from HEAD while the worktree matches the index. That is the"
+        say "  shape a refused branch switch leaves behind, and git records it nowhere."
+        say "    tree:   $root"
+        say "    repair: \$OMNI_HOME/omniclaude/scripts/converge-canonical-clone.sh <repo> --execute"
+        say "  Inspect before repairing: git -C \"$root\" diff --cached --stat"
+    fi
     return 0
 }
 

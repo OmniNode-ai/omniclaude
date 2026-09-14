@@ -708,3 +708,80 @@ def test_load_path_probe_survives_a_non_git_tree(
     )
     assert result.returncode == 0, result.stderr
     assert "ALARM" not in result.stdout, result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# A half-applied clone (OMN-18358)
+# --------------------------------------------------------------------------- #
+#
+# The OMN-16497 reference-transaction guard used to abort a refused branch
+# switch AFTER git had already written the target tree and index, leaving the
+# clone on the target tree with HEAD behind and every changed path staged.
+# git writes no reflog entry for an aborted transaction, so the only visible
+# trace was phantom staged paths in a clone nobody was looking at. Measured on
+# $OMNI_HOME/omniclaude 2026-09-14T07:0xZ: 420 staged, 0 worktree-modified, 0
+# untracked.
+#
+# The guard now restores the tree itself. This alarm is the backstop for the
+# case it declines -- a half-applied clone it could not account for, or one
+# half-applied by a git version or a path that predates the fix.
+
+
+def _half_apply(clone: Path) -> None:
+    """Stage a change without touching the worktree relative to the index.
+
+    That is the exact signature: the index differs from HEAD, and the worktree
+    agrees with the index. An ordinary dirty tree does NOT look like this, which
+    is why the alarm can tell them apart.
+    """
+    (clone / "half_applied.txt").write_text(
+        "staged by a refused checkout\n", encoding="utf-8"
+    )
+    _git("add", "half_applied.txt", cwd=clone)
+
+
+def test_load_path_half_applied_clone_raises_an_alarm(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    _half_apply(clone)
+
+    result = _run_from_tree(clone, ws)
+
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" in result.stdout, result.stdout
+    assert "half-applied" in result.stdout, result.stdout
+    # The alarm must name the tree and the sanctioned repair, not just the
+    # condition -- an alarm nobody can act on is noise that gets filtered.
+    assert str(clone) in result.stdout, result.stdout
+    assert "converge-canonical-clone.sh" in result.stdout, result.stdout
+
+
+def test_load_path_half_apply_alarm_is_silent_on_a_clean_clone(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """Positive control for the probe above: an always-ALARM bug would make the
+    test above pass against any clone at all."""
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+
+    result = _run_from_tree(clone, ws)
+
+    assert result.returncode == 0, result.stderr
+    assert "half-applied" not in result.stdout, result.stdout
+
+
+def test_load_path_half_apply_alarm_does_not_fire_on_an_ordinary_dirty_tree(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """An unstaged local edit is ordinary work, not a half-apply.
+
+    Reporting it here would make the alarm fire on every session where someone
+    was mid-edit, and an alarm that fires constantly is one nobody reads.
+    """
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    (clone / "scratch.txt").write_text("just editing\n", encoding="utf-8")
+
+    result = _run_from_tree(clone, ws)
+
+    assert result.returncode == 0, result.stderr
+    assert "half-applied" not in result.stdout, result.stdout
