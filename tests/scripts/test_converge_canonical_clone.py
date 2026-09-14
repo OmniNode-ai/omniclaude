@@ -600,3 +600,151 @@ def test_branch_refuses_clean_untracked_combination(scratch: Scratch) -> None:
     )
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "clean-untracked" in (proc.stdout + proc.stderr).lower()
+
+
+# ---------------------------------------------------------------------------
+# WRONG BRANCH (OMN-16497) — the third drift class
+# ---------------------------------------------------------------------------
+#
+# Measured 2026-09-14: the canonical onex_change_control clone sat on
+# `auto/omninode-ai-omnibase_infra-pr-3469-occ-autobind`, 175 commits behind
+# origin/dev, since 2026-09-12T23:09:04Z. HEAD was ATTACHED, the tree was
+# clean-but-for-one-untracked-dir, and that branch had a perfectly good
+# upstream of its own — so the script resolved branch=auto/..., upstream=
+# origin/auto/..., and reported a no-op reset to the same sha.
+#
+# That is worse than the refusal the detached case used to give: it reports
+# SUCCESS and leaves the clone serving a feature branch to every lane that
+# resolves it. `--to-branch` existed but was only consulted when detached.
+#
+# The correct branch is DERIVED, never guessed: `refs/remotes/<remote>/HEAD` is
+# the remote's own published default branch. When it does not resolve and
+# `--to-branch` was not given, the script refuses rather than picking one.
+
+
+def _put_clone_on_a_feature_branch(scratch: Scratch, name: str = "auto/pr-1") -> str:
+    """Reproduce the 2026-09-12 shape: a local branch created from a remote
+    feature branch, checked out in the canonical clone, with its own upstream."""
+    env, clone, seed = scratch.env, scratch.clone, scratch.remote.parent / "seed"
+    git(env, seed, "checkout", "-q", "-b", name)
+    (seed / "feature.txt").write_text("feature\n", encoding="utf-8")
+    git(env, seed, "add", "-A")
+    git(env, seed, "commit", "-q", "-m", "feature commit")
+    git(env, seed, "push", "-q", "-u", "origin", name)
+    git(env, seed, "checkout", "-q", "dev")
+    git(env, clone, "fetch", "-q", "origin")
+    git(env, clone, "checkout", "-q", "-b", name, f"origin/{name}")
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == name
+    return git(env, clone, "rev-parse", "HEAD")
+
+
+@pytest.mark.unit
+def test_wrong_branch_dry_run_names_the_drift_and_the_target(
+    scratch: Scratch,
+) -> None:
+    _put_clone_on_a_feature_branch(scratch)
+    proc = scratch.run("omnimarket")
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "auto/pr-1" in out, out
+    assert "dev" in out, out
+    # The no-op reset the un-fixed script proposed must be gone: the dry run has
+    # to say it would move HEAD back onto the clone's own branch.
+    assert "WRONG BRANCH" in out, out
+    assert "Nothing was changed" in out, out
+    # Still a dry run.
+    assert (
+        git(scratch.env, scratch.clone, "symbolic-ref", "--short", "HEAD")
+        == "auto/pr-1"
+    )
+
+
+@pytest.mark.unit
+def test_wrong_branch_execute_returns_the_clone_to_its_default_branch(
+    scratch: Scratch,
+) -> None:
+    env, clone = scratch.env, scratch.clone
+    feature_head = _put_clone_on_a_feature_branch(scratch)
+    (clone / "untracked.txt").write_text("untracked draft\n", encoding="utf-8")
+
+    proc = scratch.run("omnimarket", "--execute", "--ticket", "OMN-16497")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "dev"
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.upstream_head
+    assert git(env, clone, "status", "--porcelain", "--untracked-files=no") == ""
+    # The branch it was parked on is left intact — nothing is deleted.
+    assert git(env, clone, "rev-parse", "auto/pr-1") == feature_head
+
+    out = proc.stdout + proc.stderr
+    assert "WRONG BRANCH" in out, out
+
+    evidence = sorted(scratch.evidence_root.glob("omnimarket-*"))[-1]
+    manifest = (evidence / "MANIFEST.txt").read_text(encoding="utf-8")
+    assert "off_branch_before=1" in manifest, manifest
+    assert "reattach_target_source=" in manifest, manifest
+    assert (evidence / "untracked" / "untracked.txt").read_text(
+        encoding="utf-8"
+    ) == "untracked draft\n"
+
+    row = scratch.ledger.read_text(encoding="utf-8")
+    assert "CONVERGED" in row and "auto/pr-1" in row and "OMN-16497" in row, row
+
+
+@pytest.mark.unit
+def test_wrong_branch_honours_to_branch_override(scratch: Scratch) -> None:
+    env, clone = scratch.env, scratch.clone
+    _put_clone_on_a_feature_branch(scratch)
+    git(env, clone, "branch", "release", "origin/dev")
+    git(env, clone, "branch", "--set-upstream-to=origin/dev", "release")
+
+    proc = scratch.run("omnimarket", "--execute", "--to-branch", "release")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "release"
+
+
+@pytest.mark.unit
+def test_wrong_branch_refuses_when_target_cannot_be_derived(
+    scratch: Scratch,
+) -> None:
+    """Fail closed: no remote default branch and no --to-branch means refuse."""
+    env, clone = scratch.env, scratch.clone
+    _put_clone_on_a_feature_branch(scratch)
+    git(env, clone, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+    git(env, clone, "branch", "-D", "dev")
+
+    proc = scratch.run("omnimarket", "--execute")
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 2, out
+    assert "REFUSED" in out, out
+    assert "--to-branch" in out, out
+    # Nothing moved.
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "auto/pr-1"
+
+
+@pytest.mark.unit
+def test_correct_branch_is_still_not_treated_as_drift(scratch: Scratch) -> None:
+    """Permanent negative control: the ordinary converge path must not regress
+    into reporting every clone as on the wrong branch."""
+    _dirty_like_the_incident(scratch)
+    proc = scratch.run("omnimarket", "--execute")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    out = proc.stdout + proc.stderr
+    assert "WRONG BRANCH" not in out, out
+    assert git(scratch.env, scratch.clone, "symbolic-ref", "--short", "HEAD") == "dev"
+
+
+@pytest.mark.unit
+def test_script_opens_the_ref_guards_sanctioned_door() -> None:
+    """The OMN-16497 layer-1 reference-transaction hook denies every HEAD move
+    in a canonical clone and names exactly one door: ``ONEX_CANONICAL_CONVERGE=1``,
+    which its header says this script exports. It did not. A repair tool that
+    its own guard refuses is not a repair path — and the failure only appears on
+    a host where the hook is installed, which is not the test host.
+    """
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "ONEX_CANONICAL_CONVERGE" in text, (
+        "converge-canonical-clone.sh must export the sanctioned bypass the "
+        "reference-transaction guard names, or its own re-attach is refused"
+    )
+    assert "export ONEX_CANONICAL_CONVERGE=1" in text, text[:0] or "not exported"

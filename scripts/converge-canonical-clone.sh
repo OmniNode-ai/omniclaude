@@ -52,10 +52,29 @@
 # detached HEAD are preserved as patches first, exactly like branch mode's
 # ahead-commits.
 #
+# WRONG BRANCH (OMN-16497) is the third drift class, and until this ticket it was
+# the invisible one. A clone left ATTACHED to a feature branch -- `gh pr checkout`
+# is the spelling that did it, since every git spelling was already guard-denied
+# -- has a perfectly good upstream of its own, so the default mode resolved
+# branch=auto/..., upstream=origin/auto/..., found them equal, and reported a
+# no-op SUCCESS while the clone went on serving that branch to every lane that
+# resolved it. Live case: $OMNI_HOME/onex_change_control sat on
+# `auto/omninode-ai-omnibase_infra-pr-3469-occ-autobind`, 175 commits behind
+# origin/dev, from 2026-09-12T23:09:04Z until it was found two days later.
+#
+# The correct branch is DERIVED, never guessed: `refs/remotes/<remote>/HEAD` is
+# the default branch the REMOTE itself publishes. --to-branch overrides it and is
+# now honoured on an attached HEAD, not only a detached one. When the remote
+# publishes no default branch and none was named, the script REFUSES -- a clone
+# whose right branch cannot be established is exactly the case a confident no-op
+# must not cover. The branch the clone was parked on is left intact; commits
+# reachable only from the old HEAD are preserved as patches first.
+#
 # Refuses (exit 2): a target that is not a direct child of $OMNI_HOME with a .git
 # DIRECTORY (worktrees carry a .git file and are never converged here), a branch
 # without an upstream, a detached HEAD whose re-attachment target cannot be
-# derived and was not named, unknown options. With --branch, also
+# derived and was not named, an attached HEAD whose clone cannot be judged
+# against a published remote default branch, unknown options. With --branch, also
 # refuses the currently checked-out branch (use the default mode for that), a
 # nonexistent local branch, and the --clean-untracked combination (the working
 # tree is out of scope in branch mode). Exit 0 on success or when
@@ -132,6 +151,16 @@ repo="$(basename "$clone")"
 [[ "$repo" != "omni_worktrees" ]] || refuse "omni_worktrees is the work root, not a clone"
 [[ -d "$clone/.git" ]] \
   || refuse "$clone has no .git directory (a worktree has a .git FILE; worktrees are mutable and are not converged by this script)"
+
+# The OMN-16497 layer-1 `reference-transaction` hook refuses EVERY HEAD move and
+# every non-fast-forward ref update inside a canonical clone, and its header
+# names exactly one door: this variable, "exported by converge-canonical-clone.sh
+# for its own re-attach and reset". It was not, in fact, exported here — so on
+# every host where that hook is installed this script's own re-attach was
+# refused by the guard that points at it. It is not a skip flag: everything
+# above has already been preserved as patches and hashed, and a ledger row is
+# appended below.
+export ONEX_CANONICAL_CONVERGE=1
 
 g() { git -C "$clone" "$@"; }
 
@@ -248,7 +277,21 @@ fi
 # no sanctioned repair path at all (the guard denies checkout/switch and points
 # at this script; pull-all.sh delegates to this script). It is now converged,
 # with the re-attachment target DERIVED from the reflog rather than guessed.
+#
+# OMN-16497: a clone ATTACHED TO THE WRONG BRANCH is the third drift class and
+# used to be invisible here. `gh pr checkout` left the canonical
+# onex_change_control clone on an autobind feature branch, 175 commits behind
+# origin/dev, on 2026-09-12. That branch had an upstream of its own, so this
+# script resolved branch=auto/..., upstream=origin/auto/..., found them equal
+# and reported a no-op — SUCCESS, with the clone still serving a feature branch
+# to every lane that resolves it. That is worse than a refusal.
+#
+# The correct branch is DERIVED, never guessed: `refs/remotes/<remote>/HEAD` is
+# the default branch the REMOTE itself publishes. `--to-branch` overrides it.
+# When neither resolves, the script refuses rather than picking one.
 detached=0
+off_branch=0
+current_branch=""
 branch="$(g symbolic-ref -q --short HEAD 2>/dev/null || true)"
 if [[ -z "$branch" ]]; then
   detached=1
@@ -274,6 +317,38 @@ if [[ -z "$branch" ]]; then
   [[ -n "$branch" ]] || refuse "detached HEAD in $clone and no re-attachment target could be derived from the HEAD reflog (no prior 'checkout: moving from <branch>' entry names a local branch that still exists and has an upstream). Name one explicitly: --to-branch <name>"
   g show-ref --verify --quiet "refs/heads/$branch" \
     || refuse "detached HEAD in $clone; re-attachment target '$branch' ($branch_source) is not a local branch"
+else
+  current_branch="$branch"
+  # The remote this clone answers to: the current branch's own upstream remote
+  # when it has one, otherwise the single configured remote. Never hardcoded.
+  probe_remote="$(g rev-parse --abbrev-ref --symbolic-full-name "${branch}@{u}" 2>/dev/null || true)"
+  probe_remote="${probe_remote%%/*}"
+  if [[ -z "$probe_remote" ]]; then
+    probe_remote="$(g remote | head -n1)"
+  fi
+  default_branch=""
+  if [[ -n "$to_branch_opt" ]]; then
+    default_branch="$to_branch_opt"
+    branch_source="--to-branch"
+  elif [[ -n "$probe_remote" ]]; then
+    default_branch="$(g symbolic-ref -q --short "refs/remotes/$probe_remote/HEAD" 2>/dev/null || true)"
+    default_branch="${default_branch#"$probe_remote/"}"
+    branch_source="derived from refs/remotes/$probe_remote/HEAD"
+  fi
+  if [[ -n "$default_branch" && "$default_branch" != "$current_branch" ]]; then
+    off_branch=1
+    branch="$default_branch"
+    g show-ref --verify --quiet "refs/heads/$branch" \
+      || refuse "clone $clone is on '$current_branch', not its own branch '$branch' ($branch_source), and '$branch' is not a local branch here. Name the target explicitly: --to-branch <name>"
+    g rev-parse --abbrev-ref --symbolic-full-name "${branch}@{u}" >/dev/null 2>&1 \
+      || refuse "clone $clone is on '$current_branch', not '$branch' ($branch_source), but '$branch' has no upstream configured; refusing to guess a convergence target. Name one explicitly: --to-branch <name>"
+  elif [[ -z "$default_branch" ]]; then
+    # Fail CLOSED. Without a published default branch there is no derived fact
+    # that says which branch this clone belongs on, and the failure mode being
+    # removed here is precisely a confident no-op success on the wrong one.
+    # `git remote set-head <remote> -a` republishes it; --to-branch names it.
+    refuse "cannot determine which branch $clone belongs on: it is on '$branch' and refs/remotes/${probe_remote:-<no remote>}/HEAD does not resolve, so no derived fact says whether that is the right branch. Republish it with: git -C $clone remote set-head ${probe_remote:-origin} -a   — or name the target explicitly: --to-branch <name>"
+  fi
 fi
 
 upstream="$(g rev-parse --abbrev-ref --symbolic-full-name "${branch}@{u}" 2>/dev/null)" \
@@ -294,7 +369,7 @@ untracked="$(count_lines "$untracked_list")"
 # A DETACHED HEAD is never "already converged", even when its sha happens to
 # equal the upstream tip: the clone still has no branch, so the next `git pull`
 # has nothing to fast-forward and every downstream consumer stays frozen.
-if (( ! detached )) && [[ -z "$status" && "$head_before" == "$target_sha" ]]; then
+if (( ! detached )) && (( ! off_branch )) && [[ -z "$status" && "$head_before" == "$target_sha" ]]; then
   echo "already converged: $repo ($clone) HEAD == $upstream ($target_sha), clean tree"
   exit 0
 fi
@@ -305,19 +380,19 @@ evidence_root="$OMNI_HOME/.onex_state/canonical-clone-converge"
 # HEAD moves (the reflog expires), so they are preserved as patches before the
 # re-attach -- the same guarantee branch mode gives a branch's ahead-commits.
 detached_ahead=0
-if (( detached )); then
+if (( detached || off_branch )); then
   detached_ahead="$(g rev-list --count "${upstream}..HEAD" 2>/dev/null || echo 0)"
 fi
 
 if (( ! execute )); then
   cat <<EOF
 DRY-RUN: would converge canonical clone '$repo' ($clone)
-  HEAD state: $( (( detached )) && printf 'DETACHED at %s; would re-attach to %s (%s)' "${head_before:0:12}" "$branch" "$branch_source" || printf 'on branch %s' "$branch")
+  HEAD state: $( (( detached )) && printf 'DETACHED at %s; would re-attach to %s (%s)' "${head_before:0:12}" "$branch" "$branch_source" || { (( off_branch )) && printf "WRONG BRANCH '%s'; would return the clone to '%s' (%s)" "$current_branch" "$branch" "$branch_source" || printf 'on branch %s' "$branch"; })
   branch=$branch upstream=$upstream
   HEAD $head_before -> $target_sha
-  dirty paths: $dirty_total ($staged staged, $unstaged worktree-modified, $untracked untracked)$( (( detached )) && printf '\n  detached-only commits: %s (preserved as patches)' "$detached_ahead" || true)
+  dirty paths: $dirty_total ($staged staged, $unstaged worktree-modified, $untracked untracked)$( (( detached || off_branch )) && printf '\n  commits reachable only from the current HEAD: %s (preserved as patches)' "$detached_ahead" || true)
   would preserve status/patches/untracked copies/reflog/MANIFEST under $evidence_root/$repo-<utc>/
-  then run: $( (( detached )) && printf 'git -C %s checkout --force %s && ' "$clone" "$branch" || true)git -C $clone reset --hard $target_sha$( (( clean_untracked )) && printf ' && git clean -fd' || true )
+  then run: $( (( detached || off_branch )) && printf 'git -C %s checkout --force %s && ' "$clone" "$branch" || true)git -C $clone reset --hard $target_sha$( (( clean_untracked )) && printf ' && git clean -fd' || true )
 Nothing was changed. Re-run with --execute to perform it.
 EOF
   exit 0
@@ -332,7 +407,7 @@ g diff --cached --binary > "$evidence/staged.patch"
 g diff --binary > "$evidence/unstaged.patch"
 g diff --binary HEAD > "$evidence/full-vs-HEAD.patch"
 g reflog -n 20 > "$evidence/reflog.txt" || true
-if (( detached )); then
+if (( detached || off_branch )); then
   mkdir -p "$evidence/detached-patches"
   g log --format='%H %ci %s' "${upstream}..HEAD" > "$evidence/detached-commits.log" 2>/dev/null || true
   if (( detached_ahead > 0 )); then
@@ -350,7 +425,11 @@ done <<< "$untracked_list"
   echo "clone=$clone"
   echo "branch=$branch"
   echo "detached_before=$detached"
-  if (( detached )); then
+  echo "off_branch_before=$off_branch"
+  if (( off_branch )); then
+    echo "branch_before=$current_branch"
+  fi
+  if (( detached || off_branch )); then
     echo "reattach_target_source=$branch_source"
     echo "detached_only_commits=$detached_ahead"
   fi
@@ -385,11 +464,11 @@ patch_sha="$(sha256_of "$evidence/full-vs-HEAD.patch")"
 # and every untracked file was copied into $evidence immediately above, and the
 # detached-only commits were written out as patches. Without --force the
 # checkout aborts on the same dirty tree this script exists to converge.
-if (( detached )); then
+if (( detached || off_branch )); then
   g checkout --force --quiet "$branch" \
-    || fail "git checkout --force $branch failed while re-attaching detached HEAD (evidence kept at $evidence)"
+    || fail "git checkout --force $branch failed while moving HEAD to $branch (evidence kept at $evidence)"
   [[ "$(g symbolic-ref -q --short HEAD)" == "$branch" ]] \
-    || fail "HEAD is still detached after checkout $branch (evidence kept at $evidence)"
+    || fail "HEAD is not on $branch after checkout (evidence kept at $evidence)"
 fi
 g reset --hard --quiet "$target_sha" || fail "git reset --hard $target_sha failed (evidence kept at $evidence)"
 clean_note=""
@@ -412,13 +491,15 @@ head_after="$(g rev-parse HEAD)"
 detached_note=""
 if (( detached )); then
   detached_note=" re-attached DETACHED HEAD to $branch ($branch_source), $detached_ahead detached-only commit(s) preserved as patches;"
+elif (( off_branch )); then
+  detached_note=" returned clone from WRONG BRANCH '$current_branch' to '$branch' ($branch_source), $detached_ahead commit(s) reachable only from the old HEAD preserved as patches, branch '$current_branch' left intact;"
 fi
 row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | $lane | ${ticket:-$repo} | CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified HEAD==@{u} and clean tracked tree. No secrets printed."
 append_ledger_row "$row"
 
 cat <<EOF
 CONVERGED: $repo ($clone)
-  branch=$branch upstream=$upstream$( (( detached )) && printf '\n  re-attached DETACHED HEAD to %s (%s); %s detached-only commit(s) preserved' "$branch" "$branch_source" "$detached_ahead" || true)
+  branch=$branch upstream=$upstream$( (( detached )) && printf '\n  re-attached DETACHED HEAD to %s (%s); %s detached-only commit(s) preserved' "$branch" "$branch_source" "$detached_ahead" || true)$( (( off_branch )) && printf "\n  returned clone from WRONG BRANCH '%s' to '%s' (%s); %s commit(s) reachable only from the old HEAD preserved; branch '%s' left intact" "$current_branch" "$branch" "$branch_source" "$detached_ahead" "$current_branch" || true)
   HEAD $head_before -> $head_after
   preserved: $evidence (full-vs-HEAD.patch sha256 $patch_sha)
   dirty paths: $dirty_total ($staged staged, $unstaged worktree-modified, $untracked untracked)${clean_note:+; untracked removed after preservation}
