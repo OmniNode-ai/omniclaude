@@ -74,6 +74,109 @@ fi
 # shellcheck source=onex-paths.sh
 source "${_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 
+# --------------------------------------------------------------------------- #
+# The load path this hook is EXECUTING FROM (OMN-16497)
+# --------------------------------------------------------------------------- #
+#
+# Everything below this block reads a verdict some other process cached. This
+# block does not, and cannot: it answers "is the tree these hooks are loaded
+# from current?", and a cached answer to that question was written BY code
+# loaded from the same tree. If the tree is stale, so is the verdict about it,
+# and so is the code that printed it. A stale surface cannot certify itself.
+#
+# Measured, 2026-09-14. $OMNI_HOME/omniclaude -- the symlink target of the
+# plugin every live PreToolUse hook actually runs from -- carried
+# core.bare=true and had not fast-forwarded since 2026-09-11, fifteen commits
+# behind origin/dev. `git fetch` succeeds forever on a bare clone while no
+# checkout ever lands, so refs advanced and working-tree files did not. Every
+# guard merged in that window existed in git history and was dark on every
+# running session, fleet-wide, for at least three days.
+#
+# This line said "clones/venv: in sync" throughout, and it was not lying: the
+# reconciler it quotes (omnibase_infra/scripts/reconcile-host.sh) checks
+# core.bare through its clone-health verifier, but only over
+# SIBLING_CLONE_MANIFEST -- omnibase_infra, omnibase_core, omnibase_spi,
+# omnibase_compat, omnimarket. That is the runtime-image sibling set.
+# `omniclaude` is not in it, so the one clone that decides whether any hook
+# runs at all is the one clone nothing was looking at.
+#
+# Cost: two `git` calls against ONE repository, both local. No fetch -- see the
+# honest limit on `behind` below.
+_load_path_alarm() {
+    local root bare behind upstream probe
+    # Walk up for the enclosing `.git` in pure bash rather than asking git for
+    # `--show-toplevel`. A repository configured core.bare=true HAS no work
+    # tree by git's reckoning, so `--show-toplevel` fails there -- on exactly
+    # the repository state this check exists to catch. Asking git would make
+    # the probe silent in its most important case.
+    root=""
+    probe="$_SCRIPT_DIR"
+    while [[ -n "$probe" && "$probe" != "/" ]]; do
+        if [[ -e "$probe/.git" ]]; then
+            root="$probe"
+            break
+        fi
+        probe="${probe%/*}"
+    done
+    [[ -n "$root" ]] || return 0
+
+    # A bare clone fetches cleanly and checks out nothing. This is the failure
+    # that hides itself: refs move, files do not, and every "up to date" probe
+    # that reads refs agrees.
+    # Read .git/config in bash rather than forking `git config`. Two forks is
+    # the whole budget of this block; one of them buys nothing that a six-line
+    # INI read does not. A worktree carries a .git FILE and can never be bare,
+    # so it skips straight to the behind check.
+    bare=""
+    if [[ -d "$root/.git" && -r "$root/.git/config" ]]; then
+        local _section="" _line
+        while IFS= read -r _line || [[ -n "$_line" ]]; do
+            _line="${_line#"${_line%%[![:space:]]*}"}"
+            case "$_line" in
+                "["*) _section="$_line" ;;
+                bare*=*)
+                    if [[ "$_section" == "[core]"* ]]; then
+                        bare="${_line#*=}"
+                        bare="${bare//[[:space:]]/}"
+                    fi
+                    ;;
+            esac
+        done < "$root/.git/config"
+    fi
+    if [[ "$bare" == "true" ]]; then
+        say "ALARM: the tree these hooks load from has core.bare=true, so no"
+        say "  merged hook change has reached a running session since it was set."
+        say "    tree:   $root"
+        say "    repair: git -C \"$root\" config core.bare false && git -C \"$root\" reset --hard HEAD"
+        say "  Then start a NEW session: updating files does not reload hooks.json."
+        return 0
+    fi
+
+    # Behind its own upstream. Measured against the remote-tracking ref that is
+    # already on disk -- this hook does not fetch, because SessionStart is a
+    # sub-50ms contract and a network call there is a hang waiting for a bad
+    # link. HONEST LIMIT, stated rather than left to be discovered: if nothing
+    # has fetched recently, `behind` reads 0 and this check is silent. It
+    # detects a clone that fetched and did not fast-forward, which is the
+    # measured shape; it does not detect a clone nothing has fetched at all.
+    # One process, not two: rev-list resolves @{u} itself and fails harmlessly
+    # when the branch has no upstream. SessionStart is a sub-50ms contract, so
+    # every avoidable fork here is spent budget.
+    behind="$(git -C "$root" rev-list --count 'HEAD..@{u}' 2>/dev/null)" || return 0
+    if [[ -n "$behind" && "$behind" != "0" ]]; then
+        upstream="$(git -C "$root" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"
+        say "ALARM: the tree these hooks load from is ${behind} commit(s) behind ${upstream:-its upstream}."
+        say "  Merged is not deployed: those changes are dark on this session."
+        say "    tree:   $root"
+        say "    repair: git -C \"$root\" pull --ff-only"
+        say "  Then start a NEW session: updating files does not reload hooks.json."
+    fi
+    return 0
+}
+
+# Never let a probe of the load path break the line that reports it.
+_load_path_alarm || true
+
 _STATE_DIR="${ONEX_HOOKS_STATE_DIR:-${HOME}/.onex_state/hooks}"
 _STATUS="${_STATE_DIR}/workspace-reconcile.status"
 

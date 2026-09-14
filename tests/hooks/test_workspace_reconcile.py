@@ -557,3 +557,154 @@ def test_session_line_never_mutates_anything(ws: _Workspace) -> None:
 
     assert len(ws.reconcile_calls()) == before
     assert _git("rev-parse", "HEAD", cwd=ws.clone) == head_before
+
+
+# --------------------------------------------------------------------------- #
+# The load path this hook executes from (OMN-16497)
+# --------------------------------------------------------------------------- #
+#
+# Measured 2026-09-14: $OMNI_HOME/omniclaude carried core.bare=true and sat 15
+# commits behind origin/dev for three days. It is the symlink target of the
+# plugin every live PreToolUse hook runs from, so every guard merged in that
+# window was dark on every running session. This line reported
+# "clones/venv: in sync" throughout, truthfully: the reconciler it quotes
+# checks core.bare, but only over SIBLING_CLONE_MANIFEST, and `omniclaude` is
+# not in that list.
+#
+# These tests run the REAL script from inside a throwaway clone, so
+# ${BASH_SOURCE[0]} genuinely resolves there. Nothing is stubbed and no env
+# override exists — an override would be the bypass this check exists to close.
+
+
+def _plant_hook_tree(root: Path, name: str) -> tuple[Path, Path]:
+    """A clone containing a real copy of the hook tree, with a real upstream.
+
+    The hook resolves its load path from its own location, so the only faithful
+    test is one where the script really lives inside the repository under test.
+    """
+    import shutil
+
+    seed = root / "_lp_seed" / name
+    (seed / "plugins" / "onex").mkdir(parents=True)
+    shutil.copytree(
+        _REPO_ROOT / "plugins" / "onex" / "hooks", seed / "plugins" / "onex" / "hooks"
+    )
+    _git("init", "--quiet", "-b", "dev", cwd=seed)
+    _git("config", "user.email", "test@example.com", cwd=seed)
+    _git("config", "user.name", "Test", cwd=seed)
+    _git("add", "-A", cwd=seed)
+    _git("commit", "--quiet", "-m", "hook tree", cwd=seed)
+
+    upstream = root / "_lp_upstream" / f"{name}.git"
+    upstream.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "--quiet", "--bare", str(seed), str(upstream)], check=True
+    )
+    clone = root / "_lp" / name
+    clone.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "--quiet", "-b", "dev", str(upstream), str(clone)], check=True
+    )
+    return clone, seed
+
+
+def _run_from_tree(clone: Path, ws: _Workspace) -> subprocess.CompletedProcess[str]:
+    script = (
+        clone
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / "session_start_workspace_sync.sh"
+    )
+    return subprocess.run(
+        ["bash", str(script)],
+        input=_STDIN,
+        capture_output=True,
+        text=True,
+        env=ws.env(),
+        check=False,
+    )
+
+
+def test_load_path_healthy_raises_no_alarm(ws: _Workspace, tmp_path: Path) -> None:
+    """Positive control. Without this, an always-ALARM bug reads as a pass."""
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    result = _run_from_tree(clone, ws)
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" not in result.stdout, result.stdout
+    assert "[workspace-sync]" in result.stdout, result.stdout
+
+
+def test_load_path_bare_clone_raises_an_alarm(ws: _Workspace, tmp_path: Path) -> None:
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    _git("config", "core.bare", "true", cwd=clone)
+    result = _run_from_tree(clone, ws)
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" in result.stdout, result.stdout
+    assert "core.bare=true" in result.stdout, result.stdout
+    # The alarm must name the tree and the repair, not just the condition.
+    assert str(clone) in result.stdout, result.stdout
+    assert "core.bare false" in result.stdout, result.stdout
+    # A new session is the only surface that re-reads hooks.json.
+    assert "NEW session" in result.stdout, result.stdout
+
+
+def test_load_path_behind_upstream_raises_an_alarm(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    clone, seed = _plant_hook_tree(tmp_path, "omniclaude")
+    (seed / "marker.txt").write_text("moved on\n", encoding="utf-8")
+    _git("add", "-A", cwd=seed)
+    _git("commit", "--quiet", "-m", "upstream moves on", cwd=seed)
+    _git(
+        "push",
+        "--quiet",
+        str(tmp_path / "_lp_upstream" / "omniclaude.git"),
+        "dev",
+        cwd=seed,
+    )
+    # The clone fetches (refs advance) and does NOT fast-forward — the measured
+    # shape. `behind` is read from the remote-tracking ref already on disk.
+    _git("fetch", "--quiet", "origin", cwd=clone)
+
+    result = _run_from_tree(clone, ws)
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" in result.stdout, result.stdout
+    assert "1 commit(s) behind" in result.stdout, result.stdout
+    assert "pull --ff-only" in result.stdout, result.stdout
+
+
+def test_load_path_alarm_never_blocks_and_still_prints_the_verdict(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """The alarm is additive: the cached verdict line must still be printed."""
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    _git("config", "core.bare", "true", cwd=clone)
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    result = _run_from_tree(clone, ws)
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" in result.stdout, result.stdout
+    assert "clones/venv: in sync" in result.stdout, result.stdout
+
+
+def test_load_path_probe_survives_a_non_git_tree(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """A hook tree outside any repository is not an alarm — it is unknowable,
+    and a hook that cannot answer must not block or invent a verdict."""
+    import shutil
+
+    plain = tmp_path / "_lp_plain" / "plugins" / "onex"
+    plain.mkdir(parents=True)
+    shutil.copytree(_REPO_ROOT / "plugins" / "onex" / "hooks", plain / "hooks")
+    result = subprocess.run(
+        ["bash", str(plain / "hooks" / "scripts" / "session_start_workspace_sync.sh")],
+        input=_STDIN,
+        capture_output=True,
+        text=True,
+        env={**ws.env(), "GIT_CEILING_DIRECTORIES": str(tmp_path)},
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" not in result.stdout, result.stdout
