@@ -1,0 +1,281 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# Process catalogue (OMN-18368, step 3 of the process-skills plan).
+#
+# WHAT THIS IS. One row per recurring process, each naming the skill that is the
+# INTERFACE to that process. A prose skill is a thin front over an existing
+# workflow: it dispatches, it does not orchestrate. The catalogue exists so that
+# "which skill runs the morning ground state" has an answer that is read rather
+# than remembered.
+#
+# WHAT A ROW CARRIES, and nothing else:
+#   row_id                 stable identifier; never reused for a different process
+#   title                  the process as a person names it
+#   cadence                daily | recurring | on_demand
+#   wraps                  the workflow or script the skill runs, described generically
+#   provider               plugin    -> `skills` names directories under plugins/onex/skills/
+#                          workspace -> the process is a workspace workflow this plugin does
+#                                       not ship; `skills` is empty and the binding to a
+#                                       concrete workflow file lives in a deployment overlay
+#   skills                 the plugin skill directories that are this row's interface
+#   verification_contract  what must be read back before the run may be called done
+#   mechanical_replacement the ticket that retires this prose row, or "none yet"
+#
+# WHY mechanical_replacement IS MANDATORY. A prose skill is a temporary
+# interface. A row with no named replacement is a row nobody will ever retire.
+# "none yet" is an admission that the replacement has not been scoped, and it is
+# the honest value while the catalogue's own plan holds steps 4 onward. It is
+# never a placeholder for a ticket the author could have looked up.
+#
+# GENERIC BY CONSTRUCTION. No row names an organization, a repository, a host, a
+# ledger path, a lane or a ticket tracker. A row's organization-specific half --
+# which workflow file it runs, where its report lands, which tracker it reads --
+# lives in that skill's overlay, resolved at load time, and never here.
+#
+# ENFORCEMENT. tests/skills/test_process_catalogue_rows.py reads this file and
+# the skill directory and fails on a row naming a skill that does not exist, a
+# skill declaring a row that does not exist, a row with an empty verification
+# contract, or a row with an empty mechanical replacement.
+#
+# The reverse half of that check fires on a skill whose frontmatter carries
+# `process_catalogue_row`. The five skills written for this catalogue carry it.
+# The pre-existing skills a row points at do not yet, so the binding is
+# one-directional for those rows today: the row proves the skill exists, and the
+# skill does not yet prove its row. Back-declaring them is a mechanical follow-up
+# and is stated here rather than left to be discovered.
+
+catalogue_version: "1.0.0"
+ticket: OMN-18368
+
+rows:
+  # ---------------------------------------------------------------- daily ----
+  - row_id: morning_friction_sweep
+    title: Morning friction sweep
+    cadence: daily
+    wraps: the friction-sweep workflow
+    provider: workspace
+    skills: []
+    verification_contract: >-
+      The report is merged, a ticket exists for every second occurrence, and the
+      scheduled firing receipt for the run is present -- so that "fired and found
+      nothing" is distinguishable from "nothing fired".
+    mechanical_replacement: none yet
+
+  - row_id: morning_ground_state
+    title: Morning ground state
+    cadence: daily
+    wraps: the ground-state workflow
+    provider: workspace
+    skills: []
+    verification_contract: >-
+      The report is merged, the coordination rows are appended through the
+      append-only lock, and the shared goal document is refreshed to this run.
+    mechanical_replacement: none yet
+
+  - row_id: morning_worktree_prune
+    title: Morning worktree prune
+    cadence: daily
+    wraps: the worktree-prune workflow
+    provider: workspace
+    skills: []
+    verification_contract: >-
+      Every worktree is classified, none is left unjudged, and the triage report
+      is merged.
+    mechanical_replacement: none yet
+
+  - row_id: ledger_reconcile
+    title: Ledger reconcile
+    cadence: daily
+    wraps: the reconciler script
+    provider: workspace
+    skills: []
+    verification_contract: >-
+      Every dangling claim is closed against live state or explained, and each
+      verdict is appended through the lock rather than written by hand.
+    mechanical_replacement: none yet
+
+  - row_id: plans_board_refresh
+    title: Plans board refresh
+    cadence: daily
+    wraps: the status-board generator
+    provider: plugin
+    skills:
+      - plans_board_refresh
+    verification_contract: >-
+      The board's published timestamp advanced past the time the run started. A
+      generator that exits zero having published nothing is the failure this row
+      exists for, so an unchanged timestamp is a failure and never a no-op.
+    mechanical_replacement: none yet
+
+  - row_id: board_readback
+    title: Board readback
+    cadence: daily
+    wraps: the status-board generator's readback path
+    provider: plugin
+    skills:
+      - board_readback
+    verification_contract: >-
+      The readback re-reads the generator's own inputs immediately before the
+      merge, and the re-read output is quoted in the change that lands it. A
+      readback of a cached board proves nothing.
+    mechanical_replacement: none yet
+
+  # ------------------------------------------------------------ recurring ----
+  - row_id: comment_sweep
+    title: Comment sweep
+    cadence: recurring
+    wraps: the recurring tracker-comment sweep workflow
+    provider: plugin
+    skills:
+      - comment_sweep
+    verification_contract: >-
+      Replies are drafted to files, never posted by the sweep, and the run is
+      proven read-only on the tracker by a zero count of write calls carrying a
+      positive control that the read path returned rows.
+    mechanical_replacement: none yet
+
+  - row_id: merge_sweep_tick
+    title: Merge sweep tick
+    cadence: recurring
+    wraps: the merge-sweep skill
+    provider: plugin
+    skills:
+      - merge_sweep
+    verification_contract: >-
+      A queue delta -- what entered, what landed, what was dequeued -- or a
+      stated reason there is none.
+    mechanical_replacement: none yet
+
+  - row_id: contract_verify_tick
+    title: Contract verify tick
+    cadence: recurring
+    wraps: the contract-sweep skill
+    provider: plugin
+    skills:
+      - contract_sweep
+    verification_contract: >-
+      A findings count carrying a positive control. A zero is never reported
+      without the same sweep returning rows against an input known to have them.
+    mechanical_replacement: none yet
+
+  - row_id: overseer_verify_tick
+    title: Overseer verify tick
+    cadence: recurring
+    wraps: the dispatch watchdog
+    provider: plugin
+    skills:
+      - overseer_verify_tick
+    verification_contract: >-
+      Every stalled lane is named with the age of its last write, or a zero is
+      proven by a positive control against a lane known to be live.
+    mechanical_replacement: none yet
+
+  # ------------------------------------------------------------ on demand ----
+  - row_id: lane_dispatch
+    title: Lane dispatch
+    cadence: on_demand
+    wraps: a workflow brief plus the standing lane rules
+    provider: plugin
+    skills:
+      - lane_dispatch
+    verification_contract: >-
+      A claim row is appended before the lane's first write, the standing rules
+      block is resolved and injected rather than assumed, and the model is named
+      explicitly in the dispatch rather than inherited.
+    mechanical_replacement: none yet
+
+  - row_id: closeout
+    title: Closeout
+    cadence: on_demand
+    wraps: the closeout and handoff skills
+    provider: plugin
+    skills:
+      - handoff
+    verification_contract: >-
+      Live check state is read per pull request at closeout time. No worker
+      self-report of success is accepted as evidence.
+    mechanical_replacement: none yet
+
+  - row_id: dod_closeout_sweep
+    title: Definition-of-done closeout sweep
+    cadence: on_demand
+    wraps: the closeout-sweep workflow
+    provider: workspace
+    skills: []
+    verification_contract: >-
+      A verification receipt per ticket, and every disposition audited rather
+      than sampled.
+    mechanical_replacement: none yet
+
+  - row_id: architecture_work_discovery
+    title: Architecture work discovery
+    cadence: on_demand
+    wraps: the discovery workflow
+    provider: workspace
+    skills: []
+    verification_contract: >-
+      A full scan every run, deliberately unwatermarked, so a second run cannot
+      report a smaller surface because the first one marked it.
+    mechanical_replacement: none yet
+
+  - row_id: worktree_cleanup
+    title: Worktree cleanup
+    cadence: on_demand
+    wraps: the worktree skill
+    provider: plugin
+    skills:
+      - worktree
+    verification_contract: >-
+      Pruning is keyed to what the tree holds, and the tree diff against its
+      base is empty before anything is removed.
+    mechanical_replacement: none yet
+
+  - row_id: sweep_family
+    title: The sweep family
+    cadence: on_demand
+    wraps: the detection sweeps
+    provider: plugin
+    skills:
+      - aislop_sweep
+      - compliance_sweep
+      - coverage_sweep
+      - dashboard_sweep
+      - data_flow_sweep
+      - database_sweep
+      - dod_sweep
+      - duplication_sweep
+      - golden_chain_sweep
+      - integration_sweep
+      - runtime_sweep
+      - tech_debt_sweep
+      - verification_sweep
+    verification_contract: >-
+      Findings reported with a positive control. A zero is never reported
+      without one.
+    mechanical_replacement: none yet
+
+  - row_id: delegation
+    title: Delegation
+    cadence: on_demand
+    wraps: the delegate skills
+    provider: plugin
+    skills:
+      - delegate
+      - cloud_delegate
+    verification_contract: >-
+      The typed result is printed in full, and the receipt carries the model,
+      the token counts and the cost.
+    mechanical_replacement: none yet
+
+  - row_id: session_preflight
+    title: Session preflight
+    cadence: on_demand
+    wraps: the session preflight checks
+    provider: plugin
+    skills:
+      - preflight
+    verification_contract: >-
+      One line per check with its fix command on failure, and a session opened
+      with the quiet intent prints nothing but a blocker.
+    mechanical_replacement: none yet
