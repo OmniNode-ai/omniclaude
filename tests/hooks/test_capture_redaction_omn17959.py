@@ -323,7 +323,7 @@ def test_ungoverned_topic_is_refused_not_passed_through() -> None:
     with pytest.raises(UngovernedTopicError):
         redact_capture(
             {"session_id": "s", "prompt": "leak me"},
-            topic="onex.evt.omniclaude.session-started.v1",
+            topic="onex.evt.omniclaude.unlisted-capture.v1",
         )
 
 
@@ -403,9 +403,17 @@ def test_no_python_side_policy_constants() -> None:
     assert not hits, f"policy literals leaked into the resolver: {hits}"
 
 
-def test_governed_topics_are_exactly_the_two_relay_topics() -> None:
+def test_governed_topics_match_the_redacted_fan_out_topics() -> None:
     contract = load_contract()
-    assert set(contract.topics) == {PROMPT_TOPIC, TOOL_TOPIC}
+    assert set(contract.topics) == {
+        TopicBase.SESSION_STARTED.value,
+        TopicBase.SESSION_ENDED.value,
+        PROMPT_TOPIC,
+        TOOL_TOPIC,
+        TopicBase.SKILL_STARTED.value,
+        TopicBase.SKILL_COMPLETED.value,
+        TopicBase.TOOL_OUTPUT_CAPTURED.value,
+    }
     assert contract.default_field_class is EnumCaptureClass.CAPTURE_HASHED
 
 

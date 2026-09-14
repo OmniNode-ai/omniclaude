@@ -955,14 +955,15 @@ class TestEventRegistryIntegration:
         # Legacy topic should NOT be present
         assert "agent-routing-decisions" not in [str(t) for t in topic_bases]
 
-    def test_session_events_no_transform(self) -> None:
-        """Verify session events use passthrough (no transform)."""
+    def test_session_events_use_capture_redaction(self) -> None:
+        """Verify session lifecycle fan-out uses the capture redaction contract."""
+        from omniclaude.hooks.capture_redaction import redact_capture
         from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
         for event_type in ["session.started", "session.ended"]:
             reg = EVENT_REGISTRY[event_type]
             for rule in reg.fan_out:
-                assert rule.transform is None
+                assert rule.transform is redact_capture
 
     def test_diagnostic_daemon_health_registration(self) -> None:
         """diagnostic.daemon.health routes to the portable health topic."""
