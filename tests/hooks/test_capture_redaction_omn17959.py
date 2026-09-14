@@ -4,8 +4,8 @@
 """RED-first tests for the omniclaude half of the capture-redaction contract.
 
 OMN-17959 (parent OMN-17209). omnimarket's ``topics.yaml`` declares
-``transform: redact_capture`` on the ``prompt.submitted`` and ``tool.executed``
-fan-out rules; omniclaude never registered the name, so the required
+``transform: redact_capture`` on capture-governed fan-out rules; omniclaude
+never registered the name, so the required
 ``registry-consistency`` -> ``Tests Gate`` -> ``CI Summary`` chain failed on
 every PR.
 
@@ -15,11 +15,10 @@ mirror of omnimarket's owning copy), not against the implementation. Every
 expectation below is traceable to a clause in that file -- the posture is
 omnimarket's, not this module's.
 
-The two topics under test are the ones OMN-16019 named as an
-information-disclosure surface and that OMN-16979 widens onto the cloud relay,
-so the transform is FAIL-CLOSED by construction: a field nobody classified is
-hashed, a topic nobody governed is refused, and a contract that will not load
-is refused rather than passed through.
+The topics under test include the OMN-16019 disclosure surface and the
+OMN-16979 relay expansions, so the transform is FAIL-CLOSED by construction:
+a field nobody classified is hashed, a topic nobody governed is refused, and a
+contract that will not load is refused rather than passed through.
 """
 
 from __future__ import annotations
@@ -52,6 +51,15 @@ GENERATOR = REPO_ROOT / "scripts" / "validation" / "generate_event_registry.py"
 
 PROMPT_TOPIC = TopicBase.PROMPT_SUBMITTED.value
 TOOL_TOPIC = TopicBase.TOOL_EXECUTED.value
+GOVERNED_TOPICS = {
+    TopicBase.PROMPT_SUBMITTED.value,
+    TopicBase.SESSION_ENDED.value,
+    TopicBase.SESSION_STARTED.value,
+    TopicBase.SKILL_COMPLETED.value,
+    TopicBase.SKILL_STARTED.value,
+    TopicBase.TOOL_EXECUTED.value,
+    TopicBase.TOOL_OUTPUT_CAPTURED.value,
+}
 
 SHA256_FIELD = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -323,7 +331,7 @@ def test_ungoverned_topic_is_refused_not_passed_through() -> None:
     with pytest.raises(UngovernedTopicError):
         redact_capture(
             {"session_id": "s", "prompt": "leak me"},
-            topic="onex.evt.omniclaude.session-started.v1",
+            topic="onex.evt.omniclaude.unreviewed-capture-topic.v1",
         )
 
 
@@ -403,9 +411,9 @@ def test_no_python_side_policy_constants() -> None:
     assert not hits, f"policy literals leaked into the resolver: {hits}"
 
 
-def test_governed_topics_are_exactly_the_two_relay_topics() -> None:
+def test_governed_topics_are_exactly_the_capture_contract_topics() -> None:
     contract = load_contract()
-    assert set(contract.topics) == {PROMPT_TOPIC, TOOL_TOPIC}
+    assert set(contract.topics) == GOVERNED_TOPICS
     assert contract.default_field_class is EnumCaptureClass.CAPTURE_HASHED
 
 
