@@ -26,6 +26,7 @@ from types import ModuleType
 import pytest
 
 from omniclaude.hooks.lib.worktree_prune_policy import (
+    EnumBranchPrState,
     EnumDebrisRemediation,
     EnumPruneBlockReason,
     EnumPruneDisposition,
@@ -292,8 +293,10 @@ class TestGitCaptureAndPruneWorktreeStderr:
             block_reasons=(),
             eligibility_evidence="test",
             safety_evidence="test",
+            branch_content_preserved=True,
             dirty_file_count=0,
             commits_ahead=0,
+            pr_state=EnumBranchPrState.NONE,
             ledger_open_claim=None,
         )
 
@@ -306,6 +309,498 @@ class TestGitCaptureAndPruneWorktreeStderr:
         assert "worktree remove" in attempt.command
         assert str(worktree) in attempt.command
         assert worktree.is_dir(), "a refused removal must leave the tree untouched"
+
+
+# =============================================================================
+# OMN-18370 AC-1 / AC-2 — the branch delete goes through a guard-permitted path
+#
+# The canonical-clone `reference-transaction` guard refuses `refs/heads/*`
+# deletion inside a canonical clone, by design. The shipped pruner deleted the
+# branch there and lost that race 23 times out of 26 on 2026-09-14. These tests
+# install a faithful stand-in for the guard's deny rule in a throwaway clone —
+# with a POSITIVE CONTROL proving the stand-in actually refuses — and then
+# require the pruner to leave no orphan branch anyway.
+# =============================================================================
+
+
+_GUARD_HOOK = """#!/usr/bin/env bash
+# Stand-in for the canonical-clone reference-transaction guard's deny rule:
+# refuse deleting a refs/heads/* ref when the invoking work tree is a canonical
+# clone. A linked worktree's `.git` is a FILE, so the guard exits 0 there —
+# which is the seam the pruner is required to use.
+[ "$1" = "prepared" ] || exit 0
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -d "$top/.git" ] || exit 0
+while read -r old new ref; do
+  case "$ref" in
+    refs/heads/*)
+      if [ "$new" = "0000000000000000000000000000000000000000" ]; then
+        echo "ERROR: refused deleting a branch in canonical clone: $ref" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+exit 0
+"""
+
+
+@pytest.fixture
+def guarded_canonical_repo(canonical_repo: Path, tmp_path: Path) -> Path:
+    """`canonical_repo` plus an origin/dev base ref and the branch-delete guard."""
+    _git_ok(canonical_repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
+
+    hooks_dir = tmp_path / "canonical-clone-hooks"
+    hooks_dir.mkdir()
+    hook = hooks_dir / "reference-transaction"
+    hook.write_text(_GUARD_HOOK, encoding="utf-8")
+    hook.chmod(0o755)
+    _git_ok(canonical_repo, "config", "core.hooksPath", str(hooks_dir))
+    return canonical_repo
+
+
+def _decision(
+    worktree: Path,
+    branch: str | None,
+    *,
+    branch_content_preserved: bool = True,
+    pr_state: EnumBranchPrState = EnumBranchPrState.NONE,
+) -> object:
+    return mod.ModelWorktreePruneDecision(
+        path=str(worktree),
+        ticket="OMN-1",
+        repo="omnibase_infra",
+        branch=branch,
+        disposition=EnumPruneDisposition.PRUNE,
+        block_reasons=(),
+        eligibility_evidence="test",
+        safety_evidence="test",
+        branch_content_preserved=branch_content_preserved,
+        dirty_file_count=0,
+        commits_ahead=0,
+        pr_state=pr_state,
+        ledger_open_claim=None,
+    )
+
+
+def _branch_exists(clone: Path, branch: str) -> bool:
+    proc = subprocess.run(
+        ["git", "-C", str(clone), "branch", "--list", branch],
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+        check=False,
+        timeout=60,
+    )
+    return bool(proc.stdout.strip())
+
+
+class TestBranchDeleteThroughAGuardPermittedPath:
+    def test_positive_control_the_guard_actually_refuses_a_clone_side_delete(
+        self, guarded_canonical_repo: Path
+    ) -> None:
+        """Without this control, a green AC-1 test proves only that no guard ran."""
+        _git_ok(guarded_canonical_repo, "branch", "control-branch")
+        proc = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(guarded_canonical_repo),
+                "branch",
+                "-D",
+                "control-branch",
+            ],
+            capture_output=True,
+            text=True,
+            env=_GIT_ENV,
+            check=False,
+            timeout=60,
+        )
+        assert proc.returncode != 0
+        assert "refused deleting a branch in canonical clone" in proc.stderr
+        assert _branch_exists(guarded_canonical_repo, "control-branch")
+
+    def test_prune_leaves_no_orphan_branch(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        """AC-1: after a prune, the local branch is gone and the guard refused nothing."""
+        worktree = tmp_path / "omni_worktrees" / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-merged",
+        )
+
+        attempt = mod.prune_worktree(_decision(worktree, "wt-merged"))
+
+        assert attempt.ok is True, attempt.detail
+        assert not worktree.exists()
+        assert not _branch_exists(guarded_canonical_repo, "wt-merged")
+        assert "deleted" in attempt.branch_outcome
+        assert "refused deleting a branch" not in attempt.detail
+
+    def test_an_unmerged_branch_is_never_deleted(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        """AC-2: `git branch -d` is a real second opinion, not a formality.
+
+        The decision is deliberately built as if the policy had approved the
+        branch delete. git's own merged-into-HEAD check must still refuse it,
+        because HEAD is detached onto the BASE and the branch's commit is not in
+        it — and with no merged pull request there is no second proof either.
+        """
+        worktree = tmp_path / "omni_worktrees" / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-unmerged",
+        )
+        (worktree / "src" / "new.py").write_text("NEW = 1\n", encoding="utf-8")
+        _git_ok(worktree, "add", "-A")
+        _git_ok(worktree, "commit", "-q", "-m", "unmerged work")
+
+        attempt = mod.prune_worktree(
+            _decision(worktree, "wt-unmerged", branch_content_preserved=True)
+        )
+
+        assert _branch_exists(guarded_canonical_repo, "wt-unmerged"), (
+            "an unmerged branch must survive the prune"
+        )
+        assert "kept" in attempt.branch_outcome
+
+    def test_a_detached_worktree_reports_no_branch_to_delete(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        worktree = tmp_path / "omni_worktrees" / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo, "worktree", "add", "-q", "--detach", str(worktree)
+        )
+
+        attempt = mod.prune_worktree(_decision(worktree, None))
+
+        assert attempt.ok is True, attempt.detail
+        assert "no local branch" in attempt.branch_outcome
+
+    def test_a_refused_removal_restores_the_branch_it_deleted(
+        self,
+        guarded_canonical_repo: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The branch delete happens BEFORE the removal, so a refusal must undo it."""
+        worktree = tmp_path / "omni_worktrees" / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-restore",
+        )
+
+        real_run = mod._git_run
+
+        def fake_run(cwd: Path, *args: str, timeout: int = 60):  # noqa: ANN202
+            if args[:2] == ("worktree", "remove"):
+                return mod.ModelGitResult(
+                    exit_code=1,
+                    stdout="",
+                    stderr="fatal: injected refusal",
+                    timed_out=False,
+                    load_average=None,
+                )
+            return real_run(cwd, *args, timeout=timeout)
+
+        monkeypatch.setattr(mod, "_git_run", fake_run)
+        monkeypatch.setattr(mod, "_git_run_with_load_retry", fake_run)
+
+        attempt = mod.prune_worktree(_decision(worktree, "wt-restore"))
+
+        assert attempt.ok is False
+        assert worktree.is_dir()
+        assert _branch_exists(guarded_canonical_repo, "wt-restore")
+        assert "restored" in attempt.detail
+
+
+# =============================================================================
+# OMN-18370 AC-4 — a removal timeout is a host reading, not a safety finding
+# =============================================================================
+
+
+class TestRemovalTimeoutHandling:
+    def test_a_timeout_is_reported_with_the_load_and_never_as_a_refusal(
+        self,
+        guarded_canonical_repo: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """AC-4 falsifier: an injected timeout produces a timed_out row with the load."""
+        worktree = tmp_path / "omni_worktrees" / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-timeout",
+        )
+
+        real_run = mod._git_run
+
+        def fake_run(cwd: Path, *args: str, timeout: int = 60):  # noqa: ANN202
+            if args[:2] == ("worktree", "remove"):
+                return mod.ModelGitResult(
+                    exit_code=-1,
+                    stdout="",
+                    stderr=f"TimeoutExpired after {timeout}s",
+                    timed_out=True,
+                    load_average=127.4,
+                )
+            return real_run(cwd, *args, timeout=timeout)
+
+        monkeypatch.setattr(mod, "_git_run", fake_run)
+        # The host never calms down, so the retry window expires. Collapse the
+        # window rather than sleeping through it.
+        monkeypatch.setattr(mod, "LOAD_RETRY_MAX_WAIT_SECONDS", 0)
+        monkeypatch.setattr(mod, "host_load_average", lambda: 127.4)
+
+        attempt = mod.prune_worktree(_decision(worktree, "wt-timeout"))
+
+        assert attempt.ok is False
+        assert attempt.timed_out is True
+        assert attempt.load_average == 127.4
+        assert "127.4" in attempt.detail
+        assert "Not a safety finding" in attempt.detail
+        assert worktree.is_dir(), "a timed-out removal must leave the tree untouched"
+        assert _branch_exists(guarded_canonical_repo, "wt-timeout")
+
+    def test_a_timeout_is_retried_once_when_the_load_drops(
+        self, canonical_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The retry is conditional on the load actually falling, never immediate."""
+        calls: list[int] = []
+
+        def fake_run(cwd: Path, *args: str, timeout: int = 60):  # noqa: ANN202
+            calls.append(1)
+            if len(calls) == 1:
+                return mod.ModelGitResult(
+                    exit_code=-1,
+                    stdout="",
+                    stderr="TimeoutExpired",
+                    timed_out=True,
+                    load_average=127.4,
+                )
+            return mod.ModelGitResult(
+                exit_code=0, stdout="", stderr="", timed_out=False, load_average=None
+            )
+
+        monkeypatch.setattr(mod, "_git_run", fake_run)
+        monkeypatch.setattr(mod, "host_load_average", lambda: 1.0)
+        monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
+
+        result = mod._git_run_with_load_retry(canonical_repo, "worktree", "remove", "x")
+
+        assert result.ok is True
+        assert len(calls) == 2, "exactly one retry, not a loop"
+
+    def test_no_retry_is_attempted_while_the_load_stays_high(
+        self, canonical_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[int] = []
+
+        def fake_run(cwd: Path, *args: str, timeout: int = 60):  # noqa: ANN202
+            calls.append(1)
+            return mod.ModelGitResult(
+                exit_code=-1,
+                stdout="",
+                stderr="TimeoutExpired",
+                timed_out=True,
+                load_average=200.0,
+            )
+
+        monkeypatch.setattr(mod, "_git_run", fake_run)
+        monkeypatch.setattr(mod, "host_load_average", lambda: 200.0)
+        monkeypatch.setattr(mod, "LOAD_RETRY_MAX_WAIT_SECONDS", 0)
+
+        result = mod._git_run_with_load_retry(canonical_repo, "worktree", "remove", "x")
+
+        assert result.timed_out is True
+        assert result.load_average == 200.0
+        assert len(calls) == 1, "retrying at load 200 just reproduces the timeout"
+
+
+# =============================================================================
+# OMN-16901 — the verdict is re-verified live immediately before the removal
+# =============================================================================
+
+
+class TestRemovalTimeRevalidation:
+    def test_a_row_that_gains_a_claim_between_passes_is_not_removed(
+        self,
+        guarded_canonical_repo: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A registry-scale classification pass runs for tens of minutes while peer
+        lanes keep working. `git worktree remove` re-checks cleanliness but knows
+        nothing about the ledger, so the CLAIM window is closed here or nowhere."""
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-claimed",
+        )
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "| 2026-09-14T10:00:00Z | lane-a | OMN-1 | TERMINAL | landed |\n",
+            encoding="utf-8",
+        )
+
+        real_collect = mod.collect_facts
+        calls: list[int] = []
+
+        def fake_collect(*args: object, **kwargs: object):  # noqa: ANN202
+            facts = real_collect(*args, **kwargs)  # type: ignore[arg-type]
+            calls.append(1)
+            if len(calls) == 1:
+                return facts
+            # The second call is the removal-time re-verification: a peer lane
+            # opened a CLAIM in the meantime.
+            return facts.model_copy(
+                update={"ledger_open_claim": "2026-09-14T11:00:00Z | a peer lane"}
+            )
+
+        monkeypatch.setattr(mod, "collect_facts", fake_collect)
+        monkeypatch.setattr(
+            mod,
+            "prune_worktree",
+            lambda _d: pytest.fail("removed a re-claimed worktree"),
+        )
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--execute",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+            ]
+        )
+
+        assert exit_code == 0
+        assert len(calls) == 2, "the predicate must run again before the removal"
+        assert worktree.is_dir()
+
+
+class TestReportIsPathPortable:
+    def test_no_operator_machine_path_survives_into_the_report(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        """The report is published to a shared repository whose readers cannot
+        resolve a path on this machine, and the shared scrub refuses a document
+        carrying one. The Removals section embeds a full git command line, not
+        just a path column, so a column-only fix left the report unpublishable."""
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-2" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-report",
+        )
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text("", encoding="utf-8")
+        report_md = tmp_path / "report.md"
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--execute",
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+                "--report-md",
+                str(report_md),
+            ]
+        )
+
+        assert exit_code == 0
+        body = report_md.read_text(encoding="utf-8")
+        registry_prefix = str(root.parent).rstrip("/") + "/"
+        assert registry_prefix not in body, (
+            "the report still carries the operator-machine prefix"
+        )
+        assert "omni_worktrees/OMN-2/omnibase_infra" in body, (
+            "the portable form of the path must survive"
+        )
+
+
+class TestNoDebrisFlag:
+    def test_no_debris_skips_the_pass_and_removes_nothing_extra(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The debris pass runs BEFORE any removal and costs two git subprocesses
+        per file of every candidate, so one whole-repo candidate can hold an
+        --execute run for tens of minutes while approved removals wait behind it.
+        Skipping it must report no debris and leave the directory alone — it can
+        never widen what is removed."""
+        root = tmp_path / "omni_worktrees"
+        debris = root / "OMN-9" / "omnibase_infra"
+        debris.mkdir(parents=True)
+        (debris / "app.py").write_text("x = 1\n", encoding="utf-8")
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text("", encoding="utf-8")
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--execute",
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+            ]
+        )
+
+        assert exit_code == 0
+        assert "--no-debris" in capsys.readouterr().out
+        assert debris.is_dir()
+        assert (debris / "app.py").exists()
 
 
 # =============================================================================
