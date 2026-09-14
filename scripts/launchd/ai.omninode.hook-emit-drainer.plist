@@ -20,14 +20,12 @@
   KeepAlive process sidesteps that failure mode, matching the
   ai.omninode.worktree-reaper precedent.
 
-  Interpreter: the brew python3.13 literal path per CLAUDE.md rule 11 —
-  launchd runs with a restricted PATH, so $(brew --prefix) expansion is not
-  available, and the macOS Local Network grant is per-binary. A
-  uv-managed interpreter silently EHOSTUNREACHes on the LAN publish to the
-  .201 broker (memory feedback_macos_lan_grant_per_binary).
+  Interpreter: the lock-built plugin venv, whose interpreter resolves to the
+  brew python3.13 binary per CLAUDE.md rule 11. This keeps the macOS Local
+  Network grant while isolating the daemon from stale global site-packages.
 
   Template: __OMNI_HOME__, __HOME__ and __PYTHON__ are expanded at install
-  time by install-hook-emit-drainer.sh.
+  time by install-hook-emit-drainer.sh after it verifies the Brew-backed venv.
 
   Install:
     bash omniclaude/scripts/install-hook-emit-drainer.sh
