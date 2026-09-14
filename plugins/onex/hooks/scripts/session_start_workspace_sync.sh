@@ -201,6 +201,29 @@ _load_path_alarm() {
 # Never let a probe of the load path break the line that reports it.
 _load_path_alarm || true
 
+# Session intent (OMN-18368): under `quiet` and `tick` this hook prints nothing
+# further. The routine one-line verdict is status output, and a session opened
+# to re-authenticate asked for none.
+#
+# THE ALARM ABOVE IS DELIBERATELY NOT SUPPRESSED, and it is the only exception
+# in the whole session-start chain. It reports that the tree these hooks are
+# loaded from is bare or behind its upstream, which means every guard merged
+# since is dark on this session -- including whatever guard would have caught
+# the next mistake. Silence is the failure mode that alarm exists to break, so
+# an intent may not buy silence from it: a stale surface cannot certify itself,
+# and a session that asked for quiet gets exactly that one blocker and nothing
+# else. That is this step's stated falsifier, and it is why the intent gate sits
+# BELOW the alarm rather than at the top of the file.
+_INTENT_SH="${_SCRIPT_DIR}/../../lib/intent.sh"
+if [[ -f "$_INTENT_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$_INTENT_SH" 2>/dev/null || true
+    if declare -F omniclaude_session_intent_is_silent >/dev/null 2>&1 \
+        && omniclaude_session_intent_is_silent; then
+        exit 0
+    fi
+fi
+
 _STATE_DIR="${ONEX_HOOKS_STATE_DIR:-${HOME}/.onex_state/hooks}"
 _STATUS="${_STATE_DIR}/workspace-reconcile.status"
 

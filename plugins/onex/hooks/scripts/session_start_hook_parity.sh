@@ -36,6 +36,27 @@ set -uo pipefail
 _SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SELF}/../.." && pwd)}"
 
+# Session intent (OMN-18368): the fourth silencing axis, resolved before any
+# work. This hook is WARN-ONLY by construction -- its fail-closed half is the
+# `hook-inventory-gate` CI check -- so an advisory warning is exactly the class
+# of output a `quiet` or `tick` session asked not to see. Nothing is lost by
+# deferring it: the drift it reports is a property of the machine, not of the
+# session, and the next normal session on the same host reports it.
+#
+# Resolved from the SCRIPT's own tree, not from PLUGIN_ROOT, so a caller that
+# points PLUGIN_ROOT at an unrelated directory (which this hook tolerates and
+# reports) still gets its intent honoured.
+_INTENT_SH="${_SELF}/../../lib/intent.sh"
+if [[ -f "$_INTENT_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$_INTENT_SH" 2>/dev/null || true
+    if declare -F omniclaude_session_intent_is_silent >/dev/null 2>&1 \
+        && omniclaude_session_intent_is_silent; then
+        exit 0
+    fi
+fi
+unset _INTENT_SH
+
 _marker="plugins/onex/hooks/contracts/hook_inventory.yaml"
 REPO_ROOT=""
 
