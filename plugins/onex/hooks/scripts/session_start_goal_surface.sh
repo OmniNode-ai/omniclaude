@@ -92,6 +92,28 @@ if [[ -f "$_MODE_SH" ]]; then
     fi
 fi
 
+# Session intent (OMN-18368): the goal surface is the largest output in the
+# session-start chain, and it is exactly the output a re-authentication session
+# does not want. Under `quiet` and under `tick` it prints nothing at all; the
+# full surface moves behind an explicit ask, which is the preflight skill.
+#
+# Mode cannot express this. A session opened inside the workspace clone resolves
+# to `full` by auto-detection, which is precisely the re-authentication session,
+# so `lite` above never fires for it. Intent is the third axis for that reason.
+#
+# There is no blocker carve-out here. An unset knowledge-base path is a
+# preflight check with a fix line, not a reason to print five lines at a session
+# that asked for none.
+_INTENT_SH="${_SCRIPT_DIR}/../../lib/intent.sh"
+if [[ -f "$_INTENT_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$_INTENT_SH" 2>/dev/null || true
+    if declare -F omniclaude_session_intent_is_silent >/dev/null 2>&1 \
+        && omniclaude_session_intent_is_silent; then
+        exit 0
+    fi
+fi
+
 _TODAY="$(date +%F)"
 
 print_rebaseline_command() {

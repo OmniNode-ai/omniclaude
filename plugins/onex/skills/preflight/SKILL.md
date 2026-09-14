@@ -1,8 +1,7 @@
 ---
-description: Session environment health probe — verifies drive mount, machine identity, zombie agents, merge queue health, and required env vars. Callable from node_session_orchestrator only; not a top-level user-invocable skill.
-version: 1.1.0
-user_invocable: false
-replacement_skill: session
+description: Session environment preflight — runs the declared checks and prints one line per check with its fix command, at a volume set by the session intent (quiet, normal, tick).
+version: 2.0.0
+user_invocable: true
 mode: full
 level: intermediate
 debug: false
@@ -10,244 +9,93 @@ category: operations
 tags:
   - preflight
   - session-readiness
+  - session-intent
   - environment
   - health-check
-  - health-probe
 author: OmniClaude Team
 composable: true
 args:
-  - name: --skip-merge-queue
-    description: "Skip merge queue health checks (faster, useful when GitHub API is rate-limited)"
+  - name: --intent
+    description: "Session intent: quiet (print nothing but a blocker), normal (summary plus every check to act on), tick (print nothing; write the verdict to --receipt). Defaults to the resolved session intent."
     required: false
-  - name: --skip-watchdog
-    description: "Skip zombie agent detection via dispatch_watchdog"
+  - name: --all
+    description: "Print one line for every check, including the ones that passed."
     required: false
-boundary_exempt: true
+  - name: --receipt
+    description: "Path to write the verdict to as JSON. Required under --intent tick."
+    required: false
 ---
 
 # Preflight
 
-> **NOT USER-INVOCABLE.** This skill is a health-probe callable from `node_session_orchestrator`
-> (Phase 1 health gate) only. Use `/onex:session` for session orchestration.
+Runs the session environment checks and prints, for each one that is not a clean pass, a single
+line carrying that check's own fix command.
 
-Performs 6 sequential environment checks and emits a single go/no-go verdict. All checks are mandatory — a single FAIL blocks the verdict.
+This skill is a **shim**. It holds no check recipe: the checks run in one place, the runner below,
+so a check body has exactly one home and cannot drift between a script and a prose copy of itself.
 
-## CRITICAL RULES
-
-- **DO NOT check `ANTHROPIC_API_KEY`** — Claude Code uses OAuth, not API keys.
-  Any check for `ANTHROPIC_API_KEY` is incorrect and must be removed.
-- All 6 checks must complete before emitting the verdict.
-- FAIL on any check means the verdict is NO-GO. Do not proceed with the overnight session.
-
----
-
-## Check 1 — Overnight Drive Mounted
-
-Compose with `start_environment` for the drive check rather than reimplementing:
+## Run it
 
 ```bash
-df "${OVERNIGHT_DRIVE_PATH:?set OVERNIGHT_DRIVE_PATH to the overnight drive mount point}" 2>/dev/null && echo "Overnight drive: MOUNTED" || echo "Overnight drive: NOT MOUNTED — FAIL"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" [--intent <intent>] [--all] [--receipt <path>]
 ```
 
-If NOT MOUNTED:
-- Report: `The overnight drive is not mounted. Overnight sessions that write to ${OVERNIGHT_DRIVE_PATH} will fail.`
-- Mark check: FAIL
-- Action: User must manually mount the drive before proceeding.
+From a source checkout the same file is `plugins/onex/scripts/session_preflight.py`.
 
-If MOUNTED:
-- Mark check: PASS
+## What it needs
 
----
+`SESSION_PREFLIGHT_OVERLAY_PATH` must hold the absolute path of the **preflight overlay** — the
+YAML file declaring this environment's checks. It has **no default**, and a run without it refuses
+rather than reporting a green preflight that checked nothing.
 
-## Check 2 — Hostname / Machine Identity
+The overlay declares, per check: an id, a title, a kind (`env_set`, `env_path`, `path_exists`,
+`command`), a severity (`blocker` or `warning`), and a `fix` line. The `fix` is required. A check
+declared without one is a configuration error and the whole run refuses, because a failure a reader
+cannot act on is the thing this skill exists to remove.
 
-```bash
-hostname
-uname -m
-sw_vers -productVersion 2>/dev/null || lsb_release -d 2>/dev/null || echo "Linux"
-echo "Shell: $SHELL"
-echo "ONEX_STATE_DIR: ${ONEX_STATE_DIR:-UNSET}"
-```
+## Session intent decides the volume
 
-Report the full identity block:
-```
-Machine: <hostname>
-Arch:    <architecture>
-OS:      <version>
-Shell:   <shell>
-ONEX_STATE_DIR: <path or UNSET>
-```
+Intent is resolved by the shared resolver the SessionStart hooks use, so the hooks and this skill
+never disagree about what kind of session this is. Highest precedence first: the `--intent`
+argument, then `OMNICLAUDE_SESSION_INTENT`, then a fresh per-session marker file, then the
+persistent preference, then `normal`.
 
-Mark FAIL if `ONEX_STATE_DIR` is UNSET — state-backed skills require this variable to be set; no fallback path is provided.
-Mark PASS otherwise (identity is informational).
+| Intent | What it prints |
+| -- | -- |
+| `quiet` | nothing when every check passes; otherwise only the blockers, one line each, no summary. A session opened to re-authenticate or to check connectivity asked for silence, and it gets silence or a blocker. |
+| `normal` | one summary line, then one line per check that is not a clean pass. `--all` widens that to every check. |
+| `tick` | nothing at all; the same verdict is written as JSON to `--receipt`, which is required under this intent. A verdict with nowhere to go is a verdict nobody reads. |
 
----
+Nothing ever *infers* `quiet`. Every fall-through in the resolver lands on `normal`: a
+wrongly-quiet session hides a blocker, a wrongly-normal session costs one line.
 
-## Check 3 — Zombie Agent Detection
+## Reading the result
 
-Invoke `dispatch_watchdog` in inspect-only mode to list live agents and flag zombies.
+Exit status is the verdict, so a caller does not have to parse the text:
 
-Agents are considered zombies if they are idle (no tool call output) for >10 minutes.
+| Status | Meaning |
+| -- | -- |
+| `0` | every blocker passed. Warnings may still have been printed; they never block. |
+| `1` | at least one blocker failed. Each one printed its own fix command. |
+| `2` | the run refused: no overlay, an unreadable or malformed overlay, a check with no fix line, an unknown check kind, or `tick` with no receipt path. The reason names what to change. |
 
-```
-/onex:dispatch_watchdog --action report
-```
+Present the runner's own lines. Do not summarise them, re-word a fix command, or add a verdict
+banner: the line a reader has to act on is the fix command exactly as the overlay spells it.
 
-Interpret results:
-- If no agents running: `No active agents — clean slate.` Mark PASS.
-- If agents running with recent activity: list them. Mark PASS.
-- If any agent is idle >10min: report it as zombie. Mark WARN (does not block go/no-go, but surface to user for manual review).
+## Verification contract
 
-> Note: WARN does not flip the verdict to NO-GO. Only FAIL does.
+The run is done when every failing check has been printed with its fix command, and, under `tick`,
+when the receipt exists and carries the same verdict as the exit status.
 
----
+## What replaces this
 
-## Check 4 — Merge Queue Health (11 repos)
+A prose skill is a temporary interface. The mechanical replacement is the session orchestrator's
+own health gate calling this runner directly, so the checks run whether or not anybody remembers
+the skill name. That work is not ticketed yet; until it is, this skill is the only path from a
+person to the checks, which is the state the previous revision of this file failed at — it declared
+itself non-invocable and named a replacement skill that performs no preflight.
 
-Query GitHub merge queue and PR state across all 11 ONEX repos.
+## See also
 
-```bash
-REPOS=(
-  OmniNode-ai/omniclaude
-  OmniNode-ai/omnibase_core
-  OmniNode-ai/omnibase_infra
-  OmniNode-ai/omnibase_spi
-  OmniNode-ai/omnidash
-  OmniNode-ai/omnigemini
-  OmniNode-ai/omniintelligence
-  OmniNode-ai/omnimemory
-  OmniNode-ai/omninode_infra
-  OmniNode-ai/omnimarket
-  OmniNode-ai/omnibase_compat
-)
-
-for repo in "${REPOS[@]}"; do
-  echo "=== $repo ==="
-  gh pr list --repo "$repo" --state open --json number,title,mergeable,reviewDecision \
-    --jq '.[] | "\(.number) \(.title[:60]) | mergeable=\(.mergeable) review=\(.reviewDecision)"' \
-    2>/dev/null || echo "  (no open PRs or API error)"
-done
-```
-
-For each repo, flag:
-- PRs with `mergeable: CONFLICTING` — these block queue drain
-- PRs with `reviewDecision: CHANGES_REQUESTED` — blocked by review
-- PRs stuck in merge queue >2 hours (if detectable)
-
-Summary table:
-```
-REPO                      OPEN  CONFLICTING  BLOCKED
-omniclaude                   2            0        0
-omnibase_core                1            1        1  ← WARN
-...
-```
-
-If `--skip-merge-queue` flag is set, skip this check and mark as SKIPPED.
-
-Mark FAIL only if the `gh` CLI is unavailable or unauthenticated. WARN on conflicts.
-
----
-
-## Check 5 — Required Environment Variables
-
-Check the three env vars required for overnight sessions.
-**DO NOT check `ANTHROPIC_API_KEY`** — it is not required.
-
-```bash
-REQUIRED_VARS=(
-  KAFKA_BOOTSTRAP_SERVERS
-  LINEAR_API_KEY
-  GITHUB_TOKEN
-)
-
-for var in "${REQUIRED_VARS[@]}"; do
-  if [[ -z "${!var}" ]]; then
-    echo "MISSING: $var"
-  else
-    # Mask value — show only first 4 chars
-    masked="${!var:0:4}****"
-    echo "SET:     $var = $masked"
-  fi
-done
-```
-
-Also check:
-```bash
-# Verify GITHUB_TOKEN is actually authenticated (not just set)
-gh auth status 2>&1 | head -3
-
-# Verify LINEAR_API_KEY reaches the API
-# (check is lightweight — just verify the var is non-empty and plausibly formatted)
-[[ "${LINEAR_API_KEY}" =~ ^lin_ ]] && echo "LINEAR_API_KEY: format OK" || echo "LINEAR_API_KEY: unexpected format (expected lin_...)"
-```
-
-Mark FAIL if any of the three vars is missing.
-Mark WARN if `gh auth status` fails (token may be expired).
-
----
-
-## Check 6 — Go / No-Go Verdict
-
-After all 5 checks complete, emit a clear verdict.
-
-### PASS (Go)
-
-All checks are PASS (WARNs are acceptable):
-
-```
-╔══════════════════════════════════════╗
-║         PREFLIGHT: GO                ║
-╚══════════════════════════════════════╝
-
-Check 1  Overnight Drive    PASS
-Check 2  Machine Identity   PASS
-Check 3  Zombie Agents      PASS  (or WARN — list zombies)
-Check 4  Merge Queue        PASS  (or WARN — list conflicts)
-Check 5  Env Vars           PASS
-
-Overnight session is clear to start.
-```
-
-### FAIL (No-Go)
-
-One or more checks returned FAIL:
-
-```
-╔══════════════════════════════════════╗
-║         PREFLIGHT: NO-GO             ║
-╚══════════════════════════════════════╝
-
-Check 1  Overnight Drive    FAIL  ← drive not mounted
-Check 2  Machine Identity   PASS
-Check 3  Zombie Agents      WARN  (2 zombies — review before continuing)
-Check 4  Merge Queue        PASS
-Check 5  Env Vars           PASS
-
-Issues to resolve before starting:
-  1. Mount the overnight drive (Check 1)
-
-Do not start overnight session until all FAIL items are resolved.
-Run /preflight again after fixing.
-```
-
----
-
-## Usage Examples
-
-```bash
-# Full preflight check
-/preflight
-
-# Fast check — skip merge queue (saves ~30s when rate-limited)
-/preflight --skip-merge-queue
-
-# Skip watchdog (no active agents to check)
-/preflight --skip-watchdog
-```
-
-## See Also
-
-- `/onex:start_environment` — bring up Docker services before running preflight
-- `/onex:system_status` — comprehensive system health after session start
-- `/onex:dispatch_watchdog` — detailed zombie agent recovery
-- `/onex:merge_sweep` — fix conflicting PRs flagged by merge queue check
+- `/onex:start_environment` — bring services up before checking them.
+- `/onex:system_status` — the fuller health picture, after a session has started.
