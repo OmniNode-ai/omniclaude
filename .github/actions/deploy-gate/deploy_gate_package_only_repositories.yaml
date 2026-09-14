@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Repositories whose distributed artifact is a library package (OMN-18156).
+#
+# A repository listed here publishes no container image, no compose or
+# Kubernetes manifest, and no deployable tree, so a code-only change to it
+# deploys nothing and has no live surface for a deploy probe to reach. Without
+# this declaration the gate's broad cross-repo path patterns
+# (src/*/nodes/**, src/*/runtime/**, src/*/handlers/**, src/*/services/**)
+# treat every such change as runtime-relevant, and the only passing path left
+# to the author is a hand-written evidence string that proves nothing.
+#
+# THIS FILE ALONE GRANTS NOTHING. It is a reviewed claim. The gate independently
+# reads the checked-out tree and refuses the exemption when it finds a
+# deployment artifact, and refuses it again when any changed path in the PR is
+# one. A repository that is mis-declared here, or that later grows a
+# Dockerfile, loses the exemption with no edit to this file.
+#
+# To add a repository: confirm from its tree — not from a description of it —
+# that it ships no Dockerfile, no compose file, and no docker/, k8s/,
+# kubernetes/, helm/, charts/, terraform/, ansible/, deploy/, deployment/ or
+# infra/ tree, then add the owner/name below.
+package_only_repositories:
+  - OmniNode-ai/omnibase_core
+  - OmniNode-ai/omnibase_spi
+  - OmniNode-ai/omnibase_compat

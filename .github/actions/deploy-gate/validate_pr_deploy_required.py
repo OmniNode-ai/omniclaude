@@ -664,7 +664,175 @@ def _node_contract_proves_non_deployable(node_dir: str) -> bool:
     return True
 
 
-def find_runtime_paths(changed_files: list[str]) -> list[str]:
+# ---------------------------------------------------------------------------
+# Package-only repository exemption (OMN-18156).
+#
+# RUNTIME_PATH_PATTERNS carries deliberately broad cross-repo catch-alls
+# (src/*/nodes/**, src/*/runtime/**, src/*/handlers/**, src/*/services/**).
+# Those are right for a repository that builds and ships a runtime image, and
+# wrong for one whose distributed artifact is a library package: such a
+# repository publishes no image, no compose or Kubernetes manifest, and no
+# deployable tree, so a code-only change to it deploys nothing and there is no
+# live surface for a probe to reach. Before this exemption the only passing
+# path for such a PR was an author hand-writing a dod_evidence check value that
+# satisfies the matcher without proving anything — fabricated evidence, which
+# is the failure OMN-18156 exists to remove.
+#
+# The verdict is derived from two independent facts, never from author text:
+#
+#   1. the repository is declared package-only in the adjacent overlay file
+#      (deploy_gate_package_only_repositories.yaml), and
+#   2. the checked-out tree corroborates the declaration — no container image,
+#      compose file, or deployment tree — and no changed path in the PR is
+#      itself a deployment artifact.
+#
+# The overlay alone can never grant the exemption. It is a reviewed claim; the
+# tree is the fact that settles it, so a repository that is mis-declared, or
+# that later grows a Dockerfile, loses the exemption without anyone editing the
+# overlay. A missing, unreadable, or malformed overlay, an unreadable tree, and
+# an absent repository identity all fail CLOSED — the gate still fires.
+#
+# Honest limit: the tree scan skips dot-directories, so an artifact hidden
+# inside one is not seen. That is bounded by the changed-path check, which sees
+# every file the PR actually touches.
+# ---------------------------------------------------------------------------
+PACKAGE_ONLY_FILE = Path(__file__).parent / "deploy_gate_package_only_repositories.yaml"
+
+# Top-level trees whose contents exist to deploy something. Matched on the
+# FIRST path segment only: src/<pkg>/models/docker/model_container.py is a
+# package of Pydantic models, not a deployment tree.
+_DEPLOYMENT_ARTIFACT_ROOTS = frozenset(
+    {
+        "docker",
+        "k8s",
+        "kubernetes",
+        "helm",
+        "charts",
+        "terraform",
+        "ansible",
+        "deploy",
+        "deployment",
+        "infra",
+    }
+)
+_COMPOSE_FILENAMES = frozenset(
+    {"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
+)
+_DEPLOYMENT_ARTIFACT_GLOBS = (
+    "Dockerfile*",
+    "*.Dockerfile",
+    "docker-compose*.yml",
+    "docker-compose*.yaml",
+    "compose.yml",
+    "compose.yaml",
+)
+
+
+def _is_deployment_artifact_filename(filename: str) -> bool:
+    return (
+        filename.startswith("Dockerfile")
+        or filename.endswith(".Dockerfile")
+        or filename in _COMPOSE_FILENAMES
+        or filename.startswith("docker-compose.")
+    )
+
+
+def is_deployment_artifact_path(path: str) -> bool:
+    """Return True if `path` is a concrete deployable artifact.
+
+    Deliberately shape-based and repository-agnostic: a container image
+    definition, a compose file, or a file inside a deployment tree. A workflow
+    file is NEVER an artifact by this rule — matching a filename that begins
+    with the word "deploy" would read a deploy-GATE CI check as a deployment
+    and make every repository running the gate disqualify itself.
+    """
+    parts = path.split("/")
+    if _is_deployment_artifact_filename(parts[-1]):
+        return True
+    return parts[0] in _DEPLOYMENT_ARTIFACT_ROOTS
+
+
+def load_package_only_repositories(
+    package_only_file: Path | None = None,
+) -> frozenset[str]:
+    """Read the declared package-only repositories, failing closed to empty.
+
+    Every unreadable shape — absent file, unparsable YAML, wrong top-level
+    type, wrong entry type — yields an EMPTY set, which grants no exemption to
+    anyone. A config the gate cannot read has not passed; it has not run.
+    """
+    if package_only_file is None:
+        package_only_file = PACKAGE_ONLY_FILE
+
+    import yaml
+
+    try:
+        with package_only_file.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+    except (OSError, yaml.YAMLError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    entries = data.get("package_only_repositories")
+    if not isinstance(entries, list):
+        return frozenset()
+    return frozenset(
+        entry.strip() for entry in entries if isinstance(entry, str) and entry.strip()
+    )
+
+
+def _tree_has_deployment_artifact(root: Path) -> bool:
+    """Return True if the checked-out tree ships anything deployable.
+
+    Unreadable root fails CLOSED (True): an unverifiable tree corroborates
+    nothing, so the exemption is refused rather than assumed.
+    """
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        return True
+    for entry in entries:
+        if entry.name.startswith("."):
+            continue
+        try:
+            if entry.is_dir():
+                if entry.name in _DEPLOYMENT_ARTIFACT_ROOTS:
+                    return True
+            elif _is_deployment_artifact_filename(entry.name):
+                return True
+        except OSError:
+            return True
+    for pattern in _DEPLOYMENT_ARTIFACT_GLOBS:
+        try:
+            for match in root.rglob(pattern):
+                relative = match.relative_to(root)
+                if any(part.startswith(".") for part in relative.parts):
+                    continue
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def repository_is_package_only(
+    repository: str | None,
+    *,
+    package_only_file: Path | None = None,
+    root: Path | None = None,
+) -> bool:
+    """Return True iff `repository` is declared package-only AND its tree agrees."""
+    if not repository or not repository.strip():
+        return False
+    if repository.strip() not in load_package_only_repositories(package_only_file):
+        return False
+    return not _tree_has_deployment_artifact(Path() if root is None else root)
+
+
+def find_runtime_paths(
+    changed_files: list[str],
+    repository: str | None = None,
+    package_only_file: Path | None = None,
+) -> list[str]:
     """Return subset of changed_files that match runtime path patterns.
 
     CLI_PATH_PATTERNS files (src/*/cli/**) are matched separately from the
@@ -676,6 +844,11 @@ def find_runtime_paths(changed_files: list[str]) -> list[str]:
     that node's own contract.yaml proves it is a pure, non-bus-wired COMPUTE
     node — see _node_contract_proves_non_deployable. The per-node verdict is
     memoized so a multi-file node diff only reads contract.yaml once.
+
+    The whole result is dropped (OMN-18156) when `repository` is a declared
+    package-only repository whose tree corroborates the declaration and no
+    changed path is itself a deployment artifact — see
+    repository_is_package_only. Omitting `repository` grants no exemption.
     """
     hits: list[str] = []
     node_exemptions: dict[str, bool] = {}
@@ -698,6 +871,20 @@ def find_runtime_paths(changed_files: list[str]) -> list[str]:
                 continue
 
         hits.append(f)
+
+    if (
+        hits
+        and not any(is_deployment_artifact_path(f) for f in changed_files)
+        and repository_is_package_only(repository, package_only_file=package_only_file)
+    ):
+        print(
+            f"::notice::deploy-gate package-only exemption (OMN-18156): {repository} "
+            f"is declared a library-package repository and its checked-out tree "
+            f"ships no deployable artifact, so these {len(hits)} path(s) deploy "
+            f"nothing: {', '.join(hits)}. Add a Dockerfile, compose file, or a "
+            f"deployment tree and the exemption stops applying with no config change."
+        )
+        return []
     return hits
 
 
@@ -1008,9 +1195,20 @@ def validate_pr_deploy_gate(
     changed_files: list[str],
     pr_body: str,
     contracts_dir: Path,
+    repository: str | None = None,
+    package_only_file: Path | None = None,
 ) -> DeployGateResult:
-    """Check runtime-change PRs for deploy evidence in cited ticket contracts."""
-    runtime_hits = find_runtime_paths(changed_files)
+    """Check runtime-change PRs for deploy evidence in cited ticket contracts.
+
+    `repository` (OMN-18156) enables the package-only exemption for a declared
+    library repository whose tree corroborates the declaration. Omitting it
+    grants no exemption; nothing in `pr_body` can grant one either.
+    """
+    runtime_hits = find_runtime_paths(
+        changed_files,
+        repository=repository,
+        package_only_file=package_only_file,
+    )
 
     if not runtime_hits:
         return DeployGateResult(
@@ -1148,6 +1346,15 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Optional path to append GitHub Actions output values.",
     )
+    parser.add_argument(
+        "--repository",
+        default=os.environ.get("GITHUB_REPOSITORY", ""),
+        help=(
+            "owner/name of the repository under test (default: $GITHUB_REPOSITORY). "
+            "Enables the OMN-18156 package-only exemption for a declared library "
+            "repository whose checked-out tree ships no deployable artifact."
+        ),
+    )
 
     args = parser.parse_args(argv)
     changed = [f for f in args.changed_files.split() if f]
@@ -1179,6 +1386,7 @@ def main(argv: list[str] | None = None) -> int:
         changed_files=changed,
         pr_body=args.pr_body,
         contracts_dir=contracts_dir,
+        repository=args.repository or None,
     )
 
     if result.passed:
