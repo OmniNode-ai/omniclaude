@@ -1,20 +1,26 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Tests for the ticket-close-keyed worktree prune policy (OMN-16901).
+"""Tests for the content-keyed worktree prune policy (OMN-16901, OMN-18370).
 
-The policy is a **two-part predicate**, and these tests hold the line on both
-halves independently:
+Operator ruling, 2026-09-14 (``docs/tracking/ROLLING_WORK_LEDGER.md`` line
+7870): prune eligibility is keyed to **what the worktree HOLDS**, not to its
+ticket's state. These tests hold the line on both halves of the predicate:
 
-* **ELIGIBILITY** fires on TICKET CLOSING, never on a PR merging. A ticket that
-  is still open or In Progress is NEVER prune-eligible, however spotless its
-  worktree looks.
-* **SAFETY** gates an already-eligible worktree on local git state. A dirty tree
-  must NEVER classify safe. An ahead-unmerged branch must NEVER classify safe.
-  A squash-merged branch whose tree-diff against ``dev`` is empty MUST classify
-  safe — that is exactly the shape a squash leaves behind.
+* **ELIGIBILITY** establishes that no live lane owns the worktree — an open
+  ledger ``CLAIM`` blocks, and a path with no ticket blocks because claims are
+  ticket-keyed. The ticket's own lifecycle blocks NOTHING: a clean, zero-ahead
+  worktree under an In Progress ticket IS prunable.
+* **SAFETY** gates on local git state, and carries the ruling's two limbs —
+  (a) zero commits ahead, (b) a MERGED pull request carrying this exact HEAD. A
+  dirty tree must NEVER classify safe. An ahead-unmerged branch must NEVER
+  classify safe, and a merged PR forgives ahead-ness only at the commit it
+  merged.
 
-Everything that is not PRUNE is TRIAGE with named block reasons — never a
-silent drop, never a deletion.
+Both halves are always evaluated and their reasons unioned (AC-3), and a timed
+-out probe is its own disposition rather than a safety finding (AC-4).
+
+Everything that is not PRUNE is TRIAGE or TIMED_OUT with named block reasons —
+never a silent drop, never a deletion.
 
 All functions under test are pure (no I/O) so a future event hook can call the
 same predicate with no scheduler and no filesystem involved.
@@ -26,6 +32,7 @@ import pytest
 from pydantic import ValidationError
 
 from omniclaude.hooks.lib.worktree_prune_policy import (
+    EnumBranchPrState,
     EnumDebrisRemediation,
     EnumPruneBlockReason,
     EnumPruneDisposition,
@@ -43,20 +50,29 @@ pytestmark = pytest.mark.unit
 
 
 def _facts(**overrides: object) -> ModelWorktreePruneFacts:
-    """Build a fully prunable baseline: closed ticket, clean tree, nothing ahead."""
+    """Build the ruling's limb (a) baseline: clean tree, nothing ahead, no claim.
+
+    The ticket is deliberately **OPEN** and carries no ledger TERMINAL row. Under
+    the superseded ticket-close-keyed rule this baseline was the canonical
+    refusal; under the 2026-09-14 ruling it is the canonical removal, because an
+    empty worktree holds no work whatever its ticket says.
+    """
     base: dict[str, object] = {
         "path": "/wt/omni_worktrees/OMN-1234/omniclaude",
         "ticket": "OMN-1234",
         "repo": "omniclaude",
         "branch": "jonah/omn-1234-thing",
-        "ticket_state": EnumTicketLifecycle.DONE,
-        "ledger_has_terminal": True,
+        "ticket_state": EnumTicketLifecycle.OPEN,
+        "ledger_has_terminal": False,
         "ledger_open_claim": None,
         "base_ref": "origin/dev",
         "dirty_files": (),
         "commits_ahead": 0,
         "unmerged_ahead_commits": (),
         "tree_diff_vs_base_empty": True,
+        "pr_state": EnumBranchPrState.NONE,
+        "pr_head_oid": None,
+        "head_oid": "a" * 40,
         "attributed_stash_count": 0,
         "unreadable_probes": (),
     }
@@ -64,94 +80,88 @@ def _facts(**overrides: object) -> ModelWorktreePruneFacts:
     return ModelWorktreePruneFacts(**base)  # type: ignore[arg-type]
 
 
+def _merged_pr_facts(**overrides: object) -> ModelWorktreePruneFacts:
+    """The ruling's limb (b): clean, ahead, and a MERGED PR carrying this HEAD.
+
+    This is the squash-merge shape. `git cherry` still reports the branch's own
+    commits as unmerged and the tree-diff against the merge base is NOT empty,
+    so the pull request is the only fact that proves the content landed.
+    """
+    merged_head = "b" * 40
+    base: dict[str, object] = {
+        "commits_ahead": 4,
+        "unmerged_ahead_commits": ("abc1234", "def5678"),
+        "tree_diff_vs_base_empty": False,
+        "pr_state": EnumBranchPrState.MERGED,
+        "pr_head_oid": merged_head,
+        "head_oid": merged_head,
+    }
+    base.update(overrides)
+    return _facts(**base)
+
+
 # =============================================================================
-# ELIGIBILITY — keyed to ticket closing, not to a PR merging
+# ELIGIBILITY — no live lane owns it; the ticket's own state decides nothing
 # =============================================================================
 
 
 class TestEligibility:
-    def test_done_ticket_is_eligible(self) -> None:
-        eligible, reasons, evidence = is_prune_eligible(
-            _facts(ticket_state=EnumTicketLifecycle.DONE)
-        )
-        assert eligible is True
-        assert reasons == ()
-        assert "done" in evidence.lower()
-
-    def test_canceled_ticket_is_eligible(self) -> None:
-        eligible, reasons, _ = is_prune_eligible(
-            _facts(ticket_state=EnumTicketLifecycle.CANCELED)
-        )
-        assert eligible is True
-        assert reasons == ()
-
-    @pytest.mark.parametrize("state", [EnumTicketLifecycle.OPEN])
-    def test_open_ticket_is_never_eligible_however_clean_the_tree(
+    @pytest.mark.parametrize(
+        "state",
+        [
+            EnumTicketLifecycle.OPEN,
+            EnumTicketLifecycle.DONE,
+            EnumTicketLifecycle.CANCELED,
+            EnumTicketLifecycle.UNKNOWN,
+        ],
+    )
+    def test_ticket_state_never_blocks_eligibility(
         self, state: EnumTicketLifecycle
     ) -> None:
-        """The absolute line: an open ticket is not prunable, spotless or not."""
-        facts = _facts(
-            ticket_state=state,
-            ledger_has_terminal=True,  # even a TERMINAL row must not override
-            dirty_files=(),
-            commits_ahead=0,
-        )
-        eligible, reasons, _ = is_prune_eligible(facts)
-        assert eligible is False
-        assert EnumPruneBlockReason.TICKET_NOT_CLOSED in reasons
+        """The 2026-09-14 ruling: eligibility is keyed to what the worktree holds.
 
-    def test_unknown_ticket_state_falls_back_to_ledger_terminal(self) -> None:
+        Every lifecycle value, including an In Progress ticket with no ledger
+        TERMINAL row, must fire eligibility. Under the superseded rule the OPEN
+        and UNKNOWN cases returned TICKET_NOT_CLOSED / TICKET_UNRESOLVED.
+        """
         eligible, reasons, evidence = is_prune_eligible(
-            _facts(
-                ticket_state=EnumTicketLifecycle.UNKNOWN,
-                ledger_has_terminal=True,
-                ledger_open_claim=None,
-            )
+            _facts(ticket_state=state, ledger_has_terminal=False)
         )
         assert eligible is True
         assert reasons == ()
-        assert "terminal" in evidence.lower()
+        assert "no open ledger CLAIM" in evidence
 
-    def test_unknown_ticket_state_without_terminal_fails_closed(self) -> None:
-        eligible, reasons, _ = is_prune_eligible(
-            _facts(
-                ticket_state=EnumTicketLifecycle.UNKNOWN,
-                ledger_has_terminal=False,
-            )
+    def test_evidence_names_the_ticket_state_as_reported_not_decisive(self) -> None:
+        _, _, evidence = is_prune_eligible(
+            _facts(ticket_state=EnumTicketLifecycle.OPEN)
         )
-        assert eligible is False
-        assert EnumPruneBlockReason.TICKET_UNRESOLVED in reasons
+        assert "not decisive" in evidence
 
-    def test_newer_open_claim_blocks_even_a_done_ticket(self) -> None:
-        """A live lane re-claimed the ticket — never delete out from under it."""
+    def test_open_claim_blocks_however_empty_the_worktree(self) -> None:
+        """A live lane owns this worktree — the one trigger-half refusal left."""
         eligible, reasons, _ = is_prune_eligible(
             _facts(
                 ticket_state=EnumTicketLifecycle.DONE,
                 ledger_has_terminal=True,
-                ledger_open_claim="2026-08-28T20:35:00Z | omn-1234-repair",
+                ledger_open_claim="2026-09-14T20:35:00Z | omn-1234-repair",
             )
         )
         assert eligible is False
-        assert EnumPruneBlockReason.OPEN_CLAIM in reasons
+        assert reasons == (EnumPruneBlockReason.OPEN_CLAIM,)
 
     def test_worktree_with_no_ticket_is_never_eligible(self) -> None:
+        """Ledger claims are ticket-keyed, so absence of one cannot be shown."""
         eligible, reasons, _ = is_prune_eligible(
             _facts(path="/wt/omni_worktrees/sweep/omniclaude", ticket=None)
         )
         assert eligible is False
-        assert EnumPruneBlockReason.NO_TICKET in reasons
-
-    def test_no_ticket_does_not_also_report_unresolved(self) -> None:
-        """NO_TICKET is the whole finding; TICKET_UNRESOLVED on top is noise."""
-        _, reasons, _ = is_prune_eligible(
-            _facts(
-                path="/wt/omni_worktrees/sweep/omniclaude",
-                ticket=None,
-                ticket_state=EnumTicketLifecycle.UNKNOWN,
-                ledger_has_terminal=False,
-            )
-        )
         assert reasons == (EnumPruneBlockReason.NO_TICKET,)
+
+    def test_retired_ticket_state_block_reasons_no_longer_exist(self) -> None:
+        """The ruling removed them; a shim that still emits them would be drift."""
+        names = {reason.value for reason in EnumPruneBlockReason}
+        assert "ticket_not_closed" not in names
+        assert "ticket_unresolved" not in names
 
 
 # =============================================================================
@@ -262,6 +272,53 @@ class TestSafety:
         assert safe is False
         assert EnumPruneBlockReason.FACTS_UNREADABLE in reasons
 
+    def test_merged_pull_request_forgives_ahead_ness_at_the_merged_head(self) -> None:
+        """Limb (b) of the ruling. The squash shape no other fact can recognise."""
+        safe, reasons, evidence = is_prune_safe(_merged_pr_facts())
+        assert safe is True
+        assert reasons == ()
+        assert "limb (b)" in evidence
+
+    def test_merged_pull_request_does_not_forgive_a_commit_made_after_the_merge(
+        self,
+    ) -> None:
+        """A local commit past the merged head is unmerged work, and protected.
+
+        The ruling protects "any unmerged commit"; a merged PR proves only the
+        commit it merged. HEAD having moved past it is exactly the case where
+        the two sentences of the ruling would otherwise collide.
+        """
+        safe, reasons, _ = is_prune_safe(
+            _merged_pr_facts(head_oid="c" * 40, pr_head_oid="b" * 40)
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.AHEAD_UNMERGED in reasons
+
+    def test_unknown_pr_state_falls_back_to_limb_a_rather_than_forgiving(self) -> None:
+        """`gh` unavailable must make limb (b) unavailable, never permissive."""
+        safe, reasons, _ = is_prune_safe(
+            _merged_pr_facts(pr_state=EnumBranchPrState.UNKNOWN, pr_head_oid=None)
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.AHEAD_UNMERGED in reasons
+
+    def test_dirty_tree_is_never_safe_even_with_a_merged_pull_request(self) -> None:
+        safe, reasons, _ = is_prune_safe(_merged_pr_facts(dirty_files=("src/a.py",)))
+        assert safe is False
+        assert EnumPruneBlockReason.DIRTY_TREE in reasons
+
+    def test_a_timed_out_probe_is_not_a_safety_finding(self) -> None:
+        """AC-4: a timeout is a host reading, held apart from FACTS_UNREADABLE."""
+        safe, reasons, _ = is_prune_safe(
+            _facts(
+                timed_out_probes=("git status --porcelain",),
+                load_average=127.4,
+            )
+        )
+        assert safe is False
+        assert EnumPruneBlockReason.PROBE_TIMEOUT in reasons
+        assert EnumPruneBlockReason.FACTS_UNREADABLE not in reasons
+
     def test_every_block_reason_is_reported_not_just_the_first(self) -> None:
         safe, reasons, _ = is_prune_safe(
             _facts(
@@ -284,22 +341,78 @@ class TestSafety:
 
 
 class TestClassifyWorktreePrune:
-    def test_closed_ticket_and_safe_tree_prunes(self) -> None:
+    def test_empty_worktree_under_an_in_progress_ticket_prunes(self) -> None:
+        """Limb (a), and the 186 rows the superseded rule refused on 2026-09-14."""
         decision = classify_worktree_prune(_facts())
         assert isinstance(decision, ModelWorktreePruneDecision)
         assert decision.disposition is EnumPruneDisposition.PRUNE
         assert decision.block_reasons == ()
         assert decision.eligibility_evidence
         assert decision.safety_evidence
+        assert decision.branch_content_preserved is True
 
-    def test_open_ticket_with_spotless_tree_triages(self) -> None:
+    def test_merged_pr_worktree_under_a_backlog_ticket_prunes(self) -> None:
+        """Limb (b) end to end."""
         decision = classify_worktree_prune(
-            _facts(ticket_state=EnumTicketLifecycle.OPEN, ledger_has_terminal=False)
+            _merged_pr_facts(ticket_state=EnumTicketLifecycle.OPEN)
+        )
+        assert decision.disposition is EnumPruneDisposition.PRUNE
+        assert decision.pr_state is EnumBranchPrState.MERGED
+        assert decision.branch_content_preserved is True
+
+    def test_open_claim_triages_and_never_authorises_a_branch_delete(self) -> None:
+        decision = classify_worktree_prune(
+            _facts(ledger_open_claim="2026-09-14T20:35:00Z | omn-1234-repair")
         )
         assert decision.disposition is EnumPruneDisposition.TRIAGE
-        assert EnumPruneBlockReason.TICKET_NOT_CLOSED in decision.block_reasons
+        assert EnumPruneBlockReason.OPEN_CLAIM in decision.block_reasons
+        assert decision.branch_content_preserved is False
 
-    def test_closed_ticket_with_dirty_tree_triages_and_reports_the_hazard(
+    def test_both_halves_are_evaluated_so_every_reason_is_counted(self) -> None:
+        """AC-3. The superseded revision returned before the safety half ran, so a
+        row that was both claimed and dirty and detached reported only the claim —
+        which is how the 2026-09-14 report said detached_head 40 against an actual
+        130 and dirty_tree 26 against an actual 158."""
+        decision = classify_worktree_prune(
+            _facts(
+                ledger_open_claim="2026-09-14T20:35:00Z | a live lane",
+                branch=None,
+                dirty_files=("src/a.py",),
+            )
+        )
+        assert decision.disposition is EnumPruneDisposition.TRIAGE
+        assert EnumPruneBlockReason.OPEN_CLAIM in decision.block_reasons
+        assert EnumPruneBlockReason.DETACHED_HEAD in decision.block_reasons
+        assert EnumPruneBlockReason.DIRTY_TREE in decision.block_reasons
+
+    def test_a_timed_out_row_is_timed_out_not_triage(self) -> None:
+        """AC-4 falsifier: a timeout carries the load reading and is not 'unsafe'."""
+        decision = classify_worktree_prune(
+            _facts(
+                timed_out_probes=("git status --porcelain",),
+                load_average=127.4,
+            )
+        )
+        assert decision.disposition is EnumPruneDisposition.TIMED_OUT
+        assert decision.load_average == 127.4
+        assert decision.timed_out_probes == ("git status --porcelain",)
+        assert EnumPruneBlockReason.PROBE_TIMEOUT in decision.block_reasons
+        assert EnumPruneBlockReason.FACTS_UNREADABLE not in decision.block_reasons
+
+    def test_an_unmerged_branch_never_authorises_a_branch_delete(self) -> None:
+        """AC-2 at the predicate: the branch delete is gated on the same proof."""
+        decision = classify_worktree_prune(
+            _facts(
+                commits_ahead=2,
+                unmerged_ahead_commits=("abc1234",),
+                tree_diff_vs_base_empty=False,
+            )
+        )
+        assert decision.disposition is EnumPruneDisposition.TRIAGE
+        assert EnumPruneBlockReason.AHEAD_UNMERGED in decision.block_reasons
+        assert decision.branch_content_preserved is False
+
+    def test_dirty_tree_triages_and_reports_the_hazard(
         self,
     ) -> None:
         decision = classify_worktree_prune(
@@ -312,11 +425,17 @@ class TestClassifyWorktreePrune:
         assert decision.path == "/wt/omni_worktrees/OMN-1234/omniclaude"
         assert decision.branch == "jonah/omn-1234-thing"
 
-    def test_ineligible_worktree_does_not_report_safety_evidence(self) -> None:
-        """Safety is a gate applied AFTER eligibility, never a substitute for it."""
+    def test_a_claimed_worktree_does_not_report_eligibility_evidence(self) -> None:
+        """Evidence is only ever printed for the half that actually passed."""
         decision = classify_worktree_prune(
-            _facts(ticket_state=EnumTicketLifecycle.OPEN, ledger_has_terminal=False)
+            _facts(ledger_open_claim="2026-09-14T20:35:00Z | a live lane")
         )
+        assert decision.eligibility_evidence == ""
+        # ...while the safety half still ran, so its reasons are countable.
+        assert decision.safety_evidence
+
+    def test_an_unsafe_worktree_does_not_report_safety_evidence(self) -> None:
+        decision = classify_worktree_prune(_facts(dirty_files=("src/a.py",)))
         assert decision.safety_evidence == ""
 
     def test_triage_row_carries_the_matching_ledger_claim(self) -> None:
@@ -325,7 +444,7 @@ class TestClassifyWorktreePrune:
         assert decision.disposition is EnumPruneDisposition.TRIAGE
         assert decision.ledger_open_claim == claim
 
-    def test_unreadable_probe_triages_a_closed_clean_ticket(self) -> None:
+    def test_unreadable_probe_triages_an_otherwise_clean_worktree(self) -> None:
         decision = classify_worktree_prune(
             _facts(unreadable_probes=("git status --porcelain",))
         )

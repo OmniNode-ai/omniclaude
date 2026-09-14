@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""worktree_auto_prune.py — ticket-close-keyed worktree pruner [OMN-16901].
+"""worktree_auto_prune.py — content-keyed worktree pruner [OMN-16901, OMN-18370].
 
 The fact-collecting half of the automated pruner. It walks every worktree under
-the worktrees root, gathers observations from git / the tracker / the rolling
-work ledger, hands them to the **pure** predicate in
+the worktrees root, gathers observations from git / GitHub / the tracker / the
+rolling work ledger, hands them to the **pure** predicate in
 ``omniclaude.hooks.lib.worktree_prune_policy``, and then either reports or acts.
 
 Why this exists
 ---------------
-Pruning is keyed to the **ticket closing**, not to a PR merging. A ticket spans
-multiple PRs and OCC companions and worktrees are keyed by ticket directory, so
-a merged PR is an *input to the safety check* (it is what makes the tree-diff
-against ``dev`` empty) while ticket completion is what *fires* eligibility. The
-predecessor surfaces got this backwards: ``prune-worktrees.sh`` keys purely on
-"PR merged or remote branch gone", which per OMN-15551 is anti-correlated with
-liveness — a clean, pushed, merged worktree is exactly the state a live lane
-occupies between push and post-merge verification.
+Pruning is keyed to **what the worktree HOLDS** — operator ruling 2026-09-14,
+``docs/tracking/ROLLING_WORK_LEDGER.md`` line 7870. A worktree is removable when
+it is clean and zero commits ahead with no open ledger ``CLAIM``, or clean with a
+MERGED pull request and no open ``CLAIM``. The ticket's own state decides
+nothing: an empty or fully-merged worktree carries no work whatever the ticket
+says.
+
+That supersedes this script's original ticket-close-keyed rule, which on
+2026-09-14 refused 186 provably-empty or provably-merged worktrees (82 under an
+In Progress ticket) out of 751 on the host. Claim-awareness — the OMN-15551
+hazard, a live lane sitting on a clean pushed tree between push and post-merge
+verification — is preserved in full: an open ``CLAIM`` still blocks, and it is
+now the *only* trigger-half block reason.
 
 This script does NOT reimplement ``prune-worktrees.sh``. That script stays the
-merge-keyed GC used after a batch merge sweep; this one is the ticket-keyed
-sweep, and the two disagree on purpose.
+merge-keyed GC used after a batch merge sweep; this one is the claim-aware,
+content-keyed sweep.
 
 Safety posture
 --------------
@@ -43,10 +48,14 @@ Usage
     # act
     uv run python scripts/worktree_auto_prune.py --execute
 
+Pull-request state is resolved once per canonical clone with ``gh pr list``;
+an unresolvable PR state simply makes limb (b) unavailable for that row, which
+falls back to limb (a).
+
 Ticket-state resolution reads ``LINEAR_API_KEY`` from the environment, falling
-back to ``~/.omnibase/.env``. With ``--no-tracker`` (or no key available) every
-ticket state is ``UNKNOWN`` and eligibility falls back to the ledger's
-``TERMINAL`` rows, which fails closed when there is none.
+back to ``~/.omnibase/.env``. It is **reported context only** since the
+2026-09-14 ruling — ``--no-tracker`` costs the report a column and changes no
+verdict.
 """
 
 from __future__ import annotations
@@ -58,6 +67,7 @@ import re
 import shutil
 import subprocess  # noqa: S404 — fixed git argv lists, never shell-interpolated
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -70,6 +80,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from omniclaude.hooks.lib.worktree_health import extract_ticket_id
 from omniclaude.hooks.lib.worktree_prune_policy import (
+    EnumBranchPrState,
     EnumDebrisRemediation,
     EnumPruneBlockReason,
     EnumPruneDisposition,
@@ -87,6 +98,23 @@ LINEAR_BATCH_SIZE = 50
 BASE_REF_CANDIDATES: tuple[str, ...] = ("origin/dev", "origin/main")
 GIT_TIMEOUT_SECONDS = 60
 
+# --- timeout / load policy [OMN-18370 AC-4] --------------------------------
+# On 2026-09-14 twenty `git worktree remove` calls hit the 60 s budget at host
+# load 127 and were reported as removal failures indistinguishable from a real
+# refusal. A timeout is a statement about the HOST, not about the worktree, so
+# it is retried once when the host has actually calmed down and otherwise
+# reported with the load reading that explains it.
+LOAD_RETRY_THRESHOLD = 24.0
+"""1-minute load average at or below which a timed-out git call is retried."""
+LOAD_RETRY_MAX_WAIT_SECONDS = 120
+"""How long to wait for the load to fall before giving up on the retry."""
+LOAD_RETRY_POLL_SECONDS = 10
+"""Interval between load readings while waiting."""
+
+GH_TIMEOUT_SECONDS = 300
+GH_MERGED_PR_LIMIT = 5000
+GH_OPEN_PR_LIMIT = 500
+
 _TICKET_RE = re.compile(r"OMN-\d+")
 _CLAIM_MARKERS: tuple[str, ...] = ("| CLAIM |", "(CLAIM)", "**Status:** IN PROGRESS")
 _TERMINAL_MARKERS: tuple[str, ...] = (
@@ -102,19 +130,110 @@ _TERMINAL_MARKERS: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
-def _git(cwd: Path, *args: str) -> tuple[int, str]:
-    """Run a git command, returning ``(returncode, stripped stdout)``."""
+def host_load_average() -> float | None:
+    """1-minute host load average, or None where the platform cannot report it."""
+    try:
+        return os.getloadavg()[0]
+    except (OSError, AttributeError):
+        return None
+
+
+class ModelGitResult(BaseModel):
+    """The full outcome of one git invocation, timeouts held apart.
+
+    A timed-out call and a refused call are not the same event and must not
+    collapse into the same ``(1, "")`` [OMN-18370 AC-4]: the first says the host
+    was too busy to answer, the second says git answered and said no.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    exit_code: int = Field(..., description="git's exit code; -1 when it never ran")
+    stdout: str = Field(...)
+    stderr: str = Field(...)
+    timed_out: bool = Field(...)
+    load_average: float | None = Field(
+        ..., description="1-minute load read at the timeout; None otherwise"
+    )
+
+    @property
+    def ok(self) -> bool:
+        return self.exit_code == 0 and not self.timed_out
+
+
+def _git_run(
+    cwd: Path, *args: str, timeout: int = GIT_TIMEOUT_SECONDS
+) -> ModelGitResult:
+    """Run one git command and report exactly what happened."""
     try:
         proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
             ["git", "-C", str(cwd), *args],
             capture_output=True,
             text=True,
-            timeout=GIT_TIMEOUT_SECONDS,
+            timeout=timeout,
             check=False,
         )
-    except (subprocess.TimeoutExpired, OSError):
-        return 1, ""
-    return proc.returncode, proc.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return ModelGitResult(
+            exit_code=-1,
+            stdout="",
+            stderr=f"TimeoutExpired after {timeout}s",
+            timed_out=True,
+            load_average=host_load_average(),
+        )
+    except OSError as exc:
+        return ModelGitResult(
+            exit_code=-1,
+            stdout="",
+            stderr=f"{type(exc).__name__}: {exc}",
+            timed_out=False,
+            load_average=None,
+        )
+    return ModelGitResult(
+        exit_code=proc.returncode,
+        stdout=proc.stdout.strip(),
+        stderr=proc.stderr.strip(),
+        timed_out=False,
+        load_average=None,
+    )
+
+
+def _git_run_with_load_retry(
+    cwd: Path, *args: str, timeout: int = GIT_TIMEOUT_SECONDS
+) -> ModelGitResult:
+    """Run a git command; on a timeout, wait for the host to calm down and retry once.
+
+    The retry fires only when the 1-minute load average actually falls to
+    :data:`LOAD_RETRY_THRESHOLD` within :data:`LOAD_RETRY_MAX_WAIT_SECONDS` —
+    retrying immediately at load 127 reproduces the timeout and doubles the
+    cost. When the load never falls, the original timed-out result is returned
+    with its load reading intact so the report can say *why* [OMN-18370 AC-4].
+    """
+    result = _git_run(cwd, *args, timeout=timeout)
+    if not result.timed_out:
+        return result
+
+    waited = 0
+    while waited < LOAD_RETRY_MAX_WAIT_SECONDS:
+        load = host_load_average()
+        if load is not None and load <= LOAD_RETRY_THRESHOLD:
+            retry = _git_run(cwd, *args, timeout=timeout)
+            if not retry.timed_out:
+                return retry
+            return retry
+        time.sleep(LOAD_RETRY_POLL_SECONDS)
+        waited += LOAD_RETRY_POLL_SECONDS
+    return result
+
+
+def _git(cwd: Path, *args: str) -> tuple[int, str]:
+    """Run a git command, returning ``(returncode, stripped stdout)``.
+
+    A timeout is reported as a non-zero exit code here; call sites that must
+    tell a timeout apart from a refusal use :func:`_git_run` directly.
+    """
+    result = _git_run(cwd, *args)
+    return (1 if result.timed_out else result.exit_code), result.stdout
 
 
 def _git_capture(cwd: Path, *args: str) -> tuple[int, str, str]:
@@ -125,17 +244,12 @@ def _git_capture(cwd: Path, *args: str) -> tuple[int, str, str]:
     OMN-16951 defect 1. This variant is for every call site that needs to
     report *why* git refused, not just whether it did.
     """
-    try:
-        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
-            ["git", "-C", str(cwd), *args],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return 1, "", f"{type(exc).__name__}: {exc}"
-    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+    result = _git_run(cwd, *args)
+    return (
+        (1 if result.timed_out else result.exit_code),
+        result.stdout,
+        result.stderr,
+    )
 
 
 def discover_worktrees(root: Path) -> list[Path]:
@@ -446,7 +560,99 @@ def parse_ledger_claims(ledger_path: Path) -> dict[str, tuple[bool, str | None]]
 
 
 # ---------------------------------------------------------------------------
-# tracker (Linear)
+# pull-request state (GitHub) — the fact limb (b) of the ruling turns on
+# ---------------------------------------------------------------------------
+
+
+def collect_branch_pr_states(
+    canonical: Path,
+) -> dict[str, tuple[EnumBranchPrState, str | None]]:
+    """Map every branch in one repository to ``(pr_state, merged_head_oid)``.
+
+    One ``gh`` call per repository, not per worktree: a registry-scale root
+    holds ~750 worktrees across ~15 clones, and a per-branch ``gh pr view``
+    would be 750 API round trips.
+
+    ``gh`` is run with ``cwd`` inside the clone so it resolves the repository
+    from that clone's own ``origin`` remote — never from a repo slug this
+    script guesses from a directory name.
+
+    A failure of either call leaves the affected branches absent from the map,
+    which the caller reads as :data:`EnumBranchPrState.UNKNOWN`: limb (b) is
+    then unavailable and the row falls back to limb (a). An empty result is
+    never read as "no PR exists".
+    """
+    states: dict[str, tuple[EnumBranchPrState, str | None]] = {}
+
+    def _gh(*args: str) -> list[dict[str, Any]] | None:
+        try:
+            proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+                ["gh", *args],
+                cwd=str(canonical),
+                capture_output=True,
+                text=True,
+                timeout=GH_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            print(
+                f"  gh: {canonical.name}: {type(exc).__name__}: {exc}", file=sys.stderr
+            )
+            return None
+        if proc.returncode != 0:
+            print(
+                f"  gh: {canonical.name}: exit {proc.returncode}: "
+                f"{proc.stderr.strip()[:200]}",
+                file=sys.stderr,
+            )
+            return None
+        try:
+            parsed = json.loads(proc.stdout or "[]")
+        except ValueError as exc:
+            print(f"  gh: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr)
+            return None
+        return parsed if isinstance(parsed, list) else None
+
+    # Open first, merged second: a branch that was reused after its PR merged
+    # should read MERGED only when the merged head is still its HEAD, and the
+    # merged entry carries the oid that decides that.
+    open_rows = _gh(
+        "pr",
+        "list",
+        "--state",
+        "open",
+        "--limit",
+        str(GH_OPEN_PR_LIMIT),
+        "--json",
+        "headRefName",
+    )
+    for row in open_rows or []:
+        name = row.get("headRefName")
+        if name:
+            states[name] = (EnumBranchPrState.NOT_MERGED, None)
+
+    merged_rows = _gh(
+        "pr",
+        "list",
+        "--state",
+        "merged",
+        "--limit",
+        str(GH_MERGED_PR_LIMIT),
+        "--json",
+        "headRefName,headRefOid",
+    )
+    for row in merged_rows or []:
+        name = row.get("headRefName")
+        if name:
+            states[name] = (EnumBranchPrState.MERGED, row.get("headRefOid") or None)
+
+    if open_rows is None and merged_rows is None:
+        return {}
+    return states
+
+
+# ---------------------------------------------------------------------------
+# tracker (Linear) — reported context only since the 2026-09-14 ruling
 # ---------------------------------------------------------------------------
 
 
@@ -532,6 +738,8 @@ def collect_facts(
     ledger: dict[str, tuple[bool, str | None]],
     base_ref_cache: dict[Path, str | None],
     stash_cache: dict[Path, list[str]],
+    pr_state_cache: dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]]
+    | None = None,
 ) -> ModelWorktreePruneFacts:
     """Observe one worktree. Pure observation — no judgement, no mutation."""
     rel = worktree.relative_to(root)
@@ -544,20 +752,40 @@ def collect_facts(
     # authorise a deletion. Each failure is recorded here and fails the safety
     # gate closed rather than being inferred away.
     unreadable_probes: list[str] = []
+    # A timeout is held apart from an unreadable probe [OMN-18370 AC-4]: it says
+    # the host was too busy to answer, not that the worktree is unsafe.
+    timed_out_probes: list[str] = []
+    load_at_timeout: float | None = None
 
-    code, branch_out = _git(worktree, "branch", "--show-current")
+    def _probe(name: str, *args: str) -> str:
+        """Run one read-only probe, routing its failure to the right bucket."""
+        nonlocal load_at_timeout
+        result = _git_run(worktree, *args)
+        if result.timed_out:
+            timed_out_probes.append(name)
+            if load_at_timeout is None:
+                load_at_timeout = result.load_average
+        elif result.exit_code != 0:
+            unreadable_probes.append(name)
+        return result.stdout
+
+    branch_result = _git_run(worktree, "branch", "--show-current")
     # A non-zero rc here is a real failure; a zero rc with empty output is a
     # detached HEAD, which the policy already refuses on its own terms.
-    if code != 0:
+    if branch_result.timed_out:
+        timed_out_probes.append("git branch --show-current")
+        load_at_timeout = branch_result.load_average
+    elif branch_result.exit_code != 0:
         unreadable_probes.append("git branch --show-current")
-    branch = branch_out if (code == 0 and branch_out) else None
+    branch = branch_result.stdout if branch_result.ok and branch_result.stdout else None
 
-    code, status_out = _git(worktree, "status", "--porcelain")
-    if code != 0:
-        unreadable_probes.append("git status --porcelain")
+    status_out = _probe("git status --porcelain", "status", "--porcelain")
     dirty_files = tuple(
         line[3:].strip() for line in status_out.splitlines() if line.strip()
     )
+
+    head_out = _probe("git rev-parse HEAD", "rev-parse", "HEAD")
+    head_oid = head_out or None
 
     canonical = canonical_root_of(worktree)
     if canonical is None:
@@ -575,9 +803,13 @@ def collect_facts(
     unmerged: tuple[str, ...] = ()
     tree_diff_empty = False
     if base_ref is not None:
-        code, count_out = _git(worktree, "rev-list", "--count", f"{base_ref}..HEAD")
-        if code == 0 and count_out.isdigit():
-            commits_ahead = int(count_out)
+        count_result = _git_run(worktree, "rev-list", "--count", f"{base_ref}..HEAD")
+        if count_result.ok and count_result.stdout.isdigit():
+            commits_ahead = int(count_result.stdout)
+        elif count_result.timed_out:
+            timed_out_probes.append(f"git rev-list --count {base_ref}..HEAD")
+            if load_at_timeout is None:
+                load_at_timeout = count_result.load_average
         else:
             unreadable_probes.append(f"git rev-list --count {base_ref}..HEAD")
         if commits_ahead > 0:
@@ -602,6 +834,18 @@ def collect_facts(
 
     has_terminal, open_claim = ledger.get(ticket or "", (False, None))
 
+    pr_state = EnumBranchPrState.UNKNOWN
+    pr_head_oid: str | None = None
+    if branch is not None and canonical is not None and pr_state_cache is not None:
+        if canonical not in pr_state_cache:
+            pr_state_cache[canonical] = collect_branch_pr_states(canonical)
+        repo_map = pr_state_cache[canonical]
+        if repo_map:
+            # A branch absent from a map that DID resolve has no pull request;
+            # a branch absent from an EMPTY map proves nothing, so that case
+            # stays UNKNOWN and limb (b) is simply unavailable.
+            pr_state, pr_head_oid = repo_map.get(branch, (EnumBranchPrState.NONE, None))
+
     return ModelWorktreePruneFacts(
         path=str(worktree),
         ticket=ticket,
@@ -619,8 +863,13 @@ def collect_facts(
         commits_ahead=commits_ahead,
         unmerged_ahead_commits=unmerged,
         tree_diff_vs_base_empty=tree_diff_empty,
+        pr_state=pr_state,
+        pr_head_oid=pr_head_oid,
+        head_oid=head_oid,
         attributed_stash_count=count_attributed_stashes(stashes, branch),
         unreadable_probes=tuple(unreadable_probes),
+        timed_out_probes=tuple(timed_out_probes),
+        load_average=load_at_timeout,
     )
 
 
@@ -647,13 +896,130 @@ class ModelRemovalAttempt(BaseModel):
     exit_code: int = Field(..., description="-1 when the command was never run")
     stderr: str = Field(..., description="Full stderr text; '' on a clean success")
     detail: str = Field(..., description="Human-readable summary of the outcome")
+    timed_out: bool = Field(
+        default=False,
+        description=(
+            "The command exceeded its budget rather than being refused "
+            "[OMN-18370 AC-4]. Never a safety finding — a statement about the "
+            "host, reported with the load average that explains it."
+        ),
+    )
+    load_average: float | None = Field(
+        default=None, description="1-minute host load average read at the timeout"
+    )
+    branch_outcome: str = Field(
+        default="",
+        description="What happened to the local branch, in its own field, not folded into detail",
+    )
+
+
+def delete_branch_from_worktree_side(
+    worktree: Path, branch: str, base_ref: str | None, pr_merged: bool
+) -> tuple[str, str | None]:
+    """Delete a worktree's local branch through a path the canonical-clone guard
+    permits, returning ``(outcome_text, restorable_tip_oid_or_None)``
+    [OMN-18370 AC-1/AC-2].
+
+    Why not in the canonical clone. The clone's ``reference-transaction`` hook
+    refuses ``refs/heads/*`` deletion outright — "branch deletion in a mirror
+    destroys the only local record of what it pointed at". Measured 2026-09-14:
+    23 of 26 removals left an orphan branch because the pruner ran ``git branch
+    -D`` there. Both behaviours are correct; the pruner is what has to move.
+
+    A **linked worktree** shares the clone's config, and therefore its
+    ``hooksPath``, but the hook's own canonical-clone test resolves false there,
+    so a ref write issued from the worktree side is permitted rather than
+    bypassed. This is the option the ticket names, not a way around the guard.
+
+    Sequence, and why each step is what it is:
+
+    1. Record the branch tip, so a failed removal can put the branch back.
+    2. ``git checkout --detach <base_ref>`` — a branch cannot be deleted while
+       it is checked out, and detaching **at the base** rather than at the
+       branch tip is what makes step 3 a real check: with HEAD at the tip,
+       ``git branch -d`` would find the branch trivially "merged into HEAD" and
+       delete anything.
+    3. ``git branch -d`` — safe delete. git independently re-checks that the
+       branch is merged into HEAD (now the base), a second opinion on the
+       policy that approved the removal.
+    4. ``git branch -D`` **only** when ``-d`` refused and a MERGED pull request
+       exists for the branch. That is the squash-merge shape: the PR's commits
+       are in the base as one new commit, so the branch's own commits are not
+       ancestors of it and ``-d`` cannot see the merge. The force is recorded in
+       the outcome text, never silent, and never reached without the merged PR.
+    """
+    tip_result = _git_run(worktree, "rev-parse", "--verify", f"refs/heads/{branch}")
+    tip = tip_result.stdout if tip_result.ok else None
+    if tip is None:
+        return ("local branch kept: could not resolve its tip", None)
+
+    if base_ref is None:
+        return (
+            "local branch kept: base ref unresolved, so a safe delete cannot be checked",
+            None,
+        )
+
+    detach = _git_run(worktree, "checkout", "--detach", base_ref)
+    if not detach.ok:
+        return (
+            f"local branch kept: could not detach HEAD onto {base_ref} "
+            f"({detach.stderr or 'no stderr'})",
+            None,
+        )
+
+    safe_delete = _git_run(worktree, "branch", "-d", branch)
+    if safe_delete.ok:
+        return (
+            f"local branch deleted from the worktree side (-d, merged into {base_ref})",
+            tip,
+        )
+
+    if not pr_merged:
+        return (
+            f"local branch kept: git branch -d refused "
+            f"({safe_delete.stderr or 'no stderr'}) and no merged pull request "
+            "proves the content is preserved",
+            tip,
+        )
+
+    forced = _git_run(worktree, "branch", "-D", branch)
+    if forced.ok:
+        return (
+            "local branch force-deleted from the worktree side: -d refused "
+            f"(squash-merge shape, its commits are not ancestors of {base_ref}) "
+            "and a MERGED pull request carries this exact HEAD",
+            tip,
+        )
+    return (
+        f"local branch kept: delete failed ({forced.stderr or 'no stderr'})",
+        tip,
+    )
+
+
+def restore_branch(worktree: Path, branch: str, tip: str) -> str:
+    """Put a deleted branch back after a removal that did not happen.
+
+    The branch is deleted BEFORE ``git worktree remove`` (it is the only moment
+    the guard-permitted worktree-side path exists), so a refused or timed-out
+    removal must not leave a live worktree sitting detached with its branch
+    gone.
+    """
+    recreated = _git_run(worktree, "branch", branch, tip)
+    if not recreated.ok:
+        return f"; branch {branch} NOT restored ({recreated.stderr or 'no stderr'})"
+    reattached = _git_run(worktree, "checkout", branch)
+    if not reattached.ok:
+        return f"; branch {branch} restored at {tip[:12]} but HEAD left detached"
+    return f"; branch {branch} restored at {tip[:12]} and re-checked-out"
 
 
 def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
     """Remove one proven-safe worktree and its local branch.
 
     Uses plain ``git worktree remove`` — never ``--force`` — so git re-checks
-    cleanliness independently of the policy that just approved the removal.
+    cleanliness independently of the policy that just approved the removal. A
+    timeout is retried once when the host load falls, and is reported as a
+    timeout rather than as a refusal [OMN-18370 AC-4].
     """
     worktree = Path(decision.path)
     canonical = canonical_root_of(worktree)
@@ -667,28 +1033,69 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             detail="canonical clone not resolvable",
         )
 
+    branch_outcome = "no local branch to delete (detached HEAD)"
+    restorable_tip: str | None = None
+    if decision.branch and not decision.branch_content_preserved:
+        branch_outcome = (
+            "local branch kept: its content is not proven preserved in the base "
+            "or in a merged pull request"
+        )
+    elif decision.branch:
+        branch_outcome, restorable_tip = delete_branch_from_worktree_side(
+            worktree,
+            decision.branch,
+            resolve_base_ref(canonical),
+            decision.pr_state is EnumBranchPrState.MERGED,
+        )
+
     argv = ["git", "-C", str(canonical), "worktree", "remove", str(worktree)]
-    code, out, err = _git_capture(canonical, "worktree", "remove", str(worktree))
-    if code != 0:
-        stderr_text = err or out or "(git produced no stdout or stderr)"
+    result = _git_run_with_load_retry(canonical, "worktree", "remove", str(worktree))
+
+    if result.timed_out:
+        restored = (
+            restore_branch(worktree, decision.branch, restorable_tip)
+            if decision.branch and restorable_tip
+            else ""
+        )
+        load_text = (
+            f"{result.load_average:.2f}"
+            if result.load_average is not None
+            else "unavailable"
+        )
         return ModelRemovalAttempt(
             path=decision.path,
             ok=False,
             command=" ".join(argv),
-            exit_code=code,
-            stderr=stderr_text,
-            detail=f"git worktree remove refused (exit {code}): {stderr_text}",
+            exit_code=-1,
+            stderr=result.stderr,
+            timed_out=True,
+            load_average=result.load_average,
+            branch_outcome=branch_outcome,
+            detail=(
+                f"git worktree remove timed out at {GIT_TIMEOUT_SECONDS}s, retried "
+                f"once after waiting for the load to fall and timed out again; "
+                f"1-minute load {load_text}. Not a safety finding{restored}"
+            ),
         )
 
-    detail = "worktree removed; local branch deleted"
-    if decision.branch:
-        branch_code, _, branch_err = _git_capture(
-            canonical, "branch", "-D", decision.branch
+    if result.exit_code != 0:
+        stderr_text = (
+            result.stderr or result.stdout or "(git produced no stdout or stderr)"
         )
-        if branch_code != 0:
-            detail = (
-                f"worktree removed; branch delete failed: {branch_err or '(no stderr)'}"
-            )
+        restored = (
+            restore_branch(worktree, decision.branch, restorable_tip)
+            if decision.branch and restorable_tip
+            else ""
+        )
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=" ".join(argv),
+            exit_code=result.exit_code,
+            stderr=stderr_text,
+            branch_outcome=branch_outcome,
+            detail=f"git worktree remove refused (exit {result.exit_code}): {stderr_text}{restored}",
+        )
 
     return ModelRemovalAttempt(
         path=decision.path,
@@ -696,7 +1103,8 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
         command=" ".join(argv),
         exit_code=0,
         stderr="",
-        detail=detail,
+        branch_outcome=branch_outcome,
+        detail=f"worktree removed; {branch_outcome}",
     )
 
 
@@ -810,9 +1218,16 @@ def render_report(
     """Render the markdown report. Every worktree appears exactly once."""
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
     triage = [d for d in decisions if d.disposition is EnumPruneDisposition.TRIAGE]
+    timed_out = [
+        d for d in decisions if d.disposition is EnumPruneDisposition.TIMED_OUT
+    ]
 
+    # Every reason on every row, from both halves of the predicate — the
+    # previous revision counted only the reasons of the half that fired first,
+    # which undercounted detached_head 40-against-130 and dirty_tree
+    # 26-against-158 on the 2026-09-14 run [OMN-18370 AC-3].
     by_reason: dict[EnumPruneBlockReason, int] = defaultdict(int)
-    for decision in triage:
+    for decision in (*triage, *timed_out):
         for reason in decision.block_reasons:
             by_reason[reason] += 1
     # Only the TRIAGE subset belongs in the block-reason table — an
@@ -835,12 +1250,15 @@ def render_report(
         f"- **Scanned:** {len(decisions)}",
         f"- **Prune-eligible and safe:** {len(prunable)}",
         f"- **Triage (never deleted):** {len(triage)}",
+        f"- **Timed out (host load, not a safety finding):** {len(timed_out)}",
         f"- **Partial-mutation debris candidates:** {len(debris_decisions)}",
-        f"- **Ticket states resolved from tracker:** {tracker_resolved}",
+        f"- **Ticket states resolved from tracker (reported, not decisive):** "
+        f"{tracker_resolved}",
         "",
-        "Pruning is keyed to the **ticket closing**, not to a PR merging. A merged",
-        "PR is an input to the safety check; ticket completion is what fires",
-        "eligibility. See `omniclaude/src/omniclaude/hooks/lib/worktree_prune_policy.py`.",
+        "Pruning is keyed to **what the worktree holds**, not to its ticket's state",
+        "(operator ruling 2026-09-14). Removable when clean and zero commits ahead",
+        "with no open ledger `CLAIM`, or clean with a MERGED pull request and no open",
+        "`CLAIM`. See `omniclaude/src/omniclaude/hooks/lib/worktree_prune_policy.py`.",
         "",
         "## Triage block reasons",
         "",
@@ -856,15 +1274,43 @@ def render_report(
         "",
         f"## Prune candidates ({len(prunable)})",
         "",
-        "| Path | Ticket | Branch | Eligibility | Safety |",
-        "| --- | --- | --- | --- | --- |",
+        "| Path | Ticket | Branch | PR | Eligibility | Safety |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for decision in prunable:
         lines.append(
             f"| `{decision.path}` | {decision.ticket} | `{decision.branch}` "
-            f"| {decision.eligibility_evidence} | {decision.safety_evidence} |"
+            f"| {decision.pr_state.value} | {decision.eligibility_evidence} "
+            f"| {decision.safety_evidence} |"
         )
     if not prunable:
+        lines.append("| _(none)_ | | | | | |")
+
+    lines += [
+        "",
+        f"## Timed out ({len(timed_out)})",
+        "",
+        "A git probe exceeded its budget, so the facts were never collected. This",
+        "says nothing about the worktree — it is a host-load reading, and it is NOT",
+        "counted as a safety finding (OMN-18370 AC-4). Each row was retried once",
+        f"after waiting for the 1-minute load to fall to {LOAD_RETRY_THRESHOLD:.0f}.",
+        "",
+        "| Path | Ticket | Branch | Probes | 1-min load |",
+        "| --- | --- | --- | --- | ---: |",
+    ]
+    for decision in timed_out:
+        probes = ", ".join(f"`{p}`" for p in decision.timed_out_probes) or "—"
+        load = (
+            f"{decision.load_average:.2f}"
+            if decision.load_average is not None
+            else "unavailable"
+        )
+        branch = f"`{decision.branch}`" if decision.branch else "_(detached)_"
+        lines.append(
+            f"| `{decision.path}` | {decision.ticket or '—'} | {branch} "
+            f"| {probes} | {load} |"
+        )
+    if not timed_out:
         lines.append("| _(none)_ | | | | |")
 
     lines += [
@@ -874,8 +1320,8 @@ def render_report(
         "Never deleted. Each row carries what a human or the morning friction",
         "sweep needs to adjudicate it.",
         "",
-        "| Path | Ticket | Branch | Ahead | Dirty files | Block reasons | Ledger claim |",
-        "| --- | --- | --- | ---: | ---: | --- | --- |",
+        "| Path | Ticket | Branch | PR | Ahead | Dirty files | Block reasons | Ledger claim |",
+        "| --- | --- | --- | --- | ---: | ---: | --- | --- |",
     ]
     for decision in triage:
         reasons = ", ".join(f"`{r.value}`" for r in decision.block_reasons)
@@ -883,11 +1329,11 @@ def render_report(
         branch = f"`{decision.branch}`" if decision.branch else "_(detached)_"
         lines.append(
             f"| `{decision.path}` | {decision.ticket or '—'} | {branch} "
-            f"| {decision.commits_ahead} | {decision.dirty_file_count} | {reasons} "
-            f"| {claim} |"
+            f"| {decision.pr_state.value} | {decision.commits_ahead} "
+            f"| {decision.dirty_file_count} | {reasons} | {claim} |"
         )
     if not triage:
-        lines.append("| _(none)_ | | | | | | |")
+        lines.append("| _(none)_ | | | | | | | |")
 
     auto_removable_debris = sum(
         1
@@ -922,18 +1368,24 @@ def render_report(
             "",
             f"## Removals ({succeeded} succeeded)",
             "",
-            "| Path | Result | Command | Exit code | Stderr | Detail |",
-            "| --- | --- | --- | ---: | --- | --- |",
+            "| Path | Result | Command | Exit code | Stderr | Local branch | Detail |",
+            "| --- | --- | --- | ---: | --- | --- | --- |",
         ]
         for attempt in removals:
             stderr_cell = (
                 (attempt.stderr or "—").replace("|", "\\|").replace("\n", "<br>")
             )
             command_cell = attempt.command.replace("|", "\\|")
+            if attempt.ok:
+                verdict = "OK"
+            elif attempt.timed_out:
+                verdict = "TIMED OUT"
+            else:
+                verdict = "FAILED"
             lines.append(
-                f"| `{attempt.path}` | {'OK' if attempt.ok else 'FAILED'} "
+                f"| `{attempt.path}` | {verdict} "
                 f"| `{command_cell}` | {attempt.exit_code} | {stderr_cell} "
-                f"| {attempt.detail} |"
+                f"| {attempt.branch_outcome or '—'} | {attempt.detail} |"
             )
 
     lines.append("")
@@ -963,9 +1415,11 @@ def debris_decision_to_json(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Ticket-close-keyed worktree pruner. Dry-run by default; --execute "
-            "to remove. Eligibility fires on ticket closure, safety gates on "
-            "local git state, everything else is reported for triage."
+            "Content-keyed worktree pruner (operator ruling 2026-09-14). Dry-run "
+            "by default; --execute to remove. A worktree is removable when it is "
+            "clean and zero commits ahead with no open ledger CLAIM, or clean "
+            "with a MERGED pull request and no open CLAIM. The ticket's own "
+            "state is reported but decides nothing. Everything else is triaged."
         )
     )
     parser.add_argument(
@@ -995,7 +1449,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-tracker",
         action="store_true",
-        help="Skip Linear resolution; every ticket state is UNKNOWN (fails closed)",
+        help=(
+            "Skip Linear resolution. Ticket state is reported context only, so "
+            "this costs the report a column and changes no verdict."
+        ),
+    )
+    parser.add_argument(
+        "--no-pr-state",
+        action="store_true",
+        help=(
+            "Skip `gh pr list` resolution. Limb (b) of the ruling (clean plus a "
+            "MERGED pull request) becomes unavailable and every row falls back "
+            "to limb (a): fewer removals, never more."
+        ),
     )
     parser.add_argument(
         "--no-fetch",
@@ -1046,6 +1512,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     base_ref_cache: dict[Path, str | None] = {}
     stash_cache: dict[Path, list[str]] = {}
+    pr_state_cache: (
+        dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]] | None
+    ) = None if args.no_pr_state else {}
 
     if not args.no_fetch:
         canonicals = {
@@ -1084,7 +1553,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         decisions.append(
             classify_worktree_prune(
                 collect_facts(
-                    worktree, root, ticket_states, ledger, base_ref_cache, stash_cache
+                    worktree,
+                    root,
+                    ticket_states,
+                    ledger,
+                    base_ref_cache,
+                    stash_cache,
+                    pr_state_cache,
                 )
             )
         )
@@ -1093,6 +1568,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
     triage = [d for d in decisions if d.disposition is EnumPruneDisposition.TRIAGE]
+    timed_out = [
+        d for d in decisions if d.disposition is EnumPruneDisposition.TIMED_OUT
+    ]
 
     # Partial-mutation debris [OMN-16951 defect 2]: directories whose `.git`
     # link is already gone are invisible to `discover_worktrees` (it keys off
@@ -1126,7 +1604,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         for decision in prunable:
             attempt = prune_worktree(decision)
             removals.append(attempt)
-            status = "REMOVED" if attempt.ok else "FAILED "
+            if attempt.ok:
+                status = "REMOVED"
+            elif attempt.timed_out:
+                status = "TIMEOUT"
+            else:
+                status = "FAILED "
             print(f"  {status} {attempt.path} — {attempt.detail}")
         for debris_decision in debris_decisions:
             if debris_decision.remediation is not EnumDebrisRemediation.AUTO_REMOVABLE:
@@ -1170,6 +1653,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "scanned": len(decisions),
                     "prune_count": len(prunable),
                     "triage_count": len(triage),
+                    "timed_out_count": len(timed_out),
                     "decisions": [decision_to_json(d) for d in decisions],
                     "debris_count": len(debris_decisions),
                     "debris_decisions": [
@@ -1185,7 +1669,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(
         f"\nscanned={len(decisions)} safe={len(prunable)} triage={len(triage)} "
-        f"debris={len(debris_decisions)} removed={sum(1 for r in removals if r.ok)}"
+        f"timed_out={len(timed_out)} debris={len(debris_decisions)} "
+        f"removed={sum(1 for r in removals if r.ok)}"
     )
     if not args.execute and prunable:
         print("Dry run — re-run with --execute to remove the prune candidates.")

@@ -20,7 +20,7 @@ args:
     description: "GC merged worktrees by wrapping prune-worktrees.sh (remove stale/merged branches)"
     required: false
   - name: --auto-prune
-    description: "Ticket-close-keyed prune: remove worktrees whose TICKET closed and whose tree is provably safe, triage-report everything else (wraps scripts/worktree_auto_prune.py)"
+    description: "Content-keyed prune: remove worktrees that hold no work (clean and zero-ahead, or clean with a MERGED PR) and carry no open ledger CLAIM, triage-report everything else (wraps scripts/worktree_auto_prune.py)"
     required: false
   - name: --cron
     description: "Schedule recurring execution via CronCreate (e.g., '7d', '2h'). Applies to whichever mode flag is also passed."
@@ -63,16 +63,17 @@ lifecycle garbage collection into a single entry point with four mode flags and 
 | `--audit` | `worktree_sweep` | Health audit: SAFE_TO_DELETE, LOST_WORK, STALE, ACTIVE, DIRTY_ACTIVE |
 | `--triage` | `worktree_triage` | Classify ship_it/archive/prune, auto-PR ship_it, remove prune targets |
 | `--prune` | `worktree_lifecycle` | GC merged worktrees via prune-worktrees.sh |
-| `--auto-prune` | (new) | Ticket-close-keyed prune via worktree_auto_prune.py |
+| `--auto-prune` | (new) | Content-keyed, claim-aware prune via worktree_auto_prune.py |
 | `--cron` | (shared) | Schedule recurring execution of whichever mode is active |
 
 Exactly one of `--audit`, `--triage`, `--prune`, or `--auto-prune` must be specified per
 invocation. `--cron` is an additive modifier that schedules the chosen mode.
 
 `--prune` and `--auto-prune` key on **different things and disagree on purpose**: `--prune` is
-merge-keyed (a PR merged, or the remote branch vanished), `--auto-prune` is ticket-keyed (the
-owning ticket closed). See [Mode: --auto-prune](#mode---auto-prune-ticket-close-keyed) for why
-the merge-keyed predicate alone is unsafe.
+merge-keyed (a PR merged, or the remote branch vanished) and claim-blind, `--auto-prune` is
+content-keyed and claim-aware (what the tree holds, plus no open ledger `CLAIM`). See
+[Mode: --auto-prune](#mode---auto-prune-content-keyed) for why the merge-keyed predicate alone
+is unsafe.
 
 **Announce at start:** "I'm using the worktree skill to [audit/triage/prune/auto-prune] worktrees."
 
@@ -431,30 +432,32 @@ Active: N   Stale: N   Removed: N
 
 ---
 
-## Mode: --auto-prune (ticket-close keyed)
+## Mode: --auto-prune (content-keyed)
 
-Removes worktrees whose **ticket has closed** and whose tree is provably safe, and emits a
-triage row for every worktree that is not prunable. Wraps `scripts/worktree_auto_prune.py`
+Removes worktrees that **hold no work** and carry no open ledger `CLAIM`, and emits a triage
+row for every worktree that is not prunable. Wraps `scripts/worktree_auto_prune.py`
 (no reimplementation), whose predicate lives as a pure function in
 `src/omniclaude/hooks/lib/worktree_prune_policy.py`.
 
-**Why this exists next to `--prune`.** `--prune` keys on a PR merging. That predicate is
-anti-correlated with liveness: clean + pushed + merged is exactly the state a
+**Why this exists next to `--prune`.** `--prune` keys on a PR merging and is claim-blind. That
+predicate is anti-correlated with liveness: clean + pushed + merged is exactly the state a
 live lane occupies between push and post-merge verification, and a measured dry run over 192
-worktrees found its only two deletions were both live-claimed. Pruning is keyed to the
-**ticket closing** instead — a ticket spans multiple PRs and OCC companions and worktrees are
-keyed by ticket directory, so a merged PR is an *input to the safety check* (it is what makes
-the tree-diff against `dev` empty) while ticket completion is what *fires* eligibility.
+worktrees found its only two deletions were both live-claimed. `--auto-prune` keeps the
+claim-awareness and drops the ticket-state condition, per the operator ruling of 2026-09-14
+(`docs/tracking/ROLLING_WORK_LEDGER.md` line 7870): an empty or fully-merged worktree carries
+no work regardless of what its ticket says.
 
-Two parts, evaluated in order — eligibility fires, safety gates:
+Two parts, both always evaluated so the block-reason table counts every reason:
 
-1. **Eligibility** — the ticket directory resolves to a ticket in `Done`/`Canceled`, or (only
-   when that state is unresolvable) the work ledger shows a `TERMINAL` row with no newer open
-   `CLAIM`. An open / In Progress ticket is **never** eligible, however clean the tree.
-2. **Safety** — clean tree, nothing unmerged ahead of `origin/dev` (a squash-merged branch
-   with an empty tree-diff counts as merged), no stash attributable to the branch.
+1. **Eligibility** — no live lane owns the worktree: the path carries an identifiable ticket
+   (claims are ticket-keyed) and that ticket has no `CLAIM` newer than its newest `TERMINAL`.
+   The ticket's own state is reported and decides nothing.
+2. **Safety** — clean tree, no stash attributable to the branch, and either limb of the
+   ruling: zero commits ahead of `origin/dev`, or a MERGED pull request carrying this exact
+   HEAD. A commit made after that merge is unmerged work and is protected.
 
-Everything else is a triage row — never a deletion.
+Everything else is a triage row — never a deletion. A row whose git probes timed out is its
+own `timed_out` disposition carrying the host load reading, never a safety finding.
 
 ### Step 1: Run worktree_auto_prune.py <!-- ai-slop-ok: skill-step-heading -->
 
