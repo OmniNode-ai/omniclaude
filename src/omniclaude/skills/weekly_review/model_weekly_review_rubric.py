@@ -27,6 +27,10 @@ the review with their evidence.
 from __future__ import annotations
 
 import math
+import os
+import re
+from collections.abc import Mapping
+from pathlib import Path
 from typing import Final
 
 from omnibase_core.enums.enum_overlay_scope import EnumOverlayScope
@@ -41,6 +45,10 @@ __all__ = [
     "ModelScoreBand",
     "ModelWeeklyReviewRubric",
 ]
+
+#: A ``${VAR}`` reference inside a path an overlay declared. Expanded from the
+#: reviewing environment, and refused when the variable is unset.
+_ENV_REFERENCE: Final[re.Pattern[str]] = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 #: Every criterion carries an anchor text for each of these scores, no more and
 #: no fewer. The range is part of the contract, not a convention.
@@ -129,6 +137,13 @@ class ModelReviewCriterion(BaseModel):
                     "measure; bands without a measure imply a number the "
                     "reviewer does not have"
                 )
+            if self.promotion_to_five is not None:
+                raise ValueError(
+                    f"criterion '{self.criterion_id}' declares promotion_to_five "
+                    "but no measure; a promotion is a step off the top band, so "
+                    "on a judgement criterion it can never be applied and the "
+                    "fifth anchor already carries that condition"
+                )
             return self
         if not self.bands:
             raise ValueError(
@@ -173,13 +188,24 @@ class ModelReviewCriterion(BaseModel):
                 f"{cursor} unscored; the highest band must be open-ended"
             )
 
-    def base_score(self, value: float) -> int:
-        """The band score for a measured ``value``.
+    def base_score(self, value: float, *, sample_size: int) -> int:
+        """The band score for a measured ``value``, computed over ``sample_size``.
 
         This is the whole of the computation the skill performs. It is a base
         score: a promotion to 5, a cap, or a stated override is the reviewer's
         judgement and is recorded in the review, never derived here.
+
+        The sample size is required rather than optional because a band score
+        detached from its sample reads identically whether it came from six
+        observations or six hundred, and the two do not support the same claim.
+        Passing it here is what makes it available to state beside the score.
         """
+        if sample_size < 1:
+            raise ValueError(
+                f"criterion '{self.criterion_id}': sample_size must be at least "
+                f"1, got {sample_size}; a measure computed over nothing is "
+                "reported as not measured, never as a band score"
+            )
         if self.measure is None:
             raise ValueError(
                 f"criterion '{self.criterion_id}' is a judgement criterion and "
@@ -236,6 +262,12 @@ class ModelIdentitySource(BaseModel):
     ``resolve_command`` and ``positive_control`` are command *shapes* the
     reviewer runs. They are declared rather than built in so that the skill
     carries no knowledge of any particular code host, tracker or chat product.
+
+    ``match_field`` names the field on a returned row that carries the surface's
+    exact identifier. It is required because "exactly one match" is otherwise
+    not a checkable statement: a resolve command that searches returns near
+    matches for an unambiguous handle, and a reviewer who then picks the
+    likeliest row has guessed at the step that exists to forbid guessing.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -243,6 +275,7 @@ class ModelIdentitySource(BaseModel):
     source_id: str = Field(min_length=1)
     resolve_command: str = Field(min_length=1)
     positive_control: str = Field(min_length=1)
+    match_field: str = Field(min_length=1)
     required: bool = True
 
 
@@ -338,6 +371,99 @@ class ModelWeeklyReviewRubric(BaseModel):
                     f"role '{role.role_id}' references undeclared criteria: {unknown}"
                 )
         return self
+
+    def _resolve_declared_path(
+        self, value: str, *, field: str, environ: Mapping[str, str] | None
+    ) -> Path:
+        """Resolve one path an overlay declared, or refuse to guess at it.
+
+        A declared path is anchored in exactly one of two ways: it is absolute,
+        or it carries ``${VAR}`` references that the reviewing environment
+        supplies. Anything else is refused. It is never resolved against the
+        working directory, which is wherever the reviewer happened to start the
+        run, and never against a default, which would put a personnel document
+        in a plausible-looking wrong place with no error.
+
+        Per-path variables rather than one root for the whole rubric, because
+        the two kinds of path do not live together: reviews are written to a
+        private directory on the reviewing machine, while the role standards
+        they are scored against live in the repository the rubric came from.
+        """
+        env = os.environ if environ is None else environ
+        missing: list[str] = []
+
+        def _substitute(match: re.Match[str]) -> str:
+            name = match.group(1)
+            supplied = env.get(name, "").strip()
+            if not supplied:
+                missing.append(name)
+                return ""
+            return supplied
+
+        expanded = _ENV_REFERENCE.sub(_substitute, value)
+        if missing:
+            raise ValueError(
+                f"{field} '{value}' references "
+                f"{', '.join(sorted(set(missing)))}, which is unset or empty in "
+                "this environment"
+            )
+        candidate = Path(expanded).expanduser()
+        if not candidate.is_absolute():
+            raise ValueError(
+                f"{field} '{value}' is relative and names no environment "
+                "variable to anchor it. Declare it absolute, or prefix it with "
+                "a ${VAR} reference the reviewing environment supplies; "
+                "resolving against the working directory would write a "
+                "personnel document wherever the run happened to start"
+            )
+        return candidate
+
+    def resolve_output_directory(
+        self, *, environ: Mapping[str, str] | None = None
+    ) -> Path:
+        """Where this run's output files are written, as a resolved path."""
+        if self.output_directory is None:
+            raise ValueError(
+                "this rubric declares no output_directory; an overlay supplies "
+                "it and assert_resolved refuses a rubric without one"
+            )
+        return self._resolve_declared_path(
+            self.output_directory, field="output_directory", environ=environ
+        )
+
+    def resolve_output_paths(
+        self, *, person: str, date: str, environ: Mapping[str, str] | None = None
+    ) -> tuple[Path, ...]:
+        """The exact file each declared output kind would be written to.
+
+        Pure compute: it resolves the directory and substitutes the two tokens,
+        and touches no filesystem. The point of having it is that the reviewer
+        can see every target before writing any of them, and check whether one
+        already holds the previous review. Overwriting that file destroys the
+        baseline the trend step reads against.
+        """
+        directory = self.resolve_output_directory(environ=environ)
+        return tuple(
+            directory
+            / kind.filename_template.replace("{person}", person).replace("{date}", date)
+            for kind in self.output_files
+        )
+
+    def resolve_rubric_document(
+        self, role_id: str, *, environ: Mapping[str, str] | None = None
+    ) -> Path:
+        """Where a role's human-readable standard lives, as a resolved path.
+
+        The role document is authoritative wherever it and the overlay
+        transcription disagree, so a pointer the reviewer cannot open is not a
+        cosmetic gap: it is the whole of the mitigation for a transcription that
+        carries less than the standard does.
+        """
+        return self._resolve_declared_path(
+            self.role(role_id).rubric_document,
+            field=f"rubric_document for role '{role_id}'",
+            environ=environ,
+        )
 
     def criterion(self, criterion_id: str) -> ModelReviewCriterion:
         """The criterion with this id, searching role-specific criteria too."""

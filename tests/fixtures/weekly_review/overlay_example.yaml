@@ -11,7 +11,11 @@
 rubric_version: "1.0.0-example"
 scope: project
 
-output_directory: "./example-reviews"
+# Anchored on a variable the reviewing environment supplies, not on the
+# working directory. The role documents below anchor on a different one:
+# reviews are written to a private directory on the reviewing machine, and
+# the role standards live wherever this rubric came from.
+output_directory: "${EXAMPLE_REVIEW_ROOT}/example-reviews"
 
 criteria:
   - criterion_id: deadlines
@@ -88,11 +92,11 @@ criteria:
 
 roles:
   - role_id: example-individual
-    rubric_document: docs/example-rubric/individual.md
+    rubric_document: ${EXAMPLE_RUBRIC_ROOT}/docs/example-rubric/individual.md
     criteria: [deadlines, decision_latency, ticket_flow, corrections]
 
   - role_id: example-shared-account
-    rubric_document: docs/example-rubric/shared-account.md
+    rubric_document: ${EXAMPLE_RUBRIC_ROOT}/docs/example-rubric/shared-account.md
     criteria: [deadlines, ticket_flow, corrections]
     extra_criteria:
       - criterion_id: attribution_compensation
@@ -111,14 +115,17 @@ identity_sources:
   - source_id: example-code-host
     resolve_command: "example-cli users show --handle {person} --format id"
     positive_control: "example-cli users show --handle known-busy-handle --format id"
+    match_field: handle
     required: true
   - source_id: example-tracker
     resolve_command: "example-tracker users find --name {person}"
     positive_control: "example-tracker users find --name known-busy-name"
+    match_field: uuid
     required: true
   - source_id: example-chat
     resolve_command: "example-chat users search {person}"
     positive_control: "example-chat users search known-busy-name"
+    match_field: member_id
     required: false
 
 output_files:

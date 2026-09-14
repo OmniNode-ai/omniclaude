@@ -30,6 +30,7 @@ import yaml
 
 from omniclaude.skills.weekly_review import (
     OVERLAY_PATH_ENV_VAR,
+    ModelIdentitySource,
     ModelReviewCriterion,
     ModelScoreBand,
     ModelWeeklyReviewRubric,
@@ -313,7 +314,7 @@ def test_a_judgement_criterion_cannot_be_scored_by_number(
     example_rubric: ModelWeeklyReviewRubric,
 ) -> None:
     with pytest.raises(ValueError, match="judgement criterion"):
-        example_rubric.criterion("deadlines").base_score(1.0)
+        example_rubric.criterion("deadlines").base_score(1.0, sample_size=3)
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +335,12 @@ def test_fixture_window_scores_to_the_declared_anchors(
     }
     for measure_name, entry in measures.items():
         criterion = by_measure[measure_name]
-        assert criterion.base_score(entry["value"]) == entry["expected_base_score"], (
+        assert "sample_size" in entry, (
+            f"{measure_name} declares no sample_size; a countable measure is "
+            "reported with the sample it was computed over"
+        )
+        scored = criterion.base_score(entry["value"], sample_size=entry["sample_size"])
+        assert scored == entry["expected_base_score"], (
             f"{measure_name}={entry['value']} did not land on the anchor the "
             f"rubric declares"
         )
@@ -357,13 +363,14 @@ def test_every_band_boundary_moves_the_score(
             continue
         criterion = by_measure[measure_name]
         for case in cases:
-            assert criterion.base_score(case["value"]) == case["expected_base_score"], (
-                f"{measure_name}={case['value']} scored wrongly"
-            )
+            assert (
+                criterion.base_score(case["value"], sample_size=1)
+                == case["expected_base_score"]
+            ), f"{measure_name}={case['value']} scored wrongly"
         for below, above in zip(cases[::2], cases[1::2], strict=True):
-            assert criterion.base_score(below["value"]) != criterion.base_score(
-                above["value"]
-            ), (
+            assert criterion.base_score(
+                below["value"], sample_size=1
+            ) != criterion.base_score(above["value"], sample_size=1), (
                 f"{measure_name}: values {below['value']} and {above['value']} "
                 "straddle a declared band boundary but scored the same"
             )
@@ -432,3 +439,246 @@ def test_top_band_score_is_refused_on_a_judgement_criterion(
     judgement = next(c for c in example_rubric.criteria if c.measure is None)
     with pytest.raises(ValueError, match="judgement criterion"):
         _ = judgement.top_band_score
+
+
+# ---------------------------------------------------------------------------
+# Relative paths declared by an overlay are anchored, never guessed
+#
+# Second live trial, OMN-18367. The overlay under trial declared
+# `output_directory: docs/reviews/people` and role documents like
+# `guides/weekly-review-rubric/founder-operator.md`, both relative, and
+# explained the intended root only in a YAML comment no machine reads. Run from
+# the skill's own checkout the review files land in the wrong repository and
+# nothing refuses them. A relative path here resolves against a root the rubric
+# names, or the run stops.
+# ---------------------------------------------------------------------------
+
+
+def _rubric_with_output_directory(directory: str) -> ModelWeeklyReviewRubric:
+    payload: dict[str, Any] = yaml.safe_load(
+        OVERLAY_FIXTURE.read_text(encoding="utf-8")
+    )
+    payload["output_directory"] = directory
+    base = yaml.safe_load(default_base_path().read_text(encoding="utf-8"))
+    return ModelWeeklyReviewRubric.model_validate(
+        deep_merge_weekly_review_rubric(base, payload)
+    )
+
+
+@pytest.mark.unit
+def test_absolute_output_directory_resolves_unchanged() -> None:
+    rubric = _rubric_with_output_directory("/srv/reviews/people")
+    assert rubric.resolve_output_directory(environ={}) == Path("/srv/reviews/people")
+
+
+@pytest.mark.unit
+def test_a_bare_relative_output_directory_is_refused() -> None:
+    rubric = _rubric_with_output_directory("docs/reviews/people")
+    with pytest.raises(ValueError) as excinfo:
+        rubric.resolve_output_directory(environ={"OMNI_HOME": "/somewhere"})
+    message = str(excinfo.value)
+    assert "output_directory" in message
+    assert "docs/reviews/people" in message
+
+
+@pytest.mark.unit
+def test_an_unset_variable_in_a_declared_path_is_refused() -> None:
+    rubric = _rubric_with_output_directory("${REVIEW_ROOT}/docs/reviews/people")
+    with pytest.raises(ValueError) as excinfo:
+        rubric.resolve_output_directory(environ={})
+    assert "REVIEW_ROOT" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_a_declared_path_expands_its_variable() -> None:
+    rubric = _rubric_with_output_directory("${REVIEW_ROOT}/docs/reviews/people")
+    resolved = rubric.resolve_output_directory(
+        environ={"REVIEW_ROOT": "/srv/reviews-root"}
+    )
+    assert resolved == Path("/srv/reviews-root/docs/reviews/people")
+
+
+@pytest.mark.unit
+def test_two_declared_paths_may_anchor_on_different_roots(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    """The output and the role standard do not live in the same place.
+
+    The trial's own rubric wrote reviews into one repository and kept the role
+    documents in another. A single root for the whole rubric resolves one of
+    the two to a path that does not exist, and does it silently.
+    """
+    role_id = example_rubric.roles[0].role_id
+    environ = {
+        "EXAMPLE_REVIEW_ROOT": "/srv/reviews-root",
+        "EXAMPLE_RUBRIC_ROOT": "/srv/rubric-root",
+    }
+    assert str(example_rubric.resolve_output_directory(environ=environ)).startswith(
+        "/srv/reviews-root/"
+    )
+    assert str(
+        example_rubric.resolve_rubric_document(role_id, environ=environ)
+    ).startswith("/srv/rubric-root/")
+
+
+@pytest.mark.unit
+def test_a_relative_rubric_document_is_refused(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    role_id = example_rubric.roles[0].role_id
+    with pytest.raises(ValueError) as excinfo:
+        example_rubric.resolve_rubric_document(role_id, environ={})
+    assert "EXAMPLE_RUBRIC_ROOT" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# One match means one exact match on a named field
+#
+# The trial's code-host resolve_command was a substring search: it returned
+# three rows for an unambiguous handle, and step 1 read literally stops the run
+# on more than one row. The source declares which field carries the exact
+# identifier so "exactly one match" is a checkable statement.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_every_identity_source_declares_its_match_field(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    for source in example_rubric.identity_sources:
+        assert source.match_field.strip(), (
+            f"identity source '{source.source_id}' declares no match_field; "
+            "'exactly one match' is not checkable without the field that carries "
+            "the exact identifier"
+        )
+
+
+@pytest.mark.unit
+def test_an_identity_source_without_a_match_field_is_refused() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ModelIdentitySource.model_validate(
+            {
+                "source_id": "example",
+                "resolve_command": "example users search {person}",
+                "positive_control": "example users search known-busy",
+            }
+        )
+
+
+@pytest.mark.unit
+def test_skill_md_says_one_match_is_one_exact_match_on_the_declared_field() -> None:
+    text = _skill_md()
+    assert "match_field" in text, (
+        "SKILL.md step 1 must say that the single match is an exact match on the "
+        "source's declared match_field, not one row returned by a search"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A promotion clause needs bands to be promoted from
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_a_promotion_on_a_judgement_criterion_is_refused() -> None:
+    with pytest.raises(ValueError) as excinfo:
+        ModelReviewCriterion(
+            criterion_id="judged",
+            title="Judged",
+            what_to_read="read the anchors",
+            anchors={1: "a", 2: "b", 3: "c", 4: "d", 5: "e"},
+            promotion_to_five="some named condition",
+        )
+    message = str(excinfo.value)
+    assert "promotion_to_five" in message
+    assert "judged" in message
+
+
+# ---------------------------------------------------------------------------
+# A band score is never detached from the sample it was computed on
+#
+# The trial produced a ticket-flow ratio of 0.0 from six created tickets and a
+# decision-share of 0.093 from eighty-six classified rows. Both land in a band;
+# only one of them can carry a score. The sample size travels with the value.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_base_score_requires_the_sample_size(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    criterion = example_rubric.criterion("decision_latency")
+    with pytest.raises(TypeError):
+        criterion.base_score(3.0)  # type: ignore[call-arg]
+
+
+@pytest.mark.unit
+def test_base_score_refuses_an_empty_sample(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    criterion = example_rubric.criterion("decision_latency")
+    with pytest.raises(ValueError) as excinfo:
+        criterion.base_score(3.0, sample_size=0)
+    assert "sample_size" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_skill_md_requires_the_sample_size_beside_every_countable_score() -> None:
+    text = _skill_md()
+    assert "sample_size" in text, (
+        "SKILL.md step 4 must require the sample size to be stated with every "
+        "countable score"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A review run never writes over the previous review
+#
+# Second live trial, OMN-18367. Step 6 read literally produced the exact
+# filename an earlier hand-written review already occupied, and writing it
+# destroyed that file. The prior review is what step 5 reads the trend against,
+# so clobbering it removes the baseline the next run needs.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_output_paths_substitute_both_tokens(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    paths = example_rubric.resolve_output_paths(
+        person="example-handle",
+        date="2026-01-12",
+        environ={"EXAMPLE_REVIEW_ROOT": "/srv/reviews-root"},
+    )
+    assert len(paths) == len(example_rubric.output_files)
+    for path in paths:
+        assert path.is_absolute()
+        assert "{person}" not in str(path)
+        assert "{date}" not in str(path)
+        assert "example-handle" in str(path)
+        assert "2026-01-12" in str(path)
+
+
+@pytest.mark.unit
+def test_output_paths_are_refused_without_a_resolved_directory(
+    example_rubric: ModelWeeklyReviewRubric,
+) -> None:
+    with pytest.raises(ValueError) as excinfo:
+        example_rubric.resolve_output_paths(
+            person="example-handle", date="2026-01-12", environ={}
+        )
+    assert "EXAMPLE_REVIEW_ROOT" in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_skill_md_refuses_to_overwrite_an_existing_review() -> None:
+    text = _skill_md()
+    assert "resolve_output_paths" in text, (
+        "SKILL.md step 6 must name the call that produces the target paths"
+    )
+    assert "already exists" in text, (
+        "SKILL.md step 6 must stop the run when a target file already exists; "
+        "the prior review is the baseline step 5 reads the trend against"
+    )

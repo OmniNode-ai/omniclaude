@@ -74,14 +74,22 @@ r = L(); print(r.rubric_version, [x.role_id for x in r.roles])"
 Then resolve `--role` against the overlay's declared roles. An unknown role stops the run and the
 message lists the roles the overlay actually declares. Read the role's `rubric_document` before
 scoring: it is the human-readable standard, and it is authoritative wherever it and the overlay
-transcription disagree.
+transcription disagree. Resolve that pointer with `rubric.resolve_rubric_document(role_id)` and
+open it. A transcription carries less than the standard it transcribes, and this document is the
+whole of the mitigation for that, so a pointer you cannot open is a stop, not a note.
 
 ## Step 1 — resolve every identity, exactly one match each
 
 For every `identity_source` the overlay declares, run its `resolve_command` for `--person` and
 record what identifies the person on that surface and how it resolved.
 
-- Zero matches, or more than one: **stop and say so**. Never guess, never pick the likeliest.
+**One match means one exact match on the source's declared `match_field`, not one row returned.**
+A resolve command that searches returns near matches for an unambiguous handle: three logins
+sharing a prefix is not an ambiguous identity, and stopping there is a false stop. Narrow the rows
+to those whose `match_field` equals `--person` exactly, then apply the rule below. Record both
+numbers: how many rows came back, and the one that matched exactly.
+
+- Zero exact matches, or more than one: **stop and say so**. Never guess, never pick the likeliest.
 - A source marked `required: false` that returns nothing is recorded as absent, not as zero
   activity.
 
@@ -120,9 +128,15 @@ lowest score. An uncollected measure is a gap in the review, not a finding about
 
 For a criterion with no `measure`, read the five anchor texts and pick the one the evidence meets.
 
-For a countable criterion, call `criterion.base_score(value)`. The bands are exhaustive and
-non-overlapping, so the value lands in exactly one and two reviewers get the same base score from
-the same number.
+For a countable criterion, call `criterion.base_score(value, sample_size=n)`. The bands are
+exhaustive and non-overlapping, so the value lands in exactly one and two reviewers get the same
+base score from the same number.
+
+**The sample size is a required argument and it is written beside the score.** A ratio of 0.0 from
+six observations and a share of 0.09 from eighty-six both land in a band, and only one of them can
+carry a score. Where the sample is too thin to support the band it lands in, report the criterion
+as **not measured at this sample size**, give the raw numbers, and say so — that is a gap in the
+review, not a finding about the person.
 
 Then, and only with named evidence:
 
@@ -162,6 +176,22 @@ name two things that would change the reading inside one more window. Both must 
 
 Write one file per `output_files` entry, into the overlay's `output_directory`, using its
 `filename_template` with the window end date and the person's identifier.
+
+**Check every target before writing any of them.** Call
+`rubric.resolve_output_paths(person=..., date=...)` first and look at each path. Stop the run if a
+target file already exists, and say which one: that file is the previous review, it is what step 5 reads the trend
+against, and a run that writes over it destroys the baseline the next run needs. Re-running a window
+deliberately is a decision for the reviewer to make with the old file in hand, never something a
+write does silently.
+
+**Resolve the output directory before writing anything, and never against the working directory.**
+Every path an overlay declares is anchored one of two ways: absolute, or carrying `${VAR}`
+references the reviewing environment supplies. Call `rubric.resolve_output_directory()`; it refuses
+a bare relative path and an unset variable by name, because resolving against wherever the run
+happened to start would put a personnel document in a plausible-looking wrong place with no error.
+The same rule and the same refusal apply to a role's `rubric_document`, via
+`rubric.resolve_rubric_document(role_id)` — and the two anchor on different variables, because the
+reviews and the role standards they are scored against do not live in the same place.
 
 Each entry declares its `voice`, what it `may_contain` and what it `must_not_contain`. The
 must-not-contain list is the half that matters: it is what keeps a score out of a file meant for the

@@ -17,7 +17,8 @@
 #
 #   roles:
 #     - role_id: <identifier used as the --role argument>
-#       rubric_document: <pointer to the human-readable rubric for this role>
+#       rubric_document: <pointer to this role's human-readable rubric;
+#                         absolute, or ${VAR}-anchored, same rule as above>
 #       criteria: [<criterion_id>, ...]        # from the shared criteria list
 #       extra_criteria: [<full criterion>]     # role-specific, same shape below
 #
@@ -31,16 +32,17 @@
 #         - {score: 1, max_exclusive: <x>}
 #         - {score: 2, min_inclusive: <x>, max_exclusive: <y>}
 #         - {score: 3, min_inclusive: <y>}
-#       promotion_to_five: <the named condition that promotes a 4 to a 5>
+#       promotion_to_five: <named condition promoting the top band to 5; countable only>
 #       caps: [<condition that overrides the band downward>]
 #
 #   identity_sources:
 #     - source_id: <surface name>
 #       resolve_command: <command shape that resolves the handle on that surface>
 #       positive_control: <same shape against an identity known to return rows>
+#       match_field: <field on a returned row carrying that surface's exact id>
 #       required: true
 #
-#   output_directory: <where the three files are written, on the reviewer's machine>
+#   output_directory: <where the files are written; absolute, or ${VAR}-anchored>
 #
 #   output_files:
 #     - kind: <file kind>
