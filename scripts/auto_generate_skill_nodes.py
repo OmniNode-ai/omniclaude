@@ -10,6 +10,14 @@ orchestrator node under ``src/omniclaude/nodes/`` and runs
 This prevents the recurring friction of skills being committed without
 their ONEX orchestrator node (F57 — fourth occurrence as of OMN-6815).
 
+A skill declaring ``skill_kind: methodology`` is skipped (OMN-18368). A
+methodology skill is prose: it describes a method over a workflow that already
+exists and nothing dispatches a start command to it. Scaffolding a shell
+orchestrator for one produces a node with no ``handle()`` that nothing calls --
+the green-by-parts, dead-in-fact shape, and the canonical handler-shape ratchet
+rejects it on sight because a new node must be born canonical. Skills that
+already carry such a shell keep it; this hook only ever adds.
+
 Usage (pre-commit hook):
     python scripts/auto_generate_skill_nodes.py
 
@@ -20,6 +28,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -37,6 +46,24 @@ def _kebab_to_snake(kebab: str) -> str:
     return kebab.replace("-", "_")
 
 
+_METHODOLOGY_RE = re.compile(r"^skill_kind:\s*methodology\s*$", re.MULTILINE)
+
+
+def _is_methodology(skill_md: Path) -> bool:
+    """True when the skill classifies itself as prose rather than dispatch.
+
+    Read from the frontmatter only, so the phrase appearing in a skill's body
+    prose cannot suppress generation for a skill that does need a node.
+    """
+    text = skill_md.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return False
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return False
+    return _METHODOLOGY_RE.search(text[4:end]) is not None
+
+
 def find_skills_missing_nodes() -> list[str]:
     """Return kebab-case names of skills that have SKILL.md but no orchestrator node."""
     if not _SKILLS_DIR.exists():
@@ -47,6 +74,8 @@ def find_skills_missing_nodes() -> list[str]:
         if not skill_dir.is_dir() or skill_dir.name.startswith("_"):
             continue
         if not (skill_dir / "SKILL.md").exists():
+            continue
+        if _is_methodology(skill_dir / "SKILL.md"):
             continue
 
         snake = _kebab_to_snake(skill_dir.name)
