@@ -2071,8 +2071,37 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           # Run all tests split into groups. Exit code 5 = no tests collected.
+          #
+          # OMN-18357: three files under tests/scripts/ are IGNORED here because
+          # this job cannot provide what they need, not because they are
+          # optional. branch-claim-gate.yml already records that "the
+          # consolidated test job does not collect tests/scripts/ at all" -- that
+          # was measured on the SELECTIVE path, and the full-suite path collects
+          # the directory anyway. So the first shared-module change after those
+          # files landed red Tests Gate on a diff that touched none of them, and
+          # would do so for every shared-module change after it. Measured:
+          # omniclaude#2144, #2145 and #2148 all took the 2-split selective path
+          # and never exercised the directory, which is why it stayed latent.
+          #
+          # test_branch_claim.py and test_branch_claim_hook.py drive a real
+          # `git push` through the installed pre-push hook and need a git
+          # identity, a default branch name and OMNI_HOME. branch-claim-gate.yml
+          # supplies all three and is their CI home; they lose nothing here.
+          #
+          # test_install_hook_emit_drainer.py drives the real launchd installer
+          # and needs brew python3.13 at the rule-11 path plus launchctl. No
+          # runner in this fleet has both, so it has NO CI home and this ignore
+          # does not take one away -- it only stops a guaranteed red from
+          # standing in for coverage. That gap belongs to OMN-17284 and is
+          # recorded on OMN-18357 rather than left to be rediscovered.
+          #
+          # tests/test_ci_full_suite_ignores.py holds this list to exactly those
+          # three, each with a named reason, so it cannot quietly grow.
           set +e
           uv run pytest -o addopts="" tests/ \
+            --ignore=tests/scripts/test_branch_claim.py \
+            --ignore=tests/scripts/test_branch_claim_hook.py \
+            --ignore=tests/scripts/test_install_hook_emit_drainer.py \
             --splits ${{ needs.detect-changes.outputs.split_count }} \
             --group ${{ matrix.split }} \
             -v -m "not integration" \

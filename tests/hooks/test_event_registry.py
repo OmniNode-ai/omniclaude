@@ -955,14 +955,23 @@ class TestEventRegistryIntegration:
         # Legacy topic should NOT be present
         assert "agent-routing-decisions" not in [str(t) for t in topic_bases]
 
-    def test_session_events_no_transform(self) -> None:
-        """Verify session events use passthrough (no transform)."""
+    def test_session_events_carry_the_contract_redaction_transform(self) -> None:
+        """OMN-16979 put session lifecycle telemetry behind the redaction contract.
+
+        OMN-18357: this assertion used to require ``transform is None``. That
+        was true until omnimarket#2518 widened the owning registry, and holding
+        it would have meant reverting the egress gate to keep a test green.
+        The session payload carries a working-directory label, which is exactly
+        what the contract reduces to a shape.
+        """
+        from omniclaude.hooks.capture_redaction import redact_capture
         from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
         for event_type in ["session.started", "session.ended"]:
             reg = EVENT_REGISTRY[event_type]
+            assert reg.fan_out, f"{event_type}: positive control, no fan-out to check"
             for rule in reg.fan_out:
-                assert rule.transform is None
+                assert rule.transform is redact_capture
 
     def test_diagnostic_daemon_health_registration(self) -> None:
         """diagnostic.daemon.health routes to the portable health topic."""
