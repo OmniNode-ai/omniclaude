@@ -1,49 +1,64 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Ticket-close-keyed worktree prune policy [OMN-16901].
+"""Content-keyed worktree prune policy [OMN-16901, OMN-18370].
 
-Pruning is keyed to the **TICKET CLOSING**, not to a PR merging. A ticket spans
-multiple PRs and OCC companions, and worktrees are keyed by ticket directory
-(``omni_worktrees/<OMN-XXXX>/<repo>``), so a PR merge is an *input to the safety
-check* — it is what makes the tree-diff against ``dev`` empty — while ticket
-completion is what *fires* eligibility.
+Pruning is keyed to **what the worktree HOLDS**, not to its ticket's state.
+Operator ruling, 2026-09-14, recorded at ``docs/tracking/ROLLING_WORK_LEDGER.md``
+line 7870: an empty or fully-merged worktree carries no work regardless of the
+ticket, so the ticket being In Progress or Backlog does not block its removal.
 
-The predicate is therefore two-part, and the two halves are evaluated in order:
+A worktree is removable when, and only when, one of two limbs holds:
 
-1. :func:`is_prune_eligible` — **the trigger.** The worktree's ticket resolves to
-   a ticket in a terminal state (``Done`` / ``Canceled``), or, when that state
-   cannot be resolved, the rolling work ledger shows a ``TERMINAL`` row for the
-   ticket with no newer open ``CLAIM``. A ticket still open or In Progress is
-   **never** prune-eligible, however clean its worktree looks.
-2. :func:`is_prune_safe` — **the gate**, applied only after eligibility passes.
-   Working tree clean, nothing unmerged ahead of the base branch, no stash
-   attributable to the branch.
+* **(a)** the working tree is clean, it is zero commits ahead of its base, and
+  no ledger ``CLAIM`` is open on its ticket; or
+* **(b)** the working tree is clean, its branch's pull request is **MERGED**,
+  and no ledger ``CLAIM`` is open on its ticket; or
+* **(c)** the working tree is clean and the branch is **pushed to origin at this
+  exact HEAD**, with no ledger ``CLAIM`` open on its ticket. The ruling names
+  pushing as the one sanctioned way to clear an unmerged commit, so a commit that
+  is on origin is no longer only-local and the worktree no longer holds it.
 
-Anything that is not ``PRUNE`` is ``TRIAGE``: a report row carrying path, branch,
-ahead count, dirty file count, and any matching ledger claim, so a human or the
-morning friction sweep adjudicates it. Nothing is ever silently dropped, and
-nothing outside ``PRUNE`` is ever deleted.
+Still protected, in every limb: any uncommitted edit, any commit that is in
+neither the base, a merged PR, nor origin, and any open ``CLAIM``. This module
+never launders an unmerged commit — it only recognises the three places the
+ruling accepts as already holding it.
 
-Precedence note (a real interpretation decision, recorded on purpose)
---------------------------------------------------------------------
-The eligibility rule reads "Linear terminal **OR** ledger ``TERMINAL`` with no
-newer open ``CLAIM``", and also "tickets still open are NEVER eligible". Those
-two sentences collide when the tracker says *open* and the ledger says
-``TERMINAL``. The "NEVER" clause is the absolute one, so an explicitly-open
-ticket loses to it and the ledger fallback applies only when the tracker state is
-:data:`EnumTicketLifecycle.UNKNOWN`. That resolution fails closed in both
-directions: an unresolvable ticket with no ``TERMINAL`` row is not eligible
-either.
+This **supersedes** the ticket-close-keyed rule the module shipped with. That
+rule refused 186 provably-empty or provably-merged worktrees on 2026-09-14 (82 of
+them under an In Progress ticket) while the host carried 751 of them; see
+``knowledge-base-internal`` ``beta/tracking/2026-09-14-worktree-cleanup.md``
+bucket A. The tracker's lifecycle state is still **observed and reported** as
+triage context, but it decides nothing.
+
+The predicate is two-part, and — since OMN-18370 AC-3 — **both halves are always
+evaluated**:
+
+1. :func:`is_prune_eligible` — **the trigger.** No live lane owns the worktree:
+   the path carries an identifiable ticket (without one, "no open CLAIM" cannot
+   be established at all) and that ticket has no ``CLAIM`` newer than its newest
+   ``TERMINAL``.
+2. :func:`is_prune_safe` — **the gate.** Working tree clean, nothing unmerged
+   ahead of the base, no stash attributable to the branch.
+
+A prior revision returned early when eligibility failed, so a worktree that was
+both detached and dirty was counted under whichever reason fired first. Measured
+on the same 2026-09-14 run: detached HEAD reported 40 against an actual 130, and
+uncommitted changes reported 26 against an actual 158. Both halves now run for
+every row and the reasons are the union.
+
+Anything not ``PRUNE`` is ``TRIAGE`` — a report row carrying path, branch, ahead
+count, dirty file count, PR state, and any matching ledger claim — except a row
+whose facts could not be collected because a git probe **timed out**, which is
+``TIMED_OUT`` and carries the host load reading that caused it. A timeout is not
+a safety finding: it says nothing about the worktree, only about the host
+(OMN-18370 AC-4).
 
 Architecture note
 -----------------
-The daily sweep that calls this module is the **executor / backstop, not the
-design**. The intended end-state is event-driven: auto-close flips a ticket to
-``Done`` and prune eligibility follows mechanically from that flip (the
-OMN-16821 flip-predicate chain). Every function here is consequently **pure** —
-no git, no network, no filesystem — so a future event hook can call the same
-predicate with no scheduler involved. Fact collection lives in the caller
-(``scripts/worktree_auto_prune.py``), never in here.
+Every function here is **pure** — no git, no network, no filesystem, no clock —
+so a future event hook can call the same predicate with no scheduler involved.
+Fact collection lives in the caller (``scripts/worktree_auto_prune.py``), never
+in here.
 """
 
 from __future__ import annotations
@@ -54,25 +69,47 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class EnumTicketLifecycle(StrEnum):
-    """Terminal-vs-open lifecycle of the ticket owning a worktree directory."""
+    """Tracker lifecycle of the ticket owning a worktree directory.
+
+    **Reported, never decisive** since the 2026-09-14 ruling. It is kept because
+    a triage row is easier to adjudicate when it says whether the ticket is
+    still open — but no value here blocks or fires a removal.
+    """
 
     DONE = "done"
-    """Ticket completed. Prune-eligible."""
+    """Ticket completed."""
 
     CANCELED = "canceled"
-    """Ticket canceled or duplicated. Prune-eligible."""
+    """Ticket canceled or duplicated."""
 
     OPEN = "open"
-    """Any non-terminal tracker state (backlog, todo, in progress, in review).
-
-    Never prune-eligible, regardless of how clean the worktree is.
-    """
+    """Any non-terminal tracker state (backlog, todo, in progress, in review)."""
 
     UNKNOWN = "unknown"
-    """State could not be resolved (no tracker access, ticket not found).
+    """State could not be resolved (no tracker access, ticket not found)."""
 
-    Falls back to the ledger ``TERMINAL`` row; fails closed when there is none.
+
+class EnumBranchPrState(StrEnum):
+    """State of the pull request opened from a worktree's branch.
+
+    This is the fact limb (b) of the ruling turns on, and it is the only way to
+    recognise a squash merge. ``git diff --quiet <base>...HEAD`` compares the
+    branch against its **merge base**, so a squash-merged branch still shows its
+    own diff there — the tree-diff signal cannot stand in for this one.
     """
+
+    MERGED = "merged"
+    """A pull request from this branch is merged."""
+
+    NOT_MERGED = "not_merged"
+    """A pull request exists from this branch and is open or closed unmerged."""
+
+    NONE = "none"
+    """The branch was searched for and has no pull request."""
+
+    UNKNOWN = "unknown"
+    """Not resolvable (no `gh`, an API failure, a detached HEAD). Fails closed:
+    limb (b) is simply unavailable and the row falls back to limb (a)."""
 
 
 class EnumPruneDisposition(StrEnum):
@@ -84,19 +121,25 @@ class EnumPruneDisposition(StrEnum):
     TRIAGE = "triage"
     """Not prunable: emit a report row for human / friction-sweep adjudication."""
 
+    TIMED_OUT = "timed_out"
+    """A git probe timed out, so the facts were never collected [OMN-18370 AC-4].
+
+    Distinct from ``TRIAGE`` on purpose: a timeout is a statement about host
+    load, not about the worktree, and counting it as a safety finding
+    misattributes a host problem to a lane's tree.
+    """
+
 
 class EnumPruneBlockReason(StrEnum):
     """Why a worktree was not pruned. Every blocked worktree names its reasons."""
 
     # --- eligibility (the trigger did not fire) ---
     NO_TICKET = "no_ticket"
-    """Worktree directory carries no OMN-NNNN identifier."""
+    """Worktree directory carries no OMN-NNNN identifier.
 
-    TICKET_NOT_CLOSED = "ticket_not_closed"
-    """Ticket is explicitly open / In Progress. The absolute line."""
-
-    TICKET_UNRESOLVED = "ticket_unresolved"
-    """Ticket state unknown and no ledger TERMINAL row. Fails closed."""
+    Ledger claims are ticket-keyed, so a path with no ticket cannot be shown to
+    be free of an open ``CLAIM``. Fails closed rather than assuming absence.
+    """
 
     OPEN_CLAIM = "open_claim"
     """A ledger CLAIM newer than the TERMINAL row: a live lane owns this."""
@@ -106,7 +149,7 @@ class EnumPruneBlockReason(StrEnum):
     """Uncommitted changes present. Never launderable by merged-ness."""
 
     AHEAD_UNMERGED = "ahead_unmerged"
-    """Commits ahead of the base that are neither in it nor content-equivalent."""
+    """Commits ahead of the base that are in neither the base nor a merged PR."""
 
     UNPUSHED_STASH = "unpushed_stash"
     """A stash entry attributable to this worktree's branch."""
@@ -124,6 +167,15 @@ class EnumPruneBlockReason(StrEnum):
     indistinguishable from a clean tree if the exit code is discarded. An empty
     result is not evidence of absence — here the difference is deleting live
     work — so any unreadable probe fails the gate closed.
+    """
+
+    PROBE_TIMEOUT = "probe_timeout"
+    """A git probe exceeded its time budget [OMN-18370 AC-4].
+
+    Held apart from :data:`FACTS_UNREADABLE` because the cause is the host, not
+    the worktree: on 2026-09-14 twenty removals timed out at host load 127 and
+    were reported indistinguishably from real safety findings. A row carrying
+    this reason is ``TIMED_OUT``, never ``TRIAGE``, and carries the load reading.
     """
 
     PARTIAL_MUTATION_DEBRIS = "partial_mutation_debris"
@@ -236,10 +288,18 @@ class ModelWorktreePruneFacts(BaseModel):
         ..., description="Checked-out branch, or None on a detached HEAD"
     )
     ticket_state: EnumTicketLifecycle = Field(
-        ..., description="Tracker lifecycle state of the owning ticket"
+        ...,
+        description=(
+            "Tracker lifecycle state of the owning ticket. REPORTED CONTEXT "
+            "ONLY — it blocks nothing and fires nothing (2026-09-14 ruling)."
+        ),
     )
     ledger_has_terminal: bool = Field(
-        ..., description="A TERMINAL row for this ticket exists in the work ledger"
+        ...,
+        description=(
+            "A TERMINAL row for this ticket exists in the work ledger. Reported "
+            "in the evidence string; not a condition of eligibility."
+        ),
     )
     ledger_open_claim: str | None = Field(
         ...,
@@ -267,9 +327,33 @@ class ModelWorktreePruneFacts(BaseModel):
         ...,
         description=(
             "`git diff --quiet <base>...HEAD` succeeded — the branch contributes no "
-            "net change over its merge base. This is the shape a squash merge "
-            "leaves behind once the squash lands in the base."
+            "net change over its merge base."
         ),
+    )
+    pr_state: EnumBranchPrState = Field(
+        ...,
+        description="Pull-request state of `branch`, the fact limb (b) turns on",
+    )
+    pr_head_oid: str | None = Field(
+        ...,
+        description=(
+            "Head commit the merged pull request carried, or None when there is "
+            "no merged PR or the field could not be read"
+        ),
+    )
+    origin_head_oid: str | None = Field(
+        default=None,
+        description=(
+            "Commit `origin` currently holds for this branch, read LIVE with "
+            "`git ls-remote`. None when the confirmation was not performed or "
+            "the branch is not on origin — limb (c) is then unavailable, never "
+            "assumed. A local remote-tracking ref is deliberately NOT accepted "
+            "here: it can name a branch origin no longer has."
+        ),
+    )
+    head_oid: str | None = Field(
+        ...,
+        description="This worktree's HEAD commit, or None when it could not be read",
     )
     attributed_stash_count: int = Field(
         ..., ge=0, description="Stash entries whose subject names this branch"
@@ -280,6 +364,21 @@ class ModelWorktreePruneFacts(BaseModel):
             "Git probes that did not complete successfully, named by command. "
             "Non-empty means at least one safety fact below is UNKNOWN rather "
             "than observed, and the gate must refuse."
+        ),
+    )
+    timed_out_probes: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Git probes that exceeded their time budget, named by command. Held "
+            "apart from `unreadable_probes` because the cause is host load, not "
+            "the worktree [OMN-18370 AC-4]."
+        ),
+    )
+    load_average: float | None = Field(
+        default=None,
+        description=(
+            "1-minute host load average read when a probe timed out; None when "
+            "nothing timed out or the reading was unavailable"
         ),
     )
 
@@ -295,95 +394,95 @@ class ModelWorktreePruneDecision(BaseModel):
     branch: str | None = Field(...)
     disposition: EnumPruneDisposition = Field(...)
     block_reasons: tuple[EnumPruneBlockReason, ...] = Field(
-        ..., description="Every reason the worktree was not pruned, not just the first"
-    )
-    eligibility_evidence: str = Field(
-        ..., description="Why the owning ticket counts as closed; '' when it does not"
-    )
-    safety_evidence: str = Field(
         ...,
         description=(
-            "Why removal is safe; '' when the safety gate was never reached "
-            "(eligibility failed) or refused"
+            "Every reason the worktree was not pruned, from BOTH halves of the "
+            "predicate — never only the first to fire [OMN-18370 AC-3]"
+        ),
+    )
+    eligibility_evidence: str = Field(
+        ..., description="Why no live lane owns this worktree; '' when one does"
+    )
+    safety_evidence: str = Field(
+        ..., description="Why removal loses nothing; '' when the gate refused"
+    )
+    branch_content_preserved: bool = Field(
+        ...,
+        description=(
+            "Every commit on the branch is already in the base or in a merged "
+            "PR, so deleting the local branch destroys no unique record. This "
+            "is what authorises the branch delete that follows removal; it is "
+            "False whenever the safety gate refused [OMN-18370 AC-1/AC-2]."
         ),
     )
     dirty_file_count: int = Field(..., ge=0)
     commits_ahead: int = Field(..., ge=0)
+    pr_state: EnumBranchPrState = Field(...)
     ledger_open_claim: str | None = Field(
         ..., description="The live claim that blocked this worktree, if any"
+    )
+    timed_out_probes: tuple[str, ...] = Field(
+        default=(), description="Probes that exceeded their budget, named by command"
+    )
+    load_average: float | None = Field(
+        default=None, description="Host load average at the time of the timeout"
     )
 
 
 # ---------------------------------------------------------------------------
-# Pure predicate — eligibility FIRES, safety GATES
+# Pure predicate — eligibility FIRES, safety GATES, both always evaluated
 # ---------------------------------------------------------------------------
-
-_TERMINAL_TICKET_STATES: frozenset[EnumTicketLifecycle] = frozenset(
-    {EnumTicketLifecycle.DONE, EnumTicketLifecycle.CANCELED}
-)
 
 
 def is_prune_eligible(
     facts: ModelWorktreePruneFacts,
 ) -> tuple[bool, tuple[EnumPruneBlockReason, ...], str]:
-    """Decide whether the owning ticket's closure fires prune eligibility.
+    """Decide whether any live lane still owns this worktree.
+
+    Under the 2026-09-14 ruling this half no longer consults the ticket's
+    lifecycle at all. What it establishes is the ruling's shared precondition —
+    *no open ``CLAIM``* — which both limbs require.
 
     Args:
         facts: Observed facts for one worktree.
 
     Returns:
-        ``(eligible, block_reasons, evidence)``. ``evidence`` names the closure
-        that fired eligibility and is empty when it did not fire.
+        ``(eligible, block_reasons, evidence)``. ``evidence`` names what was
+        established and is empty when eligibility did not fire.
     """
     reasons: list[EnumPruneBlockReason] = []
 
     if facts.ticket is None:
+        # Ledger claims are ticket-keyed. With no ticket there is no way to show
+        # the absence of an open CLAIM, and an unprovable absence is not one.
         reasons.append(EnumPruneBlockReason.NO_TICKET)
 
-    # A live lane re-claiming the ticket outranks any closure: a TERMINAL row
-    # followed by a newer CLAIM means work resumed on this ticket.
     if facts.ledger_open_claim:
         reasons.append(EnumPruneBlockReason.OPEN_CLAIM)
-
-    if facts.ticket_state is EnumTicketLifecycle.OPEN:
-        # The absolute line — an explicitly-open ticket is never eligible, and a
-        # ledger TERMINAL row does not override it.
-        reasons.append(EnumPruneBlockReason.TICKET_NOT_CLOSED)
-    elif (
-        facts.ticket_state is EnumTicketLifecycle.UNKNOWN
-        and not facts.ledger_has_terminal
-        # NO_TICKET already says the ticket could not be identified; adding
-        # TICKET_UNRESOLVED on top of it is noise, not a second finding.
-        and facts.ticket is not None
-    ):
-        reasons.append(EnumPruneBlockReason.TICKET_UNRESOLVED)
 
     if reasons:
         return False, tuple(reasons), ""
 
-    if facts.ticket_state in _TERMINAL_TICKET_STATES:
-        evidence = f"ticket {facts.ticket} state={facts.ticket_state.value}"
-        if facts.ledger_has_terminal:
-            evidence += "; ledger TERMINAL row present, no newer open CLAIM"
-        return True, (), evidence
-
-    return (
-        True,
-        (),
-        (
-            f"ticket {facts.ticket} state unresolved; ledger TERMINAL row present "
-            "with no newer open CLAIM"
-        ),
-    )
+    evidence = f"no open ledger CLAIM for {facts.ticket}"
+    if facts.ledger_has_terminal:
+        evidence += " (newest row is TERMINAL)"
+    evidence += f"; ticket state {facts.ticket_state.value} (reported, not decisive)"
+    return True, (), evidence
 
 
 def is_prune_safe(
     facts: ModelWorktreePruneFacts,
 ) -> tuple[bool, tuple[EnumPruneBlockReason, ...], str]:
-    """Decide whether removing an already-eligible worktree loses no work.
+    """Decide whether removing this worktree loses no work.
 
     Collects *every* violated condition rather than short-circuiting on the
     first, so a triage row tells the whole story in one pass.
+
+    This is where the ruling's two limbs are distinguished: limb (a) is
+    ``commits_ahead == 0``, limb (b) is a MERGED pull request whose head is this
+    worktree's HEAD. A merged PR forgives ahead-ness **only** at the exact
+    commit it merged: a local commit made after the merge is unmerged work, and
+    the ruling protects it.
 
     Args:
         facts: Observed facts for one worktree.
@@ -405,20 +504,38 @@ def is_prune_safe(
         # output, not a clean observation. Refuse rather than infer.
         reasons.append(EnumPruneBlockReason.FACTS_UNREADABLE)
 
+    if facts.timed_out_probes:
+        reasons.append(EnumPruneBlockReason.PROBE_TIMEOUT)
+
     if facts.dirty_files:
         reasons.append(EnumPruneBlockReason.DIRTY_TREE)
 
     if facts.attributed_stash_count > 0:
         reasons.append(EnumPruneBlockReason.UNPUSHED_STASH)
 
-    # Ahead-ness is forgiven exactly two ways, both of which mean the content is
-    # already in the base: no ahead commit lacks a content-equivalent there, or
-    # the branch contributes no net tree change over its merge base (the shape a
-    # squash merge leaves behind).
-    content_already_in_base = (
-        not facts.unmerged_ahead_commits or facts.tree_diff_vs_base_empty
+    merged_pr_covers_head = (
+        facts.pr_state is EnumBranchPrState.MERGED
+        and facts.pr_head_oid is not None
+        and facts.head_oid is not None
+        and facts.pr_head_oid == facts.head_oid
     )
-    if facts.commits_ahead > 0 and not content_already_in_base:
+    origin_covers_head = (
+        facts.origin_head_oid is not None
+        and facts.head_oid is not None
+        and facts.origin_head_oid == facts.head_oid
+    )
+    # Ahead-ness is forgiven exactly four ways, each meaning the content is
+    # already preserved somewhere other than this worktree: every ahead commit
+    # has a content-equivalent in the base, the branch contributes no net tree
+    # change over its merge base, a merged pull request carries this exact HEAD,
+    # or origin holds this exact HEAD.
+    content_already_preserved = (
+        not facts.unmerged_ahead_commits
+        or facts.tree_diff_vs_base_empty
+        or merged_pr_covers_head
+        or origin_covers_head
+    )
+    if facts.commits_ahead > 0 and not content_already_preserved:
         reasons.append(EnumPruneBlockReason.AHEAD_UNMERGED)
 
     if reasons:
@@ -426,7 +543,18 @@ def is_prune_safe(
 
     base = facts.base_ref
     if facts.commits_ahead == 0:
-        ahead_evidence = f"0 commits ahead of {base}"
+        ahead_evidence = f"limb (a): 0 commits ahead of {base}"
+    elif merged_pr_covers_head:
+        ahead_evidence = (
+            f"limb (b): {facts.commits_ahead} commit(s) ahead of {base}, and a "
+            f"MERGED pull request carries this exact HEAD {facts.head_oid}"
+        )
+    elif origin_covers_head:
+        ahead_evidence = (
+            f"limb (c): {facts.commits_ahead} commit(s) ahead of {base}, and "
+            f"origin holds this exact HEAD {facts.head_oid} (read live with "
+            "git ls-remote), so the commits are no longer only local"
+        )
     elif not facts.unmerged_ahead_commits:
         ahead_evidence = (
             f"{facts.commits_ahead} commit(s) ahead of {base}, all content-equivalent "
@@ -435,7 +563,7 @@ def is_prune_safe(
     else:
         ahead_evidence = (
             f"{facts.commits_ahead} commit(s) ahead of {base} but tree-diff against "
-            f"{base} is empty (squash-merged: content already in {base})"
+            f"{base} is empty (content already in {base})"
         )
 
     return (
@@ -448,50 +576,54 @@ def is_prune_safe(
 def classify_worktree_prune(
     facts: ModelWorktreePruneFacts,
 ) -> ModelWorktreePruneDecision:
-    """Adjudicate one worktree: eligibility fires, safety gates.
+    """Adjudicate one worktree: eligibility fires, safety gates, both reported.
+
+    Both halves are always evaluated and their reasons unioned [OMN-18370
+    AC-3]. The previous revision skipped the safety half whenever eligibility
+    failed, which made the report's block-reason table undercount every safety
+    class on exactly the rows that had more than one problem.
 
     Args:
         facts: Observed facts for one worktree.
 
     Returns:
-        A frozen decision carrying the disposition, every block reason, and the
-        evidence behind each half of the predicate. The safety gate is not
-        evaluated at all when eligibility fails — safety is never a substitute
-        for a closed ticket.
+        A frozen decision carrying the disposition, every block reason from both
+        halves, and the evidence behind each.
     """
     eligible, eligibility_reasons, eligibility_evidence = is_prune_eligible(facts)
-
-    if not eligible:
-        return ModelWorktreePruneDecision(
-            path=facts.path,
-            ticket=facts.ticket,
-            repo=facts.repo,
-            branch=facts.branch,
-            disposition=EnumPruneDisposition.TRIAGE,
-            block_reasons=eligibility_reasons,
-            eligibility_evidence="",
-            safety_evidence="",
-            dirty_file_count=len(facts.dirty_files),
-            commits_ahead=facts.commits_ahead,
-            ledger_open_claim=facts.ledger_open_claim,
-        )
-
     safe, safety_reasons, safety_evidence = is_prune_safe(facts)
+
+    reasons = (*eligibility_reasons, *safety_reasons)
+
+    if EnumPruneBlockReason.PROBE_TIMEOUT in reasons:
+        # A timeout says nothing about the worktree, so it is not reported as a
+        # safety verdict [OMN-18370 AC-4].
+        disposition = EnumPruneDisposition.TIMED_OUT
+    elif eligible and safe:
+        disposition = EnumPruneDisposition.PRUNE
+    else:
+        disposition = EnumPruneDisposition.TRIAGE
 
     return ModelWorktreePruneDecision(
         path=facts.path,
         ticket=facts.ticket,
         repo=facts.repo,
         branch=facts.branch,
-        disposition=(
-            EnumPruneDisposition.PRUNE if safe else EnumPruneDisposition.TRIAGE
-        ),
-        block_reasons=safety_reasons,
-        eligibility_evidence=eligibility_evidence,
-        safety_evidence=safety_evidence,
+        disposition=disposition,
+        block_reasons=reasons,
+        eligibility_evidence=eligibility_evidence if eligible else "",
+        safety_evidence=safety_evidence if safe else "",
+        # The branch may only be deleted when the safety gate PROVED the content
+        # is preserved elsewhere. Eligibility (an open claim) does not bear on
+        # whether the commits exist somewhere else, but a row that is not being
+        # removed has no branch delete to authorise either.
+        branch_content_preserved=bool(safe and eligible),
         dirty_file_count=len(facts.dirty_files),
         commits_ahead=facts.commits_ahead,
+        pr_state=facts.pr_state,
         ledger_open_claim=facts.ledger_open_claim,
+        timed_out_probes=facts.timed_out_probes,
+        load_average=facts.load_average,
     )
 
 
@@ -502,8 +634,8 @@ def classify_worktree_prune(
 # `.git` link is already gone, so there is nothing for `git worktree remove` to
 # resolve — plain removal can never succeed, and the classifier above never
 # even sees these directories (its discovery keys off a `.git` glob). This
-# predicate never re-derives ticket eligibility; a debris directory with
-# unverifiable content is never auto-removed regardless of ticket state.
+# predicate never re-derives eligibility; a debris directory with unverifiable
+# content is never auto-removed.
 # ---------------------------------------------------------------------------
 
 

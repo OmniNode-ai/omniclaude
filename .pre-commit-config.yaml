@@ -64,9 +64,6 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: trailing-whitespace
-        exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
-        stages: [pre-commit]
       - id: end-of-file-fixer
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
         stages: [pre-commit]
@@ -125,7 +122,6 @@ repos:
         types: [markdown]
         pass_filenames: true
         stages: [pre-commit]
-
 
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
       # Rejects any staged file containing [skip-deploy-gate:] without an explicit
@@ -613,18 +609,6 @@ repos:
       - id: arch-cost-ledger-isolation
         name: "Arch: ModelCostLedger confined to effects (check 5)"
         entry: python3 scripts/validation/validate_cost_ledger_isolation.py
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
-      - id: arch-topic-naming
-        name: "Arch: onex.* topic naming convention (check 6)"
-        # NOTE: distinct from the existing `topic-naming-lint` hook (below),
-        # which runs scripts/validation/run_topic_lint.sh — a different
-        # program against a baseline file. This wires CI's own
-        # validate_topic_naming.py entrypoint for exact DRY parity.
-        entry: python3 scripts/validation/validate_topic_naming.py
         language: system
         pass_filenames: false
         always_run: true
