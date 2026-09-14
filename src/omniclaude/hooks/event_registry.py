@@ -1401,7 +1401,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             FanOutRule(
                 topic_base=TopicBase.TOOL_OUTPUT_CAPTURED,
                 transform=redact_capture,
-                description="Tool output captured with artifact refs and suppression decision",
+                description="Contract-redacted tool output capture telemetry (OMN-16979)",
             ),
         ],
         partition_key_field="correlation_id",

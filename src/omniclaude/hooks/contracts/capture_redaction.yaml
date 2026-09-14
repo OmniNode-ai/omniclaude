@@ -96,7 +96,7 @@ always_hashed_output_classes:
   - name: environment_dump
     reason: >
       2026-08-19 evening incident: `env | grep -i POSTGRES` printed a
-      PostgreSQL URL with credentials in the authority.
+      `postgresql://user:pw@host` URL.
     tool_names: ["Bash"]
     command_pattern: '(?i)(^|[;&|]\s*)(env|printenv|set)\b'
   - name: aws_credential_command
