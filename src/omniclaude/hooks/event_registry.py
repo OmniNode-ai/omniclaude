@@ -369,7 +369,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SESSION_STARTED,
-                transform=None,  # Passthrough
+                transform=redact_capture,
                 description="Session start event for observability",
             ),
         ],
@@ -381,7 +381,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SESSION_ENDED,
-                transform=None,  # Passthrough
+                transform=redact_capture,
                 description="Session end event for observability",
             ),
         ],
@@ -982,7 +982,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SKILL_STARTED,
-                transform=None,  # Passthrough — no sensitive data in skill metadata
+                transform=redact_capture,
                 description="Skill invocation started; emitted before task_dispatcher call",
             ),
         ],
@@ -994,7 +994,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SKILL_COMPLETED,
-                transform=None,  # Passthrough — no sensitive data in skill metadata
+                transform=redact_capture,
                 description="Skill invocation completed (success or failure); emitted after task_dispatcher",
             ),
             # OMN-6800: Fan-out to skill-invoked topic for omnidash skill_invocations projection.
@@ -1400,7 +1400,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.TOOL_OUTPUT_CAPTURED,
-                transform=None,  # Passthrough — event carries refs and a bounded summary
+                transform=redact_capture,
                 description="Tool output captured with artifact refs and suppression decision",
             ),
         ],
