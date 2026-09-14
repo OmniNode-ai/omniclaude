@@ -1600,9 +1600,36 @@ def main(argv: Sequence[str] | None = None) -> int:
             debris_owner_by_path[debris_decision.path] = Path(facts.owning_clone)
 
     removals: list[ModelRemovalAttempt] = []
+    revalidation_refusals: list[ModelWorktreePruneDecision] = []
     if args.execute:
         for decision in prunable:
-            attempt = prune_worktree(decision)
+            # RE-VERIFY LIVE, immediately before the removal. The classification
+            # pass over a registry-scale root runs for tens of minutes while peer
+            # lanes keep working, so a row can gain a CLAIM, a commit or an
+            # uncommitted edit between being judged and being removed. Re-running
+            # the whole predicate is cheap next to deleting live work, and it is
+            # the only thing that closes that window: `git worktree remove`
+            # re-checks cleanliness but knows nothing about the ledger.
+            fresh = classify_worktree_prune(
+                collect_facts(
+                    Path(decision.path),
+                    root,
+                    ticket_states,
+                    parse_ledger_claims(ledger_path),
+                    base_ref_cache,
+                    stash_cache,
+                    pr_state_cache,
+                )
+            )
+            if fresh.disposition is not EnumPruneDisposition.PRUNE:
+                revalidation_refusals.append(fresh)
+                reasons = ", ".join(r.value for r in fresh.block_reasons) or "unknown"
+                print(
+                    f"  SKIPPED {decision.path} — re-verification at removal time "
+                    f"no longer approves it ({fresh.disposition.value}: {reasons})"
+                )
+                continue
+            attempt = prune_worktree(fresh)
             removals.append(attempt)
             if attempt.ok:
                 status = "REMOVED"
@@ -1654,6 +1681,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "prune_count": len(prunable),
                     "triage_count": len(triage),
                     "timed_out_count": len(timed_out),
+                    "revalidation_refusal_count": len(revalidation_refusals),
+                    "revalidation_refusals": [
+                        decision_to_json(d) for d in revalidation_refusals
+                    ],
                     "decisions": [decision_to_json(d) for d in decisions],
                     "debris_count": len(debris_decisions),
                     "debris_decisions": [
@@ -1670,6 +1701,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"\nscanned={len(decisions)} safe={len(prunable)} triage={len(triage)} "
         f"timed_out={len(timed_out)} debris={len(debris_decisions)} "
+        f"revalidation_refused={len(revalidation_refusals)} "
         f"removed={sum(1 for r in removals if r.ok)}"
     )
     if not args.execute and prunable:

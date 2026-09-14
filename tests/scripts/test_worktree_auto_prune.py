@@ -645,6 +645,78 @@ class TestRemovalTimeoutHandling:
 
 
 # =============================================================================
+# OMN-16901 — the verdict is re-verified live immediately before the removal
+# =============================================================================
+
+
+class TestRemovalTimeRevalidation:
+    def test_a_row_that_gains_a_claim_between_passes_is_not_removed(
+        self,
+        guarded_canonical_repo: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A registry-scale classification pass runs for tens of minutes while peer
+        lanes keep working. `git worktree remove` re-checks cleanliness but knows
+        nothing about the ledger, so the CLAIM window is closed here or nowhere."""
+        root = tmp_path / "omni_worktrees"
+        worktree = root / "OMN-1" / "omnibase_infra"
+        worktree.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo,
+            "worktree",
+            "add",
+            "-q",
+            str(worktree),
+            "-b",
+            "wt-claimed",
+        )
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "| 2026-09-14T10:00:00Z | lane-a | OMN-1 | TERMINAL | landed |\n",
+            encoding="utf-8",
+        )
+
+        real_collect = mod.collect_facts
+        calls: list[int] = []
+
+        def fake_collect(*args: object, **kwargs: object):  # noqa: ANN202
+            facts = real_collect(*args, **kwargs)  # type: ignore[arg-type]
+            calls.append(1)
+            if len(calls) == 1:
+                return facts
+            # The second call is the removal-time re-verification: a peer lane
+            # opened a CLAIM in the meantime.
+            return facts.model_copy(
+                update={"ledger_open_claim": "2026-09-14T11:00:00Z | a peer lane"}
+            )
+
+        monkeypatch.setattr(mod, "collect_facts", fake_collect)
+        monkeypatch.setattr(
+            mod,
+            "prune_worktree",
+            lambda _d: pytest.fail("removed a re-claimed worktree"),
+        )
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--execute",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+            ]
+        )
+
+        assert exit_code == 0
+        assert len(calls) == 2, "the predicate must run again before the removal"
+        assert worktree.is_dir()
+
+
+# =============================================================================
 # Defect 2 — partial-mutation debris: detection + the narrow auto-remove case
 # =============================================================================
 
