@@ -27,6 +27,8 @@ node_version:
   minor: 0
   patch: 0
 
+runtime_profiles: [main]
+
 # Node type
 node_type: ORCHESTRATOR_GENERIC
 
@@ -92,6 +94,18 @@ io_operations:
       - error: str | None
       - correlation_id: UUID
     idempotent: false
+
+# Handler routing
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "skill.weekly_review"
+      handler:
+        name: "HandlerWeeklyReviewSkill"
+        module: "omniclaude.nodes.node_skill_weekly_review_orchestrator.handler_weekly_review_skill"
+      description: "Dispatch weekly_review through the shared skill request handler"
+  execution_mode: "single"
+  max_timeout_seconds: 30
 
 # Dependencies
 dependencies:

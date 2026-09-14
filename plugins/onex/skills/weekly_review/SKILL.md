@@ -28,6 +28,12 @@ args:
     description: "Path to the previous review for this person, for the trend read"
     required: false
 skill_kind: methodology
+# A methodology skill, not a dispatcher: its six steps are a method a reviewer
+# follows, and the only computation anywhere in it is one band lookup. There is
+# no node for the steps to delegate to, because scoring a person is judgement
+# and this skill deliberately produces no verdict. Same declaration, and the
+# same reason, as rolling_plan_governor.
+boundary_exempt: true
 ---
 
 # /onex:weekly_review — one person, one window, one rubric
