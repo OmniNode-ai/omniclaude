@@ -1,0 +1,107 @@
+{
+  "_comment": "Canned collection output for one example review window. Test fixture only; invented numbers for an invented person. Each key is a criterion measure declared by overlay_example.yaml, and expected_base_score is the anchor the rubric says that number lands on. Every measure carries the sample_size it was computed over, because a band score detached from its sample reads the same whether it came from six observations or six hundred.",
+  "window": "2026-01-05..2026-01-12",
+  "person": "example-handle",
+  "role": "example-individual",
+  "measures": {
+    "median_hours_to_answer": {
+      "value": 1.9,
+      "expected_base_score": 4,
+      "note": "Twelve requests measured end to end. Median 1.9 hours, maximum 27.1.",
+      "sample_size": 12
+    },
+    "closed_over_created": {
+      "value": 0.69,
+      "expected_base_score": 2,
+      "note": "209 completed against 301 created in the window.",
+      "sample_size": 301
+    },
+    "self_correction_share": {
+      "value": 0.6,
+      "expected_base_score": 3,
+      "note": "Three self-corrections against two a verifier needed.",
+      "sample_size": 5
+    }
+  },
+  "boundary_cases": {
+    "_comment": "Each pair straddles one declared band boundary. The score must differ across the pair, which is what proves the lookup reads the bands rather than returning a constant.",
+    "median_hours_to_answer": [
+      {
+        "value": 3.999,
+        "expected_base_score": 4
+      },
+      {
+        "value": 4.0,
+        "expected_base_score": 3
+      },
+      {
+        "value": 23.999,
+        "expected_base_score": 3
+      },
+      {
+        "value": 24.0,
+        "expected_base_score": 2
+      },
+      {
+        "value": 71.999,
+        "expected_base_score": 2
+      },
+      {
+        "value": 72.0,
+        "expected_base_score": 1
+      }
+    ],
+    "closed_over_created": [
+      {
+        "value": 0.499,
+        "expected_base_score": 1
+      },
+      {
+        "value": 0.5,
+        "expected_base_score": 2
+      },
+      {
+        "value": 0.899,
+        "expected_base_score": 2
+      },
+      {
+        "value": 0.9,
+        "expected_base_score": 3
+      },
+      {
+        "value": 1.099,
+        "expected_base_score": 3
+      },
+      {
+        "value": 1.1,
+        "expected_base_score": 4
+      }
+    ],
+    "self_correction_share": [
+      {
+        "value": 0.249,
+        "expected_base_score": 1
+      },
+      {
+        "value": 0.25,
+        "expected_base_score": 2
+      },
+      {
+        "value": 0.499,
+        "expected_base_score": 2
+      },
+      {
+        "value": 0.5,
+        "expected_base_score": 3
+      },
+      {
+        "value": 0.749,
+        "expected_base_score": 3
+      },
+      {
+        "value": 0.75,
+        "expected_base_score": 4
+      }
+    ]
+  }
+}

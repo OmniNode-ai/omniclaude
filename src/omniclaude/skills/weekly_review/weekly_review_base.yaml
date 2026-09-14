@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Base rubric for the weekly_review skill — structure only, no content.
+#
+# This file is deliberately unusable on its own. It declares the shape of a
+# rubric and supplies no role, no criterion, no identity source, no output
+# location and no trend measure. An overlay file supplies all of that, selected
+# by the WEEKLY_REVIEW_OVERLAY_PATH environment variable, and is deep-merged
+# over this base before validation.
+#
+# A bare base is fail-closed: assert_resolved() raises and the run stops. That
+# is preferred to a review scored against an empty rubric and written somewhere
+# undeclared.
+#
+# What an overlay supplies, and the shape each entry takes:
+#
+#   roles:
+#     - role_id: <identifier used as the --role argument>
+#       rubric_document: <pointer to this role's human-readable rubric;
+#                         absolute, or ${VAR}-anchored, same rule as above>
+#       criteria: [<criterion_id>, ...]        # from the shared criteria list
+#       extra_criteria: [<full criterion>]     # role-specific, same shape below
+#
+#   criteria:
+#     - criterion_id: <identifier>
+#       title: <short name>
+#       what_to_read: <the evidence a reviewer collects for this criterion>
+#       anchors: {1: <text>, 2: <text>, 3: <text>, 4: <text>, 5: <text>}
+#       measure: <name of the countable measure, or omitted for judgement>
+#       bands:                                  # required iff measure is set
+#         - {score: 1, max_exclusive: <x>}
+#         - {score: 2, min_inclusive: <x>, max_exclusive: <y>}
+#         - {score: 3, min_inclusive: <y>}
+#       promotion_to_five: <named condition promoting the top band to 5; countable only>
+#       caps: [<condition that overrides the band downward>]
+#
+#   identity_sources:
+#     - source_id: <surface name>
+#       resolve_command: <command shape that resolves the handle on that surface>
+#       positive_control: <same shape against an identity known to return rows>
+#       match_field: <field on a returned row carrying that surface's exact id>
+#       required: true
+#
+#   output_directory: <where the files are written; absolute, or ${VAR}-anchored>
+#
+#   output_files:
+#     - kind: <file kind>
+#       filename_template: "{date}-{person}-<kind>.md"
+#       voice: <whose voice, and to whom>
+#       may_contain: [...]
+#       must_not_contain: [...]
+#
+#   trend_measures: [<measure recomputed identically every window>]
+
+rubric_version: "0.0.0-base"
+scope: base
+
+output_directory: null
+criteria: []
+roles: []
+identity_sources: []
+output_files: []
+trend_measures: []

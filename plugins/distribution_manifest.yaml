@@ -19,15 +19,15 @@ baseline_measurements:
   installed_source_mb_per_version: 39
   git_tracked_distributable_mb: 5.27
   hooks_logs_gitignored_mb: 30
-  skills_surfaces_filesystem: 118
+  skills_surfaces_filesystem: 119
   skills_loaded: 108
 exposure_counts:
   beta: 139
-  hidden: 122
+  hidden: 123
   stable: 1
 component_counts:
-  total: 262
-  skills: 118
+  total: 263
+  skills: 119
   hooks: 91
   agents: 53
 components:
@@ -1131,6 +1131,17 @@ components:
   - node_skill_wave_scheduler_orchestrator
   - node_wave_scheduler_compute
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: weekly_review
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/weekly_review/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose method plus a typed rubric contract, no runtime
+    dependency). Hidden because it is useless without a rubric overlay, and every shipped
+    overlay is private; the committed base declares structure and no content and is
+    fail-closed on its own.
 - id: worktree
   kind: skill
   exposure: hidden

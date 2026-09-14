@@ -1,0 +1,168 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Example rubric overlay for the weekly_review skill — test fixture only.
+#
+# Deliberately generic: two invented roles, four criteria, an invented code
+# host and tracker. It exists to prove that the base + overlay mechanism
+# resolves and that a measured value lands on the anchor the overlay declares.
+# It is not anybody's rubric.
+
+rubric_version: "1.0.0-example"
+scope: project
+
+# Anchored on a variable the reviewing environment supplies, not on the
+# working directory. The role documents below anchor on a different one:
+# reviews are written to a private directory on the reviewing machine, and
+# the role standards live wherever this rubric came from.
+output_directory: "${EXAMPLE_REVIEW_ROOT}/example-reviews"
+
+criteria:
+  - criterion_id: deadlines
+    title: Deadlines committed and met
+    what_to_read: >-
+      Dates the person put in writing and what happened to each. A date removed
+      is withdrawn, not met.
+    anchors:
+      1: "No dates in writing, or a date missed with no notice."
+      2: "Dates missed, and explained afterwards rather than before."
+      3: "Short-horizon commitments hold and no delivery date exists."
+      4: "A delivery date exists and slips are called before they arrive."
+      5: "The date holds and the estimate improved on the previous window."
+
+  - criterion_id: decision_latency
+    title: Decision latency
+    what_to_read: >-
+      Requests parked on this person, answered and still open, with elapsed
+      hours each.
+    measure: median_hours_to_answer
+    anchors:
+      1: "Requests sit for days."
+      2: "Answered eventually, with no pattern."
+      3: "Median under a day, with a long tail."
+      4: "Median under four hours, nothing open older than a day."
+      5: "The same, and the queue is empty at the end of the window."
+    bands:
+      - {score: 1, min_inclusive: 72.0}
+      - {score: 2, min_inclusive: 24.0, max_exclusive: 72.0}
+      - {score: 3, min_inclusive: 4.0, max_exclusive: 24.0}
+      - {score: 4, max_exclusive: 4.0}
+    promotion_to_five: No request is still open at the end of the window.
+
+  - criterion_id: ticket_flow
+    title: Work created against work closed
+    what_to_read: >-
+      Items created and items completed in the window, and open work against
+      whatever limit the person has stated for themselves.
+    measure: closed_over_created
+    anchors:
+      1: "Inflow far exceeds closure and open work grew."
+      2: "Inflow exceeds closure and open work is flat."
+      3: "Inflow and closure within ten percent of each other."
+      4: "Closure wins."
+      5: "Closure wins and open work fell toward the stated limit."
+    bands:
+      - {score: 1, max_exclusive: 0.5}
+      - {score: 2, min_inclusive: 0.5, max_exclusive: 0.9}
+      - {score: 3, min_inclusive: 0.9, max_exclusive: 1.1}
+      - {score: 4, min_inclusive: 1.1}
+    promotion_to_five: Open work fell toward the stated limit.
+
+  - criterion_id: corrections
+    title: Corrections, in both directions
+    what_to_read: >-
+      How often a later read falsified one of their premises, whether they had
+      marked it provisional, and how often they caught someone else's wrong
+      claim first.
+    measure: self_correction_share
+    anchors:
+      1: "Premises falsified often, and stated flat."
+      2: "Falsified sometimes, unmarked."
+      3: "Rarely falsified, or marked provisional before the read."
+      4: "The same, and they catch someone else's wrong claim first."
+      5: "The same, and they correct themselves in public unasked."
+    bands:
+      - {score: 1, max_exclusive: 0.25}
+      - {score: 2, min_inclusive: 0.25, max_exclusive: 0.5}
+      - {score: 3, min_inclusive: 0.5, max_exclusive: 0.75}
+      - {score: 4, min_inclusive: 0.75}
+    promotion_to_five: A public self-correction was posted before anyone challenged the claim.
+    caps:
+      - A skipped gate discovered by someone else caps this criterion at 2.
+
+roles:
+  - role_id: example-individual
+    rubric_document: ${EXAMPLE_RUBRIC_ROOT}/docs/example-rubric/individual.md
+    criteria: [deadlines, decision_latency, ticket_flow, corrections]
+
+  - role_id: example-shared-account
+    rubric_document: ${EXAMPLE_RUBRIC_ROOT}/docs/example-rubric/shared-account.md
+    criteria: [deadlines, ticket_flow, corrections]
+    extra_criteria:
+      - criterion_id: attribution_compensation
+        title: Compensating for a shared identity
+        what_to_read: >-
+          Whether the account's own record supplies the attribution the shared
+          identity destroys.
+        anchors:
+          1: "Nothing in the record compensates."
+          2: "One compensating habit is present."
+          3: "Two are present."
+          4: "Three are present and the fourth is named as a gap by the account."
+          5: "All four, consistently."
+
+identity_sources:
+  - source_id: example-code-host
+    resolve_command: "example-cli users show --handle {person} --format id"
+    positive_control: "example-cli users show --handle known-busy-handle --format id"
+    match_field: handle
+    required: true
+  - source_id: example-tracker
+    resolve_command: "example-tracker users find --name {person}"
+    positive_control: "example-tracker users find --name known-busy-name"
+    match_field: uuid
+    required: true
+  - source_id: example-chat
+    resolve_command: "example-chat users search {person}"
+    positive_control: "example-chat users search known-busy-name"
+    match_field: member_id
+    required: false
+
+output_files:
+  - kind: review
+    filename_template: "{date}-{person}-review.md"
+    voice: Third person, written for whoever the reviewer reports to.
+    may_contain:
+      - scores
+      - the deciding artifact for each criterion
+      - the trend measures
+    must_not_contain:
+      - a local filesystem path
+      - a third party's name
+
+  - kind: feedback
+    filename_template: "{date}-{person}-feedback.md"
+    voice: Second person, addressed to the person being reviewed.
+    may_contain:
+      - the same facts as the review
+      - dated quotes of the person's own words
+      - the concrete ask and why it matters
+    must_not_contain:
+      - any score
+      - any 1-to-5 number
+      - a local filesystem path
+      - a third party's name
+
+  - kind: private-notes
+    filename_template: "{date}-{person}-private-notes.md"
+    voice: Reviewer only, five lines.
+    may_contain:
+      - what was deliberately left out and why
+    must_not_contain:
+      - anything that belongs in the other two files
+
+trend_measures:
+  - Throughput, reported as context and never as progress.
+  - Work closed against work created, and open work against the stated limit.
+  - Process compliance, and who discovered each exception.
+  - Corrections a verifier needed against corrections made first by the person.
