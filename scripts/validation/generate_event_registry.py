@@ -36,6 +36,12 @@ Usage:
     # drifted from the daemon registry (no file is written):
     python scripts/validation/generate_event_registry.py \\
         --daemon-registry /path/to/topics.yaml --check
+
+    # OMN-18357: re-derive the mirrored capture-redaction contract after an
+    # omnimarket-side change to the owning copy. This is the sanctioned repair
+    # for the drift the --check mode reports; never hand-edit the mirror:
+    python scripts/validation/generate_event_registry.py \\
+        --daemon-registry /path/to/topics.yaml --sync-capture-contract
 """
 
 from __future__ import annotations
@@ -244,8 +250,119 @@ def _resolved_posture(contract_path: Path) -> dict[str, Any]:
     }
 
 
+def _label(path: Path) -> str:
+    """Repo-relative label where possible; absolute otherwise.
+
+    The mirror is normally inside this repo, but a caller may point the check
+    at a temporary tree. ``Path.relative_to`` raises there, and a diagnostic
+    that raises while reporting a violation hides the violation.
+    """
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def owning_capture_contract(daemon_registry_path: Path) -> Path:
+    """Resolve omnimarket's OWNING capture-redaction contract.
+
+    Resolved from whatever omnimarket checkout the caller passed
+    (``nodes/<node>/registries/topics.yaml`` -> ``parents[2]`` is ``nodes/``),
+    never from a second hardcoded location, so the checker and the sync below
+    can never disagree about which file is the owner.
+    """
+    return daemon_registry_path.resolve().parents[2] / OWNING_CAPTURE_CONTRACT_RELPATH
+
+
+# The header shape omniclaude's `validate-spdx-headers` hook requires for a
+# YAML file: the SPDX block FIRST, then the document marker. omnimarket's own
+# convention is the opposite order with a different year, so the sync below
+# re-derives this preamble rather than carrying the owner's.
+_THIS_REPO_YAML_PREAMBLE = (
+    "# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.\n"
+    "# SPDX-License-Identifier: MIT\n"
+    "#\n"
+    "---\n"
+    "#\n"
+)
+
+
+def _reheader_for_this_repo(owner_text: str) -> str:
+    """Swap the owner's file preamble for this repo's, leaving the body alone.
+
+    Only a leading document marker and the SPDX comment block are consumed. The
+    scan stops at the first line that is neither, so a contract whose first real
+    comment happens to look like prose is never truncated -- dropping body here
+    would silently narrow the posture, which is the one thing this file exists
+    to prevent.
+    """
+    lines = owner_text.splitlines(keepends=True)
+    cursor = 0
+    if cursor < len(lines) and lines[cursor].rstrip() == "---":
+        cursor += 1
+    while cursor < len(lines) and (
+        lines[cursor].startswith("# SPDX-") or lines[cursor].rstrip() == "#"
+    ):
+        cursor += 1
+    return _THIS_REPO_YAML_PREAMBLE + "".join(lines[cursor:])
+
+
+def sync_vendored_capture_contract(
+    daemon_registry_path: Path, mirror_path: Path | None = None
+) -> Path:
+    """Re-derive the mirror from omnimarket's owning contract (OMN-18357).
+
+    OMN-17959 landed the drift GATE and left the repair as prose ("copy the
+    posture over rather than editing the mirror"), which in practice meant
+    hand-editing the one file the gate forbids hand-editing. This is that
+    repair, mechanically: whatever omnimarket owns becomes the mirror.
+
+    The BODY is copied verbatim, not re-emitted from the resolved posture. The
+    resolver reads a subset of the file; the prose ``reason`` blocks it ignores
+    are the documentation of why each field is classified as it is, and a sync
+    that wrote back only the posture would launder them away.
+
+    The file HEADER is the one thing re-derived, because the two repos disagree
+    about it and always will: omnimarket opens with the YAML document marker and
+    stamps 2026, omniclaude's ``validate-spdx-headers`` hook requires the SPDX
+    block at line 1 and stamps 2025. A byte-verbatim copy is therefore not a
+    committable file here, and ``onex spdx fix`` cannot repair it (it refuses a
+    block that starts after a document marker: "malformed block structure"). The
+    drift gate compares the resolved POSTURE precisely so this difference is not
+    drift -- see the module comment above ``CAPTURE_REDACTION_TRANSFORM``.
+
+    Fail-closed: an unresolvable owner raises rather than leaving the mirror
+    untouched and reporting success, because a caller that then commits an
+    unchanged mirror believes it has been re-derived.
+    """
+    target = VENDORED_CAPTURE_CONTRACT if mirror_path is None else mirror_path
+    owner = owning_capture_contract(daemon_registry_path)
+    if not owner.is_file():
+        raise FileNotFoundError(
+            f"cannot resolve omnimarket's owning capture-redaction contract at "
+            f"{owner} — refusing to report the mirror as re-derived from nothing"
+        )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        _reheader_for_this_repo(owner.read_text(encoding="utf-8")), encoding="utf-8"
+    )
+
+    # The resolver memoises by path string, so a check run in the SAME process
+    # after this write would answer from the pre-sync bytes and report drift
+    # that no longer exists. CI runs one process per invocation and would never
+    # have shown it; a caller that syncs then verifies would have been told its
+    # own repair failed.
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+    from omniclaude.hooks.capture_redaction import _load  # noqa: PLC0415
+
+    _load.cache_clear()
+    return target
+
+
 def check_vendored_capture_contract(
-    generated: dict[str, dict[str, Any]], daemon_registry_path: Path
+    generated: dict[str, dict[str, Any]],
+    daemon_registry_path: Path,
+    mirror_path: Path | None = None,
 ) -> list[str]:
     """Hold omniclaude's mirrored redaction contract to omnimarket's owning copy.
 
@@ -257,6 +374,7 @@ def check_vendored_capture_contract(
     owner means the check silently verified nothing, which reads exactly like
     a clean result.
     """
+    mirror = VENDORED_CAPTURE_CONTRACT if mirror_path is None else mirror_path
     in_use = any(
         rule["transform"] == CAPTURE_REDACTION_TRANSFORM
         for registration in generated.values()
@@ -266,16 +384,14 @@ def check_vendored_capture_contract(
         return []
 
     violations: list[str] = []
-    if not VENDORED_CAPTURE_CONTRACT.is_file():
+    if not mirror.is_file():
         violations.append(
             f"{CAPTURE_REDACTION_TRANSFORM} is declared by the daemon registry but "
-            f"the mirrored contract is missing at "
-            f"{VENDORED_CAPTURE_CONTRACT.relative_to(REPO_ROOT)}"
+            f"the mirrored contract is missing at {_label(mirror)}"
         )
         return violations
 
-    # nodes/<node>/registries/topics.yaml -> nodes/
-    owner = daemon_registry_path.resolve().parents[2] / OWNING_CAPTURE_CONTRACT_RELPATH
+    owner = owning_capture_contract(daemon_registry_path)
     if not owner.is_file():
         violations.append(
             f"cannot resolve omnimarket's owning capture-redaction contract at "
@@ -284,7 +400,7 @@ def check_vendored_capture_contract(
         return violations
 
     try:
-        mirrored = _resolved_posture(VENDORED_CAPTURE_CONTRACT)
+        mirrored = _resolved_posture(mirror)
         owned = _resolved_posture(owner)
     except Exception as exc:  # noqa: BLE001 - any resolution failure is a refusal
         violations.append(
@@ -297,9 +413,11 @@ def check_vendored_capture_contract(
             key for key in owned if mirrored.get(key) != owned.get(key)
         ) or ["<key set>"]
         violations.append(
-            f"{VENDORED_CAPTURE_CONTRACT.relative_to(REPO_ROOT)} has drifted from "
-            f"omnimarket's owning copy at {owner}: {differing}. omnimarket owns "
-            f"this contract; copy the posture over rather than editing the mirror."
+            f"{_label(mirror)} has drifted from omnimarket's owning copy at "
+            f"{owner}: {differing}. omnimarket owns this contract — re-derive "
+            f"the mirror with `python scripts/validation/generate_event_registry.py "
+            f"--daemon-registry {daemon_registry_path} --sync-capture-contract` "
+            f"rather than editing the mirror by hand (OMN-18357)."
         )
     return violations
 
@@ -364,13 +482,42 @@ def main(argv: list[str] | None = None) -> int:
             "(this script never writes source files directly)"
         ),
     )
+    mode.add_argument(
+        "--sync-capture-contract",
+        action="store_true",
+        help=(
+            "OMN-18357: re-derive the mirrored capture-redaction contract from "
+            "omnimarket's owning copy in the passed checkout. This is the ONLY "
+            "sanctioned way to move the mirror — it is a verbatim copy of the "
+            "owner, never a hand edit and never a re-emitted projection."
+        ),
+    )
+    parser.add_argument(
+        "--mirror-out",
+        type=Path,
+        default=None,
+        help=(
+            "Write the synced mirror here instead of the committed path. For "
+            "tests; a real sync targets the committed mirror."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.sync_capture_contract:
+        written = sync_vendored_capture_contract(
+            args.daemon_registry, mirror_path=args.mirror_out
+        )
+        print(
+            f"Synced {_label(written)} from "
+            f"{owning_capture_contract(args.daemon_registry)}"
+        )
+        return 0
 
     daemon_events = load_daemon_events(args.daemon_registry)
     generated = build_projected_registry(daemon_events)
 
     contract_violations = check_vendored_capture_contract(
-        generated, args.daemon_registry
+        generated, args.daemon_registry, mirror_path=args.mirror_out
     )
     if contract_violations:
         for violation in contract_violations:

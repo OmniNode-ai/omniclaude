@@ -369,8 +369,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SESSION_STARTED,
-                transform=None,  # Passthrough
-                description="Session start event for observability",
+                transform=redact_capture,
+                description="Contract-redacted session start telemetry (OMN-16979)",
             ),
         ],
         partition_key_field="session_id",
@@ -381,8 +381,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SESSION_ENDED,
-                transform=None,  # Passthrough
-                description="Session end event for observability",
+                transform=redact_capture,
+                description="Contract-redacted session end telemetry (OMN-16979)",
             ),
         ],
         partition_key_field="session_id",
@@ -982,8 +982,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SKILL_STARTED,
-                transform=None,  # Passthrough — no sensitive data in skill metadata
-                description="Skill invocation started; emitted before task_dispatcher call",
+                transform=redact_capture,
+                description="Contract-redacted skill start telemetry (OMN-16979)",
             ),
         ],
         partition_key_field="run_id",
@@ -994,8 +994,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.SKILL_COMPLETED,
-                transform=None,  # Passthrough — no sensitive data in skill metadata
-                description="Skill invocation completed (success or failure); emitted after task_dispatcher",
+                transform=redact_capture,
+                description="Contract-redacted skill completion telemetry (OMN-16979)",
             ),
             # OMN-6800: Fan-out to skill-invoked topic for omnidash skill_invocations projection.
             # The skill-invoked topic carries the same payload as skill-completed — omnidash
@@ -1400,8 +1400,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.TOOL_OUTPUT_CAPTURED,
-                transform=None,  # Passthrough — event carries refs and a bounded summary
-                description="Tool output captured with artifact refs and suppression decision",
+                transform=redact_capture,
+                description="Contract-redacted tool output capture telemetry (OMN-16979)",
             ),
         ],
         partition_key_field="correlation_id",

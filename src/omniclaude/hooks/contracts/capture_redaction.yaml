@@ -96,7 +96,7 @@ always_hashed_output_classes:
   - name: environment_dump
     reason: >
       2026-08-19 evening incident: `env | grep -i POSTGRES` printed a
-      PostgreSQL URL with credentials in the authority.
+      `postgresql://user:pw@host` URL.
     tool_names: ["Bash"]
     command_pattern: '(?i)(^|[;&|]\s*)(env|printenv|set)\b'
   - name: aws_credential_command
@@ -176,6 +176,35 @@ secret_patterns:
 # partition_key_field for both topics and the key is derived POST-transform:
 # hashing it would silently repartition the topic.
 topics:
+  "onex.evt.omniclaude.session-started.v1":
+    ticket: OMN-16979
+    reason: >
+      Session lifecycle metadata. The session identifier and source are needed
+      for correlation; the working-directory label is reduced to its shape.
+    fields:
+      session_id: capture_verbatim
+      hook_source: capture_verbatim
+      working_directory: capture_shape_only
+      correlation_id: capture_verbatim
+      causation_id: capture_verbatim
+      emitted_at: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+
+  "onex.evt.omniclaude.session-ended.v1":
+    ticket: OMN-16979
+    reason: >
+      Session lifecycle metadata. The reason is a closed hook-schema enum;
+      no transcript, prompt, or result content crosses this topic.
+    fields:
+      session_id: capture_verbatim
+      reason: capture_verbatim
+      correlation_id: capture_verbatim
+      causation_id: capture_verbatim
+      emitted_at: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+
   "onex.evt.omniclaude.tool-executed.v1":
     ticket: OMN-16979
     reason: >
@@ -228,6 +257,71 @@ topics:
       prompt_length:
         from: prompt
         derive: length
+
+  "onex.evt.omniclaude.skill-started.v1":
+    ticket: OMN-16979
+    reason: >
+      Start-boundary skill telemetry. It carries only the hook invocation key,
+      a skill name, and a correlation identifier; no arguments or skill body.
+    fields:
+      run_id: capture_verbatim
+      skill_name: capture_verbatim
+      repo_id: capture_verbatim
+      correlation_id: capture_verbatim
+      emitted_at: capture_verbatim
+      causation_id: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+      args: never_capture
+      arguments: never_capture
+      prompt: never_capture
+      content: never_capture
+
+  "onex.evt.omniclaude.skill-completed.v1":
+    ticket: OMN-16979
+    reason: >
+      Completion-bound skill telemetry. The terminal status shares the start
+      invocation key; results, output, and arbitrary tool response do not cross.
+    fields:
+      run_id: capture_verbatim
+      skill_name: capture_verbatim
+      repo_id: capture_verbatim
+      correlation_id: capture_verbatim
+      status: capture_verbatim
+      emitted_at: capture_verbatim
+      causation_id: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+      result: never_capture
+      output: never_capture
+      tool_response: never_capture
+      content: never_capture
+
+  "onex.evt.omnimarket.tool-output-captured.v1":
+    ticket: OMN-16979
+    reason: >
+      Artifact-capture telemetry. It identifies an already content-addressed
+      artifact and the suppression decision, never the captured bytes.
+    fields:
+      tool_name: capture_verbatim
+      suppression_decision: capture_verbatim
+      correlation_id: capture_verbatim
+      artifact_ref: capture_verbatim
+      command_type: capture_verbatim
+      original_bytes: capture_verbatim
+      original_lines: capture_verbatim
+      session_id: capture_verbatim
+      tool_use_id: capture_verbatim
+      emitted_at: capture_verbatim
+      causation_id: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+      tool_output: never_capture
+      tool_response: never_capture
+      stdout: never_capture
+      stderr: never_capture
+      output: never_capture
+      content: never_capture
 
 # ---------------------------------------------------------------------------
 # Mandatory redaction state (OMN-17209 scope 4)
