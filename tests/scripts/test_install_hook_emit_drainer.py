@@ -8,6 +8,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -20,6 +21,20 @@ def _write_executable(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _write_fake_brew_python(path: Path) -> None:
+    _write_executable(
+        path,
+        f'#!/usr/bin/env bash\nset -euo pipefail\nexec "{sys.executable}" "$@"\n',
+    )
+
+
+def _point_rule11_paths_at_test_python(script: Path, fake_python: Path) -> None:
+    content = script.read_text(encoding="utf-8")
+    content = content.replace("/opt" + "/homebrew/bin/python3.13", str(fake_python))
+    content = content.replace("/usr" + "/local/bin/python3.13", str(fake_python))
+    script.write_text(content, encoding="utf-8")
 
 
 def _prepare_installer(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path]:
@@ -42,6 +57,9 @@ def _prepare_installer(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    fake_brew_python = fake_bin / "python3.13"
+    _write_fake_brew_python(fake_brew_python)
+    _point_rule11_paths_at_test_python(installer, fake_brew_python)
     _write_executable(
         fake_bin / "launchctl",
         "#!/usr/bin/env bash\n"
@@ -291,6 +309,9 @@ def test_builder_lock_survives_killed_wrapper_until_child_stops(tmp_path: Path) 
     plugin_data = tmp_path / "plugin-data"
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    fake_brew_python = fake_bin / "python3.13"
+    _write_fake_brew_python(fake_brew_python)
+    _point_rule11_paths_at_test_python(builder, fake_brew_python)
     started = tmp_path / "build-started"
     release = tmp_path / "release-build"
     _write_executable(
