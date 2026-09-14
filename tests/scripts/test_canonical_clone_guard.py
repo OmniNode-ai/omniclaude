@@ -772,3 +772,102 @@ def test_g2_stray_allowance_does_not_open_the_canonical_clone(
     ):
         verdict = bash(registry, command, registry.home)
         assert verdict.denied, (command, verdict.reason)
+
+
+# ---------------------------------------------------------------------------
+# G6 — `gh` verbs that move a canonical clone's HEAD (OMN-16497)
+# ---------------------------------------------------------------------------
+#
+# Measured cause, 2026-09-14: the canonical onex_change_control clone was found
+# on branch `auto/omninode-ai-omnibase_infra-pr-3469-occ-autobind`, 175 commits
+# behind origin/dev. Its reflog carries exactly two entries for the event --
+# `branch: Created from origin/auto/...` and `checkout: moving from dev to
+# auto/...` at 2026-09-12T23:09:04Z -- which is the signature `gh pr checkout`
+# writes, and nothing else in the fleet writes that pair.
+#
+# Every `git`-spelled form of the same operation was already denied. `gh` was
+# invisible to the scan because `_iter_bash_checks` skipped any segment with no
+# `git` token in it, so the ONE spelling an agent reaches for when it wants to
+# read a pull request's branch locally was the one spelling that worked.
+#
+# `gh repo sync` is in the same class: it fast-forwards, or with `--force`
+# hard-resets, the local branch from the remote without the word `git`
+# appearing anywhere.
+
+_GH_DENIED = [
+    pytest.param("gh pr checkout 9270", id="pr-checkout-bare"),
+    pytest.param(
+        "gh pr checkout 9270 --repo OmniNode-ai/omnimarket", id="pr-checkout-repo-flag"
+    ),
+    pytest.param("gh pr checkout 9270 --detach", id="pr-checkout-detach"),
+    pytest.param("gh pr checkout some-feature-branch", id="pr-checkout-by-branch"),
+    pytest.param("gh repo sync", id="repo-sync"),
+    pytest.param("gh repo sync --force", id="repo-sync-force"),
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", _GH_DENIED)
+def test_gh_head_moving_verbs_denied_in_canonical(
+    registry: Registry, command: str
+) -> None:
+    verdict = bash(registry, command, registry.clone("omnimarket"))
+    assert verdict.denied, (command, verdict.reason)
+    assert "omnimarket" in verdict.reason
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", _GH_DENIED)
+def test_gh_head_moving_verbs_denied_via_cd_into_canonical(
+    registry: Registry, command: str
+) -> None:
+    clone = registry.clone("omnibase_infra")
+    verdict = bash(registry, f"cd {clone} && {command}", registry.home)
+    assert verdict.denied, (command, verdict.reason)
+    assert "omnibase_infra" in verdict.reason
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", _GH_DENIED)
+def test_gh_head_moving_verbs_allowed_in_worktree(
+    registry: Registry, command: str
+) -> None:
+    """Positive control: the same verbs are ordinary work inside a worktree."""
+    verdict = bash(registry, command, registry.worktree("OMN-1/omnimarket"))
+    assert not verdict.denied, (command, verdict.reason)
+
+
+_GH_ALLOWED_IN_CANONICAL = [
+    # Reads and remote-side operations. None of these writes a local ref.
+    "gh pr view 9270",
+    "gh pr view 9270 --json state,mergedAt",
+    "gh pr checks 9270 --repo OmniNode-ai/omnimarket",
+    "gh pr list --limit 5",
+    "gh pr diff 9270",
+    "gh pr merge 9270 --squash --auto",
+    "gh run list --limit 5",
+    "gh run view 34791292423 --log",
+    "gh api repos/OmniNode-ai/omnimarket/branches/dev/protection",
+    "gh repo view --json defaultBranchRef",
+    "gh workflow run deploy.yml --ref dev",
+    # The word appearing as data, not as a command word.
+    "grep -rn 'gh pr checkout' docs/",
+    "echo 'use gh pr checkout in a worktree'",
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", _GH_ALLOWED_IN_CANONICAL)
+def test_gh_read_and_remote_verbs_allowed_in_canonical(
+    registry: Registry, command: str
+) -> None:
+    verdict = bash(registry, command, registry.clone("omnimarket"))
+    assert not verdict.denied, (command, verdict.reason)
+
+
+@pytest.mark.unit
+def test_gh_deny_message_names_the_worktree_remedy(registry: Registry) -> None:
+    verdict = bash(registry, "gh pr checkout 9270", registry.clone("omnimarket"))
+    assert verdict.denied
+    assert "gh pr checkout" in verdict.reason
+    assert "worktree" in verdict.reason

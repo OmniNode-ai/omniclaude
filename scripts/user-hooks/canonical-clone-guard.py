@@ -115,6 +115,36 @@ _GIT_MUTATIONS = {
     "filter-branch",
 }
 
+# `gh` subcommand PAIRS that move a local ref in the repository `gh` resolves
+# from the current working directory (OMN-16497, G6).
+#
+# Every git-spelled form of these was already in _GIT_MUTATIONS. `gh` was not,
+# because the scan below only ever looked at segments containing the token
+# `git` — so the one spelling that reaches for a pull request's branch locally
+# was the one spelling that worked. Measured 2026-09-14: the canonical
+# onex_change_control clone sat 175 commits behind origin/dev on
+# `auto/omninode-ai-omnibase_infra-pr-3469-occ-autobind`, and its reflog pair
+# (`branch: Created from origin/<branch>` + `checkout: moving from dev to
+# <branch>`, 2026-09-12T23:09:04Z) is the signature `gh pr checkout` writes.
+#
+# Kept to the two pairs that provably write a local ref, because the cost of a
+# false positive here is a denied read on the verb agents use most:
+#   gh pr checkout   fetches the head ref, creates a local branch, moves HEAD
+#   gh repo sync     fast-forwards the local branch from the remote, and with
+#                    --force hard-resets it
+# Everything else `gh` does is either a read (`pr view`, `pr checks`, `pr diff`,
+# `run view`, `api`) or a remote-side operation (`pr merge`, `workflow run`),
+# and stays allowed inside a canonical clone.
+#
+# There is no `-C`-equivalent on `gh`: it resolves the repository from the
+# process working directory, and `--repo` selects which REMOTE it talks to, not
+# which checkout it writes. So the location is always the shell's cwd — which
+# is also why `--repo` cannot be read as moving the target elsewhere.
+_GH_LOCAL_REF_MUTATIONS = {
+    ("pr", "checkout"),
+    ("repo", "sync"),
+}
+
 # git global options that take a value, so we can skip past them to the subcommand.
 _GIT_OPTS_WITH_VALUE = {
     "-C",
@@ -527,9 +557,28 @@ def _iter_bash_checks(
         if _invokes_converge_script(tokens):
             _log(f"ALLOW sanctioned {CONVERGE_SCRIPT} invocation: {segment[:200]}")
             continue
+        if tokens[0] == "gh":
+            yield from _gh_checks(tokens, shell)
+            continue
         if "git" not in tokens:
             continue
         yield from _git_checks(tokens, shell)
+
+
+def _gh_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | None]]:
+    """Yield a mutation for a ``gh`` invocation that writes a local ref.
+
+    Matched on the command WORD plus its first two non-option arguments, never
+    on a substring: ``tokens[0] == "gh"`` is checked by the caller, so a line
+    that merely quotes the verb (``grep -rn 'gh pr checkout' docs/``, an
+    ``echo``) has a different command word and is never reached.
+    """
+    words = [tok for tok in tokens[1:] if not tok.startswith("-")]
+    if len(words) < 2:
+        return
+    pair = (words[0], words[1])
+    if pair in _GH_LOCAL_REF_MUTATIONS:
+        yield f"gh {pair[0]} {pair[1]}", shell.cwd
 
 
 def _git_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | None]]:
@@ -1043,7 +1092,15 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001 — never block on a parser bug
             _log(f"ERROR parsing Bash command for gate-escapes, failing open: {exc!r}")
 
-        if "git" not in command:
+        # Cheap early-out before the tokenising scan. It must name EVERY command
+        # word the scan can deny, or that word is unreachable no matter what the
+        # tables below say — which is exactly how `gh pr checkout` moved a
+        # canonical clone's HEAD on 2026-09-12 while every git spelling of the
+        # same operation was refused (OMN-16497, G6). `gh` is a substring of
+        # ordinary English words ("through", "right"), so this admits some
+        # commands the scan then correctly finds nothing in; that costs one
+        # tokenise and is the safe direction. A silent early-out is not.
+        if "git" not in command and "gh" not in command:
             _allow()
         try:
             for label, path in _iter_bash_checks(command, cwd, env):
