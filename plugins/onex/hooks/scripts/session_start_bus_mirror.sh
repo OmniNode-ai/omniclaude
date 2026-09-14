@@ -46,6 +46,31 @@ if [[ -f "$_MODE_SH" ]]; then
 fi
 unset _MODE_SH
 
+# Quiet intent (OMN-18368): a session opened to re-authenticate, to check
+# connectivity, or to do one thing that is not this workspace's process does not
+# mirror a session-started event. Same reasoning as the lite carve-out above,
+# on the other axis, and the emit is best-effort by this hook's own contract.
+#
+# `tick` deliberately does NOT take this exit: a scheduled or dispatched session
+# IS this workspace's process, and its event is part of that run's record. This
+# is the one hook of the four whose two non-normal intents differ, which is why
+# it calls the quiet-only predicate rather than the silent one.
+#
+# Placed HERE, ahead of the log directory and the dispatch, rather than beside
+# the print it does not do: gating output in a hook that prints nothing would be
+# a no-op dressed as a consultation.
+_INTENT_SH="${_SCRIPT_DIR}/../../lib/intent.sh"
+if [[ -f "$_INTENT_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$_INTENT_SH" 2>/dev/null || true
+    if declare -F omniclaude_session_intent_is_quiet >/dev/null 2>&1 \
+        && omniclaude_session_intent_is_quiet; then
+        cat >/dev/null 2>/dev/null || true
+        exit 0
+    fi
+fi
+unset _INTENT_SH
+
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
