@@ -74,7 +74,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -505,27 +505,69 @@ def count_attributed_stashes(subjects: Sequence[str], branch: str | None) -> int
 # ---------------------------------------------------------------------------
 
 
-def parse_ledger_claims(ledger_path: Path) -> dict[str, tuple[bool, str | None]]:
-    """Map each ticket to ``(has_terminal, open_claim_text_or_None)``.
+_LANE_RE = re.compile(r"\blane=([^\s|]+)")
+# Both spellings are live in the real ledger: `closes-CLAIM=<path>:<line>` and
+# the equally-real `closes=CLAIM <path>:<line>` (no dash before CLAIM). Either
+# way, only the trailing `:<line>` numeral is load-bearing here.
+_CLOSES_CLAIM_RE = re.compile(r"closes[-=]CLAIM[=\s]+\S*?:(\d+)")
 
-    The ledger is append-only, so line order is chronological order: a CLAIM
-    appearing at a later line than the newest TERMINAL for the same ticket means
-    a lane resumed work and the worktree must not be touched. A line carrying
-    both markers (``CLAIM+TERMINAL``) resolves to TERMINAL.
 
-    Section bodies (``- **Status:** IN PROGRESS.``) carry no ticket id of their
-    own, so they inherit the ticket from the nearest preceding ``#`` heading.
+class LedgerClaimRow(NamedTuple):
+    """One still-open ``CLAIM`` row: not yet closed by a matching ``TERMINAL``.
+
+    ``lineno`` is 1-based, matching the numbering ``closes-CLAIM=<path>:<line>``
+    citations use (and what ``sed -n '<n>p'`` / ``grep -n`` report), so a
+    citation can be compared directly against it.
+    """
+
+    lineno: int
+    lane: str | None
+    tickets: frozenset[str]
+    text: str
+
+
+def parse_ledger_claims(
+    ledger_path: Path,
+) -> dict[str, tuple[bool, tuple[LedgerClaimRow, ...]]]:
+    """Map each ticket to ``(has_terminal_ever, open_claims)``.
+
+    A ``CLAIM`` is keyed by ``(lane, line)`` [OMN-18380 AC1], not by ticket. It
+    is closed ONLY by a ``TERMINAL`` whose ``closes-CLAIM`` field cites that
+    exact line, or, when the ``TERMINAL`` carries no ``closes-CLAIM`` field, by
+    a ``TERMINAL`` whose ``lane=`` matches (and whose ticket set, if either
+    row has one, intersects the claim's). A ``TERMINAL`` naming the ticket
+    alone — no ``closes-CLAIM``, no matching lane — closes NOTHING.
+
+    The previous revision compared the newest CLAIM line against the newest
+    TERMINAL line **for the ticket**, so any lane's TERMINAL on a shared
+    ticket read as closing every other lane's open CLAIM on it. On
+    2026-09-14 a peer lane's TERMINAL on OMN-16901 (no ``closes-CLAIM``, a
+    different ``lane=``) cleared lane ``worktree-cleanup-phase2``'s own
+    still-open CLAIM this way, and the pruner removed its worktree out from
+    under it (docs/tracking/ROLLING_WORK_LEDGER.md:7963).
+
+    ``has_terminal_ever`` is reported context only (evidence text), never a
+    condition of eligibility — unchanged from the previous contract of
+    :func:`omniclaude.hooks.lib.worktree_prune_policy.is_prune_eligible`.
+
+    Section bodies (``- **Status:** IN PROGRESS.``) carry no ticket id of
+    their own, so they inherit the ticket from the nearest preceding ``#``
+    heading; such legacy rows also carry no ``lane=``, so a bare
+    ``**Status:** TERMINAL`` closes nothing under the lane-keyed rule above —
+    the fail-safe direction (OMN-15551): an unprovable close leaves the claim
+    open rather than assumed closed.
     """
     if not ledger_path.is_file():
         return {}
 
-    last_claim: dict[str, tuple[int, str]] = {}
-    last_terminal: dict[str, int] = {}
+    open_claims: dict[int, LedgerClaimRow] = {}
+    has_terminal_ever: dict[str, bool] = {}
     section_ticket: str | None = None
 
-    for lineno, raw in enumerate(
+    for index, raw in enumerate(
         ledger_path.read_text(encoding="utf-8", errors="replace").splitlines()
     ):
+        lineno = index + 1  # 1-based, matching closes-CLAIM=<path>:<line> citations
         line = raw.strip()
         if line.startswith("#"):
             heading_ticket = _TICKET_RE.search(line.upper())
@@ -536,27 +578,79 @@ def parse_ledger_claims(ledger_path: Path) -> dict[str, tuple[bool, str | None]]
         if not (is_claim or is_terminal):
             continue
 
-        tickets = set(_TICKET_RE.findall(line.upper()))
+        tickets = frozenset(_TICKET_RE.findall(line.upper()))
         if not tickets and section_ticket:
-            tickets = {section_ticket}
+            tickets = frozenset({section_ticket})
         if not tickets:
             continue
 
+        lane_match = _LANE_RE.search(line)
+        lane = lane_match.group(1).lower() if lane_match else None
+
         for ticket in tickets:
             if is_terminal:
-                last_terminal[ticket] = lineno
-            if is_claim:
-                last_claim[ticket] = (lineno, line[:240])
+                has_terminal_ever[ticket] = True
 
-    result: dict[str, tuple[bool, str | None]] = {}
-    for ticket in set(last_claim) | set(last_terminal):
-        terminal_line = last_terminal.get(ticket)
-        claim = last_claim.get(ticket)
-        open_claim: str | None = None
-        if claim is not None and (terminal_line is None or claim[0] > terminal_line):
-            open_claim = claim[1]
-        result[ticket] = (terminal_line is not None, open_claim)
+        if is_terminal:
+            closes_match = _CLOSES_CLAIM_RE.search(line)
+            if closes_match:
+                cited_line = int(closes_match.group(1))
+                open_claims.pop(cited_line, None)
+            elif lane is not None:
+                # No explicit citation: close the most recent OPEN claim from
+                # the SAME lane whose tickets intersect this TERMINAL's (or
+                # either side carries no tickets at all — a bare lane close).
+                candidates = [
+                    row
+                    for row in open_claims.values()
+                    if row.lane == lane
+                    and (not row.tickets or not tickets or row.tickets & tickets)
+                ]
+                if candidates:
+                    newest = max(candidates, key=lambda row: row.lineno)
+                    open_claims.pop(newest.lineno, None)
+            # Neither field present: this TERMINAL closes nothing (rule 8).
+            continue
+
+        # is_claim (CLAIM+TERMINAL combined rows never reach here: they match
+        # only _TERMINAL_MARKERS, never _CLAIM_MARKERS, and resolve above).
+        open_claims[lineno] = LedgerClaimRow(
+            lineno=lineno, lane=lane, tickets=tickets, text=line
+        )
+
+    result: dict[str, tuple[bool, tuple[LedgerClaimRow, ...]]] = {}
+    for ticket in set(has_terminal_ever) | {
+        t for row in open_claims.values() for t in row.tickets
+    }:
+        ticket_claims = tuple(
+            sorted(
+                (row for row in open_claims.values() if ticket in row.tickets),
+                key=lambda row: row.lineno,
+            )
+        )
+        result[ticket] = (has_terminal_ever.get(ticket, False), ticket_claims)
     return result
+
+
+def select_blocking_claim(
+    open_claims: tuple[LedgerClaimRow, ...],
+    worktree_path: str,
+    branch: str | None,
+) -> str | None:
+    """Pick the open claim, if any, that blocks this worktree from pruning.
+
+    A claim naming this worktree's path or branch always blocks, regardless
+    of other open or closed claims on the same ticket [OMN-18380 AC2]. Absent
+    a named match, any remaining open claim on the ticket still blocks — an
+    un-named claim is not proof the worktree is uninvolved, and the safe
+    default (OMN-15551) is to hold rather than guess.
+    """
+    if not open_claims:
+        return None
+    for claim in open_claims:
+        if worktree_path in claim.text or (branch and branch in claim.text):
+            return claim.text[:240]
+    return open_claims[0].text[:240]
 
 
 # ---------------------------------------------------------------------------
@@ -735,7 +829,7 @@ def collect_facts(
     worktree: Path,
     root: Path,
     ticket_states: dict[str, EnumTicketLifecycle],
-    ledger: dict[str, tuple[bool, str | None]],
+    ledger: dict[str, tuple[bool, tuple[LedgerClaimRow, ...]]],
     base_ref_cache: dict[Path, str | None],
     stash_cache: dict[Path, list[str]],
     pr_state_cache: dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]]
@@ -832,7 +926,8 @@ def collect_facts(
                 unreadable_probes.append(f"git diff --quiet {base_ref}...HEAD")
             tree_diff_empty = code == 0
 
-    has_terminal, open_claim = ledger.get(ticket or "", (False, None))
+    has_terminal, ticket_open_claims = ledger.get(ticket or "", (False, ()))
+    open_claim = select_blocking_claim(ticket_open_claims, str(worktree), branch)
 
     # Limb (c): the branch is on origin at this exact HEAD. The expensive live
     # confirmation runs ONLY when the cheap local remote-tracking ref already
