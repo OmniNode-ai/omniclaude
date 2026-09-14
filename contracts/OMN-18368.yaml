@@ -1,0 +1,63 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18368
+title: "The process catalogue, its falsifier, and the five missing prose skills"
+summary: >
+  Step 3 of the process-skills plan. Adds a machine-readable catalogue of the
+  recurring processes, a test that fails when the catalogue and the skill
+  directory disagree, and the five prose skills for the catalogue rows that had
+  no invocable name. Each skill is generic and overlay-configured; its
+  organization-specific half lives in a private overlay.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+evidence_requirements:
+  - kind: tests
+    description: "The catalogue falsifier and the skill hygiene suites pass"
+    command: "uv run pytest tests/skills/test_process_catalogue_rows.py tests/skills/test_no_monorepo_refs_in_plugin_skills.py tests/skills/test_no_mcp_linear_calls_in_skill_prompts.py tests/skills/test_no_omni_home_in_s_class_skills.py -q"
+  - kind: ci
+    description: "omniclaude PR #2168 CI green across required gates"
+    command: "gh pr checks 2168 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-catalogue-falsifier
+    description: >
+      The catalogue test fails on a row naming a skill that does not exist, a
+      skill declaring a row that does not exist, a row with an empty
+      verification contract, or a row with an empty mechanical replacement.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_process_catalogue_rows.py -q"
+  - id: dod-catalogue-present
+    description: "The process catalogue is committed and every row carries its two mandatory fields"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f plugins/onex/process_catalogue.yaml"
+  - id: dod-five-skills-present
+    description: "The five prose skills for the previously nameless rows exist with a prompt each"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f plugins/onex/skills/plans_board_refresh/SKILL.md && test -f plugins/onex/skills/board_readback/SKILL.md && test -f plugins/onex/skills/comment_sweep/SKILL.md && test -f plugins/onex/skills/overseer_verify_tick/SKILL.md && test -f plugins/onex/skills/lane_dispatch/SKILL.md"
+  - id: dod-skills-carry-no-organization-content
+    description: >
+      The new skills are generic: the monorepo-reference gate and the
+      public-repo hygiene gate both pass over them.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "bash scripts/check-skill-monorepo-refs.sh"
+  - id: dod-new-nodes-born-canonical
+    description: >
+      The five generated orchestrator nodes classify canonical rather than
+      landing as new non-canonical debt.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -f src/omniclaude/nodes/node_skill_lane_dispatch_orchestrator/handler_lane_dispatch_skill.py"
