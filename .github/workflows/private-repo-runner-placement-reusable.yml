@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Private-repo runner placement gate (reusable). OMN-18205.
+#
+# Operator ruling, 2026-09-14, firm: a PRIVATE repository never runs CI on
+# GitHub-hosted Actions runners. Hosted runners are for PUBLIC repositories,
+# where their minutes are free. This is the CI half of that ruling; the
+# exported `private-repo-runner-placement` pre-commit hook runs the SAME
+# script, so a local verdict and a CI verdict cannot diverge (operating rule 5).
+#
+# WHY IT MUST RUN ON THE FLEET ITSELF. This job judges private repositories,
+# so by its own rule it cannot be placed on a hosted runner: a gate that has to
+# break the invariant it enforces in order to run is not an enforcement
+# surface. It is pinned to the fleet label rather than routed through any seam
+# for the same reason the routing-decision job in omnibase_infra is pinned --
+# it must not share fate with the variable it reads.
+#
+# Usage in caller repos:
+#   jobs:
+#     private-repo-runner-placement:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/private-repo-runner-placement-reusable.yml@<immutable-sha>
+#
+# Surfaced check context in the caller:
+#   `private-repo-runner-placement / private-repo-runner-placement`
+#
+# ONE pin, not two: the script is checked out at `github.job_workflow_sha` --
+# the SHA this reusable was resolved at -- so the caller`s `uses:` SHA is the
+# single source of truth for both the workflow and the validator. Pin to an
+# omniclaude commit on `dev`; `main` is release-synced and does not carry it.
+
+name: Private Repo Runner Placement (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      report_reusable_calls:
+        description: >-
+          Also list `uses:` jobs, whose placement is decided in the repository
+          that DEFINES the called workflow and is judged there by this same
+          gate. Reported rather than omitted so a cross-repo hop is visible.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  private-repo-runner-placement:
+    name: private-repo-runner-placement
+    runs-on: [self-hosted, omnibase-ci]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout the caller repository
+        uses: actions/checkout@v4
+
+      - name: Checkout the validator at this workflow`s own SHA
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ github.job_workflow_sha }}
+          path: .private-repo-runner-placement-gate
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install PyYAML==6.0.2
+
+      # GH_TOKEN is the job token: it can read this repository`s own
+      # visibility and its Actions variables, which is all the gate needs. A
+      # failure to read either is exit 2, never a pass -- see the script`s
+      # GateError paths.
+      - name: Run the placement gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=(--repo-root . --repo "${GITHUB_REPOSITORY}")
+          if [ "${{ inputs.report_reusable_calls }}" = "true" ]; then
+            args+=(--report-reusable-calls)
+          fi
+          python3 .private-repo-runner-placement-gate/scripts/private_repo_runner_placement_gate.py "${args[@]}"
