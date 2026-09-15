@@ -187,6 +187,20 @@ jobs:
           # empty $REVIEW_JSON (omniclaude#2180, run 35017674790).
           # set +e/-e brackets the substitution so `set -euo pipefail` above
           # does not abort the script on a genuine cli_review failure.
+          #
+          # OMN-18409 follow-up: cli_review's own exit-code contract is 0
+          # only when >=2 models succeeded, 2 for exactly one model
+          # succeeding (DEGRADED -- a real, valid verdict), 1 when every
+          # model failed. This step only ever passes a single --model, so a
+          # successful run can NEVER return 0 -- it always returns 2. Before
+          # this fix that was masked by the very REVIEW_EXIT=$?-after-fi bug
+          # this commit fixes (a nonzero-but-valid-JSON exit was silently
+          # read as 0 and the JSON parsed anyway); fixing the exit-code
+          # capture alone, without widening this check, would have turned
+          # every ordinary single-model DEGRADED success into a false
+          # infra_error. Treat exit 0 (full pass) and exit 2 (single-model
+          # DEGRADED, still a real verdict) as "cli_review produced output";
+          # only exit 1 (every model failed / crashed) is retried.
           REVIEW_EXIT=1
           for attempt in 1 2; do
             set +e
@@ -197,7 +211,7 @@ jobs:
               2>/dev/null)
             REVIEW_EXIT=$?
             set -e
-            if [ "$REVIEW_EXIT" -eq 0 ]; then
+            if [ "$REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2 ]; then
               break
             fi
             echo "::warning::cli_review attempt ${attempt}/2 failed (exit ${REVIEW_EXIT})"
@@ -206,7 +220,11 @@ jobs:
             fi
           done
 
-          if [ "$REVIEW_EXIT" -ne 0 ]; then
+          # Exit 0 (full pass) and exit 2 (single-model DEGRADED) both mean
+          # cli_review produced a real verdict document -- only exit 1
+          # (every model failed / crashed) after both attempts is a genuine
+          # infra_error.
+          if [ "$REVIEW_EXIT" -ne 0 ] && [ "$REVIEW_EXIT" -ne 2 ]; then
             {
               echo "verdict=infra_error"
               echo "blocking_count=0"

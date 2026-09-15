@@ -244,6 +244,42 @@ def test_review_exit_captured_from_command_not_if_statement(
     )
 
 
+def test_single_model_degraded_exit_code_is_not_treated_as_infra_error(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-18409 follow-up: cli_review's exit-code contract is 0 only when
+    at least 2 models succeeded, 2 for exactly one model succeeding
+    (DEGRADED -- a real, valid verdict, not a failure), and 1 when every
+    model failed. This step passes only a single ``--model``, so a
+    successful run can NEVER return 0 -- it always returns 2.
+
+    Fixing the REVIEW_EXIT capture bug in isolation, without widening the
+    retry/infra_error checks to accept exit 2, would turn every ordinary
+    single-model DEGRADED success into a false infra_error -- strictly
+    worse than the bug it replaces, since the old (buggy) post-fi ``$?``
+    read accidentally treated any nonzero-but-valid-JSON exit as success.
+
+    Reproduced live 2026-09-15 against omniclaude PR #2181's own diff:
+    cli_review --model deepseek-r1 succeeded (0 findings) and exited 2.
+    """
+    run_text = _review_step_run_text(workflow)
+
+    assert 'REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2' in run_text, (
+        "the retry loop's success check must accept exit 2 (single-model "
+        "DEGRADED) as well as exit 0 -- this step only ever passes one "
+        "--model, so exit 0 can never occur on a genuine success"
+    )
+
+    condition_line = next(
+        line for line in run_text.splitlines() if '"$REVIEW_EXIT" -ne 0' in line
+    )
+    assert '"$REVIEW_EXIT" -ne 2' in condition_line, (
+        "the infra_error fail-closed check must exempt exit 2 -- otherwise "
+        "a real single-model DEGRADED success (the normal case for this "
+        "single-model workflow) reports infra_error after two attempts"
+    )
+
+
 def test_verdict_parser_treats_empty_diff_as_a_real_passed_verdict(
     workflow: dict[object, object],
 ) -> None:
