@@ -1,0 +1,179 @@
+{
+  "$comment": [
+    "OMN-18414. THE ONE GRAMMAR FOR THE `Gate:` KEY.",
+    "",
+    "A `Gate:` line in a Linear issue description is read by two independent",
+    "mechanisms. The AUTHORING authority is omniclaude's ticket-creation",
+    "admission guard, which refuses a create whose binding line it cannot",
+    "read. The READING consumer is omnibase_infra's evidence autoclose sweep,",
+    "which resolves the line to decide whether a Done-flip candidate names a",
+    "live surface that has to be green first.",
+    "",
+    "Before this contract the two carried DISJOINT vocabularies. The guard",
+    "mandated four forms and the closer accepted exactly one form that was not",
+    "among them, so every ticket the guard admitted was a typed hold at the",
+    "closer, and the form the closer required would have been refused at",
+    "creation. Four Done-candidates were held on nothing else at the",
+    "2026-09-15T21:34Z dry-run tick.",
+    "",
+    "This file is the single declaration. Neither consumer carries a private",
+    "form regex; each compiles the patterns below and matches them in order.",
+    "",
+    "WHY THIS IS DATA READ TWICE RATHER THAN ONE IMPORTED MODULE. The guard's",
+    "decision core imports only the standard library. Its hook script resolves",
+    "an interpreter that may be a bare system python3 and runs it with",
+    "`env -u PYTHONPATH`, so importing a packaged module would turn a missing",
+    "dependency into a refusal of every Linear write on the machine. The guard",
+    "already records that constraint for the OMN-18135 proof-class vocabulary,",
+    "which it transcribes with its source revision pinned for the same reason.",
+    "This contract follows that established construction: one canonical",
+    "declaration here, a transcription on the guard side, and a drift test that",
+    "fails when the two diverge.",
+    "",
+    "WHY TWO LINE PATTERNS AND ONE FORM LIST. The asymmetry between the two",
+    "line patterns is deliberate and is NOT the defect this contract closes.",
+    "At AUTHORING time a bulleted binding line is refused, because a bullet is",
+    "how a line ends up inside a checklist that binds nothing. At READING time",
+    "the closer faces descriptions already written, including quoted and",
+    "emphasised ones, so it tolerates leading quote, bullet and emphasis",
+    "characters and the `Gate probe:` spelling. The language the reading",
+    "pattern accepts is a strict superset of the authoring one, which is what",
+    "`line_pattern_superset_fixtures` pins. What must NOT differ, and what did,",
+    "is `forms` -- the grammar of the binding VALUE.",
+    "",
+    "WHY EXACTLY ONE FORM IS A PROBE. `probe` says what a form resolves to.",
+    "Only `workflow_run` is a proof pointer: it names a workflow file whose",
+    "newest completed run's conclusion is the ticket's own declared evidence,",
+    "and anything but `success` holds the flip. That is the OMN-16106",
+    "behaviour, unchanged. The other four forms are TRACEABILITY bindings --",
+    "they say which commitment a ticket exists to serve -- and resolving them",
+    "to a live probe is refuted rather than merely unimplemented:",
+    "",
+    "  * A release-criterion or invariant id cannot resolve to the beta board's",
+    "    live cell, because the board is generated FROM Linear. Its own module",
+    "    states it re-reads `Linear and every probe against GitHub on each run`",
+    "    (omninode_infra tools/beta_board/beta_board_data.py:4, :760, :1981).",
+    "    Holding a Linear state flip on a cell derived from that ticket's Linear",
+    "    state is a cycle, and a cycle resolves to whatever it was seeded with.",
+    "",
+    "  * A live-gate-defect check name cannot resolve to a check run. The name",
+    "    is a BROKEN SURFACE, named because it is broken, so it is red by",
+    "    construction at filing time and green only once the ticket's own work",
+    "    lands. It is frequently not a CI context at all: OMN-18403's",
+    "    `workspace-reconcile-status` matches no check run on omnibase_infra's",
+    "    dev HEAD and appears in no workflow in either repository, against a",
+    "    positive control on the same endpoint that returns check-run names.",
+    "",
+    "A form declaring `probe: none` therefore reaches the stage after the probe",
+    "on its own. It is NOT a pass on the ticket -- every other conjunct of the",
+    "sweep still applies -- it is the absence of a proof pointer, stated.",
+    "",
+    "There is deliberately NO wildcard form and no escape value. A binding line",
+    "matching no form below is a typed hold naming these forms, never a silent",
+    "pass and never a reported red conclusion: a sanctioned spelling for an",
+    "unreadable binding is a sanctioned incident.",
+    "",
+    "CASE-INSENSITIVITY IS INLINE `(?i)`, NOT A FLAGS ARGUMENT. A consumer",
+    "compiling these with `re.IGNORECASE | re.MULTILINE` trips omnibase_infra's",
+    "union-usage ratchet, which counts the `|` as a type union. The inline flag",
+    "is equivalent, and raising a ratchet ceiling to get past a false positive",
+    "is how ceilings stop meaning anything."
+  ],
+  "contract_version": "1.0.0",
+  "line_pattern_authoring": "^[ \\t]*Gate:[ \\t]*(?P<binding>.*?)[ \\t]*$",
+  "line_pattern_reading": "(?i)^[ \\t>*_]*(?:\\*\\*)?gate(?:\\s+probe)?(?:\\*\\*)?[ \\t]*:[ \\t]*(?P<binding>.+?)[ \\t]*$",
+  "normalizations": [
+    {
+      "id": "linear_issue_mention",
+      "$comment": "Linear rewrites a plain `OMN-16990` typed into a description as an issue-mention element, so the text a reader gets back is not the text the author wrote. A parent-criterion pattern built against the authored spelling matches nothing on any live ticket. Replaced with the identifier the element wraps.",
+      "pattern": "(?i)<issue\\b[^>]*>(?P<text>[^<]*)</issue>",
+      "replacement": "\\g<text>"
+    },
+    {
+      "id": "markdown_link_to_text",
+      "$comment": "A binding an editor has auto-linked reads as `[OMN-16990](url)`. The link target is never part of a binding, so the visible text is kept and the target dropped.",
+      "pattern": "\\[(?P<text>[^\\]]+)\\]\\((?:[^)]*)\\)",
+      "replacement": "\\g<text>"
+    },
+    {
+      "id": "strip_code_span",
+      "$comment": "A binding written inside a code span is the same binding. Backticks are stripped after the other rewrites so a mention nested in a span is still reached.",
+      "pattern": "`",
+      "replacement": ""
+    },
+    {
+      "id": "collapse_whitespace",
+      "$comment": "Applied last so `OMN-16990   AC-1` and a newline-wrapped equivalent are one binding.",
+      "pattern": "\\s+",
+      "replacement": " "
+    }
+  ],
+  "forms": [
+    {
+      "id": "workflow_run",
+      "$comment": "`Gate: OmniNode-ai/omnibase_infra chain-canary.yml`. The only proof pointer. A bare filename is deliberately NOT accepted: defaulting the repository to whichever one the companion happens to live in resolves a DIFFERENT workflow of the same name and reports its colour as this ticket's proof, which is worse than declining to answer.",
+      "pattern": "(?i)^(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[ ](?P<workflow>[A-Za-z0-9_.-]+\\.ya?ml)$",
+      "probe": "workflow_run"
+    },
+    {
+      "id": "release_criterion",
+      "$comment": "`Gate: C9`. Shape only; membership is checked by the authoring guard against the release-criterion ids it pins from the beta PRD. The reading consumer does not re-check membership -- an id the PRD has since dropped is a stale binding on an already-created ticket, not a reason to withhold a Done-flip.",
+      "pattern": "(?i)^(?P<criterion>C\\d+)$",
+      "probe": "none"
+    },
+    {
+      "id": "invariant",
+      "$comment": "`Gate: INV-103`. Zero-padded to at least three digits because that is the invariant registry's own spelling, so `INV-12` is a typo for `INV-012` and is refused rather than guessed at.",
+      "pattern": "(?i)^(?P<invariant>INV-\\d{3,})$",
+      "probe": "none"
+    },
+    {
+      "id": "parent_criterion",
+      "$comment": "`Gate: OMN-16729 AC-5`. Both halves are required: a bare parent is a link, not a binding.",
+      "pattern": "(?i)^(?P<parent>OMN-\\d+)[ ]AC-(?P<ordinal>\\d+)$",
+      "probe": "none"
+    },
+    {
+      "id": "live_gate_defect",
+      "$comment": "`Gate: live-gate defect: kb-doc-gate`. The check must actually be named. This is the one form that also exempts a residual-shaped title at the authoring guard, because a defect in a live gate is not a residual of anything.",
+      "pattern": "(?i)^live-gate[ ]defect:[ ]*(?P<check>\\S.*)$",
+      "probe": "none"
+    }
+  ],
+  "fixtures": {
+    "accepted": [
+      {"binding": "OmniNode-ai/omnibase_infra chain-canary.yml", "form": "workflow_run"},
+      {"binding": "OmniNode-ai/omniclaude deploy-gate.yaml", "form": "workflow_run"},
+      {"binding": "C7", "form": "release_criterion"},
+      {"binding": "C27", "form": "release_criterion"},
+      {"binding": "INV-103", "form": "invariant"},
+      {"binding": "INV-0109", "form": "invariant"},
+      {"binding": "OMN-16729 AC-5", "form": "parent_criterion"},
+      {"binding": "OMN-18031 AC-6", "form": "parent_criterion"},
+      {"binding": "live-gate defect: kb-doc-gate", "form": "live_gate_defect"},
+      {"binding": "live-gate defect: workspace-reconcile-status", "form": "live_gate_defect"},
+      {"binding": "<issue id=\"59e3391c\" href=\"https://linear.app/omninode/issue/OMN-16990\">OMN-16990</issue> AC-1", "form": "parent_criterion"},
+      {"binding": "[OMN-18031](https://linear.app/omninode/issue/OMN-18031) AC-6", "form": "parent_criterion"},
+      {"binding": "`C7`", "form": "release_criterion"}
+    ],
+    "rejected": [
+      {"binding": "chain-canary.yml", "$comment": "a bare workflow filename is ambiguous across repositories"},
+      {"binding": "OmniNode-ai/omnibase_infra", "$comment": "a repository with no workflow file names no run"},
+      {"binding": "OMN-16729", "$comment": "a bare parent is a link, not a binding"},
+      {"binding": "INV-12", "$comment": "under-padded; a typo for INV-012"},
+      {"binding": "live-gate defect:", "$comment": "the broken check is not named"},
+      {"binding": "C", "$comment": "no ordinal"},
+      {"binding": "", "$comment": "an empty binding line binds nothing"},
+      {"binding": "whatever the team decides", "$comment": "prose is not a binding"}
+    ],
+    "line_pattern_superset_fixtures": [
+      {"line": "Gate: C7", "authoring": true, "reading": true},
+      {"line": "  Gate: C7", "authoring": true, "reading": true},
+      {"line": "* Gate: C7", "authoring": false, "reading": true},
+      {"line": "> Gate: C7", "authoring": false, "reading": true},
+      {"line": "**Gate**: C7", "authoring": false, "reading": true},
+      {"line": "Gate probe: OmniNode-ai/omnibase_infra chain-canary.yml", "authoring": false, "reading": true},
+      {"line": "The line reading Gate: C7 is an example", "authoring": false, "reading": false}
+    ]
+  }
+}

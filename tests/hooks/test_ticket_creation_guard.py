@@ -2756,3 +2756,310 @@ def test_rule_nine_reproduces_the_live_omn_18387_regression() -> None:
     assert _update_codes(
         {"id": "OMN-18387", "description": after}, previous=before
     ) == {"criterion_text_rewritten"}
+
+
+# ---------------------------------------------------------------------------
+# OMN-18414 — the guard reads the declared `Gate:` grammar, it does not spell
+# one of its own
+# ---------------------------------------------------------------------------
+#
+# The `Gate:` line is read by two mechanisms with, before this contract,
+# DISJOINT vocabularies: this admission guard (four forms) and omnibase_infra's
+# evidence autoclose sweep (one form, not among the four). Every ticket the
+# guard admitted was therefore a typed hold at the closer. The single
+# declaration is `gate_binding_grammar.json`; these cases pin that the guard
+# compiles that file rather than carrying its own copy of the grammar.
+
+_GRAMMAR_JSON: Final[Path] = _HOOKS_DIR / "config" / "gate_binding_grammar.json"
+
+#: The canonical declaration, in the repository that owns it. Vendored here
+#: for the same reason the proof-class vocabulary is transcribed rather than
+#: imported (see the contract's own ``$comment``): this module's decision core
+#: is standard-library-only and cannot import a packaged sibling.
+_GRAMMAR_CANONICAL_REPO: Final[str] = "omnibase_infra"
+_GRAMMAR_CANONICAL_REL: Final[str] = (
+    "src/omnibase_infra/contracts/gate_binding_grammar.json"
+)
+
+
+def _grammar_raw() -> dict[str, Any]:
+    return json.loads(_GRAMMAR_JSON.read_text(encoding="utf-8"))
+
+
+def _grammar() -> Any:
+    return _GUARD.load_gate_grammar()
+
+
+def _gate(binding: str, **overrides: Any) -> dict[str, Any]:
+    """A create whose ONLY binding line carries ``binding``."""
+    return _create(description=f"Gate: {binding}\n\nBody text.\n", **overrides)
+
+
+def test_every_accepted_fixture_resolves_to_the_form_the_contract_declares() -> None:
+    """Driven from the contract, so a fixture with no support turns this red."""
+    grammar = _grammar()
+    fixtures = _grammar_raw()["fixtures"]["accepted"]
+    assert fixtures, "the contract declares no accepted fixtures to drive this"
+    for fixture in fixtures:
+        form = grammar.classify(fixture["binding"])
+        assert form is not None, (
+            f"{fixture['binding']!r} is declared accepted as "
+            f"{fixture['form']!r} and the guard read no form from it"
+        )
+        assert form.id == fixture["form"], (
+            f"{fixture['binding']!r} resolved to {form.id!r}, the contract "
+            f"declares {fixture['form']!r}"
+        )
+
+
+def test_every_rejected_fixture_is_refused_by_the_guard() -> None:
+    grammar = _grammar()
+    fixtures = _grammar_raw()["fixtures"]["rejected"]
+    assert fixtures, "the contract declares no rejected fixtures to drive this"
+    for fixture in fixtures:
+        form = grammar.classify(fixture["binding"])
+        assert form is None, (
+            f"{fixture['binding']!r} is declared rejected "
+            f"({fixture.get('$comment')}) and the guard read {form.id!r} from it"
+        )
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "C7",
+        "INV-103",
+        "OMN-16729 AC-5",
+        "live-gate defect: kb-doc-gate",
+        "OmniNode-ai/omnibase_infra chain-canary.yml",
+    ],
+)
+def test_each_declared_form_admits_an_otherwise_valid_create(binding: str) -> None:
+    """All five, including the repo+workflow form the closer requires.
+
+    The union is the point: before OMN-18414 the fifth would have been refused
+    at creation while the other four were held at the closer.
+    """
+    assert "missing_gate_line" not in _codes(_gate(binding))
+
+
+def test_a_criterion_id_outside_the_pinned_vocabulary_is_still_refused() -> None:
+    """The SHAPE grammar widened; the ID vocabulary did not."""
+    assert "C99" not in POLICY.criterion_ids, "positive control: C99 is unpinned"
+    assert "C7" in POLICY.criterion_ids, "positive control: C7 is pinned"
+    assert "missing_gate_line" in _codes(_gate("C99"))
+    assert "missing_gate_line" not in _codes(_gate("C7"))
+
+
+def test_an_invariant_id_outside_the_pinned_vocabulary_is_still_refused() -> None:
+    assert "INV-999" not in POLICY.invariant_ids, "positive control: unpinned"
+    assert "INV-103" in POLICY.invariant_ids, "positive control: pinned"
+    assert "missing_gate_line" in _codes(_gate("INV-999"))
+    assert "missing_gate_line" not in _codes(_gate("INV-103"))
+
+
+def test_the_authoring_line_pattern_matches_exactly_the_declared_lines() -> None:
+    """The authoring side is the strict one, and the contract pins the asymmetry."""
+    grammar = _grammar()
+    fixtures = _grammar_raw()["fixtures"]["line_pattern_superset_fixtures"]
+    assert fixtures, "the contract declares no line fixtures to drive this"
+    matched = [f["line"] for f in fixtures if grammar.line.match(f["line"])]
+    declared = [f["line"] for f in fixtures if f["authoring"]]
+    assert matched == declared
+
+
+def test_the_reading_language_is_a_superset_of_the_authoring_one() -> None:
+    """Every line the guard admits, the closer must also read.
+
+    A line accepted at authoring time and unreadable at closing time is the
+    exact defect OMN-18414 closes, in the other direction.
+    """
+    for fixture in _grammar_raw()["fixtures"]["line_pattern_superset_fixtures"]:
+        if fixture["authoring"]:
+            assert fixture["reading"], (
+                f"{fixture['line']!r} is admitted at authoring time and "
+                "declared unreadable at closing time"
+            )
+
+
+def test_a_bulleted_gate_line_is_not_a_binding_at_authoring_time() -> None:
+    """A bullet is how a line ends up inside a checklist that binds nothing."""
+    assert "missing_gate_line" in _codes(
+        _create(description="* Gate: C7\n\nBody text.\n")
+    )
+
+
+def _code_string_constants(path: Path) -> list[str]:
+    """Every string constant in ``path`` that is NOT a docstring.
+
+    Scoped this way on purpose. Docstrings and ``#:`` comments are prose about
+    the grammar -- a doc line may legitimately quote a binding spelling -- and
+    neither can be compiled or matched against anything. A regex, and any
+    refusal text rendering a spelling, has to be an executable string constant,
+    so that is the population this assertion covers. Module, class and function
+    docstrings are dropped by identifying the leading expression statement of
+    each body; comments never reach the AST at all.
+    """
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    docstrings: set[int] = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(body, list) or not body:
+            continue
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            docstrings.add(id(first.value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
+
+
+def test_the_guard_spells_no_binding_form_pattern_of_its_own() -> None:
+    """The grammar is read, never carried.
+
+    A private copy of any form is the drift this contract exists to remove:
+    the two consumers diverged precisely because each spelled its own.
+    """
+    constants = _code_string_constants(_GUARD_PY)
+    assert constants, "positive control: the module has executable string constants"
+    forbidden = ("INV-", "AC-", "live-gate", "ya?ml", r"C\d")
+    for fragment in forbidden:
+        offenders = [c for c in constants if fragment in c]
+        assert not offenders, (
+            f"{fragment!r} appears in an executable string constant "
+            f"{offenders!r}: the form grammar and every spelling rendered from "
+            "it come from gate_binding_grammar.json, not from this module"
+        )
+
+
+def test_a_missing_gate_binding_contract_refuses_rather_than_falling_back(
+    tmp_path: Path,
+) -> None:
+    """A guard that silently falls back to a built-in grammar has gone dark."""
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(grammar_path=tmp_path / "absent.json")
+
+
+def test_a_malformed_gate_binding_contract_refuses_rather_than_falling_back(
+    tmp_path: Path,
+) -> None:
+    bad = tmp_path / "gate_binding_grammar.json"
+    bad.write_text("not json at all", encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(grammar_path=bad)
+
+
+def test_a_gate_binding_contract_that_drops_a_form_refuses(tmp_path: Path) -> None:
+    """Fail closed on a contract with no forms, rather than admitting nothing quietly."""
+    raw = _grammar_raw()
+    raw["forms"] = []
+    bad = tmp_path / "gate_binding_grammar.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(grammar_path=bad)
+
+
+# --- AC6: the vendored contract has not drifted from the canonical one ------
+
+
+def _canonical_grammar_bytes() -> tuple[bytes, str] | None:
+    """The canonical declaration's bytes and where they were read from.
+
+    Same construction as the ``prd_source`` and ``proof_class_source`` drift
+    checks above: prefer an installed ``omnibase_infra`` package, then a
+    sibling clone resolved from ``$OMNI_HOME``, then this repo's own parent
+    directory -- ``_sibling_clone``'s root order. It differs from that helper
+    in one way, stated: each candidate is tested for the FILE, not for the
+    directory. A clone or a released package that predates the contract is not
+    a source to compare against, and stopping at the first directory that
+    happens to exist would compare against nothing and report a skip as though
+    no clone were present at all.
+
+    ``None`` when none carries the file, so the caller SKIPS with a stated
+    reason rather than passing silently: this repo's CI runners clone neither
+    repository and may ship a released package older than the contract.
+    """
+    candidates: list[Path] = []
+    spec = importlib.util.find_spec(_GRAMMAR_CANONICAL_REPO)
+    if spec is not None and spec.submodule_search_locations:
+        candidates.append(
+            Path(next(iter(spec.submodule_search_locations)))
+            / "contracts"
+            / _GRAMMAR_JSON.name
+        )
+    roots: list[Path] = []
+    workspace_root = os.environ.get("OMNI_HOME")
+    if workspace_root:
+        roots.append(Path(workspace_root))
+    roots.append(_REPO_ROOT.parent)
+    candidates.extend(
+        root / _GRAMMAR_CANONICAL_REPO / _GRAMMAR_CANONICAL_REL for root in roots
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.read_bytes(), str(candidate)
+    return None
+
+
+def _assert_no_grammar_drift(vendored: Path, canonical: tuple[bytes, str]) -> None:
+    """The comparison both the pin and its positive control run.
+
+    One function so the control exercises the real assertion -- including the
+    message -- rather than a restatement of it.
+    """
+    source_bytes, where = canonical
+    assert vendored.read_bytes() == source_bytes, (
+        f"{vendored} has drifted from {where}. The two consumers read one "
+        "declaration; copy the canonical file over the vendored one in a "
+        "single change rather than editing either side alone."
+    )
+
+
+def test_the_vendored_contract_is_byte_identical_to_the_canonical_one() -> None:
+    """One declaration, two consumers. A reformat is a divergence.
+
+    Byte-identity rather than a parsed comparison on purpose: the ``$comment``
+    blocks carry the reasoning both consumers are meant to read, and a
+    re-indent or a reordered key is exactly how a vendored copy starts drifting
+    from the file it claims to be.
+    """
+    canonical = _canonical_grammar_bytes()
+    if canonical is None:
+        pytest.skip(
+            f"neither an installed {_GRAMMAR_CANONICAL_REPO} package carrying "
+            f"contracts/{_GRAMMAR_JSON.name} nor a sibling clone of "
+            f"{_GRAMMAR_CANONICAL_REPO} is reachable; this repo's CI runners "
+            "clone neither, so the pin is checked where one exists"
+        )
+    _assert_no_grammar_drift(_GRAMMAR_JSON, canonical)
+
+
+def test_the_drift_check_reports_a_mutated_vendored_copy(tmp_path: Path) -> None:
+    """Positive control for the check above, which SKIPS on a bare runner.
+
+    A drift check that has never failed once is indistinguishable from one
+    comparing a file against itself.
+    """
+    canonical = _canonical_grammar_bytes()
+    if canonical is None:
+        pytest.skip(
+            "the canonical declaration is not reachable here, so there is "
+            "nothing to diverge from"
+        )
+    source_bytes, where = canonical
+    mutated = tmp_path / _GRAMMAR_JSON.name
+    mutated.write_bytes(source_bytes.replace(b'"contract_version"', b'"version"', 1))
+    with pytest.raises(AssertionError) as caught:
+        _assert_no_grammar_drift(mutated, canonical)
+    assert str(mutated) in str(caught.value), "the failure must name the file"
+    assert where in str(caught.value), "and what it diverged from"
