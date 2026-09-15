@@ -89,21 +89,34 @@ def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
     """Point this process at the contract-declared bus lane. Returns the broker.
 
     Sets ``KAFKA_BOOTSTRAP_SERVERS`` (what ``ModelKafkaEventBusConfig`` reads),
-    ``KAFKA_BROKERS`` (the legacy alias ``common.sh`` keeps in lock-step) and
+    ``KAFKA_BROKERS`` (the legacy alias ``common.sh`` keeps in lock-step),
     ``ONEX_HOOK_EDGE_LANE`` (the lane NAME, so a log line can say which lane it
-    meant instead of making a reader re-derive it from a host:port).
+    meant instead of making a reader re-derive it from a host:port), and the
+    lane's declared TRANSPORT -- ``KAFKA_SECURITY_PROTOCOL`` plus, on a SASL
+    lane, ``KAFKA_SASL_MECHANISM`` / ``KAFKA_SASL_USERNAME`` /
+    ``KAFKA_SASL_PASSWORD``.
 
     The contract wins over an ambient value, in both directions: an unset var
     is filled in, and a var naming a different lane is overwritten. That is the
     OMN-17204 rule -- an env var that disagrees is a finding, never an input --
     applied to the process that actually publishes.
 
+    TRANSPORT, NOT JUST ADDRESS (OMN-17284). The lane declares how its broker
+    is spoken to; this function never infers it from whether a credential
+    happens to be present. The credential VALUE is read at run time from the
+    operator env file the lane's ``sasl_env_prefix`` points at, so nothing
+    secret is written into the contract, the plist, or this module.
+
     Returns ``None`` and leaves the environment untouched when the contract
-    cannot be read. Deliberately not fatal: this is a launchd ``KeepAlive``
-    agent, so exiting here would spin the restart loop and recreate the CPU
-    burn OMN-17224 removed. Degrading to the ambient env means the next publish
-    raises a named error and the drainer backs off -- loud, bounded, and with
-    every record still on disk.
+    cannot be read OR when a SASL lane's credential is not on this host.
+    Deliberately not fatal: this is a launchd ``KeepAlive`` agent, so exiting
+    here would spin the restart loop and recreate the CPU burn OMN-17224
+    removed. Nothing is applied on the failing path -- a half-configured SASL
+    client fails differently from the failure being reported, which is worse
+    than not being configured at all. The refusal names the missing variable
+    and the file, because the alternative is what the operator actually saw:
+    ``Unable to bootstrap from [...]`` every thirty seconds, with no way to
+    tell a broker that refused an unauthenticated client from one that is down.
     """
     path = contract_path or (
         Path(__file__).resolve().parent.parent / "contracts" / "hook_edge_lane.yaml"
@@ -122,6 +135,32 @@ def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
         )
         return None
 
+    # Resolved BEFORE anything is written to the environment, so a lane whose
+    # credential is absent leaves no partial configuration behind.
+    credential_file = hook_edge_lane.operator_env_file_path()
+    try:
+        transport = hook_edge_lane.resolve_transport_env(
+            contract,
+            credential_source=hook_edge_lane.read_operator_env_file(credential_file),
+            credential_source_name=str(credential_file),
+        )
+    except hook_edge_lane.HookEdgeLaneCredentialError as exc:
+        logger.error(
+            "declared lane %s (%s) cannot be published to from this host: %s",
+            contract.lane,
+            brokers,
+            exc,
+        )
+        return None
+    except Exception as exc:  # noqa: BLE001 -- degrade, do not kill the daemon
+        logger.error(
+            "could not resolve the transport declared for lane %s in %s: %s",
+            contract.lane,
+            path,
+            exc,
+        )
+        return None
+
     previous = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     if previous and previous != brokers:
         logger.warning(
@@ -134,7 +173,23 @@ def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
     os.environ["KAFKA_BOOTSTRAP_SERVERS"] = brokers
     os.environ["KAFKA_BROKERS"] = brokers
     os.environ["ONEX_HOOK_EDGE_LANE"] = contract.lane
-    logger.info("publishing to declared lane %s (%s)", contract.lane, brokers)
+    os.environ.update(transport)
+    # Names only. The drainer's log is ~75 MB and world-readable on the
+    # operator Mac, so a value logged here is a value disclosed.
+    logger.info(
+        "publishing to declared lane %s (%s) over %s%s",
+        contract.lane,
+        brokers,
+        transport[hook_edge_lane.ENV_SECURITY_PROTOCOL],
+        (
+            f" using {transport[hook_edge_lane.ENV_SASL_MECHANISM]} as the "
+            f"principal named by "
+            f"{contract.known_lanes[contract.lane].sasl_env_prefix}"
+            f"{hook_edge_lane.ENV_SASL_USERNAME} in {credential_file}"
+            if hook_edge_lane.ENV_SASL_MECHANISM in transport
+            else ""
+        ),
+    )
     return brokers
 
 
