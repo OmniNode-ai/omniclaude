@@ -45,18 +45,35 @@ A create is admitted only when all eight hold:
    on a line of its own.
 2. A project is named -- ``project`` on the MCP surface, ``projectId`` in the
    REST spelling; either satisfies it.
-3. The description carries a binding line, on a line of its own::
+3. The description carries a binding line, on a line of its own. The shape of
+   that line, the rewrites applied to what it carries, and every form the
+   binding may take are declared ONCE, in ``config/gate_binding_grammar.json``,
+   and this module compiles that declaration rather than carrying a copy
+   (OMN-18414). Read the contract for the forms and for why each is or is not
+   a proof pointer.
 
-       Gate: C9
-       Gate: INV-103
-       Gate: OMN-16729 AC-5
-       Gate: live-gate defect: kb-doc-gate
+   That file is vendored from the repository that owns it, and a drift test
+   pins the two byte-identical. It is data read twice rather than one imported
+   module for one reason: this decision core imports only the standard
+   library, its hook script may resolve a bare system interpreter and runs it
+   with a cleared ``PYTHONPATH``, so importing a packaged declaration would
+   turn a missing dependency into a refusal of every Linear write on the
+   machine.
 
-   ``C<n>`` and ``INV-<nnn>`` are read from the beta PRD -- section 6's
-   release-criteria table and the front matter's ``invariant-coverage``
-   block respectively -- at the revision the admission policy pins. See that
-   policy's ``$comment`` for why the coverage block and not every ``INV-``
-   token in the document.
+   Before that contract this guard and the evidence closer carried DISJOINT
+   vocabularies -- four forms here, one there, none shared -- so every ticket
+   this guard admitted was a typed hold at the closer, and the form the closer
+   required would have been refused at creation. The grammar is now the union,
+   and it is one file.
+
+   Two things stay this module's own, because they are admission policy and
+   not grammar: which ids are in the pinned vocabulary a criterion or invariant
+   binding is checked against, and which single form exempts a residual-shaped
+   title under rule 4. The id sets are read from the beta PRD -- section 6's
+   release-criteria table and the front matter's ``invariant-coverage`` block
+   respectively -- at the revision the admission policy pins. See that policy's
+   ``$comment`` for why the coverage block and not every invariant token in the
+   document. Widening the shape grammar does not widen those sets.
 
 4. The title does not read as a residual, follow-up or nit -- unless (3) is a
    live-gate defect.
@@ -334,10 +351,12 @@ from typing import Any, Final
 
 __all__ = [
     "OVERRIDE_CITATION_GRAMMAR",
+    "BindingForm",
     "BodyLookup",
     "ChildrenLookup",
     "CriterionUnit",
     "Finding",
+    "GateGrammar",
     "ParentCensus",
     "Policy",
     "PolicyError",
@@ -348,6 +367,7 @@ __all__ = [
     "check_save_issue",
     "criterion_lines",
     "criterion_units",
+    "load_gate_grammar",
     "load_policy",
     "render_block_reason",
 ]
@@ -367,35 +387,112 @@ TICKET: Final[str] = "OMN-17942"
 #: creation gate's ticket would send somebody to the wrong diagnosis.
 CRITERION_TICKET: Final[str] = "OMN-18404"
 
-#: ``Gate: OMN-16729 AC-5`` -- a parent issue plus an acceptance-criterion
-#: ordinal. Both halves are required: a bare parent is a link, not a binding.
-_PARENT_AC: Final[re.Pattern[str]] = re.compile(r"^OMN-\d+\s+AC-\d+$", re.IGNORECASE)
-
-#: ``Gate: live-gate defect: <check name>`` -- the check must actually be named.
-_LIVE_GATE_DEFECT: Final[re.Pattern[str]] = re.compile(
-    r"^live-gate\s+defect:\s*(?P<check>\S.*)$", re.IGNORECASE
+#: The ONE declaration of the binding grammar, vendored beside this module
+#: (OMN-18414). Resolved relative to this file, never from an environment
+#: variable: a grammar whose location can be pointed elsewhere is a grammar
+#: that can be widened without review.
+DEFAULT_GATE_GRAMMAR_PATH: Final[Path] = (
+    Path(__file__).resolve().parent.parent / "config" / "gate_binding_grammar.json"
 )
 
-#: ``C3`` -- shape only; membership is checked against the configured set.
-_CRITERION: Final[re.Pattern[str]] = re.compile(r"^C\d+$", re.IGNORECASE)
+#: The contract's id for the form that also exempts a residual-shaped title
+#: (rule 4). An ID, not a pattern: the shape of that form lives in the
+#: contract, and the exemption is keyed on this form and on nothing else. Its
+#: presence in the contract is checked at load time, so a contract that drops
+#: the form refuses rather than silently retiring the exemption.
+_RESIDUAL_EXEMPTING_FORM: Final[str] = "live_gate_defect"
 
-#: ``INV-103`` -- shape only; membership is checked against the configured set.
-#: Zero-padded to at least three digits because that is the invariant
-#: registry's own spelling, so ``INV-12`` is a typo for ``INV-012`` and is
-#: refused rather than guessed at.
-_INVARIANT: Final[re.Pattern[str]] = re.compile(r"^INV-\d{3,}$", re.IGNORECASE)
+#: The two form ids whose VALUE is additionally checked for membership in a
+#: pinned vocabulary. Widening the shape grammar must not widen the id
+#: vocabulary, so these two stay checked against the admission policy's own
+#: sets after the contract has read their shape.
+_CRITERION_FORM: Final[str] = "release_criterion"
+_INVARIANT_FORM: Final[str] = "invariant"
 
-#: A binding line, anchored to the start of a line. Leading whitespace is
-#: tolerated (a lane indenting inside a block quote is not the failure mode this
-#: guards against); a list bullet is NOT, because a bullet is how a line ends up
-#: inside a checklist that nothing binds.
-_GATE_LINE: Final[re.Pattern[str]] = re.compile(
-    r"^[ \t]*Gate:[ \t]*(?P<binding>.*?)[ \t]*$", re.MULTILINE
-)
 
-_GATE_LINE_GRAMMAR: Final[str] = (
-    "Gate: <C-id | INV-id | OMN-<parent> AC-<n> | live-gate defect: <check name>>"
-)
+@dataclass(frozen=True, slots=True)
+class BindingForm:
+    """One declared binding form.
+
+    ``probe`` is the contract's statement of what the form resolves to at the
+    reading consumer. This guard does not probe anything -- it records the
+    value so a diagnostic can say which forms are proof pointers and which are
+    traceability bindings, without this module deciding that.
+    """
+
+    id: str
+    pattern: re.Pattern[str]
+    probe: str
+    example: str
+
+
+@dataclass(frozen=True, slots=True)
+class GateGrammar:
+    """The ``Gate:`` grammar, compiled from the declaration both consumers read.
+
+    This guard is the AUTHORING side, so it compiles ``line_pattern_authoring``
+    -- the strict one, which refuses a bulleted binding line. The reading side
+    tolerates bullets, quotes and emphasis because it faces descriptions that
+    are already written. That asymmetry is declared, pinned by the contract's
+    own superset fixtures, and is NOT the drift OMN-18414 closes: what must not
+    differ, and did, is ``forms`` -- the grammar of the binding VALUE.
+    """
+
+    contract_version: str
+    line: re.Pattern[str]
+    normalizations: tuple[tuple[re.Pattern[str], str], ...]
+    forms: tuple[BindingForm, ...]
+    source: Path
+
+    def normalize(self, binding: str) -> str:
+        """Apply the declared rewrites, in declared order.
+
+        Order is load-bearing and belongs to the contract: an issue mention
+        nested inside a code span is only reached because the span is stripped
+        after the mention is unwrapped, and the whitespace collapse is last so
+        every earlier rewrite's output is folded the same way.
+        """
+        value = binding
+        for pattern, replacement in self.normalizations:
+            value = pattern.sub(replacement, value)
+        return value.strip()
+
+    def classify(self, binding: str) -> BindingForm | None:
+        """The first declared form this binding matches, or ``None``.
+
+        First match wins, in declared order. There is deliberately no wildcard
+        form and no escape value: a binding matching nothing is unreadable, and
+        a sanctioned spelling for an unreadable binding is a sanctioned
+        incident.
+        """
+        value = self.normalize(binding)
+        if not value:
+            return None
+        for form in self.forms:
+            if form.pattern.match(value):
+                return form
+        return None
+
+    def form(self, form_id: str) -> BindingForm | None:
+        for candidate in self.forms:
+            if candidate.id == form_id:
+                return candidate
+        return None
+
+    def spelling(self, form_id: str) -> str:
+        """How a binding of this form is written, as the contract spells it."""
+        found = self.form(form_id)
+        return found.example if found is not None else form_id
+
+    @property
+    def summary(self) -> str:
+        """The whole grammar on one line, for a refusal to quote.
+
+        Rendered from the contract rather than written here, so a form added
+        there is named in the refusal without a second edit -- the failure mode
+        that made the guard and the closer diverge in the first place.
+        """
+        return "Gate: <" + " | ".join(form.example for form in self.forms) + ">"
 
 
 def _render_ids(ids: frozenset[str]) -> str:
@@ -413,7 +510,7 @@ def _render_ids(ids: frozenset[str]) -> str:
 
 
 #: ``Probe: <command> => <observation>`` -- the executable close probe. Anchored
-#: to a whole line for the same reason ``_GATE_LINE`` is (CLAUDE.md rule 15):
+#: to a whole line for the same reason the binding line is (CLAUDE.md rule 15):
 #: a substring rule passes on prose that mentions a probe in order to say the
 #: ticket has none. A bullet is refused, because a bullet is how a line ends up
 #: inside a checklist that nothing binds.
@@ -559,6 +656,11 @@ class Policy:
     unstarted_state_types: frozenset[str]
     override_ledger_paths: frozenset[str]
     override_ledger_path_prefixes: tuple[str, ...]
+    #: The declared binding grammar (OMN-18414). Carried on the policy so the
+    #: decision core stays a pure function of what it is handed, and so a
+    #: malformed declaration refuses at load time -- with everything else --
+    #: rather than at the first create that happens to carry a binding line.
+    gate_grammar: GateGrammar
 
 
 @dataclass(frozen=True, slots=True)
@@ -706,13 +808,152 @@ def _positive_int(raw: Any, key: str, source: Path) -> int:
     return int(raw)
 
 
-def load_policy(path: Path | None = None) -> Policy:
-    """Read the admission vocabulary, or raise.
+def _grammar_string(raw: Any, key: str, source: Path) -> str:
+    if not isinstance(raw, str) or not raw.strip():
+        raise PolicyError(f"{source}: '{key}' must be a non-empty string, got {raw!r}")
+    return raw
 
-    There is no default policy in code. A missing or malformed config is a
-    refusal of every create until it is repaired, which is loud, rather than a
-    silent widening of what the board admits, which is not.
+
+def _grammar_pattern(raw: Any, key: str, source: Path) -> re.Pattern[str]:
+    """Compile a declared pattern with NO flags argument.
+
+    Case-insensitivity arrives as an inline ``(?i)`` inside the declared
+    pattern, which is what the contract states and why: a consumer adding
+    ``re.IGNORECASE | re.MULTILINE`` trips the union-usage ratchet in the
+    repository that owns the contract, and raising a ratchet ceiling to get
+    past a false positive is how ceilings stop meaning anything. The one flag
+    this module adds is :data:`re.MULTILINE`, and only to the LINE pattern,
+    because the guard scans a whole description for a line of its own.
     """
+    try:
+        return re.compile(_grammar_string(raw, key, source))
+    except re.error as exc:
+        raise PolicyError(f"{source}: '{key}' is not a regex ({exc})") from exc
+
+
+def load_gate_grammar(path: Path | None = None) -> GateGrammar:
+    """Read the declared ``Gate:`` grammar, or raise.
+
+    There is no built-in grammar to fall back to, deliberately. A guard that
+    silently reverts to a private copy of the forms when the declaration is
+    missing is a guard that has gone dark: it would keep admitting creates
+    while the contract it claims to enforce was unreadable, which is the exact
+    shape of a gate reporting green while enforcing nothing. Every failure here
+    raises, and every create on the machine is refused with the reason named
+    until the declaration is repaired.
+    """
+    source = path or DEFAULT_GATE_GRAMMAR_PATH
+    try:
+        raw = json.loads(source.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise PolicyError(f"gate binding grammar not found at {source}") from exc
+    except json.JSONDecodeError as exc:
+        raise PolicyError(f"{source}: not valid JSON ({exc})") from exc
+    if not isinstance(raw, dict):
+        raise PolicyError(f"{source}: top level must be an object, got {type(raw)}")
+
+    line = _grammar_pattern(
+        raw.get("line_pattern_authoring"), "line_pattern_authoring", source
+    )
+    if "binding" not in line.groupindex:
+        raise PolicyError(
+            f"{source}: 'line_pattern_authoring' declares no 'binding' group, "
+            "so a matching line names nothing to classify"
+        )
+    line = re.compile(line.pattern, re.MULTILINE)
+
+    raw_norms = raw.get("normalizations")
+    if not isinstance(raw_norms, list):
+        raise PolicyError(
+            f"{source}: 'normalizations' must be a list, got {raw_norms!r}"
+        )
+    normalizations: list[tuple[re.Pattern[str], str]] = []
+    for entry in raw_norms:
+        if not isinstance(entry, dict):
+            raise PolicyError(f"{source}: normalization {entry!r} is not an object")
+        label = f"normalizations[{entry.get('id')!r}].pattern"
+        replacement = entry.get("replacement")
+        if not isinstance(replacement, str):
+            raise PolicyError(
+                f"{source}: normalization {entry.get('id')!r} declares no string "
+                f"replacement, got {replacement!r}"
+            )
+        normalizations.append(
+            (_grammar_pattern(entry.get("pattern"), label, source), replacement)
+        )
+
+    #: A spelling per form, taken from the contract's own accepted fixtures, so
+    #: a refusal quotes the grammar the contract declares rather than an
+    #: example written here that can drift from it. A contract shipping no
+    #: fixtures still loads: the form id stands in, and the fixtures are the
+    #: test surface, not a runtime requirement.
+    examples: dict[str, str] = {}
+    fixtures = raw.get("fixtures")
+    accepted = fixtures.get("accepted") if isinstance(fixtures, dict) else None
+    if isinstance(accepted, list):
+        for entry in accepted:
+            if not isinstance(entry, dict):
+                continue
+            form_id, binding = entry.get("form"), entry.get("binding")
+            if isinstance(form_id, str) and isinstance(binding, str):
+                examples.setdefault(form_id, binding)
+
+    raw_forms = raw.get("forms")
+    if not isinstance(raw_forms, list) or not raw_forms:
+        raise PolicyError(
+            f"{source}: 'forms' must be a non-empty list. A contract declaring "
+            "no form refuses every binding line, which is a workspace-wide "
+            "outage spelled as an empty list"
+        )
+    forms: list[BindingForm] = []
+    for entry in raw_forms:
+        if not isinstance(entry, dict):
+            raise PolicyError(f"{source}: form {entry!r} is not an object")
+        form_id = _grammar_string(entry.get("id"), "forms[].id", source)
+        forms.append(
+            BindingForm(
+                id=form_id,
+                pattern=_grammar_pattern(
+                    entry.get("pattern"), f"forms[{form_id!r}].pattern", source
+                ),
+                probe=_grammar_string(
+                    entry.get("probe"), f"forms[{form_id!r}].probe", source
+                ),
+                example=examples.get(form_id, form_id),
+            )
+        )
+    if not any(form.id == _RESIDUAL_EXEMPTING_FORM for form in forms):
+        raise PolicyError(
+            f"{source}: no {_RESIDUAL_EXEMPTING_FORM!r} form is declared, so "
+            "rule 4's residual-title exemption is keyed on a form that does "
+            "not exist. Refused rather than retiring the exemption silently"
+        )
+    for required in (_CRITERION_FORM, _INVARIANT_FORM):
+        if not any(form.id == required for form in forms):
+            raise PolicyError(
+                f"{source}: no {required!r} form is declared, so the pinned id "
+                "vocabulary it is checked against binds nothing"
+            )
+    return GateGrammar(
+        contract_version=_grammar_string(
+            raw.get("contract_version"), "contract_version", source
+        ),
+        line=line,
+        normalizations=tuple(normalizations),
+        forms=tuple(forms),
+        source=source,
+    )
+
+
+def load_policy(path: Path | None = None, grammar_path: Path | None = None) -> Policy:
+    """Read the admission vocabulary and the binding grammar, or raise.
+
+    There is no default policy in code and no default grammar in code. A
+    missing or malformed config is a refusal of every create until it is
+    repaired, which is loud, rather than a silent widening of what the board
+    admits, which is not.
+    """
+    grammar = load_gate_grammar(grammar_path)
     source = path or DEFAULT_POLICY_PATH
     try:
         raw = json.loads(source.read_text(encoding="utf-8"))
@@ -723,17 +964,27 @@ def load_policy(path: Path | None = None) -> Policy:
     if not isinstance(raw, dict):
         raise PolicyError(f"{source}: top level must be an object, got {type(raw)}")
 
+    # The SHAPE of a pinned id is the contract's business, not this module's:
+    # the same form regex that reads a binding line validates the vocabulary
+    # that binding line is checked against, so the two can never disagree.
+    for key, form_id in (
+        ("criterion_ids", _CRITERION_FORM),
+        ("invariant_ids", _INVARIANT_FORM),
+    ):
+        form = grammar.form(form_id)
+        assert form is not None  # load_gate_grammar refuses a contract missing it
+        for value in _string_list(raw.get(key), key, source):
+            if not form.pattern.match(value):
+                raise PolicyError(
+                    f"{source}: {key} entry {value!r} does not match the "
+                    f"{form_id!r} form declared by {grammar.source} "
+                    f"({form.pattern.pattern}); a binding spelled that way "
+                    f"would never be read, e.g. {form.example!r}"
+                )
     criterion_ids = _string_list(raw.get("criterion_ids"), "criterion_ids", source)
-    for cid in criterion_ids:
-        if not _CRITERION.match(cid):
-            raise PolicyError(f"{source}: criterion id {cid!r} is not of the form C<n>")
     invariant_ids = _string_list(raw.get("invariant_ids"), "invariant_ids", source)
-    for inv in invariant_ids:
-        if not _INVARIANT.match(inv):
-            raise PolicyError(
-                f"{source}: invariant id {inv!r} is not of the form INV-<nnn>"
-            )
     return Policy(
+        gate_grammar=grammar,
         criterion_ids=frozenset(c.upper() for c in criterion_ids),
         invariant_ids=frozenset(i.upper() for i in invariant_ids),
         epic_markers=tuple(
@@ -827,26 +1078,37 @@ def _declares_epic(description: str, policy: Policy) -> bool:
 def _binding_kind(description: str, policy: Policy) -> str | None:
     """Classify the strongest binding line in ``description``.
 
-    Returns ``"criterion"``, ``"invariant"``, ``"parent_ac"``,
-    ``"live_gate_defect"``, or ``None`` when no line binds. A body may carry several ``Gate:`` lines (a
-    quoted example above the real one, say); a live-gate-defect binding wins,
-    because it is the one that carries an exemption and rule 4 must not depend
-    on which line happened to come first.
+    Returns the declared form id of the strongest binding, or ``None`` when no
+    line binds. Every form the contract declares is read -- including the
+    workflow-run form, which is the one the evidence closer requires and which
+    this guard refused until OMN-18414, so that every ticket it admitted was a
+    typed hold downstream.
+
+    Two things this module still owns, because they are admission policy and
+    not grammar: a body may carry several ``Gate:`` lines (a quoted example
+    above the real one, say) and the exempting form wins regardless of which
+    came first, so rule 4 does not depend on line order; and a form whose id
+    names a pinned vocabulary is additionally checked for MEMBERSHIP. Widening
+    the shape grammar must not widen the id vocabulary.
     """
+    grammar = policy.gate_grammar
+    vocabularies = {
+        _CRITERION_FORM: policy.criterion_ids,
+        _INVARIANT_FORM: policy.invariant_ids,
+    }
     kinds: set[str] = set()
-    for match in _GATE_LINE.finditer(description):
-        binding = match.group("binding").strip()
+    for match in grammar.line.finditer(description):
+        binding = grammar.normalize(match.group("binding"))
         if not binding:
             continue
-        if _LIVE_GATE_DEFECT.match(binding):
-            kinds.add("live_gate_defect")
-        elif _PARENT_AC.match(binding):
-            kinds.add("parent_ac")
-        elif _CRITERION.match(binding) and binding.upper() in policy.criterion_ids:
-            kinds.add("criterion")
-        elif _INVARIANT.match(binding) and binding.upper() in policy.invariant_ids:
-            kinds.add("invariant")
-    for preferred in ("live_gate_defect", "parent_ac", "criterion", "invariant"):
+        form = grammar.classify(binding)
+        if form is None:
+            continue
+        allowed = vocabularies.get(form.id)
+        if allowed is not None and binding.upper() not in allowed:
+            continue
+        kinds.add(form.id)
+    for preferred in (_RESIDUAL_EXEMPTING_FORM, *(f.id for f in grammar.forms)):
         if preferred in kinds:
             return preferred
     return None
@@ -1887,21 +2149,22 @@ def check_save_issue(
                 ),
                 fix=(
                     f"add a line of its own, unbulleted, reading "
-                    f"'{_GATE_LINE_GRAMMAR}'. The accepted release-criterion "
-                    f"ids are {_render_ids(policy.criterion_ids)}. The accepted "
+                    f"'{policy.gate_grammar.summary}'. Those spellings are the "
+                    f"forms declared by {policy.gate_grammar.source.name}, the "
+                    "single grammar this guard and the evidence closer both "
+                    f"read. The accepted release-criterion ids are "
+                    f"{_render_ids(policy.criterion_ids)}. The accepted "
                     f"invariant ids are {_render_ids(policy.invariant_ids)}. "
                     "Both sets are read from the beta PRD at the revision the "
                     "admission policy pins, so an id the PRD does not carry is "
-                    "refused on purpose. A parent AC reference names an "
-                    "acceptance criterion on the parent issue, e.g. "
-                    "'Gate: OMN-16729 AC-5'. A live-gate defect names the check "
-                    "that is broken, e.g. 'Gate: live-gate defect: kb-doc-gate'"
+                    "refused on purpose"
                 ),
             )
         )
 
-    # Rule 4 -- residual-shaped titles, exempted only by a live-gate defect.
-    if binding != "live_gate_defect":
+    # Rule 4 -- residual-shaped titles, exempted by ONE declared form and no
+    # other: a defect in a live gate is not a residual of anything.
+    if binding != _RESIDUAL_EXEMPTING_FORM:
         hits = _residual_terms_in(title, policy)
         if hits:
             findings.append(
@@ -1917,8 +2180,10 @@ def check_save_issue(
                         "comment on the parent ticket instead. If this is a "
                         "LIVE GATE that is broken -- a check reporting green "
                         "while enforcing nothing -- it is not a residual: bind "
-                        "it with 'Gate: live-gate defect: <check name>' and the "
-                        "title stands"
+                        "it with 'Gate: "
+                        f"{policy.gate_grammar.spelling(_RESIDUAL_EXEMPTING_FORM)}'"
+                        " (naming the check that is broken) and the title "
+                        "stands"
                     ),
                 )
             )
