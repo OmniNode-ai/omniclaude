@@ -30,8 +30,12 @@
   Install:
     bash omniclaude/scripts/install-hook-emit-drainer.sh
 
-  Uninstall:
-    bash omniclaude/scripts/install-hook-emit-drainer.sh --uninstall
+  Uninstall: the same script, passing the uninstall flag. The flag is spelled
+  out rather than written here because a double hyphen is illegal inside an XML
+  comment. XML 1.0 forbids two consecutive hyphens anywhere inside a comment,
+  which is also why that rule cannot be quoted verbatim here. plutil accepts
+  such a file anyway; strict parsers, including Python's plistlib, reject the
+  whole document. Never write a hyphenated flag in this block.
 -->
 <plist version="1.0">
 <dict>

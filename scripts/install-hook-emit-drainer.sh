@@ -40,20 +40,6 @@ LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
 DST_PLIST="${LAUNCH_AGENTS}/${LABEL}.plist"
 UID_GUI="$(id -u)"
 
-# CLAUDE.md rule 11: the literal brew interpreter path. launchd runs with a
-# restricted PATH so $(brew --prefix) is unavailable, and the macOS Local
-# Network grant is per-binary — a uv-managed interpreter silently
-# EHOSTUNREACHes on the LAN publish to the .201 broker.
-if [[ -x "/opt/homebrew/bin/python3.13" ]]; then
-  BREW_PYTHON="/opt/homebrew/bin/python3.13"   # local-path-ok: rule 11 literal (ARM)
-elif [[ -x "/usr/local/bin/python3.13" ]]; then
-  BREW_PYTHON="/usr/local/bin/python3.13"      # local-path-ok: rule 11 literal (Intel)
-else
-  echo "ERROR: brew python3.13 not found at either rule-11 path." >&2
-  echo "       Install it (brew install python@3.13) before loading this agent." >&2
-  exit 1
-fi
-
 if [[ "${1:-}" == "--uninstall" ]]; then
   echo "Uninstalling ${LABEL} LaunchAgent..."
   launchctl bootout "gui/${UID_GUI}/${LABEL}" 2>/dev/null || true
@@ -71,13 +57,100 @@ if [[ "${1:-}" == "--status" ]]; then
   echo "Plist:   ${DST_PLIST}"
   launchctl print "gui/${UID_GUI}/${LABEL}" 2>/dev/null | sed -n '1,12p' \
     || echo "state:   NOT LOADED"
-  JOURNAL="${ONEX_STATE_DIR:-${OMNI_HOME_RESOLVED}/.onex_state}/hook_emit_journal"
+
+  STATE_DIR="${ONEX_STATE_DIR:-${OMNI_HOME_RESOLVED}/.onex_state}"
+  JOURNAL="${STATE_DIR}/hook_emit_journal"
   echo "Journal: ${JOURNAL}"
   shopt -s nullglob
   pending=("${JOURNAL}"/*.json)
   echo "Pending: ${#pending[@]}"
+
+  # OMN-17284: the emit spool is a SECOND backlog with a different cause.
+  # omnibase_infra's receipt-mode CLI writes here when the emit daemon's Unix
+  # socket is unreachable, so a deep spool means "no emit daemon", which the
+  # drainer does not fix and this command used not to mention at all. On the
+  # operator Mac 2026-09-15 the journal was full AND 736 records sat here, and
+  # only one of the two numbers was visible.
+  SPOOL="${STATE_DIR}/emit_spool"
+  spooled=("${SPOOL}"/*.json)
+  echo "Spool:   ${SPOOL} (emit_spool)"
+  echo "Spooled: ${#spooled[@]}"
   shopt -u nullglob
+
+  # Validate the plist this command just named. `launchctl print` reports
+  # launchd's IN-MEMORY copy, which can be a previous, good version of a file
+  # that has since been overwritten -- exactly the state measured on
+  # 2026-09-15, where the service looked healthy for two days while the file on
+  # disk was a bare JSON array with no KeepAlive. Liveness is not validity.
+  #
+  # plistlib rather than `plutil` on purpose: it is stdlib, so this check runs
+  # wherever python3 does, which is what gives this path a CI home.
+  echo "Plist checks:"
+  if ! PLIST_PATH="${DST_PLIST}" python3 - <<'PY'
+import os
+import plistlib
+import sys
+
+path = os.environ["PLIST_PATH"]
+try:
+    with open(path, "rb") as handle:
+        payload = plistlib.load(handle)
+except FileNotFoundError:
+    print("  MISSING: no plist at this path")
+    sys.exit(1)
+except Exception as exc:  # plistlib raises several unrelated types
+    print(f"  INVALID: {type(exc).__name__}: {exc}")
+    sys.exit(1)
+
+if not isinstance(payload, dict):
+    print(f"  INVALID: top level is {type(payload).__name__}, expected a dict")
+    sys.exit(1)
+
+failures = []
+if not payload.get("ProgramArguments"):
+    failures.append("  MISSING KEY: ProgramArguments")
+# KeepAlive is the property that makes a wedged or exited drainer self-healing.
+# Without it launchd never restarts the process and the backlog grows silently.
+if payload.get("KeepAlive") is not True:
+    failures.append("  MISSING KEY: KeepAlive (drainer is NOT self-healing)")
+if payload.get("RunAtLoad") is not True:
+    failures.append("  MISSING KEY: RunAtLoad")
+if payload.get("Label") != "ai.omninode.hook-emit-drainer":
+    failures.append(f"  WRONG Label: {payload.get('Label')!r}")
+
+for failure in failures:
+    print(failure)
+if failures:
+    sys.exit(1)
+print("  OK: parses, Label/ProgramArguments/KeepAlive/RunAtLoad all present")
+PY
+  then
+    echo "" >&2
+    echo "ERROR: the installed plist is invalid or has lost KeepAlive." >&2
+    echo "       Reinstall it:" >&2
+    echo "         bash omniclaude/scripts/install-hook-emit-drainer.sh" >&2
+    exit 1
+  fi
   exit 0
+fi
+
+# CLAUDE.md rule 11: the literal brew interpreter path. launchd runs with a
+# restricted PATH so $(brew --prefix) is unavailable, and the macOS Local
+# Network grant is per-binary — a uv-managed interpreter silently
+# EHOSTUNREACHes on the LAN publish to the .201 broker.
+#
+# Resolved here rather than at the top of the file: --uninstall and --status
+# launch nothing, so requiring the interpreter for a read-only query is what
+# kept this script's tests off every runner in the fleet (ci.yml ignore list,
+# OMN-18357).
+if [[ -x "/opt/homebrew/bin/python3.13" ]]; then
+  BREW_PYTHON="/opt/homebrew/bin/python3.13"   # local-path-ok: rule 11 literal (ARM)
+elif [[ -x "/usr/local/bin/python3.13" ]]; then
+  BREW_PYTHON="/usr/local/bin/python3.13"      # local-path-ok: rule 11 literal (Intel)
+else
+  echo "ERROR: brew python3.13 not found at either rule-11 path." >&2
+  echo "       Install it (brew install python@3.13) before loading this agent." >&2
+  exit 1
 fi
 
 if [[ "${1:-}" != "--dry-run" ]]; then
@@ -151,8 +224,29 @@ if launchctl print "gui/${UID_GUI}/${LABEL}" >/dev/null 2>&1; then
   was_loaded=1
 fi
 
+# OMN-17284: `launchctl bootout` returns BEFORE the domain has released the
+# label. A bootstrap issued immediately after it fails with
+# `Bootstrap failed: 5: Input/output error`, the installer rolls back, and the
+# rollback's own bootstrap fails for the same reason -- so a reinstall over a
+# RUNNING agent left the machine with no loaded drainer and the previous plist
+# restored. Measured twice in a row on 2026-09-15 while repairing this exact
+# service. A first install, with nothing loaded, never hits it, which is why it
+# survived: the failure only appears on the repair path.
+wait_for_label_released() {
+  local deadline=$((SECONDS + 30))
+  while launchctl print "gui/${UID_GUI}/${LABEL}" >/dev/null 2>&1; do
+    if (( SECONDS >= deadline )); then
+      echo "ERROR: ${LABEL} still loaded 30s after bootout; refusing to race it." >&2
+      return 1
+    fi
+    sleep 1
+  done
+  return 0
+}
+
 restore_previous_service() {
   launchctl bootout "gui/${UID_GUI}/${LABEL}" 2>/dev/null || true
+  wait_for_label_released || return 1
   if [[ "${had_previous_plist}" == "1" ]]; then
     cp "${BACKUP_PLIST}" "${DST_PLIST}" || return 1
   else
@@ -177,6 +271,11 @@ fi
 # Stop the old instance only after the candidate plist and its rollback copy
 # are ready. Any activation error restores the prior plist and loaded service.
 launchctl bootout "gui/${UID_GUI}/${LABEL}" 2>/dev/null || true
+if ! wait_for_label_released; then
+  echo "ERROR: could not unload the running ${LABEL}; restoring prior service." >&2
+  restore_previous_service || echo "ERROR: prior LaunchAgent restoration failed." >&2
+  exit 1
+fi
 if ! launchctl bootstrap "gui/${UID_GUI}" "${DST_PLIST}"; then
   echo "ERROR: could not bootstrap ${LABEL}; restoring prior service." >&2
   restore_previous_service || echo "ERROR: prior LaunchAgent restoration failed." >&2
