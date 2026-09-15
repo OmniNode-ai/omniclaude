@@ -96,11 +96,11 @@ def test_run_steps_referencing_release_tag_use_env_indirection() -> None:
                 "env.RELEASE_TAG from inputs.tag"
             )
 
-    # The three known injection sites (tag-validation, release-tag output,
-    # plugin-version output) must all have been converted.
-    assert len(steps_using_release_tag) == 3, (
-        "expected exactly 3 run: steps using RELEASE_TAG indirection "
-        f"(tag validation, release tag output, plugin version output); "
+    # The four known injection sites (tag-validation, release-tag output,
+    # main-sync, plugin-version output) must all have been converted.
+    assert len(steps_using_release_tag) == 4, (
+        "expected exactly 4 run: steps using RELEASE_TAG indirection "
+        f"(tag validation, release tag output, main sync, plugin version output); "
         f"found {len(steps_using_release_tag)}: "
         f"{[(j, s.get('name')) for j, s in steps_using_release_tag]}"
     )

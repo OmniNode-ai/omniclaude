@@ -105,7 +105,7 @@ def test_sync_script_carries_no_inline_expressions() -> None:
 
 def test_sync_script_takes_its_values_from_env() -> None:
     env = _step(_SYNC_STEP)["env"]
-    assert "steps.tag.outputs.tag" in env["RELEASE_TAG"]
+    assert env["RELEASE_TAG"] == "${{ inputs.tag }}"
     assert "steps.app-token.outputs.token" in env["APP_TOKEN"]
 
 

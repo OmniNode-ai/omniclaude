@@ -176,7 +176,7 @@ jobs:
         if: ${{ !contains(steps.tag.outputs.tag, 'rc') }}
         working-directory: ${{ github.workspace }}
         env:
-          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_TAG: ${{ inputs.tag }}
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
