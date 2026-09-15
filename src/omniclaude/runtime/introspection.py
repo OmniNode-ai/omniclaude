@@ -44,7 +44,7 @@ from omnibase_infra.mixins.mixin_node_introspection import MixinNodeIntrospectio
 from omnibase_infra.models.discovery import ModelIntrospectionConfig
 
 if TYPE_CHECKING:
-    from omnibase_core.protocols.event_bus.protocol_event_bus import ProtocolEventBus
+    from omnibase_infra.protocols import ProtocolIntrospectionEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class _SkillNodeProxy(MixinNodeIntrospection):
         self,
         node_name: str,
         node_id: UUID,
-        event_bus: ProtocolEventBus | None,
+        event_bus: ProtocolIntrospectionEventBus | None,
     ) -> None:
         config = ModelIntrospectionConfig(
             node_id=node_id,
@@ -125,7 +125,7 @@ class SkillNodeIntrospectionProxy:
     def __init__(
         self,
         contracts_dir: Path | None = None,
-        event_bus: ProtocolEventBus | None = None,
+        event_bus: ProtocolIntrospectionEventBus | None = None,
     ) -> None:
         """Initialise the proxy and discover skill nodes from contracts_dir.
 
@@ -133,7 +133,7 @@ class SkillNodeIntrospectionProxy:
             contracts_dir: Directory containing ``node_skill_*/contract.yaml``
                 files.  Defaults to ``src/omniclaude/nodes/`` relative to the
                 package installation root.
-            event_bus: Event bus implementing ``ProtocolEventBus``.  When
+            event_bus: Event bus implementing ``ProtocolIntrospectionEventBus``. When
                 ``None``, ``publish_all()`` is a silent no-op.
         """
         self._event_bus = event_bus

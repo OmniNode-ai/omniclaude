@@ -171,8 +171,17 @@ def test_contract_declares_the_hook_topics() -> None:
     """
     lib = _load_lib()
     contract = lib.load_contract(_CONTRACT_PATH)
-    resolved = lib.resolve_governed_topics(contract, repo_root=_REPO_ROOT)
+    resolved = lib.resolve_governed_event_types(contract, repo_root=_REPO_ROOT)
     assert set(resolved) == set(contract.governed_topics)
+    assert set(contract.governed_topics) == {
+        "PROMPT_SUBMITTED",
+        "SESSION_ENDED",
+        "SESSION_STARTED",
+        "SKILL_COMPLETED",
+        "SKILL_STARTED",
+        "TOOL_EXECUTED",
+        "TOOL_OUTPUT_CAPTURED",
+    }
 
     emitted: set[str] = set()
     for name in _BUS_MIRROR_SCRIPTS:

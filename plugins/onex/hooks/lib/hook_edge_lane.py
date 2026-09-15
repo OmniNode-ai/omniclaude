@@ -47,6 +47,7 @@ __all__ = [
     "operator_env_file_path",
     "read_operator_env_file",
     "resolve_bootstrap_servers",
+    "resolve_governed_event_types",
     "resolve_governed_topics",
     "resolve_transport_env",
 ]
@@ -506,6 +507,44 @@ def resolve_governed_topics(
         topic = entry.get("topic")
         if isinstance(constant, str) and isinstance(topic, str):
             by_constant[constant] = topic
+
+    resolved: dict[str, str] = {}
+    for name in contract.governed_topics:
+        if name not in by_constant:
+            raise HookEdgeLaneError(
+                f"{contract.path}: governed topic constant {name!r} is not in "
+                f"{registry_path} — the lane policy would govern a topic that "
+                "does not exist"
+            )
+        resolved[name] = by_constant[name]
+    return resolved
+
+
+def resolve_governed_event_types(
+    contract: HookEdgeLaneContract, *, repo_root: Path
+) -> dict[str, str]:
+    """Resolve governed constants to semantic event types from the registry."""
+    import yaml
+
+    registry_path = repo_root / contract.topic_registry
+    try:
+        raw = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise HookEdgeLaneError(
+            f"{contract.path}: topic_registry {registry_path} does not exist"
+        ) from exc
+    entries = (raw or {}).get("topics")
+    if not isinstance(entries, list):
+        raise HookEdgeLaneError(f"{registry_path}: no 'topics' list")
+
+    by_constant: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        constant = entry.get("topic_base_constant")
+        event_type = entry.get("event_type")
+        if isinstance(constant, str) and isinstance(event_type, str):
+            by_constant[constant] = event_type
 
     resolved: dict[str, str] = {}
     for name in contract.governed_topics:

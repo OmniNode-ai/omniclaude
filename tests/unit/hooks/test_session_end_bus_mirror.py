@@ -151,7 +151,7 @@ def test_session_end_bus_mirror_invokes_direct_dispatch_with_correct_args(
     )
     assert "--event-type" in argv_lines
     event_type_idx = argv_lines.index("--event-type") + 1
-    assert argv_lines[event_type_idx] == "onex.evt.omniclaude.session-ended.v1"
+    assert argv_lines[event_type_idx] == "session.ended"
 
     assert "--payload" in argv_lines
     payload_idx = argv_lines.index("--payload") + 1

@@ -8,8 +8,11 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import datetime
+from pathlib import Path
 
 import pytest
+from omnimarket.projection import SqliteDatabaseAdapter
 
 from omniclaude.hook_runtime.delegation_state import DelegationConfig
 from omniclaude.hook_runtime.server import HookRuntimeConfig, HookRuntimeServer
@@ -111,29 +114,27 @@ async def test_server_reset_session() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_publish_delegation_event_writes_to_sqlite(tmp_path: object) -> None:
+async def test_publish_delegation_event_writes_to_sqlite(tmp_path: Path) -> None:
     """publish_delegation_event action projects a row to SQLite via the bus (OMN-10718)."""
-    import sqlite3 as _sqlite3  # noqa: PLC0415
-    from pathlib import Path as _Path  # noqa: PLC0415
-
-    from omniclaude.delegation.sqlite_adapter import (
-        SQLiteProjectionAdapter,  # noqa: PLC0415
-        make_adapter,  # noqa: PLC0415
-    )
+    from omniclaude.delegation.sqlite_adapter import make_adapter  # noqa: PLC0415
 
     socket_path = _short_socket_path()
-    db_path = _Path(str(tmp_path)) / "test_proj.sqlite"  # type: ignore[arg-type]
+    db_path = tmp_path / "test_proj.sqlite"
 
-    # Patch make_adapter to return an adapter backed by the temp db_path.
     import omniclaude.hook_runtime.server as _server_mod  # noqa: PLC0415
 
-    _orig_make_adapter = _server_mod.make_adapter
+    legacy_adapter = make_adapter(db_path)
+    try:
+        assert legacy_adapter.upsert(
+            "delegation_events",
+            "correlation_id",
+            {"correlation_id": "existing-row", "task_type": "preserved"},
+        )
+    finally:
+        legacy_adapter.close()
 
-    def _patched_make_adapter(path: object = None) -> SQLiteProjectionAdapter:
-        conn = _sqlite3.connect(str(db_path), check_same_thread=False)
-        return SQLiteProjectionAdapter(conn)
-
-    _server_mod.make_adapter = _patched_make_adapter  # type: ignore[assignment]
+    _orig_default_evidence_db_path = _server_mod.default_evidence_db_path
+    _server_mod.default_evidence_db_path = lambda: db_path
     server = HookRuntimeServer(config=default_server_config(socket_path))
     try:
         await server.start()
@@ -168,21 +169,31 @@ async def test_publish_delegation_event_writes_to_sqlite(tmp_path: object) -> No
         # Allow the async bus subscriber handler to complete.
         await asyncio.sleep(0.1)
 
-        # Verify the row landed in SQLite.
-        adapter = make_adapter(db_path)
+        # The canonical adapter shares the legacy path and preserves existing rows.
+        adapter = SqliteDatabaseAdapter(db_path)
+        existing_rows = adapter.query(
+            "delegation_events", {"correlation_id": "existing-row"}
+        )
+        assert existing_rows[0]["task_type"] == "preserved"
+        rows = adapter.query("delegation_events", {"correlation_id": "pub-evt-001"})
+        assert len(rows) == 1
+        assert rows[0]["task_type"] == "test"
+        assert rows[0]["delegated_to"] == "Qwen3-Coder-30B"
+        assert rows[0]["delegation_latency_ms"] == 500
+        assert str(rows[0]["writer_identity"]).endswith("CURRENT_USER>")
+        datetime.fromisoformat(str(rows[0]["written_at"]))
+
+        legacy_adapter = make_adapter(db_path)
         try:
-            rows = adapter.query(
+            legacy_rows = legacy_adapter.query(
                 "delegation_events", filters={"correlation_id": "pub-evt-001"}
             )
-            assert len(rows) == 1
-            assert rows[0]["task_type"] == "test"
-            assert rows[0]["delegated_to"] == "Qwen3-Coder-30B"
-            assert rows[0]["latency_ms"] == 500
+            assert legacy_rows[0]["correlation_id"] == "pub-evt-001"
         finally:
-            adapter.close()
+            legacy_adapter.close()
     finally:
         await server.stop()
-        _server_mod.make_adapter = _orig_make_adapter  # type: ignore[assignment]
+        _server_mod.default_evidence_db_path = _orig_default_evidence_db_path
 
 
 @pytest.mark.unit

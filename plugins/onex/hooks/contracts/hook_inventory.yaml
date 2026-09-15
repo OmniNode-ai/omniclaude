@@ -1028,6 +1028,48 @@ expected_hooks:
       Publishes a synthetic prompt-submitted row to the declared .201 lane.
       Observer, not an enforcement mechanism.
 
+  - script: "pre_tool_use_skill_started.sh"
+    event: "PreToolUse"
+    matcher: "Skill"
+    order: 10
+    ticket: "OMN-16979"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Emits skill-started at the actual PreToolUse boundary through the
+      semantic event registry, using Claude's tool_use_id as the shared
+      lifecycle key. It captures no skill arguments, prompt, or body.
+    enforcement: false
+    lite_mode_exit: false
+    mask:
+      gate_call: "PRE_TOOL_USE_QUALITY"
+      bit_defined: true
+    canary: null
+    no_canary_reason: >
+      Running this observer writes a synthetic lifecycle record to the local
+      emit path. Its boundary and field-validation behaviour are pinned by the
+      focused registration test; the runtime proof belongs to the later relay
+      activation wave.
+
+  - script: "post-tool-use-quality.sh"
+    event: "PostToolUse"
+    matcher: "Skill"
+    order: 6
+    ticket: "OMN-16979"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Emits skill-completed only after the real PostToolUse result, reusing the
+      PreToolUse tool_use_id and emitting status without result content.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "POST_TOOL_USE_QUALITY"
+      bit_defined: true
+    canary: null
+    no_canary_reason: >
+      Running this observer emits a real lifecycle event and updates its local
+      quality log. Focused tests pin its registered boundary and that it never
+      emits skill-started after completion.
+
 # ---------------------------------------------------------------------------
 # disabled_hooks — every script deliberately on disk and NOT registered.
 # ---------------------------------------------------------------------------
@@ -1047,6 +1089,25 @@ expected_hooks:
 #
 # The gate also refuses a disabled entry that IS registered — a contradiction
 # between the two halves of this file is drift, not a preference.
+  - script: "post_tool_use_output_capture_metadata.sh"
+    event: "PostToolUse"
+    matcher: "Bash"
+    order: 5
+    ticket: "OMN-16979"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Emits only output size, line count, classification, and identifiers
+      through the semantic daemon; it never returns updatedToolOutput or bytes.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "POST_TOOL_OUTPUT_SUPPRESSOR"
+      bit_defined: true
+    canary: null
+    no_canary_reason: >
+      This observer writes capture telemetry; its secret-control test proves
+      the payload reduction and relay proof belongs to activation.
+
 disabled_hooks:
   - script: "hook_dispatch_claim_pretool.sh"
     owner: "omniclaude hooks lane"

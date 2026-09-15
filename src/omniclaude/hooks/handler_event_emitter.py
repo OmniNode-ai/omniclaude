@@ -49,6 +49,7 @@ from omnibase_core.models.hooks.claude_code import (
     ModelClaudeCodeHookEvent,
     ModelClaudeCodeHookEventPayload,
 )
+from omnibase_infra.enums import EnumKafkaAcks
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -404,7 +405,7 @@ class ModelPatternDiscoveredConfig(BaseModel):
 # to remote Kafka brokers.
 DEFAULT_KAFKA_TIMEOUT_SECONDS: int = 2  # Short timeout for hooks
 DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS: int = 0  # No retries (latency budget)
-DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "1"
+DEFAULT_KAFKA_ACKS = EnumKafkaAcks.ALL
 
 # Prompt size limit for Kafka message safety
 # Kafka default max message size is 1MB. We truncate prompts exceeding this

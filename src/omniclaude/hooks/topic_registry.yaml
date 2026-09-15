@@ -45,6 +45,11 @@ topics:
     topic_base_constant: "TOOL_EXECUTED"
     description: "Tool execution completion"
 
+  - event_type: "tool.output.captured"
+    topic: "onex.evt.omnimarket.tool-output-captured.v1"
+    topic_base_constant: "TOOL_OUTPUT_CAPTURED"
+    description: "Content-free tool output capture metadata"
+
   - event_type: "agent.action"
     topic: "onex.evt.omniclaude.agent-action.v1"
     topic_base_constant: "AGENT_ACTION"

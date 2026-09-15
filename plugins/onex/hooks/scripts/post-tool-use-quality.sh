@@ -176,6 +176,8 @@ TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 if [[ "$TOOL_NAME" == "Skill" ]]; then
     SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null) || SKILL_NAME="unknown"
     SKILL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // ""' 2>/dev/null) || SKILL_ERROR=""
+    SKILL_RUN_ID=$(echo "$TOOL_INFO" | jq -r '.tool_use_id // ""' 2>/dev/null) || SKILL_RUN_ID=""
+    SKILL_SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SKILL_SESSION_ID=""
     if [[ -n "$SKILL_ERROR" ]]; then
         echo "[$TS] [PostToolUse] SKILL_LOAD_FAILED skill=$SKILL_NAME error=$SKILL_ERROR" >> "$TRACE_LOG"
     else
@@ -202,42 +204,23 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
                         2>>"$LOG_FILE" || true
             ) &
         fi
-        # -----------------------------------------------------------------------
-        # Skill Lifecycle Events (wire-missing-producers)
-        # Emit skill.started and skill.completed to feed skill_invocations table.
-        # Both are emitted from PostToolUse (after the tool completes) — skill.started
-        # captures the invocation, skill.completed carries the result status.
-        # Non-blocking: runs in background subshell; hook exits 0 on failure.
-        # -----------------------------------------------------------------------
+    fi
+    # The terminal record belongs after the actual tool result. Its invocation
+    # key is the PreToolUse record's Claude-provided tool_use_id; no UUID or
+    # timestamp is fabricated at either lifecycle boundary.
+    _SKILL_CORR_ID="${ONEX_CORRELATION_ID:-$SKILL_SESSION_ID}"
+    if [[ -n "$SKILL_RUN_ID" && "$SKILL_NAME" != "unknown" && -n "$_SKILL_CORR_ID" ]]; then
+        _SKILL_STATUS="success"
+        [[ -n "$SKILL_ERROR" ]] && _SKILL_STATUS="failed"
         (
-            _SKILL_RUN_ID=$(python3 -c "import uuid; print(uuid.uuid4())" 2>/dev/null || echo "")
-            if [[ -z "$_SKILL_RUN_ID" ]]; then
-                exit 0
-            fi
-            _SKILL_CORR_ID="${ONEX_CORRELATION_ID:-${CLAUDE_CODE_SESSION_ID:-$SESSION_ID}}"
-            _SKILL_ARGS_COUNT=$(echo "$TOOL_INFO" | jq -r '.tool_input.args | if . == null then 0 elif type == "object" then length elif type == "array" then length else 0 end' 2>/dev/null) || _SKILL_ARGS_COUNT=0
-            _SKILL_STARTED_PAYLOAD=$(jq -n \
-                --arg run_id "$_SKILL_RUN_ID" \
-                --arg skill_name "$SKILL_NAME" \
-                --arg skill_id "plugins/onex/skills/${SKILL_NAME#onex:}/SKILL.md" \
-                --arg repo_id "omniclaude" \
-                --arg correlation_id "$_SKILL_CORR_ID" \
-                --argjson args_count "${_SKILL_ARGS_COUNT:-0}" \
-                --arg emitted_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-                '{run_id: $run_id, skill_name: $skill_name, skill_id: $skill_id,
-                  repo_id: $repo_id, correlation_id: $correlation_id,
-                  args_count: $args_count, emitted_at: $emitted_at}' 2>/dev/null) || exit 0
-            emit_via_daemon "skill.started" "$_SKILL_STARTED_PAYLOAD" 50
             _SKILL_COMPLETED_PAYLOAD=$(jq -n \
-                --arg run_id "$_SKILL_RUN_ID" \
+                --arg run_id "$SKILL_RUN_ID" \
                 --arg skill_name "$SKILL_NAME" \
                 --arg repo_id "omniclaude" \
                 --arg correlation_id "$_SKILL_CORR_ID" \
-                --arg status "success" \
-                --arg emitted_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+                --arg status "$_SKILL_STATUS" \
                 '{run_id: $run_id, skill_name: $skill_name, repo_id: $repo_id,
-                  correlation_id: $correlation_id, status: $status,
-                  duration_ms: 0, emitted_at: $emitted_at}' 2>/dev/null) || exit 0
+                  correlation_id: $correlation_id, status: $status}' 2>/dev/null) || exit 0
             emit_via_daemon "skill.completed" "$_SKILL_COMPLETED_PAYLOAD" 50
         ) &
     fi

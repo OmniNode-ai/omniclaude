@@ -40,9 +40,13 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.specifiers import Specifier
+from packaging.version import Version
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_dep_provenance.py"
+_OMN_16761_FIXED_FLOOR = Version("0.38.14")
 
 
 def _load_module():
@@ -75,6 +79,18 @@ def _write_pyproject(tmp_path: Path, sources_block: str) -> Path:
     path = tmp_path / "pyproject.toml"
     path.write_text(content)
     return path
+
+
+def _minimum_inclusive_floor(spec: str) -> Version | None:
+    requirement = Requirement(spec)
+    floors: list[Version] = []
+    for specifier in requirement.specifier:
+        assert isinstance(specifier, Specifier)
+        if specifier.operator == ">=":
+            floors.append(Version(specifier.version))
+    if not floors:
+        return None
+    return max(floors)
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +237,8 @@ def test_the_live_floor_admits_only_infra_that_carries_the_omn16761_fix(mod) -> 
     ]
     assert specs, "omnibase-infra missing from [project.dependencies]"
     for spec in specs:
-        assert ">=0.38.14" in spec, (
+        floor = _minimum_inclusive_floor(spec)
+        assert floor is not None and floor >= _OMN_16761_FIXED_FLOOR, (
             f"{spec!r} admits omnibase-infra < 0.38.14, which still advertises the "
             "`run` onex.cli entry point that collides with omnibase-core 0.47.x"
         )

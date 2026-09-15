@@ -221,6 +221,9 @@ governed_topics:
   - "SESSION_ENDED"
   - "TOOL_EXECUTED"
   - "PROMPT_SUBMITTED"
+  - "SKILL_STARTED"
+  - "SKILL_COMPLETED"
+  - "TOOL_OUTPUT_CAPTURED"
 
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).

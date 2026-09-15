@@ -1423,6 +1423,14 @@ components:
   path: plugins/onex/hooks/scripts/post_tool_use_kafka_poison_message_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/post_tool_use_output_capture_metadata.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/post_tool_use_output_capture_metadata.sh
+  backing_nodes: []
+  rationale: metadata-only Claude output capture observer (OMN-16979); emits classification, size, and identifiers without raw output or replacement content.
 - id: hooks/scripts/post_tool_use_output_suppressor.sh
   kind: hook
   exposure: beta
@@ -1727,6 +1735,14 @@ components:
   path: plugins/onex/hooks/scripts/pre_tool_use_skill_substitution_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
+- id: hooks/scripts/pre_tool_use_skill_started.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/pre_tool_use_skill_started.sh
+  backing_nodes: []
+  rationale: lifecycle observer (OMN-16979) registered at PreToolUse Skill; emits the redacted skill-started record keyed by Claude tool_use_id.
 - id: hooks/scripts/pre_tool_use_sweep_preflight.sh
   kind: hook
   exposure: beta

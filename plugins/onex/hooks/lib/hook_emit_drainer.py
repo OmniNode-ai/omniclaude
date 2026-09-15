@@ -59,6 +59,7 @@ import os
 import signal
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,8 @@ DEFAULT_POLL_SECONDS = 2.0
 DEFAULT_IDLE_POLL_SECONDS = 10.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 DEFAULT_BATCH_LIMIT = 200
+
+_QUARANTINE_DIRNAME = "quarantine"
 
 _shutdown = False
 
@@ -233,7 +236,7 @@ class _Emitter:
         try:
             request = self._request_cls(
                 event_type=record.event_type,
-                topic=record.event_type,
+                topic=None,
                 payload=record.payload,
                 correlation_id=record.correlation_id,
             )
@@ -253,6 +256,92 @@ class _Emitter:
             logger.warning("publish raised for %s: %s", record.event_id, exc)
             return False
         return bool(result.published)
+
+
+def _legacy_topic_to_semantic_event() -> dict[str, str] | None:
+    """Read the installed contract and invert unambiguous legacy topic rules.
+
+    The journal used to store a fully-qualified fan-out topic in ``event_type``.
+    A finite migration converts only topics with one declared semantic owner.
+    No hard-coded aliases are accepted: anything absent or ambiguous remains
+    durable for inspection in quarantine.
+    """
+    try:
+        import yaml
+        from omnimarket.nodes.node_event_emit_effect.spool.topic_resolver import (
+            default_registry_path,
+        )
+
+        raw = yaml.safe_load(default_registry_path().read_text(encoding="utf-8"))
+        events = raw["events"]
+        candidates: dict[str, set[str]] = {}
+        for event_type, definition in events.items():
+            for rule in definition.get("fan_out", []):
+                topic = rule.get("topic")
+                if isinstance(topic, str):
+                    candidates.setdefault(topic, set()).add(event_type)
+    except Exception as exc:  # noqa: BLE001 -- leave records inspectable
+        logger.error("cannot load event registry for legacy journal migration: %s", exc)
+        return None
+    return {
+        topic: next(iter(event_types))
+        for topic, event_types in candidates.items()
+        if len(event_types) == 1
+    }
+
+
+def migrate_legacy_journal(journal_dir: Path) -> tuple[int, int]:
+    """Convert known FQ journal records once and quarantine the rest.
+
+    Conversion is atomic per file and retains the original payload,
+    correlation ID, event ID, and queue time. An FQ record whose topic is no
+    longer contract-declared is never acked or sent to the broker: it is moved
+    byte-for-byte into ``quarantine/`` for manual resolution.
+    """
+    topic_to_event = _legacy_topic_to_semantic_event()
+    if topic_to_event is None:
+        return 0, 0
+
+    migrated = 0
+    quarantined = 0
+    for entry in journal.list_pending(journal_dir):
+        legacy_topic = entry.record.event_type
+        if not legacy_topic.startswith("onex."):
+            continue
+        semantic_event = topic_to_event.get(legacy_topic)
+        if semantic_event is not None:
+            converted = replace(entry.record, event_type=semantic_event)
+            tmp = entry.path.with_name(f".{entry.path.name}.migration.tmp")
+            try:
+                tmp.write_text(converted.to_json(), encoding="utf-8")
+                tmp.replace(entry.path)
+                migrated += 1
+            except OSError as exc:
+                logger.error(
+                    "cannot migrate legacy journal record %s: %s", entry.path, exc
+                )
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+            continue
+
+        quarantine = journal_dir / _QUARANTINE_DIRNAME
+        target = quarantine / entry.path.name
+        try:
+            quarantine.mkdir(parents=True, exist_ok=True)
+            entry.path.replace(target)
+            quarantined += 1
+            logger.error(
+                "quarantined unclassified legacy journal record %s (%s)",
+                entry.record.event_id,
+                legacy_topic,
+            )
+        except OSError as exc:
+            logger.error(
+                "cannot quarantine legacy journal record %s: %s", entry.path, exc
+            )
+    return migrated, quarantined
 
 
 def drain_once(
@@ -297,6 +386,13 @@ def run(
     apply_declared_lane()
 
     emitter = _Emitter()
+    migrated, quarantined = migrate_legacy_journal(journal_dir)
+    if migrated or quarantined:
+        logger.info(
+            "legacy journal migration: migrated=%d quarantined=%d",
+            migrated,
+            quarantined,
+        )
     logger.info("draining %s (pid %s)", journal_dir, os.getpid())
     try:
         while True:

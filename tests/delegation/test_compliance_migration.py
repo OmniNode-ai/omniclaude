@@ -100,7 +100,7 @@ class TestMigration003FreshDB:
         adapter = SQLiteProjectionAdapter(conn)
 
         applied = adapter.get_applied_migrations()
-        assert applied == ["001", "002", "003"]
+        assert applied == ["001", "002", "003", "004"]
         adapter.close()
 
 
