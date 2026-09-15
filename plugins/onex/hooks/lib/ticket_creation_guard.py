@@ -32,9 +32,12 @@ one refusal naming every failing rule.
 What it refuses, and what it deliberately does not
 --------------------------------------------------
 It fires on a **CREATE** -- ``mcp__linear-server__save_issue`` with no ``id``.
-An **UPDATE** is never gated: ``save_issue`` with an ``id`` edits a row that
-already exists, and gating it would block every state flip, description repair
-and parent re-link the board-truth work (OMN-16729) depends on.
+
+An **UPDATE** is gated on ONE thing and nothing else (rule 9, OMN-18404): it may
+not rewrite an acceptance criterion's own line. Every other update -- a state
+flip, a parent re-link, a rewritten problem statement, a ticked checkbox -- is
+admitted untouched, because gating those would block the board-truth work
+(OMN-16729) this guard exists to serve.
 
 A create is admitted only when all eight hold:
 
@@ -101,6 +104,36 @@ timestamp.
 
 The falsifier is a check name or a command shape -- **never a result**. It is a
 claim about what WOULD settle the criterion, made before anything is built.
+
+Rule 9 -- an update may not rewrite an acceptance criterion
+----------------------------------------------------------
+`onex_change_control`'s Acceptance-Criterion Binding Gate (OMN-18236) pins a
+criterion by the hash of its text, so a binding cannot be left standing under a
+criterion that was rewritten beneath it. Orchestration lanes patch descriptions
+as BOOKKEEPING -- writing a comment-id citation, or a ``MET`` verdict, into the
+criterion's own line -- and every such write moves that hash.
+
+Measured 2026-09-15 on `onex_change_control` ``origin/dev`` ``48d9a167``
+against live ticket bodies: **27 of 144 live pins were stale**, across
+OMN-18387, OMN-18388 and OMN-18390, all three annotated the same day. 25 were
+healed exactly by removing a ``(#<hex>)`` citation; the remaining 2 by removing
+a ``MET`` verdict.
+
+**Two shapes in one day** is the whole argument for putting the rule at the
+writer rather than teaching the hash to ignore an annotation. A normaliser
+taught to ignore the first shape would still have been red on the second, and
+each exception carved into that hash is a channel through which a criterion CAN
+be rewritten invisibly -- including the commit shas and digests this fleet
+writes into criteria normatively.
+
+Scope is exactly the bytes that gate hashes: the criterion's own LINE. Ticking
+its checkbox, appending an indented evidence paragraph beneath it, adding a
+criterion and removing one are all admitted. See :func:`criterion_lines` for why
+that is deliberately narrower than this module's own :func:`criterion_units`.
+
+The honest limit, as everywhere else here: this refuses an ACCIDENT. It cannot
+tell a lane that a criterion is wrong, and a lane that means to change one may
+still do so -- and must then re-accept the binding in the same act.
 
 What rules 6 and 7 enforce, and what they cannot
 ------------------------------------------------
@@ -301,6 +334,7 @@ from typing import Any, Final
 
 __all__ = [
     "OVERRIDE_CITATION_GRAMMAR",
+    "BodyLookup",
     "ChildrenLookup",
     "CriterionUnit",
     "Finding",
@@ -308,9 +342,11 @@ __all__ = [
     "Policy",
     "PolicyError",
     "UnstartedChild",
+    "apply_description_patch",
     "build_census",
     "canonical_criterion_text",
     "check_save_issue",
+    "criterion_lines",
     "criterion_units",
     "load_policy",
     "render_block_reason",
@@ -326,6 +362,10 @@ DEFAULT_POLICY_PATH: Final[Path] = (
 GATE_BIT_NAME: Final[str] = "LINEAR_DONE_VERIFY"
 
 TICKET: Final[str] = "OMN-17942"
+
+#: Rule 9's own ticket. Named separately because a refusal that cited the
+#: creation gate's ticket would send somebody to the wrong diagnosis.
+CRITERION_TICKET: Final[str] = "OMN-18404"
 
 #: ``Gate: OMN-16729 AC-5`` -- a parent issue plus an acceptance-criterion
 #: ordinal. Both halves are required: a bare parent is a link, not a binding.
@@ -574,6 +614,13 @@ class ParentCensus:
 #: network lives in exactly one place, which is what makes rule 8 testable
 #: without a workspace.
 ChildrenLookup = Callable[[str], "ParentCensus | None"]
+
+#: Resolve an issue reference to its CURRENT description, or ``None`` when the
+#: tracker will not report one. Rule 9's only window outside the payload, and a
+#: callable for the same reason :data:`ChildrenLookup` is: the decision core
+#: stays a pure function of what it is handed, and the network lives in one
+#: place.
+BodyLookup = Callable[[str], "str | None"]
 
 
 def build_census(
@@ -1089,6 +1136,247 @@ def criterion_units(description: str, policy: Policy) -> list[CriterionUnit]:
     return units
 
 
+# -- rule 9: a criterion's own line is not bookkeeping surface (OMN-18404) ----
+
+
+def _criterion_line_text(line: str) -> str:
+    """The criterion text ONE line carries, or ``""``.
+
+    The per-line half of :func:`_acceptance_criteria_items`, lifted out so rule
+    9 can read a criterion exactly as the change-control gate does. The task
+    marker is stripped, which is why ticking a checkbox is invisible here and
+    therefore always admitted.
+    """
+    list_match = _LIST_ITEM.match(line)
+    if list_match:
+        return _TASK_MARKER.sub("", list_match.group(1)).strip()
+    ac_match = _AC_ITEM.match(line)
+    if not ac_match:
+        return ""
+    lead, token, rest = ac_match.groups()
+    text = f"{token}{rest}".strip()
+    if lead:
+        text = _TRAILING_EMPHASIS.sub("", text).strip()
+    return text
+
+
+def criterion_lines(description: str) -> dict[str, str]:
+    """``{label: that criterion's OWN LINE}``, canonicalised.
+
+    DELIBERATELY NOT :func:`criterion_units`, and the difference is the whole
+    point of the rule. That function joins a criterion's continuation lines into
+    one item, because the falsifier rules need the criterion as its author wrote
+    it. `onex_change_control`'s binding gate hashes the criterion's own LINE and
+    nothing else (`validation/ac_criteria.py`, ``item_text``), so the bytes rule
+    9 must protect are the line's, not the item's.
+
+    Reading it any wider would refuse the habit that is actually harmless --
+    appending an indented evidence paragraph beneath a criterion, which three
+    live tickets do and which changes no hash -- and a guard that refuses
+    harmless work is a guard somebody turns off.
+
+    Scanned over the WHOLE body rather than the criteria section, matching that
+    gate's own whole-body fallback: a criterion written under an unrecognised
+    heading is still one whose rewrite breaks a binding.
+
+    First occurrence of a label wins, the same tie-break that gate uses, so two
+    lines labelled ``AC1`` cannot make the comparison depend on scan order.
+    """
+    resolved: dict[str, str] = {}
+    for line in description.splitlines():
+        text = _criterion_line_text(line)
+        if not text:
+            continue
+        match = _CRITERION_LABEL.match(text)
+        if not match:
+            continue
+        label = f"{match.group(1).upper()}{match.group(2)}{match.group(3)}"
+        if label not in resolved:
+            resolved[label] = canonical_criterion_text(text)
+    return resolved
+
+
+class PatchUnapplicable(ValueError):
+    """A description patch this guard cannot resolve to one definite result."""
+
+
+def apply_description_patch(previous: str, operations: Any) -> str:
+    """The description ``operations`` produce when applied to ``previous``.
+
+    ``save_issue`` can edit a description through ``patch`` instead of sending
+    the whole field, and ticking a checkbox is exactly the shape somebody
+    reaches for ``patch`` to do. A rule 9 that read only ``description`` would
+    therefore miss the most likely route to the defect while looking like it
+    covered it, so the ops are applied here and the RESULT is compared.
+
+    Anchor semantics are the tool's own: every anchor must match exactly once,
+    and the ops apply in order, atomically. Anything this cannot resolve to one
+    definite result raises :class:`PatchUnapplicable` and the caller refuses --
+    "I could not work out what this writes" must not resolve to "so it passes".
+    """
+    if not isinstance(operations, list) or not operations:
+        raise PatchUnapplicable("patch is not a non-empty list of operations")
+    body = previous
+    for index, raw in enumerate(operations):
+        if not isinstance(raw, dict):
+            raise PatchUnapplicable(f"operation {index} is not an object")
+        op = raw.get("op")
+        if op == "prepend":
+            text = raw.get("text")
+            if not isinstance(text, str):
+                raise PatchUnapplicable(f"operation {index} carries no text")
+            body = text + body
+        elif op == "append":
+            text = raw.get("text")
+            if not isinstance(text, str):
+                raise PatchUnapplicable(f"operation {index} carries no text")
+            body = body + text
+        elif op in {"insert_before", "insert_after"}:
+            anchor, text = raw.get("anchor"), raw.get("text")
+            if not isinstance(anchor, str) or not isinstance(text, str):
+                raise PatchUnapplicable(
+                    f"operation {index} needs a string anchor and text"
+                )
+            if body.count(anchor) != 1:
+                raise PatchUnapplicable(
+                    f"operation {index} anchor matches {body.count(anchor)} times"
+                )
+            at = body.index(anchor)
+            at = at if op == "insert_before" else at + len(anchor)
+            body = body[:at] + text + body[at:]
+        elif op == "replace":
+            old, new = raw.get("old_string"), raw.get("new_string")
+            if not isinstance(old, str) or not old or not isinstance(new, str):
+                raise PatchUnapplicable(
+                    f"operation {index} needs a non-empty old_string and a new_string"
+                )
+            if raw.get("replace_all") is True:
+                if old not in body:
+                    raise PatchUnapplicable(f"operation {index} matches nothing")
+                body = body.replace(old, new)
+            else:
+                if body.count(old) != 1:
+                    raise PatchUnapplicable(
+                        f"operation {index} old_string matches {body.count(old)} times"
+                    )
+                body = body.replace(old, new, 1)
+        elif op == "replace_range":
+            start, end = raw.get("from"), raw.get("to")
+            new = raw.get("new_string")
+            if (
+                not isinstance(start, str)
+                or not start
+                or not isinstance(end, str)
+                or not end
+                or not isinstance(new, str)
+            ):
+                raise PatchUnapplicable(f"operation {index} needs from, to, new_string")
+            if body.count(start) != 1:
+                raise PatchUnapplicable(
+                    f"operation {index} 'from' matches {body.count(start)} times"
+                )
+            head = body.index(start)
+            tail = body.find(end, head + len(start))
+            if tail == -1 or body.count(end, head + len(start)) != 1:
+                raise PatchUnapplicable(
+                    f"operation {index} 'to' does not follow 'from' exactly once"
+                )
+            body = body[:head] + new + body[tail:]
+        else:
+            raise PatchUnapplicable(f"operation {index} has unknown op {op!r}")
+    return body
+
+
+def _criterion_text_findings(
+    issue_ref: str,
+    tool_input: dict[str, Any],
+    body_lookup: BodyLookup | None,
+) -> list[Finding]:
+    """Rule 9 -- an existing criterion's own line may not be rewritten.
+
+    Only the labels present BOTH before and after are compared. Adding a
+    criterion and removing one are authoring, not rewriting, and neither can
+    leave a binding standing over changed text: a binding to a label the ticket
+    no longer has is already refused by that gate as an unknown criterion.
+
+    **Where the unknowns fall, stated rather than left to be discovered.** No
+    credential configured is a stable property of the machine, not of this call
+    -- the rule does not run and :func:`main` says so on stderr, which is rule
+    8's precedent and its reasoning. A credential that IS present and a body
+    that still cannot be read is a transient, and it REFUSES: a retry clears it,
+    and "I hold a credential and could not check" is the shape that must not
+    resolve to a pass.
+    """
+    if body_lookup is None:
+        return []
+    previous = body_lookup(issue_ref)
+    if previous is None:
+        return [
+            Finding(
+                code="criterion_text_unreadable",
+                field="description",
+                reason=(
+                    f"the current body of {issue_ref} could not be read, so the "
+                    "guard cannot tell whether this update rewrites an "
+                    "acceptance criterion"
+                ),
+                fix=(
+                    "retry the update; if the tracker stays unreachable, make "
+                    "the edit once the read works rather than blind"
+                ),
+            )
+        ]
+
+    if "patch" in tool_input:
+        try:
+            proposed = apply_description_patch(previous, tool_input["patch"])
+        except PatchUnapplicable as exc:
+            return [
+                Finding(
+                    code="criterion_text_unreadable",
+                    field="patch",
+                    reason=(
+                        f"this patch does not resolve to one definite body "
+                        f"({exc}), so the guard cannot tell whether it rewrites "
+                        "an acceptance criterion"
+                    ),
+                    fix=(
+                        "send the edit as a full description, or give each "
+                        "operation an anchor that matches exactly once"
+                    ),
+                )
+            ]
+    else:
+        proposed = str(tool_input.get("description") or "")
+
+    before = criterion_lines(previous)
+    after = criterion_lines(proposed)
+    findings: list[Finding] = []
+    for label in sorted(set(before) & set(after)):
+        if before[label] == after[label]:
+            continue
+        findings.append(
+            Finding(
+                code="criterion_text_rewritten",
+                field=label,
+                reason=(
+                    f"this update rewrites {label}'s own line. Was: "
+                    f"{_quote(before[label])!r}. Now: {_quote(after[label])!r}"
+                ),
+                fix=(
+                    f"leave {label}'s line exactly as it is and put the "
+                    "annotation on its own line BELOW the acceptance-criteria "
+                    "block. A contract's ac_bindings pins this line by hash, so "
+                    "editing it reverts every binding on it to unproven and "
+                    "turns the change-control gate red. If the criterion itself "
+                    "is genuinely wrong, change it and re-accept the binding in "
+                    "the same act"
+                ),
+            )
+        )
+    return findings
+
+
 def _quote(item: str) -> str:
     """One criterion, trimmed to a readable length for a refusal message."""
     flat = " ".join(item.split())
@@ -1437,16 +1725,20 @@ def check_save_issue(
     policy: Policy,
     children_lookup: ChildrenLookup | None = None,
     ledger_root: Path | None = None,
+    body_lookup: BodyLookup | None = None,
 ) -> list[Finding]:
     """Return every failing admission rule for one ``save_issue`` call.
 
-    An empty list admits the call. Updates always return an empty list.
+    An empty list admits the call. A CREATE is judged by rules 1-8; an UPDATE is
+    judged by rule 9 alone, and only when it touches the description.
 
     ``children_lookup`` is rule 8's only window onto anything outside the
     payload, and it is an argument rather than an import so this function stays
     a pure function of what it is given. ``None`` means no census source is
     configured; see :func:`_unstarted_cap_findings` for why that admits rather
     than refuses. ``ledger_root`` is where an override citation is resolved from.
+    ``body_lookup`` is rule 9's equivalent window; see
+    :func:`_criterion_text_findings`.
     """
 
     if not isinstance(tool_input, dict):
@@ -1464,8 +1756,32 @@ def check_save_issue(
 
     if "id" in tool_input:
         if _is_present(tool_input["id"]):
-            # An UPDATE. Never gated -- see the module docstring.
-            return []
+            # An UPDATE. Rules 1-8 bound a ticket's SHAPE at creation and have
+            # nothing to say here. Rule 9 does: an update is the only way an
+            # acceptance criterion's text can change after a contract has
+            # pinned it (OMN-18404).
+            touches_body = (
+                "patch" in tool_input or tool_input.get("description") is not None
+            )
+            if not touches_body:
+                return []
+            raw_body = tool_input.get("description")
+            if "patch" not in tool_input and not isinstance(raw_body, str):
+                return [
+                    Finding(
+                        code="unevaluable",
+                        field="description",
+                        reason=(
+                            f"'description' is {type(raw_body).__name__}, not a "
+                            "string, so the guard cannot read what this update "
+                            "writes into the acceptance criteria"
+                        ),
+                        fix="pass the description as markdown text",
+                    )
+                ]
+            return _criterion_text_findings(
+                str(tool_input["id"]), tool_input, body_lookup
+            )
         return [
             Finding(
                 code="unevaluable",
@@ -1636,31 +1952,60 @@ def check_save_issue(
     return findings
 
 
-def render_block_reason(findings: list[Finding], policy: Policy) -> str:
+def render_block_reason(
+    findings: list[Finding], policy: Policy, update: bool = False
+) -> str:
     """Render one refusal naming every failing rule.
 
     Every rule at once, not the first: a guard that reports one missing field
     per attempt turns a single fix into four round trips, and each round trip is
     a chance for the lane to give up and file the ticket from a surface the gate
     does not see.
+
+    ``update`` selects rule 9's preamble. A create's refusal cites the backlog
+    measurement that justifies rules 1-8 and would be simply untrue on an
+    update, which is refused for an unrelated reason.
     """
-    lines = [
-        f"BLOCKED: this Linear issue CREATE is not bound to a commitment ({TICKET}).",
-        "",
-        (
-            "Measured 2026-08-22..2026-09-04: 1553 tickets created in 14 days "
-            "against ~35/day closed; 779 never left Backlog and 398 were never "
-            "touched again. This guard refuses the creates that produce that."
-        ),
-        "",
-    ]
+    if update:
+        lines = [
+            f"BLOCKED: this Linear issue UPDATE rewrites an acceptance "
+            f"criterion ({CRITERION_TICKET}).",
+            "",
+            (
+                "Measured 2026-09-15: 27 of 144 live ac_binding pins were stale "
+                "across three tickets, every one of them because a lane wrote "
+                "bookkeeping -- a comment-id citation, a MET verdict -- into a "
+                "criterion's own line. A contract pins that line by hash, so the "
+                "annotation reverts every binding on it to unproven."
+            ),
+            "",
+        ]
+    else:
+        lines = [
+            f"BLOCKED: this Linear issue CREATE is not bound to a commitment "
+            f"({TICKET}).",
+            "",
+            (
+                "Measured 2026-08-22..2026-09-04: 1553 tickets created in 14 days "
+                "against ~35/day closed; 779 never left Backlog and 398 were never "
+                "touched again. This guard refuses the creates that produce that."
+            ),
+            "",
+        ]
     for finding in findings:
         lines.append(f"  * [{finding.code}] {finding.field}: {finding.reason}")
         lines.append(f"      fix: {finding.fix}")
     lines.extend(
         [
             "",
-            "An UPDATE (save_issue with an id) is never gated -- only creates are.",
+            (
+                "Only a criterion's OWN LINE is protected. Ticking its checkbox, "
+                "appending an indented paragraph beneath it, adding a criterion "
+                "and removing one are all admitted."
+                if update
+                else "An UPDATE is gated only on rewriting an acceptance "
+                "criterion's own line -- nothing else about it is checked."
+            ),
             (f"To disable this guard deliberately: onex hooks disable {GATE_BIT_NAME}"),
         ]
     )
@@ -1763,6 +2108,60 @@ def _fetch_children_nodes(
     return identifier, nodes, False
 
 
+_BODY_QUERY: Final[str] = "query($id:String!){issue(id:$id){description}}"
+
+
+def _fetch_issue_body(issue_ref: str, api_key: str) -> str | None:
+    """One issue's current description, or ``None`` when it cannot be read.
+
+    Every failure collapses to ``None`` for the same reason
+    :func:`_fetch_children_nodes` does: a transport error, a non-200, a GraphQL
+    error body, an unknown issue and an unparseable response are all "the
+    tracker did not tell us", and the caller refuses on that uniformly. An issue
+    that exists with a genuinely empty description returns ``""``, which is a
+    body and not an unknown.
+    """
+    request = urllib.request.Request(  # noqa: S310
+        _LINEAR_API_URL,
+        data=json.dumps(
+            {"query": _BODY_QUERY, "variables": {"id": issue_ref}}
+        ).encode(),
+        headers={"Authorization": api_key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+            request, timeout=_CENSUS_TIMEOUT_S
+        ) as response:
+            if response.status != 200:
+                return None
+            raw = response.read()
+    except (urllib.error.URLError, OSError):
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if payload.get("errors"):
+        return None
+    issue = (payload.get("data") or {}).get("issue")
+    if not isinstance(issue, dict):
+        return None
+    description = issue.get("description")
+    if description is None:
+        return ""
+    return description if isinstance(description, str) else None
+
+
+def _body_network_lookup(api_key: str) -> BodyLookup:
+    """Bind rule 9's body seam to the live tracker."""
+
+    def lookup(issue_ref: str) -> str | None:
+        return _fetch_issue_body(issue_ref, api_key)
+
+    return lookup
+
+
 def _network_lookup(api_key: str, policy: Policy) -> ChildrenLookup:
     """Bind the census seam to the live tracker."""
 
@@ -1820,14 +2219,19 @@ def main(argv: list[str] | None = None) -> int:
 
     api_key = _resolve_api_key()
     lookup = _network_lookup(api_key, policy) if api_key else None
+    body_lookup = _body_network_lookup(api_key) if api_key else None
     ledger_root_raw = os.environ.get("OMNI_HOME", "").strip()
     ledger_root = Path(ledger_root_raw) if ledger_root_raw else None
 
+    tool_input = payload.get("tool_input")
+    is_update = isinstance(tool_input, dict) and _is_present(tool_input.get("id"))
+
     findings = check_save_issue(
-        payload.get("tool_input"),
+        tool_input,
         policy,
         children_lookup=lookup,
         ledger_root=ledger_root,
+        body_lookup=body_lookup,
     )
     if findings:
         # Nothing is written to stderr on this path. The shell wrapper captures
@@ -1835,12 +2239,13 @@ def main(argv: list[str] | None = None) -> int:
         # with jq, so a diagnostic line here would not be a diagnostic -- it
         # would corrupt the refusal into the wrapper's generic fallback text and
         # throw away every finding this function just computed.
-        return _block(render_block_reason(findings, policy))
+        return _block(render_block_reason(findings, policy, update=is_update))
     if lookup is None:
         sys.stderr.write(
             "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "
-            "~/.omnibase/.env, so rule 8 (the unstarted-children cap) was not "
-            "evaluated for this create. Rules 1-7 ran normally.\n"
+            "~/.omnibase/.env, so rule 8 (the unstarted-children cap) and rule 9 "
+            "(an update may not rewrite an acceptance criterion) were not "
+            "evaluated for this call. Rules 1-7 ran normally.\n"
         )
     return 0
 
