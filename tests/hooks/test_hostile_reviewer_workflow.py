@@ -187,6 +187,119 @@ def test_dependency_clones_track_dev_and_review_install_excludes_rl(
     )
 
 
+def _review_step_run_text(workflow: dict[object, object]) -> str:
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+    steps = review_job.get("steps") or []
+    review_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict) and step.get("id") == "review"
+        ),
+        None,
+    )
+    assert isinstance(review_step, dict), "review step must exist"
+    run_text = review_step.get("run")
+    assert isinstance(run_text, str)
+    return run_text
+
+
+def test_review_exit_captured_from_command_not_if_statement(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-18409: ``REVIEW_EXIT=$?`` must capture the real exit status of the
+    ``cli_review`` invocation, never the exit status of the enclosing
+    ``if``/``fi`` block.
+
+    In bash, ``if COND; then BODY; fi`` with no matching branch and no
+    ``else`` clause itself returns exit status 0 — so reading ``$?``
+    immediately after a bare ``fi`` captures the if-statement's own status,
+    not the failed command's. That silently zeroed out ``REVIEW_EXIT`` on
+    every ``cli_review`` failure, so the ``if [ "$REVIEW_EXIT" -ne 0 ]``
+    infra_error fail-closed path never fired and the script fell through to
+    parse an empty ``$REVIEW_JSON`` as JSON.
+
+    Observed on omniclaude#2180 (run 35017674790): two retry attempts both
+    logged "(exit 0)" despite genuinely failing, followed by
+    ``json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)``.
+    """
+    run_text = _review_step_run_text(workflow)
+
+    lines = [line.strip() for line in run_text.splitlines()]
+    for index, line in enumerate(lines):
+        if line == "fi" and index + 1 < len(lines):
+            assert lines[index + 1] != "REVIEW_EXIT=$?", (
+                "REVIEW_EXIT=$? must not be read immediately after a bare "
+                "`fi` with no `else` -- that captures the if-statement's own "
+                "exit status (always 0 in that shape), not the real exit "
+                "code of the cli_review command substitution (OMN-18409)"
+            )
+
+    assert "REVIEW_EXIT=$?" in run_text, (
+        "the retry loop must still capture a real exit code from the "
+        "cli_review invocation"
+    )
+
+
+def test_single_model_degraded_exit_code_is_not_treated_as_infra_error(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-18409 follow-up: cli_review's exit-code contract is 0 only when
+    at least 2 models succeeded, 2 for exactly one model succeeding
+    (DEGRADED -- a real, valid verdict, not a failure), and 1 when every
+    model failed. This step passes only a single ``--model``, so a
+    successful run can NEVER return 0 -- it always returns 2.
+
+    Fixing the REVIEW_EXIT capture bug in isolation, without widening the
+    retry/infra_error checks to accept exit 2, would turn every ordinary
+    single-model DEGRADED success into a false infra_error -- strictly
+    worse than the bug it replaces, since the old (buggy) post-fi ``$?``
+    read accidentally treated any nonzero-but-valid-JSON exit as success.
+
+    Reproduced live 2026-09-15 against omniclaude PR #2181's own diff:
+    cli_review --model deepseek-r1 succeeded (0 findings) and exited 2.
+    """
+    run_text = _review_step_run_text(workflow)
+
+    assert 'REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2' in run_text, (
+        "the retry loop's success check must accept exit 2 (single-model "
+        "DEGRADED) as well as exit 0 -- this step only ever passes one "
+        "--model, so exit 0 can never occur on a genuine success"
+    )
+
+    condition_line = next(
+        line for line in run_text.splitlines() if '"$REVIEW_EXIT" -ne 0' in line
+    )
+    assert '"$REVIEW_EXIT" -ne 2' in condition_line, (
+        "the infra_error fail-closed check must exempt exit 2 -- otherwise "
+        "a real single-model DEGRADED success (the normal case for this "
+        "single-model workflow) reports infra_error after two attempts"
+    )
+
+
+def test_verdict_parser_treats_empty_diff_as_a_real_passed_verdict(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-18409: cli_review reports ``skipped_reason=="empty_diff"`` for a
+    PR with no diff (e.g. a merge/ancestry commit whose tree matches the base
+    branch). The workflow's verdict parser must treat that as a real,
+    non-blocking ``passed`` verdict -- not fall through to ``degraded``,
+    whose PR-comment framing ("all reviewer models failed or were
+    unavailable") misdescribes a diff that was never sent to any model.
+    """
+    run_text = _review_step_run_text(workflow)
+
+    assert 'data.get("skipped_reason")' in run_text, (
+        "verdict parser must read the skipped_reason field cli_review emits "
+        "for an empty-diff PR"
+    )
+    assert 'skipped_reason == "empty_diff"' in run_text
+    assert 'verdict = "passed"' in run_text
+
+
 def test_dependency_install_failure_fails_closed(
     workflow: dict[object, object],
 ) -> None:
