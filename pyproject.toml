@@ -249,9 +249,9 @@ override-dependencies = [
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
     # OMN-15968: omninode-intelligence's own pin (v0.4.0) otherwise conflicts
     # with our direct omnimarket rev below -- force our rev to win transitively.
-    # OMN-16979: v0.4.83 retains the merged redaction policy and transports
-    # the post-redaction content identity in ModelEventHeaders.idempotency_key.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@88009a00e5462a4fb818c78e6aae2ab169f5b13f",
+    # OMN-16979: approved dispatch baseline carrying canonical projection
+    # adapter query support required by the all-class producer path.
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@fa7f0d26f37a638f3985c1b19c43728a118a7dba",
 ]
 
 [tool.uv.sources]
@@ -275,9 +275,9 @@ onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_contro
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret
-# OMN-16979: pin the approved v0.4.83 commit; never substitute a branch head
-# or a PyPI source because the dispatch-drift guard verifies direct VCS provenance.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "88009a00e5462a4fb818c78e6aae2ab169f5b13f" }  # pragma: allowlist secret
+# OMN-16979: pin the approved dispatch commit; never substitute a branch head or
+# a PyPI source because the dispatch-drift guard verifies direct VCS provenance.
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "fa7f0d26f37a638f3985c1b19c43728a118a7dba" }  # pragma: allowlist secret
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
