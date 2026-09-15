@@ -967,12 +967,14 @@ expected_hooks:
     ticket: "OMN-18368"
     owner: "omniclaude hooks lane"
     purpose: >
-      Runs plugins/onex/scripts/session_preflight.py under a FIXED
-      --intent quiet at every session start: nothing when every declared
-      check passes, one line per failing blocker with its own fix command
-      otherwise, or a single REFUSED line when this machine has no
-      SESSION_PREFLIGHT_OVERLAY_PATH declared. Print-only: never blocks
-      regardless of the runner's own exit status (0/1/2).
+      Runs plugins/onex/scripts/session_preflight.py at every session start:
+      nothing when every declared check passes, one line per failing blocker
+      with its own fix command otherwise, or a single REFUSED line when this
+      machine has no SESSION_PREFLIGHT_OVERLAY_PATH declared. Consults
+      lib/intent.sh for exactly one thing: under a tick session it runs
+      --intent tick --receipt <state-dir path> (verdict on a receipt, nothing
+      printed); every other intent runs a FIXED --intent quiet. Print-only:
+      never blocks regardless of the runner's own exit status (0/1/2).
     enforcement: false
     lite_mode_exit: true
     mask:

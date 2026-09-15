@@ -5,17 +5,23 @@
 # SessionStart preflight hook (OMN-18368)
 #
 # Runs the session preflight runner (plugins/onex/scripts/session_preflight.py)
-# under the FIXED `--intent quiet` argument at every session start, and prints
-# whatever it prints: nothing when every check passes, one line per blocker
-# with its own fix command otherwise, or a single REFUSED line naming a
-# configuration problem (most commonly: no overlay declared on this machine).
+# at every session start and prints whatever it prints: nothing when every
+# check passes, one line per blocker with its own fix command otherwise, or a
+# single REFUSED line naming a configuration problem (most commonly: no
+# overlay declared on this machine).
 #
-# The `--intent quiet` argument is fixed, not resolved from the session's own
-# intent. The runner's own quiet mode already IS the volume control this hook
-# needs -- silent when clean, one line per blocker otherwise -- so there is
-# nothing left for a second silencing layer to add. A person who wants the
-# fuller `normal` picture asks for it explicitly via
-# `/onex:preflight --intent normal`; that path is unaffected by this hook.
+# Consults the shared session-intent resolver (lib/intent.sh) for exactly one
+# thing: whether THIS session is `tick` -- a scheduled or dispatched workflow,
+# per intent.sh's own contract, whose verdict belongs on that run's receipt,
+# not in its transcript. Under `tick` the runner is called with
+# `--intent tick --receipt <state-dir path>`, which prints nothing and writes
+# the verdict as JSON instead (session_preflight.py's own tick behaviour).
+# Every other intent (`quiet`, `normal`, or the resolver being unavailable)
+# runs the runner under a FIXED `--intent quiet`: the runner's own quiet mode
+# already IS the volume control a SessionStart line needs -- silent when
+# clean, one line per blocker otherwise -- so a `normal` session gets the same
+# compressed summary here and asks for the fuller picture explicitly via
+# `/onex:preflight --intent normal`, which this hook does not affect.
 #
 # NEVER BLOCKS. The runner's own exit status (0 clean, 1 blocked, 2 refused)
 # is discarded: this hook always exits 0. A configuration problem or a failed
@@ -66,6 +72,24 @@ if [[ ! -f "$_RUNNER" ]]; then
     exit 0
 fi
 
+# Session intent (OMN-18368): the only question asked of the resolver is
+# whether this is a `tick` session. `quiet` and `normal` both run the runner
+# under a fixed --intent quiet (see the file header); only `tick` changes the
+# invocation, per intent.sh's own contract that a tick verdict belongs on a
+# receipt, not in the transcript.
+_RUN_ARGS=(--intent quiet)
+_INTENT_SH="${PLUGIN_ROOT}/lib/intent.sh"
+if [[ -f "$_INTENT_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$_INTENT_SH" 2>/dev/null || true
+    if declare -F omniclaude_session_intent >/dev/null 2>&1 \
+        && [[ "$(omniclaude_session_intent 2>/dev/null || true)" == "tick" ]]; then
+        _RECEIPT="${ONEX_STATE_DIR:-/tmp}/hooks/preflight/session-preflight-receipt.json"
+        mkdir -p "$(dirname "$_RECEIPT")" 2>/dev/null || true
+        _RUN_ARGS=(--intent tick --receipt "$_RECEIPT")
+    fi
+fi
+
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh" 2>/dev/null || true
 _PY="${PYTHON_CMD:-python3}"
@@ -78,9 +102,9 @@ elif command -v gtimeout >/dev/null 2>&1; then
 fi
 
 if [[ -n "$_TIMEOUT_BIN" ]]; then
-    _OUTPUT="$("$_TIMEOUT_BIN" 20s "$_PY" "$_RUNNER" --intent quiet 2>&1)"
+    _OUTPUT="$("$_TIMEOUT_BIN" 20s "$_PY" "$_RUNNER" "${_RUN_ARGS[@]}" 2>&1)"
 else
-    _OUTPUT="$("$_PY" "$_RUNNER" --intent quiet 2>&1)"
+    _OUTPUT="$("$_PY" "$_RUNNER" "${_RUN_ARGS[@]}" 2>&1)"
 fi
 
 if [[ -n "$_OUTPUT" ]]; then

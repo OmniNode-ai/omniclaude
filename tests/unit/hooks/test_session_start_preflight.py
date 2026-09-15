@@ -35,11 +35,13 @@ def _base_env(tmp_path: Path) -> dict[str, str]:
     env = os.environ.copy()
     # Never let the developer's own persistent mode/intent preference leak in.
     env.pop("OMNICLAUDE_MODE", None)
+    env.pop("OMNICLAUDE_SESSION_INTENT", None)
     env.pop("SESSION_PREFLIGHT_OVERLAY_PATH", None)
     env.pop("SESSION_PREFLIGHT_RECEIPT", None)
     env["HOME"] = str(tmp_path / "home")
     (tmp_path / "home").mkdir(exist_ok=True)
     env["CLAUDE_PLUGIN_ROOT"] = str(_PLUGIN)
+    env["ONEX_STATE_DIR"] = str(tmp_path / "state")
     return env
 
 
@@ -160,3 +162,50 @@ def test_prints_one_line_per_failing_blocker_and_still_exits_zero() -> None:
     assert lines[0].startswith("[preflight]")
     assert "A check that always fails" in lines[0]
     assert "fix-the-thing --now" in lines[0]
+
+
+@pytest.mark.unit
+def test_tick_intent_writes_a_receipt_and_prints_nothing() -> None:
+    """A tick session's verdict belongs on a receipt, not in the transcript.
+
+    Consulting lib/intent.sh for exactly this distinction is what lets this
+    hook stay declared in tests/hooks/test_session_start_quiet_intent.py's
+    registration-surface check (every registered SessionStart hook must
+    consult the resolver).
+    """
+    import json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp_path = Path(td)
+        overlay = _write_overlay(
+            tmp_path,
+            "  - check_id: always_false\n"
+            "    title: A check that always fails\n"
+            "    kind: command\n"
+            "    severity: blocker\n"
+            "    fix: 'run: fix-the-thing --now'\n"
+            "    command: 'false'\n",
+        )
+        env = _base_env(tmp_path)
+        env["OMNICLAUDE_MODE"] = "full"
+        env["OMNICLAUDE_SESSION_INTENT"] = "tick"
+        env["SESSION_PREFLIGHT_OVERLAY_PATH"] = str(overlay)
+        result = _run(env)
+
+        receipt = (
+            tmp_path
+            / "state"
+            / "hooks"
+            / "preflight"
+            / "session-preflight-receipt.json"
+        )
+        assert receipt.is_file(), f"expected a receipt at {receipt}"
+        payload = json.loads(receipt.read_text())
+
+    assert result.returncode == 0
+    assert result.stdout == "", (
+        f"tick intent must print nothing, got: {result.stdout!r}"
+    )
+    assert payload["intent"] == "tick"
+    assert payload["verdict"] == "BLOCKED"

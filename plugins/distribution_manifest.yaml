@@ -1910,7 +1910,7 @@ components:
   surface_class: hook_script
   path: plugins/onex/hooks/scripts/session_start_preflight.sh
   backing_nodes: []
-  rationale: behavior-changing Claude event hook (OMN-18368). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); runs plugins/onex/scripts/session_preflight.py under a fixed --intent quiet at every session start, printing nothing when every declared check passes, one line per failing blocker with its own fix command otherwise, or a single REFUSED line naming a configuration problem. Never blocks - the runner's own exit status (0/1/2) is discarded and this hook always exits 0. Lite-mode exits early because the preflight overlay this environment ships is private content, so an external contributor would only ever see the REFUSED line.
+  rationale: behavior-changing Claude event hook (OMN-18368). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); runs plugins/onex/scripts/session_preflight.py at every session start, printing nothing when every declared check passes, one line per failing blocker with its own fix command otherwise, or a single REFUSED line naming a configuration problem; a tick session instead gets --intent tick --receipt <path>, so its verdict lands on a receipt rather than in the transcript. Never blocks - the runner's own exit status (0/1/2) is discarded and this hook always exits 0. Lite-mode exits early because the preflight overlay this environment ships is private content, so an external contributor would only ever see the REFUSED line.
 - id: hooks/scripts/user_prompt_submit_bus_mirror.sh
   kind: hook
   exposure: beta
