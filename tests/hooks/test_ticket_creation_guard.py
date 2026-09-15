@@ -2478,3 +2478,281 @@ def test_main_wires_the_real_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(payload)))
     assert _GUARD.main([]) == 3
+
+
+# ---------------------------------------------------------------------------
+# Rule 9 -- an update may not rewrite an acceptance criterion (OMN-18404)
+# ---------------------------------------------------------------------------
+#
+# Measured 2026-09-15 on origin/dev 48d9a167 against live ticket bodies: 27 of
+# 144 live `ac_binding` pins were stale, across OMN-18387, OMN-18388 and
+# OMN-18390 -- every one because a lane wrote bookkeeping INTO a criterion's own
+# line. 25 were healed by removing a `(#<hex>)` comment-id citation, the other 2
+# by removing a ` MET` verdict. Two shapes in one day is why the rule lives at
+# the writer and not in the hash: a normaliser taught to ignore the first shape
+# would still have been red on the second.
+
+_AC_BODY: Final[str] = (
+    "Some preamble.\n"
+    "\n"
+    "## Acceptance criteria\n"
+    "\n"
+    "* AC1: the classifier publishes a rebuild for a projection-only merge "
+    "-- falsifier: a unit test with that path set returns no rebuild.\n"
+    "* AC2: the up-target list equals RUNTIME_SERVICES "
+    "-- falsifier: the two lists can be edited apart without a red test.\n"
+)
+
+
+def _update(**overrides: Any) -> dict[str, Any]:
+    """An UPDATE payload carrying a new description."""
+    payload: dict[str, Any] = {"id": "OMN-18387", "description": _AC_BODY}
+    payload.update(overrides)
+    return payload
+
+
+def _check_update(
+    tool_input: dict[str, Any], previous: str | None = _AC_BODY
+) -> list[Any]:
+    return list(
+        _GUARD.check_save_issue(tool_input, POLICY, body_lookup=lambda _ref: previous)
+    )
+
+
+def _update_codes(
+    tool_input: dict[str, Any], previous: str | None = _AC_BODY
+) -> set[str]:
+    return {f.code for f in _check_update(tool_input, previous)}
+
+
+def test_a_citation_appended_to_a_criterion_line_is_refused() -> None:
+    """AC1 -- the exact shape that took three tickets' bindings stale.
+
+    The refusal names the label and quotes both texts, because "a criterion
+    changed" without saying which one sends somebody diffing a whole body.
+    """
+    annotated = _AC_BODY.replace("* AC1:", "* AC1 (#eaffe695):")
+    findings = _check_update(_update(description=annotated))
+    assert [f.code for f in findings] == ["criterion_text_rewritten"]
+    assert findings[0].field == "AC1"
+    assert "(#eaffe695)" in findings[0].reason
+    assert "BELOW" in findings[0].fix
+
+
+def test_a_met_verdict_written_into_a_criterion_line_is_refused() -> None:
+    """AC1 -- the second live shape, which a citation-only rule would miss."""
+    annotated = _AC_BODY.replace("* AC2:", "* AC2 MET:")
+    findings = _check_update(_update(description=annotated))
+    assert [f.field for f in findings] == ["AC2"]
+
+
+def test_ticking_a_criterion_checkbox_is_admitted() -> None:
+    """AC2 -- the task marker is stripped, so a tick cannot move the hash.
+
+    This is the single most common legitimate description edit. A rule that
+    refused it would be turned off within a day.
+    """
+    boxed = _AC_BODY.replace("* AC1:", "* [ ] AC1:").replace("* AC2:", "* [ ] AC2:")
+    ticked = boxed.replace("* [ ] AC1:", "* [X] AC1:")
+    assert _check_update(_update(description=ticked), previous=boxed) == []
+
+
+def test_an_evidence_paragraph_appended_below_a_criterion_is_admitted() -> None:
+    """AC3 -- the habit that is genuinely harmless, and must stay allowed.
+
+    `onex_change_control` hashes a criterion's own LINE, so an indented
+    continuation beneath it moves no hash. This module's own
+    ``criterion_units`` WOULD fold that paragraph into the criterion, which is
+    exactly why rule 9 reads lines instead -- see ``criterion_lines``.
+    """
+    with_evidence = _AC_BODY + (
+        "\n  Both post-rebuild receipts carry the projection_ready check: run "
+        "34976826412, result PASS.\n"
+    )
+    assert _check_update(_update(description=with_evidence)) == []
+    # and the divergence this test is guarding is real, not hypothetical
+    units = {u.label: u.text for u in _GUARD.criterion_units(with_evidence, POLICY)}
+    lines = _GUARD.criterion_lines(with_evidence)
+    assert "projection_ready" in units["AC2"]
+    assert "projection_ready" not in lines["AC2"]
+
+
+def test_adding_and_removing_a_criterion_are_admitted() -> None:
+    """AC5 -- authoring a ticket is not rewriting one."""
+    added = _AC_BODY + "* AC3: a third criterion -- falsifier: a unit test.\n"
+    assert _check_update(_update(description=added)) == []
+    removed = "\n".join(
+        line for line in _AC_BODY.splitlines() if not line.startswith("* AC2:")
+    )
+    assert _check_update(_update(description=removed)) == []
+
+
+def test_an_unreadable_body_refuses_and_an_absent_lookup_does_not_run() -> None:
+    """AC4 -- where each unknown falls, and why they fall differently.
+
+    A credential present and a body that still will not read is a transient, so
+    it refuses. No credential at all is a property of the machine, not of this
+    call, so rule 9 does not run -- rule 8's precedent, and ``main`` writes the
+    same notice to stderr either way.
+    """
+    assert _update_codes(_update(), previous=None) == {"criterion_text_unreadable"}
+    assert _GUARD.check_save_issue(_update(), POLICY, body_lookup=None) == []
+
+
+def test_an_update_that_does_not_touch_the_description_is_admitted() -> None:
+    """A state flip carries no body, so there is nothing for rule 9 to read."""
+    assert (
+        _GUARD.check_save_issue(
+            {"id": "OMN-18387", "state": "Done"},
+            POLICY,
+            body_lookup=lambda _ref: _AC_BODY,
+        )
+        == []
+    )
+
+
+def test_a_patch_that_rewrites_a_criterion_line_is_refused() -> None:
+    """`patch` is the natural way to tick a box, so it is the natural bypass.
+
+    A rule 9 reading only ``description`` would look like it covered the
+    surface while missing its most likely route.
+    """
+    payload = {
+        "id": "OMN-18387",
+        "patch": [
+            {
+                "op": "replace",
+                "old_string": "* AC1:",
+                "new_string": "* AC1 (#eaffe695):",
+            }
+        ],
+    }
+    findings = _check_update(payload)
+    assert [f.field for f in findings] == ["AC1"]
+
+
+def test_a_patch_that_only_ticks_a_box_is_admitted() -> None:
+    boxed = _AC_BODY.replace("* AC1:", "* [ ] AC1:")
+    payload = {
+        "id": "OMN-18387",
+        "patch": [
+            {"op": "replace", "old_string": "* [ ] AC1:", "new_string": "* [X] AC1:"}
+        ],
+    }
+    assert _check_update(payload, previous=boxed) == []
+
+
+def test_a_patch_the_guard_cannot_resolve_refuses() -> None:
+    """An anchor matching zero or many times has no one definite result."""
+    for ops in (
+        [{"op": "replace", "old_string": "nowhere in the body", "new_string": "x"}],
+        [{"op": "replace", "old_string": "falsifier", "new_string": "x"}],
+        [{"op": "not_an_op"}],
+        "not a list",
+    ):
+        assert _update_codes({"id": "OMN-18387", "patch": ops}) == {
+            "criterion_text_unreadable"
+        }
+
+
+def test_apply_description_patch_covers_every_documented_operation() -> None:
+    """Each op the tool schema declares, applied the way the schema declares it."""
+    apply = _GUARD.apply_description_patch
+    assert apply("abc", [{"op": "prepend", "text": "X"}]) == "Xabc"
+    assert apply("abc", [{"op": "append", "text": "X"}]) == "abcX"
+    assert apply("abc", [{"op": "insert_before", "anchor": "b", "text": "X"}]) == "aXbc"
+    assert apply("abc", [{"op": "insert_after", "anchor": "b", "text": "X"}]) == "abXc"
+    assert (
+        apply("abc", [{"op": "replace", "old_string": "b", "new_string": "X"}]) == "aXc"
+    )
+    assert (
+        apply(
+            "aba",
+            [
+                {
+                    "op": "replace",
+                    "old_string": "a",
+                    "new_string": "X",
+                    "replace_all": True,
+                }
+            ],
+        )
+        == "XbX"
+    )
+    assert (
+        apply(
+            "a<b>c",
+            [{"op": "replace_range", "from": "<", "to": ">", "new_string": "!"}],
+        )
+        == "a!>c"
+    )
+    # ops apply in order, so a later anchor sees the earlier op's result
+    assert (
+        apply(
+            "abc",
+            [
+                {"op": "replace", "old_string": "b", "new_string": "ZZ"},
+                {"op": "insert_after", "anchor": "ZZ", "text": "!"},
+            ],
+        )
+        == "aZZ!c"
+    )
+
+
+def test_rule_nine_reads_criteria_written_outside_a_recognised_heading() -> None:
+    """The whole-body scan, matching the change-control gate's own fallback.
+
+    A criterion under a heading no reader recognises is still one whose rewrite
+    breaks a binding, and OMN-17907 is the live ticket shaped that way.
+    """
+    body = "## Second finding, folded in\n\n* AC4: a real criterion.\n"
+    assert _GUARD.criterion_lines(body) == {"AC4": "AC4: a real criterion."}
+    assert _GUARD.criterion_units(body, POLICY) == []
+    annotated = body.replace("* AC4:", "* AC4 (#abcd1234):")
+    assert _update_codes(
+        {"id": "OMN-17907", "description": annotated}, previous=body
+    ) == {"criterion_text_rewritten"}
+
+
+def test_the_refusal_for_an_update_does_not_cite_the_create_measurement() -> None:
+    """A create's backlog reasoning is simply untrue of an update."""
+    findings = _check_update(
+        _update(description=_AC_BODY.replace("* AC1:", "* AC1 (#eaffe695):"))
+    )
+    rendered = _GUARD.render_block_reason(findings, POLICY, update=True)
+    assert "UPDATE" in rendered and "1553 tickets" not in rendered
+    assert _GUARD.CRITERION_TICKET in rendered
+    created = _GUARD.render_block_reason(findings, POLICY)
+    assert "CREATE" in created and "1553 tickets" in created
+
+
+def test_rule_nine_reproduces_the_live_omn_18387_regression() -> None:
+    """The real bytes, and the real pinned hash, from the incident.
+
+    `onex_change_control` pinned OMN-18387's AC1 at c553ca3c...; the live body
+    hashed to db8fcd0e... once a lane appended `(#eaffe695)` to the line. This
+    pins that this guard refuses the edit that produced that pair, using the
+    criterion verbatim.
+    """
+    import hashlib
+
+    criterion = (
+        "AC1: a merge to omnimarket `dev` that changes only "
+        "`src/omnimarket/projection/**` publishes a runtime rebuild -- "
+        "falsifier: a unit test over the classifier with that path set returns "
+        '"no rebuild", or the next such merge\'s `runtime-rebuild-trigger.yml` '
+        'run logs "No rebuild trigger".'
+    )
+    before = f"## Acceptance criteria\n\n* {criterion}\n"
+    after = before.replace("* AC1:", "* AC1 (#eaffe695):")
+
+    pinned = "c553ca3c796308799c383bf68a7fd32cfe37c9ed3c861013a6b837853bddcaf3"
+    observed = "db8fcd0e13aca1a8a8bcb5b3ac067123a57feb6f86ebda5f657136d33e30b25c"
+    lines_before = _GUARD.criterion_lines(before)["AC1"]
+    lines_after = _GUARD.criterion_lines(after)["AC1"]
+    assert hashlib.sha256(lines_before.encode()).hexdigest() == pinned
+    assert hashlib.sha256(lines_after.encode()).hexdigest() == observed
+
+    assert _update_codes(
+        {"id": "OMN-18387", "description": after}, previous=before
+    ) == {"criterion_text_rewritten"}
