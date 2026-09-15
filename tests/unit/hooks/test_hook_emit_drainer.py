@@ -259,8 +259,31 @@ def test_drainer_lock_frees_after_holder_is_killed(tmp_path: Path, jdir: Path) -
 # declared contract, and a disagreeing ambient env does not win.
 
 
+@pytest.fixture
+def _lane_credential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A synthetic operator env file, so these tests are about the LANE.
+
+    The shipped contract's declared lane is SASL (OMN-17284), so
+    ``apply_declared_lane`` now resolves a credential as well as an address.
+    These two tests are about address resolution and precedence, and they must
+    give the same verdict on a developer laptop, on the lab host and on a CI
+    runner -- reading whatever the real ``~/.omnibase/.env`` happens to hold
+    would make them pass or fail on host state rather than on the behaviour
+    they name. The credential-absent path has its own dedicated coverage in
+    ``tests/hooks/test_omn17284_hook_edge_declared_transport.py``.
+    """
+    env_file = tmp_path / "operator.env"
+    env_file.write_text(
+        "DEV_KAFKA_SASL_USERNAME=synthetic-lane-principal\n"
+        "DEV_KAFKA_SASL_PASSWORD=synthetic-not-a-real-secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OMNIBASE_OPERATOR_ENV_FILE", str(env_file))
+
+
 def test_drainer_applies_declared_lane_when_env_is_empty(
     monkeypatch: pytest.MonkeyPatch,
+    _lane_credential: None,
 ) -> None:
     """launchd hands the drainer no KAFKA_BOOTSTRAP_SERVERS. The contract must."""
     monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
@@ -283,6 +306,7 @@ def test_drainer_applies_declared_lane_when_env_is_empty(
 
 def test_declared_lane_beats_a_disagreeing_ambient_env(
     monkeypatch: pytest.MonkeyPatch,
+    _lane_credential: None,
 ) -> None:
     """An env var naming another lane is a finding, never an input (OMN-17204)."""
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "other-lane.invalid:9999")

@@ -108,19 +108,87 @@ lane: "dev"
 # ports on that host; containers on a lane network use redpanda:9092 instead.
 lane_host: "192.168.86.201"  # onex-allow-internal-ip
 
+# ---------------------------------------------------------------------------
+# TRANSPORT IS DECLARED, NEVER INFERRED (OMN-17284, following OMN-18012)
+# ---------------------------------------------------------------------------
+# Each lane declares HOW its broker is spoken to, beside WHICH broker it is.
+# The vocabulary is copied deliberately from the two surfaces that settled
+# this after the 2026-09-07 outage -- omnimarket `config/ci_bus_lanes.yaml`
+# and omnibase_infra `scripts/deploy-agent/deploy_agent/kafka_config.py` --
+# so a lane declaration reads identically wherever a reader meets one:
+#
+#   security_protocol -> PLAINTEXT | SSL | SASL_PLAINTEXT | SASL_SSL, spelled
+#                        as librdkafka spells it. REQUIRED on every lane. The
+#                        loader refuses to guess.
+#   sasl_mechanism    -> REQUIRED beside a SASL_* protocol, REJECTED beside a
+#                        non-SASL one. A declaration that says two things is
+#                        not a declaration.
+#   sasl_env_prefix   -> a REFERENCE, never a value. It names the prefix this
+#                        host stores the credential under, so the four names
+#                        ModelKafkaEventBusConfig.apply_environment_overrides()
+#                        reads can be resolved at run time from the operator
+#                        env file (OMNIBASE_OPERATOR_ENV_FILE, default
+#                        ~/.omnibase/.env) -- the same surface
+#                        `deploy-runtime.sh` resolves the lane's principal
+#                        from on the lab host.
+#
+# CONFIG HERE, SECRET ELSEWHERE. `ci_bus_lanes.yaml` states the line this file
+# also holds: SASL credential VALUES are never stored in a checked-in lane
+# declaration. Only the prefix is.
+#
+# WHY IT MATTERS HERE AND NOT BEFORE: this producer is the SIXTEENTH dev-lane
+# Kafka client. omnibase_infra#3276 (squash d7c5585314a751689e705e09e32c9e4565671ef2,
+# OMN-18012 phase B, merged 2026-09-07) flipped the dev broker's EXTERNAL
+# listener to SASL/SCRAM-SHA-256 and bound the credential on the fifteen
+# dev-lane COMPOSE services. This one lives outside that compose project and
+# was not brought along, so it kept bootstrapping in the clear. A Redpanda
+# that requires SASL closes the connection rather than answering, so the
+# symptom was `KafkaConnectionError: Unable to bootstrap from [...]` on a 30s
+# loop -- in a log, indistinguishable from a broker that is simply down. The
+# gateway forwarder's dev legs failed the same way from 2026-09-06 while still
+# logging "delivered" (repaired 2026-09-10; see the header above), and the
+# deploy agent restarted 53 times by 2026-09-08T04:12Z.
+#
+# verified: 2026-09-15 on the lab host --
+#   `rpk cluster info` inside `omnibase-infra-redpanda` returns "broker closed
+#   the connection immediately after a request was issued, which happens when
+#   SASL is required but not provided"; the same command inside
+#   `omnibase-infra-stability-test-redpanda` returns cluster info, which is
+#   the positive control that makes the dev refusal a fact about SASL rather
+#   than about the probe.
 known_lanes:
   dev:
     compose_project: "omnibase-infra"
     network: "omnibase-infra-network"
     bootstrap_servers: "192.168.86.201:19092"  # onex-allow-internal-ip onex-allow-kafka-broker
+    # SASL over PLAINTEXT: :19092 carries no TLS. Declaring SASL_SSL here
+    # would reproduce the CI publishers' 2026-09-07 failure verbatim
+    # ("SSL handshake failed ... connecting to a PLAINTEXT broker listener?").
+    security_protocol: "SASL_PLAINTEXT"
+    sasl_mechanism: "SCRAM-SHA-256"
+    # -> DEV_KAFKA_SASL_USERNAME / DEV_KAFKA_SASL_PASSWORD in the operator env
+    # file. The same two names docker-compose.dev-lane.yml resolves for all
+    # fifteen compose clients. A pointer, not a credential.
+    sasl_env_prefix: "DEV_"
   stability-test:
     compose_project: "omnibase-infra-stability-test"
     network: "omnibase-infra-stability-test-network"
     bootstrap_servers: "192.168.86.201:39092"  # onex-allow-internal-ip onex-allow-kafka-broker
+    # No SASL: OMN-18012 phase B deliberately scoped the flip to the dev lane
+    # only, because the redpanda service is declared in the BASE compose file
+    # that four other lanes merge. Measured 2026-09-15: an unauthenticated
+    # client bootstraps against :39092 and is refused on :19092.
+    security_protocol: "PLAINTEXT"
   prod:
     compose_project: "omnibase-infra-prod"
     network: "omnibase-infra-prod-network"
     bootstrap_servers: "192.168.86.201:49092"  # onex-allow-internal-ip onex-allow-kafka-broker
+    # Last-known transport, NOT currently verifiable: the lab compose prod
+    # lane was retired under OMN-18320 and removed from the census manifest,
+    # so there is no listener to probe. Recorded rather than deleted because
+    # the entry is what makes `lane: "prod"` a refusable value instead of an
+    # unknown one; this producer never selects it.
+    security_protocol: "PLAINTEXT"
 
 # ---------------------------------------------------------------------------
 # Consumer side of the same pairing.
