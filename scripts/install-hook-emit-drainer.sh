@@ -224,8 +224,29 @@ if launchctl print "gui/${UID_GUI}/${LABEL}" >/dev/null 2>&1; then
   was_loaded=1
 fi
 
+# OMN-17284: `launchctl bootout` returns BEFORE the domain has released the
+# label. A bootstrap issued immediately after it fails with
+# `Bootstrap failed: 5: Input/output error`, the installer rolls back, and the
+# rollback's own bootstrap fails for the same reason -- so a reinstall over a
+# RUNNING agent left the machine with no loaded drainer and the previous plist
+# restored. Measured twice in a row on 2026-09-15 while repairing this exact
+# service. A first install, with nothing loaded, never hits it, which is why it
+# survived: the failure only appears on the repair path.
+wait_for_label_released() {
+  local deadline=$((SECONDS + 30))
+  while launchctl print "gui/${UID_GUI}/${LABEL}" >/dev/null 2>&1; do
+    if (( SECONDS >= deadline )); then
+      echo "ERROR: ${LABEL} still loaded 30s after bootout; refusing to race it." >&2
+      return 1
+    fi
+    sleep 1
+  done
+  return 0
+}
+
 restore_previous_service() {
   launchctl bootout "gui/${UID_GUI}/${LABEL}" 2>/dev/null || true
+  wait_for_label_released || return 1
   if [[ "${had_previous_plist}" == "1" ]]; then
     cp "${BACKUP_PLIST}" "${DST_PLIST}" || return 1
   else
@@ -250,6 +271,11 @@ fi
 # Stop the old instance only after the candidate plist and its rollback copy
 # are ready. Any activation error restores the prior plist and loaded service.
 launchctl bootout "gui/${UID_GUI}/${LABEL}" 2>/dev/null || true
+if ! wait_for_label_released; then
+  echo "ERROR: could not unload the running ${LABEL}; restoring prior service." >&2
+  restore_previous_service || echo "ERROR: prior LaunchAgent restoration failed." >&2
+  exit 1
+fi
 if ! launchctl bootstrap "gui/${UID_GUI}" "${DST_PLIST}"; then
   echo "ERROR: could not bootstrap ${LABEL}; restoring prior service." >&2
   restore_previous_service || echo "ERROR: prior LaunchAgent restoration failed." >&2

@@ -195,3 +195,30 @@ def test_status_reports_the_emit_spool_backlog(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "3" in result.stdout and "7" in result.stdout
     assert "emit_spool" in result.stdout or "Spool" in result.stdout
+
+
+def test_shipped_template_is_well_formed_xml() -> None:
+    """The template itself must parse with a strict parser, not just plutil.
+
+    `plutil -lint` -- the only validation the installer ran -- accepts a double
+    hyphen inside an XML comment. XML 1.0 does not: "the string '--' MUST NOT
+    occur within comments". The shipped template carried one in its usage block,
+    so every correctly rendered plist on every machine was ill-formed XML that
+    only Apple's lenient parser would read. Nothing surfaced it, because nothing
+    strict ever parsed it.
+    """
+    template = (
+        _REPO_ROOT / "scripts" / "launchd" / "ai.omninode.hook-emit-drainer.plist"
+    ).read_text(encoding="utf-8")
+    rendered = (
+        template.replace("__PYTHON__", "/x/python3")
+        .replace("__OMNI_HOME__", "/x/home")
+        .replace("__HOME__", "/x/user")
+    )
+
+    payload = plistlib.loads(rendered.encode("utf-8"))
+
+    assert payload["Label"] == _LABEL
+    assert payload["KeepAlive"] is True
+    assert payload["RunAtLoad"] is True
+    assert payload["ProgramArguments"][0] == "/x/python3"

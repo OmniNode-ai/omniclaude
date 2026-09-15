@@ -48,7 +48,14 @@ def _prepare_installer(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path
         "set -euo pipefail\n"
         'printf "%s\\n" "$*" >> "${FAKE_LAUNCHCTL_LOG}"\n'
         'command="${1:-}"\n'
-        'if [[ "$command" == print && "${FAKE_WAS_LOADED:-0}" != 1 ]]; then exit 1; fi\n'
+        # OMN-17284: bootout must actually release the label, or the
+        # installer's bounded wait has nothing to wait for. The real
+        # launchctl releases asynchronously; this models the release.
+        'if [[ "$command" == bootout ]]; then : > "${FAKE_STATE}/booted-out"; fi\n'
+        'if [[ "$command" == print ]]; then\n'
+        '  if [[ -f "${FAKE_STATE}/booted-out" ]]; then exit 1; fi\n'
+        '  if [[ "${FAKE_WAS_LOADED:-0}" != 1 ]]; then exit 1; fi\n'
+        "fi\n"
         'if [[ "$command" == bootstrap || "$command" == enable ]]; then\n'
         '  count_file="${FAKE_STATE}/${command}"\n'
         '  count=0; [[ -f "$count_file" ]] && count="$(<"$count_file")"\n'
@@ -357,3 +364,51 @@ def test_builder_and_installer_share_both_literal_brew_paths() -> None:
         encoding="utf-8"
     )
     assert 'export ONEX_BREW_PYTHON="${BREW_PYTHON}"' in installer
+
+
+def test_installer_waits_for_bootout_before_bootstrapping(tmp_path: Path) -> None:
+    """Reinstalling over a RUNNING agent must not race its own bootout. [OMN-17284]
+
+    Real `launchctl bootout` returns before the domain releases the label, and a
+    bootstrap issued in that window fails with `Bootstrap failed: 5: Input/output
+    error`. Measured twice consecutively on the operator Mac 2026-09-15 while
+    repairing this service: the installer rolled back, the rollback's own
+    bootstrap failed the same way, and the machine was left with no loaded
+    drainer and the previous plist restored.
+
+    This stub reproduces the window -- the label stays visible for two `print`
+    polls after bootout, and `bootstrap` refuses while it is visible, which is
+    what the real tool does. Without the bounded wait the install fails here.
+    """
+    installer, env, builder, home = _prepare_installer(tmp_path)
+    _write_builder(builder)
+    env = env | {"FAKE_WAS_LOADED": "1"}
+
+    fake_bin = Path(env["PATH"].split(os.pathsep)[0])
+    _write_executable(
+        fake_bin / "launchctl",
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'printf "%s\\n" "$*" >> "${FAKE_LAUNCHCTL_LOG}"\n'
+        'command="${1:-}"\n'
+        'marker="${FAKE_STATE}/polls-left"\n'
+        'if [[ "$command" == bootout ]]; then printf 2 > "$marker"; exit 0; fi\n'
+        'if [[ "$command" == print ]]; then\n'
+        '  [[ -f "$marker" ]] || exit 0\n'
+        '  left="$(<"$marker")"\n'
+        '  if (( left > 0 )); then printf "%s" "$((left - 1))" > "$marker"; exit 0; fi\n'
+        "  exit 1\n"
+        "fi\n"
+        'if [[ "$command" == bootstrap ]]; then\n'
+        '  if [[ -f "$marker" && "$(<"$marker")" != 0 ]]; then\n'
+        '    echo "Bootstrap failed: 5: Input/output error" >&2; exit 5\n'
+        "  fi\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+
+    result = _run(installer, env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Loaded ai.omninode.hook-emit-drainer." in result.stdout
