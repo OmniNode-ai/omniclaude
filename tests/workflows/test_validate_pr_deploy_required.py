@@ -227,5 +227,47 @@ class TestOtherCategoriesUnaffected:
         assert validator.find_runtime_paths(files) == []
 
 
+# ---------------------------------------------------------------------------
+# OMN-18387: the omnimarket projection package is runtime-serving code
+# ---------------------------------------------------------------------------
+#
+# omnimarket#2546 (squash d68ea622, merged 2026-09-14T18:29Z) changed
+# src/omnimarket/projection/api_server.py -- the process image the
+# `omnimarket-projection-api` container runs on every compose lane -- plus its
+# test, pyproject.toml and uv.lock. None of RUNTIME_PATH_PATTERNS matched any
+# of the four, so runtime-rebuild-trigger.yml run 34881090258 logged "No
+# rebuild trigger: no runtime_change label or runtime path changes detected"
+# and the dev compose lane served a stale projection API for five days (ledger
+# FRICTION docs/tracking/ROLLING_WORK_LEDGER.md:8022).
+class TestProjectionPackageIsRuntimePath:
+    def test_projection_api_server_change_alone_is_a_runtime_hit(self) -> None:
+        """RED on the parent commit, GREEN here: api_server.py must be a hit
+        on its own, independent of the non-runtime files it is usually
+        co-changed with."""
+        files = ["src/omnimarket/projection/api_server.py"]
+        assert validator.find_runtime_paths(files) == files
+
+    def test_omnimarket_2546_exact_file_set_is_detected(self) -> None:
+        """Pins the exact omnimarket#2546 changed-file set: the runtime path
+        is the only one of the four that should be flagged."""
+        files = [
+            "src/omnimarket/projection/api_server.py",
+            "tests/test_projection_api_server.py",
+            "pyproject.toml",
+            "uv.lock",
+        ]
+        assert validator.find_runtime_paths(files) == [
+            "src/omnimarket/projection/api_server.py"
+        ]
+
+    def test_projection_package_nested_file_also_matched(self) -> None:
+        """The standalone projection writers (runner.py, discovery.py, the
+        per-domain database adapters) share api_server.py's runner shape and
+        must be covered by the same fix, not just the one file named in the
+        incident."""
+        files = ["src/omnimarket/projection/runner.py"]
+        assert validator.find_runtime_paths(files) == files
+
+
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(pytest.main([__file__, "-v"]))

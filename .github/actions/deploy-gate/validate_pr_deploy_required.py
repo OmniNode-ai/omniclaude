@@ -61,6 +61,20 @@ RUNTIME_PATH_PATTERNS = [
     "src/omnimarket/nodes/*/contract.yaml",
     "src/omnimarket/nodes/*/runtime/**/*.py",
     "src/omnimarket/services/**/*.py",
+    # omnimarket projection package (OMN-18387): the standalone-runner shaped
+    # handlers under here (api_server.py, runner.py, discovery.py, dlq.py, the
+    # per-domain postgres/sqlite database adapters) are deliberately NOT
+    # dispatched by the shared kernel (OMN-15905/OMN-16874: a runner-shaped
+    # handler owns its own consume loop), so none of them lived under
+    # nodes/*/handlers/ where the patterns above already look. api_server.py
+    # is the process image the `omnimarket-projection-api` container on every
+    # compose lane runs; the rest of the package backs the standalone
+    # projection writers on the dev lane's runtime profile. Both flat and
+    # nested forms: `**` requires at least one path segment (see
+    # `src/*/services/*.py` + `src/*/services/**/*.py` below for the same
+    # reason), so a bare `**/*.py` form alone would miss api_server.py itself.
+    "src/omnimarket/projection/*.py",
+    "src/omnimarket/projection/**/*.py",
     # Cross-repo node handlers and runtime paths (OMN-9685: narrowed from catch-all)
     # Use both flat and nested forms since ** requires at least one path segment
     "src/*/nodes/*.py",
