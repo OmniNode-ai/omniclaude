@@ -223,6 +223,9 @@ _SESSION_START_GOAL_SURFACE_COMMAND = (
 _SESSION_START_WORKSPACE_SYNC_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_workspace_sync.sh"
 )
+_SESSION_START_PREFLIGHT_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_preflight.sh"
+)
 _WORKSPACE_RECONCILE_TICK_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workspace_reconcile_tick.sh"
 )
@@ -442,14 +445,15 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"{subagent_stop_commands!r}"
     )
 
-    # Exactly four SessionStart commands, in order: the bus-mirror hook
+    # Exactly five SessionStart commands, in order: the bus-mirror hook
     # (OMN-16162), the goal-surface hook (OMN-17168), the workspace-sync line
-    # (OMN-17190), then the hook-inventory parity warning (OMN-17020). Order
-    # matters -- the bus mirror backgrounds its dispatch and returns
-    # immediately, so what follows is what the session actually opens on: the
-    # goal it is working toward, whether the workspace it will work in is
-    # current, and whether any hook that is supposed to be enforcing has gone
-    # dark.
+    # (OMN-17190), the preflight hook (OMN-18368), then the hook-inventory
+    # parity warning (OMN-17020). Order matters -- the bus mirror backgrounds
+    # its dispatch and returns immediately, so what follows is what the
+    # session actually opens on: the goal it is working toward, whether the
+    # workspace it will work in is current, whether the declared environment
+    # checks pass, and whether any hook that is supposed to be enforcing has
+    # gone dark.
     session_start_commands = [
         hook.get("command", "")
         for group in hooks["SessionStart"]
@@ -459,13 +463,14 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _SESSION_START_BUS_MIRROR_COMMAND,
         _SESSION_START_GOAL_SURFACE_COMMAND,
         _SESSION_START_WORKSPACE_SYNC_COMMAND,
+        _SESSION_START_PREFLIGHT_COMMAND,
         _SESSION_START_HOOK_PARITY_COMMAND,
     ], (
         "hooks.json SessionStart must register EXACTLY the bus-mirror hook "
         "(OMN-16162 carve-out), the goal-surface hook (OMN-17168 carve-out), the "
-        "workspace-sync line (OMN-17190 carve-out), and the hook-inventory parity "
-        "check (OMN-17020 carve-out), and nothing else. "
-        f"Found: {session_start_commands!r}"
+        "workspace-sync line (OMN-17190 carve-out), the preflight hook (OMN-18368 "
+        "carve-out), and the hook-inventory parity check (OMN-17020 carve-out), "
+        f"and nothing else. Found: {session_start_commands!r}"
     )
 
     # Exactly one SessionEnd command: the bus-mirror hook (OMN-16162).
