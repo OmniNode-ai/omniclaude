@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -90,6 +91,80 @@ def test_drain_preserves_fifo_order(jdir: Path) -> None:
 
 def test_drain_on_empty_journal_is_a_noop(jdir: Path) -> None:
     assert drainer.drain_once(jdir, FakeEmitter()) == (0, 0)  # type: ignore[arg-type]
+
+
+def test_semantic_journal_record_uses_no_topic_override() -> None:
+    """The resolver must receive the semantic key, never a topic override."""
+
+    class Request:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+    class Handler:
+        def handle(self, request: Request) -> SimpleNamespace:
+            assert request.kwargs["event_type"] == "tool.executed"
+            assert request.kwargs["topic"] is None
+            return SimpleNamespace(published=True)
+
+    emitter = drainer._Emitter()
+    emitter._handler = Handler()
+    emitter._request_cls = Request
+    record = journal.JournalRecord(
+        event_id="semantic-record",
+        event_type="tool.executed",
+        payload={"tool_name": "Bash", "session_id": "s-1"},
+        correlation_id="s-1",
+        queued_at=journal.datetime.now(journal.UTC),
+    )
+    assert emitter.publish(record) is True
+
+
+def test_known_legacy_topic_is_migrated_atomically_before_publish(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outcome = journal.append(
+        jdir,
+        event_type="onex.evt.omniclaude.tool-executed.v1",
+        payload={"tool_name": "Bash", "session_id": "s-1"},
+        correlation_id="s-1",
+    )
+    assert outcome.path is not None
+    original = journal.list_pending(jdir)[0].record
+    monkeypatch.setattr(
+        drainer,
+        "_legacy_topic_to_semantic_event",
+        lambda: {"onex.evt.omniclaude.tool-executed.v1": "tool.executed"},
+    )
+
+    assert drainer.migrate_legacy_journal(jdir) == (1, 0)
+    migrated = journal.list_pending(jdir)
+    assert len(migrated) == 1
+    assert migrated[0].record.event_type == "tool.executed"
+    assert migrated[0].record.payload == original.payload
+    assert migrated[0].record.correlation_id == original.correlation_id
+    assert migrated[0].record.event_id == original.event_id
+    assert migrated[0].record.queued_at == original.queued_at
+    assert drainer.migrate_legacy_journal(jdir) == (0, 0)
+
+
+def test_unknown_legacy_topic_is_quarantined_byte_for_byte(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outcome = journal.append(
+        jdir,
+        event_type="onex.evt.omniclaude.retired-event.v1",
+        payload={"opaque": "retain-me"},
+        correlation_id="s-1",
+    )
+    assert outcome.path is not None
+    original = outcome.path.read_bytes()
+    monkeypatch.setattr(drainer, "_legacy_topic_to_semantic_event", dict)
+
+    assert drainer.migrate_legacy_journal(jdir) == (0, 1)
+    assert journal.list_pending(jdir) == []
+    quarantined = list((jdir / "quarantine").glob("*.json"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == original
 
 
 def test_drain_respects_batch_limit(jdir: Path) -> None:

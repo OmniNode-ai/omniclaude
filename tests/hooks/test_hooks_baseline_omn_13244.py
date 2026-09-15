@@ -196,6 +196,9 @@ _AGENT_MODEL_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_agent_model_guard.sh"
 )
 _LANE_OPEN_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_open.sh"
+_SKILL_STARTED_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_skill_started.sh"
+)
 _SUBAGENT_STOP_LANE_TERMINATION_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_lane_termination_guard.sh"
 )
@@ -235,6 +238,12 @@ _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND = (
 )
 _POST_TOOL_USE_CHANGESET_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_changeset_guard.sh"
+)
+_POST_TOOL_USE_OUTPUT_CAPTURE_METADATA_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_output_capture_metadata.sh"
+)
+_POST_TOOL_USE_QUALITY_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-use-quality.sh"
 )
 
 # The OMN-8928/8929 dispatch-claim pair: on disk, deliberately unregistered.
@@ -278,12 +287,13 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly ten PreToolUse commands are wired: Done-flip guard,
+    # Exactly eleven PreToolUse commands are wired: Done-flip guard,
     # ticket-creation admission gate (OMN-17942), worktree guard, PR
     # lane-ownership guard (OMN-16485), credential-rotation admission gate
     # (OMN-17957), pull-request body stamp-preservation gate (OMN-18335),
     # background-agent model guard (OMN-17499), lane-open recorder,
-    # lane-liveness guard, then the overseer foreground-block guard.
+    # lane-liveness guard, the overseer foreground-block guard, then the
+    # Skill-started capture hook.
     #
     # The stamp gate's position is behaviour too: it is registered LAST on
     # the Bash matcher, after the credential-rotation gate. Neither inspects
@@ -327,13 +337,15 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
         _OVERSEER_FOREGROUND_BLOCK_COMMAND,
+        _SKILL_STARTED_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the ticket-creation admission gate, the worktree canonical-root "
         "guard, the PR lane-ownership guard, the credential-rotation admission "
         "gate, the pull-request body stamp-preservation gate, "
         "the background-agent model guard, the lane-dispatch recorder, the "
-        "lane-liveness guard, and the overseer foreground-block guard, and "
+        "lane-liveness guard, the overseer foreground-block guard, and the "
+        "Skill-started capture hook, and "
         "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17957 + "
         "OMN-18335 + OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
@@ -352,20 +364,23 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "^(Task|Agent|Workflow)$",
         "^SendMessage$",
         "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$",
+        "Skill",
     ], (
         f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
         f"guard must match Bash, the background-agent model guard must match "
         f"exactly the two dispatch tools that choose a background model "
         f"(Workflow and Agent, never Task), the lane recorder must match the "
         f"dispatch tools, "
-        f"the lane-liveness guard must match SendMessage, and the overseer "
+        f"the lane-liveness guard must match SendMessage, the overseer "
         f"foreground-block guard must match exactly the BLOCK_TOOLS set in "
-        f"overseer_foreground_block.py. Found: {matchers!r}"
+        f"overseer_foreground_block.py, and Skill-started capture must match "
+        f"Skill. Found: {matchers!r}"
     )
 
-    # Exactly three PostToolUse commands are wired: the secret-redaction guard
+    # Exactly seven PostToolUse commands are wired: the secret-redaction guard
     # (Bash only, OMN-16277), the catch-all bus-mirror hook (.*, OMN-16162 S1),
-    # then the workspace-reconcile tick (.*, OMN-17190).
+    # the workspace-reconcile tick (.*, OMN-17190), the local capture group, and
+    # the Skill quality capture hook.
     post_tool_use_commands = [
         hook.get("command", "")
         for group in hooks["PostToolUse"]
@@ -377,21 +392,24 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _WORKSPACE_RECONCILE_TICK_COMMAND,
         _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND,
         _POST_TOOL_USE_CHANGESET_GUARD_COMMAND,
+        _POST_TOOL_USE_OUTPUT_CAPTURE_METADATA_COMMAND,
+        _POST_TOOL_USE_QUALITY_COMMAND,
     ], (
         "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
         "(OMN-16277 carve-out), the bus-mirror hook (OMN-16162 S1 carve-out), the "
-        "workspace-reconcile tick (OMN-17190 carve-out), and the two OMN-17207 "
-        "local-only capture hooks (auto-checkpoint, changeset-guard) and nothing "
+        "workspace-reconcile tick (OMN-17190 carve-out), the OMN-17207 "
+        "local-only capture hooks, and the Skill quality capture hook, and nothing "
         f"else. Found: {post_tool_use_commands!r}"
     )
     post_tool_use_matchers = [
         group.get("matcher", "") for group in hooks["PostToolUse"]
     ]
-    assert post_tool_use_matchers == ["Bash", ".*", ".*", "Bash"], (
+    assert post_tool_use_matchers == ["Bash", ".*", ".*", "Bash", "Skill"], (
         "PostToolUse secret-redaction guard must match Bash only; the bus-mirror "
         "hook and the workspace-reconcile tick must each match every tool (.*) in "
-        "their own entry; and the OMN-17207 local-capture group must match Bash "
-        f"only. Found: {post_tool_use_matchers!r}"
+        "their own entry; the OMN-17207 local-capture group must match Bash "
+        "only; and the Skill quality capture hook must match Skill. "
+        f"Found: {post_tool_use_matchers!r}"
     )
 
     # The OMN-17207 local-capture hooks MUST be registered AFTER the

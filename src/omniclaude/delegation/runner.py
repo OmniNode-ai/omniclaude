@@ -49,8 +49,18 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
+    from omnibase_infra.mixins.mixin_llm_http_transport import MixinLlmHttpTransport
+    from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.handler_bifrost_gateway import (
+        HandlerBifrostGateway,
+    )
     from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.handler_bifrost_response import (  # noqa: F401
         ModelBifrostResponse,
+    )
+    from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
+        ModelBifrostConfig,
+    )
+    from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_llm_openai_compatible import (
+        HandlerLlmOpenaiCompatible,
     )
 
 logger = logging.getLogger(__name__)
@@ -318,7 +328,9 @@ def _load_delegation_bifrost_contract(
 # ---------------------------------------------------------------------------
 
 
-def _build_transport_and_handler() -> tuple[object, object]:
+def _build_transport_and_handler() -> tuple[
+    MixinLlmHttpTransport, HandlerLlmOpenaiCompatible
+]:
     """Instantiate a MixinLlmHttpTransport subclass and HandlerLlmOpenaiCompatible.
 
     Returns a tuple of (transport_instance, handler_instance) or raises
@@ -377,14 +389,14 @@ class DelegationRunner:
 
     def __init__(
         self,
-        config: object | None = None,  # ModelBifrostConfig — lazy import
+        config: ModelBifrostConfig | None = None,
         on_audit_event: Callable[[ModelDelegationAuditEvent], None] | None = None,
         config_version: str = "",
     ) -> None:
         self._on_audit_event = on_audit_event
         self._config_version = config_version
-        self._gateway: object | None = None  # HandlerBifrostGateway — lazy init
-        self._transport: object | None = None
+        self._gateway: HandlerBifrostGateway | None = None
+        self._transport: MixinLlmHttpTransport | None = None
         self._config = config
         self._init_error: str = ""
 
@@ -734,7 +746,7 @@ def _delegation_tenant_id() -> UUID:
     return _DELEGATION_TENANT_ID
 
 
-def _build_env_config() -> object | None:  # ModelBifrostConfig | None
+def _build_env_config() -> ModelBifrostConfig | None:
     """Build a ModelBifrostConfig from the bifrost default plus endpoint overlay.
 
     Loads the delegation routing contract and converts it to the gateway's
@@ -820,25 +832,22 @@ def _build_env_config() -> object | None:  # ModelBifrostConfig | None
         bid for bid in delegation_config.default_backends if bid in backends
     )
 
-    return cast(
-        "object",
-        ModelBifrostConfig(
-            backends=backends,
-            routing_rules=tuple(rules)
-            if rules
-            else (
-                ModelBifrostRoutingRule(
-                    rule_id=uuid4(),
-                    priority=100,
-                    backend_ids=tuple(backends.keys()),
-                ),
+    return ModelBifrostConfig(
+        backends=backends,
+        routing_rules=tuple(rules)
+        if rules
+        else (
+            ModelBifrostRoutingRule(
+                rule_id=uuid4(),
+                priority=100,
+                backend_ids=tuple(backends.keys()),
             ),
-            default_backends=default_ids or tuple(backends.keys()),
-            failover_attempts=delegation_config.failover.max_attempts,
-            failover_backoff_base_ms=delegation_config.failover.backoff_base_ms,
-            circuit_breaker_failure_threshold=delegation_config.circuit_breaker.failure_threshold,
-            circuit_breaker_window_seconds=delegation_config.circuit_breaker.window_seconds,
         ),
+        default_backends=default_ids or tuple(backends.keys()),
+        failover_attempts=delegation_config.failover.max_attempts,
+        failover_backoff_base_ms=delegation_config.failover.backoff_base_ms,
+        circuit_breaker_failure_threshold=delegation_config.circuit_breaker.failure_threshold,
+        circuit_breaker_window_seconds=delegation_config.circuit_breaker.window_seconds,
     )
 
 

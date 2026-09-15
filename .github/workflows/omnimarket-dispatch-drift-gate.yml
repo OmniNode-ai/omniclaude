@@ -90,7 +90,11 @@ jobs:
           # cleanly (independently confirmed via `rpk topic consume` against
           # the .201 dev-lane broker) after this bump. See pyproject.toml's
           # own override-dependencies comment for the full fix list.
-          SHA="0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f"
+          # OMN-16979: bumped 0bd86dbf -> fa7f0d26 (omnimarket dev tip at
+          # bump time). The prior pin predates the canonical projection
+          # adapter query surface this PR exercises; locking it locally made
+          # ordered/query metadata tests fail against the older adapter.
+          SHA="fa7f0d26f37a638f3985c1b19c43728a118a7dba"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Expected omnimarket dispatch SHA: $SHA"
 

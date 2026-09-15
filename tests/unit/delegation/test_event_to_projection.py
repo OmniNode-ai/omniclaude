@@ -19,39 +19,24 @@ OMN-10656 / OMN-6977 (verifies the contract-driven delegation event wiring).
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import pytest
+from omnimarket.nodes.node_projection_delegation.handlers.handler_projection_delegation import (
+    HandlerProjectionDelegation,
+)
+from omnimarket.projection import SqliteDatabaseAdapter
 
 from omniclaude.delegation.bus_bootstrap import bootstrap_delegation_bus
 from omniclaude.delegation.emitter import emit_task_delegated
 
 
-class _CapturingAdapter:
-    """ProtocolProjectionDatabaseSync stub recording every upsert call."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, str, dict[str, object]]] = []
-
-    def upsert(
-        self,
-        table: str,
-        conflict_key: str,
-        row: dict[str, object],
-    ) -> bool:
-        self.calls.append((table, conflict_key, row))
-        return True
-
-    def query(
-        self,
-        table: str,
-        filters: dict[str, object] | None = None,
-    ) -> list[dict[str, object]]:
-        del table, filters
-        return []
-
-
 def _drive_pipeline(
-    adapter: _CapturingAdapter,
+    adapter: SqliteDatabaseAdapter,
     *,
     correlation_id: str,
     session_id: str,
@@ -94,12 +79,21 @@ def _drive_pipeline(
     asyncio.run(_run())
 
 
+def _stored_row(
+    adapter: SqliteDatabaseAdapter,
+    correlation_id: str,
+) -> dict[str, object]:
+    rows = adapter.query("delegation_events", {"correlation_id": correlation_id})
+    assert len(rows) == 1
+    return rows[0]
+
+
 @pytest.mark.unit
 class TestEventToProjectionFlow:
     """The full event -> bus -> handler -> adapter path produces a single row."""
 
-    def test_emit_then_projection_writes_one_row(self) -> None:
-        adapter = _CapturingAdapter()
+    def test_emit_then_projection_writes_one_row(self, tmp_path: Path) -> None:
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
         _drive_pipeline(
             adapter,
             correlation_id="flow-001",
@@ -115,21 +109,22 @@ class TestEventToProjectionFlow:
             model_name="Qwen3-Coder-30B",
         )
 
-        assert len(adapter.calls) == 1
-        table, conflict_key, row = adapter.calls[0]
-        assert table == "delegation_events"
-        assert conflict_key == "correlation_id"
+        row = _stored_row(adapter, "flow-001")
         assert row["correlation_id"] == "flow-001"
         assert row["session_id"] == "session-xyz"
         assert row["task_type"] == "document"
         assert row["delegated_to"] == "Qwen3-Coder-30B"
         assert row["delegated_by"] == "onex.delegate-skill.test"
         assert row["model_name"] == "Qwen3-Coder-30B"
-        assert row["quality_gate_passed"] is True
+        assert row["quality_gate_passed"] == 1
         assert row["delegation_latency_ms"] == 320
+        assert str(row["writer_identity"]).endswith("CURRENT_USER>")
+        datetime.fromisoformat(str(row["written_at"]))
 
-    def test_quality_gate_failure_propagates_through_projection(self) -> None:
-        adapter = _CapturingAdapter()
+    def test_quality_gate_failure_propagates_through_projection(
+        self, tmp_path: Path
+    ) -> None:
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
         _drive_pipeline(
             adapter,
             correlation_id="flow-fail",
@@ -147,14 +142,13 @@ class TestEventToProjectionFlow:
             quality_gate_reason="response below minimum length",
         )
 
-        assert len(adapter.calls) == 1
-        _, _, row = adapter.calls[0]
-        assert row["quality_gate_passed"] is False
+        row = _stored_row(adapter, "flow-fail")
+        assert row["quality_gate_passed"] == 0
         assert row["delegation_latency_ms"] == 2000
 
-    def test_full_field_round_trip_for_demo_payload(self) -> None:
+    def test_full_field_round_trip_for_demo_payload(self, tmp_path: Path) -> None:
         """Demo-shaped payload: every field on the projection handler input is asserted."""
-        adapter = _CapturingAdapter()
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
         _drive_pipeline(
             adapter,
             correlation_id="demo-pol-001",
@@ -170,15 +164,14 @@ class TestEventToProjectionFlow:
             model_name="Qwen3-Coder-30B-A3B-Instruct",
         )
 
-        assert len(adapter.calls) == 1
-        _, _, row = adapter.calls[0]
+        row = _stored_row(adapter, "demo-pol-001")
         assert row["correlation_id"] == "demo-pol-001"
         assert row["session_id"] == "demo-session"
         assert row["task_type"] == "test"
         assert row["delegated_to"] == "Qwen3-Coder-30B-A3B-Instruct"
         assert row["delegated_by"] == "onex.delegate-skill.inprocess"
         assert row["model_name"] == "Qwen3-Coder-30B-A3B-Instruct"
-        assert row["quality_gate_passed"] is True
+        assert row["quality_gate_passed"] == 1
         assert row["delegation_latency_ms"] == 420
         # ModelTaskDelegatedEvent has extra="ignore"; tokens/cost ride the
         # event payload but are projected via downstream savings pipeline,
@@ -186,8 +179,8 @@ class TestEventToProjectionFlow:
         # The row contract is fixed by HandlerProjectionDelegation.project.
         assert "timestamp" in row
 
-    def test_two_emissions_produce_two_upserts(self) -> None:
-        adapter = _CapturingAdapter()
+    def test_two_emissions_produce_two_upserts(self, tmp_path: Path) -> None:
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
 
         async def _run() -> None:
             bus = await bootstrap_delegation_bus(db_adapter=adapter)
@@ -211,9 +204,101 @@ class TestEventToProjectionFlow:
                 await bus.close()
 
         asyncio.run(_run())
-        assert len(adapter.calls) == 2
-        assert adapter.calls[0][2]["correlation_id"] == "multi-0"
-        assert adapter.calls[1][2]["correlation_id"] == "multi-1"
+        assert _stored_row(adapter, "multi-0")["correlation_id"] == "multi-0"
+        assert _stored_row(adapter, "multi-1")["correlation_id"] == "multi-1"
+
+    def test_projection_runs_to_completion_in_a_worker_thread(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The sync projection completes before the async bus publish returns."""
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
+        caller_thread = threading.get_ident()
+        worker_threads: list[int] = []
+        original_project = HandlerProjectionDelegation.project
+
+        def traced_project(*args: Any) -> bool:
+            worker_threads.append(threading.get_ident())
+            return original_project(*args)
+
+        monkeypatch.setattr(HandlerProjectionDelegation, "project", traced_project)
+
+        _drive_pipeline(
+            adapter,
+            correlation_id="threaded-projection",
+            session_id="session-threaded",
+            task_type="document",
+            delegated_to="Qwen3-Coder-30B",
+            delegated_by="onex.delegate-skill.test",
+            quality_gate_passed=True,
+            delegation_latency_ms=320,
+            cost_savings_usd=0.0112,
+            tokens_input=200,
+            tokens_output=50,
+            model_name="Qwen3-Coder-30B",
+        )
+
+        assert worker_threads
+        assert all(worker_thread != caller_thread for worker_thread in worker_threads)
+        assert _stored_row(adapter, "threaded-projection")["correlation_id"] == (
+            "threaded-projection"
+        )
+
+    def test_projection_failure_is_logged_without_retrying_publish(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Projection remains best-effort when the synchronous handler fails."""
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
+        calls: list[object] = []
+
+        def failing_project(*args: Any) -> bool:
+            calls.append(args)
+            raise RuntimeError("injected projection failure")
+
+        monkeypatch.setattr(HandlerProjectionDelegation, "project", failing_project)
+
+        with caplog.at_level(
+            logging.ERROR, logger="omniclaude.delegation.bus_bootstrap"
+        ):
+            _drive_pipeline(
+                adapter,
+                correlation_id="failed-projection",
+                session_id="session-failed",
+                task_type="document",
+                delegated_to="Qwen3-Coder-30B",
+                delegated_by="onex.delegate-skill.test",
+                quality_gate_passed=True,
+                delegation_latency_ms=320,
+                cost_savings_usd=0.0112,
+                tokens_input=200,
+                tokens_output=50,
+                model_name="Qwen3-Coder-30B",
+            )
+
+        assert len(calls) == 1
+        assert (
+            adapter.query("delegation_events", {"correlation_id": "failed-projection"})
+            == []
+        )
+        assert "Failed to project task-delegated event" in caplog.text
+
+    def test_canonical_adapter_rejects_unsafe_query_options(
+        self, tmp_path: Path
+    ) -> None:
+        """Canonical local evidence reads reject unsafe ordering and limits."""
+        adapter = SqliteDatabaseAdapter(tmp_path / "delegation.sqlite")
+        adapter.upsert(
+            "delegation_events", "correlation_id", {"correlation_id": "safe"}
+        )
+
+        with pytest.raises(ValueError, match="descending requires an order_by"):
+            adapter.query("delegation_events", descending=True)
+        with pytest.raises(ValueError, match="positive int"):
+            adapter.query("delegation_events", limit=-1)
+        with pytest.raises(ValueError, match="Invalid order_by column"):
+            adapter.query("delegation_events", order_by="correlation_id; DROP TABLE")
 
     def test_no_adapter_means_no_upsert_but_event_still_published(self) -> None:
         """db_adapter=None: projection handler skips writes; bus still receives the event."""

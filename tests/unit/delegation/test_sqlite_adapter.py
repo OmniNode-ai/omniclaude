@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+import omniclaude.delegation.sqlite_adapter as sqlite_adapter_module
 from omniclaude.delegation.sqlite_adapter import (
     ModelDelegationEvent,
     ModelEventLogEnvelope,
@@ -126,6 +128,342 @@ class TestMigration:
         adapter = make_adapter(db_path)
         adapter.close()
         assert db_path.exists()
+
+    def test_canonical_reconcile_preserves_rows_columns_and_indexes(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "warm-canonical.sqlite"
+        conn = sqlite3.connect(db_path)
+        conn.executescript(
+            (sqlite_adapter_module._MIGRATION_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_002_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_003_SQL).read_text()
+        )
+        conn.execute(
+            "INSERT INTO delegation_events "
+            "(correlation_id, task_type, created_at, delegated_by) "
+            "VALUES (?, ?, ?, ?)",
+            ("warm-001", "preserve", 123.5, "owner"),
+        )
+        conn.execute(
+            "INSERT INTO delegation_events "
+            "(id, correlation_id, task_type, created_at) VALUES (?, ?, ?, ?)",
+            (42, "warm-042", "high-water", 124.0),
+        )
+        conn.execute(
+            "CREATE INDEX idx_legacy_delegation_task ON delegation_events(task_type)"
+        )
+        conn.commit()
+        conn.close()
+
+        adapter = make_adapter(db_path)
+        try:
+            row = next(
+                row
+                for row in adapter.query_delegation_events()
+                if row.correlation_id == "warm-001"
+            )
+            assert row.correlation_id == "warm-001"
+            assert row.task_type == "preserve"
+            assert row.created_at == 123.5
+            with sqlite3.connect(db_path) as check:
+                columns = {
+                    record[1]
+                    for record in check.execute("PRAGMA table_info(delegation_events)")
+                }
+                indexes = {
+                    record[1]
+                    for record in check.execute("PRAGMA index_list(delegation_events)")
+                }
+                created_at = next(
+                    record
+                    for record in check.execute("PRAGMA table_info(delegation_events)")
+                    if record[1] == "created_at"
+                )
+            assert {"cost_usd", "tenant_id", "writer_identity", "written_at"} <= columns
+            assert "idx_legacy_delegation_task" in indexes
+            assert created_at[4] is not None
+            assert adapter.write_delegation_event(_delegation_event("warm-043"))
+            with sqlite3.connect(db_path) as check:
+                assert (
+                    check.execute(
+                        "SELECT id FROM delegation_events WHERE correlation_id = ?",
+                        ("warm-043",),
+                    ).fetchone()[0]
+                    > 42
+                )
+        finally:
+            adapter.close()
+
+    def test_canonical_reconcile_locks_schema_before_capturing_metadata(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A concurrent extension cannot land after M004 captures its snapshot."""
+        db_path = tmp_path / "schema-lock.sqlite"
+        setup = sqlite3.connect(db_path)
+        setup.executescript(
+            (sqlite_adapter_module._MIGRATION_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_002_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_003_SQL).read_text()
+        )
+        setup.commit()
+        setup.close()
+
+        metadata_read_started = threading.Event()
+        contender_finished = threading.Event()
+        contender_outcome: list[str] = []
+
+        original_read_metadata = SQLiteProjectionAdapter._read_reconciliation_metadata
+
+        def pause_after_metadata_capture(
+            adapter: SQLiteProjectionAdapter,
+        ) -> tuple[set[str], list[str], int | None]:
+            metadata = original_read_metadata(adapter)
+            metadata_read_started.set()
+            assert contender_finished.wait(timeout=5)
+            return metadata
+
+        monkeypatch.setattr(
+            SQLiteProjectionAdapter,
+            "_read_reconciliation_metadata",
+            pause_after_metadata_capture,
+        )
+
+        def extend_schema() -> None:
+            if not metadata_read_started.wait(timeout=5):
+                contender_outcome.append("migration metadata read did not start")
+                contender_finished.set()
+                return
+            contender = sqlite3.connect(db_path, timeout=0)
+            try:
+                contender.execute(
+                    "ALTER TABLE delegation_events ADD COLUMN concurrent_extension TEXT"
+                )
+                contender.commit()
+                contender_outcome.append("extension succeeded")
+            except sqlite3.OperationalError as exc:
+                contender_outcome.append(str(exc))
+            finally:
+                contender.close()
+                contender_finished.set()
+
+        source = sqlite3.connect(db_path)
+        contender_thread = threading.Thread(target=extend_schema)
+        contender_thread.start()
+        adapter = SQLiteProjectionAdapter(source)
+        contender_thread.join(timeout=5)
+
+        try:
+            assert not contender_thread.is_alive()
+            assert contender_outcome and "locked" in contender_outcome[0]
+            with sqlite3.connect(db_path) as check:
+                columns = {
+                    record[1]
+                    for record in check.execute("PRAGMA table_info(delegation_events)")
+                }
+                versions = {
+                    record[0]
+                    for record in check.execute("SELECT version FROM schema_migrations")
+                }
+            assert "concurrent_extension" not in columns
+            assert "004" in versions
+        finally:
+            adapter.close()
+
+    def test_canonical_reconcile_marker_failure_rolls_back_schema(
+        self, tmp_path: Path
+    ) -> None:
+        """A rejected 004 marker restores the old schema and leaves no transaction."""
+        db_path = tmp_path / "marker-rollback.sqlite"
+        setup = sqlite3.connect(db_path)
+        setup.executescript(
+            (sqlite_adapter_module._MIGRATION_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_002_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_003_SQL).read_text()
+        )
+        setup.execute(
+            "INSERT INTO delegation_events (correlation_id, task_type, created_at) "
+            "VALUES (?, ?, ?)",
+            ("marker-rollback-001", "unchanged", 10.0),
+        )
+        setup.execute(
+            "CREATE TRIGGER reject_migration_004 "
+            "BEFORE INSERT ON schema_migrations "
+            "WHEN NEW.version = '004' "
+            "BEGIN SELECT RAISE(ABORT, 'reject migration 004'); END"
+        )
+        setup.commit()
+        setup.close()
+
+        source = sqlite3.connect(db_path)
+        try:
+            with pytest.raises(sqlite3.IntegrityError, match="reject migration 004"):
+                SQLiteProjectionAdapter(source)
+
+            assert not source.in_transaction
+            row = source.execute(
+                "SELECT correlation_id, task_type, created_at FROM delegation_events"
+            ).fetchone()
+            columns = {
+                record[1]
+                for record in source.execute("PRAGMA table_info(delegation_events)")
+            }
+            versions = {
+                record[0]
+                for record in source.execute("SELECT version FROM schema_migrations")
+            }
+            assert tuple(row) == ("marker-rollback-001", "unchanged", 10.0)
+            assert "writer_identity" not in columns
+            assert {"001", "002", "003"} <= versions
+            assert "004" not in versions
+
+            source.execute("CREATE TABLE marker_cleanup_proof (id INTEGER)")
+            source.execute("DROP TRIGGER reject_migration_004")
+            source.commit()
+
+            adapter = SQLiteProjectionAdapter(source)
+            try:
+                assert "004" in adapter.get_applied_migrations()
+            finally:
+                adapter.close()
+        finally:
+            if source:
+                source.close()
+
+    def test_canonical_reconcile_refusal_rolls_back_its_schema_lock(
+        self, tmp_path: Path
+    ) -> None:
+        """Unsupported columns remain intact and do not leave M004 open."""
+        db_path = tmp_path / "unsupported-column.sqlite"
+        setup = sqlite3.connect(db_path)
+        setup.executescript(
+            (sqlite_adapter_module._MIGRATION_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_002_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_003_SQL).read_text()
+        )
+        setup.execute(
+            "ALTER TABLE delegation_events ADD COLUMN unsupported_extension TEXT"
+        )
+        setup.commit()
+        setup.close()
+
+        source = sqlite3.connect(db_path)
+        try:
+            with pytest.raises(RuntimeError, match="unsupported columns"):
+                SQLiteProjectionAdapter(source)
+
+            assert not source.in_transaction
+            source.execute("CREATE TABLE refusal_cleanup_proof (id INTEGER)")
+            source.commit()
+        finally:
+            source.close()
+
+        with sqlite3.connect(db_path) as check:
+            columns = {
+                record[1]
+                for record in check.execute("PRAGMA table_info(delegation_events)")
+            }
+            versions = {
+                record[0]
+                for record in check.execute("SELECT version FROM schema_migrations")
+            }
+            tables = {
+                record[0]
+                for record in check.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+        assert "unsupported_extension" in columns
+        assert "004" not in versions
+        assert "refusal_cleanup_proof" in tables
+
+    def test_canonical_reconcile_rolls_back_on_schema_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        db_path = tmp_path / "rollback.sqlite"
+        conn = sqlite3.connect(db_path)
+        conn.executescript(
+            (sqlite_adapter_module._MIGRATION_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_002_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_003_SQL).read_text()
+        )
+        conn.execute(
+            "INSERT INTO delegation_events (correlation_id, task_type, created_at) "
+            "VALUES (?, ?, ?)",
+            ("rollback-001", "unchanged", 10.0),
+        )
+        conn.commit()
+        conn.close()
+        monkeypatch.setitem(
+            sqlite_adapter_module._CANONICAL_COLUMN_DEFINITIONS,
+            "migration_failure",
+            "THIS IS INVALID SQL",
+        )
+
+        with pytest.raises(sqlite3.OperationalError):
+            make_adapter(db_path)
+
+        with sqlite3.connect(db_path) as check:
+            row = check.execute(
+                "SELECT correlation_id, task_type, created_at FROM delegation_events"
+            ).fetchone()
+            tables = {
+                record[0]
+                for record in check.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            versions = {
+                record[0]
+                for record in check.execute("SELECT version FROM schema_migrations")
+            }
+        assert row == ("rollback-001", "unchanged", 10.0)
+        assert "delegation_events_v004" not in tables
+        assert "004" not in versions
+
+    def test_canonical_reconcile_rolls_back_during_index_replay(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        db_path = tmp_path / "index-rollback.sqlite"
+        conn = sqlite3.connect(db_path)
+        conn.executescript(
+            (sqlite_adapter_module._MIGRATION_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_002_SQL).read_text()
+            + (sqlite_adapter_module._MIGRATION_003_SQL).read_text()
+        )
+        conn.execute(
+            "INSERT INTO delegation_events (correlation_id, task_type, created_at) "
+            "VALUES (?, ?, ?)",
+            ("index-rollback-001", "unchanged", 10.0),
+        )
+        conn.execute(
+            "CREATE INDEX idx_index_rollback_task ON delegation_events(task_type)"
+        )
+        conn.commit()
+        conn.close()
+
+        def fail_replay(_conn: sqlite3.Connection, _statement: str) -> None:
+            raise RuntimeError("injected index replay failure")
+
+        monkeypatch.setattr(sqlite_adapter_module, "_recreate_index", fail_replay)
+        with pytest.raises(RuntimeError, match="index replay failure"):
+            make_adapter(db_path)
+
+        with sqlite3.connect(db_path) as check:
+            row = check.execute(
+                "SELECT correlation_id, task_type, created_at FROM delegation_events"
+            ).fetchone()
+            indexes = {
+                record[1]
+                for record in check.execute("PRAGMA index_list(delegation_events)")
+            }
+            versions = {
+                record[0]
+                for record in check.execute("SELECT version FROM schema_migrations")
+            }
+        assert row == ("index-rollback-001", "unchanged", 10.0)
+        assert "idx_index_rollback_task" in indexes
+        assert "004" not in versions
 
 
 class TestDelegationEvent:

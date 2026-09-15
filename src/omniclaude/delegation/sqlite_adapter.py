@@ -23,8 +23,138 @@ _MIGRATION_SQL = _MIGRATIONS_DIR / "001_create_delegation_tables.sql"
 _MIGRATION_002_SQL = _MIGRATIONS_DIR / "002_align_with_projection_handler.sql"
 _MIGRATION_003_SQL = _MIGRATIONS_DIR / "003_add_compliance_columns.sql"
 _DEFAULT_DB_PATH = Path.home() / ".omninode" / "delegation" / "delegation.sqlite"
-_MIGRATION_VERSION = "003"
 _MIGRATION_DESCRIPTION = "Add tokens_to_compliance and compliance_attempts columns"
+_MIGRATION_004_DESCRIPTION = (
+    "Reconcile canonical projection columns and created_at default"
+)
+
+_CANONICAL_COLUMN_DEFINITIONS = {
+    "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+    "correlation_id": "TEXT NOT NULL UNIQUE",
+    "session_id": "TEXT",
+    "tool_use_id": "TEXT",
+    "hook_name": "TEXT",
+    "task_type": "TEXT NOT NULL DEFAULT ''",
+    "delegated_to": "TEXT NOT NULL DEFAULT ''",
+    "model_name": "TEXT NOT NULL DEFAULT ''",
+    "quality_gate_passed": "INTEGER NOT NULL DEFAULT 0",
+    "quality_gate_detail": "TEXT",
+    "latency_ms": "INTEGER",
+    "input_hash": "TEXT",
+    "input_redaction_policy": "TEXT NOT NULL DEFAULT 'hash_only'",
+    "contract_version": "TEXT NOT NULL DEFAULT 'v1'",
+    "created_at": "REAL NOT NULL DEFAULT (strftime('%s', 'now'))",
+    "timestamp": "TEXT",
+    "delegated_by": "TEXT NOT NULL DEFAULT ''",
+    "quality_gates_checked": "INTEGER NOT NULL DEFAULT 0",
+    "quality_gates_failed": "INTEGER NOT NULL DEFAULT 0",
+    "delegation_latency_ms": "INTEGER",
+    "repo": "TEXT",
+    "is_shadow": "INTEGER NOT NULL DEFAULT 0",
+    "llm_call_id": "TEXT",
+    "tokens_input": "INTEGER NOT NULL DEFAULT 0",
+    "tokens_output": "INTEGER NOT NULL DEFAULT 0",
+    "cost_savings_usd": "REAL NOT NULL DEFAULT 0.0",
+    "tokens_to_compliance": "INTEGER NOT NULL DEFAULT 0",
+    "compliance_attempts": "INTEGER NOT NULL DEFAULT 1",
+    "quality_gates_checked_jsonb": "TEXT",
+    "quality_gates_failed_jsonb": "TEXT",
+    "cost_usd": "REAL",
+    "prompt_text": "TEXT",
+    "response_text": "TEXT",
+    "context_pack_hash": "TEXT",
+    "pricing_manifest_version": "TEXT",
+    "premium_counterfactual": "TEXT",
+    "cost_tier_type": "TEXT",
+    "cost_tier_name": "TEXT",
+    "cost_measurement_source": "TEXT",
+    "budget_headroom_consumed_usd": "REAL",
+    "required_bar": "REAL",
+    "actual_score": "REAL",
+    "escalation_count": "INTEGER",
+    "authority_source": "TEXT",
+    "score_source": "TEXT",
+    "request_override_applied": "INTEGER",
+    "override_within_bounds": "INTEGER",
+    "tenant_id": "TEXT",
+    "writer_identity": "TEXT",
+    "written_at": "TEXT",
+    "terminal_ok": "INTEGER",
+    "terminal_failure_cause": "TEXT",
+    "attempt_history": "TEXT",
+    "projection_version": "TEXT",
+    "reducer_version": "TEXT",
+}
+
+_NON_NULL_CANONICAL_COLUMNS = frozenset(
+    {
+        "task_type",
+        "delegated_to",
+        "model_name",
+        "quality_gate_passed",
+        "input_redaction_policy",
+        "contract_version",
+        "created_at",
+        "delegated_by",
+        "quality_gates_checked",
+        "quality_gates_failed",
+        "is_shadow",
+        "tokens_input",
+        "tokens_output",
+        "cost_savings_usd",
+        "tokens_to_compliance",
+        "compliance_attempts",
+    }
+)
+
+_CANONICAL_DEFAULT_EXPRESSIONS = {
+    "task_type": "''",
+    "delegated_to": "''",
+    "model_name": "''",
+    "quality_gate_passed": "0",
+    "input_redaction_policy": "'hash_only'",
+    "contract_version": "'v1'",
+    "created_at": "strftime('%s', 'now')",
+    "delegated_by": "''",
+    "quality_gates_checked": "0",
+    "quality_gates_failed": "0",
+    "is_shadow": "0",
+    "tokens_input": "0",
+    "tokens_output": "0",
+    "cost_savings_usd": "0.0",
+    "tokens_to_compliance": "0",
+    "compliance_attempts": "1",
+}
+
+
+def _quote_identifier(identifier: str) -> str:
+    """Quote an identifier obtained from SQLite schema metadata."""
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _recreate_index(conn: sqlite3.Connection, statement: str) -> None:
+    """Replay one pre-existing explicit index during the v004 rebuild."""
+    conn.execute(statement)
+
+
+_LEGACY_DELEGATION_EVENTS_BY_SESSION_SQL = (
+    "SELECT id, correlation_id, session_id, tool_use_id, hook_name, task_type, "
+    "delegated_to, model_name, quality_gate_passed, quality_gate_detail, latency_ms, "
+    "input_hash, input_redaction_policy, contract_version, created_at, timestamp, "
+    "delegated_by, quality_gates_checked, quality_gates_failed, delegation_latency_ms, "
+    "repo, is_shadow, llm_call_id, tokens_input, tokens_output, cost_savings_usd, "
+    "tokens_to_compliance, compliance_attempts FROM delegation_events "
+    "WHERE session_id = ? ORDER BY created_at DESC LIMIT ?"
+)
+_LEGACY_DELEGATION_EVENTS_SQL = (
+    "SELECT id, correlation_id, session_id, tool_use_id, hook_name, task_type, "
+    "delegated_to, model_name, quality_gate_passed, quality_gate_detail, latency_ms, "
+    "input_hash, input_redaction_policy, contract_version, created_at, timestamp, "
+    "delegated_by, quality_gates_checked, quality_gates_failed, delegation_latency_ms, "
+    "repo, is_shadow, llm_call_id, tokens_input, tokens_output, cost_savings_usd, "
+    "tokens_to_compliance, compliance_attempts FROM delegation_events "
+    "ORDER BY created_at DESC LIMIT ?"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +305,83 @@ class SQLiteProjectionAdapter:
     # Migration
     # ------------------------------------------------------------------
 
+    def _read_reconciliation_metadata(self) -> tuple[set[str], list[str], int | None]:
+        """Read source metadata while the caller holds the M004 write lock."""
+        source_info = self._conn.execute(
+            "PRAGMA table_info(delegation_events)"
+        ).fetchall()
+        source_names = {str(row["name"]) for row in source_info}
+        index_sql = [
+            str(row["sql"])
+            for row in self._conn.execute(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'index' AND tbl_name = 'delegation_events' "
+                "AND sql IS NOT NULL"
+            ).fetchall()
+        ]
+        try:
+            sequence = self._conn.execute(
+                "SELECT seq FROM sqlite_sequence WHERE name = 'delegation_events'"
+            ).fetchone()
+        except sqlite3.OperationalError:
+            sequence = None
+        sequence_value = int(sequence[0]) if sequence is not None else None
+        return source_names, index_sql, sequence_value
+
+    def _reconcile_canonical_schema(self) -> None:
+        """Rebuild delegation_events inside the caller's M004 transaction."""
+        source_names, index_sql, sequence_value = self._read_reconciliation_metadata()
+        unsupported = source_names.difference(_CANONICAL_COLUMN_DEFINITIONS)
+        if unsupported:
+            names = ", ".join(sorted(unsupported))
+            raise RuntimeError(
+                f"Cannot reconcile delegation_events with unsupported columns: {names}"
+            )
+
+        definitions = list(_CANONICAL_COLUMN_DEFINITIONS.items())
+        target = "delegation_events_v004"
+        target_columns = [name for name, _ in definitions]
+        source_select: list[str] = []
+        insert_columns: list[str] = []
+        for name in target_columns:
+            if name not in source_names:
+                continue
+            source_expression = _quote_identifier(name)
+            if name in _NON_NULL_CANONICAL_COLUMNS:
+                fallback = _CANONICAL_DEFAULT_EXPRESSIONS[name]
+                source_expression = f"COALESCE({source_expression}, {fallback})"
+            insert_columns.append(name)
+            source_select.append(source_expression)
+
+        self._conn.execute(f"DROP TABLE IF EXISTS {_quote_identifier(target)}")
+        ddl = ",\n    ".join(
+            f"{_quote_identifier(name)} {definition}"
+            for name, definition in definitions
+        )
+        self._conn.execute(f"CREATE TABLE {_quote_identifier(target)} (\n    {ddl}\n)")
+        quoted_insert = ", ".join(_quote_identifier(name) for name in insert_columns)
+        # All identifiers are canonical allowlist members; row values are not interpolated.
+        self._conn.execute(
+            f"INSERT INTO {_quote_identifier(target)} ({quoted_insert}) "  # noqa: S608  # nosec B608
+            f"SELECT {', '.join(source_select)} FROM {_quote_identifier('delegation_events')}"
+        )
+        self._conn.execute("DROP TABLE delegation_events")
+        self._conn.execute(
+            f"ALTER TABLE {_quote_identifier(target)} RENAME TO delegation_events"
+        )
+        for statement in index_sql:
+            _recreate_index(self._conn, statement)
+        if sequence_value is not None:
+            updated = self._conn.execute(
+                "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = ?",
+                (sequence_value, "delegation_events"),
+            )
+            if updated.rowcount == 0:
+                self._conn.execute(
+                    "INSERT INTO sqlite_sequence(name, seq) VALUES (?, ?)",
+                    ("delegation_events", sequence_value),
+                )
+
     def _apply_migrations(self) -> None:
         with self._lock:
             self._conn.executescript(_MIGRATION_SQL.read_text())
@@ -226,8 +433,21 @@ class SQLiteProjectionAdapter:
                     "INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?, ?, ?)",
                     ("003", time.time(), _MIGRATION_DESCRIPTION),
                 )
+            if "004" not in applied:
+                self._conn.commit()
+                self._conn.execute("BEGIN IMMEDIATE")
+                try:
+                    self._reconcile_canonical_schema()
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?, ?, ?)",
+                        ("004", time.time(), _MIGRATION_004_DESCRIPTION),
+                    )
+                    self._conn.commit()
+                except BaseException:
+                    self._conn.rollback()
+                    raise
             self._conn.commit()
-        logger.debug("Ensured migration %s is applied", _MIGRATION_VERSION)
+        logger.debug("Ensured migration 004 is applied")
 
     # ------------------------------------------------------------------
     # Write methods
@@ -417,12 +637,12 @@ class SQLiteProjectionAdapter:
         with self._lock:
             if session_id is not None:
                 rows = self._conn.execute(
-                    "SELECT * FROM delegation_events WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
+                    _LEGACY_DELEGATION_EVENTS_BY_SESSION_SQL,
                     (session_id, limit),
                 ).fetchall()
             else:
                 rows = self._conn.execute(
-                    "SELECT * FROM delegation_events ORDER BY created_at DESC LIMIT ?",
+                    _LEGACY_DELEGATION_EVENTS_SQL,
                     (limit,),
                 ).fetchall()
         return [ModelDelegationEventRow(**dict(r)) for r in rows]
@@ -635,7 +855,17 @@ def make_adapter(db_path: Path | None = None) -> SQLiteProjectionAdapter:
     resolved = db_path or _DEFAULT_DB_PATH
     resolved.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(resolved), check_same_thread=False)  # di-ok
-    return SQLiteProjectionAdapter(conn)
+    try:
+        return SQLiteProjectionAdapter(conn)
+    except Exception:
+        conn.close()
+        raise
+
+
+def prepare_adapter_schema(db_path: Path | None = None) -> None:
+    """Apply the owned SQLite migrations and close their connection."""
+    adapter = make_adapter(db_path)
+    adapter.close()
 
 
 __all__: list[str] = [
@@ -647,4 +877,5 @@ __all__: list[str] = [
     "ModelSavingsSummary",
     "SQLiteProjectionAdapter",
     "make_adapter",
+    "prepare_adapter_schema",
 ]
