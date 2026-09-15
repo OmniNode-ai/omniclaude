@@ -105,8 +105,22 @@ def test_sync_script_carries_no_inline_expressions() -> None:
 
 def test_sync_script_takes_its_values_from_env() -> None:
     env = _step(_SYNC_STEP)["env"]
-    assert env["RELEASE_TAG"] == "${{ inputs.tag }}"
     assert "steps.app-token.outputs.token" in env["APP_TOKEN"]
+    # From the derived, already charset-guarded step output -- never from
+    # `inputs.tag`, which is empty on the `push: tags:` trigger a real release
+    # fires. See test_sync_tag_is_not_read_from_the_dispatch_input.
+    assert env["SYNC_TAG"] == "${{ steps.tag.outputs.tag }}"
+
+
+def test_sync_tag_is_not_read_from_the_dispatch_input() -> None:
+    """Reading `inputs.tag` here kills the sync on every tag-push release.
+
+    `inputs.tag` is defined only for `workflow_dispatch`. A release cut by
+    pushing a tag resolves it to the empty string, `git rev-list -n 1 ""`
+    fails, and main silently stops advancing -- the exact failure this whole
+    pair exists to prevent.
+    """
+    assert "inputs.tag" not in str(_step(_SYNC_STEP)["env"])
 
 
 def _run_sync_script(tmp_path: Path, *, http_code: str) -> subprocess.CompletedProcess:
@@ -147,7 +161,7 @@ def _run_sync_script(tmp_path: Path, *, http_code: str) -> subprocess.CompletedP
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
-            "RELEASE_TAG": "v9.9.9",
+            "SYNC_TAG": "v9.9.9",
             "APP_TOKEN": "stub-token",
             "GITHUB_API_URL": "https://api.github.com",
             "GITHUB_REPOSITORY": "OmniNode-ai/omniclaude",

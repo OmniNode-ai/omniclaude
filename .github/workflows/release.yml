@@ -176,11 +176,22 @@ jobs:
         if: ${{ !contains(steps.tag.outputs.tag, 'rc') }}
         working-directory: ${{ github.workspace }}
         env:
-          RELEASE_TAG: ${{ inputs.tag }}
+          # Deliberately NOT named RELEASE_TAG, and deliberately NOT sourced
+          # from `inputs.tag`. `tests/workflows/test_release_workflow_no_shell_injection.py`
+          # polices the RELEASE_TAG vocabulary as the path a raw dispatch input
+          # takes to the shell, and requires every such step to read
+          # `inputs.tag`. This step needs the OPPOSITE: `inputs.tag` is empty
+          # on the `push: tags:` trigger that a real release actually fires,
+          # so reading it there would resolve the empty string and kill the
+          # sync on every tag-push release. `steps.tag.outputs.tag` is the
+          # value the `Set release tag` step already produced for both
+          # triggers, behind that step's own charset guard -- derived and
+          # validated, not raw input.
+          SYNC_TAG: ${{ steps.tag.outputs.tag }}
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-          TAG="$RELEASE_TAG"
+          TAG="$SYNC_TAG"
           TAG_SHA=$(git rev-list -n 1 "$TAG")
           echo "Resolved tag $TAG -> commit $TAG_SHA"
           # The ref is moved through the REST API rather than `git push`, so no
