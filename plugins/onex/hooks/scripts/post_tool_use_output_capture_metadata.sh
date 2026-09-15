@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# Emits content-free output metadata and never writes hookSpecificOutput.
+# Emits content-free output metadata and never writes hookSpecificOutput or hookEventName.
 set -uo pipefail
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
