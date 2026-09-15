@@ -960,10 +960,42 @@ expected_hooks:
         stdout_absent:
           - '"decision": "block"'
 
-  - script: "session_start_hook_parity.sh"
+  - script: "session_start_preflight.sh"
     event: "SessionStart"
     matcher: null
     order: 3
+    ticket: "OMN-18368"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Runs plugins/onex/scripts/session_preflight.py at every session start:
+      nothing when every declared check passes, one line per failing blocker
+      with its own fix command otherwise, or a single REFUSED line when this
+      machine has no SESSION_PREFLIGHT_OVERLAY_PATH declared. Consults
+      lib/intent.sh for exactly one thing: under a tick session it runs
+      --intent tick --receipt <state-dir path> (verdict on a receipt, nothing
+      printed); every other intent runs a FIXED --intent quiet. Print-only:
+      never blocks regardless of the runner's own exit status (0/1/2).
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "pass_through"
+      stdin:
+        hook_event_name: "SessionStart"
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 0
+        stdout_contains: []
+        stdout_absent:
+          - '"decision": "block"'
+
+  - script: "session_start_hook_parity.sh"
+    event: "SessionStart"
+    matcher: null
+    order: 4
     ticket: "OMN-17020"
     owner: "omniclaude hooks lane"
     purpose: >
