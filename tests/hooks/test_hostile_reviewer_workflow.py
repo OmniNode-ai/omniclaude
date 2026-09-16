@@ -110,6 +110,30 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
     )
 
 
+def test_same_repo_dev_prs_do_not_use_public_runner_branch(
+    workflow: dict[object, object],
+) -> None:
+    """Same-repo dev PRs need the LAN-only DeepSeek endpoint on the trusted runner.
+
+    Forks may still take the public-runner branch, but a same-repo PR targeting
+    dev must not. That exact shape ran on ``ubuntu-latest`` for omniclaude#2181
+    and made ``cli_review`` fail twice with no model reachable.
+    """
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+    runs_on = review_job.get("runs-on")
+    assert isinstance(runs_on, str), "runs-on must be a routing expression"
+
+    assert "github.event.pull_request.base.ref == 'dev'" not in runs_on
+    assert (
+        "github.event.pull_request.head.repo.full_name != github.repository" in runs_on
+    )
+    assert "OMNI_PUBLIC_PR_RUNS_ON_JSON" in runs_on
+    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" in runs_on
+
+
 def test_review_step_invokes_cli_review_with_model(
     workflow: dict[object, object],
 ) -> None:
