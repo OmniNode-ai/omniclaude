@@ -46,7 +46,7 @@ jobs:
       contents: read
       pull-requests: read
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@dev
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
     with:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
@@ -63,7 +63,7 @@ jobs:
   zone-filter:
     needs: occ-preflight
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@dev
+    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
     with:
       python-version: "3.12"
 
