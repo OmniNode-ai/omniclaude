@@ -580,10 +580,12 @@ def test_the_shipped_contract_carries_no_credential_value() -> None:
         )
 
 
-def test_the_store_files_are_referenced_by_name_not_hardcoded_home(
-    tmp_path: Path,
-) -> None:
+def test_the_store_files_are_referenced_by_name_not_hardcoded_home() -> None:
     """``onex_home_path`` is the one place ``~/.onex`` is spelled.
+
+    Takes no ``tmp_path``: it writes no store and reads no file. The parameter
+    was unused, and an unused one here invites a reader to attribute a
+    neighbouring test's deliberate bad-mode fixture to this one.
 
     The canonical store takes ``onex_home`` by injection for the same reason:
     a class that derived it from ``Path.home()`` internally cannot be driven
@@ -597,12 +599,25 @@ def test_the_store_files_are_referenced_by_name_not_hardcoded_home(
 def test_the_secret_file_mode_check_uses_the_same_mask_as_the_canonical_store(
     tmp_path: Path,
 ) -> None:
-    """0600 exactly -- any group or other bit is a refusal, not a warning."""
+    """0600 exactly -- any group or other bit is a refusal, not a warning.
+
+    NEGATIVE CASE. The group-readable file below is this test's INPUT, not an
+    artifact this code ever writes: the assertion being made is that
+    ``read_lane_client_store`` REFUSES it. A fixture the production path
+    rejects is the only way to prove the production path rejects it.
+
+    ``0o640`` is chosen over ``0o644`` deliberately -- it sets a group bit and
+    no other bit, so it also pins the MASK. A check written as ``mode != 0o600``
+    or as ``mode & 0o007`` would pass a group-readable credential; ``0o077``
+    is the mask the canonical ``StoreLaneCredential`` uses, and this is what
+    holds the two readers to the same one.
+    """
     lib = _load_lib()
     onex_home = _write_store(tmp_path / ".onex", mode=0o640)
     credentials = onex_home / "credentials.json"
     assert stat.S_IMODE(credentials.stat().st_mode) & 0o077, (
-        "positive control: the fixture really is group readable"
+        "positive control: the fixture really is group readable, so the "
+        "refusal below is about the mode and not about some other defect"
     )
 
     with pytest.raises(lib.HookEdgeLaneCredentialError):
