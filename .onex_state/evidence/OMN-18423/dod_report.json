@@ -2,8 +2,8 @@
   "schema_version": "1.0.0",
   "ticket_id": "OMN-18423",
   "status": "PASS",
-  "run_timestamp": "2026-09-16T01:50:00Z",
-  "summary": "PASS: omniclaude PR #2184 adds the cross-repo runner-route shim that lets a caller outside omnibase_infra reach the routing COMPUTE node. The shim holds no decision and no threshold, which is asserted by tests rather than claimed; the node is pinned to a full commit sha verified reachable from omnibase_infra dev; central OCC evidence is onex_change_control PR #9766. AC5 (the measured cross-repo route cost) is deliberately NOT claimed here and is owed by the first consumer run under OMN-18424 -- a figure carried over from the in-repo job would not be evidence.",
+  "run_timestamp": "2026-09-16T05:40:00Z",
+  "summary": "PASS: omniclaude PR #2184 landed the cross-repo runner-route shim; this follow-up closes AC5, which the first pull request deliberately recorded as owed. The cross-repo route cost is now MEASURED rather than carried over: 155 seconds on omninode_infra run 35048508160, of which 69 were a dependency re-resolve caused by the run and the sync selecting different groups, and 34 were a post-job cache save on an ephemeral runner that nothing ever reads. Both are removed.",
   "checks": [
     {
       "name": "shim shape: no decision, no threshold, fork branch first, floor before refusal",
@@ -24,6 +24,11 @@
       "name": "OCC evidence",
       "status": "PASS",
       "command": "Evidence-Ticket: OMN-18423; Evidence-Source: OCC#9766"
+    },
+    {
+      "name": "AC5 -- the cross-repo route cost, measured and then reduced",
+      "status": "PASS",
+      "command": "gh api repos/OmniNode-ai/omninode_infra/actions/jobs/<route job>/steps  =>  155s total: setup 15s, checkout 7s, uv 2s, sync 23s, decide 69s (uv run re-resolving 57 packages incl. numpy/botocore), upload 1s, post-cache-save 34s"
     }
   ]
 }

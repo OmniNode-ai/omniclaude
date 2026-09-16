@@ -216,6 +216,42 @@ def test_the_seam_is_read_and_never_written() -> None:
 # --- the environment, and the silent degradation it prevents -----------------
 
 
+def test_the_sync_and_the_run_select_the_same_dependency_groups() -> None:
+    """MEASURED, not stylistic. `uv run` includes the dev group by default.
+
+    A run whose flags differ from its sync re-resolves and installs the
+    difference, on the critical path, every time. On omninode_infra run
+    35048508160 that was 57 extra packages -- numpy, botocore, a source build
+    of the project -- to make a decision that needs a typed model and a YAML
+    parser: 69 of the route job's 155 seconds, spent inside the step that was
+    supposed to just decide, after the step that exists to prepare the
+    environment had already finished in 23.
+
+    Nothing reports it. The job is green either way; the cost is simply added
+    to every pipeline that calls this workflow.
+    """
+    body = _step("decide")["run"]
+    assert "uv run --frozen --no-dev" in body, (
+        "the run must select the same groups as the sync, or it re-resolves"
+    )
+
+
+def test_the_uv_cache_is_off_because_the_runners_are_ephemeral() -> None:
+    """A cache that is always written and never read is pure cost.
+
+    Same measured run: the post-job cache SAVE took 34 seconds. Every fleet
+    runner is an ephemeral container, so the cache it writes is discarded with
+    it -- the save is paid on the critical path of every consuming run and the
+    restore never hits.
+    """
+    setup = next(
+        step
+        for step in _route_job()["steps"]
+        if isinstance(step, dict) and "setup-uv" in str(step.get("uses", ""))
+    )
+    assert setup["with"]["enable-cache"] is False
+
+
 def test_the_environment_is_synced_before_the_decision_runs() -> None:
     """THE SILENT DEGRADATION.
 
@@ -227,18 +263,20 @@ def test_the_environment_is_synced_before_the_decision_runs() -> None:
     a broken router still schedules, which is why nothing else can see this.
     """
     steps = _route_job()["steps"]
-    sync_at = next(
+    uv_at = next(
         i
         for i, step in enumerate(steps)
-        if isinstance(step, dict) and "uv sync" in str(step.get("run", ""))
+        if isinstance(step, dict) and "setup-uv" in str(step.get("uses", ""))
     )
     decide_at = next(
         i
         for i, step in enumerate(steps)
         if isinstance(step, dict) and step.get("id") == "decide"
     )
-    assert sync_at < decide_at
-    assert "uv run --frozen" in _step("decide")["run"]
+    assert uv_at < decide_at
+    # One step does the resolve and the run, with one set of group flags, so
+    # the two cannot disagree and the environment is built exactly once.
+    assert "uv run --frozen --no-dev" in _step("decide")["run"]
 
 
 def test_every_step_that_needs_the_node_runs_inside_its_checkout() -> None:
@@ -251,7 +289,7 @@ def test_every_step_that_needs_the_node_runs_inside_its_checkout() -> None:
         if not isinstance(step, dict):
             continue
         run = str(step.get("run", ""))
-        if "runner_route_decision.py" in run or "uv sync" in run:
+        if "runner_route_decision.py" in run:
             assert step.get("working-directory") == ".runner-route"
 
 
