@@ -12,7 +12,7 @@ permissions:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@dev
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
     permissions:
       contents: read
       pull-requests: read
@@ -23,4 +23,16 @@ jobs:
   imperative-contract-guard:
     needs: occ-preflight
     # self-gating-ok: central guard is intentionally shared across repos; caller PRs do not modify the referenced workflow.
-    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@dev
+    #
+    # OMN-18494: pinned to a full sha rather than @main, deliberately. @main is
+    # the fleet standard for a cross-repo reusable and is what the other three
+    # references in this repository now use, but this one file is BEHIND on
+    # onex_change_control's main: that revision still carries actions/checkout@v6
+    # and astral-sh/setup-uv@v7, and retries a deterministic `uv sync --locked`
+    # lockfile mismatch through the whole attempt budget instead of failing fast
+    # with an actionable message (the OMN-14780 fix, present on dev only). Moving
+    # this to @main would revert all of that. A full sha satisfies the same
+    # policy -- an immutable ref that no unreleased upstream commit can move
+    # under us -- without the regression. Re-point it at @main once
+    # onex_change_control cuts a release carrying OMN-14780.
+    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@939856e335ad7be4f4a231b86d4241e69f1c388b
