@@ -356,7 +356,18 @@ jobs:
             # value is ever placed on a command line, where `ps` would show it.
             python3 - "$ATTEMPT_ERR" <<'PY'
           import os
+          import re
           import sys
+
+          def redact_value(text: str, name: str, value: str) -> str:
+              pattern = re.compile(
+                  rf"(^|\s)(\S*{re.escape(value)}\S*)(?=\s|$)"
+              )
+              return pattern.sub(
+                  lambda match: f"{match.group(1)}***{name}-redacted***",
+                  text,
+              )
+
 
           path = sys.argv[1]
           with open(path, encoding="utf-8", errors="replace") as handle:
@@ -364,7 +375,7 @@ jobs:
           for name in ("LOCAL_LLM_SHARED_SECRET", "LLM_ENDPOINT_CIDR_ALLOWLIST"):
               value = os.environ.get(name)
               if value and len(value) >= 8:
-                  text = text.replace(value, f"***{name}-redacted***")
+                  text = redact_value(text, name, value)
           with open(path, "w", encoding="utf-8") as handle:
               handle.write(text)
           PY

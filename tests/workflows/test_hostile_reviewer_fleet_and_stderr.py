@@ -290,6 +290,13 @@ echo "ERROR: All models failed. Review could not be performed." >&2
 exit 1
 """
 
+PARTIAL_SECRET_STUB = f"""#!/usr/bin/env bash
+echo "\\"{FAKE_SIGNING_VALUE}\\"" >&2
+echo "unrelated-prefix-{FAKE_SIGNING_VALUE}-suffix" >&2
+echo "ERROR: All models failed. Review could not be performed." >&2
+exit 1
+"""
+
 PASSING_STUB = """#!/usr/bin/env bash
 echo "Model 'deepseek-r1' succeeded in 233.5s (0 finding(s))." >&2
 cat <<'JSON'
@@ -444,6 +451,25 @@ def test_the_signing_value_is_redacted_before_it_is_logged(tmp_path: Path) -> No
         "the redaction must leave a marker, so a reader can tell a redacted "
         "line from a line that never existed"
     )
+
+
+def test_secret_redaction_does_not_mutate_partial_token_matches(
+    tmp_path: Path,
+) -> None:
+    """A redaction must replace the whole containing token, not splice it."""
+    result, artifact, _ = _run_review_script(
+        tmp_path,
+        stub=PARTIAL_SECRET_STUB,
+        extra_env={SIGNING_KEY_VAR: FAKE_SIGNING_VALUE},
+    )
+
+    assert FAKE_SIGNING_VALUE not in result.stdout
+    assert f"prefix-***{SIGNING_KEY_VAR}-redacted***-suffix" not in result.stdout
+    assert result.stdout.count(f"***{SIGNING_KEY_VAR}-redacted***") >= 2
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert FAKE_SIGNING_VALUE not in payload["stderr"]
+    assert f"prefix-***{SIGNING_KEY_VAR}-redacted***-suffix" not in payload["stderr"]
+    assert payload["stderr"].count(f"***{SIGNING_KEY_VAR}-redacted***") >= 2
 
 
 def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:
