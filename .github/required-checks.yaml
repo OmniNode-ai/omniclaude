@@ -422,7 +422,7 @@ gates:
     producer_kind: cross_repo
     caller_workflow: pr-title-check.yml
     caller_job: pr-title
-    cross_repo_ref: "OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@dev"
+    cross_repo_ref: "OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@main"
     skip_semantics: never
     rationale: "PR title ticket-reference check (cross-repo reusable hosted in onex_change_control)."
 
