@@ -49,6 +49,15 @@ shipped plist every publish raised ``KeyError: 'KAFKA_BOOTSTRAP_SERVERS'``
 and every record stayed queued (proven on the operator Mac 2026-08-30).
 ``validate_hook_edge_lane.py`` now reads this file, so the publisher cannot
 leave the declared lane again without failing a merge gate.
+
+Which credential (OMN-18120)
+    The lane also declares WHERE its identity is resolved from. On the lab
+    host that is the operator env file; on an operator workstation it is the
+    per-lane client store under ``~/.onex`` -- the same one ``onex delegate
+    --lane`` reads, so one machine dialling one lane presents one principal.
+    The resolver reads the declared surface and does not fall back to the
+    other: an absent identity is a refusal naming its remedy, never a
+    connection as a different principal.
 """
 
 from __future__ import annotations
@@ -137,13 +146,14 @@ def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
 
     # Resolved BEFORE anything is written to the environment, so a lane whose
     # credential is absent leaves no partial configuration behind.
-    credential_file = hook_edge_lane.operator_env_file_path()
+    #
+    # WHICH surface holds the credential is the lane's own declaration
+    # (``sasl_credential_source``), not this function's guess and not a search
+    # order -- see OMN-18120. On this host the dev lane declares the ~/.onex
+    # client store, which is the identity ``onex delegate --lane dev`` also
+    # presents, so both dev-lane clients on the machine are one principal.
     try:
-        transport = hook_edge_lane.resolve_transport_env(
-            contract,
-            credential_source=hook_edge_lane.read_operator_env_file(credential_file),
-            credential_source_name=str(credential_file),
-        )
+        transport = hook_edge_lane.resolve_credential_environment(contract)
     except hook_edge_lane.HookEdgeLaneCredentialError as exc:
         logger.error(
             "declared lane %s (%s) cannot be published to from this host: %s",
@@ -183,9 +193,8 @@ def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
         transport[hook_edge_lane.ENV_SECURITY_PROTOCOL],
         (
             f" using {transport[hook_edge_lane.ENV_SASL_MECHANISM]} as the "
-            f"principal named by "
-            f"{contract.known_lanes[contract.lane].sasl_env_prefix}"
-            f"{hook_edge_lane.ENV_SASL_USERNAME} in {credential_file}"
+            f"principal this host declares in "
+            f"{contract.known_lanes[contract.lane].sasl_credential_source}"
             if hook_edge_lane.ENV_SASL_MECHANISM in transport
             else ""
         ),

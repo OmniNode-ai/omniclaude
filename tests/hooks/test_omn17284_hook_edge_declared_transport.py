@@ -114,6 +114,7 @@ def _lane_block(
     protocol: str,
     mechanism: str | None = None,
     prefix: str | None = None,
+    source: str | None = None,
     network: str = "omnibase-infra-network",
 ) -> str:
     block = (
@@ -127,6 +128,8 @@ def _lane_block(
         block += f"    sasl_mechanism: '{mechanism}'\n"
     if prefix is not None:
         block += f"    sasl_env_prefix: '{prefix}'\n"
+    if source is not None:
+        block += f"    sasl_credential_source: '{source}'\n"
     return block
 
 
@@ -166,11 +169,16 @@ def test_dev_lane_declares_the_transport_omn18012_actually_enabled() -> None:
 
     assert dev.security_protocol == "SASL_PLAINTEXT"
     assert dev.sasl_mechanism == "SCRAM-SHA-256"
-    assert dev.sasl_env_prefix == "DEV_", (
-        "the dev lane's principal is held as DEV_KAFKA_SASL_USERNAME / "
-        "DEV_KAFKA_SASL_PASSWORD in the operator env file; the contract names "
-        "the prefix so the value never has to be written down here"
+    assert dev.sasl_credential_source == "onex_lane_store", (
+        "CORRECTED by OMN-18120: this assertion read sasl_env_prefix == 'DEV_' "
+        "until the dev lane moved its declared credential surface to the "
+        "~/.onex per-lane client store. The operator env file is the LAB "
+        "HOST's surface; an operator workstation holds its bus identity in "
+        "the store, which is also what `onex delegate --lane dev` reads. What "
+        "the assertion pins is unchanged: the contract names a REFERENCE, so "
+        "the value never has to be written down here"
     )
+    assert dev.sasl_env_prefix is None
 
 
 def test_a_plaintext_lane_declares_no_mechanism_and_no_prefix() -> None:
@@ -232,7 +240,9 @@ def test_loader_rejects_a_sasl_protocol_with_no_mechanism(tmp_path: Path) -> Non
     lib = _load_lib()
     path = _write_contract(
         tmp_path,
-        _lane_block("dev", protocol="SASL_PLAINTEXT", prefix="DEV_"),
+        _lane_block(
+            "dev", protocol="SASL_PLAINTEXT", prefix="DEV_", source="operator_env_file"
+        ),
     )
     with pytest.raises(lib.HookEdgeLaneError) as exc:
         lib.load_contract(path)
@@ -244,7 +254,12 @@ def test_loader_rejects_a_sasl_protocol_with_no_env_prefix(tmp_path: Path) -> No
     lib = _load_lib()
     path = _write_contract(
         tmp_path,
-        _lane_block("dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256"),
+        _lane_block(
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            source="operator_env_file",
+        ),
     )
     with pytest.raises(lib.HookEdgeLaneError) as exc:
         lib.load_contract(path)
@@ -264,7 +279,11 @@ def test_loader_rejects_an_unknown_sasl_mechanism(tmp_path: Path) -> None:
     path = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-999", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-999",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     with pytest.raises(lib.HookEdgeLaneError) as exc:
@@ -278,7 +297,11 @@ def test_loader_accepts_the_valid_sasl_shape(tmp_path: Path) -> None:
     path = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     endpoint = lib.load_contract(path).known_lanes["dev"]
@@ -304,7 +327,11 @@ def test_resolve_transport_env_returns_the_four_declared_names(tmp_path: Path) -
     path = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     contract = lib.load_contract(path)
@@ -354,7 +381,11 @@ def test_resolve_transport_env_names_the_missing_variables(tmp_path: Path) -> No
     path = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     contract = lib.load_contract(path)
@@ -384,7 +415,11 @@ def test_resolve_transport_env_refuses_a_half_present_credential(
     path = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     contract = lib.load_contract(path)
@@ -402,7 +437,11 @@ def test_credential_error_message_never_contains_the_value(tmp_path: Path) -> No
     path = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     contract = lib.load_contract(path)
@@ -504,7 +543,11 @@ def test_drainer_applies_the_declared_sasl_transport(
     contract = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     env_file = tmp_path / ".env"
@@ -548,7 +591,11 @@ def test_drainer_leaves_no_half_configured_sasl_client_when_the_value_is_absent(
     contract = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     empty = tmp_path / "empty.env"
@@ -601,7 +648,11 @@ def test_drainer_never_logs_the_credential_value(
     contract = _write_contract(
         tmp_path,
         _lane_block(
-            "dev", protocol="SASL_PLAINTEXT", mechanism="SCRAM-SHA-256", prefix="DEV_"
+            "dev",
+            protocol="SASL_PLAINTEXT",
+            mechanism="SCRAM-SHA-256",
+            prefix="DEV_",
+            source="operator_env_file",
         ),
     )
     env_file = tmp_path / ".env"
