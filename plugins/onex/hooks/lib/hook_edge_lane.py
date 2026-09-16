@@ -199,6 +199,7 @@ class HookEdgeLaneContract:
     relay_required_network: str
     topic_registry: str
     governed_topics: tuple[str, ...]
+    governed_event_classes: tuple[str, ...]
     non_authoritative_surfaces: tuple[str, ...]
 
     @property
@@ -739,6 +740,18 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
             "topic-registry constant names"
         )
 
+    # OMN-18471 AC2. Topics and classes are different lists, and declaring
+    # only the first is what let eight classes sit on this edge with no
+    # delivery path and no surface reporting it.
+    classes = _require(raw, "governed_event_classes", where)
+    if not isinstance(classes, list) or not classes:
+        raise HookEdgeLaneError(
+            f"{where}: governed_event_classes must be a non-empty list of the "
+            "semantic event classes this edge emits. A topic list cannot "
+            "stand in for it: one class fans out to several topics, and two "
+            "classes can share one topic."
+        )
+
     demoted = _require(raw, "non_authoritative_surfaces", where)
     if not isinstance(demoted, list) or not demoted:
         raise HookEdgeLaneError(
@@ -757,6 +770,7 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
         ),
         topic_registry=str(_require(raw, "topic_registry", where)),
         governed_topics=tuple(str(name) for name in governed),
+        governed_event_classes=tuple(str(name) for name in classes),
         non_authoritative_surfaces=tuple(str(s) for s in demoted),
     )
 

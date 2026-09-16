@@ -173,6 +173,13 @@ def test_contract_declares_the_hook_topics() -> None:
     contract = lib.load_contract(_CONTRACT_PATH)
     resolved = lib.resolve_governed_event_types(contract, repo_root=_REPO_ROOT)
     assert set(resolved) == set(contract.governed_topics)
+    # CLAUDE_HOOK_EVENT is the eighth (OMN-18471 AC7). It was in the live
+    # producer fan-out and in no revision of this list, and that was not a
+    # paperwork gap: with the other seven granted and this one not, EVERY
+    # publish failed on it, the journal held at its 50,000-record bound and
+    # zero records drained. It is also the only `onex.cmd.omniintelligence.*`
+    # topic here -- the access-restricted class -- so omitting it also
+    # understated the blast radius of the grant this list implies.
     assert set(contract.governed_topics) == {
         "PROMPT_SUBMITTED",
         "SESSION_ENDED",
@@ -181,6 +188,7 @@ def test_contract_declares_the_hook_topics() -> None:
         "SKILL_STARTED",
         "TOOL_EXECUTED",
         "TOOL_OUTPUT_CAPTURED",
+        "CLAUDE_HOOK_EVENT",
     }
 
     emitted: set[str] = set()
@@ -196,6 +204,49 @@ def test_contract_declares_the_hook_topics() -> None:
     assert not missing, (
         f"hook topics emitted but not declared on the lane contract: {sorted(missing)}"
     )
+
+
+def test_contract_declares_every_event_class_the_edge_emits() -> None:
+    """OMN-18471 AC2: the contract declares CLASSES, not only topics.
+
+    The topic assertion above could not have caught the OMN-18471 defect.
+    Eight classes -- skill.started, skill.completed, agent.action,
+    response.stopped, session.outcome, routing.feedback, llm.cost.completed,
+    utilization.scoring.requested -- had call sites on this edge and no
+    delivery path at all from 2026-06-08, because their only emitter was
+    emit_via_daemon and that socket was gone. Their topics were beside the
+    point; nothing compared the emitted CLASS list against the contract.
+
+    A class list and a topic list are genuinely different: `prompt.submitted`
+    fans out to two topics, and `response.stopped` shares one of them.
+    """
+    lib = _load_lib()
+    contract = lib.load_contract(_CONTRACT_PATH)
+    declared = set(contract.governed_event_classes)
+
+    twelve = {
+        "session.started",
+        "session.ended",
+        "tool.executed",
+        "prompt.submitted",
+        "skill.started",
+        "skill.completed",
+        "agent.action",
+        "response.stopped",
+        "session.outcome",
+        "routing.feedback",
+        "llm.cost.completed",
+        "utilization.scoring.requested",
+    }
+    assert not twelve - declared, (
+        f"classes the edge emits that the contract does not declare: "
+        f"{sorted(twelve - declared)}"
+    )
+
+    # dod.guard.fired is the thirteenth, found by the gate rather than by the
+    # ticket: it already appends to the journal
+    # (pre_tool_use_dod_completion_guard.sh) and was undeclared too.
+    assert "dod.guard.fired" in declared
 
 
 def test_shell_resolver_exists_and_exports_the_contract_broker() -> None:

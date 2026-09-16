@@ -52,8 +52,22 @@ PAYLOAD="$(jq -nc \
     '{run_id: $run_id, skill_name: $skill_name, repo_id: $repo_id,
       correlation_id: $correlation_id}' 2>/dev/null)" || exit 0
 
-# This is intentionally synchronous only through the local emit daemon. It
-# must pass the semantic key so the registry applies redact_capture before any
-# topic fan-out; it never contacts Kafka from the Claude hook path.
+# OMN-18471: this class is re-homed onto the journal path. Until 2026-09-16
+# its ONLY call site was emit_via_daemon, which writes to a Unix socket that
+# has not existed since 2026-06-08 -- so skill.started had no delivery path at
+# all, not a second one. Zero occurrences of it appeared in a 5,000-record
+# sample of the 50,002 then queued in the journal. It is also the class the
+# stuck Slack alert named ("100 consecutive emit failures for 'skill.started'"),
+# which is why repairing the drainer did nothing for it.
+#
+# The journal append is the delivery path. The emit_via_daemon call is kept
+# beside it, not in place of it, because emit_via_daemon is retired as one
+# change once every orphaned class is re-homed (AC5) -- removing its call
+# sites one at a time would leave the surface half-migrated with no gate able
+# to say which half.
+#
+# Neither call contacts Kafka from the Claude hook path. The semantic key is
+# passed so the registry applies redact_capture before any topic fan-out.
+emit_to_journal "skill.started" "$PAYLOAD" "$CORRELATION_ID"
 emit_via_daemon "skill.started" "$PAYLOAD" 50 || true
 exit 0

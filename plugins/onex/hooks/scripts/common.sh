@@ -681,17 +681,58 @@ emit_via_daemon() {
             # Attempt daemon auto-restart after 5 consecutive failures (OMN-3647)
             _try_restart_emit_daemon &
         fi
-        if (( n == 10 || n == 25 || n == 50 || n == 100 )); then
-            local _last_ok
-            if [[ -z "$_prev_success_ts" || "$_prev_success_ts" -eq 0 ]]; then
-                _last_ok="never"
-            else
-                _last_ok=$(date -u -r "${_prev_success_ts}" +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "never")
-            fi
-            ( slack_notify "emit_sustained" "[omniclaude][${_SLACK_HOST}] ${n} consecutive emit failures for '${event_type}'. Last success: ${_last_ok}. Daemon may be unhealthy." ) &
-        fi
+        # OMN-18471 AC4: the milestone Slack alert that used to fire here is
+        # GONE, and nothing replaces it on this path. It read _prev_success_ts
+        # off the counter files above, so it reported on the ~/.claude/emit.sock
+        # daemon -- absent since 2026-06-08 -- and not on the journal/drainer
+        # path that actually delivers hook events. Read live 2026-09-16 it
+        # claimed 101,009 consecutive failures for tool.executed with a last
+        # success in June, and it would have said exactly that whether hook
+        # capture was healthy or dead: during the 22-hour drainer outage of
+        # 2026-09-15/16 it produced no signal of its own. The counters are
+        # still written, because emit_via_daemon itself is retired only after
+        # every orphaned class is re-homed (OMN-18471 AC5); what moved is the
+        # ALERT, to hook_emit_health.py, which reads journal backlog depth and
+        # the drainer's last confirmed publish.
         return 1
     fi
+}
+
+# =============================================================================
+# Journal Append (OMN-17224 fast path, OMN-18471 re-homing)
+# =============================================================================
+# Append one event to the local hook-emit journal. The launchd singleton
+# drainer (hook_emit_drainer.py) publishes it to the contract-declared lane.
+#
+# This is the ONLY delivery path a hook event has. emit_via_daemon above
+# writes to a Unix socket that has not existed since 2026-06-08, so a class
+# whose only call site is emit_via_daemon is not dual-homed -- it is not
+# delivered at all. OMN-18471 exists to move the orphaned classes here.
+#
+# Requires (set by the caller, as emit_via_daemon does):
+#   - PYTHON_CMD, HOOKS_LIB, LOG_FILE
+#
+# Backgrounded and fail-open by construction: a hook that cannot record
+# telemetry must never slow or break the operator's session.
+#
+# Usage: emit_to_journal <event_type> <payload_json> [correlation_id]
+
+emit_to_journal() {
+    local event_type="$1"
+    local payload="$2"
+    local correlation_id="${3:-}"
+
+    local _append_py="${HOOKS_LIB}/hook_emit_append.py"
+    [[ -n "${PYTHON_CMD:-}" && -f "$_append_py" ]] || return 0
+
+    local -a _args=(--event-type "$event_type" --payload "$payload")
+    [[ -n "$correlation_id" ]] && _args+=(--correlation-id "$correlation_id")
+
+    (
+        "$PYTHON_CMD" "$_append_py" "${_args[@]}" >>"${LOG_FILE:-/dev/null}" 2>&1
+    ) &
+    disown 2>/dev/null || true
+    return 0
 }
 
 # =============================================================================

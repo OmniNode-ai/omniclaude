@@ -48,16 +48,21 @@ _STDIN_PAYLOAD = json.dumps(
     }
 )
 
+# OMN-18471: the stub APPENDS. This hook now makes two backgrounded Python
+# invocations -- the journal append, and the hook-emit delivery-liveness check
+# that replaced the dead socket-counter alert (AC4). A truncating single-writer
+# marker cannot represent two concurrent writers: whichever finished last won,
+# and the test read whichever that happened to be.
 _SLOW_STUB = """#!/bin/bash
 # Test stand-in for the Python interpreter: records its own argv immediately,
 # then sleeps to prove the caller does not wait for it (non-blocking).
-printf '%s\\n' "$@" > "{marker}"
+printf '%s\\n' "$@" >> "{marker}"
 sleep {sleep_seconds}
 exit 0
 """
 
 _FAST_STUB = """#!/bin/bash
-printf '%s\\n' "$@" > "{marker}"
+printf '%s\\n' "$@" >> "{marker}"
 exit 0
 """
 
@@ -142,9 +147,20 @@ def test_session_start_bus_mirror_invokes_direct_dispatch_with_correct_args(
     assert result.returncode == 0, f"Non-zero exit: {result.stderr}"
 
     # Poll briefly: the invocation is backgrounded, so the marker may land a
-    # moment after the hook process itself has already exited.
+    # moment after the hook process itself has already exited. Wait for the
+    # APPEND invocation specifically -- the hook also backgrounds the
+    # delivery-liveness check (OMN-18471 AC4), and waiting on mere existence
+    # would read a marker holding only that one.
+    def _append_recorded() -> bool:
+        if not marker.exists():
+            return False
+        return any(
+            line.endswith("hook_emit_append.py")
+            for line in marker.read_text().splitlines()
+        )
+
     deadline = time.monotonic() + 3.0
-    while not marker.exists() and time.monotonic() < deadline:
+    while not _append_recorded() and time.monotonic() < deadline:
         time.sleep(0.05)
 
     assert marker.exists(), (
