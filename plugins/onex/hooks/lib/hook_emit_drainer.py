@@ -94,7 +94,9 @@ def _handle_signal(signum: int, _frame: object) -> None:
     logger.info("received signal %s; finishing current batch then exiting", signum)
 
 
-def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
+def apply_declared_lane(
+    *, contract_path: Path | None = None, onex_home: Path | None = None
+) -> str | None:
     """Point this process at the contract-declared bus lane. Returns the broker.
 
     Sets ``KAFKA_BOOTSTRAP_SERVERS`` (what ``ModelKafkaEventBusConfig`` reads),
@@ -147,13 +149,21 @@ def apply_declared_lane(*, contract_path: Path | None = None) -> str | None:
     # Resolved BEFORE anything is written to the environment, so a lane whose
     # credential is absent leaves no partial configuration behind.
     #
+    # ``onex_home`` is injected so a caller -- in practice a test -- can drive a
+    # synthetic client store instead of whatever this machine happens to hold.
+    # None means the real one. Same injection the canonical StoreLaneCredential
+    # uses, and the same reason these tests already inject an operator env file:
+    # a test that reads host state gives a different verdict per machine.
+    #
     # WHICH surface holds the credential is the lane's own declaration
     # (``sasl_credential_source``), not this function's guess and not a search
     # order -- see OMN-18120. On this host the dev lane declares the ~/.onex
     # client store, which is the identity ``onex delegate --lane dev`` also
     # presents, so both dev-lane clients on the machine are one principal.
     try:
-        transport = hook_edge_lane.resolve_credential_environment(contract)
+        transport = hook_edge_lane.resolve_credential_environment(
+            contract, onex_home=onex_home
+        )
     except hook_edge_lane.HookEdgeLaneCredentialError as exc:
         logger.error(
             "declared lane %s (%s) cannot be published to from this host: %s",
