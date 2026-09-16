@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Fail-closed credential-rotation admission gate (OMN-17957).
+r"""Fail-closed credential-rotation admission gate (OMN-17957).
 
 Why this exists
 ---------------
@@ -65,7 +65,7 @@ the command carries::
 
     ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:<line>
 
-resolving to an ``OPERATOR-CONSENT`` row -- rule 18 of ``omni_home/CLAUDE.md``
+resolving to an ``OPERATOR-CONSENT`` row -- rule 18 of the workspace doctrine,
 extended by rule 22 with ``approved_by=<operator|jake>`` -- whose APPROVED SCOPE
 names the credential the command names, and which carries an OUT OF SCOPE list.
 Both lists are required: the OUT OF SCOPE half is the one that BOUNDS the grant,
@@ -91,6 +91,64 @@ CLAUDE.md rule 15). The consent citation itself is read from the raw command
 text, because an inline environment assignment or a trailing ``#`` comment is
 exactly where a caller writes it.
 
+The selection surface is the command and its arguments (OMN-18175)
+------------------------------------------------------------------
+A heredoc **body** is data the command writes, not a command the shell runs, so
+it is removed before the command is tokenised. Two lanes were refused in four
+days for writing an ordinary file -- one a findings document, one a test fixture
+-- because the body named credential vocabulary and an ordinary English
+apostrophe in the prose (``the lane's own``) read to the tokeniser as an
+unbalanced quote. The fail-closed refusal that followed was correct; the defect
+was upstream of it, in selecting the command at all. Recorded at
+``docs/tracking/ROLLING_WORK_LEDGER.md:8464`` and ``:8479``.
+
+What the tokeniser now sees, stated precisely, because the safety argument is
+entirely in this list:
+
+* **The command line and its arguments**, byte for byte. A heredoc body starts
+  on the line AFTER the redirection, so a one-line command is never rewritten --
+  which is why every shape in the OMN-17957 sweep is unaffected.
+* **A body redirected to a program that runs it** -- ``sh``/``bash``/``zsh``/
+  ``ksh``/``dash``/``ash``, ``ssh``, ``docker``, ``podman``. That body IS a
+  command, so it is tokenised as one and matched on the same terms, and an
+  untokenisable one is refused. This is strictly MORE than the shipped guard saw:
+  it merged such a body into the redirecting segment, where the program was
+  ``bash`` and no shape could apply, so ``bash <<EOF`` + a rotation was ADMITTED.
+* **A body redirected to a credential-surface program** -- one named by a policy
+  shape, such as ``psql`` -- as a single argument of that segment, because that
+  is what it is. ``psql <<EOF ALTER ROLE ... PASSWORD ... EOF`` is now the same
+  refusal as ``psql -c "ALTER ROLE ... PASSWORD ..."``; it was admitted before.
+* **Nothing else.** A body redirected to ``cat``, ``tee`` or any other sink is
+  dropped, and the drop is recorded in the hook log with the delimiter, the byte
+  count and the receiving program -- never the content, which can hold a value.
+
+The guard reads no file. A path named by ``--append-file``, ``--body-file`` or
+any other flag is a string in the argument list and stays one; what a lane later
+writes from that file is not this command.
+
+Two segment-boundary defects were found while making that list true, both of
+them admissions rather than refusals, and both fixed here because a heredoc
+makes multi-line commands the normal shape at this seam:
+
+* An unquoted newline did not end a segment -- ``shlex`` reads it as ordinary
+  whitespace -- so every line of a multi-line command was merged into one
+  segment whose program came from line 1. ``echo hi`` followed by a rotation on
+  the next line was ADMITTED.
+* An escaped newline -- a ``\`` line continuation, which JOINS two lines -- was
+  the one newline ``shlex`` does emit, and it was being treated as a separator.
+  ``aws secretsmanager \`` + newline + ``rotate-secret --secret-id x`` split
+  into ``aws secretsmanager``, which matches no shape, and was ADMITTED.
+
+Measured across a 20-case before/after matrix, this module now refuses five
+shapes it previously admitted and admits exactly one it previously refused --
+the documentation heredoc this change exists for. No refusal was lost.
+
+Residual, stated rather than implied: a rotation written into a file and run
+later (``bash /tmp/x.sh``) is invisible here, exactly as it was before -- the
+tool seam sees one command at a time, and a command in a file is a different
+command. This change narrows nothing about that: it removes only text that the
+shipped guard could never match a shape against anyway.
+
 Fail-closed boundary, stated deliberately
 -----------------------------------------
 * A command carrying none of the rotation vocabulary never reaches this module
@@ -110,7 +168,7 @@ naming the credential and an authorised approver exists in the one append-only
 coordination surface **before** the rotation runs, so the authorisation is
 resolvable after the session that granted it is gone. It converts a silent
 rotation into one that must leave an auditable artifact. That is the same
-honest limit ``omni_home`` CLAUDE.md records for the staging-namespace gate:
+honest limit the workspace doctrine records for the staging-namespace gate:
 what is enforced is blast radius and evidence, not authenticity.
 """
 
@@ -129,13 +187,17 @@ from typing import Any, Final
 __all__ = [
     "CONSENT_CITATION_GRAMMAR",
     "GATE_BIT_NAME",
+    "Decision",
     "Finding",
+    "Heredoc",
     "Policy",
     "PolicyError",
     "RotationShape",
     "check_bash_command",
+    "evaluate_bash_command",
     "load_policy",
     "render_block_reason",
+    "split_heredocs",
 ]
 
 DEFAULT_POLICY_PATH: Final[Path] = (
@@ -163,7 +225,20 @@ _CITATION: Final[re.Pattern[str]] = re.compile(
 #: Shell separators that end one segment and begin another. Matched outside
 #: quotes only, which ``shlex`` handles for us by tokenising the whole command
 #: once and splitting the TOKEN stream rather than the text.
-_SEPARATORS: Final[frozenset[str]] = frozenset({";", "&&", "||", "|", "&", "\n"})
+#:
+#: A newline is deliberately NOT here. The only newline ``shlex`` ever emits as
+#: a token is an ESCAPED one -- a ``\`` line continuation, which joins two lines
+#: into one command rather than separating them. Treating it as a separator is
+#: how the shipped guard admitted
+#: ``aws secretsmanager \<newline> rotate-secret --secret-id x``: the first
+#: segment became ``aws secretsmanager`` with no mutating subcommand, and
+#: matched nothing. Real unquoted newlines are made explicit by
+#: ``split_heredocs`` before the text ever reaches ``shlex``.
+_SEPARATORS: Final[frozenset[str]] = frozenset({";", "&&", "||", "|", "&"})
+
+#: A line-continuation artifact in the token stream: whitespace inside one
+#: command, dropped rather than split on.
+_CONTINUATION_NEWLINE: Final[str] = "\n"
 
 #: Wrapper programs that prefix a real command. Stripped before the program of a
 #: segment is read, so `sudo aws secretsmanager rotate-secret` is still an aws
@@ -173,6 +248,37 @@ _WRAPPERS: Final[frozenset[str]] = frozenset(
 )
 
 _ASSIGNMENT: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+#: Programs that RUN their heredoc body as commands, so the body stays in the
+#: selection surface and is tokenised as a command in its own right. A program
+#: absent from this set and from every shape's ``programs`` receives its body as
+#: data -- ``cat``, ``tee`` and every other sink -- and the body is dropped.
+#:
+#: ``python``/``perl``/``ruby`` are deliberately absent. A body they run is
+#: their own language, not shell, so tokenising it against shell shapes would
+#: match nothing it should and could match things it should not; a rotation
+#: driven from inside an interpreted script is the same residual as a rotation
+#: written to a file and run later, and is not made smaller by pretending to
+#: read it.
+_BODY_EXECUTING_PROGRAMS: Final[frozenset[str]] = frozenset(
+    {"sh", "bash", "zsh", "ksh", "dash", "ash", "ssh", "docker", "podman"}
+)
+
+#: How deep a heredoc body may nest another executed heredoc before the guard
+#: stops descending. Three is far past any real command; the bound exists so a
+#: pathological payload cannot spend the session's time here.
+_MAX_BODY_DEPTH: Final[int] = 3
+
+#: The token left in the visible text where a heredoc redirection stood, so a
+#: body can be attributed to the segment that owns it after tokenising. The
+#: spelling is chosen to match no shape's credential pattern: every one of those
+#: is either anchored to URL/SQL text or restricted to ``[A-Za-z0-9_.-]`` /
+#: ``[a-z0-9]``-initial tokens, and ``@`` is in neither class. A test pins that
+#: a marker is never reported as the credential.
+_HEREDOC_MARKER: Final[str] = "@@onex-heredoc-{index}@@"
+
+#: Characters that end a heredoc delimiter word.
+_DELIMITER_STOP: Final[str] = " \t;&|<>()"
 
 #: `approved_by=<name>`, the OMN-17957 rule-22 extension to the rule-18 row.
 _APPROVED_BY: Final[re.Pattern[str]] = re.compile(
@@ -224,6 +330,15 @@ class Policy:
     consent_ledger_paths: frozenset[str]
     consent_ledger_path_prefixes: tuple[str, ...]
     rotation_shapes: tuple[RotationShape, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Heredoc:
+    """One heredoc body, lifted out of the command before it is tokenised."""
+
+    marker: str
+    delimiter: str
+    body: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,6 +516,161 @@ class _Untokenisable(RuntimeError):
     """The command carries rotation vocabulary and cannot be tokenised."""
 
 
+def _read_delimiter(line: str, index: int) -> tuple[str, int]:
+    """Read the heredoc delimiter word at ``index``, resolving its quoting.
+
+    ``<<EOF``, ``<<'EOF'``, ``<<"EOF"`` and ``<<\\EOF`` all delimit on ``EOF``;
+    the quoting decides whether the shell expands the body, which is irrelevant
+    here because the body is never executed by this guard.
+    """
+    parts: list[str] = []
+    length = len(line)
+    while index < length:
+        char = line[index]
+        if char in _DELIMITER_STOP:
+            break
+        if char in "'\"":
+            close = line.find(char, index + 1)
+            if close == -1:
+                parts.append(line[index + 1 :])
+                index = length
+                break
+            parts.append(line[index + 1 : close])
+            index = close + 1
+            continue
+        if char == "\\" and index + 1 < length:
+            parts.append(line[index + 1])
+            index += 2
+            continue
+        parts.append(char)
+        index += 1
+    return "".join(parts), index
+
+
+def _scan_line(
+    line: str, quote: str | None, next_index: int
+) -> tuple[str, list[tuple[str, bool, str]], str | None]:
+    """Replace each heredoc redirection on ``line`` with a marker token.
+
+    Returns the rewritten line, the heredocs it opened in order, and the quoting
+    state at end of line. Only text on THIS line is rewritten: a heredoc body
+    lives on the lines that follow, so a single-line command comes back
+    byte-identical.
+    """
+    out: list[str] = []
+    pending: list[tuple[str, bool, str]] = []
+    index = 0
+    length = len(line)
+    while index < length:
+        char = line[index]
+        if char == "\\" and quote != "'" and index + 1 < length:
+            out.append(line[index : index + 2])
+            index += 2
+            continue
+        if quote is None and char in "'\"":
+            quote = char
+            out.append(char)
+            index += 1
+            continue
+        if quote is not None and char == quote:
+            quote = None
+            out.append(char)
+            index += 1
+            continue
+        if quote is None and line.startswith("<<", index):
+            if line.startswith("<<<", index):
+                # A here-STRING is an argument on this line, not a body.
+                out.append("<<<")
+                index += 3
+                continue
+            cursor = index + 2
+            if cursor < length and line[cursor] == "-":
+                cursor += 1
+            while cursor < length and line[cursor] in " \t":
+                cursor += 1
+            delimiter, cursor = _read_delimiter(line, cursor)
+            if not delimiter:
+                out.append("<<")
+                index += 2
+                continue
+            marker = _HEREDOC_MARKER.format(index=next_index + len(pending))
+            out.append(marker)
+            pending.append((delimiter, line[index + 2 : index + 3] == "-", marker))
+            index = cursor
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out), pending, quote
+
+
+def _is_continuation(line: str) -> bool:
+    """True when ``line`` ends in an odd number of backslashes.
+
+    An even count is an escaped backslash, which ends the line for real.
+    """
+    return (len(line) - len(line.rstrip("\\"))) % 2 == 1
+
+
+def split_heredocs(command: str) -> tuple[str, dict[str, Heredoc]]:
+    """Lift every heredoc body out of ``command`` (OMN-18175).
+
+    Returns the visible text -- the command and its arguments, with each heredoc
+    redirection replaced by a marker token -- and the bodies by marker. The body
+    lines and the terminator line are removed entirely.
+
+    The scan tracks quoting the way a shell does, and it does NOT track quoting
+    through a body: a body is consumed verbatim from the newline to its
+    delimiter. That is what makes an apostrophe in prose harmless here -- it is
+    never read as a quote, because the body is never read as shell at all.
+    """
+    lines = command.split("\n")
+    rendered: list[str] = []
+    heredocs: dict[str, Heredoc] = {}
+    quote: str | None = None
+    index = 0
+    while index < len(lines):
+        text, pending, quote = _scan_line(lines[index], quote, len(heredocs))
+        if index + 1 < len(lines) and quote is None and not _is_continuation(text):
+            # An unquoted newline ENDS a command. `shlex` treats it as plain
+            # whitespace, which silently merged every line of a multi-line
+            # command into one segment: the shipped guard admitted
+            # `echo hi\naws secretsmanager rotate-secret ...` outright, because
+            # the segment's program was `echo`. Heredocs make multi-line
+            # commands the normal case here, so the separator is made explicit.
+            text = f"{text} ;"
+        rendered.append(text)
+        index += 1
+        for delimiter, strip_tabs, marker in pending:
+            body: list[str] = []
+            while index < len(lines):
+                candidate = lines[index]
+                probe = candidate.lstrip("\t") if strip_tabs else candidate
+                index += 1
+                if probe.rstrip("\r") == delimiter:
+                    break
+                body.append(candidate)
+            heredocs[marker] = Heredoc(
+                marker=marker, delimiter=delimiter, body="\n".join(body)
+            )
+    return "\n".join(rendered), heredocs
+
+
+def _dropped_body_note(doc: Heredoc, program: str) -> str:
+    """Record a body that was NOT evaluated, without echoing a byte of it.
+
+    A body can carry a credential value, so the note names the delimiter the
+    author chose, the size, and the program the body was handed to -- the three
+    facts that make the decision auditable -- and nothing from inside it.
+    """
+    return (
+        f"NOT SELECTED: heredoc body with delimiter {doc.delimiter!r} "
+        f"({len(doc.body.encode('utf-8'))} bytes) was redirected to {program!r}, "
+        f"which does not run its input, so it is data the command writes rather "
+        f"than a command the shell runs and it was not evaluated as a rotation "
+        f"(OMN-18175). The command and its arguments were evaluated in full."
+    )
+
+
 def _segments(command: str) -> list[list[str]]:
     """Split ``command`` into shell segments, as token lists.
 
@@ -417,6 +687,8 @@ def _segments(command: str) -> list[list[str]]:
 
     out: list[list[str]] = [[]]
     for token in tokens:
+        if token == _CONTINUATION_NEWLINE:
+            continue
         if token in _SEPARATORS:
             out.append([])
             continue
@@ -660,6 +932,70 @@ def _scope_names(scope: str, credential: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class Decision:
+    """The verdict for one Bash command, and what was left out of it.
+
+    ``notes`` carries every heredoc body that was NOT evaluated. It is written
+    to the hook log on the allow path so a non-selection is auditable rather
+    than invisible: a guard that silently narrows what it looks at is
+    indistinguishable from a guard that is not running.
+    """
+
+    findings: list[Finding]
+    notes: list[str]
+
+
+def _selection_surface(
+    command: str, policy: Policy, depth: int = 0
+) -> tuple[list[tuple[str, list[str]]], list[str], list[str]]:
+    """Return the ``(program, tokens)`` segments to match, the notes, and the
+    text a consent citation may be written in.
+
+    Raises ``_Untokenisable`` when the command and its arguments -- or the body
+    of a heredoc that is executed -- cannot be parsed.
+    """
+    visible, heredocs = split_heredocs(command)
+    shape_programs = {
+        program for shape in policy.rotation_shapes for program in shape.programs
+    }
+    segments: list[tuple[str, list[str]]] = []
+    notes: list[str] = []
+    citation_text: list[str] = [visible]
+    claimed: set[str] = set()
+
+    for raw_segment in _segments(visible):
+        program, tokens = _program_of(raw_segment)
+        if not program:
+            continue
+        owned = [heredocs[token] for token in tokens if token in heredocs]
+        claimed.update(doc.marker for doc in owned)
+        enriched = list(tokens)
+        for doc in owned:
+            if program in shape_programs:
+                # The body is stdin to a credential-surface program, which makes
+                # it an argument of that command: `psql <<EOF ALTER ROLE ...` is
+                # the rotation `psql -c "ALTER ROLE ..."` is.
+                enriched.append(doc.body)
+                citation_text.append(doc.body)
+            elif program in _BODY_EXECUTING_PROGRAMS and depth < _MAX_BODY_DEPTH:
+                inner_segments, inner_notes, inner_text = _selection_surface(
+                    doc.body, policy, depth + 1
+                )
+                segments.extend(inner_segments)
+                notes.extend(inner_notes)
+                citation_text.extend(inner_text)
+            else:
+                notes.append(_dropped_body_note(doc, program))
+        segments.append((program, enriched))
+
+    for marker, doc in heredocs.items():
+        if marker not in claimed:
+            notes.append(_dropped_body_note(doc, "(no command)"))
+
+    return segments, notes, citation_text
+
+
 def check_bash_command(command: Any, policy: Policy, omni_home: Path) -> list[Finding]:
     """Return every failing rule for one Bash command.
 
@@ -667,54 +1003,66 @@ def check_bash_command(command: Any, policy: Policy, omni_home: Path) -> list[Fi
     every read, and every unrelated command -- returns an empty list without
     ever touching the ledger.
     """
+    return evaluate_bash_command(command, policy, omni_home).findings
+
+
+def evaluate_bash_command(command: Any, policy: Policy, omni_home: Path) -> Decision:
+    """Decide one Bash command, and report what was excluded from the decision."""
     if not isinstance(command, str) or not command.strip():
-        return [
-            Finding(
-                code="unevaluable",
-                shape_id="",
-                credential="",
-                reason=(
-                    f"the Bash call carries no command string (got "
-                    f"{type(command).__name__}), so a rotation cannot be ruled out"
-                ),
-                fix="re-issue the call with the command as a string",
-            )
-        ]
+        return Decision(
+            findings=[
+                Finding(
+                    code="unevaluable",
+                    shape_id="",
+                    credential="",
+                    reason=(
+                        f"the Bash call carries no command string (got "
+                        f"{type(command).__name__}), so a rotation cannot be "
+                        f"ruled out"
+                    ),
+                    fix="re-issue the call with the command as a string",
+                )
+            ],
+            notes=[],
+        )
 
     try:
-        segments = _segments(command)
+        segments, notes, citation_parts = _selection_surface(command, policy)
     except _Untokenisable as exc:
-        return [
-            Finding(
-                code="unevaluable",
-                shape_id="",
-                credential="",
-                reason=(
-                    f"the command carries credential-rotation vocabulary and "
-                    f"cannot be tokenised ({exc}), so the guard cannot tell "
-                    f"which credential it mutates"
-                ),
-                fix=(
-                    "balance the quoting and re-issue the command. An "
-                    "unverifiable rotation is refused, never assumed clean"
-                ),
-            )
-        ]
+        return Decision(
+            findings=[
+                Finding(
+                    code="unevaluable",
+                    shape_id="",
+                    credential="",
+                    reason=(
+                        f"the command carries credential-rotation vocabulary and "
+                        f"cannot be tokenised ({exc}), so the guard cannot tell "
+                        f"which credential it mutates"
+                    ),
+                    fix=(
+                        "balance the quoting and re-issue the command. An "
+                        "unverifiable rotation is refused, never assumed clean. "
+                        "Note that a heredoc BODY is no longer read as shell "
+                        "(OMN-18175), so this is an unbalanced quote in the "
+                        "command itself or in a heredoc that is executed"
+                    ),
+                )
+            ],
+            notes=[],
+        )
 
     hits: list[tuple[RotationShape, str]] = []
-    for segment in segments:
-        program, tokens = _program_of(segment)
-        if not program:
-            continue
+    for program, tokens in segments:
         for shape in policy.rotation_shapes:
             if _matches(shape, program, tokens):
                 hits.append((shape, _credential_of(shape, tokens)))
                 break
 
     if not hits:
-        return []
+        return Decision(findings=[], notes=notes)
 
-    consent = _read_consent_row(command, policy, omni_home)
+    consent = _read_consent_row("\n".join(citation_parts), policy, omni_home)
     findings: list[Finding] = []
 
     if consent is None:
@@ -736,7 +1084,7 @@ def check_bash_command(command: Any, policy: Policy, omni_home: Path) -> list[Fi
                     ),
                 )
             )
-        return findings
+        return Decision(findings=findings, notes=notes)
 
     if consent.code is not None:
         for shape, credential in hits:
@@ -749,7 +1097,7 @@ def check_bash_command(command: Any, policy: Policy, omni_home: Path) -> list[Fi
                     fix=consent.fix,
                 )
             )
-        return findings
+        return Decision(findings=findings, notes=notes)
 
     for shape, credential in hits:
         if not credential:
@@ -788,7 +1136,7 @@ def check_bash_command(command: Any, policy: Policy, omni_home: Path) -> list[Fi
                 )
             )
 
-    return findings
+    return Decision(findings=findings, notes=notes)
 
 
 def render_block_reason(findings: list[Finding], policy: Policy) -> str:
@@ -905,9 +1253,15 @@ def main(argv: list[str] | None = None) -> int:
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
 
-    findings = check_bash_command(command, policy, omni_home)
-    if findings:
-        return _block(render_block_reason(findings, policy))
+    decision = evaluate_bash_command(command, policy, omni_home)
+    if decision.findings:
+        return _block(render_block_reason(decision.findings, policy))
+    if decision.notes:
+        # The allow path speaks only when something was left out of the
+        # decision. The wrapper captures this stream and writes it to the hook
+        # log; it never reaches the transcript.
+        json.dump({"decision": "allow", "notes": decision.notes}, sys.stdout)
+        sys.stdout.write("\n")
     return 0
 
 
