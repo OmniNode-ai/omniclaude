@@ -75,6 +75,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -247,10 +248,38 @@ def install_overlay(source: str) -> Path:
     origin = Path(source).expanduser()
     if not origin.is_file():
         raise ConfigError(f"--install-overlay names no readable file: {origin}")
+    content = origin.read_text()
     load_overlay(origin)
+
     destination = _user_config_root() / _OVERLAY_RELATIVE
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(origin.read_text())
+
+    # Refuse a symlinked destination rather than following it. Writing through a
+    # link would put the overlay wherever the link points, which is a write to a
+    # path the caller did not name — the same class of silent wrong answer this
+    # runner refuses when resolving one.
+    if destination.is_symlink():
+        raise ConfigError(
+            f"the install destination {destination} is a symbolic link. Writing "
+            f"through it would put the overlay somewhere else; remove the link "
+            f"or install with an explicit --overlay instead."
+        )
+
+    # Write a temporary file in the destination's own directory and rename it
+    # into place. os.replace is atomic on the same filesystem, so a reader never
+    # sees a half-written overlay, and the file is created with O_EXCL under a
+    # name nothing else holds, so there is no window in which the path being
+    # written can be swapped for a link. Path.replace is os.replace.
+    handle, temporary = tempfile.mkstemp(
+        dir=str(destination.parent), prefix=".overlay-", suffix=".yaml"
+    )
+    try:
+        with os.fdopen(handle, "w") as stream:
+            stream.write(content)
+        Path(temporary).replace(destination)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
     return destination
 
 

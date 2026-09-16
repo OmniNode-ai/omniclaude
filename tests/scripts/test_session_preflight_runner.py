@@ -626,3 +626,33 @@ def test_an_overlay_declaring_no_checks_is_refused(tmp_path: Path) -> None:
     result = _run(tmp_path, overlay=empty)
     assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
     assert "no checks" in result.stderr
+
+
+def test_install_refuses_to_write_through_a_symlinked_destination(
+    tmp_path: Path,
+) -> None:
+    """Writing through a link puts the overlay at a path nobody named."""
+    destination = tmp_path / "xdg" / "onex" / "overlays" / _OVERLAY_RELATIVE
+    destination.parent.mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere.yaml"
+    elsewhere.write_text("do not overwrite me\n")
+    destination.symlink_to(elsewhere)
+
+    source = _overlay(tmp_path, [_PASSING])
+    result = _run(tmp_path, "--install-overlay", str(source), overlay=None)
+
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert "symbolic link" in result.stderr
+    assert elsewhere.read_text() == "do not overwrite me\n", (
+        "The install followed the link and overwrote the target."
+    )
+
+
+def test_install_leaves_no_temporary_file_behind(tmp_path: Path) -> None:
+    """The install is a rename into place, and the staging file does not survive."""
+    source = _overlay(tmp_path, [_PASSING])
+    result = _run(tmp_path, "--install-overlay", str(source), overlay=None)
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
+
+    directory = tmp_path / "xdg" / "onex" / "overlays" / "session_preflight"
+    assert sorted(child.name for child in directory.iterdir()) == ["overlay.yaml"]
