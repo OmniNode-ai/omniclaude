@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-18423",
+  "status": "PASS",
+  "run_timestamp": "2026-09-16T01:50:00Z",
+  "summary": "PASS: omniclaude PR #2184 adds the cross-repo runner-route shim that lets a caller outside omnibase_infra reach the routing COMPUTE node. The shim holds no decision and no threshold, which is asserted by tests rather than claimed; the node is pinned to a full commit sha verified reachable from omnibase_infra dev; central OCC evidence is onex_change_control PR #9766. AC5 (the measured cross-repo route cost) is deliberately NOT claimed here and is owed by the first consumer run under OMN-18424 -- a figure carried over from the in-repo job would not be evidence.",
+  "checks": [
+    {
+      "name": "shim shape: no decision, no threshold, fork branch first, floor before refusal",
+      "status": "PASS",
+      "command": "uv run pytest tests/workflows/test_route_runner_reusable.py -q  =>  17 passed"
+    },
+    {
+      "name": "the pinned node commit is reachable from omnibase_infra dev",
+      "status": "PASS",
+      "command": "gh api repos/OmniNode-ai/omnibase_infra/compare/dev...341ac00cfac9b0f7e42498de265ace7006fdfa72 --jq .status  =>  identical"
+    },
+    {
+      "name": "no Actions variable is written by the shim",
+      "status": "PASS",
+      "command": "test_the_seam_is_read_and_never_written asserts the workflow contains no variable-write verb; the seam is read as a ceiling only"
+    },
+    {
+      "name": "OCC evidence",
+      "status": "PASS",
+      "command": "Evidence-Ticket: OMN-18423; Evidence-Source: OCC#9766"
+    }
+  ]
+}
