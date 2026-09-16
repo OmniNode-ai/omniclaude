@@ -1,0 +1,85 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18430
+title: "Discover the session preflight overlay instead of reading one unset variable"
+summary: >
+  The preflight runner resolved its check overlay from exactly one environment
+  variable with no default, and nothing set it, so every lane that ran the
+  preflight got exit 2. The overlay itself exists and is complete; it was parked
+  on the private side under OMN-18368 with the status "nothing loads this file
+  today", so the two halves landed on opposite sides of the public/private
+  boundary with no resolution path between them. The runner now searches a
+  declared, ordered list of installation-provided locations, refuses naming
+  every one it tried, and ships the install command that fixes it. Fail-closed
+  is unchanged; the public plugin still declares no checks of its own.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - public_api
+evidence_requirements:
+  - kind: tests
+    description: "The preflight runner and skill suites pass"
+    command: "uv run pytest tests/scripts/test_session_preflight_runner.py tests/skills/test_preflight_skill_user_invocable.py -q"
+  - kind: ci
+    description: "omniclaude PR #2190 CI green across required gates"
+    command: "gh pr checks 2190 --repo OmniNode-ai/omniclaude"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-resolves-with-no-variable-set
+    description: >
+      AC1. An overlay discovered in a marketplace root or in the per-user
+      directory resolves with SESSION_PREFLIGHT_OVERLAY_PATH unset, and the
+      install command makes the next bare run resolve. Measured live on the
+      launching host: the shipped runner exited 2 with the variable unset;
+      after the change the same command exited 0, reporting 6 of 9 checks
+      passed with every blocker passing.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q -k 'marketplace_root or per_user_directory or install_overlay_makes'"
+  - id: dod-absent-overlay-still-refuses
+    description: >
+      AC1 positive control. With nothing installed anywhere the run still
+      refuses with exit 2, so the zero-configuration path did not become a
+      green preflight that checked nothing.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q -k 'no_overlay_anywhere_is_still_a_hard_stop'"
+  - id: dod-refusal-names-every-location
+    description: >
+      AC2. The refusal lists each location searched, the pointers that are
+      unset, and the command that installs an overlay.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q -k 'refusal_names_every_location'"
+  - id: dod-explicit-pointer-wins-and-never-falls-through
+    description: >
+      AC3. The flag beats the variable, the variable beats a discovered
+      overlay, and an explicit pointer that misses is refused rather than
+      silently replaced by the next candidate.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q -k 'beats_the_variable or beats_a_discovered_overlay or never_falls_through'"
+  - id: dod-runner-still-declares-no-checks
+    description: >
+      AC4. The public runner names no organization variable and carries no
+      check content, and an overlay declaring zero checks is refused.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q -k 'declares_no_checks_of_its_own or declaring_no_checks_is_refused'"
+  - id: dod-install-is-atomic-and-never-follows-a-link
+    description: >
+      Raised by the adversarial review gate. The install refuses a symlinked
+      destination by name and otherwise stages the content in the destination's
+      own directory and renames it into place, leaving no temporary file.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q -k 'symlinked_destination or no_temporary_file_behind'"

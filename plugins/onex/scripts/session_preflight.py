@@ -29,10 +29,27 @@ would reproduce it while looking like compliance.
 **This file declares no checks.** The plugin is public and the runner is
 generic: it owns the check kinds, the output contract and the refusal rules, and
 nothing else. The check content — which variables, which probes, which commands
-— is an overlay, named by ``SESSION_PREFLIGHT_OVERLAY_PATH``, which has no
-default. A default would have to be somebody's environment, and a run against an
-absent overlay would be a green preflight that checked nothing, which is worse
-than no preflight at all. So an unset variable is a hard stop.
+— is an overlay, and it is never committed here: it would have to be somebody's
+environment, and a run against an absent overlay would be a green preflight that
+checked nothing, which is worse than no preflight at all.
+
+**The overlay is discovered, not guessed** [OMN-18430]. The runner searches a
+declared, ordered list of *installation-provided locations* — every one of them
+a place an installation puts its own file, none of them content this file
+carries. In order: ``--overlay``; ``SESSION_PREFLIGHT_OVERLAY_PATH``; each root
+in ``ONEX_SKILL_OVERLAY_ROOTS``; and the conventional per-user install
+directory. The first two are explicit pointers, so one that names a file that is
+not there is a hard stop rather than a fall-through — an override that silently
+resolved to a different overlay than the one named would be the same
+silent-wrong-answer this runner refuses everywhere else. The rest fall through
+when absent, and when none of them resolves the run refuses, naming every
+location it tried **and the command that installs one**, because this runner's
+own rule is that a failure a reader cannot act on is not worth printing.
+
+``--install-overlay SOURCE`` is that command: it copies an overlay into the
+per-user directory, which is what makes the preflight reachable on a machine
+that sets nothing. It moves a file the caller already has; it never writes check
+content of its own.
 
 Overlay shape::
 
@@ -58,6 +75,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +86,25 @@ EXIT_BLOCKED = 1
 EXIT_CONFIG = 2
 
 OVERLAY_ENV = "SESSION_PREFLIGHT_OVERLAY_PATH"
+
+# OMN-18430. Every entry below names a LOCATION an installation provides, never
+# a check. The runner still declares no check content of its own.
+
+# A marketplace root, or several, separated by the platform path separator. This
+# is the entry the private skill marketplace fills in when it lands: one value
+# set once, and every split skill's overlay resolves.
+OVERLAY_ROOTS_ENV = "ONEX_SKILL_OVERLAY_ROOTS"
+
+# Where a root is joined to reach THIS skill's overlay.
+_OVERLAY_RELATIVE = Path("session_preflight") / "overlay.yaml"
+
+# The conventional per-user install location, the same shape every other tool
+# uses for per-user configuration. Not somebody's environment: a directory an
+# installation writes to, empty until it does.
+_USER_CONFIG_ENV = "XDG_CONFIG_HOME"
+_USER_CONFIG_RELATIVE = Path("onex") / "overlays"
+
+_INSTALL_HINT = "session_preflight.py --install-overlay <path to your overlay>"
 
 SEVERITY_BLOCKER = "blocker"
 SEVERITY_WARNING = "warning"
@@ -134,18 +171,127 @@ def resolve_intent(explicit: str | None) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def load_overlay(raw_path: str | None) -> list[dict[str, Any]]:
+def _user_config_root() -> Path:
+    """The per-user configuration directory, resolved the conventional way."""
+    raw = os.environ.get(_USER_CONFIG_ENV)
+    base = Path(raw) if raw else Path.home() / ".config"
+    return base / _USER_CONFIG_RELATIVE
+
+
+def _split_roots(raw: str | None) -> list[Path]:
+    return [Path(part) for part in (raw or "").split(os.pathsep) if part.strip()]
+
+
+def overlay_candidates(explicit: str | None) -> list[tuple[str, Path]]:
+    """Every location the overlay is searched for, in order, as (source, path).
+
+    The list is the whole resolution policy and is returned rather than walked
+    internally so the refusal can name every location that was tried. A reader
+    who has to fix this needs to know where the runner looked, not only that it
+    found nothing.
+    """
+    candidates: list[tuple[str, Path]] = []
+    if explicit:
+        candidates.append(("--overlay", Path(explicit)))
+    from_env = os.environ.get(OVERLAY_ENV)
+    if from_env:
+        candidates.append((OVERLAY_ENV, Path(from_env)))
+    for root in _split_roots(os.environ.get(OVERLAY_ROOTS_ENV)):
+        candidates.append((OVERLAY_ROOTS_ENV, root / _OVERLAY_RELATIVE))
+    candidates.append(
+        ("the per-user overlay directory", _user_config_root() / _OVERLAY_RELATIVE)
+    )
+    return candidates
+
+
+def resolve_overlay_path(explicit: str | None = None) -> Path:
+    """Return the first overlay that resolves, or refuse naming every location.
+
+    An EXPLICIT pointer that misses is a hard stop, not a fall-through. A run
+    told to use one overlay and silently given another is the silent wrong
+    answer this runner refuses in every other place it could occur.
+    """
+    candidates = overlay_candidates(explicit)
+    explicit_sources = {"--overlay", OVERLAY_ENV}
+    for source, path in candidates:
+        if path.is_file():
+            return path
+        if source in explicit_sources:
+            raise ConfigError(f"{source} points at no readable file: {path}")
+
+    lines = [f"  - {source}: {path}" for source, path in candidates]
+    # An UNSET pointer is not a location that was tried, and saying it was would
+    # be a lie. It is still the thing a reader most needs named, so it is listed
+    # as what it is: available and unset.
+    for name in (OVERLAY_ENV, OVERLAY_ROOTS_ENV):
+        if not os.environ.get(name):
+            lines.append(f"  - {name}: not set")
+    tried = "\n".join(lines)
+    raise ConfigError(
+        "no preflight overlay resolved. The overlay declares this "
+        "environment's checks; this runner carries none, because a run against "
+        "an absent overlay would report a green preflight that checked "
+        "nothing. Locations tried, in order:\n"
+        f"{tried}\n"
+        f"Install yours with: {_INSTALL_HINT}"
+    )
+
+
+def install_overlay(source: str) -> Path:
+    """Copy an overlay into the per-user directory and return where it landed.
+
+    The whole of the "works on a machine that sets nothing" story. It is a file
+    move and nothing more: the content is the caller's, validated before it is
+    written so an unusable overlay is refused at install time rather than at the
+    start of the next session.
+    """
+    origin = Path(source).expanduser()
+    if not origin.is_file():
+        raise ConfigError(f"--install-overlay names no readable file: {origin}")
+    content = origin.read_text()
+    load_overlay(origin)
+
+    destination = _user_config_root() / _OVERLAY_RELATIVE
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write a temporary file in the destination's own directory and rename it
+    # into place. This is the whole safety argument, and it is deliberately the
+    # ONLY one — there is no "is this a symlink?" pre-check, because a check
+    # followed by a write is a race by construction, and a guard that has to be
+    # read together with a race to be sound is not a guard:
+    #
+    # - mkstemp creates the staging file with O_CREAT|O_EXCL under a name
+    #   nothing else holds, so the bytes are never written to a path an
+    #   attacker can have pre-created or swapped;
+    # - Path.replace is os.replace, which is atomic on one filesystem and acts
+    #   on the destination NAME. It does not follow a symlink found there: it
+    #   unlinks whatever the name refers to and binds the name to the new
+    #   inode. A link cannot redirect the write to its target, so a symlink
+    #   planted at the destination at ANY moment is replaced rather than
+    #   followed.
+    #
+    # So a reader never sees a half-written overlay, and there is no
+    # time-of-check-to-time-of-use window at all, because there is no check.
+    handle, temporary = tempfile.mkstemp(
+        dir=str(destination.parent), prefix=".overlay-", suffix=".yaml"
+    )
+    try:
+        with os.fdopen(handle, "w") as stream:
+            stream.write(content)
+        Path(temporary).replace(destination)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    return destination
+
+
+def load_overlay(raw_path: str | Path | None) -> list[dict[str, Any]]:
     """Read and validate the overlay. Every refusal names what to change."""
-    if not raw_path:
-        raise ConfigError(
-            f"{OVERLAY_ENV} is not set and has no default. It must hold the "
-            f"absolute path of the preflight overlay declaring this "
-            f"environment's checks. Running with no overlay would report a "
-            f"green preflight that checked nothing."
-        )
+    if raw_path is None:
+        raise ConfigError("load_overlay was given no overlay path")
     path = Path(raw_path)
     if not path.is_file():
-        raise ConfigError(f"{OVERLAY_ENV} points at no readable file: {path}")
+        raise ConfigError(f"the overlay at {path} is not a readable file")
 
     try:
         document = yaml.safe_load(path.read_text())
@@ -347,11 +493,39 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Path to write the verdict to as JSON. Required under --intent tick.",
     )
+    parser.add_argument(
+        "--install-overlay",
+        default=None,
+        metavar="SOURCE",
+        help=(
+            "Copy SOURCE into the per-user overlay directory, then exit. This "
+            "is how a machine that sets no variables gets a reachable "
+            "preflight."
+        ),
+    )
+    parser.add_argument(
+        "--overlay",
+        default=None,
+        help=(
+            "Path to the check overlay for this run. Beats every discovered "
+            "location; a path that does not resolve is refused rather than "
+            "silently replaced by the next candidate."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.install_overlay:
+        try:
+            destination = install_overlay(args.install_overlay)
+        except ConfigError as exc:
+            print(f"preflight: REFUSED — {exc}", file=sys.stderr)
+            return EXIT_CONFIG
+        print(f"preflight: overlay installed at {destination}")
+        return EXIT_OK
 
     try:
         intent = resolve_intent(args.intent)
-        checks = load_overlay(os.environ.get(OVERLAY_ENV))
+        checks = load_overlay(resolve_overlay_path(args.overlay))
         receipt_path = args.receipt or os.environ.get("SESSION_PREFLIGHT_RECEIPT")
         if intent == "tick" and not receipt_path:
             raise ConfigError(

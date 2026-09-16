@@ -37,16 +37,42 @@ so a check body has exactly one home and cannot drift between a script and a pro
 ## Run it
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" [--intent <intent>] [--all] [--receipt <path>]
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" [--intent <intent>] [--all] [--receipt <path>] [--overlay <path>]
 ```
 
 From a source checkout the same file is `plugins/onex/scripts/session_preflight.py`.
 
 ## What it needs
 
-`SESSION_PREFLIGHT_OVERLAY_PATH` must hold the absolute path of the **preflight overlay** — the
-YAML file declaring this environment's checks. It has **no default**, and a run without it refuses
-rather than reporting a green preflight that checked nothing.
+A **preflight overlay** — the YAML file declaring this environment's checks. The runner carries
+none: a run against an absent overlay would report a green preflight that checked nothing, which is
+worse than no preflight at all.
+
+The overlay is **discovered**, not guessed. Locations are searched in this order, and the first one
+that resolves wins:
+
+| Order | Location | Kind |
+| -- | -- | -- |
+| 1 | `--overlay <path>` | explicit pointer |
+| 2 | `SESSION_PREFLIGHT_OVERLAY_PATH` | explicit pointer |
+| 3 | each root in `ONEX_SKILL_OVERLAY_ROOTS`, joined with `session_preflight/overlay.yaml` | discovered |
+| 4 | `$XDG_CONFIG_HOME/onex/overlays/session_preflight/overlay.yaml`, or `~/.config/...` | discovered |
+
+An **explicit** pointer that names a file that is not there is a hard stop, never a fall-through: a
+run told to use one overlay and silently handed another is the wrong answer, quietly. A
+**discovered** location that is empty falls through to the next.
+
+When none of them resolves, the run refuses and names every location it tried, plus the command
+that fixes it:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" --install-overlay <path to your overlay>
+```
+
+That copies the overlay into location 4, so a machine that sets no variables at all has a reachable
+preflight from then on. It validates before it writes, so an overlay that could not have run is
+refused at install time rather than at the start of the next session. It moves a file you already
+have; it never writes check content of its own.
 
 The overlay declares, per check: an id, a title, a kind (`env_set`, `env_path`, `path_exists`,
 `command`), a severity (`blocker` or `warning`), and a `fix` line. The `fix` is required. A check
