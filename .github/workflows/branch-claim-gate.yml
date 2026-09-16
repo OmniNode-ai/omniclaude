@@ -37,6 +37,8 @@ on:
       - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
       - 'tests/scripts/test_branch_claim_hook.py'
+      - 'tests/scripts/test_lane_identity_canary.py'
+      - 'scripts/hooks/prepare-commit-msg-lane'
       - '.github/workflows/branch-claim-gate.yml'
       - '.github/workflows/branch-claim-check-reusable.yml'
   pull_request:
@@ -47,6 +49,8 @@ on:
       - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
       - 'tests/scripts/test_branch_claim_hook.py'
+      - 'tests/scripts/test_lane_identity_canary.py'
+      - 'scripts/hooks/prepare-commit-msg-lane'
       - '.github/workflows/branch-claim-gate.yml'
       - '.github/workflows/branch-claim-check-reusable.yml'
 
@@ -158,4 +162,5 @@ jobs:
           git config --global user.name ci
           uv run pytest \
             tests/scripts/test_branch_claim.py \
-            tests/scripts/test_branch_claim_hook.py -q
+            tests/scripts/test_branch_claim_hook.py \
+            tests/scripts/test_lane_identity_canary.py -q

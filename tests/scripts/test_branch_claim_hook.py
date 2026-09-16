@@ -466,9 +466,17 @@ def test_the_installer_refuses_a_hooks_directory_outside_the_repo(
         check=False,
         env=scratch["env"],
     )
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "outside this repository" in result.stderr
+    # OMN-18273: the refusal is kept but made structural. The installer resolves
+    # `<git-common-dir>/hooks` rather than following core.hooksPath, so the
+    # shared directory is never written -- and the install is reported NOT
+    # REACHABLE (exit 4) instead of succeeding silently, because git will not
+    # dispatch the file until the shared directory carries a chaining entry.
+    # Asserting exit 2 here was what made the mechanism uninstallable on the
+    # real workspace, where every canonical clone sets core.hooksPath.
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert "NOT REACHABLE" in result.stderr
     assert not (shared / "pre-push").exists()
+    assert (scratch["repo"] / ".git" / "hooks" / "pre-push").is_file()
 
 
 def test_the_installed_hook_carries_no_unreplaced_placeholder(scratch: dict) -> None:
