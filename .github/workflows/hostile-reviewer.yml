@@ -175,6 +175,7 @@ jobs:
               "review_exit": None,
               "error": os.environ["REASON"],
               "named_cause": "",
+              "findings": [],
               "stderr": "",
           }
           with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
@@ -409,6 +410,7 @@ jobs:
                   " \u2014 infra unavailable or crash"
               ),
               "named_cause": os.environ.get("NAMED_CAUSE", ""),
+              "findings": [],
               "stderr": captured,
           }
           with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
@@ -483,7 +485,8 @@ jobs:
           # non-blocking degradation is unreadable after the run, which is how
           # this gate spent an unknown number of PRs reviewing nothing.
           VERDICT_DATA="$VERDICT_DATA" NAMED_CAUSE="$NAMED_CAUSE" \
-          STDERR_LOG="$STDERR_LOG" REVIEW_EXIT="$REVIEW_EXIT" python3 - <<'PY'
+          STDERR_LOG="$STDERR_LOG" REVIEW_EXIT="$REVIEW_EXIT" \
+          REVIEW_JSON="$REVIEW_JSON" python3 - <<'PY'
           import json
           import os
 
@@ -495,6 +498,30 @@ jobs:
           with open(os.environ["STDERR_LOG"], encoding="utf-8", errors="replace") as handle:
               captured = handle.read()
           models = fields.get("models_succeeded", "")
+
+          # OMN-18415 — THE FINDINGS THEMSELVES, not just how many there were.
+          # `blocked` is the one verdict that stops a merge, and the first live
+          # run of this gate on a real diff blocked with `blocking findings: 1`
+          # and NOTHING anywhere naming the finding: the reviewer's JSON went to
+          # a shell variable that was parsed for counts and then discarded. A
+          # required gate whose refusal cannot be read is not reviewable, it is
+          # only obstructive.
+          findings = []
+          for result in json.loads(os.environ["REVIEW_JSON"]).get("results", []):
+              if not result.get("success"):
+                  continue
+              for finding in result.get("findings", []):
+                  findings.append(
+                      {
+                          "severity": finding.get("severity", "unknown"),
+                          "title": finding.get("title", ""),
+                          "message": finding.get("message", ""),
+                          "file": finding.get("file", ""),
+                          "line": finding.get("line"),
+                          "model": result.get("model", ""),
+                      }
+                  )
+
           payload = {
               "verdict": fields.get("verdict", "unknown"),
               "blocking_count": int(fields.get("blocking_count", "0") or 0),
@@ -503,11 +530,33 @@ jobs:
               "review_exit": int(os.environ["REVIEW_EXIT"]),
               "error": "",
               "named_cause": os.environ.get("NAMED_CAUSE", ""),
+              "findings": findings,
               "stderr": captured,
           }
           with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
               json.dump(payload, handle, indent=2, sort_keys=True)
           PY
+
+          # And into the job log, so the refusal is readable without
+          # downloading anything.
+          echo "::group::adversarial findings"
+          python3 - "$VERDICT_ARTIFACT" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+          for finding in payload.get("findings", []):
+              location = finding.get("file") or "(no file)"
+              if finding.get("line"):
+                  location = f"{location}:{finding['line']}"
+              print(f"[{finding.get('severity')}] {location} — {finding.get('title')}")
+              if finding.get("message"):
+                  print(f"    {finding['message']}")
+          if not payload.get("findings"):
+              print("(none)")
+          PY
+          echo "::endgroup::"
 
           # Set exit code: blocked → 1, everything else → 0 (pilot: degraded is informational)
           VERDICT=$(echo "$VERDICT_DATA" | grep '^verdict=' | cut -d= -f2)
@@ -549,6 +598,23 @@ jobs:
             // stderr, which used to go to /dev/null. The full capture is in the
             // uploaded `hostile-review-verdict-*` artifact.
             const namedCause = process.env.REVIEW_NAMED_CAUSE || '';
+
+            // OMN-18415: read the findings out of the verdict artifact the
+            // review step wrote. They are NOT passed as step outputs -- a
+            // finding is multi-line free text from a model, and threading that
+            // through GITHUB_OUTPUT means choosing a delimiter the model could
+            // emit. Reading the file has no such failure mode.
+            const fs = require('fs');
+            let findings = [];
+            try {
+              const raw = fs.readFileSync(
+                `${process.env.GITHUB_WORKSPACE}/hostile-review-verdict.json`,
+                'utf8',
+              );
+              findings = JSON.parse(raw).findings || [];
+            } catch (err) {
+              core.info(`no verdict artifact to read findings from: ${err.message}`);
+            }
 
             const icon = {
               passed: '✅',
@@ -593,6 +659,27 @@ jobs:
               note += `\n\n> **Reviewer stderr (named cause)**: \`${namedCause}\``;
             }
 
+            // The findings block. `blocked` is the only verdict that stops a
+            // merge, and before OMN-18415 it reported a COUNT and nothing else,
+            // so the one thing a reader needed was the one thing absent.
+            let findingsBlock = '';
+            if (findings.length > 0) {
+              const rows = findings.map(f => {
+                const where = f.line ? `${f.file}:${f.line}` : (f.file || '_(no file)_');
+                const text = (f.message || '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+                return `| \`${f.severity}\` | ${where} | ${f.title || ''} ${text} |`;
+              });
+              findingsBlock = [
+                '',
+                '### Findings',
+                '',
+                '| Severity | Location | Finding |',
+                '|---|---|---|',
+                ...rows,
+                '',
+              ].join('\n');
+            }
+
             const body = [
               `## ${icon} Hostile Reviewer — ${label}`,
               '',
@@ -600,6 +687,7 @@ jobs:
               `**Total findings**: ${total}  `,
               `**Models succeeded**: ${models || 'none'}`,
               note,
+              findingsBlock,
               '',
               '---',
               '',

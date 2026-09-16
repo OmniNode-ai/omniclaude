@@ -299,6 +299,66 @@ exit 0
 """
 
 
+BLOCKING_STUB = """#!/usr/bin/env bash
+echo "Model 'deepseek-r1' succeeded in 6.2s (1 finding(s))." >&2
+cat <<'JSON'
+{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "title": "unbounded retry", "message": "the loop has no ceiling", "file": "a/b.py", "line": 12}]}]}
+JSON
+exit 2
+"""
+
+
+def test_a_blocking_verdict_names_the_finding_that_blocked_it(
+    tmp_path: Path,
+) -> None:
+    """`blocked` is the only verdict that stops a merge, so it must be readable.
+
+    The first live run of this gate on a real diff blocked with a finding COUNT
+    of 1 and nothing anywhere naming the finding: the reviewer's JSON went to a
+    shell variable, was parsed for counts, and was then discarded. A required
+    gate whose refusal cannot be read is not reviewable, only obstructive.
+    """
+    result, artifact, outputs = _run_review_script(tmp_path, stub=BLOCKING_STUB)
+
+    assert result.returncode == 1, "a blocking finding must fail the job"
+    assert outputs["verdict"] == "blocked"
+    assert outputs["blocking_count"] == "1"
+
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert payload["findings"], "the verdict artifact must carry the findings"
+    finding = payload["findings"][0]
+    assert finding["severity"] == "error"
+    assert finding["title"] == "unbounded retry"
+    assert finding["file"] == "a/b.py"
+    assert finding["line"] == 12
+
+    assert "unbounded retry" in result.stdout, (
+        "the finding must be readable in the job log without downloading the "
+        "artifact -- a count alone tells a reader nothing to act on"
+    )
+    assert "a/b.py:12" in result.stdout
+
+
+def test_the_comment_reads_findings_from_the_artifact_not_a_step_output() -> None:
+    """A finding is multi-line free text written by a model.
+
+    Threading that through ``GITHUB_OUTPUT`` means choosing a delimiter the
+    model could itself emit. Reading the file the review step already wrote has
+    no such failure mode.
+    """
+    for step in _job(REVIEW_JOB)["steps"]:
+        if step.get("name", "").startswith("Post review summary"):
+            script = step["with"]["script"]
+            break
+    else:
+        raise AssertionError("the PR-comment step must exist")
+
+    assert "hostile-review-verdict.json" in script, (
+        "the comment must read the findings out of the verdict artifact"
+    )
+    assert "findings" in script
+
+
 def test_a_broken_model_config_names_its_cause_in_the_job_log(tmp_path: Path) -> None:
     """AC3's falsifier, executed rather than asserted about.
 
