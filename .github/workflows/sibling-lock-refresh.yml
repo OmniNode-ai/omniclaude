@@ -108,11 +108,18 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH="bot/sibling-lock-refresh-$(date -u +%Y%m%d%H%M%S)"
-          git config user.name "omninode-bot"
-          git config user.email "bot@omninode.ai"
+          # OMN-18273: commit as the App this job already authenticates as. The
+          # previous identity resolved to no GitHub account, so the commit rendered
+          # unlinked and named neither a bot nor a run; the credential and the
+          # committer disagreeing was itself misleading about who made the change.
+          # The numeric prefix on the address is what links it to the App account.
+          git config user.name "onexbot-occ-writer[bot]"
+          git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add uv.lock
-          git commit -m "chore(deps): refresh omninode sibling locks [bot]"
+          git commit -m "chore(deps): refresh omninode sibling locks [bot]" \
+            --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
+            --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           git push origin "$BRANCH"
           # Build the PR body in a file to avoid heredoc-in-YAML indentation pitfalls.
           {
