@@ -319,10 +319,16 @@ exit 1
     b64=base64.b64encode(ENCODED_VALUE.encode()).decode(),
 )
 
+# OMN-18479: the reviewer resolves cross-model agreement itself and ships it
+# in `quorum`. Every stub below therefore emits the two-model shape the gate
+# now reads: a payload with no quorum block, or with fewer succeeded models
+# than agreement requires, is DEGRADED QUORUM -- no verdict at all -- and the
+# gate fails closed on it (see DEGRADED_QUORUM_STUB).
 PASSING_STUB = """#!/usr/bin/env bash
 echo "Model 'deepseek-r1' succeeded in 233.5s (0 finding(s))." >&2
+echo "Model 'qwen3-review-b' succeeded in 41.2s (0 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1"], "total_findings": 0, "results": [{"success": true, "findings": []}]}
+{"models_succeeded": ["deepseek-r1", "qwen3-review-b"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -333,20 +339,37 @@ exit 0
 # `file_path`, `line_start` and `normalized_message`. The first revision of the
 # renderer guessed title/message/file and produced a row of three empty cells on
 # the live run, which reads as a reviewer with nothing to say.
+# Both models raise the same finding, so it reaches quorum and blocks
+# (OMN-18479). One model raising it alone is a warning and does not.
 BLOCKING_STUB = """#!/usr/bin/env bash
 echo "Model 'deepseek-r1' succeeded in 6.2s (1 finding(s))." >&2
+echo "Model 'qwen3-review-b' succeeded in 8.1s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}]}
+{"models_succeeded": ["deepseek-r1", "qwen3-review-b"], "total_findings": 2, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "qwen3-review-b", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
 JSON
-exit 2
+exit 0
 """
 
 # A finding whose every mapped key is absent. The renderer must still say
 # something, because an empty row is indistinguishable from no finding.
 UNMAPPABLE_STUB = """#!/usr/bin/env bash
 echo "Model 'deepseek-r1' succeeded in 1.0s (1 finding(s))." >&2
+echo "Model 'qwen3-review-b' succeeded in 1.4s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}]}
+{"models_succeeded": ["deepseek-r1", "qwen3-review-b"], "total_findings": 2, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "qwen3-review-b", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
+JSON
+exit 0
+"""
+
+# One model returned; agreement cannot be established, so there is no verdict
+# and the gate fails closed (OMN-18479). Before that ticket this exact payload
+# produced a blocking verdict from a single opinion.
+DEGRADED_QUORUM_STUB = """#!/usr/bin/env bash
+echo "Model 'deepseek-r1' succeeded in 6.2s (1 finding(s))." >&2
+echo "Model 'qwen3-review-b' FAILED in 0.4s (0 finding(s))." >&2
+echo "ERROR: DEGRADED QUORUM \u2014 1 model(s) succeeded, 2 required for agreement." >&2
+cat <<'JSON'
+{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12}]}], "quorum": {"verdict": "degraded_quorum", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 1, "blocking_findings": [], "warning_findings": [{"agreement_count": 1}]}}
 JSON
 exit 2
 """
@@ -533,19 +556,18 @@ def test_encoded_spellings_of_the_signing_value_are_redacted_too(
 def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:
     """The success path writes the artifact too.
 
-    `degraded` is a SUCCESS exit in the pilot -- every model failed mid-review
-    and the gate does not block -- so without this the cause of a non-blocking
-    degradation would be unreadable after the run, which is how this gate spent
-    an unknown number of PRs reviewing nothing.
+    A non-blocking run writes the artifact too, so the cause of a degradation
+    that did not stop the merge is still readable after the run -- which is how
+    this gate spent an unknown number of PRs reviewing nothing.
     """
     result, artifact, outputs = _run_review_script(tmp_path, stub=PASSING_STUB)
 
     assert result.returncode == 0
     assert outputs["verdict"] == "passed"
-    assert outputs["models_succeeded"] == "deepseek-r1"
+    assert outputs["models_succeeded"] == "deepseek-r1,qwen3-review-b"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["verdict"] == "passed"
-    assert payload["models_succeeded"] == ["deepseek-r1"]
+    assert payload["models_succeeded"] == ["deepseek-r1", "qwen3-review-b"]
     assert "Model 'deepseek-r1' succeeded" in payload["stderr"]
     assert "Model 'deepseek-r1' succeeded" in result.stdout
 
@@ -556,4 +578,27 @@ def test_both_attempts_are_logged_separately(tmp_path: Path) -> None:
     groups = re.findall(r"::group::cli_review stderr \(attempt (\d)/2", result.stdout)
     assert groups == ["1", "2"], (
         f"each attempt's stderr must be its own log group; saw {groups}"
+    )
+
+
+def test_a_degraded_quorum_fails_the_gate_closed(tmp_path: Path) -> None:
+    """OMN-18479: one model of two is not a verdict.
+
+    This payload -- a single succeeded model carrying one error finding --
+    produced ``verdict=blocked`` before OMN-18479, which is how one model's
+    rotating finding blocked 24 of 40 runs on this repository. It must now
+    resolve to ``degraded_quorum`` and fail the step closed under that name,
+    without inventing a blocking count from the one opinion it has.
+    """
+    result, artifact, outputs = _run_review_script(tmp_path, stub=DEGRADED_QUORUM_STUB)
+
+    assert result.returncode == 1, "no verdict is not a passing verdict"
+    assert outputs["verdict"] == "degraded_quorum"
+    assert outputs["blocking_count"] == "0"
+
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert payload["verdict"] == "degraded_quorum"
+    assert payload["blocking_count"] == 0
+    assert "DEGRADED QUORUM" in payload["stderr"], (
+        "the reason must survive into the artifact, not only the job log"
     )
