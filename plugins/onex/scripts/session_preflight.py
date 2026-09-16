@@ -254,25 +254,11 @@ def install_overlay(source: str) -> Path:
     destination = _user_config_root() / _OVERLAY_RELATIVE
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    # Refuse a symlinked destination rather than silently replacing it. This
-    # check is for the MESSAGE, not for the safety property: it is deliberately
-    # NOT what prevents a write through a link, because a check followed by a
-    # write is a race by construction and reading it as the guard would be
-    # reading it wrongly. The safety property is the rename below — os.replace
-    # operates on the destination NAME and never follows a symlink at it, so a
-    # link swapped in after this check is itself replaced, and the link's target
-    # is never written. Removing this check would leave the install safe and
-    # only make it silent about clobbering somebody's link.
-    if destination.is_symlink():
-        raise ConfigError(
-            f"the install destination {destination} is a symbolic link. Writing "
-            f"through it would put the overlay somewhere else; remove the link "
-            f"or install with an explicit --overlay instead."
-        )
-
     # Write a temporary file in the destination's own directory and rename it
-    # into place. This is the whole safety argument, and it does not depend on
-    # the check above:
+    # into place. This is the whole safety argument, and it is deliberately the
+    # ONLY one — there is no "is this a symlink?" pre-check, because a check
+    # followed by a write is a race by construction, and a guard that has to be
+    # read together with a race to be sound is not a guard:
     #
     # - mkstemp creates the staging file with O_CREAT|O_EXCL under a name
     #   nothing else holds, so the bytes are never written to a path an
@@ -280,11 +266,12 @@ def install_overlay(source: str) -> Path:
     # - Path.replace is os.replace, which is atomic on one filesystem and acts
     #   on the destination NAME. It does not follow a symlink found there: it
     #   unlinks whatever the name refers to and binds the name to the new
-    #   inode. A link cannot redirect the write to its target.
+    #   inode. A link cannot redirect the write to its target, so a symlink
+    #   planted at the destination at ANY moment is replaced rather than
+    #   followed.
     #
     # So a reader never sees a half-written overlay, and there is no
-    # time-of-check-to-time-of-use window that could turn this into a write
-    # somewhere the caller did not name.
+    # time-of-check-to-time-of-use window at all, because there is no check.
     handle, temporary = tempfile.mkstemp(
         dir=str(destination.parent), prefix=".overlay-", suffix=".yaml"
     )

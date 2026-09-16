@@ -628,10 +628,16 @@ def test_an_overlay_declaring_no_checks_is_refused(tmp_path: Path) -> None:
     assert "no checks" in result.stderr
 
 
-def test_install_refuses_to_write_through_a_symlinked_destination(
+def test_install_never_writes_through_a_symlinked_destination(
     tmp_path: Path,
 ) -> None:
-    """Writing through a link puts the overlay at a path nobody named."""
+    """The security property, tested directly rather than through a guard.
+
+    A symlink planted at the destination must not redirect the install to the
+    link's target. The install has no is-this-a-symlink check, on purpose: a
+    check followed by a write is a race, and the rename is what makes this safe
+    — os.replace acts on the destination NAME and replaces the link itself.
+    """
     destination = tmp_path / "xdg" / "onex" / "overlays" / _OVERLAY_RELATIVE
     destination.parent.mkdir(parents=True)
     elsewhere = tmp_path / "elsewhere.yaml"
@@ -641,11 +647,13 @@ def test_install_refuses_to_write_through_a_symlinked_destination(
     source = _overlay(tmp_path, [_PASSING])
     result = _run(tmp_path, "--install-overlay", str(source), overlay=None)
 
-    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
-    assert "symbolic link" in result.stderr
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
     assert elsewhere.read_text() == "do not overwrite me\n", (
-        "The install followed the link and overwrote the target."
+        "The install followed the link and wrote to its target — an arbitrary "
+        "write to a path the caller never named."
     )
+    assert not destination.is_symlink(), "The link survived the install."
+    assert destination.is_file()
 
 
 def test_install_leaves_no_temporary_file_behind(tmp_path: Path) -> None:
