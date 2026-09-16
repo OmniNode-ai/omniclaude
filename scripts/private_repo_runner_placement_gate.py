@@ -83,6 +83,14 @@ ANNOTATION = re.compile(
     re.IGNORECASE,
 )
 
+# The same marker WITHOUT the rest of the pattern on its line. A comment block
+# wrapped across several lines puts the ticket on a line the annotation regex
+# cannot reach, so the annotation reads as absent and the job is reported as a
+# bare pin -- a correct verdict for an incomprehensible reason, and the author
+# sees a gate that ignored the exemption they wrote. Detected separately so the
+# failure names itself: an annotation is ONE line, reason and ticket together.
+ANNOTATION_MARKER = re.compile(r"#\s*private-repo-hosted-ok:", re.IGNORECASE)
+
 # "This pull request came from a fork", in the two spellings this estate uses:
 # the head repository differing from the base, and the `fork` flag read as true
 # or read bare for its truthiness. Deliberately an ENUMERATION rather than a
@@ -382,8 +390,17 @@ def scan(repo_root: Path, slug: str, variables: dict[str, str]) -> list[Finding]
             offender = _offending_branch(branches)
             if offender is None:
                 continue
-            if ANNOTATION.search(_job_source(text, str(job_id))):
+            source = _job_source(text, str(job_id))
+            if ANNOTATION.search(source):
                 continue
+            if ANNOTATION_MARKER.search(source):
+                raise GateError(
+                    f"{path.name}::{job_id} carries a private-repo-hosted-ok "
+                    "marker whose reason and (OMN-nnnnn) ticket are not on the "
+                    "SAME line, so it excuses nothing. Put the whole annotation "
+                    "on one comment line; continuation lines beneath it are "
+                    "fine. THE GATE DID NOT RUN."
+                )
             findings.append(
                 Finding(
                     workflow=path.name,

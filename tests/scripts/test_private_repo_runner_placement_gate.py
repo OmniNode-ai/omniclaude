@@ -298,7 +298,14 @@ def test_an_annotated_job_passes_and_an_unannotated_twin_does_not(
 def test_an_annotation_without_a_ticket_does_not_excuse_anything(
     tmp_path: Path,
 ) -> None:
-    """Free text is a justification, not a commitment to move the job."""
+    """Free text is a justification, not a commitment to move the job.
+
+    The verdict is 2 rather than 1 as of OMN-18431, and the distinction is the
+    point: an incomplete marker is not judged as an ordinary bare pin, it is
+    REFUSED with its own message naming what is missing. Both fail the run;
+    only one of them tells the author that the exemption they wrote was read
+    and rejected rather than never seen.
+    """
     module = _module()
     root = _tree(
         tmp_path,
@@ -307,7 +314,7 @@ def test_an_annotation_without_a_ticket_does_not_excuse_anything(
         "  # private-repo-hosted-ok: it has always been like this\n"
         "  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
     )
-    assert _run(module, root, {}, tmp_path) == 1
+    assert _run(module, root, {}, tmp_path) == 2
 
 
 def test_an_unset_variable_with_no_fallback_fails_closed(tmp_path: Path) -> None:
@@ -389,3 +396,27 @@ def test_an_inverted_or_unrelated_guard_is_not_a_fork_test(guard: str) -> None:
     """The exemption must not be reachable by a guard that means the opposite."""
     module = _module()
     assert not module.FORK_TEST.search(guard)
+
+
+def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
+    tmp_path: Path,
+) -> None:
+    """A wrapped annotation is a refusal that names itself, not a silent miss.
+
+    The reason and its ticket have to share a line. When an author wraps the
+    comment the ticket lands where the pattern cannot reach it, and without
+    this the job is simply reported as a bare pin -- the right verdict for a
+    reason the author cannot see from the message.
+    """
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "ci.yml",
+        "name: CI\non:\n  pull_request: {}\njobs:\n"
+        "  build:\n"
+        "    # private-repo-hosted-ok: needs a tool the fleet image does not\n"
+        "    # carry (OMN-17477)\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: true\n",
+    )
+    assert _run(module, root, {}, tmp_path) == 2
