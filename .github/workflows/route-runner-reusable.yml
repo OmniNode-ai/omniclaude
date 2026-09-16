@@ -1,0 +1,238 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Cross-repo per-run runner routing (reusable). OMN-18423.
+#
+# A caller asks this workflow where its jobs should execute; it answers with a
+# `runs_on` label set the caller's jobs consume:
+#
+#   jobs:
+#     route:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/route-runner-reusable.yml@<sha>
+#       with:
+#         workflow_path: .github/workflows/your-workflow.yml
+#     your-job:
+#       needs: route
+#       runs-on: ${{ fromJSON(needs.route.outputs.runs_on) }}
+#
+# THIS FILE HOLDS NO DECISION AND NO THRESHOLD. The decision is an ONEX COMPUTE
+# node, `node_ci_runner_route_compute` in omnibase_infra, whose contract declares
+# the label sets, every threshold, the reversible-reason set and the
+# private-repository refusal. This workflow checks that repository out at a
+# pinned commit and invokes the node's boundary. A second copy of the decision,
+# or of its thresholds, is exactly the drift the node exists to prevent, so the
+# only routing-related literal below is the fork fallback.
+#
+# WHY THIS JOB IS PLACED BY THE CALLER'S SEAM RATHER THAN PINNED HOSTED.
+# omnibase_infra's in-repo route job is pinned hosted so a router never queues
+# behind the fleet it is routing away from. That reasoning does not survive the
+# private-repository ruling of 2026-09-14: a hosted job in a private repository
+# is the placement the ruling forbids, and it does not execute in any case
+# because those minutes are billed. So this job resolves through the caller's
+# own seam -- hosted for a public caller, the fleet for a private one -- with
+# the fork branch ahead of both.
+#
+# The property traded away is named rather than hidden: for a private caller
+# this router can be queued behind the fleet. It cannot give a WRONG answer as
+# a result -- a private repository's answer can only ever be the fleet or a
+# refusal -- only a late one.
+#
+# THE SEAM IS READ, NEVER WRITTEN (CLAUDE.md rule 14, single-owner). Routing may
+# only ever DOWNGRADE from what the caller's seam already allows.
+#
+# A REFUSAL FAILS THE RUN. When the caller is a private repository whose only
+# allowed placement is GitHub-hosted, the node returns no labels and this job
+# exits non-zero. That is deliberate: the alternative is a job queued forever
+# against capacity the repository may not use, which reads as a mystery rather
+# than as a rule.
+
+name: Route Runner (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      workflow_path:
+        description: >-
+          Path of the CALLING workflow. Checked against the hosted-workflow list
+          the routing node is given, so a workflow that must stay hosted for a
+          reason other than capacity is answered before any capacity signal is
+          read.
+        required: true
+        type: string
+      force:
+        description: >-
+          Operator override: auto, fleet or hosted. Subject to every safety rule
+          rather than a bypass of them -- fleet cannot widen past the caller's
+          seam ceiling and cannot take a fork pull request, and hosted is still
+          refused for a private repository. It exists so the kill switch a
+          static seam value provided survives per-run routing.
+        required: false
+        default: auto
+        type: string
+      dry_run:
+        description: >-
+          Compute and report the decision but gate nothing. The job always
+          succeeds and the caller keeps whatever placement it had.
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      runs_on:
+        # NO EXPRESSION IN ANY DESCRIPTION HERE. Actions evaluates `${{ }}`
+        # inside a workflow_call block, where the `needs` context does not
+        # exist, so an illustrative snippet in a description is a STARTUP
+        # FAILURE in every calling workflow -- zero jobs, no red check, and a
+        # run title that falls back to the file path. Measured on
+        # omnibase_infra run 35037012235. The snippet lives in the header.
+        description: >-
+          The label set the caller's jobs consume, as a JSON array for
+          fromJSON().
+        value: ${{ jobs.route.outputs.runs_on }}
+      decision:
+        description: "self_hosted, hosted, or blocked."
+        value: ${{ jobs.route.outputs.decision }}
+      reason:
+        description: >-
+          Why this placement was chosen. Read it rather than the job's colour: a
+          green route job that decided nothing looks exactly like one that
+          decided correctly.
+        value: ${{ jobs.route.outputs.reason }}
+    secrets:
+      RUNNER_FLEET_STATUS_TOKEN:
+        required: false
+      CROSS_REPO_PAT:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    name: route
+    # The caller's own seam, with fork isolation ahead of it. Untrusted code
+    # never reaches self-hosted compute at any idle level (OMN-16683/16684),
+    # and that branch is FIRST precisely so no capacity or visibility argument
+    # can be applied before it.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+    outputs:
+      runs_on: ${{ steps.decide.outputs.runs_on }}
+      decision: ${{ steps.decide.outputs.decision }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      # ONE PIN, IMMUTABLE. A full commit sha reachable from omnibase_infra's
+      # dev branch, never a branch name: a floating ref would let the routing
+      # decision change under every caller at once, and an unreachable pin is
+      # the failure that took this organisation's deploy gates down on
+      # 2026-09-15 when a force-push orphaned the commit they named.
+      - name: Check out the routing node
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omnibase_infra
+          ref: 341ac00cfac9b0f7e42498de265ace7006fdfa72
+          path: .runner-route
+          persist-credentials: false
+
+      # The node cannot be imported without its project environment: importing
+      # anything in that package executes its __init__, which pulls the
+      # database and broker surfaces. A route job that skips this step raises
+      # ModuleNotFoundError, falls through to the fail-closed floor below, and
+      # reports a GREEN job whose decision reads `probe_error:module_unavailable`
+      # -- measured on omnibase_infra run 35039101488, where the mechanism was
+      # entirely inert and nothing was red.
+      - name: Set up Python and uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: .runner-route/uv.lock
+
+      - name: Sync the routing node's environment
+        working-directory: .runner-route
+        run: uv sync --frozen --no-dev
+
+      - name: Decide runs-on
+        id: decide
+        working-directory: .runner-route
+        env:
+          # Preferred: a dedicated token with org self-hosted-runner read scope.
+          # Absent BOTH this and the fallback is not a crash -- the capacity
+          # probe returns `missing_token` and the decision is hosted, or for a
+          # private caller the fleet, by the node's own fail-closed rules.
+          RUNNER_FLEET_STATUS_TOKEN: ${{ secrets.RUNNER_FLEET_STATUS_TOKEN }}
+          CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
+          # The job token reads the CALLER's repository metadata, which is what
+          # decides the private-repository rule. In a called reusable workflow
+          # `github.repository` is the CALLER, so a private repository calling a
+          # shared reusable is judged on ITS OWN visibility rather than on this
+          # repository's.
+          GITHUB_TOKEN: ${{ github.token }}
+          RUNNER_ROUTE_ARTIFACT: runner-route-decision.json
+          # EVERY VALUE THE COMMAND READS ARRIVES HERE, NOT INLINE IN THE BODY.
+          # Actions substitutes an expression into the run script as RAW TEXT
+          # before the shell parses it, so a JSON array interpolated inside
+          # double quotes loses its inner quotes and reaches the module as
+          # non-JSON. That produced `probe_error:seam_unparseable` on every run
+          # of the pilot's first live decision, which looked exactly like a
+          # correctly inert mechanism. Env values are passed as data and never
+          # re-parsed by the shell, which also closes the template-injection
+          # class on the head repository name in the same stroke.
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_PATH: ${{ inputs.workflow_path }}
+          SEAM_JSON: >-
+            ${{ (github.event_name == 'merge_group' && vars.OMNI_REQUIRED_CI_RUNS_ON_JSON)
+                || vars.OMNI_TRUSTED_CI_RUNS_ON_JSON }}
+          PUBLIC_JSON: ${{ vars.OMNI_PUBLIC_PR_RUNS_ON_JSON }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -uo pipefail
+          rc=0
+          args=(
+            --event-name "${EVENT_NAME}"
+            --head-repo "${HEAD_REPO}"
+            --repository "${REPOSITORY}"
+            --workflow-path "${WORKFLOW_PATH}"
+            --seam-json "${SEAM_JSON}"
+            --public-json "${PUBLIC_JSON}"
+            --policy config/runner_routing_policy.yaml
+            --force "${FORCE}"
+          )
+          [ "${DRY_RUN}" = "true" ] && args+=(--dry-run)
+          uv run --frozen python3 scripts/ci/runner_route_decision.py "${args[@]}" || rc=$?
+          # FAIL-CLOSED FLOOR. The node catches everything internally, but if
+          # the interpreter itself could not run, the calling workflow must
+          # still receive a usable runs-on rather than an empty string, which
+          # would make every consuming job fail to SCHEDULE -- a failure with no
+          # log to read.
+          if [ ! -s "${GITHUB_OUTPUT}" ] || ! grep -q '^runs_on=' "${GITHUB_OUTPUT}"; then
+            echo 'runs_on=["ubuntu-latest"]' >> "${GITHUB_OUTPUT}"
+            echo 'decision=hosted' >> "${GITHUB_OUTPUT}"
+            echo 'reason=probe_error:module_unavailable' >> "${GITHUB_OUTPUT}"
+          fi
+          # THE REFUSAL, AFTER THE FLOOR. Exit 3 means the placement is
+          # forbidden rather than merely unavailable: a private caller whose
+          # only allowed placement is GitHub-hosted. The node has already
+          # written its outputs and its record, so the floor above is a no-op on
+          # this path by construction and cannot paper the refusal over with
+          # hosted labels. Failing here is the point.
+          if [ "${rc}" = "3" ]; then
+            echo "::error title=Runner route refused::this repository is private and the only placement its policy allows is a GitHub-hosted runner; the decision record names the cause"
+            exit 1
+          fi
+
+      - name: Upload the decision record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-route-decision-${{ github.run_id }}-${{ github.job }}
+          path: .runner-route/runner-route-decision.json
+          if-no-files-found: ignore
+          retention-days: 7
