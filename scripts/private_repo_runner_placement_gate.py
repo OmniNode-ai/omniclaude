@@ -147,9 +147,24 @@ class Branch:
         return f"guarded by `{self.guard.strip()}`" if self.guard else "default arm"
 
 
-def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _gh(
+    args: list[str], env_name: str = "GH_TOKEN"
+) -> subprocess.CompletedProcess[str]:
+    """Run `gh`, optionally under a different token than the job token.
+
+    The job token can read its own repository and nothing above it. Reading
+    ORGANISATION variables needs a credential with organisation scope, so that
+    read is made under `GH_TOKEN_ORG` when a caller supplies one and under the
+    job token otherwise -- which is the case that 403s, and is handled by
+    failing closed at the point a value is actually needed rather than at
+    startup.
+    """
+    env = os.environ.copy()
+    token = os.environ.get(env_name)
+    if token:
+        env["GH_TOKEN"] = token
     return subprocess.run(
-        ["gh", *args], check=False, capture_output=True, text=True, timeout=30
+        ["gh", *args], check=False, capture_output=True, text=True, timeout=30, env=env
     )
 
 
@@ -172,26 +187,85 @@ def resolve_visibility(slug: str) -> str:
     return visibility
 
 
-def live_variables(slug: str) -> dict[str, str]:
-    """Repository variables layered over organisation variables.
+class Variables:
+    """Repository variables layered over organisation variables, read LAZILY.
 
     A repo-scoped shadow overrides the organisation value, which is the whole
     trap in rule 14: flipping the org value while a shadow still holds the old
-    one drains nothing, and the org readback looks correct.
+    one drains nothing, and the org readback looks correct. So both scopes are
+    consulted -- but the organisation scope is read with a credential the job
+    token does not have, and demanding it up front made this gate unrunnable in
+    every repository whose jobs never name a variable at all.
+
+    The resolution is therefore deferred to the point a NAME is looked up. A
+    name present at repository scope is answered without ever touching the
+    organisation. A name absent there, in a repository where the organisation
+    read failed, is a REFUSAL naming the token -- never a silent fall through
+    to the expression own literal default, which is how a repository carrying
+    no shadow at all would come back green while inheriting a hosted
+    organisation value.
     """
-    org = slug.split("/", 1)[0]
-    merged: dict[str, str] = {}
-    for scope in (["--org", org], ["--repo", slug]):
-        result = _gh(["variable", "list", *scope, "--json", "name,value"])
+
+    def __init__(self, slug: str) -> None:
+        self._org_name = slug.split("/", 1)[0]
+        self._repo = self._read(["--repo", slug], slug)
+        self._org: dict[str, str] | None = None
+        self._org_error: str | None = None
+
+    @staticmethod
+    def _read(scope: list[str], label: str) -> dict[str, str]:
+        result = _gh(
+            ["variable", "list", *scope, "--json", "name,value"],
+            env_name="GH_TOKEN_ORG" if scope[0] == "--org" else "GH_TOKEN",
+        )
         if result.returncode != 0:
             raise GateError(
-                f"could not list variables for scope {scope[1]} "
+                f"could not list variables for scope {label} "
                 f"({result.stderr.strip()[:200]}). Placement cannot be "
                 "resolved. THE GATE DID NOT RUN."
             )
-        for item in json.loads(result.stdout or "[]"):
-            merged[item["name"]] = item["value"]
-    return merged
+        return {
+            item["name"]: item["value"] for item in json.loads(result.stdout or "[]")
+        }
+
+    def _org_scope(self) -> dict[str, str] | None:
+        if self._org is None and self._org_error is None:
+            try:
+                self._org = self._read(["--org", self._org_name], self._org_name)
+            except GateError as error:
+                self._org_error = str(error)
+        return self._org
+
+    @classmethod
+    def from_fixture(cls, values: dict[str, str]) -> Variables:
+        """A fully-resolved map, for TESTS only. CI never takes this path."""
+        instance = cls.__new__(cls)
+        instance._org_name = ""
+        instance._repo = dict(values)
+        instance._org = {}
+        instance._org_error = None
+        return instance
+
+    def get(self, name: str) -> str | None:
+        """The value this repository resolves `name` to, or None if unset.
+
+        Raises rather than answering None when the organisation scope could not
+        be read, because "unset here" and "unreadable above here" are different
+        facts and only one of them means the expression own default applies.
+        """
+        if name in self._repo:
+            return self._repo[name]
+        org = self._org_scope()
+        if org is None:
+            raise GateError(
+                f"{name} is not set on this repository and the organisation "
+                f"scope could not be read, so whether it is set above this "
+                f"repository is unknown -- and an organisation value overrides "
+                f"the expression own default. Pass an organisation-readable "
+                f"credential as the ORG_VARIABLES_TOKEN secret. Underlying "
+                f"read: {self._org_error} THE GATE DID NOT RUN."
+            )
+        return org.get(name)
 
 
 def _labels(value: Any) -> list[str]:
@@ -242,7 +316,7 @@ def _split_top_level(expression: str, operator: str) -> list[str]:
 
 
 def _labels_of(
-    fragment: str, runs_on: str, variables: dict[str, str]
+    fragment: str, runs_on: str, variables: Variables
 ) -> tuple[list[str], str]:
     """Resolve one arm's value to labels, live, or refuse to guess."""
     names = VAR_REF.findall(fragment)
@@ -276,7 +350,7 @@ def _labels_of(
     return labels, "; ".join(how)
 
 
-def resolve_branches(runs_on: Any, variables: dict[str, str]) -> list[Branch]:
+def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
     """Return every arm this `runs-on` can resolve to, with its guard.
 
     An expression is not "unknown": it resolves, live, to whatever the
@@ -354,7 +428,7 @@ def _offending_branch(branches: list[Branch]) -> Branch | None:
     return None
 
 
-def scan(repo_root: Path, slug: str, variables: dict[str, str]) -> list[Finding]:
+def scan(repo_root: Path, slug: str, variables: Variables) -> list[Finding]:
     workflows = repo_root / ".github" / "workflows"
     if not workflows.is_dir():
         raise GateError(
@@ -476,9 +550,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         variables = (
-            json.loads(Path(args.variables_json).read_text(encoding="utf-8"))
+            Variables.from_fixture(
+                json.loads(Path(args.variables_json).read_text(encoding="utf-8"))
+            )
             if args.variables_json
-            else live_variables(args.repo)
+            else Variables(args.repo)
         )
         findings = scan(Path(args.repo_root), args.repo, variables)
     except GateError as error:
