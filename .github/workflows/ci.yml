@@ -2083,10 +2083,24 @@ jobs:
           # omniclaude#2144, #2145 and #2148 all took the 2-split selective path
           # and never exercised the directory, which is why it stayed latent.
           #
-          # test_branch_claim.py and test_branch_claim_hook.py drive a real
-          # `git push` through the installed pre-push hook and need a git
-          # identity, a default branch name and OMNI_HOME. branch-claim-gate.yml
-          # supplies all three and is their CI home; they lose nothing here.
+          # test_branch_claim.py, test_branch_claim_hook.py and
+          # test_lane_identity_canary.py drive a real `git push` and a real
+          # `git commit` through installed hooks. They need a git identity, a
+          # default branch name, and an ABSOLUTE path to the claim index module,
+          # which lives in a different repository. branch-claim-gate.yml checks
+          # that repository out and passes the path as ONEX_CLAIM_INDEX_MODULE;
+          # it is their CI home and they lose nothing here.
+          #
+          # The previous revision of this comment said the gate supplies
+          # OMNI_HOME. It does not, and never did -- these files resolve the
+          # module from the explicit variable and fall back to OMNI_HOME only
+          # when it is absent. That distinction is why the canary was red here:
+          # the consolidated job supplies NEITHER, and the canary FAILS rather
+          # than skipping when it cannot locate the module, so it errored at
+          # fixture setup on every pull request merging dev after
+          # 2026-09-16T14:35Z -- omniclaude#2194 among them, otherwise green.
+          # It was added to branch-claim-gate.yml when it landed and to this
+          # list only now; one half of a two-half change (OMN-18273).
           #
           # test_install_hook_emit_drainer.py drives the real launchd installer
           # and needs brew python3.13 at the rule-11 path plus launchctl. No
@@ -2096,11 +2110,15 @@ jobs:
           # recorded on OMN-18357 rather than left to be rediscovered.
           #
           # tests/test_ci_full_suite_ignores.py holds this list to exactly those
-          # three, each with a named reason, so it cannot quietly grow.
+          # four, each with a named reason, so it cannot quietly grow. That test
+          # also asserts each gated entry is NAMED by the workflow claimed as its
+          # home, so an ignore can never be justified by a gate that does not run
+          # the file.
           set +e
           uv run pytest -o addopts="" tests/ \
             --ignore=tests/scripts/test_branch_claim.py \
             --ignore=tests/scripts/test_branch_claim_hook.py \
+            --ignore=tests/scripts/test_lane_identity_canary.py \
             --ignore=tests/scripts/test_install_hook_emit_drainer.py \
             --splits ${{ needs.detect-changes.outputs.split_count }} \
             --group ${{ matrix.split }} \
