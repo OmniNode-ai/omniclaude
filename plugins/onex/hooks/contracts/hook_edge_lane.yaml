@@ -244,6 +244,25 @@ relay:
 # against the --event-type each *_bus_mirror.sh actually emits, so a new hook
 # cannot join the edge without joining the lane policy.
 topic_registry: "src/omniclaude/hooks/topic_registry.yaml"
+#
+# THE EIGHTH TOPIC (OMN-18471 AC7). CLAUDE_HOOK_EVENT
+# (onex.cmd.omniintelligence.claude-hook-event.v1) is in the live producer
+# fan-out and was in no revision of this list until now. That was not a
+# paperwork gap: a reader who provisioned produce ACLs from the seven
+# constants below got a producer that could not publish AT ALL. Measured
+# 2026-09-16 -- with the seven granted and the eighth not, every batch failed
+# on `Topic onex.cmd.omniintelligence.claude-hook-event.v1 is not authorized
+# for this client`, the journal held at its 50,000-record bound, and zero
+# records drained. It was the only denial in the run. Granting the eighth
+# under its own operator consent row made the same drainer drain cleanly and
+# the topic took its first writes ever (high watermark 0 -> 25).
+#
+# It is also a different ACCESS CLASS from the other seven. They are
+# `onex.evt.*`, the broad-access observability class. This one is
+# `onex.cmd.omniintelligence.*`, which this repository's invariants reserve
+# for full prompts and file contents -- so a contract that governed the hook
+# edge while omitting it also understated the blast radius of the grant it
+# implies.
 governed_topics:
   - "SESSION_STARTED"
   - "SESSION_ENDED"
@@ -252,6 +271,84 @@ governed_topics:
   - "SKILL_STARTED"
   - "SKILL_COMPLETED"
   - "TOOL_OUTPUT_CAPTURED"
+  - "CLAUDE_HOOK_EVENT"
+
+# ---------------------------------------------------------------------------
+# The event CLASSES this edge emits (OMN-18471 AC2).
+# ---------------------------------------------------------------------------
+# `governed_topics` above names TOPICS. This names CLASSES, and the two are
+# not the same list: one class can fan out to several topics, and two classes
+# can share one topic (`response.stopped` and `prompt.submitted` both reach
+# CLAUDE_HOOK_EVENT). A contract that declared only topics could not say
+# which classes the edge actually produces, which is how eight of them went
+# undelivered for three months without any surface reporting it.
+#
+# `validate_hook_edge_lane.py` resolves every quoted event-type literal in
+# `plugins/onex/hooks/scripts/*.sh` -- the `--event-type` passed to
+# hook_emit_append.py, and the first argument of emit_to_journal /
+# emit_via_daemon -- and fails if any of them is missing here. A hook cannot
+# join the edge without joining the lane policy, and it cannot do so by
+# emitting a class nobody declared either.
+#
+# DELIVERY STATE, measured 2026-09-16 and NOT uniform. The journal
+# (${ONEX_STATE_DIR}/hook_emit_journal -> hook_emit_drainer.py) is the only
+# path that delivers; emit_via_daemon writes to a Unix socket absent since
+# 2026-06-08. `j` = has a journal call site, `L` = legacy-only.
+#
+#   j  session.started              onex.evt.omniclaude.session-started.v1
+#   j  session.ended                onex.evt.omniclaude.session-ended.v1
+#   j  tool.executed                onex.evt.omniclaude.tool-executed.v1
+#   j  prompt.submitted             onex.evt.omniclaude.prompt-submitted.v1
+#                                 + onex.cmd.omniintelligence.claude-hook-event.v1
+#   j  dod.guard.fired              onex.evt.omniclaude.dod-guard-fired.v1
+#   j  skill.started                onex.evt.omniclaude.skill-started.v1
+#   j  response.stopped             onex.cmd.omniintelligence.claude-hook-event.v1
+#   L  skill.completed              onex.evt.omniclaude.skill-completed.v1
+#                                 + onex.evt.omniclaude.skill-invoked.v1
+#   L  agent.action                 onex.evt.omniclaude.agent-actions.v1
+#   L  session.outcome              onex.evt.omniclaude.session-outcome.v1
+#                                 + onex.cmd.omniintelligence.session-outcome.v1
+#   L  routing.feedback             onex.evt.omniclaude.routing-feedback.v1
+#   L  llm.cost.completed           onex.evt.omniintelligence.llm-call-completed.v1
+#   L  utilization.scoring.requested onex.cmd.omniintelligence.utilization-scoring.v1
+#
+# Fan-out is read from omnimarket `node_emit_daemon/registries/topics.yaml`,
+# which is what the drainer's HandlerEventEmitEffect resolves against. The
+# omniclaude topic registry above is the constant->topic home; it is not the
+# fan-out, and for `agent.action` the two even disagree on the topic NAME
+# (`agent-action.v1` here, `agent-actions.v1` in the fan-out the publish
+# actually uses). Read the fan-out registry, never this one, when the
+# question is which topic a class lands on.
+#
+# WHY THE SIX `L` CLASSES ARE NOT RE-HOMED IN THE SAME CHANGE. Every topic
+# their fan-out requires -- skill-invoked, agent-actions, both session-outcome
+# topics, routing-feedback, llm-call-completed, utilization-scoring -- exists
+# on the dev broker and has NO produce ACL for the hook edge's principal. A
+# journal call site for any of them would therefore put a record in the queue
+# that the drainer cannot publish, and a denied topic does not fail only its
+# own record: it stops the drain. That is measured, not inferred, and it is
+# the same mechanism the eighth topic demonstrated above. Adding those call
+# sites before the grants exist would take hook capture back down, so the
+# grants come first. Broker permissions are the operator's decision.
+#
+# `dod.guard.fired` is in the same position for a different reason: it
+# already HAS a journal call site (pre_tool_use_dod_completion_guard.sh) and
+# its topic has no grant either, so it is a live hazard rather than a pending
+# one -- the first time that guard fires, the drain stops.
+governed_event_classes:
+  - "session.started"
+  - "session.ended"
+  - "tool.executed"
+  - "prompt.submitted"
+  - "dod.guard.fired"
+  - "skill.started"
+  - "skill.completed"
+  - "response.stopped"
+  - "agent.action"
+  - "session.outcome"
+  - "routing.feedback"
+  - "llm.cost.completed"
+  - "utilization.scoring.requested"
 
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).

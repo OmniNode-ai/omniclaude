@@ -102,6 +102,9 @@ def _write_contract(tmp_path: Path, lanes: str, lane: str = "dev") -> Path:
         "  required_network: 'omnibase-infra-network'\n"
         "topic_registry: 'src/omniclaude/hooks/topic_registry.yaml'\n"
         "governed_topics:\n  - 'TOOL_EXECUTED'\n"
+        # Required since OMN-18471 AC2: a lane contract declares the event
+        # CLASSES on the edge, not only the topics they land on.
+        "governed_event_classes:\n  - 'tool.executed'\n"
         "non_authoritative_surfaces:\n  - '~/.omnibase/.env'\n",
         encoding="utf-8",
     )

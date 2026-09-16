@@ -135,6 +135,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
             --argjson tools_count "$TOOLS_COUNT" \
             '{session_id: $session_id, completion_status: $completion_status, event_type: $event_type, latency_seconds: $latency_seconds, gate_results: $gate_results, tools_count: $tools_count}' 2>/dev/null)
         if [[ -n "$STOP_PAYLOAD" ]] && [[ "$STOP_PAYLOAD" != "null" ]]; then
+            # OMN-18471: re-homed onto the journal path, which is the only one
+            # that delivers. The emit_via_daemon call below stays until every
+            # orphaned class is re-homed and the whole legacy surface is
+            # retired in one change (AC5).
+            emit_to_journal "response.stopped" "$STOP_PAYLOAD" "$SESSION_ID"
             emit_via_daemon "response.stopped" "$STOP_PAYLOAD" 100
         else
             log "WARNING: Failed to construct stop payload, skipping Kafka emission"
