@@ -266,7 +266,7 @@ def test_the_environment_is_synced_before_the_decision_runs() -> None:
     uv_at = next(
         i
         for i, step in enumerate(steps)
-        if isinstance(step, dict) and "setup-uv" in str(step.get("uses", ""))
+        if isinstance(step, dict) and "uv sync" in str(step.get("run", ""))
     )
     decide_at = next(
         i
@@ -274,9 +274,10 @@ def test_the_environment_is_synced_before_the_decision_runs() -> None:
         if isinstance(step, dict) and step.get("id") == "decide"
     )
     assert uv_at < decide_at
-    # One step does the resolve and the run, with one set of group flags, so
-    # the two cannot disagree and the environment is built exactly once.
+    # Both carry --no-dev, so the run cannot re-resolve what the sync already
+    # installed, and a dependency failure is still diagnosed in its own step.
     assert "uv run --frozen --no-dev" in _step("decide")["run"]
+    assert "--no-dev" in str(steps[uv_at]["run"])
 
 
 def test_every_step_that_needs_the_node_runs_inside_its_checkout() -> None:
@@ -289,7 +290,7 @@ def test_every_step_that_needs_the_node_runs_inside_its_checkout() -> None:
         if not isinstance(step, dict):
             continue
         run = str(step.get("run", ""))
-        if "runner_route_decision.py" in run:
+        if "runner_route_decision.py" in run or "uv sync" in run:
             assert step.get("working-directory") == ".runner-route"
 
 
