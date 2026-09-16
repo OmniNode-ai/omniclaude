@@ -423,26 +423,59 @@ def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
 
 
 def _variables_with_unreadable_org(module, repo_scope: dict[str, str]):
-    """A resolver whose repository scope is readable and organisation is not.
+    """A resolver whose repository scope reads and whose organisation does not.
 
-    This is the live CI shape: the job token reads its own repository and 403s
-    on the organisation. The real class is used, with only its one I/O call
-    replaced on the instance, so the lazy path under test is the one that
-    ships.
+    Built through the real class with only its one I/O call replaced on the
+    instance, so the lazy path under test is the one that ships.
     """
 
-    def fake_read(scope: list[str], label: str) -> dict[str, str]:
-        if scope[0] == "--org":
+    def fake_read(flag: str, target: str) -> dict[str, str]:
+        if flag == "--org":
             raise module.GateError("HTTP 403: Resource not accessible by integration")
         return dict(repo_scope)
 
-    instance = module.Variables.__new__(module.Variables)
+    instance = module.Variables("OmniNode-ai/fixture")
     instance._read = fake_read
-    instance._org_name = "OmniNode-ai"
-    instance._repo = dict(repo_scope)
-    instance._org = None
-    instance._org_error = None
     return instance
+
+
+def _variables_with_no_readable_scope(module):
+    """Neither scope readable: the live shape with no credential supplied."""
+
+    def fake_read(flag: str, target: str) -> dict[str, str]:
+        raise module.GateError("HTTP 403: Resource not accessible by integration")
+
+    instance = module.Variables("OmniNode-ai/fixture")
+    instance._read = fake_read
+    return instance
+
+
+def test_a_literal_placement_never_reads_a_variable_at_all(tmp_path: Path) -> None:
+    """The majority case, and the reason every read is deferred.
+
+    A repository whose jobs pin their labels needs no credential: if a read
+    happened here it would raise, because neither scope is readable.
+    """
+    module = _module()
+    variables = _variables_with_no_readable_scope(module)
+    root = _tree(
+        tmp_path,
+        "ci.yml",
+        "name: CI\non:\n  pull_request: {}\njobs:\n"
+        "  build:\n    runs-on: [self-hosted, omnibase-ci]\n"
+        "    steps:\n      - run: true\n",
+    )
+    assert module.scan(root, "OmniNode-ai/fixture", variables) == []
+
+
+def test_an_unreadable_repository_scope_refuses_by_name(tmp_path: Path) -> None:
+    """No credential plus an expression is a refusal, not a default."""
+    module = _module()
+    variables = _variables_with_no_readable_scope(module)
+    root = _tree(tmp_path, "ci.yml", _seam_job())
+    with pytest.raises(module.GateError) as error:
+        module.scan(root, "OmniNode-ai/fixture", variables)
+    assert "ACTIONS_VARIABLES_TOKEN" in str(error.value)
 
 
 def test_a_repo_scoped_value_never_needs_the_organisation(tmp_path: Path) -> None:
@@ -475,4 +508,4 @@ def test_an_unreadable_organisation_scope_refuses_rather_than_defaulting(
     root = _tree(tmp_path, "ci.yml", _seam_job())
     with pytest.raises(module.GateError) as error:
         module.scan(root, "OmniNode-ai/fixture", variables)
-    assert "ORG_VARIABLES_TOKEN" in str(error.value)
+    assert "ACTIONS_VARIABLES_TOKEN" in str(error.value)
