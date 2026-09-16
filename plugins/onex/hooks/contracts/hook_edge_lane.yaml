@@ -123,14 +123,33 @@ lane_host: "192.168.86.201"  # onex-allow-internal-ip
 #   sasl_mechanism    -> REQUIRED beside a SASL_* protocol, REJECTED beside a
 #                        non-SASL one. A declaration that says two things is
 #                        not a declaration.
-#   sasl_env_prefix   -> a REFERENCE, never a value. It names the prefix this
-#                        host stores the credential under, so the four names
+#   sasl_credential_source
+#                     -> WHERE the identity is resolved from, REQUIRED beside a
+#                        SASL_* protocol and REJECTED beside a non-SASL one.
+#                        `operator_env_file` is the lab host's answer (the
+#                        prefix below names the two variables in
+#                        OMNIBASE_OPERATOR_ENV_FILE, default ~/.omnibase/.env,
+#                        the surface `deploy-runtime.sh` resolves the lane
+#                        principal from). `onex_lane_store` is a workstation's
+#                        answer: ~/.onex/config.yaml `lanes.<lane>` plus the
+#                        0600 ~/.onex/credentials.json, which is the store
+#                        `onex auth lane-login` writes and `onex delegate
+#                        --lane` reads.
+#   sasl_env_prefix   -> a REFERENCE, never a value, belonging to
+#                        `operator_env_file` ONLY. It names the prefix that
+#                        file spells the credential under, so the four names
 #                        ModelKafkaEventBusConfig.apply_environment_overrides()
-#                        reads can be resolved at run time from the operator
-#                        env file (OMNIBASE_OPERATOR_ENV_FILE, default
-#                        ~/.omnibase/.env) -- the same surface
-#                        `deploy-runtime.sh` resolves the lane's principal
-#                        from on the lab host.
+#                        reads can be resolved at run time. The client store is
+#                        keyed by lane and takes no prefix; a lane declaring
+#                        both is refused.
+#
+# THE SOURCE IS DECLARED, NEVER SEARCHED (OMN-18120). The resolver reads the
+# one declared surface and does not fall back to the other. A fallback chain
+# would put the credential back under resolution-by-search-order -- the exact
+# defect this file was created to retire for the BROKER -- and on a machine
+# holding two identities it would silently authenticate as whichever file was
+# read first. An absent identity is a refusal naming the remedy, which is a
+# strictly better outcome than a connection as the wrong principal.
 #
 # CONFIG HERE, SECRET ELSEWHERE. `ci_bus_lanes.yaml` states the line this file
 # also holds: SASL credential VALUES are never stored in a checked-in lane
@@ -166,10 +185,19 @@ known_lanes:
     # ("SSL handshake failed ... connecting to a PLAINTEXT broker listener?").
     security_protocol: "SASL_PLAINTEXT"
     sasl_mechanism: "SCRAM-SHA-256"
-    # -> DEV_KAFKA_SASL_USERNAME / DEV_KAFKA_SASL_PASSWORD in the operator env
-    # file. The same two names docker-compose.dev-lane.yml resolves for all
-    # fifteen compose clients. A pointer, not a credential.
-    sasl_env_prefix: "DEV_"
+    # The per-lane client store under ~/.onex -- config.yaml's lanes.dev block
+    # (a principal NAME and a REFERENCE) plus credentials.json (mode 0600, the
+    # value). That is what `onex auth lane-login --lane dev` writes and what
+    # `onex delegate --lane dev` reads, so the two dev-lane clients on an
+    # operator workstation present ONE identity instead of one each.
+    #
+    # NOT sasl_env_prefix: "DEV_". That prefix names the operator env file, and
+    # it is the right answer on the LAB HOST, where deploy-runtime.sh and the
+    # fifteen dev-lane compose services all resolve the principal from
+    # ${HOME}/.omnibase/.env. It is the wrong answer on a workstation, whose
+    # bus identity lives in the store precisely so it is not sitting in a
+    # world-readable .env. Declaring both would be two answers; see OMN-18120.
+    sasl_credential_source: "onex_lane_store"
   stability-test:
     compose_project: "omnibase-infra-stability-test"
     network: "omnibase-infra-stability-test-network"

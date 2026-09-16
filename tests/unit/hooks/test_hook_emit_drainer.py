@@ -21,6 +21,7 @@ a broker and without paying the ~30s import the drainer exists to amortize.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -335,37 +336,59 @@ def test_drainer_lock_frees_after_holder_is_killed(tmp_path: Path, jdir: Path) -
 
 
 @pytest.fixture
-def _lane_credential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A synthetic operator env file, so these tests are about the LANE.
+def _lane_credential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A synthetic client store, so these tests are about the LANE.
 
     The shipped contract's declared lane is SASL (OMN-17284), so
-    ``apply_declared_lane`` now resolves a credential as well as an address.
-    These two tests are about address resolution and precedence, and they must
-    give the same verdict on a developer laptop, on the lab host and on a CI
-    runner -- reading whatever the real ``~/.omnibase/.env`` happens to hold
-    would make them pass or fail on host state rather than on the behaviour
-    they name. The credential-absent path has its own dedicated coverage in
-    ``tests/hooks/test_omn17284_hook_edge_declared_transport.py``.
+    ``apply_declared_lane`` resolves a credential as well as an address. These
+    two tests are about address resolution and precedence, and they must give
+    the same verdict on a developer laptop, on the lab host and on a CI runner.
+
+    CORRECTED by OMN-18120, and the correction is the point of the fixture
+    rather than an incidental edit. This wrote a synthetic OPERATOR ENV FILE,
+    which stopped being the dev lane's declared credential surface when that
+    lane moved to ``sasl_credential_source: onex_lane_store``. Left as it was,
+    both tests read the developer's real ``~/.onex`` -- green on a machine that
+    holds a dev-lane identity, red on a CI runner that does not, which is
+    exactly the host-dependent verdict the original fixture was written to
+    prevent. So it now writes the synthetic surface the lane actually declares,
+    and the tests inject it.
+
+    The credential-absent path has its own dedicated coverage in
+    ``tests/hooks/test_omn17284_hook_edge_declared_transport.py`` and
+    ``tests/hooks/test_omn18120_hook_edge_credential_source.py``.
     """
-    env_file = tmp_path / "operator.env"
-    env_file.write_text(
-        "DEV_KAFKA_SASL_USERNAME=synthetic-lane-principal\n"
-        "DEV_KAFKA_SASL_PASSWORD=synthetic-not-a-real-secret\n",
+    # Pointed at a file that does not exist, so a regression that reinstated a
+    # fallback to the env file would fail here rather than pass quietly.
+    monkeypatch.setenv("OMNIBASE_OPERATOR_ENV_FILE", str(tmp_path / "absent.env"))
+
+    onex_home = tmp_path / ".onex"
+    onex_home.mkdir()
+    (onex_home / "config.yaml").write_text(
+        "lanes:\n"
+        "  dev:\n"
+        "    sasl_username: 'synthetic-lane-principal'\n"
+        "    sasl_password_ref: 'dev-lane-sasl'\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("OMNIBASE_OPERATOR_ENV_FILE", str(env_file))
+    credentials = onex_home / "credentials.json"
+    credentials.write_text(
+        json.dumps({"dev-lane-sasl": "synthetic-not-a-real-secret"}), encoding="utf-8"
+    )
+    credentials.chmod(0o600)
+    return onex_home
 
 
 def test_drainer_applies_declared_lane_when_env_is_empty(
     monkeypatch: pytest.MonkeyPatch,
-    _lane_credential: None,
+    _lane_credential: Path,
 ) -> None:
     """launchd hands the drainer no KAFKA_BOOTSTRAP_SERVERS. The contract must."""
     monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
     monkeypatch.delenv("KAFKA_BROKERS", raising=False)
     monkeypatch.delenv("ONEX_HOOK_EDGE_LANE", raising=False)
 
-    lane = drainer.apply_declared_lane()
+    lane = drainer.apply_declared_lane(onex_home=_lane_credential)
 
     contract_path = (
         _REPO_ROOT / "plugins" / "onex" / "hooks" / "contracts" / "hook_edge_lane.yaml"
@@ -381,18 +404,59 @@ def test_drainer_applies_declared_lane_when_env_is_empty(
 
 def test_declared_lane_beats_a_disagreeing_ambient_env(
     monkeypatch: pytest.MonkeyPatch,
-    _lane_credential: None,
+    _lane_credential: Path,
 ) -> None:
     """An env var naming another lane is a finding, never an input (OMN-17204)."""
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "other-lane.invalid:9999")
     monkeypatch.setenv("KAFKA_BROKERS", "other-lane.invalid:9999")
 
-    lane = drainer.apply_declared_lane()
+    lane = drainer.apply_declared_lane(onex_home=_lane_credential)
 
     assert lane is not None
     assert lane != "other-lane.invalid:9999"
     assert os.environ["KAFKA_BOOTSTRAP_SERVERS"] == lane
     assert os.environ["KAFKA_BROKERS"] == lane
+
+
+def test_a_machine_with_no_stored_identity_writes_nothing_and_returns_none(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The live 2026-09-15 failure, pinned (OMN-18120).
+
+    The dev lane declares SASL and resolves its credential from the ~/.onex
+    client store. On a machine holding no identity for that lane the resolver
+    refuses, and the question this test answers is what the drainer does next:
+    it must write NOTHING. launchd hands this process an environment of
+    ``{OMNI_HOME, ONEX_STATE_DIR, HOME}`` with no broker address in it, so a
+    half-applied lane -- an address written, a credential missing -- would
+    produce an anonymous connect against an auth-required listener.
+
+    Returning ``None`` with the environment untouched is what makes the next
+    publish raise a named ``KeyError: 'KAFKA_BOOTSTRAP_SERVERS'`` and back off,
+    which is the loud, diagnosable failure the live drainer actually showed for
+    22 hours, rather than a client quietly dialling as nobody.
+    """
+    for name in ("KAFKA_BOOTSTRAP_SERVERS", "KAFKA_BROKERS", "ONEX_HOOK_EDGE_LANE"):
+        monkeypatch.delenv(name, raising=False)
+    # The legacy surface is present and complete. A regression that reinstated a
+    # fallback to it would resolve here, so this is the negative control for
+    # "the resolver reads the DECLARED surface and only that one".
+    env_file = tmp_path / "operator.env"
+    env_file.write_text(
+        "DEV_KAFKA_SASL_USERNAME=synthetic-lane-principal\n"
+        "DEV_KAFKA_SASL_PASSWORD=synthetic-not-a-real-secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OMNIBASE_OPERATOR_ENV_FILE", str(env_file))
+
+    assert drainer.apply_declared_lane(onex_home=tmp_path / "no-such-onex") is None
+
+    for name in ("KAFKA_BOOTSTRAP_SERVERS", "KAFKA_BROKERS", "ONEX_HOOK_EDGE_LANE"):
+        assert name not in os.environ, (
+            f"{name} was written although the declared lane could not be "
+            "resolved; a half-applied lane is how an anonymous client reaches "
+            "an auth-required broker"
+        )
 
 
 def test_unreadable_contract_leaves_env_untouched(
