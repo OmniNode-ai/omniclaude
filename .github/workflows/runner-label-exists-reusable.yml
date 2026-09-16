@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Runner-label-exists gate (reusable). OMN-18408.
+#
+# A job pinned to a label no runner carries does not fail. It QUEUES, the pull
+# request that merged the pin stays green because the job never ran, and the
+# only surface that knows is the organisation's runner listing, which nothing
+# consults at merge time.
+#
+# Measured 2026-09-16: a pull request repinned five scheduled lab probes to a
+# host label whose runner had not been registered yet. Zero of 64 organisation
+# runners carried it. The probes queued for about four hours -- one canary run
+# sat unstarted for 2h40m -- and no check anywhere said so.
+#
+# DELIBERATELY SEPARATE from `private-repo-runner-placement-reusable.yml`. That
+# gate asks whether a job is on a hosted runner it should not be on; this one
+# asks whether the label a job names exists at all. This one applies to PUBLIC
+# repositories too, and needs a credential that one does not. Entangling the two
+# verdicts would make one line fail for two unrelated reasons under one name.
+#
+# Usage in caller repos:
+#   jobs:
+#     runner-label-exists:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/runner-label-exists-reusable.yml@<immutable-sha>
+#       secrets:
+#         ORG_RUNNERS_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+#
+# Surfaced check context in the caller:
+#   `runner-label-exists / runner-label-exists`
+#
+# ONE pin, not two: the script is checked out at `github.job_workflow_sha`, so
+# the caller's `uses:` SHA is the single source of truth for both the workflow
+# and the validator. Pin to an omniclaude commit on `dev`.
+
+name: Runner Label Exists (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      org:
+        description: >-
+          Organisation whose runner listing is authoritative. Defaults to the
+          owner of the calling repository.
+        required: false
+        default: ""
+        type: string
+    secrets:
+      ORG_RUNNERS_TOKEN:
+        description: >-
+          A credential that can read the ORGANISATION's self-hosted runner
+          listing (`GET /orgs/{org}/actions/runners`). The Actions job token
+          cannot: that read needs organisation administration scope, which a
+          workflow cannot grant itself through `permissions:`. REQUIRED -- the
+          gate refuses rather than guessing when it cannot read the listing,
+          because an unreadable listing and an empty fleet are the same value
+          and neither is a pass. Pass `secrets.CROSS_REPO_PAT`.
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  runner-label-exists:
+    name: runner-label-exists
+    # On the fleet, like its sibling gate: this job reads the fleet's own
+    # registration state, and a gate that cannot run when the fleet is degraded
+    # is exactly the gate you need when the fleet is degraded. It is pinned to a
+    # literal rather than routed through a seam so it does not share fate with
+    # the variable it would otherwise read.
+    runs-on: [self-hosted, omnibase-ci]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout the caller repository
+        uses: actions/checkout@v4
+
+      - name: Checkout the validator at this workflow's own SHA
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ github.job_workflow_sha }}
+          path: .runner-label-exists-gate
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install PyYAML==6.0.2
+
+      # GH_TOKEN is the ORG-scoped credential, not the job token: the runner
+      # listing is an organisation read. A failure to read it is exit 2 and
+      # "THE GATE DID NOT RUN" -- never a pass. Actions-variable reads (needed
+      # only when a job's labels come from a `vars.*` expression) reuse the same
+      # credential; an arm that still cannot be resolved is REPORTED as
+      # run-time-computed rather than refused, and a repository in which NOTHING
+      # was decidable is itself a refusal.
+      - name: Run the runner-label-exists gate
+        env:
+          GH_TOKEN: ${{ secrets.ORG_RUNNERS_TOKEN }}
+          GH_TOKEN_VARIABLES: ${{ secrets.ORG_RUNNERS_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(--repo-root . --repo "${GITHUB_REPOSITORY}")
+          if [ -n "${{ inputs.org }}" ]; then
+            args+=(--org "${{ inputs.org }}")
+          fi
+          python3 .runner-label-exists-gate/scripts/runner_label_exists_gate.py "${args[@]}"
