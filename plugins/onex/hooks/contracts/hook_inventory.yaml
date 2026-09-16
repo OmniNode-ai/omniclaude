@@ -395,10 +395,95 @@ expected_hooks:
           - "ROTATION-CONSENT"
         stdout_absent: []
 
-  - script: "pre_tool_use_pr_body_stamp_guard.sh"
+  - script: "pre_tool_use_git_stash_guard.sh"
     event: "PreToolUse"
     matcher: "Bash"
     order: 5
+    ticket: "OMN-17334"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Bash command that mutates the git stash (`push`, `pop`,
+      `apply`, `drop`, `save`, `clear`, `store`, `branch`, or a bare
+      `git stash`) when the command's cwd or `-C <path>` target resolves to a
+      git WORKTREE (`.git` is a file pointing at the parent clone's real git
+      directory) or a canonical clone directly under `$OMNI_HOME`, shared by
+      every concurrent lane. git's stash is one repo-wide stack, so a scoped
+      `git stash push -- <path>` on a tree with no changes to that path
+      silently creates NO entry and still exits 0, and the paired
+      `git stash pop` then pops whatever is at stash@{0} -- another lane's
+      work. Measured six times by 2026-09-16 across omnibase_infra and
+      omnimarket (rolling work ledger rows on 2026-09-15T03:10Z,
+      2026-09-15T23:23Z and 2026-09-16T01:38Z), twice destroying a peer
+      lane's uncommitted work outright. Reads (`git stash list`,
+      `git stash show`) are never gated and are not allowlisted -- they
+      simply match no shape, because the policy's mutating-subcommand
+      vocabulary never names them; a stash mutation in an ordinary git clone
+      that is neither a worktree nor a canonical clone under `$OMNI_HOME` is likewise
+      outside both conditions and is never gated, since that lane owns the
+      whole stash stack alone. There is deliberately no consent-citation
+      escape hatch: the safe alternative (`git checkout origin/dev --
+      <path>` then `git checkout HEAD -- <path>`, scoped to named paths)
+      never touches the shared stash ref, so nothing legitimate needs an
+      exception. The shared-tree half of this hazard -- two concurrent lanes
+      racing push/pop inside the SAME canonical clone -- is OMN-18433 and is
+      deliberately untouched here. Registered AFTER
+      pre_tool_use_credential_rotation_guard.sh on the same matcher, which
+      never inspects a stash shape, so the two never contend for the same
+      call.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      # BORROWED BIT, recorded rather than left for a reader to infer, same
+      # pattern as pre_tool_use_credential_rotation_guard.sh's
+      # PRE_TOOL_AUTHORIZATION_SHIM borrow. A dedicated bit is unavailable:
+      # all 60 default-mask ordinals in hook_bits.sh are allocated, 60-62 are
+      # the disabled-by-default trio, and bit-governance rule 7 forbids
+      # ordinal 63 outright.
+      #
+      # SWEEP_PREFLIGHT was chosen over SKILL_SUBSTITUTION_GUARD (also
+      # unregistered, also otherwise uncontested) because SWEEP_PREFLIGHT is
+      # `bit_defined: true` in hook_bits.sh and SKILL_SUBSTITUTION_GUARD is
+      # not -- a gate_call naming an undefined bit can never actually fire,
+      # since `hook_bits_bit_for_name` returns non-zero for it and
+      # `onex_hook_gate` then returns 0 unconditionally. SWEEP_PREFLIGHT's
+      # own namesake script (pre_tool_use_sweep_preflight.sh) is on disk and
+      # UNREGISTERED, and no other registered script gates on it, so
+      # `onex hooks disable SWEEP_PREFLIGHT` disables exactly this guard and
+      # nothing else that is live.
+      #
+      # tests/hooks/test_git_stash_guard.py pins the borrow: registering
+      # pre_tool_use_sweep_preflight.sh would silently share the switch
+      # between two independent controls.
+      gate_call: "SWEEP_PREFLIGHT"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "git stash pop"
+      env:
+        # CLAUDE_PROJECT_DIR (set by _prepare to {repo_root}) is this canary's
+        # target directory, since the stdin carries no explicit `cwd`. In a
+        # worktree checkout {repo_root}'s own .git is already a FILE, so the
+        # WORKTREE branch fires regardless of OMNI_HOME. In a plain checkout
+        # (CI, and any non-worktree clone) .git is a directory, so this sets
+        # OMNI_HOME to {repo_root}'s PARENT -- satisfying the canonical-clone
+        # branch instead. Both branches block, so this value exercises
+        # whichever one applies without needing to know which.
+        OMNI_HOME: "{repo_root}/.."
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "OMN-17334"
+        stdout_absent: []
+
+  - script: "pre_tool_use_pr_body_stamp_guard.sh"
+    event: "PreToolUse"
+    matcher: "Bash"
+    order: 6
     ticket: "OMN-18335"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -473,7 +558,7 @@ expected_hooks:
   - script: "pre_tool_use_agent_model_guard.sh"
     event: "PreToolUse"
     matcher: "^(Workflow|Agent)$"
-    order: 6
+    order: 7
     ticket: "OMN-17499"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -522,7 +607,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 7
+    order: 8
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -551,7 +636,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 8
+    order: 9
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -582,7 +667,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 9
+    order: 10
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -1031,7 +1116,7 @@ expected_hooks:
   - script: "pre_tool_use_skill_started.sh"
     event: "PreToolUse"
     matcher: "Skill"
-    order: 10
+    order: 11
     ticket: "OMN-16979"
     owner: "omniclaude hooks lane"
     purpose: >
