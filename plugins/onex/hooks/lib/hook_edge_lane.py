@@ -495,28 +495,34 @@ def read_lane_client_store(lane: str, *, onex_home: Path) -> dict[str, str]:
     assert isinstance(username, str) and isinstance(password_ref, str)
 
     secrets_path = onex_home / LANE_STORE_VALUE_FILE
+
+    import json
+
+    # The mode is read from the OPEN DESCRIPTOR, and the bytes are read from
+    # that same descriptor, so the file whose permissions were checked is
+    # necessarily the file that was read. A path-based `stat()` followed by a
+    # separate `read_text()` leaves a window between the two in which the mode
+    # can change, which is a check that proves nothing about the read.
     try:
-        mode = stat.S_IMODE(secrets_path.stat().st_mode)
+        with secrets_path.open("r", encoding="utf-8") as handle:
+            mode = stat.S_IMODE(os.fstat(handle.fileno()).st_mode)
+            if mode & 0o077:
+                raise HookEdgeLaneCredentialError(
+                    f"{secrets_path} is mode {mode:04o}; a bus credential "
+                    "readable by any other identity on this machine is "
+                    f"refused. Fix it with 'chmod 600 {secrets_path}'"
+                )
+            value_file_text = handle.read()
     except OSError as exc:
         raise HookEdgeLaneCredentialError(
             f"{config_path}: lanes.{lane} points at {password_ref!r} but "
             f"{secrets_path} cannot be read ({exc.strerror}). Re-place the "
             f"identity with {_lane_login_remediation(lane)}"
         ) from exc
-    if mode & 0o077:
-        raise HookEdgeLaneCredentialError(
-            f"{secrets_path} is mode {mode:04o}; a bus credential readable by "
-            "any other identity on this machine is refused. Fix it with "
-            f"'chmod 600 {secrets_path}'"
-        )
-
-    import json
 
     try:
-        secrets = json.loads(  # secret-ok: parsed from the 0600 file, not literal
-            secrets_path.read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError) as exc:
+        secrets = json.loads(value_file_text)  # secret-ok: file bytes, not a literal
+    except ValueError as exc:
         raise HookEdgeLaneCredentialError(
             f"{secrets_path} does not parse as JSON ({exc}); re-place the "
             f"identity with {_lane_login_remediation(lane)}"
