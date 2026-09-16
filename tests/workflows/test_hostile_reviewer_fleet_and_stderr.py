@@ -37,10 +37,12 @@ words and loses the behaviour fails here.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import subprocess
+import urllib.parse
 from pathlib import Path
 from typing import Any, cast
 
@@ -297,6 +299,26 @@ echo "ERROR: All models failed. Review could not be performed." >&2
 exit 1
 """
 
+# A placeholder chosen so each ENCODING of it differs from the raw spelling --
+# it carries a quote, a slash and a plus, and no whitespace (a real signing
+# value has none, and a token-scoped redaction cannot match across a space). A
+# value made only of unreserved characters would pass an encoding test that
+# tested nothing.
+ENCODED_VALUE = 'pl@ceholder/"not+real"0123456789'
+
+# The same value after each transformation it can plausibly survive on its way
+# to stderr: a JSON body, a query string, an encoded header.
+ENCODED_STUB = """#!/usr/bin/env bash
+echo 'json: {json}' >&2
+echo 'query: {query}' >&2
+echo 'b64: {b64}' >&2
+exit 1
+""".format(
+    json=json.dumps(ENCODED_VALUE)[1:-1],
+    query=urllib.parse.quote(ENCODED_VALUE, safe=""),
+    b64=base64.b64encode(ENCODED_VALUE.encode()).decode(),
+)
+
 PASSING_STUB = """#!/usr/bin/env bash
 echo "Model 'deepseek-r1' succeeded in 233.5s (0 finding(s))." >&2
 cat <<'JSON'
@@ -470,6 +492,43 @@ def test_secret_redaction_does_not_mutate_partial_token_matches(
     assert FAKE_SIGNING_VALUE not in payload["stderr"]
     assert f"prefix-***{SIGNING_KEY_VAR}-redacted***-suffix" not in payload["stderr"]
     assert payload["stderr"].count(f"***{SIGNING_KEY_VAR}-redacted***") >= 2
+
+
+def test_encoded_spellings_of_the_signing_value_are_redacted_too(
+    tmp_path: Path,
+) -> None:
+    """A plain substring replace only catches the value spelled verbatim.
+
+    Anything that passes through a JSON body, a query string or an encoded
+    header reaches stderr in a form that does not match the raw value, and the
+    first revision of the redaction printed those in full. Raised by this gate's
+    own adversarial reviewer on the pull request that introduced it.
+    """
+    result, artifact, _ = _run_review_script(
+        tmp_path,
+        stub=ENCODED_STUB,
+        extra_env={SIGNING_KEY_VAR: ENCODED_VALUE},
+    )
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+
+    for label, spelling in (
+        ("raw", ENCODED_VALUE),
+        ("json-escaped", json.dumps(ENCODED_VALUE)[1:-1]),
+        ("percent-encoded", urllib.parse.quote(ENCODED_VALUE, safe="")),
+        ("base64", base64.b64encode(ENCODED_VALUE.encode()).decode()),
+    ):
+        assert spelling not in result.stdout, (
+            f"the {label} spelling of the signing value reached the job log"
+        )
+        assert spelling not in payload["stderr"], (
+            f"the {label} spelling of the signing value reached the artifact"
+        )
+
+    for prefix in ("json: ", "query: ", "b64: "):
+        assert f"{prefix}***{SIGNING_KEY_VAR}-redacted***" in payload["stderr"], (
+            f"the {prefix.strip()} line must keep its marker, so a reader can "
+            "tell a redacted line from a line that never existed"
+        )
 
 
 def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:

@@ -355,18 +355,53 @@ jobs:
             # secrets, not runner env. Done in python reading os.environ so no
             # value is ever placed on a command line, where `ps` would show it.
             python3 - "$ATTEMPT_ERR" <<'PY'
+          import base64
+          import json
           import os
           import re
           import sys
+          import urllib.parse
+
+          def spellings(value: str) -> list[str]:
+              """Every form the value can reach stderr in, longest first.
+
+              A substring replace only catches the value spelled verbatim.
+              Anything that passes through a JSON body, a query string or an
+              encoded header arrives in a form that does not match it and was
+              printed in full. Longest first so a shorter spelling cannot cut a
+              longer one in half and leave the remainder in the log.
+              """
+              return sorted(
+                  {
+                      value,
+                      json.dumps(value)[1:-1],
+                      urllib.parse.quote(value, safe=""),
+                      base64.b64encode(value.encode()).decode(),
+                  },
+                  key=len,
+                  reverse=True,
+              )
+
 
           def redact_value(text: str, name: str, value: str) -> str:
-              pattern = re.compile(
-                  rf"(^|\s)(\S*{re.escape(value)}\S*)(?=\s|$)"
-              )
-              return pattern.sub(
-                  lambda match: f"{match.group(1)}***{name}-redacted***",
-                  text,
-              )
+              """Replace the WHOLE token containing any spelling of the value.
+
+              Splicing the value out of the middle of a token leaves the
+              surrounding characters behind, which reads as corruption and tells
+              a reader how long the value was. The token goes, or nothing does.
+              Over-redaction is the accepted direction: a value that happens to
+              sit inside an unrelated token costs a marked-up log line, which is
+              legible. The other direction leaves a signing value in CI output.
+              """
+              for spelling in spellings(value):
+                  pattern = re.compile(
+                      rf"(^|\s)(\S*{re.escape(spelling)}\S*)(?=\s|$)"
+                  )
+                  text = pattern.sub(
+                      lambda match: f"{match.group(1)}***{name}-redacted***",
+                      text,
+                  )
+              return text
 
 
           path = sys.argv[1]
