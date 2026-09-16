@@ -627,6 +627,21 @@ _FALSIFIER_GRAMMAR: Final[str] = (
     "<criterion text> -- falsifier: <check name or command shape that would settle it>"
 )
 
+#: The whole shape rule 10 asks for, rendered in every refusal it produces.
+#: A refusal that names a missing property without showing the form that
+#: carries it is one an author satisfies by guessing, and a guessed shape is
+#: how a criteria section ends up parseable but unbindable -- which is the
+#: defect, not a near miss of it.
+_LABELLED_CRITERION_GRAMMAR: Final[str] = (
+    "- [ ] AC<n>: <criterion text> -- falsifier: <check name or command shape "
+    "that would settle it>"
+)
+
+#: The two ordinal prefixes :data:`_CRITERION_LABEL` reads, rendered for an
+#: author. Spelled here rather than derived from the pattern because a regex
+#: source is not a remedy anybody can act on.
+_CRITERION_LABEL_FORMS: Final[str] = "AC<n> or DOD<n>"
+
 
 class PolicyError(RuntimeError):
     """The admission policy could not be read.
@@ -654,6 +669,13 @@ class Policy:
     behaviour_runner_words: tuple[str, ...]
     unstarted_children_cap: int
     unstarted_state_types: frozenset[str]
+    #: Rule 10 (OMN-18484). The fewest LABELLED criteria a create may carry.
+    min_labelled_criteria: int
+    #: The binding-form ids that exempt a create from rule 10, validated at
+    #: load time against the declared grammar: an exemption naming a form
+    #: nothing can produce is an exemption that never fires, and a gate whose
+    #: exemption never fires reads as working.
+    labelled_criterion_exempt_binding_forms: frozenset[str]
     override_ledger_paths: frozenset[str]
     override_ledger_path_prefixes: tuple[str, ...]
     #: The declared binding grammar (OMN-18414). Carried on the policy so the
@@ -983,6 +1005,20 @@ def load_policy(path: Path | None = None, grammar_path: Path | None = None) -> P
                 )
     criterion_ids = _string_list(raw.get("criterion_ids"), "criterion_ids", source)
     invariant_ids = _string_list(raw.get("invariant_ids"), "invariant_ids", source)
+
+    # Rule 10's exemption names FORMS, and the forms are the contract's. An id
+    # the grammar does not declare can never be the answer _binding_kind
+    # returns, so the exemption would silently never fire -- a gate reporting
+    # green while enforcing something other than what its config says.
+    exempt_key = "labelled_criterion_exempt_binding_forms"
+    exempt_forms = _string_list(raw.get(exempt_key), exempt_key, source)
+    for form_id in exempt_forms:
+        if grammar.form(form_id) is None:
+            raise PolicyError(
+                f"{source}: {exempt_key} entry {form_id!r} is not a form "
+                f"declared by {grammar.source}; the declared forms are "
+                f"{', '.join(f.id for f in grammar.forms)}"
+            )
     return Policy(
         gate_grammar=grammar,
         criterion_ids=frozenset(c.upper() for c in criterion_ids),
@@ -1052,6 +1088,10 @@ def load_policy(path: Path | None = None, grammar_path: Path | None = None) -> P
             "override_ledger_path_prefixes",
             source,
         ),
+        min_labelled_criteria=_positive_int(
+            raw.get("min_labelled_criteria"), "min_labelled_criteria", source
+        ),
+        labelled_criterion_exempt_binding_forms=frozenset(exempt_forms),
     )
 
 
@@ -1726,6 +1766,101 @@ def _criterion_findings(description: str, policy: Policy) -> list[Finding]:
     return findings
 
 
+def _labelled_criterion_findings(
+    description: str, binding: str | None, policy: Policy
+) -> list[Finding]:
+    """Rule 10 -- the create carries a criterion the closer can bind evidence to.
+
+    Rules 6 and 7 ask what a LISTED criterion must carry. This asks the prior
+    question: is there a criterion at all, and does one of them carry a label?
+    Both halves are the same defect seen from the closing side. A binding entry
+    keys on a label (``ModelAcBinding``), so an unlabelled criterion cannot
+    appear in a binding record at all; and a description that parses to zero
+    criteria is refused outright by the evidence-autoclose sweep, which is why
+    such a ticket can never close mechanically no matter how good its evidence.
+
+    This is deliberately the rule that closes rule 6's stated fail-OPEN. That
+    rule declines to fire on a description with no criteria section, because
+    there an over-count would refuse a create; here the absence IS the finding,
+    so there is nothing to over-count.
+
+    Two exempt shapes, both declared in config rather than inferred:
+
+    * an epic states its own commitment and its children carry the criteria;
+    * a create bound by a form the policy names -- the parent-criterion form --
+      points at a LABELLED criterion on its parent, so the bindable thing this
+      rule demands already exists. A binding that names a check or a document
+      id (a workflow run, a release criterion, an invariant, a live-gate
+      defect) does not, and is not exempt.
+
+    The threshold is at least one labelled criterion, not all of them. Rules 6
+    and 7 already bound what every criterion carries; asking every one of them
+    to be labelled as well would refuse the mixed sections the corpus is full
+    of, and a gate that refuses correct work is one lanes route around.
+    """
+    if _declares_epic(description, policy):
+        return []
+    if (
+        binding is not None
+        and binding in policy.labelled_criterion_exempt_binding_forms
+    ):
+        return []
+
+    units = criterion_units(description, policy)
+    if not units:
+        headings = ", ".join(sorted(policy.acceptance_criteria_headings))
+        return [
+            Finding(
+                code="missing_acceptance_criteria",
+                field="description",
+                reason=(
+                    "the description lists no acceptance criterion: no "
+                    "recognised criteria heading opens a section here, so the "
+                    "parser the evidence closer reads tickets with returns "
+                    "nothing. A ticket with no parseable criterion is refused "
+                    "outright by that closer, so this one could never close "
+                    "mechanically however good its evidence turned out to be"
+                ),
+                fix=(
+                    "open a section with one of these headings -- "
+                    f"{headings} -- and write each criterion as "
+                    f"'{_LABELLED_CRITERION_GRAMMAR}'. At least "
+                    f"{policy.min_labelled_criteria} criterion must carry an "
+                    f"ordinal label ({_CRITERION_LABEL_FORMS}), because that "
+                    "label is "
+                    "what a change-control binding entry points at. If the "
+                    "work has no such criterion, it is not yet a ticket"
+                ),
+            )
+        ]
+
+    labelled = sum(1 for unit in units if unit.label is not None)
+    if labelled >= policy.min_labelled_criteria:
+        return []
+    return [
+        Finding(
+            code="unlabelled_criteria",
+            field="description",
+            reason=(
+                f"every one of the {len(units)} acceptance criteria listed "
+                "here parses, and none carries an ordinal label "
+                f"({_CRITERION_LABEL_FORMS}). A binding entry keys on "
+                "that label, so an unlabelled criterion cannot appear in a "
+                "binding record at all -- the criteria read fine to a human "
+                "and are invisible to everything that closes tickets"
+            ),
+            fix=(
+                f"prefix at least {policy.min_labelled_criteria} of them with "
+                f"an ordinal -- {_CRITERION_LABEL_FORMS} -- giving "
+                f"'{_LABELLED_CRITERION_GRAMMAR}'. The ordinal is the stable "
+                "thing a binding points at, which is why a position in the "
+                "list will not do: inserting a bullet would renumber every "
+                "binding below it"
+            ),
+        )
+    ]
+
+
 def _override_path_is_canonical(cited: str, policy: Policy) -> bool:
     """True when the citation names the append-only coordination surface.
 
@@ -2200,6 +2335,13 @@ def check_save_issue(
     # it, and a behaviour-shaped criterion does not name a merge-state read.
     if description_readable:
         findings.extend(_criterion_findings(description, policy))
+
+    # Rule 10 -- the create carries a criterion the closer can bind evidence
+    # to. Read AFTER rules 6 and 7 because it closes their stated fail-open,
+    # and given the binding rule 3 already classified so the two cannot
+    # disagree about which form this create declares.
+    if description_readable:
+        findings.extend(_labelled_criterion_findings(description, binding, policy))
 
     # Rule 8 -- a parent may not carry more than N children nobody has started.
     # The one rule here that reads state outside the payload, because the

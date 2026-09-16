@@ -143,11 +143,15 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 "unstarted_state_types": ["backlog"],
                 "override_ledger_paths": ["docs/tracking/ROLLING_WORK_LEDGER.md"],
                 "override_ledger_path_prefixes": ["docs/tracking/archive/"],
+                "min_labelled_criteria": 2,
+                "labelled_criterion_exempt_binding_forms": ["invariant"],
             }
         ),
         encoding="utf-8",
     )
     policy = _GUARD.load_policy(override)
+    assert policy.min_labelled_criteria == 2
+    assert policy.labelled_criterion_exempt_binding_forms == frozenset({"invariant"})
     assert policy.unstarted_children_cap == 3
     assert policy.unstarted_state_types == frozenset({"backlog"})
     assert policy.criterion_ids == frozenset({"C1"})
@@ -3063,3 +3067,309 @@ def test_the_drift_check_reports_a_mutated_vendored_copy(tmp_path: Path) -> None
         _assert_no_grammar_drift(mutated, canonical)
     assert str(mutated) in str(caught.value), "the failure must name the file"
     assert where in str(caught.value), "and what it diverged from"
+
+
+# ---------------------------------------------------------------------------
+# Rule 10 -- a create carries at least one LABELLED acceptance criterion
+# (OMN-18484)
+#
+# Rules 6 and 7 (OMN-18331) made a listed criterion name the check that would
+# settle it. They say nothing about whether the criterion carries a LABEL, and
+# nothing at all about a description that lists no criterion. Both gaps are the
+# same defect from the closer's side: a binding entry keys on a label
+# (`ModelAcBinding`), and a ticket whose description parses to zero criteria is
+# refused outright by the evidence-autoclose sweep. 64.4% of the 915 tickets
+# created in the fourteen days to 2026-09-16 carry no labelled criterion, so
+# the closer has nothing to bind to on two tickets in three.
+#
+# Scope, and why it is the whole population rather than the criteria-carrying
+# one: rule 6 deliberately fails OPEN on a description with no criteria section,
+# because there an over-count would refuse a create. Rule 10 closes exactly that
+# hole, so the two rules' scopes are complementary by construction and the
+# policy comment for `acceptance_criteria_headings` is no longer describing a
+# live fail-open.
+#
+# The two exempt shapes are DECLARED, not inferred. An epic states its own
+# commitment and its children carry the criteria. A create bound by the
+# parent-criterion form names a labelled criterion ON ITS PARENT -- the binding
+# target already exists and is already labelled, which is the entire property
+# rule 10 exists to guarantee. A create bound to a release criterion, an
+# invariant, a workflow run or a live-gate defect names a CHECK or a document
+# id, not a label a binding entry can key on, so it is not exempt.
+# ---------------------------------------------------------------------------
+
+_LABELLED_CRITERIA_SECTION = (
+    "## Acceptance criteria\n"
+    "\n"
+    "- [ ] AC1: the guard refuses a create with no labelled criterion "
+    "-- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+)
+
+_UNLABELLED_CRITERIA_SECTION = (
+    "## Acceptance criteria\n"
+    "\n"
+    "- [ ] the guard refuses an unlabelled create "
+    "-- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+    "- [ ] the refusal names the label grammar "
+    "-- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+    "- [ ] the exemptions are read from the policy file "
+    "-- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+)
+
+#: A binding line whose form is NOT exempt from rule 10. The workflow-run form
+#: names a CI workflow -- a check, not a labelled commitment -- so a ticket
+#: bound this way still has to carry its own criteria. OMN-18484's own body is
+#: written this way.
+_UNEXEMPT_GATE = "Gate: OmniNode-ai/omniclaude ci.yml"
+
+#: The parent-criterion form, which IS exempt: it names `AC-5` on OMN-16729,
+#: a label a binding entry can already key on.
+_EXEMPT_GATE = "Gate: OMN-16729 AC-5"
+
+
+def _rule_ten(body: str, **overrides: Any) -> dict[str, Any]:
+    return _create(description=body, **overrides)
+
+
+# -- AC1: a create that parses to zero criteria is refused -------------------
+
+
+def test_a_create_parsing_to_zero_criteria_is_refused() -> None:
+    """RED before OMN-18484: this create is admitted today.
+
+    The description binds, names a project and a parent, and lists nothing the
+    closer could ever discharge.
+    """
+    body = f"{_UNEXEMPT_GATE}\n\nThe deliverable is described in prose only.\n"
+    assert _GUARD.criterion_units(body, POLICY) == [], (
+        "positive control: the parser reads no criterion out of this body, "
+        "which is the population the rule is about"
+    )
+    assert "missing_acceptance_criteria" in _codes(_rule_ten(body))
+
+
+def test_a_create_carrying_a_labelled_criterion_is_admitted() -> None:
+    """The paired positive control -- admitted before the rule and after it.
+
+    Without this, a rule 10 that refused every create would pass every other
+    case in this section.
+    """
+    body = f"{_UNEXEMPT_GATE}\n\n{_LABELLED_CRITERIA_SECTION}"
+    assert _check(_rule_ten(body)) == []
+
+
+def test_the_missing_criteria_refusal_names_the_criteria_section() -> None:
+    """A refusal that says 'no criteria' without saying what one looks like is
+    a refusal an author satisfies by guessing."""
+    body = f"{_UNEXEMPT_GATE}\n\nProse only.\n"
+    reason = _reason(_rule_ten(body))
+    assert "missing_acceptance_criteria" in reason
+    assert "acceptance criteria" in reason.lower()
+    assert "AC<n>" in reason
+    assert "falsifier:" in reason
+
+
+def test_the_guard_exits_three_on_a_create_with_no_criteria(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The decision core's own exit code, not the shell wrapper's.
+
+    `main` returns 3 for a block with the payload on stdout; the registered
+    wrapper maps that onto its own code. AC1 pins the former.
+    """
+    import io
+
+    payload = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": _rule_ten(f"{_UNEXEMPT_GATE}\n\nProse only.\n"),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    # No credential, so rule 8 cannot reach the network and cannot supply the
+    # refusal this case is about. Without this the test passes on whichever
+    # finding a live census happens to produce.
+    monkeypatch.setattr(_GUARD, "_resolve_api_key", lambda: "")
+    written = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", written)
+    code = _GUARD.main([])
+    assert code == 3
+    decision = json.loads(written.getvalue())
+    assert decision["decision"] == "block"
+    assert "missing_acceptance_criteria" in decision["reason"], decision["reason"]
+
+
+# -- AC2: criteria that parse but carry no label are refused ----------------
+
+
+def test_three_unlabelled_criteria_are_refused() -> None:
+    body = f"{_UNEXEMPT_GATE}\n\n{_UNLABELLED_CRITERIA_SECTION}"
+    units = _GUARD.criterion_units(body, POLICY)
+    assert len(units) == 3 and all(u.label is None for u in units), (
+        "positive control: the parser reads three criteria and labels none"
+    )
+    assert "unlabelled_criteria" in _codes(_rule_ten(body))
+
+
+def test_the_same_three_criteria_labelled_are_admitted() -> None:
+    """The paired control: the ONLY difference is the label."""
+    labelled = (
+        _UNLABELLED_CRITERIA_SECTION.replace("- [ ] the guard", "- [ ] AC1: the guard")
+        .replace("- [ ] the refusal", "- [ ] AC2: the refusal")
+        .replace("- [ ] the exemptions", "- [ ] AC3: the exemptions")
+    )
+    body = f"{_UNEXEMPT_GATE}\n\n{labelled}"
+    units = _GUARD.criterion_units(body, POLICY)
+    assert [u.label for u in units] == ["AC1", "AC2", "AC3"], (
+        "positive control: the same three criteria now carry labels"
+    )
+    assert _check(_rule_ten(body)) == []
+
+
+def test_the_unlabelled_refusal_names_the_label_grammar() -> None:
+    """Both accepted label spellings, because an author who reads only one of
+    them rewrites the section twice."""
+    body = f"{_UNEXEMPT_GATE}\n\n{_UNLABELLED_CRITERIA_SECTION}"
+    reason = _reason(_rule_ten(body))
+    assert "unlabelled_criteria" in reason
+    assert "AC<n>" in reason
+    assert "DOD<n>" in reason
+
+
+def test_one_labelled_criterion_among_unlabelled_ones_is_admitted() -> None:
+    """The threshold is at least one, not all of them.
+
+    Rules 6 and 7 already bound what every criterion must carry. Rule 10 asks
+    only whether the closer has ANY label to bind to, and widening it to every
+    criterion would refuse the mixed sections the corpus is full of.
+    """
+    body = (
+        f"{_UNEXEMPT_GATE}\n\n{_UNLABELLED_CRITERIA_SECTION}"
+        "- [ ] AC9: one labelled criterion "
+        "-- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+    )
+    assert _check(_rule_ten(body)) == []
+
+
+def test_a_dod_label_satisfies_the_rule() -> None:
+    body = (
+        f"{_UNEXEMPT_GATE}\n\n## Definition of done\n\n"
+        "- [ ] DOD1: the guard reads a DoD ordinal as a label "
+        "-- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard.py -q\n"
+    )
+    assert _check(_rule_ten(body)) == []
+
+
+# -- AC4: the two declared exemptions ---------------------------------------
+
+
+def test_an_epic_create_with_no_labelled_criterion_is_admitted() -> None:
+    """An epic states a commitment; its children carry the criteria."""
+    body = f"{_UNEXEMPT_GATE}\n\nissue_class: epic\n\nThe closure-throughput epic.\n"
+    assert _check(_rule_ten(body, parentId=None)) == []
+
+
+def test_a_parent_criterion_binding_admits_a_create_with_no_criteria() -> None:
+    """The second declared exemption: the binding names a LABEL on the parent,
+    so the thing rule 10 demands already exists and is already bindable."""
+    body = f"{_EXEMPT_GATE}\n\nProse only.\n"
+    assert _check(_rule_ten(body)) == []
+
+
+def test_a_create_declaring_neither_exemption_is_refused() -> None:
+    """The third case AC4 asks for -- the control that proves the exemptions
+    are exemptions and not the rule."""
+    body = f"{_UNEXEMPT_GATE}\n\nProse only.\n"
+    assert "missing_acceptance_criteria" in _codes(_rule_ten(body))
+
+
+def test_a_release_criterion_binding_is_not_exempt() -> None:
+    """A C-id names a PRD row, not a label a binding entry can key on."""
+    assert "missing_acceptance_criteria" in _codes(
+        _rule_ten("Gate: C7\n\nProse only.\n")
+    )
+
+
+def test_a_live_gate_defect_binding_is_not_exempt() -> None:
+    assert "missing_acceptance_criteria" in _codes(
+        _rule_ten("Gate: live-gate defect: kb-doc-gate\n\nProse only.\n")
+    )
+
+
+def test_rule_ten_does_not_gate_an_update() -> None:
+    """Rules 1-8 bound a ticket's shape at CREATION. An update is rule 9's."""
+    assert (
+        _GUARD.check_save_issue(
+            {"id": "OMN-18484", "state": "In Progress"}, POLICY, body_lookup=None
+        )
+        == []
+    )
+
+
+# -- AC3: the threshold and both exemptions are policy, not literals --------
+
+
+def _policy_without(key: str, tmp_path: Path) -> Path:
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    assert key in raw, f"positive control: {key!r} is in the shipped policy"
+    del raw[key]
+    written = tmp_path / "policy.json"
+    written.write_text(json.dumps(raw), encoding="utf-8")
+    return written
+
+
+def test_the_shipped_policy_carries_the_rule_ten_vocabulary() -> None:
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    assert raw["min_labelled_criteria"] == 1
+    assert raw["labelled_criterion_exempt_binding_forms"] == ["parent_criterion"]
+    assert POLICY.min_labelled_criteria == 1
+    assert POLICY.labelled_criterion_exempt_binding_forms == frozenset(
+        {"parent_criterion"}
+    )
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "min_labelled_criteria",
+        "labelled_criterion_exempt_binding_forms",
+        "epic_markers",
+    ],
+)
+def test_deleting_a_rule_ten_policy_key_refuses_rather_than_defaulting(
+    key: str, tmp_path: Path
+) -> None:
+    """Rule 8 of the doctrine: fail fast on a missing key, never a default.
+
+    A default here would be a silently different admission policy on any
+    machine whose config lagged -- which is the class of failure the whole
+    config-not-literal convention exists to remove.
+    """
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(_policy_without(key, tmp_path))
+
+
+def test_an_exempt_form_the_grammar_does_not_declare_refuses_at_load(
+    tmp_path: Path,
+) -> None:
+    """An exemption naming a form nothing can produce is an exemption that
+    never fires, and a gate whose exemption never fires reads as working."""
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    raw["labelled_criterion_exempt_binding_forms"] = ["no_such_form"]
+    written = tmp_path / "policy.json"
+    written.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(written)
+
+
+def test_the_guard_spells_no_rule_ten_constant_of_its_own() -> None:
+    """AC3's grep, as an assertion.
+
+    The threshold and the exempt form id are POLICY. The only spellings of
+    either that may appear in the module are the key lookups that read them.
+    """
+    constants = _code_string_constants(_GUARD_PY)
+    assert constants, "positive control: the module has executable string constants"
+    offenders = [c for c in constants if "parent_criterion" in c]
+    assert not offenders, (
+        f"the exempt form id is spelled in {offenders!r}: it is read from "
+        "ticket_creation_policy.json, not carried here"
+    )
