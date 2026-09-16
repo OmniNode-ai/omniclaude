@@ -378,6 +378,74 @@ def test_the_store_refuses_an_inline_password(tmp_path: Path) -> None:
     assert _FAKE_PASS not in message
 
 
+@pytest.mark.parametrize(
+    "yaml_value",
+    ["true", "false", "null", "0", "1", "~", "[]", "{}", "''", '""'],
+    ids=[
+        "bool-true",
+        "bool-false",
+        "null",
+        "int-zero",
+        "int-one",
+        "tilde-null",
+        "empty-list",
+        "empty-dict",
+        "empty-single-quoted",
+        "empty-double-quoted",
+    ],
+)
+def test_the_inline_password_refusal_is_by_KEY_not_by_value(
+    tmp_path: Path, yaml_value: str
+) -> None:
+    """The refusal is a membership test, and every YAML scalar type proves it.
+
+    Raised by an adversarial review that claimed ``sasl_password: true`` slips
+    through, on the reasoning that YAML coerces it to a Python ``bool`` and a
+    later ``isinstance`` check would not catch it. It does not slip through:
+    the inline-key refusal is ``if LANE_STORE_INLINE_PASSWORD_KEY in entry``,
+    which raises on the KEY being present and never reaches any type check.
+
+    The claim was wrong, but the hazard it describes is real for a FUTURE
+    edit: rewriting that line as ``if entry.get(key):`` would silently pass
+    every falsy value here -- ``false``, ``null``, ``0``, ``''`` -- and a
+    truthy-but-non-string one would then meet a type check that was never
+    meant to be the gate. This parametrisation is what makes that refactor a
+    red test instead of a review argument.
+    """
+    lib = _load_lib()
+    onex_home = tmp_path / ".onex"
+    _write_store(onex_home)
+    (onex_home / "config.yaml").write_text(
+        "lanes:\n"
+        "  dev:\n"
+        f"    sasl_username: '{_FAKE_USER}'\n"
+        f"    sasl_password_ref: '{_FAKE_REF}'\n"
+        f"    sasl_password: {yaml_value}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(lib.HookEdgeLaneCredentialError) as excinfo:
+        lib.read_lane_client_store("dev", onex_home=onex_home)
+
+    assert "sasl_password" in str(excinfo.value)
+
+
+def test_a_well_formed_entry_without_the_inline_key_still_resolves(
+    tmp_path: Path,
+) -> None:
+    """Positive control for the parametrisation above.
+
+    Without it, those ten cases would be equally satisfied by a reader that
+    refused every entry it was ever handed.
+    """
+    lib = _load_lib()
+    onex_home = _write_store(tmp_path / ".onex")
+
+    resolved = lib.read_lane_client_store("dev", onex_home=onex_home)
+
+    assert resolved[lib.ENV_SASL_USERNAME] == _FAKE_USER
+
+
 def test_a_machine_holding_no_entry_for_the_lane_yields_nothing(
     tmp_path: Path,
 ) -> None:
