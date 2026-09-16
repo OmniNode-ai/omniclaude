@@ -113,6 +113,26 @@ def _labels_lower(values: Any) -> frozenset[str]:
     return frozenset(str(value).lower() for value in values)
 
 
+def runner_listing_command(org: str) -> list[str]:
+    """The argv used to read the organisation's runner listing.
+
+    Split out so the no-credential-on-argv property is testable rather than
+    asserted in a comment. The credential reaches `gh` ONLY through the
+    inherited environment: every element of this list is a literal or the
+    organisation slug, and a test pins that against a sentinel token.
+
+    Why it matters: an argument list is world-readable through `ps` for the
+    life of the process, on a host shared with every other job on the runner.
+    An environment variable is readable only by the process and its children.
+    """
+    return [
+        "gh",
+        "api",
+        "--paginate",
+        f"/orgs/{org}/actions/runners?per_page=100",
+    ]
+
+
 def load_runners(org: str) -> list[Runner]:
     """Every runner registered to the organisation, live.
 
@@ -120,15 +140,7 @@ def load_runners(org: str) -> list[Runner]:
     listing that failed to load and a fleet with no runners are the same value
     and must not be the same verdict.
     """
-    # `gh` reads GH_TOKEN from the inherited environment. The credential is
-    # never named here and never passed on a command line, where `ps` would
-    # show it to every user on the host.
-    command = [
-        "gh",
-        "api",
-        "--paginate",
-        f"/orgs/{org}/actions/runners?per_page=100",
-    ]
+    command = runner_listing_command(org)
     try:
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
     except FileNotFoundError as error:  # pragma: no cover - environment guard

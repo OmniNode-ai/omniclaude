@@ -477,3 +477,28 @@ def test_a_run_time_computed_arm_is_reported_not_silently_skipped(
     assert result.returncode == 0
     assert "computed at run time" in result.stdout
     assert "routed.yml::consume" in result.stdout
+
+
+def test_the_runner_listing_command_carries_no_credential_on_argv() -> None:
+    """The credential reaches `gh` through the environment, never through argv.
+
+    An argument list is world-readable through `ps` for the life of the
+    process, on a host shared with every other job on the runner; an
+    environment variable is readable only by the process and its children. This
+    is asserted against a sentinel rather than described in a comment, because
+    an adversarial review of this module read the workflow's `env:` block and
+    concluded the token was on the command line. It is not, and this is the
+    falsifier for that reading.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import runner_label_exists_gate as gate
+
+    sentinel = "ghs_SENTINEL_NEVER_ON_ARGV"
+    argv = gate.runner_listing_command("OmniNode-ai")
+    assert all(sentinel not in part for part in argv)
+    # Positive control: the sentinel is a value this test could actually find,
+    # so an assertion that never fails is not mistaken for one that passes.
+    assert sentinel in f"{sentinel} {' '.join(argv)}"
+    # And nothing in the list is credential-shaped at all.
+    assert argv[0] == "gh"
+    assert all(not part.lower().startswith(("ghp_", "ghs_", "gho_")) for part in argv)
