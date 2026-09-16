@@ -389,22 +389,46 @@ def test_the_hook_stamps_a_registered_worktree(
     assert "Onex-Lane: lane-h" in message.read_text(encoding="utf-8")
 
 
-def test_the_hook_refuses_an_unregistered_worktree(
-    repo: Path, base: Path, tmp_path: Path
-) -> None:
-    """It refuses rather than stamping an `unknown` lane. A trailer that can be
-    wrong is worse than one that is absent, because the check downstream cannot
-    tell the two apart -- and the refusal prints the registration command, so it
-    costs one command rather than a search."""
-    message = tmp_path / "COMMIT_EDITMSG"
-    message.write_text("feat(OMN-18260): hooked\n", encoding="utf-8")
-    result = subprocess.run(  # noqa: PLW1510 - the return code IS the assertion
+def _run_hook(repo: Path, base: Path, message: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(  # noqa: PLW1510 - the return code IS the assertion
         [str(HOOK), str(message)],
         cwd=repo,
         env=_clean_env(ONEX_LANE_REGISTRY_ROOT=str(base)),
         capture_output=True,
         text=True,
     )
+
+
+def test_the_hook_never_stamps_an_unregistered_worktree(
+    repo: Path, base: Path, tmp_path: Path
+) -> None:
+    """It never stamps an `unknown` lane. A trailer that can be wrong is worse
+    than one that is absent, because the check downstream cannot tell the two
+    apart.
+
+    Under the DEFAULT policy it allows the commit (OMN-18273). Refusing by
+    default would freeze every worktree that predates the mechanism, and the
+    pre-push refusal already reports-and-allows an unstamped commit by its own
+    documented design, so the absent trailer costs the downstream gate nothing.
+    """
+    message = tmp_path / "COMMIT_EDITMSG"
+    message.write_text("feat(OMN-18260): hooked\n", encoding="utf-8")
+    result = _run_hook(repo, base, message)
+    assert result.returncode == 0, result.stderr
+    assert "Onex-Lane" not in message.read_text(encoding="utf-8")
+
+
+def test_the_hook_refuses_an_unregistered_worktree_once_armed(
+    repo: Path, base: Path, tmp_path: Path
+) -> None:
+    """The design's refusal, kept, and reachable by one explicit verb -- the
+    sequencing question OMN-18259 section 7 left open for the operator. The
+    refusal prints the registration command, so it costs one command rather than
+    a search."""
+    li.set_unregistered_mode(base, "refuse")
+    message = tmp_path / "COMMIT_EDITMSG"
+    message.write_text("feat(OMN-18260): hooked\n", encoding="utf-8")
+    result = _run_hook(repo, base, message)
     assert result.returncode != 0
     assert "lane_identity.py register" in result.stderr
     assert "Onex-Lane" not in message.read_text(encoding="utf-8")
@@ -564,15 +588,103 @@ def test_the_window_check_ignores_an_inherited_git_dir(
     assert findings[0][1] == "unstamped under an inherited GIT_DIR"
 
 
-def test_installer_refuses_a_shared_hooks_directory(repo: Path, tmp_path: Path) -> None:
+def test_installer_never_writes_into_a_shared_hooks_directory(
+    repo: Path, tmp_path: Path
+) -> None:
     """A clone can point core.hooksPath at a directory SHARED by several
     repositories. Installing a commit-refusing hook there arms every one of
-    them. That is not hypothetical: during this ticket, an inherited GIT_DIR
+    them. That is not hypothetical: during OMN-18260, an inherited GIT_DIR
     pointed the installer at exactly such a directory and every canonical clone
     in the workspace began refusing commits until the file was removed by hand.
+
+    OMN-18273 keeps that refusal and moves where it bites. The installer now
+    resolves its target structurally, as `<git-common-dir>/hooks`, so the shared
+    directory is never a candidate at all -- and it reports the install as NOT
+    REACHABLE (exit 4) rather than pretending it worked, because on a clone with
+    an overridden hooksPath git will not dispatch the file until the shared
+    directory carries a chaining entry of the same name.
+
+    The previous revision of this test asserted exit 2 and no install anywhere,
+    which is what made the mechanism uninstallable on the real workspace: every
+    canonical clone there sets core.hooksPath, so `install-hook` refused all of
+    them and the whole phase sat inert with four tickets marked Done.
     """
     shared = tmp_path / "shared-hooks"
     shared.mkdir()
     _git(repo, "config", "core.hooksPath", str(shared))
-    assert li.main(["install-hook", "--repo", str(repo)]) == 2
+
+    assert li.main(["install-hook", "--repo", str(repo)]) == 4
     assert not (shared / "prepare-commit-msg").exists()
+    assert (repo / ".git" / "hooks" / "prepare-commit-msg").is_file()
+
+
+def test_installer_reports_reachable_once_the_shared_directory_dispatches(
+    repo: Path, tmp_path: Path
+) -> None:
+    """The other half of the same fact: with a dispatch entry present, the
+    install is reachable and exits 0. Without this control the exit-4 assertion
+    above would also be satisfied by an installer that can never succeed."""
+    shared = tmp_path / "shared-hooks"
+    shared.mkdir()
+    entry = shared / "prepare-commit-msg"
+    entry.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    entry.chmod(0o755)
+    _git(repo, "config", "core.hooksPath", str(shared))
+
+    assert li.main(["install-hook", "--repo", str(repo)]) == 0
+
+
+def test_installer_preserves_a_prior_hook_and_chains_to_it(
+    repo: Path, base: Path
+) -> None:
+    """Every canonical clone in this registry already carries a pre-commit
+    framework `pre-push`, and the shipped installer wrote over its target
+    unconditionally. Installing must move a foreign hook aside, keep it
+    executable, and leave the installed hook chaining to it -- the governed
+    test selector is exactly the gate that would have been removed."""
+    hooks = repo / ".git" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    prior = hooks / "prepare-commit-msg"
+    prior.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    prior.chmod(0o755)
+
+    assert li.main(["install-hook", "--repo", str(repo)]) == 0
+    preserved = hooks / f"prepare-commit-msg{li.PRIOR_SUFFIX}"
+    assert preserved.is_file()
+    assert preserved.stat().st_mode & 0o111
+    assert li.OURS_MARKER in (hooks / "prepare-commit-msg").read_text(encoding="utf-8")
+    assert li.PRIOR_SUFFIX in (hooks / "prepare-commit-msg").read_text(encoding="utf-8")
+
+    # Re-installing must not overwrite the preserved original with our own copy.
+    assert li.main(["install-hook", "--repo", str(repo)]) == 0
+    assert li.OURS_MARKER not in preserved.read_text(encoding="utf-8")
+
+
+def test_status_reports_an_unarmed_clone_nonzero(repo: Path, base: Path) -> None:
+    """The canary the design's part 2 demands: a gate that cannot see its own
+    state is not a gate. An unarmed clone must be a nonzero exit, not silence --
+    silence is precisely how four Done tickets stayed inert for three days."""
+    assert li.main(["--registry-root", str(base), "status", "--repo", str(repo)]) == 1
+    assert li.main(["install-hook", "--repo", str(repo)]) == 0
+    assert li.main(["--registry-root", str(base), "status", "--repo", str(repo)]) == 0
+
+
+def test_status_refuses_to_pass_an_empty_sweep(base: Path, tmp_path: Path) -> None:
+    """CLAUDE.md rule 16: an empty result is not evidence of absence. A status
+    run that checked no clone must not report every clone armed."""
+    assert (
+        li.main(
+            ["--registry-root", str(base), "status", "--repo", str(tmp_path / "nope")]
+        )
+        == 2
+    )
+
+
+def test_unregistered_policy_defaults_to_silent_and_is_armed_explicitly(
+    base: Path,
+) -> None:
+    assert li.unregistered_mode(base) == "silent"
+    li.set_unregistered_mode(base, "refuse")
+    assert li.unregistered_mode(base) == "refuse"
+    li.set_unregistered_mode(base, "silent")
+    assert li.unregistered_mode(base) == "silent"
