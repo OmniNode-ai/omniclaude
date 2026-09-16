@@ -48,6 +48,17 @@ Usage
     # act
     uv run python scripts/worktree_auto_prune.py --execute
 
+    # additionally classify the RESCUE-ONLY class into its own report section.
+    # Report-only: this script never removes a rescue-only worktree, whatever
+    # --execute says. The numbers are the CALLER's, from the declared
+    # morning-worktree-prune policy — this script carries no default for
+    # either, deliberately [OMN-18442 AC6].
+    uv run python scripts/worktree_auto_prune.py \
+        --rescue-only \
+        --rescue-only-age-days <the declared bar> \
+        --rescue-only-claim-fence-days <the declared fence> \
+        --rescue-only-hand-held <the declared hand_held_worktrees.yaml>
+
 Pull-request state is resolved once per canonical clone with ``gh pr list``;
 an unresolvable PR state simply makes limb (b) unavailable for that row, which
 falls back to limb (a).
@@ -76,6 +87,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from omniclaude.hooks.lib.worktree_health import extract_ticket_id
@@ -84,12 +96,16 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumDebrisRemediation,
     EnumPruneBlockReason,
     EnumPruneDisposition,
+    EnumRescueOnlyDisposition,
     EnumTicketLifecycle,
     ModelPartialMutationDebrisDecision,
     ModelPartialMutationDebrisFacts,
+    ModelRescueOnlyDecision,
+    ModelRescueOnlyFacts,
     ModelWorktreePruneDecision,
     ModelWorktreePruneFacts,
     classify_partial_mutation_debris,
+    classify_rescue_only,
     classify_worktree_prune,
 )
 
@@ -994,6 +1010,280 @@ def collect_facts(
 
 
 # ---------------------------------------------------------------------------
+# rescue-only fact collection [OMN-18442 AC6]
+# ---------------------------------------------------------------------------
+#
+# The class the content-keyed predicate structurally cannot reach: a branch that
+# never opened a pull request and has none open, holding work a rescue pass
+# swept up and nobody came back for. See the rescue-only section of
+# ``worktree_prune_policy`` for what it is and why it is separate.
+#
+# NOTHING BELOW DECLARES A POLICY VALUE. The age bar and the claim fence arrive
+# on the command line, from the workflow config that declares them once. The
+# hand-held exclusion list arrives as a path to the declared file. This half
+# only OBSERVES; ``classify_rescue_only`` decides.
+#
+# The classifier REPORTS this class and never acts on it, on ``--execute`` as
+# much as on a dry run. Removal is the morning-prune Prune phase's, under a
+# re-read of the operator consent row — a pass that destroys unpreserved work
+# must not ride in on a flag that means something else.
+
+
+class ModelHandHeldEntry(BaseModel):
+    """One row of the declared hand-held exclusion file.
+
+    Exact on ``branch``, substring on ``path_contains``, and never a regular
+    expression — a regex in an exclusion list is how an exclusion quietly grows
+    to cover more than it was written for.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    branch: str | None = None
+    path_contains: str | None = None
+    reason: str
+    added: str
+
+    def matches(self, *, branch: str | None, path: str) -> bool:
+        if self.branch is not None:
+            return branch is not None and branch == self.branch
+        return self.path_contains is not None and self.path_contains in path
+
+
+def load_hand_held_entries(path: Path) -> tuple[ModelHandHeldEntry, ...] | None:
+    """Read the declared exclusion list, or return ``None`` if it cannot be read.
+
+    ``None`` is NOT an empty list and the caller must not treat it as one: every
+    row is held on ``hand_held_list_unavailable`` instead. A missing file, an
+    unparseable one, a row naming neither key or both, or a row missing its
+    reason or date all return ``None`` — an exclusion list that silently covers
+    nothing reads exactly like one that covers everything it should.
+    """
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"  hand-held list unreadable ({path}): {exc}", file=sys.stderr)
+        return None
+    if not isinstance(raw, dict) or "hand_held" not in raw:
+        print(
+            f"  hand-held list has no top-level 'hand_held' key: {path}",
+            file=sys.stderr,
+        )
+        return None
+    rows = raw["hand_held"]
+    if rows is None:
+        return ()
+    if not isinstance(rows, list):
+        print(f"  hand-held list 'hand_held' is not a list: {path}", file=sys.stderr)
+        return None
+    entries: list[ModelHandHeldEntry] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            print(
+                f"  hand-held entry {index} is not a mapping: {path}", file=sys.stderr
+            )
+            return None
+        branch = row.get("branch")
+        path_contains = row.get("path_contains")
+        if (branch is None) == (path_contains is None):
+            print(
+                f"  hand-held entry {index} must name exactly one of 'branch' or "
+                f"'path_contains', not neither and not both: {path}",
+                file=sys.stderr,
+            )
+            return None
+        if not row.get("reason") or not row.get("added"):
+            print(
+                f"  hand-held entry {index} carries no reason or no added date: {path}",
+                file=sys.stderr,
+            )
+            return None
+        entries.append(
+            ModelHandHeldEntry(
+                branch=None if branch is None else str(branch),
+                path_contains=None if path_contains is None else str(path_contains),
+                reason=str(row["reason"]).strip(),
+                added=str(row["added"]),
+            )
+        )
+    return tuple(entries)
+
+
+def commit_age_days(worktree: Path, now: float) -> float | None:
+    """Age of the branch tip's COMMITTER date, in days, or None if unreadable."""
+    result = _git_run(worktree, "log", "-1", "--format=%ct", "HEAD")
+    if not result.ok or not result.stdout.strip().isdigit():
+        return None
+    return max(0.0, (now - float(result.stdout.strip())) / 86400.0)
+
+
+def newest_git_visible_mtime_age_days(worktree: Path, now: float) -> float | None:
+    """Age of the newest GIT-VISIBLE file, in days, or None if unreadable.
+
+    Git-visible means ``git ls-files`` plus ``git ls-files --others
+    --exclude-standard`` — tracked files plus untracked-not-ignored ones. A raw
+    filesystem walk is a DEFECT here, not a shortcut: measured 2026-09-16, a
+    walk called 663 of 671 worktrees recently touched because ``.grimp_cache/``
+    and ``.import_linter_cache/`` entries written by a pre-commit run were the
+    newest files, while all 22 uncommitted SOURCE files in one of those trees
+    were 33 days old. Excluding cache directories by name requires guessing the
+    next tool's cache name; asking git drops them out by construction.
+
+    A tree with no visible files at all reports the age of its own HEAD commit's
+    absence rather than a fabricated zero: it returns ``None``, which the
+    predicate refuses.
+    """
+    newest: float | None = None
+    for args in (
+        ("ls-files", "-z"),
+        ("ls-files", "--others", "--exclude-standard", "-z"),
+    ):
+        result = _git_run(worktree, *args)
+        if not result.ok:
+            return None
+        for name in result.stdout.split("\0"):
+            if not name:
+                continue
+            try:
+                stamp = (worktree / name).lstat().st_mtime
+            except OSError:
+                # A listed path that cannot be stat'ed (a broken symlink, a race
+                # with a peer lane) is skipped rather than read as age zero.
+                continue
+            if newest is None or stamp > newest:
+                newest = stamp
+    if newest is None:
+        return None
+    return max(0.0, (now - newest) / 86400.0)
+
+
+_LEADING_TIMESTAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)")
+
+
+def newest_claim_timestamp_by_ticket(ledger_path: Path) -> dict[str, float]:
+    """Map each ticket to the epoch seconds of the NEWEST ``CLAIM`` naming it.
+
+    Deliberately different from :func:`parse_ledger_claims`, which answers "is a
+    claim still OPEN" and discards the row's date. The rescue-only fence asks a
+    different question — *how recently did any lane say it owns this* — and a
+    closed claim from yesterday answers it just as well as an open one. Reusing
+    the open-claims map would silently shorten the fence to zero for every
+    ticket whose lane remembered to write its TERMINAL row.
+
+    A ``CLAIM`` row with no leading ISO timestamp contributes nothing: it cannot
+    be aged, and a row of unknown age must not be read as old.
+    """
+    newest: dict[str, float] = {}
+    if not ledger_path.is_file():
+        return newest
+    for raw in ledger_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not any(marker in line for marker in _CLAIM_MARKERS):
+            continue
+        stamp_match = _LEADING_TIMESTAMP_RE.match(line)
+        if not stamp_match:
+            continue
+        try:
+            stamp = (
+                datetime.strptime(stamp_match.group(1), "%Y-%m-%dT%H:%M:%SZ")
+                .replace(tzinfo=UTC)
+                .timestamp()
+            )
+        except ValueError:
+            continue
+        for ticket in _TICKET_RE.findall(line.upper()):
+            if ticket not in newest or stamp > newest[ticket]:
+                newest[ticket] = stamp
+    return newest
+
+
+def claim_age_days(
+    ticket: str | None, newest_claim: dict[str, float], now: float
+) -> float | None:
+    """Age in days of the newest ``CLAIM`` naming ``ticket``, or ``None``.
+
+    ``None`` means no dated CLAIM row named it — a real zero only because the
+    ledger itself was read successfully; ``main`` refuses to run at all when it
+    is not (OMN-15551).
+    """
+    if ticket is None:
+        return None
+    stamp = newest_claim.get(ticket)
+    if stamp is None:
+        return None
+    return max(0.0, (now - stamp) / 86400.0)
+
+
+def collect_rescue_only_facts(
+    worktree: Path,
+    root: Path,
+    *,
+    prune_facts: ModelWorktreePruneFacts,
+    newest_claim: dict[str, float],
+    hand_held: tuple[ModelHandHeldEntry, ...] | None,
+    now: float,
+) -> ModelRescueOnlyFacts:
+    """Observe the rescue-only facts for one worktree. No judgement, no mutation.
+
+    Reuses the content-keyed pass's already-collected facts for everything the
+    two classes ask the same question about — branch, pull-request state,
+    attributed stashes, probe failures — so the scan does not pay twice for the
+    same git calls, and the two classes cannot disagree about what they saw.
+
+    The two ages are measured HERE and only when they can matter: a row whose
+    pull-request state already disqualifies it from the class never pays for a
+    whole-tree ``ls-files`` walk.
+    """
+    del root  # the path is already resolved on ``prune_facts``
+    disqualified = (
+        prune_facts.pr_state
+        in (
+            EnumBranchPrState.MERGED,
+            EnumBranchPrState.NOT_MERGED,
+            EnumBranchPrState.UNKNOWN,
+        )
+        or prune_facts.branch is None
+    )
+
+    commit_age = None if disqualified else commit_age_days(worktree, now)
+    mtime_age = (
+        None if disqualified else newest_git_visible_mtime_age_days(worktree, now)
+    )
+
+    return ModelRescueOnlyFacts(
+        path=prune_facts.path,
+        repo=prune_facts.repo,
+        ticket=prune_facts.ticket,
+        branch=prune_facts.branch,
+        exists=worktree.is_dir(),
+        commit_age_days=commit_age,
+        mtime_age_days=mtime_age,
+        pr_state=prune_facts.pr_state,
+        last_claim_age_days=claim_age_days(prune_facts.ticket, newest_claim, now),
+        # The classifier runs detached, outside any agent session, so it cannot
+        # observe which lanes are live. It reports False and never removes a
+        # rescue-only row on that basis; the Prune phase re-derives the set
+        # against live state before anything is deleted.
+        live_lane=False,
+        attributed_stash_count=prune_facts.attributed_stash_count,
+        hand_held_available=hand_held is not None,
+        hand_held_match=any(
+            entry.matches(branch=prune_facts.branch, path=prune_facts.path)
+            for entry in (hand_held or ())
+        ),
+        unreadable_probes=prune_facts.unreadable_probes + prune_facts.timed_out_probes,
+    )
+
+
+def rescue_only_decision_to_json(decision: ModelRescueOnlyDecision) -> dict[str, Any]:
+    payload = decision.model_dump(mode="json")
+    payload["hold_reasons"] = [r.value for r in decision.hold_reasons]
+    payload["pr_state"] = decision.pr_state.value
+    payload["disposition"] = decision.disposition.value
+    return payload
+
+
+# ---------------------------------------------------------------------------
 # action
 # ---------------------------------------------------------------------------
 
@@ -1339,6 +1629,16 @@ def _portable(text: str, root: Path) -> str:
     return text.replace(registry, "")
 
 
+def _age_cell(value: float | None) -> str:
+    """One age column of the rescue-only table, in days.
+
+    An unmeasured age renders as an em dash, never as ``0.0``: a zero there
+    would read as "touched just now", which is the opposite of what an
+    unreadable probe means.
+    """
+    return "—" if value is None else f"{value:.1f}"
+
+
 def render_report(
     decisions: Sequence[ModelWorktreePruneDecision],
     *,
@@ -1348,6 +1648,11 @@ def render_report(
     removals: Sequence[ModelRemovalAttempt],
     tracker_resolved: int,
     debris_decisions: Sequence[ModelPartialMutationDebrisDecision] = (),
+    rescue_only_decisions: Sequence[ModelRescueOnlyDecision] = (),
+    rescue_only_enabled: bool = False,
+    rescue_only_max_age_days: float | None = None,
+    rescue_only_claim_fence_days: float | None = None,
+    rescue_only_hand_held_available: bool = False,
 ) -> str:
     """Render the markdown report. Every worktree appears exactly once."""
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
@@ -1522,6 +1827,93 @@ def render_report(
                 f"| {attempt.branch_outcome or '—'} | {attempt.detail} |"
             )
 
+    # --- the rescue-only class [OMN-18442 AC6] ----------------------------
+    # Its own section, after everything above and never merged into it: it is a
+    # SECOND predicate answering a different question, and it is the only one
+    # whose verdict authorises destroying work that exists nowhere else.
+    if rescue_only_enabled:
+        candidates = [
+            d
+            for d in rescue_only_decisions
+            if d.disposition is EnumRescueOnlyDisposition.REMOVE
+        ]
+        held = [
+            d
+            for d in rescue_only_decisions
+            if d.disposition is EnumRescueOnlyDisposition.HOLD
+        ]
+        bar = (
+            "unset"
+            if rescue_only_max_age_days is None
+            else f"{rescue_only_max_age_days:g}"
+        )
+        fence = (
+            "unset"
+            if rescue_only_claim_fence_days is None
+            else f"{rescue_only_claim_fence_days:g}"
+        )
+        lines += [
+            "",
+            "## Rescue-only candidates",
+            "",
+            f"- **Age bar (caller-supplied):** {bar} day(s), applied to BOTH the "
+            "branch tip's committer date and the newest git-visible file",
+            f"- **CLAIM fence (caller-supplied):** {fence} day(s)",
+            f"- **Hand-held exclusion list:** "
+            f"{'read' if rescue_only_hand_held_available else 'UNAVAILABLE — every row held'}",
+            f"- **Candidates:** {len(candidates)}",
+            f"- **Held:** {len(held)}",
+            "- **Removed by this script:** 0 — it reports this class and never "
+            "acts on it, whatever the mode. Removal is the morning-prune Prune "
+            "phase's, under a re-read of the operator consent row.",
+            "",
+            "A rescue-only worktree's branch never opened a pull request and has",
+            "none open. The content-keyed predicate above can never reach one:",
+            "being dirty or ahead-unmerged is exactly why it was rescued. `mtime`",
+            "is the newest of `git ls-files` plus `git ls-files --others",
+            "--exclude-standard` — never a filesystem walk, which gitignored tool",
+            "caches make read recent.",
+            "",
+            "| Path | Repo | Branch | Commit age (d) | Git-visible mtime age (d) | PR state | Last CLAIM age (d) | Verdict | Hold reasons |",
+            "| --- | --- | --- | ---: | ---: | --- | ---: | --- | --- |",
+        ]
+        if not rescue_only_decisions:
+            lines.append("| _none scanned_ | | | | | | | | |")
+        for rescue_row in sorted(
+            rescue_only_decisions,
+            key=lambda d: (d.disposition.value, d.path),
+        ):
+            rescue_reasons = ", ".join(r.value for r in rescue_row.hold_reasons) or "—"
+            lines.append(
+                f"| `{rescue_row.path}` | {rescue_row.repo} | "
+                f"`{rescue_row.branch or '(detached)'}` | "
+                f"{_age_cell(rescue_row.commit_age_days)} | "
+                f"{_age_cell(rescue_row.mtime_age_days)} | "
+                f"{rescue_row.pr_state.value} | "
+                f"{_age_cell(rescue_row.last_claim_age_days)} | "
+                f"{rescue_row.disposition.value} | {rescue_reasons} |"
+            )
+
+        by_hold_reason: dict[str, int] = defaultdict(int)
+        for rescue_row in held:
+            for hold_reason in rescue_row.hold_reasons:
+                by_hold_reason[hold_reason.value] += 1
+        lines += [
+            "",
+            "### Rescue-only hold reasons",
+            "",
+            "Every reason on every held row, never only the first.",
+            "",
+            "| Reason | Count |",
+            "| --- | ---: |",
+        ]
+        if not by_hold_reason:
+            lines.append("| _none_ | 0 |")
+        for hold_reason_name, hold_count in sorted(
+            by_hold_reason.items(), key=lambda kv: (-kv[1], kv[0])
+        ):
+            lines.append(f"| `{hold_reason_name}` | {hold_count} |")
+
     lines.append("")
     return _portable("\n".join(lines), root)
 
@@ -1616,6 +2008,56 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip refreshing origin/dev in each canonical clone before classifying",
     )
+    # --- the rescue-only pass [OMN-18442 AC6] -----------------------------
+    # Report-only here, on --execute as much as on a dry run. The numbers are
+    # REQUIRED and carry no defaults: they are declared once in the
+    # morning-worktree-prune workflow config and its format contract, and this
+    # script is one of their callers. A default would be a copy nothing
+    # compares, in the one pass whose mistakes destroy work rather than
+    # misreport it.
+    parser.add_argument(
+        "--rescue-only",
+        action="store_true",
+        help=(
+            "Also classify the RESCUE-ONLY class (branch never opened a pull "
+            "request and has none open) into its own report section. Reports "
+            "only: this script never removes a rescue-only worktree, whatever "
+            "--execute says. Requires --rescue-only-age-days and "
+            "--rescue-only-claim-fence-days."
+        ),
+    )
+    parser.add_argument(
+        "--rescue-only-age-days",
+        type=float,
+        default=None,
+        help=(
+            "Age bar in days for the rescue-only class, supplied by the caller "
+            "from the declared policy (no default here, deliberately). Both "
+            "limbs must exceed it: the branch tip's committer date AND the "
+            "newest git-visible file."
+        ),
+    )
+    parser.add_argument(
+        "--rescue-only-claim-fence-days",
+        type=float,
+        default=None,
+        help=(
+            "Window in days within which a ledger CLAIM naming the ticket "
+            "fences a rescue-only row. Supplied by the caller from the declared "
+            "policy; no default here."
+        ),
+    )
+    parser.add_argument(
+        "--rescue-only-hand-held",
+        default=None,
+        help=(
+            "Path to the declared hand-held exclusion file. When it is absent "
+            "or unreadable every rescue-only row is held on "
+            "'hand_held_list_unavailable' rather than silently classified a "
+            "candidate — an exclusion list that cannot be read has not "
+            "established that anything is unexcluded."
+        ),
+    )
     parser.add_argument("--report-md", help="Write the markdown report to this path")
     parser.add_argument("--report-json", help="Write the JSON report to this path")
     parser.add_argument(
@@ -1625,7 +2067,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    # The rescue-only policy values are the caller's to supply. Refusing here
+    # rather than defaulting is the whole point: this repository declares no age
+    # bar, so a run that forgot to pass one must fail loudly instead of quietly
+    # adopting a number nobody ruled on [OMN-18442 AC6].
+    if args.rescue_only:
+        missing = [
+            flag
+            for flag, value in (
+                ("--rescue-only-age-days", args.rescue_only_age_days),
+                ("--rescue-only-claim-fence-days", args.rescue_only_claim_fence_days),
+            )
+            if value is None
+        ]
+        if missing:
+            parser.error(
+                f"--rescue-only requires {' and '.join(missing)}: the values are "
+                "declared in the morning-worktree-prune workflow config and this "
+                "script deliberately carries no default for them."
+            )
+        for flag, value in (
+            ("--rescue-only-age-days", args.rescue_only_age_days),
+            ("--rescue-only-claim-fence-days", args.rescue_only_claim_fence_days),
+        ):
+            if value < 0:
+                parser.error(f"{flag} must not be negative (got {value})")
 
     if not args.worktrees_root:
         print(
@@ -1696,21 +2165,62 @@ def main(argv: Sequence[str] | None = None) -> int:
     # A full root is ~1000 worktrees and several git calls each, so the scan runs
     # for minutes. Report progress as it goes: a silent multi-minute run is
     # indistinguishable from a hung one.
+    # The rescue-only pass rides along on the SAME fact collection [OMN-18442
+    # AC6]: it asks a different question of the same observations, and paying
+    # twice for `git branch`/`gh pr list`/`git stash list` at registry scale
+    # would also let the two classes disagree about what they saw.
+    rescue_hand_held: tuple[ModelHandHeldEntry, ...] | None = None
+    if args.rescue_only:
+        if args.rescue_only_hand_held:
+            rescue_hand_held = load_hand_held_entries(
+                Path(args.rescue_only_hand_held).expanduser()
+            )
+        else:
+            print(
+                "  no --rescue-only-hand-held supplied: every rescue-only row "
+                "will be held on hand_held_list_unavailable",
+                file=sys.stderr,
+            )
+        print(
+            f"Rescue-only pass ON (report only): bar "
+            f"{args.rescue_only_age_days:g}d, claim fence "
+            f"{args.rescue_only_claim_fence_days:g}d, hand-held entries "
+            f"{'unavailable' if rescue_hand_held is None else len(rescue_hand_held)}",
+            flush=True,
+        )
+    newest_claim_by_ticket = (
+        newest_claim_timestamp_by_ticket(ledger_path) if args.rescue_only else {}
+    )
+    rescue_now = time.time()
+
     decisions: list[ModelWorktreePruneDecision] = []
+    rescue_decisions: list[ModelRescueOnlyDecision] = []
     for index, worktree in enumerate(worktrees, start=1):
-        decisions.append(
-            classify_worktree_prune(
-                collect_facts(
-                    worktree,
-                    root,
-                    ticket_states,
-                    ledger,
-                    base_ref_cache,
-                    stash_cache,
-                    pr_state_cache,
+        worktree_facts = collect_facts(
+            worktree,
+            root,
+            ticket_states,
+            ledger,
+            base_ref_cache,
+            stash_cache,
+            pr_state_cache,
+        )
+        decisions.append(classify_worktree_prune(worktree_facts))
+        if args.rescue_only:
+            rescue_decisions.append(
+                classify_rescue_only(
+                    collect_rescue_only_facts(
+                        worktree,
+                        root,
+                        prune_facts=worktree_facts,
+                        newest_claim=newest_claim_by_ticket,
+                        hand_held=rescue_hand_held,
+                        now=rescue_now,
+                    ),
+                    max_age_days=args.rescue_only_age_days,
+                    claim_fence_days=args.rescue_only_claim_fence_days,
                 )
             )
-        )
         if index % 100 == 0 or index == len(worktrees):
             print(f"  classified {index}/{len(worktrees)}", flush=True)
 
@@ -1805,6 +2315,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         for empty_dir in cleanup_empty_ticket_dirs(root):
             print(f"  RMDIR   {empty_dir}")
 
+    rescue_candidates = [
+        d for d in rescue_decisions if d.disposition is EnumRescueOnlyDisposition.REMOVE
+    ]
+    rescue_held = [
+        d for d in rescue_decisions if d.disposition is EnumRescueOnlyDisposition.HOLD
+    ]
+
     generated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = render_report(
         decisions,
@@ -1814,6 +2331,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         removals=removals,
         tracker_resolved=len(ticket_states),
         debris_decisions=debris_decisions,
+        rescue_only_decisions=rescue_decisions,
+        rescue_only_enabled=bool(args.rescue_only),
+        rescue_only_max_age_days=args.rescue_only_age_days,
+        rescue_only_claim_fence_days=args.rescue_only_claim_fence_days,
+        rescue_only_hand_held_available=rescue_hand_held is not None,
     )
 
     if args.report_md:
@@ -1844,6 +2366,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                         debris_decision_to_json(d) for d in debris_decisions
                     ],
                     "removals": [r.model_dump(mode="json") for r in removals],
+                    # The rescue-only class, in its own section so it can never
+                    # be mistaken for a content-keyed verdict [OMN-18442 AC6].
+                    # `removed` is structurally 0: this script reports the class
+                    # and the Prune phase acts on it under the operator consent
+                    # row, so a non-zero here would be a defect, not a mode.
+                    "rescue_only": {
+                        "enabled": bool(args.rescue_only),
+                        "max_age_days": args.rescue_only_age_days,
+                        "claim_fence_days": args.rescue_only_claim_fence_days,
+                        "hand_held_file": args.rescue_only_hand_held,
+                        "hand_held_available": rescue_hand_held is not None,
+                        "hand_held_entries": (
+                            None if rescue_hand_held is None else len(rescue_hand_held)
+                        ),
+                        "candidate_count": len(rescue_candidates),
+                        "held_count": len(rescue_held),
+                        "removed": 0,
+                        "decisions": [
+                            rescue_only_decision_to_json(d) for d in rescue_decisions
+                        ],
+                    },
                 },
                 indent=2,
             ),
@@ -1851,12 +2394,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(f"Wrote JSON report: {json_path}")
 
+    rescue_summary = (
+        f" rescue_only_candidates={len(rescue_candidates)} "
+        f"rescue_only_held={len(rescue_held)}"
+        if args.rescue_only
+        else ""
+    )
     print(
         f"\nscanned={len(decisions)} safe={len(prunable)} triage={len(triage)} "
         f"timed_out={len(timed_out)} debris={len(debris_decisions)} "
         f"revalidation_refused={len(revalidation_refusals)} "
-        f"removed={sum(1 for r in removals if r.ok)}"
+        f"removed={sum(1 for r in removals if r.ok)}{rescue_summary}"
     )
+    if args.rescue_only and rescue_candidates:
+        print(
+            f"Rescue-only: {len(rescue_candidates)} candidate(s) REPORTED, none "
+            "removed — this script never acts on that class. Removal is the "
+            "morning-prune Prune phase's, under a re-read of the operator "
+            "consent row."
+        )
     if not args.execute and prunable:
         print("Dry run — re-run with --execute to remove the prune candidates.")
     return 0
