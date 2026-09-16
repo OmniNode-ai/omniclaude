@@ -6,9 +6,41 @@
 # Adversarial multi-model code review gate on every pull request.
 #
 # Invokes omniintelligence.review_pairing.cli_review (node-based path via
-# HandlerLlmCliSubprocess / adapter_codex_reviewer) with --model deepseek-r1.
+# HandlerLlmCliSubprocess / adapter_codex_reviewer) with
+# --model deepseek-r1 --model qwen3-review-b.
 # Codex is excluded from the initial pilot — add --model codex once non-interactive
 # OAuth auth is confirmed on the omnibase-ci runner (OMN-8524).
+#
+# TWO MODELS, BECAUSE THE CLI's CONTRACT ASKS FOR TWO (OMN-18473). cli_review
+# returns 0 only when >=2 models succeed and 2 ("DEGRADED — a minimum of 2
+# models is required for a full pass") when exactly one does. This repo passed
+# a single --model from 2026-04-11 (71d816a99) to 2026-09-16, so every verdict
+# it ever produced was DEGRADED by construction, while omnimarket passed two
+# (qwen3-review, qwen3-review-b) and omnibase_infra three (adding the cloud
+# glm-review). Operator ruling 2026-09-15, firm: no one-off repo configuration
+# — a differing repo is brought to the fleet standard.
+#
+# WHAT A SECOND MODEL HERE DOES AND DOES NOT BUY, stated so nobody re-derives
+# it wrongly. It does NOT damp a spurious finding. run_multi_model_review
+# CONCATENATES per-model results — there is no dedup, no agreement weighting
+# and no union anywhere on this path — and the verdict step below sums blocking
+# findings across every succeeded model, so ONE critical/error finding from
+# EITHER model blocks. Adding a model can only RAISE the blocking count. What
+# it buys is a second independent sample and conformance to the CLI's contract,
+# at the cost of a strictly stricter gate. That is the same trade omnibase_infra
+# and omnimarket already run under.
+#
+# WHY qwen3-review-b AND NOT qwen3-review. deepseek-r1 and qwen3-review are two
+# registry keys for ONE backend: both resolve to the same lab endpoint with the
+# same api_model_id (Qwen3.6-35B-A3B) since the 4090 RMA — that is OMN-16481,
+# still open. Pairing them would pass one backend twice under two spellings.
+# qwen3-review-b is the key omnimarket pairs, and it is honestly ALSO the same
+# endpoint and served model; it differs in its env var override
+# (LLM_QWEN3_REVIEW_B_URL) and max_retries. Two samples of one set of weights is
+# what the fleet standard currently IS. The genuinely independent reviewer is
+# glm-review, which needs an LLM_GLM_API_KEY Actions secret that exists on
+# omnibase_infra and on neither this PUBLIC repo nor the org — provisioning a
+# cloud credential here is a separate, consent-gated change (OMN-16481).
 #
 # Gate semantics (pilot phase):
 #   blocked     — critical/error findings from at least one succeeded model → exit 1
@@ -313,15 +345,22 @@ jobs:
           # OMN-18409 follow-up: cli_review's own exit-code contract is 0
           # only when >=2 models succeeded, 2 for exactly one model
           # succeeding (DEGRADED -- a real, valid verdict), 1 when every
-          # model failed. This step only ever passes a single --model, so a
-          # successful run can NEVER return 0 -- it always returns 2. Before
-          # this fix that was masked by the very REVIEW_EXIT=$?-after-fi bug
-          # this commit fixes (a nonzero-but-valid-JSON exit was silently
-          # read as 0 and the JSON parsed anyway); fixing the exit-code
-          # capture alone, without widening this check, would have turned
-          # every ordinary single-model DEGRADED success into a false
-          # infra_error. Treat exit 0 (full pass) and exit 2 (single-model
-          # DEGRADED, still a real verdict) as "cli_review produced output";
+          # model failed.
+          #
+          # OMN-18473 amended this. This step now passes TWO --model flags, so
+          # the EXPECTED outcome of a healthy run is exit 0, not exit 2. Exit 2
+          # is the DEGRADED path: it means one of the two models failed
+          # mid-review while the other returned, which is a real verdict on a
+          # single opinion and must still be accepted rather than retried into
+          # a false infra_error. Before OMN-18473 this step passed one model,
+          # so exit 0 was unreachable and every successful run reported
+          # DEGRADED by construction -- accepting exit 2 was then the normal
+          # case rather than the exception. Both remain accepted; only the
+          # expectation changed, and a permanently-degraded gate is now a
+          # signal worth reading instead of the steady state.
+          #
+          # Treat exit 0 (full pass, both models) and exit 2 (one model
+          # returned, still a real verdict) as "cli_review produced output";
           # only exit 1 (every model failed / crashed) is retried.
           #
           # OMN-18415 AC3 — STDERR IS CAPTURED, NEVER DISCARDED. A redirect to
@@ -345,6 +384,7 @@ jobs:
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
               --model deepseek-r1 \
+              --model qwen3-review-b \
               2>"$ATTEMPT_ERR")
             REVIEW_EXIT=$?
             set -e
@@ -432,7 +472,8 @@ jobs:
           # output so it reaches the PR comment as well as the log.
           NAMED_CAUSE=$(grep -aE '\[ONEX_[A-Z0-9_]+\]|is not set|is required|Traceback' "$STDERR_LOG" | tail -n 1 || true)
 
-          # Exit 0 (full pass) and exit 2 (single-model DEGRADED) both mean
+          # Exit 0 (both models returned) and exit 2 (one of the two
+          # returned -- DEGRADED, still a real verdict) both mean
           # cli_review produced a real verdict document -- only exit 1
           # (every model failed / crashed) after both attempts is a genuine
           # infra_error.
