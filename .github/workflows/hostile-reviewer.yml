@@ -43,8 +43,16 @@
 # cloud credential here is a separate, consent-gated change (OMN-16481).
 #
 # Gate semantics (pilot phase):
-#   blocked     — critical/error findings from at least one succeeded model → exit 1
+#   blocked     — critical/error findings raised by AT LEAST TWO distinct
+#                 succeeded models (cross-model quorum, OMN-18479) → exit 1.
+#                 A finding only one model raised is reported as a warning
+#                 in the verdict artifact and does NOT block.
 #   degraded    — cli_review RAN but every model failed mid-review → exit 0 (informational, pilot)
+#   degraded_quorum
+#               — fewer models succeeded than agreement requires, so NO verdict
+#                 could be established (cli_review exit 2) → exit 1 (fail
+#                 closed, OMN-18479). Treating this as a valid verdict is what
+#                 made single-model blocking possible in the first place.
 #   infra_error — cli_review could not run at all (dependency install failed, or the
 #                 CLI itself crashed) after one retry → exit 1 (fail closed, 2026-08-13)
 #   unavailable_fork_isolation
@@ -342,26 +350,19 @@ jobs:
           # set +e/-e brackets the substitution so `set -euo pipefail` above
           # does not abort the script on a genuine cli_review failure.
           #
-          # OMN-18409 follow-up: cli_review's own exit-code contract is 0
-          # only when >=2 models succeeded, 2 for exactly one model
-          # succeeding (DEGRADED -- a real, valid verdict), 1 when every
-          # model failed.
+          # cli_review's exit-code contract (OMN-18409, amended OMN-18479):
+          # 0 a verdict was produced, 2 DEGRADED QUORUM (fewer models
+          # succeeded than cross-model agreement requires, so no verdict
+          # exists), 1 every model failed or the CLI crashed.
           #
-          # OMN-18473 amended this. This step now passes TWO --model flags, so
-          # the EXPECTED outcome of a healthy run is exit 0, not exit 2. Exit 2
-          # is the DEGRADED path: it means one of the two models failed
-          # mid-review while the other returned, which is a real verdict on a
-          # single opinion and must still be accepted rather than retried into
-          # a false infra_error. Before OMN-18473 this step passed one model,
-          # so exit 0 was unreachable and every successful run reported
-          # DEGRADED by construction -- accepting exit 2 was then the normal
-          # case rather than the exception. Both remain accepted; only the
-          # expectation changed, and a permanently-degraded gate is now a
-          # signal worth reading instead of the steady state.
-          #
-          # Treat exit 0 (full pass, both models) and exit 2 (one model
-          # returned, still a real verdict) as "cli_review produced output";
-          # only exit 1 (every model failed / crashed) is retried.
+          # Exit 2 is NOT a verdict and is no longer read as one. This step
+          # previously treated it as the expected steady state, which is
+          # precisely what made a single model's opinion sufficient to block
+          # a merge. Since OMN-18473 this step passes TWO --model flags, so
+          # the expected outcome of a healthy run is exit 0; exit 2 now means
+          # one of the two returned and agreement could not be established.
+          # That is a degraded quorum, not a verdict on a single opinion, and
+          # the gate fails closed on it rather than accepting it.
           #
           # OMN-18415 AC3 — STDERR IS CAPTURED, NEVER DISCARDED. A redirect to
           # the null device stood on the substitution below, discarding every
@@ -459,7 +460,12 @@ jobs:
             cat "$ATTEMPT_ERR"
             echo "::endgroup::"
 
-            if [ "$REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2 ]; then
+            # OMN-18479: exit 2 is DEGRADED QUORUM -- fewer models succeeded
+            # than agreement requires, so there is no verdict to read. It is
+            # retried like any other failure and, if it persists, fails the
+            # gate closed below. It is NOT a break condition: breaking on it
+            # is what let a single model's opinion stand as a verdict.
+            if [ "$REVIEW_EXIT" -eq 0 ]; then
               break
             fi
             echo "::warning::cli_review attempt ${attempt}/2 failed (exit ${REVIEW_EXIT})"
@@ -472,12 +478,50 @@ jobs:
           # output so it reaches the PR comment as well as the log.
           NAMED_CAUSE=$(grep -aE '\[ONEX_[A-Z0-9_]+\]|is not set|is required|Traceback' "$STDERR_LOG" | tail -n 1 || true)
 
-          # Exit 0 (both models returned) and exit 2 (one of the two
-          # returned -- DEGRADED, still a real verdict) both mean
-          # cli_review produced a real verdict document -- only exit 1
-          # (every model failed / crashed) after both attempts is a genuine
-          # infra_error.
-          if [ "$REVIEW_EXIT" -ne 0 ] && [ "$REVIEW_EXIT" -ne 2 ]; then
+          # OMN-18479: exit 2 after both attempts is DEGRADED QUORUM -- the
+          # reviewer ran and wrote a document, but fewer models succeeded than
+          # agreement requires, so the document carries no verdict. It fails
+          # the gate closed under its own name rather than being folded into
+          # infra_error (a different cause, and a different fix) or, as
+          # before, read as a valid single-model verdict.
+          if [ "$REVIEW_EXIT" -eq 2 ]; then
+            REVIEW_EXIT="$REVIEW_EXIT" NAMED_CAUSE="$NAMED_CAUSE" \
+            STDERR_LOG="$STDERR_LOG" python3 - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["STDERR_LOG"], encoding="utf-8", errors="replace") as handle:
+              captured = handle.read()
+          payload = {
+              "verdict": "degraded_quorum",
+              "blocking_count": 0,
+              "total_findings": 0,
+              "models_succeeded": [],
+              "review_exit": int(os.environ["REVIEW_EXIT"]),
+              "error": (
+                  "fewer reviewer models succeeded than cross-model agreement "
+                  "requires \u2014 no verdict could be established"
+              ),
+              "named_cause": os.environ.get("NAMED_CAUSE", ""),
+              "findings": [],
+              "stderr": captured,
+          }
+          with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
+              json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
+            {
+              echo "verdict=degraded_quorum"
+              echo "blocking_count=0"
+              echo "total_findings=0"
+              echo "models_succeeded="
+              echo "error=fewer reviewer models succeeded than cross-model agreement requires — no verdict could be established"
+              echo "named_cause=${NAMED_CAUSE}"
+            } >> "$GITHUB_OUTPUT"
+            echo "::error title=Hostile Reviewer degraded quorum::fewer models succeeded than agreement requires; no verdict was established"
+            exit 1
+          fi
+
+          if [ "$REVIEW_EXIT" -ne 0 ]; then
             REVIEW_EXIT="$REVIEW_EXIT" NAMED_CAUSE="$NAMED_CAUSE" \
             STDERR_LOG="$STDERR_LOG" python3 - <<'PY'
           import json
@@ -527,14 +571,19 @@ jobs:
           total_findings = data.get("total_findings", 0)
           skipped_reason = data.get("skipped_reason")
 
-          # Count blocking findings (critical or error severity)
-          blocking = 0
-          for r in data.get("results", []):
-              if not r.get("success"):
-                  continue
-              for f in r.get("findings", []):
-                  if f.get("severity") in ("critical", "error"):
-                      blocking += 1
+          # OMN-18479: read the reviewer's cross-model agreement verdict.
+          # This used to sum blocking severities across every succeeded model,
+          # so ONE model's finding blocked the merge -- 24 of 40 runs on this
+          # repository blocked on a rotating finding no second sample
+          # reproduced. The reviewer now resolves agreement itself and ships
+          # the clusters in `quorum`; a finding blocks only when at least two
+          # distinct models raise a matching one, and a finding below that
+          # threshold is reported as a warning. The rule lives in the reviewer,
+          # once, for the whole fleet -- never re-derived here.
+          quorum = data.get("quorum") or {}
+          quorum_verdict = str(quorum.get("verdict", ""))
+          blocking = int(quorum.get("blocking_count", 0))
+          below_quorum = int(quorum.get("warning_count", 0))
 
           # OMN-18409: an empty PR diff (e.g. a merge/ancestry commit whose
           # tree is identical to the base branch) is a real, reviewable
@@ -547,13 +596,22 @@ jobs:
               verdict = "passed"
           elif not models_succeeded:
               verdict = "degraded"
-          elif blocking > 0:
+          elif quorum_verdict in ("degraded_quorum", "no_models"):
+              verdict = "degraded_quorum"
+          elif quorum_verdict == "blocked":
               verdict = "blocked"
-          else:
+          elif quorum_verdict == "passed":
               verdict = "passed"
+          else:
+              # No quorum block: a reviewer predating OMN-18479. Report
+              # degraded_quorum rather than inventing a verdict from a rule
+              # this gate no longer implements -- fail closed, do not guess.
+              verdict = "degraded_quorum"
 
           print(f"verdict={verdict}")
           print(f"blocking_count={blocking}")
+          print(f"below_quorum_count={below_quorum}")
+          print(f"quorum_verdict={quorum_verdict or 'absent'}")
           print(f"total_findings={total_findings}")
           print(f"models_succeeded={','.join(models_succeeded)}")
           PYEOF
@@ -626,6 +684,8 @@ jobs:
           payload = {
               "verdict": fields.get("verdict", "unknown"),
               "blocking_count": int(fields.get("blocking_count", "0") or 0),
+              "below_quorum_count": int(fields.get("below_quorum_count", "0") or 0),
+              "quorum": json.loads(os.environ["REVIEW_JSON"]).get("quorum"),
               "total_findings": int(fields.get("total_findings", "0") or 0),
               "models_succeeded": [m for m in models.split(",") if m],
               "review_exit": int(os.environ["REVIEW_EXIT"]),
@@ -663,9 +723,11 @@ jobs:
           PY
           echo "::endgroup::"
 
-          # Set exit code: blocked → 1, everything else → 0 (pilot: degraded is informational)
+          # Set exit code: blocked → 1, degraded_quorum → 1 (no verdict was
+          # established, and the absence of a verdict is not a passing one),
+          # everything else → 0 (pilot: degraded is informational).
           VERDICT=$(echo "$VERDICT_DATA" | grep '^verdict=' | cut -d= -f2)
-          if [ "$VERDICT" = "blocked" ]; then
+          if [ "$VERDICT" = "blocked" ] || [ "$VERDICT" = "degraded_quorum" ]; then
             exit 1
           fi
 
@@ -725,6 +787,7 @@ jobs:
               passed: '✅',
               blocked: '🚫',
               degraded: '⚠️',
+              degraded_quorum: '🚫',
               infra_error: '🚫',
               unavailable_fork_isolation: '🚫',
             }[verdict] || '❓';
@@ -733,6 +796,7 @@ jobs:
               passed: 'PASSED',
               blocked: 'BLOCKED',
               degraded: 'DEGRADED (informational)',
+              degraded_quorum: 'DEGRADED QUORUM — no verdict (blocking)',
               infra_error: 'INFRA ERROR (blocking)',
               unavailable_fork_isolation: 'UNAVAILABLE — fork isolation (blocking)',
             }[verdict] || verdict.toUpperCase();
@@ -743,7 +807,15 @@ jobs:
                 'Degraded results are informational during the pilot phase (OMN-8524) and do not block merge.';
               if (error) note += ` Error: \`${error}\``;
             } else if (verdict === 'blocked') {
-              note = '\n\n> **Action required**: Resolve CRITICAL/ERROR findings before merge.';
+              note = '\n\n> **Action required**: Resolve the CRITICAL/ERROR findings below. ' +
+                'Only findings raised by at least two distinct reviewer models block (OMN-18479); ' +
+                'findings below that threshold are listed as warnings and do not.';
+            } else if (verdict === 'degraded_quorum') {
+              note = '\n\n> **Action required**: fewer reviewer models succeeded than cross-model ' +
+                'agreement requires, so NO verdict was established. An absent verdict is not a passing ' +
+                'one, so this fails the required gate closed. Re-run the job; if a model endpoint is ' +
+                'genuinely down, escalate rather than bypassing.';
+              if (error) note += ` Error: \`${error}\``;
             } else if (verdict === 'infra_error') {
               note = '\n\n> **Action required**: the reviewer CLI failed after 2 attempts (dependency install or crash) — ' +
                 'this now fails the required gate closed instead of silently passing. Re-run the job; if infra is ' +

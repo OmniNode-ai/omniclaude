@@ -312,47 +312,62 @@ def test_review_exit_captured_from_command_not_if_statement(
     )
 
 
-def test_degraded_exit_code_is_not_treated_as_infra_error(
+def test_degraded_quorum_exit_code_fails_the_gate_closed(
     workflow: dict[object, object],
 ) -> None:
-    """OMN-18409 follow-up: cli_review's exit-code contract is 0 only when
-    at least 2 models succeeded, 2 for exactly one model succeeding
-    (DEGRADED -- a real, valid verdict, not a failure), and 1 when every
-    model failed.
+    """OMN-18479: exit 2 is DEGRADED QUORUM and is not a verdict.
 
-    OMN-18473 amended what exit 2 MEANS here without changing that it is
-    accepted. The step now passes two ``--model`` flags, so a healthy run
-    returns 0 and exit 2 is the exception: one of the two models failed
-    mid-review while the other returned a real verdict on a single opinion.
-    That must still be accepted rather than retried into a false infra_error.
-    Before OMN-18473 the step passed one model, exit 0 was unreachable, and
-    exit 2 was the normal case rather than a degradation worth noticing.
+    cli_review's exit contract is 0 when a verdict was produced, 2 when
+    fewer models succeeded than cross-model agreement requires, and 1 when
+    every model failed. The earlier revision of this workflow accepted exit
+    2 as "a real, valid verdict" from a single model -- which is exactly
+    what let one model's rotating finding block a merge, measured at 24
+    blocked runs out of 40 on this repository.
 
-    Fixing the REVIEW_EXIT capture bug in isolation, without widening the
-    retry/infra_error checks to accept exit 2, would turn a genuine
-    partial-failure verdict into a false infra_error -- strictly worse than
-    the bug it replaces, since the old (buggy) post-fi ``$?`` read
-    accidentally treated any nonzero-but-valid-JSON exit as success.
-
-    Reproduced live 2026-09-15 against omniclaude PR #2181's own diff:
-    cli_review --model deepseek-r1 succeeded (0 findings) and exited 2.
+    The retry loop must therefore break only on exit 0, and a persistent
+    exit 2 must fail the gate closed under its own name rather than being
+    accepted or folded into infra_error. This step consequently requires at
+    least two ``--model`` flags (OMN-18473) for any run to pass.
     """
     run_text = _review_step_run_text(workflow)
 
-    assert 'REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2' in run_text, (
-        "the retry loop's success check must accept exit 2 (DEGRADED -- one "
-        "of the two models returned) as well as exit 0, because a verdict on "
-        "a single opinion is still a real verdict"
+    assert '[ "$REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2 ]' not in run_text, (
+        "the retry loop must NOT break on exit 2 -- a degraded quorum is the "
+        "absence of a verdict, not a valid one (OMN-18479)"
+    )
+    assert 'if [ "$REVIEW_EXIT" -eq 2 ]; then' in run_text, (
+        "a persistent exit 2 must be classified as degraded_quorum under its "
+        "own name, not folded into infra_error"
+    )
+    assert 'echo "verdict=degraded_quorum"' in run_text
+    assert '[ "$VERDICT" = "degraded_quorum" ]' in run_text, (
+        "degraded_quorum must fail the step closed alongside blocked -- the "
+        "absence of a verdict is not a passing one"
     )
 
-    condition_line = next(
-        line for line in run_text.splitlines() if '"$REVIEW_EXIT" -ne 0' in line
+
+def test_verdict_parser_blocks_only_on_cross_model_agreement(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-18479: the blocking count comes from the reviewer's quorum.
+
+    The parser used to sum critical/error findings across every succeeded
+    model, so any single model's finding produced ``verdict=blocked``. The
+    reviewer now resolves agreement itself; this workflow reads the result
+    and must not re-derive one, because a second aggregation rule in a
+    caller is how the fleet ended up with four different ones.
+    """
+    run_text = _review_step_run_text(workflow)
+
+    assert 'quorum.get("blocking_count", 0)' in run_text, (
+        "blocking_count must come from the reviewer's quorum block"
     )
-    assert '"$REVIEW_EXIT" -ne 2' in condition_line, (
-        "the infra_error fail-closed check must exempt exit 2 -- otherwise a "
-        "real DEGRADED success, where one of the two models returned "
-        "findings, reports infra_error after two attempts"
+    assert 'for f in r.get("findings", []):' not in run_text, (
+        "the per-model severity sum must be gone -- it is the rule that let "
+        "one model block a merge (OMN-18479)"
     )
+    assert 'quorum_verdict == "blocked"' in run_text
+    assert 'quorum_verdict in ("degraded_quorum", "no_models")' in run_text
 
 
 def test_verdict_parser_treats_empty_diff_as_a_real_passed_verdict(
@@ -539,3 +554,94 @@ def test_workflow_has_pr_write_permission(workflow: dict[object, object]) -> Non
     assert permissions.get("contents") == "read", (
         "workflow should request only contents: read (least privilege)"
     )
+
+
+def _extract_verdict_snippet(workflow: dict[object, object]) -> str:
+    """Return the review step's inline verdict parser, ready to execute."""
+    run_text = _review_step_run_text(workflow)
+    start = run_text.index('VERDICT_DATA=$(REVIEW_JSON="$REVIEW_JSON" python3 - ')
+    return run_text[run_text.index("\n", start) + 1 : run_text.index("PYEOF\n", start)]
+
+
+def _run_verdict_snippet(
+    workflow: dict[object, object], payload: dict[str, object]
+) -> dict[str, str]:
+    import json
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "-c", _extract_verdict_snippet(workflow)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+        env={"REVIEW_JSON": json.dumps(payload), "PATH": "/usr/bin:/bin"},
+    )
+    return dict(
+        line.split("=", 1) for line in completed.stdout.splitlines() if "=" in line
+    )
+
+
+def test_verdict_parser_behaviour_on_quorum_payloads(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-18479: run the parser, do not grep it.
+
+    A text assertion that the word ``quorum`` appears passes on a comment
+    mentioning it. These fixtures exercise the four cases that matter, and
+    each zero has its positive control beside it.
+    """
+    two_models = ["deepseek-r1", "qwen3-review-b"]
+
+    # One model raised a finding, the other did not: reported, not blocking.
+    below = _run_verdict_snippet(
+        workflow,
+        {
+            "models_succeeded": two_models,
+            "total_findings": 1,
+            "results": [],
+            "quorum": {"verdict": "passed", "blocking_count": 0, "warning_count": 1},
+        },
+    )
+    assert below["verdict"] == "passed"
+    assert below["blocking_count"] == "0"
+    assert below["below_quorum_count"] == "1"
+
+    # Positive control: both models raised it, so it blocks.
+    agreed = _run_verdict_snippet(
+        workflow,
+        {
+            "models_succeeded": two_models,
+            "total_findings": 2,
+            "results": [],
+            "quorum": {"verdict": "blocked", "blocking_count": 1, "warning_count": 0},
+        },
+    )
+    assert agreed["verdict"] == "blocked"
+    assert agreed["blocking_count"] == "1"
+
+    # Too few models succeeded to establish agreement: no verdict.
+    degraded = _run_verdict_snippet(
+        workflow,
+        {
+            "models_succeeded": ["deepseek-r1"],
+            "total_findings": 1,
+            "results": [],
+            "quorum": {
+                "verdict": "degraded_quorum",
+                "blocking_count": 0,
+                "warning_count": 1,
+            },
+        },
+    )
+    assert degraded["verdict"] == "degraded_quorum"
+
+    # A reviewer with no quorum block cannot be read by this gate at all,
+    # and must fail closed rather than have a verdict invented for it.
+    absent = _run_verdict_snippet(
+        workflow,
+        {"models_succeeded": two_models, "total_findings": 0, "results": []},
+    )
+    assert absent["verdict"] == "degraded_quorum"
+    assert absent["quorum_verdict"] == "absent"
