@@ -50,6 +50,47 @@ and every record stayed queued (proven on the operator Mac 2026-08-30).
 ``validate_hook_edge_lane.py`` now reads this file, so the publisher cannot
 leave the declared lane again without failing a merge gate.
 
+Where a published hook event ENDS UP: two planes, two ledgers (OMN-18120 AC5)
+--------------------------------------------------------------------------
+Three separate lanes read `public.hook_events` as empty on a compose
+lane and concluded the bare-canonical hook wire had no consumer anywhere, and
+that the repair was to declare a `hook-ledger` writer service in the compose
+file. Both halves are wrong, and the second would have made things worse. The
+split is written here, beside the publisher, because this is the file a lane
+asking "where did my hook event go" opens first.
+
+    PLANE           WIRE                       LEDGER TABLE
+    compose / L1    bare canonical topics      omninode_internal.work_events
+                    (`onex.evt.omniclaude.*`)  written by node_projection_work_events
+    cloud           the same topics, carrying  public.hook_events
+                    a tenant prefix applied    written by the k3s
+                    at runtime                 node_projection_hook_ledger
+
+* `work_events` IS the compose plane's hook ledger. It held 71,176 rows over
+  exactly the four bare-canonical hook classes when it was being called
+  empty, so the canonical wire has a consumer and has always had one.
+* `hook_events` is the CLOUD sink. It is correctly empty on a plane that is
+  not the cloud. An empty `hook_events` on a compose lane is not a missing
+  service.
+* The prefix is not a second topic declaration. `node_projection_hook_ledger`
+  declares only bare canonical topics -- the shared resolver rejects a
+  tenant-prefixed string outright -- and the prefix is applied at runtime
+  from `config.hook_ledger.cloud_wire_scope`.
+* Declaring a compose-lane `hook-ledger` writer would subscribe a SECOND
+  claimant to the bare-canonical topics in the shared kernel, which that
+  node's own contract refuses by name: it takes no shared-kernel profile
+  "because node_projection_work_events already claims the same four BARE
+  canonical topics in that kernel -- a second claimant there would be a
+  dispatch ambiguity, not a second reader." It would duplicate an existing
+  projection into a second table and introduce exactly that ambiguity.
+
+The corollary that cost the most time: `max(ingested_at)` on `work_events`
+freezing is NOT evidence that the projection stopped. During the 2026-09-06
+to 09-10 window the projection was consuming every record and upserting
+idempotently; the INPUT had stopped being new, because the stream was
+replaying pre-09-06 events. `hook_edge_freshness.py` in this directory is the
+check that tells those two apart -- content age, never offsets.
+
 Which credential (OMN-18120)
     The lane also declares WHERE its identity is resolved from. On the lab
     host that is the operator env file; on an operator workstation it is the
