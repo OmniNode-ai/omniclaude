@@ -420,3 +420,59 @@ def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
         "    steps:\n      - run: true\n",
     )
     assert _run(module, root, {}, tmp_path) == 2
+
+
+def _variables_with_unreadable_org(module, repo_scope: dict[str, str]):
+    """A resolver whose repository scope is readable and organisation is not.
+
+    This is the live CI shape: the job token reads its own repository and 403s
+    on the organisation. The real class is used, with only its one I/O call
+    replaced on the instance, so the lazy path under test is the one that
+    ships.
+    """
+
+    def fake_read(scope: list[str], label: str) -> dict[str, str]:
+        if scope[0] == "--org":
+            raise module.GateError("HTTP 403: Resource not accessible by integration")
+        return dict(repo_scope)
+
+    instance = module.Variables.__new__(module.Variables)
+    instance._read = fake_read
+    instance._org_name = "OmniNode-ai"
+    instance._repo = dict(repo_scope)
+    instance._org = None
+    instance._org_error = None
+    return instance
+
+
+def test_a_repo_scoped_value_never_needs_the_organisation(tmp_path: Path) -> None:
+    """The organisation scope is not read at all when the shadow answers.
+
+    That is what makes the gate runnable with only a job token in every
+    repository whose variables are shadowed locally or whose jobs use literals.
+    """
+    module = _module()
+    variables = _variables_with_unreadable_org(
+        module,
+        {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET, "OMNI_PUBLIC_PR_RUNS_ON_JSON": FLEET},
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job())
+    assert module.scan(root, "OmniNode-ai/fixture", variables) == []
+
+
+def test_an_unreadable_organisation_scope_refuses_rather_than_defaulting(
+    tmp_path: Path,
+) -> None:
+    """ "Unset here" and "unreadable above here" are different facts.
+
+    Falling through to the expression own literal default when the
+    organisation scope could not be read is how a repository carrying no
+    shadow at all comes back green while inheriting a hosted organisation
+    value -- which is exactly what the organisation seam holds today.
+    """
+    module = _module()
+    variables = _variables_with_unreadable_org(module, {})
+    root = _tree(tmp_path, "ci.yml", _seam_job())
+    with pytest.raises(module.GateError) as error:
+        module.scan(root, "OmniNode-ai/fixture", variables)
+    assert "ORG_VARIABLES_TOKEN" in str(error.value)
