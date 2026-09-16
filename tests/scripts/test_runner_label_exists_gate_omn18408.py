@@ -21,6 +21,7 @@ exercised separately, at CI time, against the real listing.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -502,3 +503,42 @@ def test_the_runner_listing_command_carries_no_credential_on_argv() -> None:
     # And nothing in the list is credential-shaped at all.
     assert argv[0] == "gh"
     assert all(not part.lower().startswith(("ghp_", "ghs_", "gho_")) for part in argv)
+
+
+def test_subprocess_stderr_is_redacted_before_it_reaches_a_ci_log() -> None:
+    """The gate quotes `gh`'s stderr when a read fails, and a CI log is durable.
+
+    `gh` is not expected to echo its token, but "not expected to" is not a
+    control. Both halves of the scrub are asserted: the shape pattern catches a
+    credential this process never held, and the literal match catches one whose
+    shape GitHub changes tomorrow.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import runner_label_exists_gate as gate
+
+    shaped = "ghp_" + "A" * 36
+    assert shaped not in gate.redact(f"HTTP 401: bad credentials ({shaped})")
+    assert "<redacted>" in gate.redact(f"boom {shaped}")
+
+    live = "not-token-shaped-but-secret-anyway"
+    os.environ["GH_TOKEN"] = live
+    try:
+        assert live not in gate.redact(f"gh said: {live}")
+    finally:
+        del os.environ["GH_TOKEN"]
+
+    # Positive control: ordinary text is untouched, so a scrub that blanked
+    # everything would not read as working.
+    assert gate.redact("HTTP 404: Not Found") == "HTTP 404: Not Found"
+
+
+def test_a_short_env_value_is_not_treated_as_a_credential() -> None:
+    """Masking a two-character value would blank half of every message."""
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import runner_label_exists_gate as gate
+
+    os.environ["GH_TOKEN"] = "ab"
+    try:
+        assert gate.redact("a bad request") == "a bad request"
+    finally:
+        del os.environ["GH_TOKEN"]

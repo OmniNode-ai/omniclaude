@@ -53,6 +53,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -74,6 +75,32 @@ from private_repo_runner_placement_gate import (  # noqa: E402
 # the labels array, so it needs no special handling in the subset test. It is
 # named here only so a reader does not go looking for where it is stripped.
 IMPLICIT_SELF_HOSTED = "self-hosted"
+
+# GitHub credential shapes, for scrubbing subprocess output before it is quoted
+# into an error message that lands in a CI log. `gh` is not expected to echo its
+# token, but "not expected to" is not a control: this module prints the CLI's
+# stderr verbatim when a read fails, and a CI log is durable and widely
+# readable. Cheap insurance, and the same posture as this repository's
+# PostToolUse output guard.
+CREDENTIAL_SHAPES = re.compile(
+    r"\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,})\b"
+)
+REDACTED = "<redacted>"
+
+
+def redact(text: str) -> str:
+    """Mask credential-shaped substrings, and the live token value if set.
+
+    Both halves matter. The pattern catches a token this process never held;
+    the literal match catches one whose shape GitHub changes tomorrow.
+    """
+    scrubbed = CREDENTIAL_SHAPES.sub(REDACTED, text)
+    for name in ("GH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN_VARIABLES"):
+        value = os.environ.get(name, "")
+        # A short value is not a credential and would mask half the message.
+        if len(value) >= 8:
+            scrubbed = scrubbed.replace(value, REDACTED)
+    return scrubbed
 
 
 @dataclass(frozen=True)
@@ -154,7 +181,7 @@ def load_runners(org: str) -> list[Runner]:
     if completed.returncode != 0:
         raise GateError(
             f"reading {org}'s runner listing failed (exit {completed.returncode}): "
-            f"{completed.stderr.strip()}. THE GATE DID NOT RUN."
+            f"{redact(completed.stderr.strip())}. THE GATE DID NOT RUN."
         )
 
     runners: list[Runner] = []
