@@ -102,11 +102,14 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
         return
 
     assert isinstance(runs_on, str), "runs-on must be labels or a routing expression"
-    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" in runs_on, (
-        "trusted PRs must use the org-managed self-hosted runner routing variable"
+    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" not in runs_on, (
+        "this LAN-only job must not use the generic trusted runner variable; "
+        "that variable can resolve to hosted runners in repos whose general CI "
+        "does not require the LAN-only model path"
     )
-    assert '"self-hosted","omnibase-ci"' in runs_on, (
-        "trusted runner fallback must include self-hosted and omnibase-ci labels"
+    assert """fromJSON('["self-hosted","omnibase-ci"]')""" in runs_on, (
+        "same-repo review runs must pin the literal self-hosted omnibase-ci "
+        "labels so the LAN-only DeepSeek endpoint is reachable"
     )
 
 
@@ -131,7 +134,8 @@ def test_same_repo_dev_prs_do_not_use_public_runner_branch(
         "github.event.pull_request.head.repo.full_name != github.repository" in runs_on
     )
     assert "OMNI_PUBLIC_PR_RUNS_ON_JSON" in runs_on
-    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" in runs_on
+    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" not in runs_on
+    assert """fromJSON('["self-hosted","omnibase-ci"]')""" in runs_on
 
 
 def test_review_step_invokes_cli_review_with_model(
