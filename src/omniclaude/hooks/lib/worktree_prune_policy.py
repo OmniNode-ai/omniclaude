@@ -706,3 +706,307 @@ def classify_partial_mutation_debris(
         remediation=EnumDebrisRemediation.TRIAGE,
         evidence=evidence,
     )
+
+
+# ===========================================================================
+# The rescue-only class [OMN-18442]
+# ===========================================================================
+#
+# A SECOND, SEPARATE predicate. It is evaluated after the content-keyed one
+# above, against a different question, and it never widens it: no row ever moves
+# from TRIAGE to PRUNE because of anything below.
+#
+# WHAT IT COVERS. A **rescue-only** worktree is one whose branch never opened a
+# pull request and has none open — work a rescue pass swept into a branch that
+# nobody came back for. The content-keyed predicate can never reach one: being
+# dirty or ahead-unmerged is exactly WHY it was rescued, so it fails
+# :func:`is_prune_safe` forever and the population only grows. Measured live
+# 2026-09-16 across 668 worktree records: 415 are rescue-only at any age, and
+# 233 of those clear every non-age clause.
+#
+# WHAT IT DOES. It authorises removing the worktree and its local branch WITHOUT
+# PRESERVATION — destroying uncommitted work that exists nowhere else. That is
+# the point, and it is what the operator ruled. It is the only surface of this
+# lane that destroys work, so every clause below fails CLOSED and every reason a
+# row was held is reported, never only the first.
+#
+# WHERE THE NUMBERS LIVE — deliberately not here. ``max_age_days`` and
+# ``claim_fence_days`` are REQUIRED parameters of :func:`classify_rescue_only`
+# with no defaults. The values are declared once, in the morning-prune workflow
+# config and its format contract in the private workspace registry, and reach
+# this module through the caller's command line. A default here would be a copy
+# nothing compares, in the one place where a stale number deletes work rather
+# than merely misreporting it.
+#
+# WHY THE AGE IS MEASURED TWICE. ``commit_age_days`` (the branch tip's committer
+# date) and ``mtime_age_days`` (the newest git-visible file) answer different
+# questions. A tree can carry a 40-day-old commit and a file edited an hour ago;
+# a tree can carry a commit made minutes ago by a rescue pass over files last
+# touched a month back. Either limb alone mis-ages a real worktree in the
+# direction that destroys work, so the bar is a CONJUNCTION.
+
+
+class EnumRescueOnlyDisposition(StrEnum):
+    """What the rescue-only pass would do with one worktree."""
+
+    REMOVE = "remove"
+    """Rescue-only, over the bar, fenced by nothing: authorized for removal."""
+
+    HOLD = "hold"
+    """Not a candidate. Every hold names EVERY reason, never only the first."""
+
+
+class EnumRescueOnlyHoldReason(StrEnum):
+    """Why a worktree was held back, by the clause that produced it."""
+
+    # --- the row is not of this class at all ---
+    NOT_RESCUE_ONLY_OPEN_PR = "not_rescue_only_open_pr"
+    """The branch has an open pull request: the work is in review, not lost."""
+
+    NOT_RESCUE_ONLY_MERGED_PR = "not_rescue_only_merged_pr"
+    """The branch merged a pull request, so the row belongs to the
+    content-keyed predicate above, not to this one."""
+
+    DETACHED_HEAD = "detached_head"
+    """No branch, so "never opened a pull request" cannot be established at
+    all. Fails closed: a detached worktree is never a rescue-only candidate."""
+
+    # --- the age bar ---
+    COMMIT_WITHIN_WINDOW = "commit_within_window"
+    """The branch tip is at or under the age bar."""
+
+    MTIME_WITHIN_WINDOW = "mtime_within_window"
+    """The newest git-visible file is at or under the age bar."""
+
+    # --- fences ---
+    CLAIM_WITHIN_WINDOW = "claim_within_window"
+    """A ledger ``CLAIM`` named this ticket inside the claim-fence window."""
+
+    LIVE_LANE = "live_lane"
+    """A lane live in the running session owns this ticket."""
+
+    STASH_ATTRIBUTED = "stash_attributed"
+    """A stash entry names this branch; removing the tree would strand it."""
+
+    HAND_HELD = "hand_held"
+    """The declared exclusion file names this branch or path."""
+
+    HAND_HELD_LIST_UNAVAILABLE = "hand_held_list_unavailable"
+    """The declared exclusion list was not supplied, or could not be read.
+
+    Fail-closed counterpart to :attr:`HAND_HELD`. A pass that cannot read the
+    list has not established that a row is unexcluded, and an unreadable list is
+    indistinguishable from an empty one to a caller that ignores the difference
+    — which is how an exclusion silently stops excluding.
+    """
+
+    # --- fail closed ---
+    PATH_MISSING = "path_missing"
+    """The worktree directory is gone: an administrative record, not a tree.
+    ``git worktree prune`` is the remedy and it is not this policy's."""
+
+    FACTS_UNREADABLE = "facts_unreadable"
+    """At least one probe did not complete, so at least one fact is UNKNOWN
+    rather than observed. An empty result is not evidence of absence, and here
+    the difference is destroying work."""
+
+
+class ModelRescueOnlyFacts(BaseModel):
+    """Already-observed facts about one worktree. Every field is an observation.
+
+    The caller collects these; this module only decides. A field that could not
+    be read is ``None``, never a substituted default — see
+    :attr:`EnumRescueOnlyHoldReason.FACTS_UNREADABLE`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(..., description="Absolute worktree path")
+    repo: str = Field(..., description="Owning canonical clone's directory name")
+    ticket: str | None = Field(None, description="OMN-NNNN read off the path")
+    branch: str | None = Field(None, description="Branch, or None on detached HEAD")
+    exists: bool = Field(True, description="The worktree directory is on disk")
+    commit_age_days: float | None = Field(
+        None, description="Age of the branch tip's committer date; None if unreadable"
+    )
+    mtime_age_days: float | None = Field(
+        None,
+        description=(
+            "Age of the newest GIT-VISIBLE file, in days. Git-visible means "
+            "`git ls-files` plus `git ls-files --others --exclude-standard`. A "
+            "raw filesystem walk is a defect here, not a shortcut: gitignored "
+            "tool caches written by a pre-commit run reported 663 of 671 "
+            "worktrees as recently touched on 2026-09-16 while their source "
+            "files were 33 days old. None if unreadable."
+        ),
+    )
+    pr_state: EnumBranchPrState = Field(
+        EnumBranchPrState.UNKNOWN,
+        description=(
+            "Pull-request state of the branch. UNKNOWN fails closed: a branch "
+            "absent from an EMPTY lookup proves nothing, and reading that as "
+            "'no pull request' is what licenses a wrong deletion."
+        ),
+    )
+    last_claim_age_days: float | None = Field(
+        None,
+        description=(
+            "Age of the newest ledger CLAIM naming this ticket. None means no "
+            "CLAIM was found, which is a real zero only because the ledger was "
+            "read successfully; an unreadable ledger belongs in "
+            "`unreadable_probes`."
+        ),
+    )
+    live_lane: bool = Field(
+        False, description="A lane live in the running session owns this ticket"
+    )
+    attributed_stash_count: int = Field(
+        0, description="Stash entries whose subject names this branch"
+    )
+    hand_held_available: bool = Field(
+        False,
+        description=(
+            "The declared exclusion list was supplied AND parsed. False holds "
+            "every row on HAND_HELD_LIST_UNAVAILABLE."
+        ),
+    )
+    hand_held_match: bool = Field(
+        False, description="The declared exclusion list names this branch or path"
+    )
+    unreadable_probes: tuple[str, ...] = Field(
+        (), description="Probes that did not complete, named by command"
+    )
+
+
+class ModelRescueOnlyDecision(BaseModel):
+    """The adjudicated disposition of one worktree, with its measured evidence.
+
+    The measured ages are carried on the DECISION, not only on the facts, so a
+    report row can state what was measured beside the verdict it produced — a
+    verdict whose inputs are not printed cannot be checked by the person reading
+    the report [OMN-18442 AC6].
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str
+    repo: str
+    ticket: str | None = None
+    branch: str | None = None
+    disposition: EnumRescueOnlyDisposition
+    hold_reasons: tuple[EnumRescueOnlyHoldReason, ...] = ()
+    commit_age_days: float | None = None
+    mtime_age_days: float | None = None
+    pr_state: EnumBranchPrState = EnumBranchPrState.UNKNOWN
+    last_claim_age_days: float | None = None
+    evidence: str = Field(
+        "", description="Why removal is authorized on a REMOVE; empty on a HOLD"
+    )
+
+
+def classify_rescue_only(
+    facts: ModelRescueOnlyFacts,
+    *,
+    max_age_days: float,
+    claim_fence_days: float,
+) -> ModelRescueOnlyDecision:
+    """Decide one worktree. Every clause runs; every reason is reported.
+
+    Never short-circuits. A row that is both hand-held and inside the claim
+    window names both, because a caller reading only the first reason cannot
+    tell a single fence from a stack of them — and when the fences are all that
+    stand between a tree and deletion, the count matters.
+
+    ``max_age_days`` and ``claim_fence_days`` are required and have no defaults
+    anywhere in this repository: they are the caller's to supply from the
+    declared policy values.
+    """
+    reasons: list[EnumRescueOnlyHoldReason] = []
+
+    def _unreadable() -> None:
+        if EnumRescueOnlyHoldReason.FACTS_UNREADABLE not in reasons:
+            reasons.append(EnumRescueOnlyHoldReason.FACTS_UNREADABLE)
+
+    if not facts.exists:
+        reasons.append(EnumRescueOnlyHoldReason.PATH_MISSING)
+    if facts.unreadable_probes:
+        _unreadable()
+    if facts.branch is None:
+        reasons.append(EnumRescueOnlyHoldReason.DETACHED_HEAD)
+
+    # Class membership. UNKNOWN is refused rather than assumed: a worktree whose
+    # pull-request state could not be resolved is not PROVABLY rescue-only.
+    if facts.pr_state is EnumBranchPrState.UNKNOWN:
+        _unreadable()
+    elif facts.pr_state is EnumBranchPrState.NOT_MERGED:
+        reasons.append(EnumRescueOnlyHoldReason.NOT_RESCUE_ONLY_OPEN_PR)
+    elif facts.pr_state is EnumBranchPrState.MERGED:
+        reasons.append(EnumRescueOnlyHoldReason.NOT_RESCUE_ONLY_MERGED_PR)
+
+    # The age bar — a conjunction, both limbs measured, both reported.
+    if facts.commit_age_days is None:
+        _unreadable()
+    elif facts.commit_age_days <= max_age_days:
+        reasons.append(EnumRescueOnlyHoldReason.COMMIT_WITHIN_WINDOW)
+
+    if facts.mtime_age_days is None:
+        _unreadable()
+    elif facts.mtime_age_days <= max_age_days:
+        reasons.append(EnumRescueOnlyHoldReason.MTIME_WITHIN_WINDOW)
+
+    # Fences. Each one is taken from the consent row's own OUT OF SCOPE list.
+    if (
+        facts.last_claim_age_days is not None
+        and facts.last_claim_age_days < claim_fence_days
+    ):
+        reasons.append(EnumRescueOnlyHoldReason.CLAIM_WITHIN_WINDOW)
+    if facts.live_lane:
+        reasons.append(EnumRescueOnlyHoldReason.LIVE_LANE)
+    if facts.attributed_stash_count > 0:
+        reasons.append(EnumRescueOnlyHoldReason.STASH_ATTRIBUTED)
+    if not facts.hand_held_available:
+        reasons.append(EnumRescueOnlyHoldReason.HAND_HELD_LIST_UNAVAILABLE)
+    elif facts.hand_held_match:
+        reasons.append(EnumRescueOnlyHoldReason.HAND_HELD)
+
+    if reasons:
+        return ModelRescueOnlyDecision(
+            path=facts.path,
+            repo=facts.repo,
+            ticket=facts.ticket,
+            branch=facts.branch,
+            commit_age_days=facts.commit_age_days,
+            mtime_age_days=facts.mtime_age_days,
+            pr_state=facts.pr_state,
+            last_claim_age_days=facts.last_claim_age_days,
+            disposition=EnumRescueOnlyDisposition.HOLD,
+            hold_reasons=tuple(reasons),
+            evidence="",
+        )
+
+    claim = (
+        "no ledger CLAIM ever named this ticket"
+        if facts.last_claim_age_days is None
+        else f"newest ledger CLAIM {facts.last_claim_age_days:.1f}d old"
+    )
+    assert facts.commit_age_days is not None  # noqa: S101 — refused above otherwise
+    assert facts.mtime_age_days is not None  # noqa: S101 — refused above otherwise
+    return ModelRescueOnlyDecision(
+        path=facts.path,
+        repo=facts.repo,
+        ticket=facts.ticket,
+        branch=facts.branch,
+        commit_age_days=facts.commit_age_days,
+        mtime_age_days=facts.mtime_age_days,
+        pr_state=facts.pr_state,
+        last_claim_age_days=facts.last_claim_age_days,
+        disposition=EnumRescueOnlyDisposition.REMOVE,
+        hold_reasons=(),
+        evidence=(
+            f"rescue-only (no pull request ever opened, none open); last commit "
+            f"{facts.commit_age_days:.1f}d and newest git-visible file "
+            f"{facts.mtime_age_days:.1f}d, both over the {max_age_days:g}-day "
+            f"bar; {claim}; no live lane; no attributed stash; not on the "
+            f"hand-held list."
+        ),
+    )
