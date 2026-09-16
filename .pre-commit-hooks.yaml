@@ -88,3 +88,31 @@
   pass_filenames: false
   always_run: true
   stages: [pre-commit]
+
+- id: runner-label-exists
+  name: A runs-on label pin names a label an online runner carries (OMN-18408)
+  description: >
+    A job pinned to a label no runner carries does not fail -- it queues, and
+    the pull request that merged the pin stays green because the job never ran.
+    Measured 2026-09-16: five scheduled lab probes were repinned to a host
+    label whose runner was not registered yet, zero of 64 organisation runners
+    carried it, and they queued about four hours with no check anywhere saying
+    so. This resolves each job's parsed runs-on arm by arm and requires at
+    least one ONLINE organisation runner carrying EVERY label in the arm, which
+    is the rule GitHub itself uses to assign a job. A label carried only by
+    offline runners fails too, and the message says which of the two it is,
+    because they want different repairs. Hosted labels are skipped -- whether
+    those are ALLOWED is the sibling placement gate's verdict. An unreadable or
+    empty runner listing is exit 2, never a pass, and every run executes a
+    positive control built from the live listing so a broken matcher cannot
+    report everything as satisfied. A label set computed at run time is
+    reported rather than refused; a repository in which nothing was decidable
+    is itself a refusal. See scripts/runner_label_exists_gate.py.
+  language: script
+  entry: scripts/runner_label_exists_gate.py --repo-root .
+  # WHOLE-TREE for the same reason as the sibling gate above: the invariant is
+  # over every workflow in the repository, and a hook that inspects only the
+  # diff reports green over every unclaimed pin that landed before it existed.
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
