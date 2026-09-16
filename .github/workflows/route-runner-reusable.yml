@@ -120,6 +120,11 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
+    # 10 minutes covers a checkout, one environment sync and a decision that
+    # takes milliseconds. It is not a budget to grow into: this job is on the
+    # critical path of every consuming run, so a sync that stops fitting should
+    # fail here rather than silently add minutes to every pipeline that calls
+    # this workflow.
     timeout-minutes: 10
     outputs:
       runs_on: ${{ steps.decide.outputs.runs_on }}
@@ -146,12 +151,21 @@ jobs:
       # reports a GREEN job whose decision reads `probe_error:module_unavailable`
       # -- measured on omnibase_infra run 35039101488, where the mechanism was
       # entirely inert and nothing was red.
-      - name: Set up Python and uv
+      # NO CACHE, DELIBERATELY. Measured on omninode_infra run 35048508160: the
+      # post-job cache SAVE cost 34 seconds of the job's 155, and bought
+      # nothing -- every fleet runner is an ephemeral container, so the cache it
+      # writes is discarded with it. A cache that is always written and never
+      # read is pure cost on the critical path of every consuming run.
+      - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
-          enable-cache: true
-          cache-dependency-glob: .runner-route/uv.lock
+          enable-cache: false
 
+      # KEPT AS ITS OWN STEP so a dependency failure is diagnosed as one. The
+      # decide step below runs with the SAME group flags, which is the fix:
+      # `uv run` includes the dev group by default, so a run whose flags differ
+      # from its sync re-resolves and installs the difference inside the step
+      # that was supposed to just decide.
       - name: Sync the routing node's environment
         working-directory: .runner-route
         run: uv sync --frozen --no-dev
@@ -206,7 +220,16 @@ jobs:
             --force "${FORCE}"
           )
           [ "${DRY_RUN}" = "true" ] && args+=(--dry-run)
-          uv run --frozen python3 scripts/ci/runner_route_decision.py "${args[@]}" || rc=$?
+          # `--no-dev` HERE AS WELL AS ON THE SYNC, and the two must agree.
+          # `uv run` includes the dev group by DEFAULT, so a run whose flags
+          # differ from its sync re-resolves and installs the difference. On the
+          # same measured run that was 57 extra packages -- numpy, botocore, a
+          # source build of the project -- downloaded on the critical path to
+          # make a decision that needs a typed model and a YAML parser. 69 of
+          # the job's 155 seconds were spent inside this step doing that, while
+          # the step that exists to prepare the environment had already
+          # finished in 23.
+          uv run --frozen --no-dev python3 scripts/ci/runner_route_decision.py "${args[@]}" || rc=$?
           # FAIL-CLOSED FLOOR. The node catches everything internally, but if
           # the interpreter itself could not run, the calling workflow must
           # still receive a usable runs-on rather than an empty string, which
