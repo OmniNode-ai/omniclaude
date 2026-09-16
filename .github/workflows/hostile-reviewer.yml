@@ -15,7 +15,25 @@
 #   degraded    — cli_review RAN but every model failed mid-review → exit 0 (informational, pilot)
 #   infra_error — cli_review could not run at all (dependency install failed, or the
 #                 CLI itself crashed) after one retry → exit 1 (fail closed, 2026-08-13)
+#   unavailable_fork_isolation
+#               — a fork-origin pull request, which is never placed on the
+#                 LAN-attached fleet, so the reviewer model is unreachable by
+#                 construction → exit 1 (fail closed with a NAMED reason, OMN-18415)
 #   passed      — no critical/error findings → exit 0
+#
+# THIS JOB IS LAB-TOUCHING AND ITS RUNNER CARVE-OUT IS LOAD-BEARING (OMN-18415).
+# The reviewer calls DeepSeek-R1 on the lab host, which is LAN-only, and it
+# needs two variables the omnibase-ci fleet carries and a GitHub-hosted runner
+# does not: the local-LLM HMAC signing key (fail-closed) and
+# LLM_ENDPOINT_CIDR_ALLOWLIST, the transport's trust boundary, which it refuses
+# to default. Both were placed on all 60 fleet runners on 2026-09-15/16.
+#
+# stderr IS NOT DISCARDED (OMN-18415 AC3). The reviewer's stderr used to be
+# redirected to the null device, so three separate fail-closed causes each had
+# to be reproduced by hand on a laptop instead of read from the job log. It is
+# now echoed into the log per attempt and carried in an uploaded verdict
+# artifact. A test asserts that redirection appears nowhere in this file, so do
+# not reintroduce it — not even inside a comment.
 #
 # 2026-08-13: infra_error used to be folded into `degraded` and exit 0 — a
 # dependency-install failure or a CLI crash let this REQUIRED context ("Hostile
@@ -50,24 +68,129 @@ jobs:
   hostile-review:
     needs: occ-preflight
     name: Hostile Reviewer (adversarial gate)
-    # self-hosted runner on .201 required — DeepSeek-R1 at :8001 is LAN-only  # onex-allow-internal-ip
-    # LLM_DEEPSEEK_URL must be set in the runner's environment (Infisical or shell profile)
+    # RUNNER CARVE-OUT (OMN-18415) — the trusted branch reads a DEDICATED
+    # `OMNI_HOSTILE_REVIEW_RUNS_ON_JSON` variable, NOT the shared
+    # `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam that governs lint/test/build here, and
+    # NOT a bare hardcoded label either.
+    #
+    # WHY NOT THE SEAM: this job calls DeepSeek-R1 on the lab host over the
+    # LAN (# onex-allow-internal-ip), reading LLM_DEEPSEEK_R1_URL and two
+    # trust-boundary variables from the runner's own environment. Only the
+    # self-hosted `omnibase-ci` fleet has any of the three. omniclaude is a
+    # PUBLIC repository whose seam is deliberately `["ubuntu-latest"]` at org and
+    # repo scope under the 2026-09-14 ruling that public HERMETIC CI stays
+    # hosted — and that ruling classifies a job by what it REACHES. This one
+    # reaches the lab. While it read the seam it landed hosted on every real pull
+    # request, could not reach the endpoint, and reported `infra_error` on a
+    # REQUIRED check (omniclaude#2181 run 35043714512 attempt 4, hosted
+    # ubuntu-24.04 image).
+    #
+    # WHY NOT A BARE LITERAL: a runner label written straight into a workflow
+    # file answers to no routing variable and is invisible to the hourly
+    # runner-routing audit, which reads Actions variables. One explicit knob
+    # keeps the placement legible and killable (CLAUDE.md rule 14).
+    #
+    # WHY NOT THE ROUTING NODE: `node_ci_runner_route_compute` (omnibase_infra,
+    # reached through route-runner-reusable.yml) cannot express this. It treats
+    # the caller's seam as a CEILING it may only ever DOWNGRADE from, so for a
+    # public repository whose seam is hosted it returns `seam_ceiling_hosted` on
+    # every run. A lab-touching job in a public repository has to sit AHEAD of
+    # the seam, which is precisely what this narrower variable is for — the same
+    # carve-out shape the OCC publishers use for the tailnet-only broker
+    # (OMN-16691).
+    #
+    # HOW: the literal `["self-hosted","omnibase-ci"]` fallback IS the operating
+    # value. `OMNI_HOSTILE_REVIEW_RUNS_ON_JSON` is deliberately left UNSET at org
+    # and repo scope — setting it is an operator kill switch that must cite a
+    # reachability proof for whatever class it names, never a side effect of a
+    # seam migration. Nothing here writes any Actions variable (rule 14,
+    # single-owner).
+    #
+    # FORK ISOLATION IS UNTOUCHED AND COMES FIRST (OMN-16683/16684). Untrusted
+    # fork code never reaches the LAN-attached fleet at any idle level. It keeps
+    # the `OMNI_PUBLIC_PR_RUNS_ON_JSON` path, where the model is unreachable, and
+    # the job then fails CLOSED with a named reason rather than passing silently.
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     timeout-minutes: 20
     env:
       UV_HTTP_TIMEOUT: "900"
+      # Same fork/non-fork test as `runs-on:` above, threaded into the steps so
+      # the fork path can refuse loudly instead of attempting a LAN call it
+      # cannot make. Identical shape to the OCC publishers' RUNNER_IS_TRUSTED.
+      RUNNER_IS_TRUSTED: >-
+        ${{
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name != github.repository)
+          && 'false' || 'true'
+        }}
+      # Absolute: the review step runs in ../omniintelligence, and the upload
+      # action resolves a relative path against the workspace.
+      VERDICT_ARTIFACT: ${{ github.workspace }}/hostile-review-verdict.json
 
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
+
+      # OMN-18415. A fork-origin pull request is placed on a GitHub-hosted
+      # runner by the selector above and MUST stay there: running untrusted code
+      # on the LAN-attached fleet is the exposure OMN-16683 closed. The
+      # consequence is that the reviewer model is unreachable, so this path can
+      # never produce an adversarial verdict.
+      #
+      # It therefore refuses with a NAMED reason rather than passing. A silent
+      # pass here would be the same class of defect this ticket exists to close:
+      # a REQUIRED adversarial gate reporting green with zero review performed.
+      # A typed skip is not available either — the gate below treats `skipped`
+      # as the ABSENCE of a verdict and fails closed on it (OMN-15304 vector 6),
+      # so skipping would be a red check with no reason attached to it. This is
+      # a red check WITH one, in the job log and in the verdict artifact.
+      - name: Refuse fork-origin pull requests (fail closed, named)
+        if: env.RUNNER_IS_TRUSTED != 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          REASON: >-
+            fork-origin pull request: the adversarial reviewer calls a LAN-only
+            model on the lab host, and untrusted fork code is never placed
+            on the self-hosted fleet (OMN-16683). No verdict can be produced on
+            this path.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "verdict": "unavailable_fork_isolation",
+              "blocking_count": 0,
+              "total_findings": 0,
+              "models_succeeded": [],
+              "review_exit": None,
+              "error": os.environ["REASON"],
+              "named_cause": "",
+              "findings": [],
+              "stderr": "",
+          }
+          with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
+              json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
+          {
+            echo "verdict=unavailable_fork_isolation"
+            echo "blocking_count=0"
+            echo "total_findings=0"
+            echo "models_succeeded="
+            echo "error=${REASON}"
+            echo "named_cause="
+          } >> "$GITHUB_OUTPUT"
+          echo "::error title=Hostile Reviewer unavailable::${REASON}"
+          exit 1
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
@@ -200,16 +323,102 @@ jobs:
           # infra_error. Treat exit 0 (full pass) and exit 2 (single-model
           # DEGRADED, still a real verdict) as "cli_review produced output";
           # only exit 1 (every model failed / crashed) is retried.
+          #
+          # OMN-18415 AC3 — STDERR IS CAPTURED, NEVER DISCARDED. A redirect to
+          # the null device stood on the substitution below, discarding every
+          # byte of it. cli_review writes its human summary
+          # AND every fail-closed cause to stderr, so discarding it meant a
+          # misconfiguration surfaced as a bare `infra_error` with no diagnostic
+          # anywhere in CI. Three distinct causes on this one gate — an absent
+          # signing key, an absent endpoint CIDR boundary, and a hosted runner
+          # with no route to the model at all — each had to be reproduced by
+          # hand on a laptop to be named. Each was one line of this stderr.
+          STDERR_LOG="${RUNNER_TEMP}/hostile-review-stderr.log"
+          ATTEMPT_ERR="${RUNNER_TEMP}/hostile-review-stderr-attempt.log"
+          : > "$STDERR_LOG"
+
           REVIEW_EXIT=1
           for attempt in 1 2; do
+            : > "$ATTEMPT_ERR"
             set +e
             REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
               --model deepseek-r1 \
-              2>/dev/null)
+              2>"$ATTEMPT_ERR")
             REVIEW_EXIT=$?
             set -e
+
+            # Redact before anything is echoed or uploaded. The signing key is
+            # in this step's ambient process environment because the fleet
+            # declares it there, and GitHub masks only registered Actions
+            # secrets, not runner env. Done in python reading os.environ so no
+            # value is ever placed on a command line, where `ps` would show it.
+            python3 - "$ATTEMPT_ERR" <<'PY'
+          import base64
+          import json
+          import os
+          import sys
+          import urllib.parse
+
+          def spellings(value: str) -> list[str]:
+              """Every form the value can reach stderr in, longest first.
+
+              A substring replace only catches the value spelled verbatim.
+              Anything that passes through a JSON body, a query string or an
+              encoded header arrives in a form that does not match it and was
+              printed in full. Longest first so a shorter spelling cannot cut a
+              longer one in half and leave the remainder in the log.
+              """
+              return sorted(
+                  {
+                      value,
+                      json.dumps(value)[1:-1],
+                      urllib.parse.quote(value, safe=""),
+                      base64.b64encode(value.encode()).decode(),
+                  },
+                  key=len,
+                  reverse=True,
+              )
+
+
+          def redact_value(text: str, name: str, value: str) -> str:
+              """Replace every line containing any spelling of the value.
+
+              Splicing the value out of the middle of a line leaves the
+              surrounding characters behind, which reads as corruption and tells
+              a reader how long the value was. The line goes, or nothing does.
+              Over-redaction is the accepted direction: a value that happens to
+              sit inside an unrelated token costs a marked-up log line, which is
+              legible. The other direction leaves a signing value in CI output.
+              """
+              marker = f"***{name}-redacted***"
+              for spelling in spellings(value):
+                  text = "".join(
+                      f"{marker}{os.linesep if line.endswith(os.linesep) else ''}"
+                      if spelling in line
+                      else line
+                      for line in text.splitlines(keepends=True)
+                  )
+              return text
+
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8", errors="replace") as handle:
+              text = handle.read()
+          for name in ("LOCAL_LLM_SHARED_SECRET", "LLM_ENDPOINT_CIDR_ALLOWLIST"):
+              value = os.environ.get(name)
+              if value and len(value) >= 8:
+                  text = redact_value(text, name, value)
+          with open(path, "w", encoding="utf-8") as handle:
+              handle.write(text)
+          PY
+
+            cat "$ATTEMPT_ERR" >> "$STDERR_LOG"
+            echo "::group::cli_review stderr (attempt ${attempt}/2, exit ${REVIEW_EXIT})"
+            cat "$ATTEMPT_ERR"
+            echo "::endgroup::"
+
             if [ "$REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2 ]; then
               break
             fi
@@ -219,18 +428,50 @@ jobs:
             fi
           done
 
+          # The single most informative stderr line, carried into the step
+          # output so it reaches the PR comment as well as the log.
+          NAMED_CAUSE=$(grep -aE '\[ONEX_[A-Z0-9_]+\]|is not set|is required|Traceback' "$STDERR_LOG" | tail -n 1 || true)
+
           # Exit 0 (full pass) and exit 2 (single-model DEGRADED) both mean
           # cli_review produced a real verdict document -- only exit 1
           # (every model failed / crashed) after both attempts is a genuine
           # infra_error.
           if [ "$REVIEW_EXIT" -ne 0 ] && [ "$REVIEW_EXIT" -ne 2 ]; then
+            REVIEW_EXIT="$REVIEW_EXIT" NAMED_CAUSE="$NAMED_CAUSE" \
+            STDERR_LOG="$STDERR_LOG" python3 - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["STDERR_LOG"], encoding="utf-8", errors="replace") as handle:
+              captured = handle.read()
+          payload = {
+              "verdict": "infra_error",
+              "blocking_count": 0,
+              "total_findings": 0,
+              "models_succeeded": [],
+              "review_exit": int(os.environ["REVIEW_EXIT"]),
+              "error": (
+                  f"cli_review failed after 2 attempts (exit {os.environ['REVIEW_EXIT']})"
+                  " \u2014 infra unavailable or crash"
+              ),
+              "named_cause": os.environ.get("NAMED_CAUSE", ""),
+              "findings": [],
+              "stderr": captured,
+          }
+          with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
+              json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
             {
               echo "verdict=infra_error"
               echo "blocking_count=0"
               echo "total_findings=0"
               echo "models_succeeded="
               echo "error=cli_review failed after 2 attempts (exit ${REVIEW_EXIT}) — infra unavailable or crash"
+              echo "named_cause=${NAMED_CAUSE}"
             } >> "$GITHUB_OUTPUT"
+            if [ -n "$NAMED_CAUSE" ]; then
+              echo "::error title=Hostile Reviewer infra_error::${NAMED_CAUSE}"
+            fi
             exit 1
           fi
 
@@ -280,12 +521,124 @@ jobs:
           # Write outputs
           echo "$VERDICT_DATA" >> "$GITHUB_OUTPUT"
           echo "error=" >> "$GITHUB_OUTPUT"
+          echo "named_cause=${NAMED_CAUSE}" >> "$GITHUB_OUTPUT"
+
+          # OMN-18415 AC3 — the verdict artifact carries the captured stderr on
+          # the SUCCESS path as well. `degraded` is a success exit in the pilot:
+          # every model failed mid-review, the gate does not block, and the
+          # reason exists only in stderr. Without this the cause of a
+          # non-blocking degradation is unreadable after the run, which is how
+          # this gate spent an unknown number of PRs reviewing nothing.
+          VERDICT_DATA="$VERDICT_DATA" NAMED_CAUSE="$NAMED_CAUSE" \
+          STDERR_LOG="$STDERR_LOG" REVIEW_EXIT="$REVIEW_EXIT" \
+          REVIEW_JSON="$REVIEW_JSON" python3 - <<'PY'
+          import json
+          import os
+
+          fields = {}
+          for line in os.environ["VERDICT_DATA"].splitlines():
+              if "=" in line:
+                  key, _, value = line.partition("=")
+                  fields[key.strip()] = value
+          with open(os.environ["STDERR_LOG"], encoding="utf-8", errors="replace") as handle:
+              captured = handle.read()
+          models = fields.get("models_succeeded", "")
+
+          # OMN-18415 — THE FINDINGS THEMSELVES, not just how many there were.
+          # `blocked` is the one verdict that stops a merge, and the first live
+          # run of this gate on a real diff blocked with `blocking findings: 1`
+          # and NOTHING anywhere naming the finding: the reviewer's JSON went to
+          # a shell variable that was parsed for counts and then discarded. A
+          # required gate whose refusal cannot be read is not reviewable, it is
+          # only obstructive.
+          # Field names are ModelReviewFindingObserved's
+          # (omniintelligence.review_pairing.models): rule_id, file_path,
+          # line_start, normalized_message / raw_message. Guessing them wrongly
+          # is not hypothetical -- the first revision of this block guessed
+          # title/message/file and rendered a finding row of three empty cells,
+          # which reads as "the reviewer found nothing to say" rather than "this
+          # code read the wrong keys". So each value falls back through its
+          # alternatives, and `raw` keeps the finding verbatim: a renamed field
+          # upstream then costs a worse-looking row, never a lost finding.
+          findings = []
+          for result in json.loads(os.environ["REVIEW_JSON"]).get("results", []):
+              if not result.get("success"):
+                  continue
+              for finding in result.get("findings", []):
+                  findings.append(
+                      {
+                          "severity": finding.get("severity") or "unknown",
+                          "rule": finding.get("rule_id") or finding.get("title") or "",
+                          "message": (
+                              finding.get("normalized_message")
+                              or finding.get("raw_message")
+                              or finding.get("message")
+                              or ""
+                          ),
+                          "file": finding.get("file_path") or finding.get("file") or "",
+                          "line": finding.get("line_start") or finding.get("line"),
+                          "model": result.get("model", ""),
+                          "raw": finding,
+                      }
+                  )
+
+          payload = {
+              "verdict": fields.get("verdict", "unknown"),
+              "blocking_count": int(fields.get("blocking_count", "0") or 0),
+              "total_findings": int(fields.get("total_findings", "0") or 0),
+              "models_succeeded": [m for m in models.split(",") if m],
+              "review_exit": int(os.environ["REVIEW_EXIT"]),
+              "error": "",
+              "named_cause": os.environ.get("NAMED_CAUSE", ""),
+              "findings": findings,
+              "stderr": captured,
+          }
+          with open(os.environ["VERDICT_ARTIFACT"], "w", encoding="utf-8") as handle:
+              json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
+
+          # And into the job log, so the refusal is readable without
+          # downloading anything.
+          echo "::group::adversarial findings"
+          python3 - "$VERDICT_ARTIFACT" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+          for finding in payload.get("findings", []):
+              location = finding.get("file") or "(no file)"
+              if finding.get("line"):
+                  location = f"{location}:{finding['line']}"
+              print(f"[{finding.get('severity')}] {location} — {finding.get('rule')}")
+              if finding.get("message"):
+                  print(f"    {finding['message']}")
+              elif not finding.get("rule"):
+                  # Nothing mapped. Print the finding verbatim rather than an
+                  # empty line that reads as an empty finding.
+                  print(f"    {json.dumps(finding.get('raw', {}), sort_keys=True)}")
+          if not payload.get("findings"):
+              print("(none)")
+          PY
+          echo "::endgroup::"
 
           # Set exit code: blocked → 1, everything else → 0 (pilot: degraded is informational)
           VERDICT=$(echo "$VERDICT_DATA" | grep '^verdict=' | cut -d= -f2)
           if [ "$VERDICT" = "blocked" ]; then
             exit 1
           fi
+
+      # OMN-18415 AC3. `if: always()` because the run that most needs its stderr
+      # read is the one that failed — including the fork refusal above, which
+      # exits before the reviewer runs at all.
+      - name: Upload the verdict artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hostile-review-verdict-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/hostile-review-verdict.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Post review summary as PR comment
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
@@ -296,6 +649,7 @@ jobs:
           REVIEW_TOTAL: ${{ steps.review.outputs.total_findings }}
           REVIEW_MODELS: ${{ steps.review.outputs.models_succeeded }}
           REVIEW_ERROR: ${{ steps.review.outputs.error }}
+          REVIEW_NAMED_CAUSE: ${{ steps.review.outputs.named_cause }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -304,12 +658,34 @@ jobs:
             const total = parseInt(process.env.REVIEW_TOTAL || '0');
             const models = process.env.REVIEW_MODELS || '';
             const error = process.env.REVIEW_ERROR || '';
+            // OMN-18415 AC3: the single most informative line of the reviewer's
+            // stderr, which used to go to /dev/null. The full capture is in the
+            // uploaded `hostile-review-verdict-*` artifact.
+            const namedCause = process.env.REVIEW_NAMED_CAUSE || '';
+
+            // OMN-18415: read the findings out of the verdict artifact the
+            // review step wrote. They are NOT passed as step outputs -- a
+            // finding is multi-line free text from a model, and threading that
+            // through GITHUB_OUTPUT means choosing a delimiter the model could
+            // emit. Reading the file has no such failure mode.
+            const fs = require('fs');
+            let findings = [];
+            try {
+              const raw = fs.readFileSync(
+                `${process.env.GITHUB_WORKSPACE}/hostile-review-verdict.json`,
+                'utf8',
+              );
+              findings = JSON.parse(raw).findings || [];
+            } catch (err) {
+              core.info(`no verdict artifact to read findings from: ${err.message}`);
+            }
 
             const icon = {
               passed: '✅',
               blocked: '🚫',
               degraded: '⚠️',
               infra_error: '🚫',
+              unavailable_fork_isolation: '🚫',
             }[verdict] || '❓';
 
             const label = {
@@ -317,6 +693,7 @@ jobs:
               blocked: 'BLOCKED',
               degraded: 'DEGRADED (informational)',
               infra_error: 'INFRA ERROR (blocking)',
+              unavailable_fork_isolation: 'UNAVAILABLE — fork isolation (blocking)',
             }[verdict] || verdict.toUpperCase();
 
             let note = '';
@@ -331,6 +708,47 @@ jobs:
                 'this now fails the required gate closed instead of silently passing. Re-run the job; if infra is ' +
                 'genuinely down, escalate rather than bypassing.';
               if (error) note += ` Error: \`${error}\``;
+            } else if (verdict === 'unavailable_fork_isolation') {
+              note = '\n\n> **Action required**: this is a fork-origin pull request. The adversarial reviewer ' +
+                'calls a LAN-only model on the lab host, and untrusted fork code is never placed on the ' +
+                'self-hosted fleet (OMN-16683), so no verdict can be produced here. A maintainer must ' +
+                'review this change directly — this gate fails closed rather than passing silently.';
+              if (error) note += ` Reason: \`${error}\``;
+            }
+
+            // The named cause goes in the body for every verdict that has one,
+            // not only the blocking ones: a `degraded` run does not block, so
+            // its cause would otherwise be invisible (OMN-18415 AC3).
+            if (namedCause) {
+              note += `\n\n> **Reviewer stderr (named cause)**: \`${namedCause}\``;
+            }
+
+            // The findings block. `blocked` is the only verdict that stops a
+            // merge, and before OMN-18415 it reported a COUNT and nothing else,
+            // so the one thing a reader needed was the one thing absent.
+            let findingsBlock = '';
+            if (findings.length > 0) {
+              const rows = findings.map(f => {
+                const where = f.line ? `${f.file}:${f.line}` : (f.file || '_(no file)_');
+                let text = f.message || '';
+                if (!text && !f.rule) {
+                  // Nothing mapped: show the finding verbatim rather than an
+                  // empty row, which reads as a reviewer with nothing to say.
+                  text = JSON.stringify(f.raw || {});
+                }
+                text = text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+                const rule = f.rule ? `**${f.rule}** ` : '';
+                return `| \`${f.severity}\` | ${where} | ${rule}${text} |`;
+              });
+              findingsBlock = [
+                '',
+                '### Findings',
+                '',
+                '| Severity | Location | Finding |',
+                '|---|---|---|',
+                ...rows,
+                '',
+              ].join('\n');
             }
 
             const body = [
@@ -340,6 +758,7 @@ jobs:
               `**Total findings**: ${total}  `,
               `**Models succeeded**: ${models || 'none'}`,
               note,
+              findingsBlock,
               '',
               '---',
               '',
@@ -351,6 +770,7 @@ jobs:
               '| `blocked` | CRITICAL or ERROR findings found | **Yes** |',
               '| `degraded` | Reviewer ran but every model failed mid-run | No (pilot) |',
               '| `infra_error` | cli_review failed to run at all (install/crash) after 2 attempts | **Yes** |',
+              '| `unavailable_fork_isolation` | Fork PR — the LAN-only model is unreachable and the fleet is off limits | **Yes** |',
               '',
               '_Powered by [omniintelligence.review_pairing.cli_review](https://github.com/OmniNode-ai/omniintelligence) — node-based adversarial review via HandlerLlmCliSubprocess (OMN-8524)_',
             ].join('\n');
@@ -419,7 +839,7 @@ jobs:
             success)
               ;;
             failure)
-              echo "::error::Hostile reviewer job failed — either CRITICAL/ERROR findings were reported (resolve them) or cli_review could not run at all after 2 attempts (infra_error — check the job log/PR comment for which). See the 'Post review summary as PR comment' output for the verdict."
+              echo "::error::Hostile reviewer job failed — CRITICAL/ERROR findings were reported (resolve them), or cli_review could not run after 2 attempts (infra_error), or this is a fork-origin PR where the LAN-only model is unreachable and the fleet is off limits (unavailable_fork_isolation). The reviewer's stderr is now in the job log and in the uploaded 'hostile-review-verdict-*' artifact (OMN-18415) — read it rather than guessing which."
               exit 1
               ;;
             cancelled|skipped)

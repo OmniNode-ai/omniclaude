@@ -107,9 +107,18 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
         "that variable can resolve to hosted runners in repos whose general CI "
         "does not require the LAN-only model path"
     )
-    assert """fromJSON('["self-hosted","omnibase-ci"]')""" in runs_on, (
-        "same-repo review runs must pin the literal self-hosted omnibase-ci "
-        "labels so the LAN-only DeepSeek endpoint is reachable"
+    # OMN-18415: the fleet labels are now the FALLBACK of a dedicated per-job
+    # variable rather than a bare literal. The operating value is unchanged --
+    # the variable is deliberately unset at org and repo scope -- but the job is
+    # no longer invisible to the routing audit, which reads Actions variables
+    # and cannot see a label written straight into a workflow file.
+    assert (
+        "vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || "
+        """'["self-hosted","omnibase-ci"]'""" in runs_on
+    ), (
+        "same-repo review runs must resolve to the self-hosted omnibase-ci "
+        "labels so the LAN-only DeepSeek endpoint is reachable, through the "
+        "dedicated OMNI_HOSTILE_REVIEW_RUNS_ON_JSON knob"
     )
 
 
@@ -135,7 +144,11 @@ def test_same_repo_dev_prs_do_not_use_public_runner_branch(
     )
     assert "OMNI_PUBLIC_PR_RUNS_ON_JSON" in runs_on
     assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" not in runs_on
-    assert """fromJSON('["self-hosted","omnibase-ci"]')""" in runs_on
+    # OMN-18415: dedicated variable, fleet literal as the operating fallback.
+    assert (
+        "vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || "
+        """'["self-hosted","omnibase-ci"]'""" in runs_on
+    )
 
 
 def test_review_step_invokes_cli_review_with_model(
