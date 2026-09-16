@@ -454,12 +454,32 @@ def read_lane_client_store(lane: str, *, onex_home: Path) -> dict[str, str]:
     import yaml
 
     config_path = onex_home / LANE_STORE_CONFIG_FILE
+
+    # ABSENT and MALFORMED are different answers and must not collapse into one.
+    # A machine that holds no store legitimately yields {} -- the caller turns
+    # that into a refusal naming the remedy. A machine whose store is present
+    # but unparseable has an identity the reader failed to read, and reporting
+    # that as "no identity" would send the operator to re-place a credential
+    # that is already there. Fail-quiet on a broken config is the same
+    # silent-wrong-answer shape this contract exists to retire.
     try:
-        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+        config_text = config_path.read_text(encoding="utf-8")
+    except OSError:
         return {}
+    try:
+        raw = yaml.safe_load(config_text)
+    except yaml.YAMLError as exc:
+        raise HookEdgeLaneCredentialError(
+            f"{config_path} is present but does not parse as YAML ({exc}); "
+            "this machine may well hold an identity for this lane that cannot "
+            f"be read. Repair the file, or re-place it with "
+            f"{_lane_login_remediation(lane)}"
+        ) from exc
     if not isinstance(raw, dict):
-        return {}
+        raise HookEdgeLaneCredentialError(
+            f"{config_path} parses but is not a mapping; the lane store is a "
+            f"'{LANE_STORE_LANES_BLOCK}:' block of per-lane entries"
+        )
 
     block = raw.get(LANE_STORE_LANES_BLOCK)
     if not isinstance(block, dict):

@@ -393,6 +393,42 @@ def test_a_machine_holding_no_entry_for_the_lane_yields_nothing(
     assert lib.read_lane_client_store("dev", onex_home=onex_home) == {}
 
 
+def test_a_malformed_store_is_refused_rather_than_read_as_absent(
+    tmp_path: Path,
+) -> None:
+    """ABSENT and MALFORMED are different answers.
+
+    A machine holding no store yields ``{}`` and the caller turns that into a
+    refusal naming ``onex auth lane-login``. A machine whose store is present
+    but unparseable holds an identity the reader FAILED TO READ, and reporting
+    that as "no identity" sends the operator to re-place a credential that is
+    already there. The paired control is the test directly below: the same
+    reader, an absent file, returns ``{}`` rather than raising.
+    """
+    lib = _load_lib()
+    onex_home = _write_store(tmp_path / ".onex")
+    (onex_home / "config.yaml").write_text(
+        "lanes:\n  dev:\n    sasl_username: 'x'\n   bad_indent: [unclosed\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(lib.HookEdgeLaneCredentialError) as excinfo:
+        lib.read_lane_client_store("dev", onex_home=onex_home)
+
+    message = str(excinfo.value)
+    assert "config.yaml" in message
+    assert "does not parse as YAML" in message
+
+
+def test_a_store_that_is_not_a_mapping_is_refused(tmp_path: Path) -> None:
+    lib = _load_lib()
+    onex_home = _write_store(tmp_path / ".onex")
+    (onex_home / "config.yaml").write_text("- just\n- a\n- list\n", encoding="utf-8")
+
+    with pytest.raises(lib.HookEdgeLaneCredentialError):
+        lib.read_lane_client_store("dev", onex_home=onex_home)
+
+
 def test_an_absent_store_yields_nothing(tmp_path: Path) -> None:
     lib = _load_lib()
     assert lib.read_lane_client_store("dev", onex_home=tmp_path / "nope") == {}
