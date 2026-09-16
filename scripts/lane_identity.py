@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -54,6 +55,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 __all__ = [
     "LANE_TRAILER",
@@ -78,6 +80,10 @@ __all__ = [
 
 LANE_TRAILER = "Onex-Lane"
 SESSION_TRAILER = "Onex-Session"
+
+# The environment variable naming the workspace root. Named once so the
+# literal does not have to be repeated at every use site.
+WORKSPACE_ENV = "OMNI_HOME"
 
 # The slug the ledger already uses: lowercase, digits, single hyphens, no
 # leading or trailing hyphen. Adopted rather than invented so a trailer and a
@@ -140,7 +146,7 @@ def registry_root_from_env() -> Path:
     explicit = os.environ.get("ONEX_LANE_REGISTRY_ROOT")
     if explicit:
         return Path(explicit)
-    return Path(os.environ["OMNI_HOME"]) / ".onex_state"
+    return Path(os.environ[WORKSPACE_ENV]) / ".onex_state"
 
 
 def _registry_dir(base: Path) -> Path:
@@ -319,33 +325,8 @@ class SharedHooksDirectory(RuntimeError):
     """The resolved hooks directory is shared with other repositories."""
 
 
-def own_hooks_dir(repo: Path) -> Path:
-    """This repository OWN hooks directory, or raise.
-
-    REFUSES a hooks directory that is not inside the repository own git
-    directory. A clone can set core.hooksPath to a SHARED directory -- this
-    workspace points every canonical clone at one -- and installing there
-    silently arms a refusing hook for every repository that shares it. That is
-    not hypothetical: it happened during OMN-18260 development, when an inherited
-    GIT_DIR pointed the installer at the shared directory and every canonical
-    clone started refusing commits until the file was removed by hand.
-
-    Extracted from the installer (OMN-18262) so the pre-push installer cannot
-    ship a second, weaker copy of the one check that stopped that recurring.
-    """
-    hooks = Path(
-        subprocess.run(
-            ["git", "rev-parse", "--git-path", "hooks"],
-            cwd=repo,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=_git_env(),
-        ).stdout.strip()
-    )
-    if not hooks.is_absolute():
-        hooks = repo / hooks
-    common = Path(
+def git_common_dir(repo: Path) -> Path:
+    return Path(
         subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             cwd=repo,
@@ -355,7 +336,54 @@ def own_hooks_dir(repo: Path) -> Path:
             env=_git_env(),
         ).stdout.strip()
     )
-    if not hooks.resolve().is_relative_to(common.resolve()):
+
+
+def configured_hooks_path(repo: Path) -> Path | None:
+    """`core.hooksPath` for this clone, absolute, or None when unset."""
+    result = subprocess.run(
+        ["git", "config", "--get", "core.hooksPath"],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_git_env(),
+    )
+    value = result.stdout.strip()
+    if result.returncode != 0 or not value:
+        return None
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else (repo / path)
+
+
+def own_hooks_dir(repo: Path) -> Path:
+    """This repository OWN hooks directory -- `<git-common-dir>/hooks` -- or raise.
+
+    RESOLVED FROM THE COMMON DIRECTORY, NOT FROM `git rev-parse --git-path hooks`
+    (OMN-18273). That form honours `core.hooksPath`, and this workspace points
+    EVERY canonical clone at one shared guard directory
+    (`scripts/git-hooks/canonical-clone`). So the refusal below fired on every
+    clone in the registry and the installer could not install anywhere at all:
+    `install-hook --repo <any canonical clone>` exited 2 with "refusing to
+    install into .../canonical-clone". That is why OMN-18260 through OMN-18263
+    shipped complete and stayed inert -- not because nobody ran the installer,
+    but because running it could not succeed.
+
+    The refusal it was protecting is kept, and is now structural: the target is
+    computed as `<git-common-dir>/hooks`, which cannot be a shared directory,
+    and the assertion below still refuses anything that escapes it. The original
+    incident -- an inherited GIT_DIR pointing the installer at the shared
+    directory -- is separately closed by `_git_env()` stripping every GIT_*
+    variable before any git call here.
+
+    Installing HERE is also what makes the hook run: the shared guard
+    (`canonical_clone_guard.sh`) chains with `exec "$git_common_dir/hooks/$hook_name"`,
+    so a hook in this directory is exactly what the guard hands control to. See
+    `hooks_reachable` for the other half -- the guard only chains hook types it
+    has a symlink for.
+    """
+    common = git_common_dir(repo)
+    hooks = common / "hooks"
+    if not hooks.resolve().parent == common.resolve():
         raise SharedHooksDirectory(
             f"refusing to install into {hooks} -- that directory is outside this "
             f"repository git directory ({common}), so it is shared with other "
@@ -363,6 +391,42 @@ def own_hooks_dir(repo: Path) -> Path:
             "per clone, into its own hooks directory."
         )
     return hooks
+
+
+def hooks_reachable(repo: Path, hook_name: str) -> tuple[bool, str]:
+    """Will git actually run `<git-common-dir>/hooks/<hook_name>` for this clone?
+
+    THE QUESTION AN INSTALLER MUST ASK AND DID NOT (OMN-18273). `core.hooksPath`
+    REPLACES git's hook lookup outright -- git never falls back to the clone's
+    own hooks directory. So a hook file written into `<git-common-dir>/hooks` on
+    a clone whose `core.hooksPath` is overridden is dead bytes unless the
+    override directory carries an entry of the SAME NAME that chains back.
+
+    This workspace's override is `scripts/git-hooks/canonical-clone`, whose
+    per-hook-type symlinks resolve to `canonical_clone_guard.sh`, and that guard
+    ends by exec-ing `<git-common-dir>/hooks/<hook_name>`. Its symlink set was
+    `pre-commit commit-msg pre-push pre-merge-commit` -- `prepare-commit-msg` was
+    never in it, so the stamping hook had no dispatch entry even had it been
+    installable. Both halves had to be wrong for the mechanism to be inert, and
+    both were.
+
+    Returns (reachable, human-readable reason). A caller that cannot prove
+    reachability must say so rather than report a successful install: an install
+    that reports success and never runs is the failure this whole ticket is.
+    """
+    override = configured_hooks_path(repo)
+    if override is None:
+        return True, "core.hooksPath is unset, so git uses the clone's own hooks"
+    entry = override / hook_name
+    if not entry.exists():
+        return False, (
+            f"core.hooksPath is {override} and it has no '{hook_name}' entry, so git "
+            f"will never dispatch this hook type. Add the chaining entry with:\n"
+            f"    python3 {Path(__file__).resolve()} reconcile --execute"
+        )
+    if not os.access(entry, os.X_OK):
+        return False, f"{entry} exists but is not executable, so git cannot run it"
+    return True, f"{entry} dispatches this hook type and chains to the clone's own"
 
 
 def _git_env() -> dict[str, str]:
@@ -441,6 +505,209 @@ def commits_in_range(
 
 
 # ---------------------------------------------------------------------------
+# Arming: installation, reachability, policy, reconcile  (OMN-18273)
+# ---------------------------------------------------------------------------
+
+# The hook types this workspace's shared guard must dispatch for the lane
+# mechanism to run at all. `prepare-commit-msg` is the one that was missing.
+CHAINED_HOOK_TYPES = (
+    "prepare-commit-msg",
+    "pre-commit",
+    "commit-msg",
+    "pre-push",
+    "pre-merge-commit",
+)
+
+PRIOR_SUFFIX = ".onex-prior"
+
+# Marks a hook file as one of ours, so a re-install is idempotent and a
+# pre-existing third-party hook is never mistaken for a previous install of
+# this one and discarded.
+OURS_MARKER = "# onex-lane-hook: managed by lane_identity.py"
+
+_UNREGISTERED_MODES = ("silent", "refuse")
+
+
+def policy_path(base: Path) -> Path:
+    return _registry_dir(base) / "policy.json"
+
+
+def unregistered_mode(base: Path) -> str:
+    """What the stamping hook does in a worktree with no lane identity.
+
+    DEFAULT `silent`, and that is a deliberate departure from the design of
+    record (OMN-18259 §3), recorded here rather than buried in a commit message.
+
+    The design says the stamping hook REFUSES an unregistered worktree, on the
+    argument that a trailer which can be wrong is worse than one that is absent.
+    That argument is about STAMPING and it still holds -- nothing here ever
+    stamps a guessed lane. It is not an argument for refusing the commit, and
+    arming a refusal is a different act with a different blast radius: this
+    workspace carries 454 worktrees that predate the mechanism, so installing a
+    refusing stamping hook today freezes every one of them. That is precisely
+    the ten-minute fleet-wide freeze the OMN-18260 development incident already
+    produced once, at a larger scale.
+
+    Absence also costs the downstream gate nothing it can use: the pre-push
+    refusal already reports-and-allows a commit carrying no lane trailer, by its
+    own documented design, because on install day that is every commit.
+
+    So the refusal is kept and made an explicit, reversible decision --
+    `lane_identity policy --unregistered refuse` -- which is the sequencing
+    question the design left open for the operator (§7), answered by a verb
+    rather than by an install side effect.
+    """
+    try:
+        data = json.loads(policy_path(base).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "silent"
+    mode = data.get("unregistered")
+    return mode if mode in _UNREGISTERED_MODES else "silent"
+
+
+def set_unregistered_mode(base: Path, mode: str) -> None:
+    if mode not in _UNREGISTERED_MODES:
+        raise ValueError(
+            f"unregistered mode {mode!r} is not one of {_UNREGISTERED_MODES}"
+        )
+    path = policy_path(base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"unregistered": mode}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def install_hook(
+    repo: Path,
+    *,
+    source: Path,
+    hook_name: str,
+    placeholder: str,
+    module: Path,
+) -> tuple[Path, str]:
+    """Install `source` as `<git-common-dir>/hooks/<hook_name>`, chain-safely.
+
+    CHAIN, NEVER CLOBBER. Every canonical clone in this registry already carries
+    a `pre-push` written by the pre-commit framework -- the governed
+    impacted-test selector runs from it. The shipped installer wrote its own
+    file over that path unconditionally, which would have silently removed the
+    repository's real pre-push gate on the first successful install. A prior
+    hook that is not ours is moved aside to `<hook_name>.onex-prior` and the
+    installed hook execs it as its last act, so the existing gate keeps running
+    and keeps its exit status.
+
+    Returns (target, reachability reason). The caller decides what an
+    unreachable install means; this function does not report success for one.
+    """
+    hooks = own_hooks_dir(repo)
+    hooks.mkdir(parents=True, exist_ok=True)
+    target = hooks / hook_name
+    prior = hooks / f"{hook_name}{PRIOR_SUFFIX}"
+
+    if target.exists():
+        existing = ""
+        try:
+            existing = target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            existing = ""
+        if OURS_MARKER not in existing:
+            # Somebody else's hook. Preserve it, once: a second install must not
+            # overwrite the preserved original with our own previous copy.
+            if not prior.exists():
+                target.replace(prior)
+                prior.chmod(0o755)
+            else:
+                target.unlink()
+
+    body = source.read_text(encoding="utf-8").replace(
+        placeholder, str(module.resolve())
+    )
+    target.write_text(body, encoding="utf-8")
+    target.chmod(0o755)
+    _, reason = hooks_reachable(repo, hook_name)
+    return target, reason
+
+
+def shared_guard_dir(repo: Path) -> Path | None:
+    """The shared `core.hooksPath` directory for this clone, when it has one."""
+    return configured_hooks_path(repo)
+
+
+def ensure_chained_entries(repo: Path, *, execute: bool) -> list[str]:
+    """Give the shared guard directory a dispatch entry for every hook type we
+    need, copying whatever mechanism its existing entries already use.
+
+    A new entry is a symlink to the SAME target the directory's existing entries
+    resolve to, read from the directory itself rather than named here. Naming
+    the guard script in this file would make an omniclaude module depend on the
+    exact layout of an untracked local script, and the two would drift the first
+    time either moved.
+    """
+    override = shared_guard_dir(repo)
+    if override is None or not override.is_dir():
+        return []
+    existing = [p for p in override.iterdir() if p.is_symlink()]
+    if not existing:
+        return []
+    link_target = existing[0].readlink()
+    added: list[str] = []
+    for hook_name in CHAINED_HOOK_TYPES:
+        entry = override / hook_name
+        if entry.exists() or entry.is_symlink():
+            continue
+        added.append(str(entry))
+        if execute:
+            entry.symlink_to(link_target)
+    return added
+
+
+def worktree_dirs(worktrees_root: Path) -> list[tuple[Path, str]]:
+    """Every `<worktrees-root>/<TICKET>/<repo>` directory that is a git worktree,
+    paired with its ticket, read from the path convention of CLAUDE.md rule 9."""
+    found: list[tuple[Path, str]] = []
+    if not worktrees_root.is_dir():
+        return found
+    for ticket_dir in sorted(worktrees_root.iterdir()):
+        if not ticket_dir.is_dir():
+            continue
+        ticket = ticket_dir.name.upper()
+        if not _TICKET_RE.match(ticket):
+            continue
+        for repo_dir in sorted(ticket_dir.iterdir()):
+            if (repo_dir / ".git").exists():
+                found.append((repo_dir, ticket))
+    return found
+
+
+def claim_holders(
+    ledger_text: str, ledger_name: str, claim_index: Any
+) -> dict[str, str]:
+    """Ticket -> LIVE holder lane, resolved by the authoritative claim index.
+
+    ONE RESOLUTION, NOT A SECOND PARSER. The claim store is the ledger and the
+    index that replays it is the only thing allowed to say who holds a ticket
+    (OMN-18259 section 4). A backfill that scanned CLAIM rows with its own
+    regular expression would be a second reader of the same store, and the two
+    would disagree the first time either moved -- which is the whole argument
+    the design makes against a second store.
+
+    Using the index also makes the backfill honest about STALENESS. A ticket
+    whose holder has written nothing for the staleness window has no live
+    holder, so its worktree stays unregistered rather than being stamped with
+    the name of a lane that stopped days ago. A trailer naming a dead lane is
+    a wrong trailer, and a wrong trailer is the one outcome ruled out.
+    """
+    index = claim_index.build_index(ledger_text, ledger_name, now=datetime.now(UTC))
+    holders: dict[str, str] = {}
+    for ticket in index.get("tickets", {}):
+        held = claim_index.holder(index, ticket)
+        if held is not None and valid_lane(getattr(held, "lane", "")):
+            holders[ticket] = held.lane
+    return holders
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -492,6 +759,38 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_inst.add_argument("--repo", default=".")
 
+    p_pol = sub.add_parser(
+        "policy",
+        help="read or set what the stamping hook does in an unregistered worktree",
+    )
+    p_pol.add_argument("--unregistered", choices=list(_UNREGISTERED_MODES))
+
+    p_stat = sub.add_parser(
+        "status",
+        help="report whether the mechanism is armed on this host; nonzero when it is not",
+    )
+    p_stat.add_argument(
+        "--repo",
+        action="append",
+        default=None,
+        help="a clone to check; repeatable. Defaults to every clone in the workspace",
+    )
+    p_stat.add_argument("--json", action="store_true")
+
+    p_rec = sub.add_parser(
+        "reconcile",
+        help="arm every canonical clone and register the worktrees whose lane the ledger resolves",
+    )
+    p_rec.add_argument(
+        "--execute", action="store_true", help="apply; default is a dry run"
+    )
+    p_rec.add_argument("--workspace-root", default=None)
+    p_rec.add_argument(
+        "--ledger",
+        default=None,
+        help="claim store to backfill registrations from; defaults to the workspace ledger",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "register":
@@ -521,12 +820,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "trailers":
+        base = _base(args)
         try:
-            for line in trailer_lines(_base(args), Path(args.worktree)):
+            for line in trailer_lines(base, Path(args.worktree)):
                 print(line)
         except UnregisteredLane as exc:
-            print(f"lane_identity: {exc} has no lane", file=sys.stderr)
-            return 3
+            # Exit 3 is the hook's REFUSE contract. Under the default `silent`
+            # policy an unregistered worktree exits 0 printing nothing, and the
+            # hook stamps nothing and allows the commit -- see
+            # `unregistered_mode` for why that is the default and how a refusing
+            # workspace is armed deliberately.
+            if unregistered_mode(base) == "refuse":
+                print(f"lane_identity: {exc} has no lane", file=sys.stderr)
+                return 3
+            return 0
         return 0
 
     if args.command == "verify":
@@ -557,26 +864,272 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "install-hook":
         repo = Path(args.repo)
         try:
-            hooks = own_hooks_dir(repo)
+            # Bake the module's absolute path into the copy. The hook then needs
+            # no environment variable at commit time, which removes the failure
+            # mode where a correctly installed hook cannot find its own module on
+            # a box that does not export the workspace variable.
+            target, reason = install_hook(
+                repo,
+                source=Path(__file__).resolve().parent
+                / "hooks"
+                / "prepare-commit-msg-lane",
+                hook_name="prepare-commit-msg",
+                placeholder="@LANE_IDENTITY_PATH@",
+                module=Path(__file__),
+            )
         except SharedHooksDirectory as exc:
             print(f"lane_identity: {exc}", file=sys.stderr)
             return 2
-        hooks.mkdir(parents=True, exist_ok=True)
-        source = Path(__file__).resolve().parent / "hooks" / "prepare-commit-msg-lane"
-        target = hooks / "prepare-commit-msg"
-        # Bake the module's absolute path into the copy. The hook then needs no
-        # environment variable at commit time, which removes the failure mode
-        # where a correctly installed hook cannot find its own module on a box
-        # that does not export the workspace variable.
-        body = source.read_text(encoding="utf-8").replace(
-            "@LANE_IDENTITY_PATH@", str(Path(__file__).resolve())
-        )
-        target.write_text(body, encoding="utf-8")
-        target.chmod(0o755)
         print(f"lane_identity: installed {target}")
+        reachable, _ = hooks_reachable(repo, "prepare-commit-msg")
+        if not reachable:
+            # An install that git will never dispatch is the defect this ticket
+            # exists to remove. Say so with a nonzero exit rather than printing
+            # a success line over an inert file.
+            print(f"lane_identity: NOT REACHABLE -- {reason}", file=sys.stderr)
+            return 4
+        print(f"lane_identity: reachable -- {reason}")
         return 0
 
+    if args.command == "policy":
+        base = _base(args)
+        if args.unregistered:
+            set_unregistered_mode(base, args.unregistered)
+        print(json.dumps({"unregistered": unregistered_mode(base)}, indent=2))
+        return 0
+
+    if args.command == "status":
+        return _status(args)
+
+    if args.command == "reconcile":
+        return _reconcile(args)
+
     return 2
+
+
+def _registry_clones(root: Path) -> list[Path]:
+    """Every directory under the workspace root that is a git CLONE (not a
+    worktree). Read from the filesystem, never from a hardcoded list: a list in
+    this file goes stale the first time a repository is added, and a clone
+    missing from it reads as armed because it was never checked."""
+    clones: list[Path] = []
+    for child in sorted(root.iterdir()):
+        if child.name.startswith(".") or not (child / ".git").is_dir():
+            continue
+        clones.append(child)
+    return clones
+
+
+def _status(args: argparse.Namespace) -> int:
+    base = _base(args)
+    if args.repo:
+        repos = [Path(r) for r in args.repo]
+    else:
+        try:
+            repos = _registry_clones(Path(os.environ[WORKSPACE_ENV]))
+        except KeyError:
+            print(f"lane_identity: {WORKSPACE_ENV} is not set", file=sys.stderr)
+            return 2
+
+    registry = _registry_dir(base)
+    registrations = len(list(registry.glob("*.json"))) if registry.is_dir() else 0
+
+    rows = []
+    unarmed = 0
+    for repo in repos:
+        try:
+            hooks = own_hooks_dir(repo)
+        except (SharedHooksDirectory, subprocess.CalledProcessError, OSError):
+            # Not a resolvable clone. Skipped, and the empty-sweep refusal below
+            # is what stops a run that skipped everything from reading as a pass.
+            continue
+        hook = hooks / "prepare-commit-msg"
+        installed = hook.is_file() and OURS_MARKER in hook.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        reachable, reason = hooks_reachable(repo, "prepare-commit-msg")
+        armed = installed and reachable
+        if not armed:
+            unarmed += 1
+        rows.append(
+            {
+                "repo": repo.name,
+                "installed": installed,
+                "reachable": reachable,
+                "armed": armed,
+                "reason": reason,
+            }
+        )
+
+    report = {
+        "armed_clones": sum(1 for r in rows if r["armed"]),
+        "clones": len(rows),
+        "registrations": registrations,
+        "unregistered_policy": unregistered_mode(base),
+        "repos": rows,
+    }
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        for row in rows:
+            mark = "ARMED   " if row["armed"] else "UNARMED "
+            print(f"{mark} {row['repo']}: {row['reason']}")
+        print(
+            f"lane_identity: {report['armed_clones']}/{report['clones']} clones armed, "
+            f"{registrations} worktree registration(s), "
+            f"unregistered policy = {report['unregistered_policy']}"
+        )
+    if not rows:
+        print(
+            "lane_identity: no clones were checked, which is not the same as none "
+            "being unarmed -- refusing to report a pass on an empty sweep "
+            "(CLAUDE.md rule 16).",
+            file=sys.stderr,
+        )
+        return 2
+    if unarmed:
+        print(
+            f"lane_identity: {unarmed} clone(s) are NOT armed, so commits there carry no "
+            f"lane identity and the pre-push refusal has nothing to compare. Arm with:\n"
+            f"    python3 {Path(__file__).resolve()} reconcile --execute",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _reconcile(args: argparse.Namespace) -> int:
+    base = _base(args)
+    try:
+        root = Path(args.workspace_root or os.environ[WORKSPACE_ENV])
+    except KeyError:
+        print(f"lane_identity: {WORKSPACE_ENV} is not set", file=sys.stderr)
+        return 2
+    execute = bool(args.execute)
+    verb = "would " if not execute else ""
+
+    clones = _registry_clones(root)
+    if not clones:
+        print(f"lane_identity: no clones under {root}", file=sys.stderr)
+        return 2
+
+    # 1. The shared guard needs a dispatch entry per hook type, or nothing we
+    #    install into a clone's own hooks directory is ever invoked.
+    announced: set[str] = set()
+    for clone in clones:
+        for entry in ensure_chained_entries(clone, execute=execute):
+            if entry in announced:
+                # Every clone shares one override directory, so a dry run would
+                # otherwise report the same missing entry once per clone.
+                continue
+            announced.add(entry)
+            print(f"lane_identity: {verb}add shared dispatch entry {entry}")
+
+    # 2. Install into each clone's own hooks directory, chain-safely.
+    failures = 0
+    for clone in clones:
+        if not execute:
+            print(f"lane_identity: would install prepare-commit-msg in {clone.name}")
+            continue
+        try:
+            target, reason = install_hook(
+                clone,
+                source=Path(__file__).resolve().parent
+                / "hooks"
+                / "prepare-commit-msg-lane",
+                hook_name="prepare-commit-msg",
+                placeholder="@LANE_IDENTITY_PATH@",
+                module=Path(__file__),
+            )
+        except (SharedHooksDirectory, OSError) as exc:
+            print(f"lane_identity: {clone.name}: {exc}", file=sys.stderr)
+            failures += 1
+            continue
+        reachable, _ = hooks_reachable(clone, "prepare-commit-msg")
+        state = "armed" if reachable else "INERT"
+        if not reachable:
+            failures += 1
+        print(f"lane_identity: {clone.name}: {state} -- {target} ({reason})")
+
+    # 3. Backfill registrations for worktrees whose holder the ledger resolves.
+    # The same claim store the pre-push hook resolves, resolved the same way, so
+    # a backfill and a refusal can never be reading two different stores.
+    ledger = Path(
+        args.ledger
+        or os.environ.get("ONEX_BRANCH_CLAIM_LEDGER")
+        or root / "docs/tracking/ROLLING_WORK_LEDGER.md"
+    )
+    try:
+        ledger_text = ledger.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print(
+            f"lane_identity: cannot read the claim store {ledger}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+
+    # The claim index module lives in the private workspace repository. Loaded
+    # by path, with importlib, exactly as the pre-push hook's resolution loads
+    # it -- not through `scripts.branch_claim`, which is only importable when
+    # this file is imported as part of a package and is not when it is run as a
+    # script, which is how every hook and every lane invokes it.
+    index_path = Path(
+        os.environ.get("ONEX_BRANCH_CLAIM_INDEX_MODULE")
+        or root / "docs/workflows/_shared/claim_index.py"
+    )
+    try:
+        spec = importlib.util.spec_from_file_location("onex_claim_index", index_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"no loader for {index_path}")
+        claim_index = importlib.util.module_from_spec(spec)
+        # Registered BEFORE execution. `claim_index` declares frozen
+        # dataclasses, and `dataclasses` resolves each class's own module out of
+        # `sys.modules` while processing it; a module absent from that table
+        # raises an AttributeError from inside the standard library that reads
+        # like a defect in the claim index rather than in how it was loaded.
+        sys.modules[spec.name] = claim_index
+        spec.loader.exec_module(claim_index)
+    except (OSError, ImportError, SyntaxError) as exc:
+        # FAIL CLOSED ON THE BACKFILL, not on the install. The hooks above are
+        # already armed and stamping is safe without any registration; what
+        # cannot proceed is deciding who holds a ticket without the module that
+        # decides who a holder is. Reported, never substituted with a second,
+        # weaker parser -- two readers of one claim store is the drift the
+        # design of record rules out.
+        print(
+            f"lane_identity: the claim index module at {index_path} did not load "
+            f"({exc}), so NO worktree was backfilled. The hooks above are installed; "
+            f"register a worktree with `register --lane <slug> --ticket OMN-XXXX`.",
+            file=sys.stderr,
+        )
+        return 1 if failures else 0
+
+    holders = claim_holders(ledger_text, ledger.name, claim_index)
+
+    registered = skipped = 0
+    for worktree, ticket in worktree_dirs(root / "omni_worktrees"):
+        if resolve(base, worktree) is not None:
+            continue
+        lane = holders.get(ticket)
+        if lane is None:
+            # No LIVE holder. Left unregistered on purpose: a lane derived from
+            # a directory name is an invented identity, and a lane whose claim
+            # went stale days ago is a dead one. Either produces a wrong
+            # trailer, which is the one outcome the design rules out.
+            skipped += 1
+            continue
+        registered += 1
+        if execute:
+            register(base, worktree, lane=lane, ticket=ticket)
+
+    print(
+        f"lane_identity: {verb}register {registered} worktree(s) from {ledger.name}; "
+        f"{skipped} left unregistered (no single claim holder resolves)"
+    )
+    if failures:
+        print(f"lane_identity: {failures} clone(s) did not arm", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

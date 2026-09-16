@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# onex-lane-hook: managed by lane_identity.py
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
@@ -130,6 +131,15 @@ if [ -z "$LEDGER" ] || [ -z "$CLAIM_INDEX" ]; then
 fi
 
 # git feeds one line per ref on stdin: <local ref> <local sha> <remote ref> <remote sha>
+#
+# READ ONCE, REPLAY TO THE CHAINED HOOK. git writes these lines exactly once. A
+# pre-existing pre-push — every canonical clone in this registry carries the
+# pre-commit framework's, which runs the governed impacted-test selector —
+# reads the same stream, so consuming it here and then exec-ing that hook hands
+# it an empty stdin and it silently selects nothing. Captured up front and fed
+# back in at the chain below.
+REF_LINES="$(cat)"
+
 ZERO="0000000000000000000000000000000000000000"
 status=0
 
@@ -161,6 +171,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       --claim-index-module "$CLAIM_INDEX"; then
     status=1
   fi
-done
+done <<< "$REF_LINES"
+
+# A refusal here is terminal: do not chain, because running the repository's
+# test selector for a push that is already refused wastes the lane's time on a
+# push that will not happen.
+[ "$status" -eq 0 ] || exit "$status"
+
+# CHAIN, NEVER REPLACE, with the ref lines replayed on stdin.
+PRIOR="${BASH_SOURCE[0]}.onex-prior"
+if [ -x "$PRIOR" ]; then
+  exec "$PRIOR" "$@" <<< "$REF_LINES"
+fi
 
 exit "$status"

@@ -60,6 +60,18 @@ def _stamp(offset_hours: float = 0.0) -> str:
     return (NOW - timedelta(hours=offset_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _real_stamp(offset_hours: float = 0.0) -> str:
+    """A timestamp on the REAL clock, for fixtures consumed by a subprocess.
+
+    The frozen NOW above is injected into in-process calls and cannot cross a
+    process boundary, so any subprocess fixture stamped from it silently decays
+    into a stale claim once the staleness window elapses (OMN-18273).
+    """
+    return (datetime.now(UTC) - timedelta(hours=offset_hours)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
 def _claim_index_module() -> Path:
     """Where the claim index module is, resolved fail-fast.
 
@@ -371,8 +383,18 @@ def _run_cli(
 @pytest.fixture
 def collision_ledger(tmp_path: Path) -> Path:
     path = tmp_path / "LEDGER.md"
+    # REAL now, not the frozen NOW (OMN-18273). This fixture feeds a SUBPROCESS,
+    # and the command-line entry point builds its index against the real clock;
+    # nothing injects the frozen time across the process boundary. Stamped at
+    # the frozen NOW, the claim aged past the twelve-hour staleness window on
+    # 2026-09-14T00:00Z -- the day after these tests were written and the day
+    # OMN-18262 was marked Done -- and both assertions below had been red in
+    # every checkout ever since, reading as "unclaimed" rather than as the
+    # collision they exist to pin. Nothing caught it: the repository's main
+    # suite ignores this file by name, and the path-filtered gate that does run
+    # it only fires on a pull request touching these paths.
     path.write_text(
-        _ledger(f"{_stamp(0)} | CLAIM | lane=beta | tickets=OMN-9999 | taking it"),
+        _ledger(f"{_real_stamp()} | CLAIM | lane=beta | tickets=OMN-9999 | taking it"),
         encoding="utf-8",
     )
     return path

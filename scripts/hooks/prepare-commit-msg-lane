@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
+# onex-lane-hook: managed by lane_identity.py
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
 # OMN-18260 — stamp the committing lane's identity into the commit message.
 #
 # Install with:
-#   python3 scripts/lane_identity.py install-hook --repo <clone>
+#   python3 scripts/lane_identity.py reconcile --execute     # every clone, armed
+#   python3 scripts/lane_identity.py install-hook --repo <clone>   # one clone
+#
+# WHERE IT IS INSTALLED, AND WHY THAT WAS THE WHOLE DEFECT (OMN-18273). It goes
+# into the clone's OWN `<git-common-dir>/hooks`, and on a workspace whose clones
+# set `core.hooksPath` that file is only ever invoked because the shared guard
+# directory carries a same-named entry that chains back to it. Both halves have
+# to exist. Between 2026-09-13 and 2026-09-16 neither did: the installer
+# resolved its target through `core.hooksPath` and therefore refused every
+# canonical clone, and the shared directory had no `prepare-commit-msg` entry to
+# dispatch. Zero commits carried a lane trailer for three days with the whole
+# mechanism merged and Done.
 #
 # Installed once per CLONE, not per worktree: git worktrees share the main
 # clone's hooks directory, so one install covers every worktree of that repo.
@@ -125,14 +137,22 @@ Why this refuses instead of stamping "unknown": a lane trailer that can be wrong
 is worse than one that is absent — the pre-push refusal and its matching check
 cannot tell a wrong lane from a missing one, and a gate that cannot tell them
 apart passes the case it exists to catch (OMN-18260).
+
+This refusal is the `refuse` unregistered policy. It is not the default; see
+`lane_identity policy --unregistered` and the reasoning in the module.
 MSG
   exit 1
 fi
 
-
-# Apply through the module itself so the hook and the tests share one
-# implementation of "append idempotently, above git's comment block".
-"$PYTHON" -c '
+# EMPTY UNDER THE `silent` POLICY. An unregistered worktree exits 0 printing
+# nothing, and this hook then stamps nothing and allows the commit. That is the
+# default, because arming a refusing hook across a workspace of worktrees that
+# predate the mechanism is a fleet-wide commit freeze, and because the pre-push
+# refusal already reports-and-allows an unstamped commit by its own design.
+if [ -n "$TRAILERS" ]; then
+  # Apply through the module itself so the hook and the tests share one
+  # implementation of "append idempotently, above git's comment block".
+  "$PYTHON" -c '
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]).resolve().parent))
@@ -141,3 +161,14 @@ message_file = Path(sys.argv[2])
 lines = [line for line in sys.argv[3].splitlines() if line.strip()]
 message_file.write_text(li.apply_trailers(message_file.read_text(encoding="utf-8"), lines), encoding="utf-8")
 ' "$LANE_IDENTITY" "$MESSAGE_FILE" "$TRAILERS"
+fi
+
+# CHAIN, NEVER REPLACE. A clone may already have had a hook of this type; the
+# installer moved it aside rather than deleting it, and this is where it runs.
+# Last act, and with `exec`, so its exit status is the hook's exit status —
+# swallowing a pre-existing gate's refusal would be exactly the silent bypass
+# this family of hooks exists to remove.
+PRIOR="${BASH_SOURCE[0]}.onex-prior"
+if [ -x "$PRIOR" ]; then
+  exec "$PRIOR" "$@"
+fi
