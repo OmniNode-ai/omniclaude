@@ -201,6 +201,12 @@ repos:
         language: script
         pass_filenames: true
         stages: [commit-msg]
+      - id: strip-ai-coauthor-trailer
+        name: Strip AI-generated Co-Authored-By trailers from commit messages
+        entry: perl -i -ne 'print unless /^co-authored-by:.*claude.*noreply\@anthropic\.com/i'
+        language: system
+        pass_filenames: true
+        stages: [commit-msg]
       - id: reject-legacy-session-id-reads
         name: Reject legacy session-id env-var reads
         entry: .pre-commit-hooks/reject-legacy-session-id-reads.sh
