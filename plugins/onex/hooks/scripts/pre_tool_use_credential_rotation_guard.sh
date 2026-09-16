@@ -61,6 +61,24 @@
 #     pre-filter and are then ALLOWED. Conflating the two layers is the
 #     OMN-16983 defect that refused every `gh api` read on this host.
 #
+# The selection surface is the command and its arguments (OMN-18175)
+# ------------------------------------------------------------------
+# The grep above stays an over-matcher on the whole payload ON PURPOSE, and it
+# is NOT the selection: it only decides whether an interpreter starts. Selection
+# is the decision core's, and there a heredoc BODY is no longer part of the
+# command. A body redirected to `cat` or any other sink is data the command
+# writes; a body redirected to a program that RUNS it (`bash`, `ssh`) is
+# tokenised as a command in its own right, and a body redirected to a
+# credential-surface program (`psql`) is that segment's argument. Two lanes were
+# refused in four days for writing an ordinary file whose prose named the
+# vocabulary and whose apostrophes left the command untokenisable
+# (rolling work ledger rows 8464 and 8479).
+#
+# A body that is NOT evaluated is written to this log as a NOT SELECTED line
+# carrying the delimiter, the byte count and the receiving program -- never the
+# content, which can hold a value. A guard that silently stops looking at
+# something is indistinguishable from one that is not running.
+#
 # What this cannot do, stated rather than implied
 # -----------------------------------------------
 # No file can prove a human said the words. This gate does not establish
@@ -69,7 +87,7 @@
 # append-only coordination surface BEFORE the rotation runs, so the
 # authorisation is resolvable after the session that granted it is gone. It
 # converts a silent rotation into one that must leave an auditable artifact.
-# That is the same honest limit omni_home CLAUDE.md records for the
+# That is the same honest limit the workspace doctrine records for the
 # staging-namespace gate: what is enforced is blast radius and evidence, not
 # authenticity.
 #
@@ -243,6 +261,17 @@ GUARD_RC=$?
 set -e
 
 if [[ $GUARD_RC -eq 0 ]]; then
+    # The decision core speaks on the allow path only when something was left
+    # out of the decision -- a heredoc body redirected to a program that does
+    # not run it (OMN-18175). Recording that here is what keeps a narrowed
+    # selection surface auditable instead of invisible: a guard that silently
+    # stops looking at something reads exactly like a guard that is passing it.
+    # The last line is taken because stderr is merged into this capture.
+    GUARD_NOTES=$(printf '%s' "$GUARD_OUT" | tail -n 1 \
+        | jq -r 'select(type == "object") | .notes // [] | join(" | ")' 2>/dev/null || true)
+    if [[ -n "$GUARD_NOTES" ]]; then
+        _log "$GUARD_NOTES"
+    fi
     _hook_status "PASS" "no unauthorised credential rotation in this command" "0" 2>/dev/null || true
     exit 0
 fi

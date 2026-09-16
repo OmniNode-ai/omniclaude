@@ -50,8 +50,10 @@ from credential_rotation_guard import (  # noqa: E402
     Policy,
     PolicyError,
     check_bash_command,
+    evaluate_bash_command,
     load_policy,
     render_block_reason,
+    split_heredocs,
 )
 
 pytestmark = pytest.mark.unit
@@ -683,3 +685,406 @@ def test_hook_is_classified_in_the_distribution_manifest() -> None:
     assert "hooks/scripts/pre_tool_use_credential_rotation_guard.sh" in manifest, (
         "the guard must be classified in the distribution manifest"
     )
+
+
+# --------------------------------------------------------------------------
+# OMN-18175: the selection surface is the command and its arguments
+# --------------------------------------------------------------------------
+#
+# A heredoc BODY is data the command writes, not a command the shell runs. Two
+# lanes were refused in four days for writing an ordinary file -- one a findings
+# document, one a test fixture -- because the body named credential vocabulary
+# and an apostrophe in the prose left the whole command untokenisable. The
+# refusal itself was correct fail-closed behaviour; the defect is that the
+# command was selected for evaluation at all.
+#
+# Recorded at docs/tracking/ROLLING_WORK_LEDGER.md:8464 and :8479.
+
+#: Occurrence 2's shape: a TERMINAL row written through a heredoc and appended
+#: by ledger_lock.py. The body names the guarded vocabulary precisely because
+#: an honest closeout row asserts the ABSENCE of an identity-store operation,
+#: and it carries the ordinary English apostrophes that broke the tokeniser.
+LEDGER_ROW_HEREDOC = (
+    "cat > /tmp/row.md <<'ROW'\n"
+    "2026-09-11T08:00:00Z | TERMINAL | lane=fixture-lane | the lane's own row: "
+    "no identity-store operation of any kind, no secret read or written, no "
+    "access-key minted, no kcadm call, and the phase's own probes printed no "
+    "protected value.\n"
+    "ROW\n"
+    "python3 scripts/ledger_lock.py "
+    "docs/tracking/ROLLING_WORK_LEDGER.md --append-file /tmp/row.md"
+)
+
+#: Occurrence 1's shape: a findings document whose prose describes a stored key
+#: reference.
+FINDINGS_DOC_HEREDOC = (
+    "cat > reports/findings.md <<'MD'\n"
+    "The cloud client is blocked. It resolves its client_secret_ref from the "
+    "store, so the lane's next step is to re-issue nothing and read the "
+    "api-key reference instead.\n"
+    "MD"
+)
+
+#: Occurrence 2 of the same class from a different direction: source code whose
+#: fixtures necessarily name credential fields.
+TEST_FIXTURE_HEREDOC = (
+    "cat > tests/test_confidential_client.py <<'PY'\n"
+    "FIXTURE = {'client_secret_ref': 'x', 'api-key': 'y'}  # don't re-issue\n"
+    "PY"
+)
+
+#: Every term the shell pre-filter greps for, plus a complete rotation recipe,
+#: written into a document. Documenting a rotation is not performing one -- the
+#: same rule that lets `echo 'aws secretsmanager rotate-secret'` through.
+RUNBOOK_HEREDOC = (
+    "cat > runbooks/rotation.md <<'DOC'\n"
+    "To rotate: aws secretsmanager rotate-secret --secret-id operator-k8s, then "
+    "aws iam create-access-key --user-name operator-k8s, then kcadm.sh update "
+    "clients/operator-k8s/client-secret, then in psql ALTER ROLE operator-k8s "
+    "PASSWORD 'x' (ALTER USER works too), then gh secret set OPERATOR_K8S, "
+    "then kubectl create secret generic operator-k8s. Never use access_key "
+    "material from the transcript.\n"
+    "DOC"
+)
+
+NOT_SELECTED_HEREDOCS = [
+    ("ledger_row", LEDGER_ROW_HEREDOC),
+    ("findings_doc", FINDINGS_DOC_HEREDOC),
+    ("test_fixture", TEST_FIXTURE_HEREDOC),
+    ("runbook", RUNBOOK_HEREDOC),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "command"),
+    NOT_SELECTED_HEREDOCS,
+    ids=[label for label, _ in NOT_SELECTED_HEREDOCS],
+)
+def test_heredoc_body_is_not_the_selection_surface(
+    label: str, command: str, policy: Policy, ledger: Path
+) -> None:
+    """AC-1. A command whose only guarded vocabulary is in a heredoc body passes.
+
+    Falsified by any finding at all -- an `unevaluable` refusal included, since
+    a body that is never evaluated cannot make a command unevaluable.
+    """
+    assert check_bash_command(command, policy, ledger) == [], label
+
+
+@pytest.mark.parametrize(
+    ("label", "command"),
+    NOT_SELECTED_HEREDOCS,
+    ids=[label for label, _ in NOT_SELECTED_HEREDOCS],
+)
+def test_non_selection_of_a_heredoc_body_is_recorded(
+    label: str, command: str, policy: Policy, ledger: Path
+) -> None:
+    """AC-2. The skip is auditable, and it never echoes the body.
+
+    A body can hold a credential value, so the note carries the delimiter, the
+    byte count and the program the body was redirected to -- never content.
+    """
+    decision = evaluate_bash_command(command, policy, ledger)
+    assert decision.findings == []
+    assert decision.notes, "a dropped heredoc body must be recorded, not silent"
+    note = " ".join(decision.notes)
+    assert "heredoc" in note.lower()
+    for secret_ish in ("operator-k8s", "client_secret_ref", "identity-store"):
+        assert secret_ish not in note, (
+            f"the non-selection note must not echo body content ({secret_ish!r})"
+        )
+
+
+def test_file_named_by_append_file_is_never_read(
+    policy: Policy, ledger: Path, tmp_path: Path
+) -> None:
+    """AC-1, the other half. The guard opens no file the command names.
+
+    The rotation recipe here is real and on disk. It is not a command this
+    session runs, so it is not this session's rotation.
+    """
+    row = tmp_path / "row.md"
+    row.write_text(
+        "aws secretsmanager rotate-secret --secret-id operator-k8s\n",
+        encoding="utf-8",
+    )
+    command = (
+        "python3 scripts/ledger_lock.py "
+        f"docs/tracking/ROLLING_WORK_LEDGER.md --append-file {row}"
+    )
+    assert check_bash_command(command, policy, ledger) == []
+
+
+def test_a_single_line_command_is_never_rewritten(policy: Policy) -> None:
+    """The stripper can only remove whole lines AFTER the operator's line.
+
+    A heredoc body begins on the next line, so a one-line command has no body
+    to remove and its text reaches the tokeniser byte-identical. This is what
+    makes the change safe for every shape in ROTATION_SHAPES, all of which are
+    written on one line.
+    """
+    for _, command in ROTATION_SHAPES:
+        visible, heredocs = split_heredocs(command)
+        assert visible == command, command
+        assert heredocs == {}, command
+
+
+def test_here_string_is_not_a_heredoc(policy: Policy, ledger: Path) -> None:
+    """`<<<` feeds an argument, not a body, and stays inside the surface."""
+    command = "psql -h h <<< \"ALTER ROLE operator-k8s PASSWORD 'x'\""
+    assert "rotation_without_consent" in codes(
+        check_bash_command(command, policy, ledger)
+    )
+
+
+# -- AC-3: the refusal path is untouched ----------------------------------
+
+
+def test_rotation_beside_a_document_heredoc_is_still_refused(
+    policy: Policy, ledger: Path
+) -> None:
+    """The body is dropped; the command it accompanies is not."""
+    command = (
+        f"{FINDINGS_DOC_HEREDOC}\n"
+        "aws secretsmanager rotate-secret --secret-id operator-k8s"
+    )
+    findings = check_bash_command(command, policy, ledger)
+    assert "rotation_without_consent" in codes(findings)
+    assert any(f.credential == "operator-k8s" for f in findings)
+
+
+def test_untokenisable_arguments_are_still_refused_when_a_heredoc_is_present(
+    policy: Policy, ledger: Path
+) -> None:
+    """AC-3. Stripping the body does not rescue an unbalanced quote in the args.
+
+    The apostrophe that matters is the one on the command line.
+    """
+    command = (
+        "cat > /tmp/note.md <<'MD'\nthe lane's own note\nMD\n"
+        "aws secretsmanager rotate-secret --secret-id 'operator-k8s"
+    )
+    assert "unevaluable" in codes(check_bash_command(command, policy, ledger))
+
+
+EXECUTED_HEREDOCS = [
+    (
+        "bash",
+        "bash <<'SH'\naws secretsmanager rotate-secret --secret-id operator-k8s\nSH",
+    ),
+    (
+        "sh_dash_s",
+        "sh -s <<'SH'\ngh secret delete operator-k8s --repo OmniNode-ai/omniclaude\nSH",
+    ),
+    (
+        "ssh",
+        "ssh host <<'SH'\nkubectl -n onex-dev delete secret operator-k8s\nSH",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "command"),
+    EXECUTED_HEREDOCS,
+    ids=[label for label, _ in EXECUTED_HEREDOCS],
+)
+def test_rotation_inside_an_executed_heredoc_is_refused(
+    label: str, command: str, policy: Policy, ledger: Path
+) -> None:
+    """AC-3. A body fed to an interpreter IS a command, so it stays in scope.
+
+    This is the half that must not be lost when bodies stop being tokenised
+    with the command line: `cat` writes its body to a file, `bash` and `ssh`
+    run it.
+    """
+    assert "rotation_without_consent" in codes(
+        check_bash_command(command, policy, ledger)
+    ), label
+
+
+def test_untokenisable_executed_heredoc_body_is_refused(
+    policy: Policy, ledger: Path
+) -> None:
+    """An executed body that cannot be parsed is refused, never assumed clean."""
+    command = (
+        "bash <<'SH'\naws secretsmanager rotate-secret --secret-id 'operator-k8s\nSH"
+    )
+    assert "unevaluable" in codes(check_bash_command(command, policy, ledger))
+
+
+def test_sql_in_a_psql_heredoc_is_refused(policy: Policy, ledger: Path) -> None:
+    """A body fed to a credential-surface program is that program's argument.
+
+    `psql <<EOF ALTER ROLE ... PASSWORD ... EOF` is the same rotation as
+    `psql -c "ALTER ROLE ... PASSWORD ..."` and is refused on the same terms.
+    """
+    command = "psql -h h -U u <<'SQL'\nALTER ROLE operator-k8s PASSWORD 'new';\nSQL"
+    findings = check_bash_command(command, policy, ledger)
+    assert "rotation_without_consent" in codes(findings)
+    assert any(f.credential == "operator-k8s" for f in findings)
+
+
+def test_heredoc_marker_is_never_reported_as_the_credential(
+    policy: Policy, ledger: Path
+) -> None:
+    """The placeholder that tracks body ownership must not look like a name."""
+    command = (
+        "gh secret set operator-k8s --repo OmniNode-ai/omniclaude <<'VAL'\nxx\nVAL"
+    )
+    findings = check_bash_command(command, policy, ledger)
+    assert findings, "gh secret set is still a rotation"
+    assert [f.credential for f in findings] == ["operator-k8s"], findings
+
+
+def test_an_executed_heredoc_rotation_can_be_authorised(
+    policy: Policy, ledger: Path
+) -> None:
+    """The citation is read from the command line and from executed bodies."""
+    command = (
+        f"bash <<'SH'\naws secretsmanager rotate-secret --secret-id operator-k8s "
+        f"{_cite(1)}\nSH"
+    )
+    assert check_bash_command(command, policy, ledger) == []
+
+
+def test_citation_hidden_in_a_document_body_does_not_authorise(
+    policy: Policy, ledger: Path
+) -> None:
+    """A citation in dropped text authorises nothing -- it was never read."""
+    command = (
+        f"cat > /tmp/note.md <<'MD'\n{_cite(1)}\nMD\n"
+        "aws secretsmanager rotate-secret --secret-id operator-k8s"
+    )
+    assert "rotation_without_consent" in codes(
+        check_bash_command(command, policy, ledger)
+    )
+
+
+# -- An unquoted newline ends a command -----------------------------------
+
+
+LATER_LINE_ROTATIONS = [
+    (
+        "after_an_echo",
+        "echo starting\naws secretsmanager rotate-secret --secret-id operator-k8s",
+    ),
+    (
+        "after_a_heredoc",
+        f"{TEST_FIXTURE_HEREDOC}\ngh secret delete operator-k8s --repo OmniNode-ai/omniclaude",
+    ),
+    (
+        "after_a_comment",
+        "# rotate the pair\nkubectl -n onex-dev delete secret operator-k8s",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "command"),
+    LATER_LINE_ROTATIONS,
+    ids=[label for label, _ in LATER_LINE_ROTATIONS],
+)
+def test_a_rotation_on_a_later_line_is_refused(
+    label: str, command: str, policy: Policy, ledger: Path
+) -> None:
+    """`shlex` reads an unquoted newline as whitespace, not as a separator.
+
+    The shipped guard therefore merged every line of a multi-line command into
+    one segment and read its program from line 1, so
+    `echo hi\\naws secretsmanager rotate-secret ...` was ADMITTED. Heredocs make
+    multi-line commands the normal shape here, so the separator is explicit.
+    """
+    assert "rotation_without_consent" in codes(
+        check_bash_command(command, policy, ledger)
+    ), label
+
+
+def test_a_newline_inside_a_quoted_argument_does_not_split(
+    policy: Policy, ledger: Path
+) -> None:
+    """Falsifier for the rule above: a quoted newline is part of an argument."""
+    command = "psql -c \"ALTER ROLE operator-k8s\n  PASSWORD 'new'\""
+    findings = check_bash_command(command, policy, ledger)
+    assert "rotation_without_consent" in codes(findings)
+    assert any(f.credential == "operator-k8s" for f in findings)
+
+
+def test_a_backslash_continuation_does_not_split(policy: Policy, ledger: Path) -> None:
+    """The other falsifier: a continued line is one command, not two.
+
+    Split here and the first segment would be `aws secretsmanager` with no
+    mutating subcommand, which matches nothing and would admit the rotation.
+    """
+    command = "aws secretsmanager \\\n  rotate-secret --secret-id operator-k8s"
+    assert "rotation_without_consent" in codes(
+        check_bash_command(command, policy, ledger)
+    )
+
+
+# -- AC-5: the vocabulary is not narrowed ---------------------------------
+
+
+def test_shell_prefilter_vocabulary_is_unchanged() -> None:
+    """AC-5. The fix is the matching surface, never the vocabulary.
+
+    A patch that made the heredoc cases pass by deleting a term from the
+    pre-filter or the policy would fail this ticket, so both are pinned: the
+    terms here, and every shape by test_every_configured_shape_has_a_test.
+    """
+    script = HOOK_SCRIPT.read_text(encoding="utf-8")
+    assert (
+        "'secret|access-key|access_key|kcadm|alter[[:space:]]+(role|user)'" in script
+    ), "the pre-filter vocabulary must stay as shipped"
+
+
+def test_policy_still_names_every_shipped_shape(policy: Policy) -> None:
+    """AC-5, restated as a count so a deletion cannot pass quietly."""
+    assert len(policy.rotation_shapes) == 15
+    assert policy.approvers == {"operator", "jake"}
+
+
+# -- End to end, through the registered hook script ------------------------
+
+
+def test_hook_script_allows_a_document_heredoc_and_logs_the_skip(
+    tmp_path: Path, ledger: Path
+) -> None:
+    """AC-1 and AC-2 at the seam the lanes actually hit."""
+    log = tmp_path / "hooks.log"
+    result = _run_hook(
+        {"tool_name": "Bash", "tool_input": {"command": LEDGER_ROW_HEREDOC}},
+        {
+            "OMNI_HOME": str(ledger),
+            "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
+            "ONEX_HOOK_LOG": str(log),
+        },
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert log.exists(), "the non-selection must leave a log line"
+    text = log.read_text(encoding="utf-8")
+    assert "NOT SELECTED" in text, text
+    assert "BLOCKED" not in text, text
+
+
+def test_hook_script_still_blocks_a_rotation_beside_a_heredoc(
+    tmp_path: Path, ledger: Path
+) -> None:
+    log = tmp_path / "hooks.log"
+    result = _run_hook(
+        {
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    f"{FINDINGS_DOC_HEREDOC}\n"
+                    "aws secretsmanager rotate-secret --secret-id operator-k8s"
+                )
+            },
+        },
+        {
+            "OMNI_HOME": str(ledger),
+            "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
+            "ONEX_HOOK_LOG": str(log),
+        },
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "BLOCKED" in log.read_text(encoding="utf-8")
