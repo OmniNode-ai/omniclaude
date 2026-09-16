@@ -49,6 +49,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RUNNER = _REPO_ROOT / "plugins" / "onex" / "scripts" / "session_preflight.py"
 
 _OVERLAY_ENV = "SESSION_PREFLIGHT_OVERLAY_PATH"
+_ROOTS_ENV = "ONEX_SKILL_OVERLAY_ROOTS"
+_OVERLAY_RELATIVE = Path("session_preflight") / "overlay.yaml"
 
 EXIT_OK = 0
 EXIT_BLOCKED = 1
@@ -69,9 +71,14 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.pop(_OVERLAY_ENV, None)
+    env.pop(_ROOTS_ENV, None)
     env.pop("OMNICLAUDE_SESSION_INTENT", None)
     env["HOME"] = str(tmp_path / "home")
     (tmp_path / "home").mkdir(exist_ok=True)
+    # OMN-18430: the runner discovers an overlay in the per-user configuration
+    # directory. Point that at tmp_path so a case that expects to find nothing
+    # is not answered by the developer's own installed overlay.
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "xdg")
     env["ONEX_HOOKS_STATE_DIR"] = str(tmp_path / "state")
     (tmp_path / "state").mkdir(exist_ok=True)
     if overlay is not None:
@@ -481,3 +488,141 @@ def test_a_check_command_that_hangs_is_bounded(tmp_path: Path) -> None:
     result = _run(tmp_path, "--intent", "normal", overlay=overlay)
     assert result.returncode == EXIT_BLOCKED, result.stdout
     assert "Slow probe" in result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# Overlay resolution [OMN-18430]
+#
+# The overlay and the runner were landed on opposite sides of the public /
+# private boundary with no resolution path between them: the runner read exactly
+# one variable, nothing set it, and every session that ran the preflight got a
+# refusal. Fail-closed was never the defect and is kept. What these cases pin is
+# that the runner searches a declared, ordered list of locations an installation
+# provides, that an explicit pointer still wins and still refuses rather than
+# falling through, and that a refusal names what to do about it.
+# --------------------------------------------------------------------------- #
+
+
+def _install_at(root: Path, checks: list[dict[str, object]]) -> Path:
+    """Write an overlay at a root's skill-relative location."""
+    path = root / _OVERLAY_RELATIVE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"preflight_version": "1.0.0", "checks": checks}))
+    return path
+
+
+def test_a_marketplace_root_resolves_the_overlay_with_no_overlay_variable(
+    tmp_path: Path,
+) -> None:
+    """AC1. The machine sets no preflight variable and the preflight still runs."""
+    root = tmp_path / "marketplace"
+    _install_at(root, [_PASSING])
+    result = _run(tmp_path, overlay=None, env_extra={_ROOTS_ENV: str(root)})
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
+
+
+def test_the_per_user_directory_resolves_the_overlay_with_no_variable_at_all(
+    tmp_path: Path,
+) -> None:
+    """AC1. The location that makes the preflight reachable on a bare machine."""
+    _install_at(tmp_path / "xdg" / "onex" / "overlays", [_PASSING])
+    result = _run(tmp_path, overlay=None)
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
+
+
+def test_no_overlay_anywhere_is_still_a_hard_stop(tmp_path: Path) -> None:
+    """AC1 positive control. Nothing installed anywhere still refuses."""
+    result = _run(tmp_path, overlay=None)
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+
+
+def test_the_refusal_names_every_location_it_tried(tmp_path: Path) -> None:
+    """AC2. A refusal a reader cannot act on is the shape this runner removes."""
+    root = tmp_path / "empty-marketplace"
+    result = _run(tmp_path, overlay=None, env_extra={_ROOTS_ENV: str(root)})
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert _OVERLAY_ENV in result.stderr
+    assert str(root / _OVERLAY_RELATIVE) in result.stderr
+    assert (
+        str(tmp_path / "xdg" / "onex" / "overlays" / _OVERLAY_RELATIVE) in result.stderr
+    )
+    assert "--install-overlay" in result.stderr, (
+        "The refusal must name the command that fixes it, not only the "
+        "locations that were empty."
+    )
+
+
+def test_several_roots_are_searched_in_order(tmp_path: Path) -> None:
+    """The earlier root wins; the later one is the fall-through."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    _install_at(second, [_PASSING])
+    result = _run(
+        tmp_path,
+        overlay=None,
+        env_extra={_ROOTS_ENV: os.pathsep.join([str(first), str(second)])},
+    )
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
+
+
+def test_the_explicit_variable_beats_a_discovered_overlay(tmp_path: Path) -> None:
+    """AC3. An override names the overlay that runs, not a starting guess."""
+    _install_at(tmp_path / "xdg" / "onex" / "overlays", [_PASSING])
+    override = _overlay(tmp_path, [_FAILING_BLOCKER])
+    result = _run(tmp_path, overlay=override)
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert _FAILING_BLOCKER["title"] in result.stdout
+
+
+def test_the_overlay_flag_beats_the_variable(tmp_path: Path) -> None:
+    """AC3. --overlay is the highest-precedence pointer."""
+    from_env = _overlay(tmp_path, [_PASSING])
+    flagged = tmp_path / "flagged.yaml"
+    flagged.write_text(
+        yaml.safe_dump({"preflight_version": "1.0.0", "checks": [_FAILING_BLOCKER]})
+    )
+    result = _run(tmp_path, "--overlay", str(flagged), overlay=from_env)
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert _FAILING_BLOCKER["title"] in result.stdout
+
+
+def test_an_explicit_pointer_that_misses_never_falls_through(tmp_path: Path) -> None:
+    """A run told to use one overlay is never silently given another."""
+    _install_at(tmp_path / "xdg" / "onex" / "overlays", [_PASSING])
+    missing = tmp_path / "nowhere.yaml"
+    result = _run(tmp_path, "--overlay", str(missing), overlay=None)
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert str(missing) in result.stderr
+
+
+def test_install_overlay_makes_the_next_bare_run_resolve(tmp_path: Path) -> None:
+    """AC1. The fix the refusal names actually fixes it."""
+    source = _overlay(tmp_path, [_PASSING])
+    installed = _run(tmp_path, "--install-overlay", str(source), overlay=None)
+    assert installed.returncode == EXIT_OK, installed.stdout + installed.stderr
+
+    destination = tmp_path / "xdg" / "onex" / "overlays" / _OVERLAY_RELATIVE
+    assert destination.is_file(), installed.stdout + installed.stderr
+
+    after = _run(tmp_path, overlay=None)
+    assert after.returncode == EXIT_OK, after.stdout + after.stderr
+
+
+def test_install_overlay_refuses_an_overlay_it_could_not_run(tmp_path: Path) -> None:
+    """Validated at install time, not at the start of the next session."""
+    source = _overlay(
+        tmp_path,
+        [{"check_id": "nofix", "title": "No fix", "kind": "env_set", "env": "X"}],
+    )
+    result = _run(tmp_path, "--install-overlay", str(source), overlay=None)
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert not (tmp_path / "xdg" / "onex" / "overlays" / _OVERLAY_RELATIVE).exists()
+
+
+def test_an_overlay_declaring_no_checks_is_refused(tmp_path: Path) -> None:
+    """AC4. An empty check set is the green-preflight-that-checked-nothing case."""
+    empty = tmp_path / "empty.yaml"
+    empty.write_text(yaml.safe_dump({"preflight_version": "1.0.0", "checks": []}))
+    result = _run(tmp_path, overlay=empty)
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert "no checks" in result.stderr
