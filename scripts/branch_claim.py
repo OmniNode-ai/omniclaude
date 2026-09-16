@@ -336,23 +336,29 @@ def _install_hook(repo: Path) -> int:
     that check was written for.
     """
     try:
-        hooks = li.own_hooks_dir(repo)
+        target, reason = li.install_hook(
+            repo,
+            source=Path(__file__).resolve().parent / "hooks" / "pre-push-branch-claim",
+            hook_name="pre-push",
+            placeholder="@BRANCH_CLAIM_PATH@",
+            module=Path(__file__),
+        )
     except li.SharedHooksDirectory as exc:
         print(f"branch_claim: {exc}", file=sys.stderr)
         return 2
-    hooks.mkdir(parents=True, exist_ok=True)
-    source = Path(__file__).resolve().parent / "hooks" / "pre-push-branch-claim"
-    target = hooks / "pre-push"
-    body = source.read_text(encoding="utf-8").replace(
-        "@BRANCH_CLAIM_PATH@", str(Path(__file__).resolve())
-    )
-    target.write_text(body, encoding="utf-8")
-    target.chmod(0o755)
     print(f"branch_claim: installed {target}")
     print(
         "  It refuses NOTHING until a worktree is registered as a lane:\n"
         "    python3 scripts/lane_identity.py register --lane <slug> --ticket OMN-XXXX"
     )
+    reachable, _ = li.hooks_reachable(repo, "pre-push")
+    if not reachable:
+        # OMN-18273: a hook file git will never dispatch is not an installation.
+        # Reported nonzero rather than printed over, because the whole defect
+        # this closes is a mechanism that reported Done and never ran.
+        print(f"branch_claim: NOT REACHABLE -- {reason}", file=sys.stderr)
+        return 4
+    print(f"branch_claim: reachable -- {reason}")
     return 0
 
 
