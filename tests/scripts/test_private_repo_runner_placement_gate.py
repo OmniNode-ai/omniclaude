@@ -73,6 +73,16 @@ def _run(module, root: Path, variables: dict[str, str], tmp_path: Path) -> int:
     )
 
 
+def _seam_job(expression: str = SEAM_EXPRESSION) -> str:
+    """One pull-request job whose runs-on is `expression`, indented for YAML."""
+    return (
+        "name: CI\non:\n  pull_request: {}\njobs:\n"
+        "  build:\n    runs-on: >-\n      "
+        + expression.replace("\n", "\n      ")
+        + "\n    steps:\n      - run: true\n"
+    )
+
+
 def test_positive_control_a_hosted_pin_in_a_private_repo_fails(
     tmp_path: Path,
 ) -> None:
@@ -154,23 +164,106 @@ def test_an_expression_is_resolved_against_live_values_not_skipped(
     assert _run(module, root, trusted_hosted, tmp_path) == 1
 
 
-def test_a_selector_whose_other_branch_is_hosted_is_reported(
+def test_the_fork_branch_may_be_hosted_when_the_trusted_branch_is_not(
     tmp_path: Path,
 ) -> None:
-    """The UNION, not the common case.
+    """Fork isolation is a TRUST constraint and outranks the cost ruling.
 
-    A selector that sends fork events to a hosted class IS a hosted placement
-    for those events. Reporting only the branch a same-repo pull request takes
-    is how a gate reports green on half the matrix.
+    The canonical selector sends a pull request opened from a fork to the
+    public runner class and everything else to the trusted seam. For a private
+    repository both halves of that are required, not in tension: the
+    2026-09-14 ruling says a private repository's CI does not run on hosted
+    runners, and fork isolation says untrusted code never reaches a fleet
+    runner that bind-mounts lab credentials. The routing node's own contract
+    settles the order -- only a CAPACITY reason may be reversed for a
+    repository that may not run hosted, never a trust reason such as fork
+    isolation -- so the hosted fork branch is the REQUIRED placement here and
+    reporting it as a violation would be asking for the prohibited one.
+
+    The property that survives: the branch a same-repo pull request actually
+    takes must still be the fleet, and that is asserted by the next two tests.
     """
     module = _module()
-    body = (
-        "name: CI\non:\n  pull_request: {}\njobs:\n"
-        "  build:\n    runs-on: >-\n      "
-        + SEAM_EXPRESSION.replace("\n", "\n      ")
-        + "\n    steps:\n      - run: true\n"
+    root = _tree(tmp_path, "ci.yml", _seam_job())
+    variables = {
+        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+    }
+    assert _run(module, root, variables, tmp_path) == 0
+
+
+def test_an_inverted_guard_that_defaults_to_hosted_is_still_reported(
+    tmp_path: Path,
+) -> None:
+    """The OMN-16683 inversion, which is what the carve-out must not readmit.
+
+    Here the guard selects the TRUSTED class and the unguarded default is the
+    public one, so an ordinary same-repo pull request lands on a hosted runner
+    while the file still reads as fork-isolated. The rule is scoped to the
+    branch a fork takes; a hosted DEFAULT is a finding however the expression
+    is spelled.
+    """
+    module = _module()
+    inverted = (
+        "${{\n"
+        "  (github.event.pull_request.head.repo.full_name == github.repository)\n"
+        "  && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+        '\'["self-hosted","omnibase-ci"]\')\n'
+        "  || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+        "}}"
     )
-    root = _tree(tmp_path, "ci.yml", body)
+    root = _tree(tmp_path, "ci.yml", _seam_job(inverted))
+    variables = {
+        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+    }
+    assert _run(module, root, variables, tmp_path) == 1
+
+
+def test_a_fork_guarded_branch_that_is_the_only_branch_is_reported(
+    tmp_path: Path,
+) -> None:
+    """A carve-out with nothing to fall back to is just a hosted pin.
+
+    The exemption exists because a NON-fork branch carries the ordinary
+    placement. With no such branch every event resolves hosted, which is the
+    thing the ruling forbids, so the fork guard excuses nothing.
+    """
+    module = _module()
+    only_fork = (
+        "${{\n"
+        "  (github.event.pull_request.head.repo.full_name != github.repository)\n"
+        "  && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+        "}}"
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(only_fork))
+    variables = {
+        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+    }
+    assert _run(module, root, variables, tmp_path) == 1
+
+
+def test_a_guard_that_is_not_a_fork_test_excuses_nothing(
+    tmp_path: Path,
+) -> None:
+    """Fail closed on any guard the rule does not recognise as a fork test.
+
+    Only two spellings of `is a fork` are recognised. Anything else guarding a
+    hosted branch -- an event name, a label, a schedule -- is judged as an
+    ordinary hosted placement, so a new selector shape cannot quietly inherit
+    the exemption.
+    """
+    module = _module()
+    not_a_fork_test = (
+        "${{\n"
+        "  (github.event_name == 'schedule')\n"
+        "  && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+        "  || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+        '\'["self-hosted","omnibase-ci"]\')\n'
+        "}}"
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(not_a_fork_test))
     variables = {
         "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
         "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
@@ -205,7 +298,14 @@ def test_an_annotated_job_passes_and_an_unannotated_twin_does_not(
 def test_an_annotation_without_a_ticket_does_not_excuse_anything(
     tmp_path: Path,
 ) -> None:
-    """Free text is a justification, not a commitment to move the job."""
+    """Free text is a justification, not a commitment to move the job.
+
+    The verdict is 2 rather than 1 as of OMN-18431, and the distinction is the
+    point: an incomplete marker is not judged as an ordinary bare pin, it is
+    REFUSED with its own message naming what is missing. Both fail the run;
+    only one of them tells the author that the exemption they wrote was read
+    and rejected rather than never seen.
+    """
     module = _module()
     root = _tree(
         tmp_path,
@@ -214,7 +314,7 @@ def test_an_annotation_without_a_ticket_does_not_excuse_anything(
         "  # private-repo-hosted-ok: it has always been like this\n"
         "  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
     )
-    assert _run(module, root, {}, tmp_path) == 1
+    assert _run(module, root, {}, tmp_path) == 2
 
 
 def test_an_unset_variable_with_no_fallback_fails_closed(tmp_path: Path) -> None:
@@ -266,3 +366,57 @@ def test_every_hosted_image_family_is_matched_by_stem(label: str) -> None:
 def test_fleet_labels_are_not_matched(label: str) -> None:
     module = _module()
     assert not module.HOSTED_LABEL.match(label)
+
+
+@pytest.mark.parametrize(
+    "guard",
+    [
+        "github.event.pull_request.head.repo.full_name != github.repository",
+        "github.event.pull_request.head.repo.fork == true",
+        "github.event.pull_request.head.repo.fork",
+    ],
+)
+def test_the_recognised_fork_tests(guard: str) -> None:
+    module = _module()
+    assert module.FORK_TEST.search(guard)
+
+
+@pytest.mark.parametrize(
+    "guard",
+    [
+        # The OMN-16683 inversion: this guards the TRUSTED arm.
+        "github.event.pull_request.head.repo.full_name == github.repository",
+        "github.event.pull_request.head.repo.fork == false",
+        "github.event.pull_request.head.repo.fork != true",
+        "github.event_name == 'schedule'",
+        "contains(github.event.pull_request.labels.*.name, 'fork')",
+    ],
+)
+def test_an_inverted_or_unrelated_guard_is_not_a_fork_test(guard: str) -> None:
+    """The exemption must not be reachable by a guard that means the opposite."""
+    module = _module()
+    assert not module.FORK_TEST.search(guard)
+
+
+def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
+    tmp_path: Path,
+) -> None:
+    """A wrapped annotation is a refusal that names itself, not a silent miss.
+
+    The reason and its ticket have to share a line. When an author wraps the
+    comment the ticket lands where the pattern cannot reach it, and without
+    this the job is simply reported as a bare pin -- the right verdict for a
+    reason the author cannot see from the message.
+    """
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "ci.yml",
+        "name: CI\non:\n  pull_request: {}\njobs:\n"
+        "  build:\n"
+        "    # private-repo-hosted-ok: needs a tool the fleet image does not\n"
+        "    # carry (OMN-17477)\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: true\n",
+    )
+    assert _run(module, root, {}, tmp_path) == 2

@@ -27,6 +27,26 @@ under test; if it cannot be resolved, the gate FAILS CLOSED and says so,
 because a gate that cannot tell whether the rule applies has not passed -- it
 has not run.
 
+FORK ISOLATION OUTRANKS THIS RULE, AND THE ORDER IS NOT A JUDGEMENT CALL.
+The canonical selector sends a pull request opened from a fork to the public
+runner class and everything else to the trusted seam. Both halves are required
+in a private repository: this ruling says its CI does not run on hosted
+runners, and fork isolation says untrusted code never reaches a fleet runner
+that bind-mounts the lab credential directory. The routing node's contract
+settles which yields -- only a CAPACITY reason may be reversed for a repository
+that may not run hosted, never a trust reason such as fork isolation -- so a
+hosted branch GUARDED BY A FORK TEST is the required placement, not a
+violation, and it is exempt here.
+
+The exemption is scoped three ways so it cannot become a hole. It applies only
+to the branch a fork actually takes; the branch an ordinary same-repo pull
+request takes is judged exactly as before. It requires a non-fork branch to
+exist that resolves to no hosted label, because a fork guard with nothing to
+fall back to is a hosted pin wearing a guard. And it recognises only two
+spellings of "is a fork", so any other guard -- an event name, a label, a
+schedule -- is judged as an ordinary hosted placement rather than inheriting
+the exemption by accident.
+
 A JOB THAT CANNOT MOVE GETS A NAMED REASON, NOT A QUIET PIN. The escape hatch
 is a per-job annotation in the workflow file recording WHY the fleet cannot
 carry it and the ticket that will move it:
@@ -63,6 +83,30 @@ ANNOTATION = re.compile(
     re.IGNORECASE,
 )
 
+# The same marker WITHOUT the rest of the pattern on its line. A comment block
+# wrapped across several lines puts the ticket on a line the annotation regex
+# cannot reach, so the annotation reads as absent and the job is reported as a
+# bare pin -- a correct verdict for an incomprehensible reason, and the author
+# sees a gate that ignored the exemption they wrote. Detected separately so the
+# failure names itself: an annotation is ONE line, reason and ticket together.
+ANNOTATION_MARKER = re.compile(r"#\s*private-repo-hosted-ok:", re.IGNORECASE)
+
+# "This pull request came from a fork", in the two spellings this estate uses:
+# the head repository differing from the base, and the `fork` flag read as true
+# or read bare for its truthiness. Deliberately an ENUMERATION rather than a
+# loose search for the word fork, because this pattern decides whether a hosted
+# arm is EXCUSED: an unrecognised guard must fall through to the ordinary
+# judgement rather than inherit the exemption. The inverted forms -- `==`
+# against the repository name, or `fork == false` -- guard the TRUSTED arm, not
+# the fork arm, and are excluded by construction; the OMN-16683 inversion
+# defect is exactly that shape.
+FORK_TEST = re.compile(
+    r"head\.repo\.full_name\s*!=\s*github\.repository"
+    r"|head\.repo\.fork\s*==\s*true"
+    r"|head\.repo\.fork\b(?!\s*[=!]=)",
+    re.IGNORECASE,
+)
+
 VAR_REF = re.compile(r"vars\.([A-Z0-9_]+)")
 FALLBACK_FOR = "vars.{name}\\s*\\|\\|\\s*'(\\[[^']*\\])'"
 
@@ -78,6 +122,29 @@ class Finding:
     runs_on: str
     resolved: str
     why: str
+    branch: str
+
+
+@dataclass(frozen=True)
+class Branch:
+    """One arm of a `runs-on` selector, with the guard that reaches it.
+
+    `guard` is empty for the arm an expression falls through to. `fork_guarded`
+    says the guard is one of the two recognised fork tests, which is the only
+    condition under which a hosted `labels` set is permitted here.
+    """
+
+    guard: str
+    labels: list[str]
+    how: str
+    fork_guarded: bool
+
+    @property
+    def hosted(self) -> list[str]:
+        return [label for label in self.labels if HOSTED_LABEL.match(label)]
+
+    def describe(self) -> str:
+        return f"guarded by `{self.guard.strip()}`" if self.guard else "default arm"
 
 
 def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -139,31 +206,57 @@ def _labels(value: Any) -> list[str]:
     return [str(value)]
 
 
-def resolve_runs_on(runs_on: Any, variables: dict[str, str]) -> tuple[list[str], str]:
-    """Return the labels this `runs-on` resolves to, and how it was resolved.
+def _split_top_level(expression: str, operator: str) -> list[str]:
+    """Split on `operator` at parenthesis depth 0, outside single quotes.
 
-    An expression names one or more variables. Every branch a `pull_request`
-    event can take is resolved and the UNION is returned: a selector that sends
-    some events to a hosted class is a hosted placement for those events, and
-    reporting only the common case is how a gate reports green on the half of
-    the matrix nobody looked at.
+    Depth matters because the inline default in `fromJSON(vars.X || '[...]')`
+    is the SAME `||` token as the one separating the arms of the selector.
+    Splitting textually merges the two and reports an arm that does not exist.
     """
-    if not isinstance(runs_on, str) or "${{" not in str(runs_on):
-        return _labels(runs_on), "literal"
+    parts: list[str] = []
+    depth = 0
+    quoted = False
+    start = 0
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if char == "'":
+            quoted = not quoted
+        elif not quoted:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            elif (
+                depth == 0
+                and char == operator[0]
+                and expression[index : index + len(operator)] == operator
+            ):
+                parts.append(expression[start:index])
+                index += len(operator)
+                start = index
+                continue
+        index += 1
+    parts.append(expression[start:])
+    return [part.strip() for part in parts if part.strip()]
 
-    names = VAR_REF.findall(runs_on)
+
+def _labels_of(
+    fragment: str, runs_on: str, variables: dict[str, str]
+) -> tuple[list[str], str]:
+    """Resolve one arm's value to labels, live, or refuse to guess."""
+    names = VAR_REF.findall(fragment)
     if not names:
         raise GateError(
             "a runs-on expression that names no vars.* cannot be resolved "
             f"statically: {runs_on!r}. THE GATE DID NOT RUN."
         )
-
     labels: list[str] = []
     how: list[str] = []
     for name in dict.fromkeys(names):
         value = variables.get(name)
         if value is None:
-            match = re.search(FALLBACK_FOR.format(name=name), runs_on)
+            match = re.search(FALLBACK_FOR.format(name=name), fragment)
             if match is None:
                 raise GateError(
                     f"{name} is unset at every scope and carries no literal "
@@ -181,6 +274,40 @@ def resolve_runs_on(runs_on: Any, variables: dict[str, str]) -> tuple[list[str],
                 f"{name} is not valid JSON ({value!r}): {error}. THE GATE DID NOT RUN."
             ) from error
     return labels, "; ".join(how)
+
+
+def resolve_branches(runs_on: Any, variables: dict[str, str]) -> list[Branch]:
+    """Return every arm this `runs-on` can resolve to, with its guard.
+
+    An expression is not "unknown": it resolves, live, to whatever the
+    repository's own variable scopes currently hold. It is resolved ARM BY ARM
+    rather than flattened, because `A && X || Y` places a run on X or on Y and
+    never on both, and the two arms answer to different rules -- see the fork
+    paragraph in the module docstring.
+    """
+    if not isinstance(runs_on, str) or "${{" not in str(runs_on):
+        return [
+            Branch(guard="", labels=_labels(runs_on), how="literal", fork_guarded=False)
+        ]
+
+    inner = runs_on.strip()
+    if inner.startswith("${{") and inner.endswith("}}"):
+        inner = inner[3:-2]
+
+    branches: list[Branch] = []
+    for segment in _split_top_level(inner, "||"):
+        operands = _split_top_level(segment, "&&")
+        guard = " && ".join(operands[:-1]) if len(operands) > 1 else ""
+        labels, how = _labels_of(operands[-1], runs_on, variables)
+        branches.append(
+            Branch(
+                guard=guard,
+                labels=labels,
+                how=how,
+                fork_guarded=bool(FORK_TEST.search(guard)),
+            )
+        )
+    return branches
 
 
 def _job_source(text: str, job_id: str) -> str:
@@ -206,6 +333,25 @@ def _job_source(text: str, job_id: str) -> str:
     # include the line immediately above, so an annotation may sit on top of
     # the job rather than only inside it
     return "\n".join(lines[max(0, start - 1) : end])
+
+
+def _offending_branch(branches: list[Branch]) -> Branch | None:
+    """The arm that places this job on a hosted runner in breach of the rule.
+
+    An arm a FORK reaches is exempt, but only while an ordinary arm exists that
+    resolves to no hosted label: a fork guard with nothing to fall through to
+    sends every event hosted, which is the placement the rule forbids, so it is
+    reported against its own guard rather than excused by it.
+    """
+    for branch in branches:
+        if branch.hosted and not branch.fork_guarded:
+            return branch
+    hosted_fork = [branch for branch in branches if branch.hosted]
+    if hosted_fork and not any(
+        not branch.fork_guarded and not branch.hosted for branch in branches
+    ):
+        return hosted_fork[0]
+    return None
 
 
 def scan(repo_root: Path, slug: str, variables: dict[str, str]) -> list[Finding]:
@@ -240,19 +386,29 @@ def scan(repo_root: Path, slug: str, variables: dict[str, str]) -> list[Finding]
                 # which is judged in ITS OWN repository by this same gate. It
                 # is not silently exempt: see --report-reusable-calls.
                 continue
-            labels, how = resolve_runs_on(definition["runs-on"], variables)
-            hosted = [label for label in labels if HOSTED_LABEL.match(label)]
-            if not hosted:
+            branches = resolve_branches(definition["runs-on"], variables)
+            offender = _offending_branch(branches)
+            if offender is None:
                 continue
-            if ANNOTATION.search(_job_source(text, str(job_id))):
+            source = _job_source(text, str(job_id))
+            if ANNOTATION.search(source):
                 continue
+            if ANNOTATION_MARKER.search(source):
+                raise GateError(
+                    f"{path.name}::{job_id} carries a private-repo-hosted-ok "
+                    "marker whose reason and (OMN-nnnnn) ticket are not on the "
+                    "SAME line, so it excuses nothing. Put the whole annotation "
+                    "on one comment line; continuation lines beneath it are "
+                    "fine. THE GATE DID NOT RUN."
+                )
             findings.append(
                 Finding(
                     workflow=path.name,
                     job=str(job_id),
                     runs_on=str(definition["runs-on"]).strip(),
-                    resolved=",".join(labels),
-                    why=how,
+                    resolved=",".join(offender.labels),
+                    why=offender.how,
+                    branch=offender.describe(),
                 )
             )
     return findings
@@ -350,6 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"  {finding.workflow}::{finding.job}\n"
             f"    runs-on:  {finding.runs_on}\n"
+            f"    arm:      {finding.branch}\n"
             f"    resolves: {finding.resolved}   [{finding.why}]",
             file=sys.stderr,
         )
