@@ -47,6 +47,35 @@ spellings of "is a fork", so any other guard -- an event name, a label, a
 schedule -- is judged as an ordinary hosted placement rather than inheriting
 the exemption by accident.
 
+A `uses:` JOB IS JUDGED WHERE THE RUN IS BILLED, NOT WHERE THE WORKFLOW LIVES.
+A job that calls a reusable workflow has no `runs-on` of its own, and the
+called workflow's `runs-on` is evaluated in the CALLER's variable scopes, not
+the defining repository's. Reading the placement in the repository that DEFINES
+the workflow is therefore the wrong reading twice over: that repository is
+usually public, where a hosted label is the correct answer, while the run the
+label places is billed to the private caller. Measured on omnistream, whose
+REQUIRED `kb-doc-gate` job calls a public reusable, resolves the trusted seam
+in omnistream's own scope (no repository shadow, organisation value hosted),
+lands on a hosted label in a private repository and does not start at all --
+three seconds, no runner, no steps, failing every run since 2026-09-02 while
+this gate reported the repository green.
+
+So a `uses:` job is RESOLVED: the called workflow is fetched at the ref its
+caller pins, each of its jobs' `runs-on` is resolved against the CALLER's
+variables, and the verdict is reported against the caller's job. Nesting is
+followed to GitHub's own limit and refused beyond it. A called workflow that
+cannot be fetched, or whose jobs cannot be parsed, is a REFUSAL -- a gate that
+cannot see where a required job lands has not passed, it has not run.
+
+A mutable ref (`@main`, `@dev`, a tag) is RESOLVED rather than refused, and the
+commit it resolved to is printed beside the verdict. Refusing it was considered
+and rejected: the content at a mutable ref is exactly what the next run will
+execute, so resolving it is the true reading, and four of the seven private
+repositories pin a required gate that way today -- refusing them would take the
+enforcement surface down over a supply-chain concern that is not this gate's
+subject. What the printed commit buys is that a verdict can be re-derived: it
+names the bytes it judged.
+
 A JOB THAT CANNOT MOVE GETS A NAMED REASON, NOT A QUIET PIN. The escape hatch
 is a per-job annotation in the workflow file recording WHY the fleet cannot
 carry it and the ticket that will move it:
@@ -69,6 +98,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import yaml
 
@@ -110,6 +140,24 @@ FORK_TEST = re.compile(
 VAR_REF = re.compile(r"vars\.([A-Z0-9_]+)")
 FALLBACK_FOR = "vars.{name}\\s*\\|\\|\\s*'(\\[[^']*\\])'"
 
+# The two spellings a JOB-level `uses:` may take. A job-level `uses:` names a
+# reusable WORKFLOW, never an action, so both forms carry a `.github/workflows`
+# path -- anything else is a shape this gate has not been taught to read, and
+# is refused rather than skipped.
+USES_CROSS_REPO = re.compile(
+    r"^(?P<slug>[^/]+/[^/]+)/(?P<path>\.github/workflows/[^@]+)@(?P<ref>.+)$"
+)
+USES_LOCAL = re.compile(r"^\./(?P<path>\.github/workflows/.+)$")
+
+# A ref that names an immutable commit. Used only to decide whether the commit
+# a mutable ref resolved to is worth printing -- never to refuse a ref.
+SHA_REF = re.compile(r"^[0-9a-f]{40}$")
+
+# GitHub evaluates at most four levels of nested reusable workflows. Past that
+# a run would not execute, so a tree claiming to go deeper is malformed rather
+# than merely large, and is refused.
+MAX_NESTING = 4
+
 
 class GateError(RuntimeError):
     """A condition under which the gate refuses to return a verdict."""
@@ -123,6 +171,11 @@ class Finding:
     resolved: str
     why: str
     branch: str
+    # Empty for a job that declares its own `runs-on`. For a `uses:` job it
+    # names the called workflow and the job inside it whose placement this
+    # finding is about, so the report says WHERE to make the change -- which is
+    # not the file the finding is reported against.
+    via: str = ""
 
 
 @dataclass(frozen=True)
@@ -272,6 +325,139 @@ class Variables:
         if org is None:
             raise self._refuse(name, "org")
         return org.get(name)
+
+
+class CalledWorkflows:
+    """The source of every reusable workflow a caller job delegates to.
+
+    Fetched at the ref the CALLER pins, because that is the content the run
+    executes. Results are cached per `uses:` string: one reusable is typically
+    called from several workflows in the same repository, and a gate that
+    re-fetched per call site would turn a ten-second scan into a rate limit.
+
+    The read uses GH_TOKEN_VARIABLES when a caller supplies one -- the same
+    credential the variable reads use, which has cross-repository read -- and
+    falls back to the job token, which can read only the caller's own
+    repository. A read that fails is a REFUSAL naming what could not be
+    fetched: the alternative is to skip the job, which is the exact silence
+    this change exists to remove.
+    """
+
+    def __init__(self, repo_root: Path, fixture: dict[str, str] | None = None) -> None:
+        self._repo_root = repo_root
+        self._fixture = fixture
+        self._cache: dict[str, str] = {}
+        self._commits: dict[str, str] = {}
+
+    @staticmethod
+    def _parse(uses: str) -> tuple[str, str, str]:
+        """(slug, path, ref) for `uses`; slug empty for a same-repo call."""
+        local = USES_LOCAL.match(uses.strip())
+        if local:
+            return "", local.group("path"), ""
+        cross = USES_CROSS_REPO.match(uses.strip())
+        if cross:
+            return cross.group("slug"), cross.group("path"), cross.group("ref")
+        raise GateError(
+            f"a job delegates to {uses!r}, which is neither a same-repository "
+            "workflow path (./.github/workflows/x.yml) nor a cross-repository "
+            "one (owner/repo/.github/workflows/x.yml@ref). Placement cannot be "
+            "read from a shape this gate does not recognise, and skipping it "
+            "would report the caller green. THE GATE DID NOT RUN."
+        )
+
+    def commit(self, uses: str) -> str:
+        """The commit a MUTABLE ref resolved to, or '' for an immutable pin.
+
+        Printed beside the verdict so the reading can be re-derived. A failure
+        to resolve it is not fatal -- the content was already fetched, and the
+        verdict stands on the content, not on this label.
+        """
+        slug, _, ref = self._parse(uses)
+        if not slug or SHA_REF.match(ref):
+            return ""
+        if uses not in self._commits:
+            result = _gh(
+                ["api", f"repos/{slug}/commits/{ref}", "--jq", ".sha"],
+                env_name="GH_TOKEN_VARIABLES",
+            )
+            self._commits[uses] = (
+                result.stdout.strip() if result.returncode == 0 else "unresolved"
+            )
+        return self._commits[uses]
+
+    def source(self, uses: str) -> str:
+        """The called workflow's YAML text, at the ref its caller pins."""
+        if uses in self._cache:
+            return self._cache[uses]
+        if self._fixture is not None:
+            if uses not in self._fixture:
+                raise GateError(
+                    f"the called-workflow fixture carries no entry for {uses!r}. "
+                    "THE GATE DID NOT RUN."
+                )
+            self._cache[uses] = self._fixture[uses]
+            return self._cache[uses]
+
+        slug, path, ref = self._parse(uses)
+        if not slug:
+            local = self._repo_root / path
+            if not local.is_file():
+                raise GateError(
+                    f"a job delegates to {uses!r} and {local} does not exist in "
+                    "the checked-out tree, so its placement cannot be read. "
+                    "THE GATE DID NOT RUN."
+                )
+            self._cache[uses] = local.read_text(encoding="utf-8")
+            return self._cache[uses]
+
+        # The ref goes in the QUERY STRING, never as `-f ref=...`: a single
+        # `-f` makes `gh api` switch the request to POST and send the pair as
+        # a body field, which the contents endpoint answers with a bare
+        # `Not Found`. That 404 is indistinguishable from a real missing file,
+        # so the mistake reads as a correct fail-closed refusal -- measured
+        # against a SHA that demonstrably exists.
+        result = _gh(
+            [
+                "api",
+                f"repos/{slug}/contents/{path}?ref={quote(ref, safe='')}",
+                "-H",
+                "Accept: application/vnd.github.raw",
+            ],
+            env_name="GH_TOKEN_VARIABLES",
+        )
+        if result.returncode != 0:
+            raise GateError(
+                f"could not fetch the called workflow {uses!r} "
+                f"({result.stderr.strip()[:200]}). A `uses:` job's placement is "
+                "decided by the called workflow's runs-on resolved in THIS "
+                "repository's variable scopes, so a gate that cannot read it "
+                "has not judged the job -- and this repository's required "
+                "checks may be the jobs in question. Supply a credential with "
+                "cross-repository read as ACTIONS_VARIABLES_TOKEN. "
+                "THE GATE DID NOT RUN."
+            )
+        self._cache[uses] = result.stdout
+        return self._cache[uses]
+
+
+def _called_jobs(uses: str, text: str) -> dict[str, Any]:
+    """The `jobs:` mapping of a called workflow, or a refusal."""
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise GateError(
+            f"the called workflow {uses!r} is not parseable YAML ({error}). "
+            "THE GATE DID NOT RUN."
+        ) from error
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    if not isinstance(jobs, dict) or not jobs:
+        raise GateError(
+            f"the called workflow {uses!r} declares no jobs, so the caller's "
+            "job resolves to no runner at all. That is a malformed delegation, "
+            "not a job that is safely placed. THE GATE DID NOT RUN."
+        )
+    return jobs
 
 
 def _labels(value: Any) -> list[str]:
@@ -434,7 +620,103 @@ def _offending_branch(branches: list[Branch]) -> Branch | None:
     return None
 
 
-def scan(repo_root: Path, slug: str, variables: Variables) -> list[Finding]:
+def _placements(
+    uses: str,
+    variables: Variables,
+    called: CalledWorkflows,
+    notes: list[str],
+    depth: int = 1,
+    parent_slug: str = "",
+) -> list[tuple[str, Branch, str]]:
+    """Every (runs-on, offending arm, where) a `uses:` job can be placed on.
+
+    Recursive, because a reusable workflow may itself delegate. Each called
+    job's `runs-on` is resolved against the CALLER's variables -- `variables`
+    is threaded unchanged all the way down -- because that is the scope GitHub
+    evaluates it in and the account the run is billed to.
+    """
+    if depth > MAX_NESTING:
+        raise GateError(
+            f"the delegation chain reaching {uses!r} is more than {MAX_NESTING} "
+            "levels deep, which GitHub will not execute. A tree that claims to "
+            "is malformed, not merely large. THE GATE DID NOT RUN."
+        )
+    slug, _, ref = CalledWorkflows._parse(uses)
+    if not slug and parent_slug:
+        raise GateError(
+            f"the called workflow in {parent_slug} delegates to {uses!r}, a path "
+            "relative to ITS OWN repository, which is not in this checkout. "
+            "Reading it from the caller's tree would judge a different file of "
+            "the same name. THE GATE DID NOT RUN."
+        )
+
+    commit = called.commit(uses)
+    pin = f" (ref {ref} -> {commit})" if commit else ""
+    jobs = _called_jobs(uses, called.source(uses))
+
+    offenders: list[tuple[str, Branch, str]] = []
+    for job_id, definition in jobs.items():
+        if not isinstance(definition, dict):
+            continue
+        where = f"{uses}::{job_id}{pin}"
+        nested = definition.get("uses")
+        if "runs-on" in definition:
+            branches = resolve_branches(definition["runs-on"], variables)
+            notes.append(
+                f"note:     {uses}::{job_id} resolves to "
+                + " | ".join(
+                    f"[{','.join(branch.labels)}] ({branch.describe()})"
+                    for branch in branches
+                )
+                + pin
+            )
+            offender = _offending_branch(branches)
+            if offender is not None:
+                offenders.append((str(definition["runs-on"]).strip(), offender, where))
+        elif isinstance(nested, str):
+            offenders.extend(
+                _placements(nested, variables, called, notes, depth + 1, slug or "")
+            )
+        else:
+            raise GateError(
+                f"{uses}::{job_id} declares neither `runs-on` nor `uses`, so "
+                "where it runs cannot be read. THE GATE DID NOT RUN."
+            )
+    return offenders
+
+
+def _job_offenders(
+    definition: dict[str, Any],
+    variables: Variables,
+    called: CalledWorkflows,
+    notes: list[str],
+) -> list[tuple[str, Branch, str]]:
+    """The placements one CALLER job can take, whether it pins or delegates."""
+    if "runs-on" in definition:
+        branches = resolve_branches(definition["runs-on"], variables)
+        offender = _offending_branch(branches)
+        if offender is None:
+            return []
+        return [(str(definition["runs-on"]).strip(), offender, "")]
+
+    uses = definition.get("uses")
+    if isinstance(uses, str):
+        return _placements(uses, variables, called, notes)
+
+    # Neither key. GitHub would not schedule this job at all, so there is
+    # nothing to place and nothing to refuse.
+    return []
+
+
+def scan(
+    repo_root: Path,
+    slug: str,
+    variables: Variables,
+    called: CalledWorkflows | None = None,
+    notes: list[str] | None = None,
+) -> list[Finding]:
+    called = CalledWorkflows(repo_root) if called is None else called
+    notes = [] if notes is None else notes
     workflows = repo_root / ".github" / "workflows"
     if not workflows.is_dir():
         raise GateError(
@@ -461,15 +743,17 @@ def scan(repo_root: Path, slug: str, variables: Variables) -> list[Finding]:
         for job_id, definition in jobs.items():
             if not isinstance(definition, dict):
                 continue
-            if "runs-on" not in definition:
-                # a `uses:` job takes its placement from the CALLED workflow,
-                # which is judged in ITS OWN repository by this same gate. It
-                # is not silently exempt: see --report-reusable-calls.
+            if isinstance(definition.get("uses"), str):
+                notes.append(
+                    f"note: {path.name}::{job_id} delegates to {definition['uses']}"
+                )
+            offenders = _job_offenders(definition, variables, called, notes)
+            if not offenders:
                 continue
-            branches = resolve_branches(definition["runs-on"], variables)
-            offender = _offending_branch(branches)
-            if offender is None:
-                continue
+            # The annotation lives beside the CALLER's job, because that is the
+            # mapping in this repository. A `uses:` job's excuse belongs here
+            # too: the called workflow is shared, and an exemption written
+            # there would excuse every other caller of it as well.
             source = _job_source(text, str(job_id))
             if ANNOTATION.search(source):
                 continue
@@ -481,31 +765,19 @@ def scan(repo_root: Path, slug: str, variables: Variables) -> list[Finding]:
                     "on one comment line; continuation lines beneath it are "
                     "fine. THE GATE DID NOT RUN."
                 )
-            findings.append(
-                Finding(
-                    workflow=path.name,
-                    job=str(job_id),
-                    runs_on=str(definition["runs-on"]).strip(),
-                    resolved=",".join(offender.labels),
-                    why=offender.how,
-                    branch=offender.describe(),
+            for runs_on, offender, via in offenders:
+                findings.append(
+                    Finding(
+                        workflow=path.name,
+                        job=str(job_id),
+                        runs_on=runs_on,
+                        resolved=",".join(offender.labels),
+                        why=offender.how,
+                        branch=offender.describe(),
+                        via=via,
+                    )
                 )
-            )
     return findings
-
-
-def reusable_calls(repo_root: Path) -> list[tuple[str, str, str]]:
-    """`uses:` jobs, reported so a cross-repo hop is visible rather than absent."""
-    out: list[tuple[str, str, str]] = []
-    workflows = repo_root / ".github" / "workflows"
-    for path in sorted(workflows.glob("*.yml")) + sorted(workflows.glob("*.yaml")):
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(document, dict):
-            continue
-        for job_id, definition in (document.get("jobs") or {}).items():
-            if isinstance(definition, dict) and isinstance(definition.get("uses"), str):
-                out.append((path.name, str(job_id), definition["uses"]))
-    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -533,9 +805,22 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--called-workflows-json",
+        help=(
+            "path to a JSON object of `uses:` string -> workflow YAML text, "
+            "used INSTEAD of fetching called workflows. For tests only; CI "
+            "never passes it, because a fixture cannot go stale in the way "
+            "the live content can."
+        ),
+    )
+    parser.add_argument(
         "--report-reusable-calls",
         action="store_true",
-        help="also list `uses:` jobs, whose placement is decided elsewhere",
+        help=(
+            "also print each `uses:` job, the workflow it delegates to, and "
+            "what every called job's runs-on resolved to in THIS repository's "
+            "variable scopes"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -562,14 +847,23 @@ def main(argv: list[str] | None = None) -> int:
             if args.variables_json
             else Variables(args.repo)
         )
-        findings = scan(Path(args.repo_root), args.repo, variables)
+        called = CalledWorkflows(
+            Path(args.repo_root),
+            fixture=(
+                json.loads(Path(args.called_workflows_json).read_text(encoding="utf-8"))
+                if args.called_workflows_json
+                else None
+            ),
+        )
+        notes: list[str] = []
+        findings = scan(Path(args.repo_root), args.repo, variables, called, notes)
     except GateError as error:
         print(f"::error::{error}", file=sys.stderr)
         return 2
 
     if args.report_reusable_calls:
-        for workflow, job, uses in reusable_calls(Path(args.repo_root)):
-            print(f"note: {workflow}::{job} delegates placement to {uses}")
+        for note in notes:
+            print(note)
 
     if not findings:
         print(
@@ -585,8 +879,9 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
     for finding in findings:
+        via = f"\n    via:      {finding.via}" if finding.via else ""
         print(
-            f"  {finding.workflow}::{finding.job}\n"
+            f"  {finding.workflow}::{finding.job}{via}\n"
             f"    runs-on:  {finding.runs_on}\n"
             f"    arm:      {finding.branch}\n"
             f"    resolves: {finding.resolved}   [{finding.why}]",
@@ -596,7 +891,11 @@ def main(argv: list[str] | None = None) -> int:
         "\nMove the job to the fleet, or -- if the fleet genuinely cannot carry "
         "it -- record WHY beside the job:\n"
         "  # private-repo-hosted-ok: <reason> (OMN-nnnnn)\n"
-        "A pin with no reason is the failure this gate exists to refuse.",
+        "A pin with no reason is the failure this gate exists to refuse.\n"
+        "A finding carrying a `via:` line is a job that DELEGATES: the label is "
+        "chosen by the called workflow but resolved in THIS repository's "
+        "variable scopes, so the fix is usually this repository's routing "
+        "variable, not an edit to the shared workflow.",
         file=sys.stderr,
     )
     return 1

@@ -337,21 +337,6 @@ def test_a_repo_with_no_workflows_fails_closed(tmp_path: Path) -> None:
     assert _run(module, tmp_path, {}, tmp_path) == 2
 
 
-def test_a_uses_job_is_not_silently_exempt(tmp_path: Path) -> None:
-    """A `uses:` job has no runs-on of its own; it is REPORTED, not ignored."""
-    module = _module()
-    root = _tree(
-        tmp_path,
-        "call.yml",
-        "name: Call\non:\n  pull_request: {}\njobs:\n"
-        "  gate:\n    uses: OmniNode-ai/other/.github/workflows/x.yml@abc\n",
-    )
-    calls = module.reusable_calls(root)
-    assert calls == [
-        ("call.yml", "gate", "OmniNode-ai/other/.github/workflows/x.yml@abc")
-    ]
-
-
 @pytest.mark.parametrize(
     "label",
     ["ubuntu-latest", "ubuntu-24.04", "macos-15", "macos-latest", "windows-2025"],
@@ -509,3 +494,307 @@ def test_an_unreadable_organisation_scope_refuses_rather_than_defaulting(
     with pytest.raises(module.GateError) as error:
         module.scan(root, "OmniNode-ai/fixture", variables)
     assert "ACTIONS_VARIABLES_TOKEN" in str(error.value)
+
+
+# ---------------------------------------------------------------------------
+# OMN-18431: a `uses:` job is judged where the run is BILLED.
+#
+# The gap these close, measured on omnistream 2026-09-16: its REQUIRED
+# `kb-doc-gate` job calls a reusable defined in a PUBLIC repository, whose
+# `runs-on` resolves the trusted seam in OMNISTREAM's scope -- no repository
+# shadow, organisation value hosted -- so the job lands on a hosted label in a
+# private repository and does not start at all. Three seconds, no runner, no
+# steps, failing every run since 2026-09-02. The gate reported the repository
+# green, because it read the called workflow's placement in the repository that
+# DEFINES it, where hosted is the correct answer.
+#
+# Red-first: with only these tests applied and the resolution unimplemented,
+# the two FAIL cases below returned 0 and the unfetchable case returned 0 --
+# the gate skipped every `uses:` job. The PASS and public-caller cases already
+# passed, which is what makes them controls rather than restatements.
+# ---------------------------------------------------------------------------
+
+CALLED = "OmniNode-ai/omniclaude/.github/workflows/kb-doc-gate-reusable.yml@a78b103"
+
+REUSABLE_SEAM = (
+    "name: KB Doc Gate (reusable)\non:\n  workflow_call: {}\njobs:\n"
+    "  kb-doc-gate:\n    runs-on: >-\n      "
+    + SEAM_EXPRESSION.replace("\n", "\n      ")
+    + "\n    steps:\n      - run: true\n"
+)
+
+CALLER = (
+    "name: KB Doc Gate\non:\n  pull_request: {}\njobs:\n"
+    "  kb-doc-gate:\n    uses: " + CALLED + "\n"
+)
+
+
+def _run_delegating(
+    module,
+    root: Path,
+    variables: dict[str, str],
+    tmp_path: Path,
+    called: dict[str, str] | None,
+    visibility: str = "private",
+) -> int:
+    vars_file = tmp_path / "vars.json"
+    vars_file.write_text(json.dumps(variables), encoding="utf-8")
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/omnistream",
+        "--assume-visibility",
+        visibility,
+        "--variables-json",
+        str(vars_file),
+    ]
+    if called is not None:
+        called_file = tmp_path / "called.json"
+        called_file.write_text(json.dumps(called), encoding="utf-8")
+        argv += ["--called-workflows-json", str(called_file)]
+    return module.main(argv)
+
+
+def test_a_delegated_required_job_inheriting_a_hosted_org_value_fails(
+    tmp_path: Path,
+) -> None:
+    """omnistream's exact live shape: private caller, public reusable, no shadow.
+
+    The caller's own file contains no runner label at all, and the called
+    workflow is defined in a public repository where `ubuntu-latest` is the
+    correct placement. The run is nonetheless billed to the private caller and
+    the label is resolved in the private caller's scopes, so this is a
+    violation and must be reported against the caller's job.
+    """
+    module = _module()
+    root = _tree(tmp_path, "kb-doc-gate.yml", CALLER)
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": HOSTED,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {CALLED: REUSABLE_SEAM},
+        )
+        == 1
+    )
+
+
+def test_the_same_delegation_passes_once_the_caller_carries_a_fleet_shadow(
+    tmp_path: Path,
+) -> None:
+    """The fix is the CALLER's routing variable, not an edit to the reusable.
+
+    Same caller file, same called workflow, byte for byte. Only the repository
+    scope differs. If this failed too, the gate would be reporting the shared
+    workflow rather than the placement, and no repository could ever be green.
+    """
+    module = _module()
+    root = _tree(tmp_path, "kb-doc-gate.yml", CALLER)
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {CALLED: REUSABLE_SEAM},
+        )
+        == 0
+    )
+
+
+def test_a_public_caller_delegating_to_a_hosted_reusable_stays_correct(
+    tmp_path: Path,
+) -> None:
+    """Positive control. Hosted is the RIGHT answer in a public repository.
+
+    Without this, a change that simply failed every delegation would satisfy
+    the first test and look like a fix.
+    """
+    module = _module()
+    root = _tree(tmp_path, "kb-doc-gate.yml", CALLER)
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": HOSTED,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {CALLED: REUSABLE_SEAM},
+            visibility="public",
+        )
+        == 0
+    )
+
+
+def test_a_called_workflow_that_cannot_be_fetched_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """Unreadable is exit 2. A gate that cannot see the job has not judged it.
+
+    This is the failure mode the whole change exists to remove: skipping the
+    job reports the caller green, and the jobs that delegate are this estate's
+    REQUIRED checks.
+    """
+    module = _module()
+    root = _tree(tmp_path, "kb-doc-gate.yml", CALLER)
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {},
+        )
+        == 2
+    )
+
+
+def test_a_delegated_hosted_placement_is_excused_beside_the_CALLER_job(
+    tmp_path: Path,
+) -> None:
+    """The annotation goes where the repository can write it, and only there.
+
+    Writing it beside the called job would excuse every other caller of the
+    same shared workflow at once, which is the allowlist this gate refuses to
+    have.
+    """
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "kb-doc-gate.yml",
+        "name: KB Doc Gate\non:\n  pull_request: {}\njobs:\n"
+        "  kb-doc-gate:\n"
+        "    # private-repo-hosted-ok: fixture reason (OMN-18431)\n"
+        "    uses: " + CALLED + "\n",
+    )
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": HOSTED,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {CALLED: REUSABLE_SEAM},
+        )
+        == 0
+    )
+
+
+def test_a_nested_delegation_is_followed_to_the_job_that_actually_runs(
+    tmp_path: Path,
+) -> None:
+    """A reusable that calls a reusable still places the run somewhere.
+
+    Stopping at the first hop would restore the original blindness one level
+    down, where it is harder to see.
+    """
+    module = _module()
+    inner = "OmniNode-ai/omniclaude/.github/workflows/inner.yml@" + "b" * 40
+    outer = "OmniNode-ai/omniclaude/.github/workflows/outer.yml@" + "a" * 40
+    root = _tree(
+        tmp_path,
+        "call.yml",
+        "name: Call\non:\n  pull_request: {}\njobs:\n  gate:\n    uses: "
+        + outer
+        + "\n",
+    )
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {
+                outer: "name: Outer\non:\n  workflow_call: {}\njobs:\n"
+                "  hop:\n    uses: " + inner + "\n",
+                inner: "name: Inner\non:\n  workflow_call: {}\njobs:\n"
+                "  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+            },
+        )
+        == 1
+    )
+
+
+def test_an_unrecognised_uses_shape_is_refused_rather_than_skipped(
+    tmp_path: Path,
+) -> None:
+    """A shape the gate cannot parse is not a job it has cleared."""
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "call.yml",
+        "name: Call\non:\n  pull_request: {}\njobs:\n"
+        "  gate:\n    uses: docker://example/thing:1\n",
+    )
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            {},
+        )
+        == 2
+    )
+
+
+def test_an_annotation_on_the_CALLED_job_does_not_excuse_the_caller(
+    tmp_path: Path,
+) -> None:
+    """A same-repository delegation is read from the checkout, per CALLER.
+
+    The called workflow here carries its own annotation, so the DIRECT scan of
+    that file clears it -- which is how this fixture isolates the delegation:
+    the only remaining way to reach a finding is by judging the caller's job.
+    An exemption written once beside a shared job would otherwise excuse every
+    caller of it at a stroke, which is the global allowlist this gate refuses
+    to have.
+    """
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "call.yml",
+        "name: Call\non:\n  pull_request: {}\njobs:\n"
+        "  gate:\n    uses: ./.github/workflows/local.yml\n",
+    )
+    _tree(
+        tmp_path,
+        "local.yml",
+        "name: Local\non:\n  workflow_call: {}\njobs:\n"
+        "  # private-repo-hosted-ok: cleared for the direct scan (OMN-18431)\n"
+        "  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+    )
+    assert (
+        _run_delegating(
+            module,
+            root,
+            {
+                "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+            },
+            tmp_path,
+            None,
+        )
+        == 1
+    )
