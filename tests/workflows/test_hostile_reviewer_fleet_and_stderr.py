@@ -299,10 +299,25 @@ exit 0
 """
 
 
+# The shape `cli_review` actually emits: `ModelReviewFindingObserved` in
+# omniintelligence.review_pairing.models, whose fields are `rule_id`,
+# `file_path`, `line_start` and `normalized_message`. The first revision of the
+# renderer guessed title/message/file and produced a row of three empty cells on
+# the live run, which reads as a reviewer with nothing to say.
 BLOCKING_STUB = """#!/usr/bin/env bash
 echo "Model 'deepseek-r1' succeeded in 6.2s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "title": "unbounded retry", "message": "the loop has no ceiling", "file": "a/b.py", "line": 12}]}]}
+{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}]}
+JSON
+exit 2
+"""
+
+# A finding whose every mapped key is absent. The renderer must still say
+# something, because an empty row is indistinguishable from no finding.
+UNMAPPABLE_STUB = """#!/usr/bin/env bash
+echo "Model 'deepseek-r1' succeeded in 1.0s (1 finding(s))." >&2
+cat <<'JSON'
+{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}]}
 JSON
 exit 2
 """
@@ -328,15 +343,33 @@ def test_a_blocking_verdict_names_the_finding_that_blocked_it(
     assert payload["findings"], "the verdict artifact must carry the findings"
     finding = payload["findings"][0]
     assert finding["severity"] == "error"
-    assert finding["title"] == "unbounded retry"
+    assert finding["rule"] == "unbounded-retry"
+    assert finding["message"] == "the loop has no ceiling"
     assert finding["file"] == "a/b.py"
     assert finding["line"] == 12
+    assert finding["raw"]["line_end"] == 12, (
+        "the finding must also be kept verbatim, so an upstream field rename "
+        "costs a worse-looking row rather than a lost finding"
+    )
 
-    assert "unbounded retry" in result.stdout, (
+    assert "unbounded-retry" in result.stdout, (
         "the finding must be readable in the job log without downloading the "
         "artifact -- a count alone tells a reader nothing to act on"
     )
     assert "a/b.py:12" in result.stdout
+    assert "the loop has no ceiling" in result.stdout
+
+
+def test_an_unmappable_finding_is_printed_verbatim(tmp_path: Path) -> None:
+    """A renamed upstream field must not render as an empty finding."""
+    result, artifact, _ = _run_review_script(tmp_path, stub=UNMAPPABLE_STUB)
+
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert payload["findings"][0]["raw"]["some_future_field"] == "renamed upstream"
+    assert "some_future_field" in result.stdout, (
+        "with nothing mapped the job log must fall back to the verbatim "
+        "finding; an empty row reads as a reviewer with nothing to say"
+    )
 
 
 def test_the_comment_reads_findings_from_the_artifact_not_a_step_output() -> None:

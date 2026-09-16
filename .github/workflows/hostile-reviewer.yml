@@ -506,6 +506,15 @@ jobs:
           # a shell variable that was parsed for counts and then discarded. A
           # required gate whose refusal cannot be read is not reviewable, it is
           # only obstructive.
+          # Field names are ModelReviewFindingObserved's
+          # (omniintelligence.review_pairing.models): rule_id, file_path,
+          # line_start, normalized_message / raw_message. Guessing them wrongly
+          # is not hypothetical -- the first revision of this block guessed
+          # title/message/file and rendered a finding row of three empty cells,
+          # which reads as "the reviewer found nothing to say" rather than "this
+          # code read the wrong keys". So each value falls back through its
+          # alternatives, and `raw` keeps the finding verbatim: a renamed field
+          # upstream then costs a worse-looking row, never a lost finding.
           findings = []
           for result in json.loads(os.environ["REVIEW_JSON"]).get("results", []):
               if not result.get("success"):
@@ -513,12 +522,18 @@ jobs:
               for finding in result.get("findings", []):
                   findings.append(
                       {
-                          "severity": finding.get("severity", "unknown"),
-                          "title": finding.get("title", ""),
-                          "message": finding.get("message", ""),
-                          "file": finding.get("file", ""),
-                          "line": finding.get("line"),
+                          "severity": finding.get("severity") or "unknown",
+                          "rule": finding.get("rule_id") or finding.get("title") or "",
+                          "message": (
+                              finding.get("normalized_message")
+                              or finding.get("raw_message")
+                              or finding.get("message")
+                              or ""
+                          ),
+                          "file": finding.get("file_path") or finding.get("file") or "",
+                          "line": finding.get("line_start") or finding.get("line"),
                           "model": result.get("model", ""),
+                          "raw": finding,
                       }
                   )
 
@@ -550,9 +565,13 @@ jobs:
               location = finding.get("file") or "(no file)"
               if finding.get("line"):
                   location = f"{location}:{finding['line']}"
-              print(f"[{finding.get('severity')}] {location} — {finding.get('title')}")
+              print(f"[{finding.get('severity')}] {location} — {finding.get('rule')}")
               if finding.get("message"):
                   print(f"    {finding['message']}")
+              elif not finding.get("rule"):
+                  # Nothing mapped. Print the finding verbatim rather than an
+                  # empty line that reads as an empty finding.
+                  print(f"    {json.dumps(finding.get('raw', {}), sort_keys=True)}")
           if not payload.get("findings"):
               print("(none)")
           PY
@@ -666,8 +685,15 @@ jobs:
             if (findings.length > 0) {
               const rows = findings.map(f => {
                 const where = f.line ? `${f.file}:${f.line}` : (f.file || '_(no file)_');
-                const text = (f.message || '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
-                return `| \`${f.severity}\` | ${where} | ${f.title || ''} ${text} |`;
+                let text = f.message || '';
+                if (!text && !f.rule) {
+                  // Nothing mapped: show the finding verbatim rather than an
+                  // empty row, which reads as a reviewer with nothing to say.
+                  text = JSON.stringify(f.raw || {});
+                }
+                text = text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+                const rule = f.rule ? `**${f.rule}** ` : '';
+                return `| \`${f.severity}\` | ${where} | ${rule}${text} |`;
               });
               findingsBlock = [
                 '',
