@@ -798,3 +798,65 @@ def test_an_annotation_on_the_CALLED_job_does_not_excuse_the_caller(
         )
         == 1
     )
+
+
+# ---------------------------------------------------------------------------
+# OMN-18431: the fixture flags are a TEST boundary, and it is now enforced.
+#
+# Raised by the adversarial reviewer against `CalledWorkflows`: the class takes
+# a fixture from a file and serves it in place of a live fetch. The docstrings
+# said "CI never passes it", which is a claim, not a control. A workflow that
+# added one would get a gate reporting on a file somebody wrote rather than on
+# the live estate, and it would report SUCCESS -- the same false-green shape
+# this whole gate exists to remove, one level up.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [
+        ("--variables-json", "vars.json"),
+        ("--called-workflows-json", "called.json"),
+        ("--assume-visibility", "private"),
+    ],
+)
+def test_a_fixture_flag_is_refused_inside_github_actions(
+    flag: str,
+    value: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Inside Actions a fixture cannot stand in for a live read.
+
+    The assertion is on the REASON, not only on exit 2. Without the refusal
+    this same invocation ALSO exits 2 -- because the live variable read then
+    fails against a fixture repository -- so an exit-code-only test passes on
+    the unguarded script and proves nothing. That was measured, not assumed.
+    """
+    module = _module()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    root = _tree(tmp_path, "ci.yml", _seam_job())
+    assert (
+        module.main(
+            ["--repo-root", str(root), "--repo", "OmniNode-ai/fixture", flag, value]
+        )
+        == 2
+    )
+    message = capsys.readouterr().err
+    assert flag in message
+    assert "replaces a live read with a file" in message
+
+
+def test_the_same_flags_still_work_outside_github_actions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Positive control. The refusal is scoped, not a removal of the flags.
+
+    Without this, deleting the flags entirely would satisfy the refusals above
+    and look like a fix, while taking every test in this file with it.
+    """
+    module = _module()
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    root = _tree(tmp_path, "ci.yml", _seam_job())
+    assert _run(module, root, {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}, tmp_path) == 0

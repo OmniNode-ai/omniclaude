@@ -824,6 +824,36 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # The two fixture flags substitute a FILE for a live read -- the variable
+    # scopes, and the called workflows. That is exactly what their help text
+    # says, and until now "CI never passes it" was a claim in a docstring. A
+    # claim in a docstring is not a control: anyone who added one to a workflow
+    # would get a gate that reports on a file somebody wrote instead of on the
+    # live estate, and it would pass. So the boundary is enforced where it can
+    # be checked. Inside Actions the flags are REFUSED, which is the same
+    # fail-closed posture every other unresolvable input in this file takes.
+    # Outside Actions they work unchanged, which is what the tests and a local
+    # credential-free run need.
+    fixtures = [
+        name
+        for name, value in (
+            ("--variables-json", args.variables_json),
+            ("--called-workflows-json", args.called_workflows_json),
+            ("--assume-visibility", args.assume_visibility),
+        )
+        if value
+    ]
+    if fixtures and os.environ.get("GITHUB_ACTIONS") == "true":
+        print(
+            f"::error::{', '.join(fixtures)} replaces a live read with a file "
+            "and is for tests and local runs only. Inside GitHub Actions the "
+            "gate must resolve visibility, variables and called workflows "
+            "live, or it is reporting on whatever the file says rather than on "
+            "this repository. THE GATE DID NOT RUN.",
+            file=sys.stderr,
+        )
+        return 2
+
     if not args.repo:
         print(
             "::error::--repo (or $GITHUB_REPOSITORY) is required: visibility is "
