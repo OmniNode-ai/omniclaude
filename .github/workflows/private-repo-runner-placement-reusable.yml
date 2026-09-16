@@ -43,15 +43,16 @@ on:
         default: true
         type: boolean
     secrets:
-      ORG_VARIABLES_TOKEN:
+      ACTIONS_VARIABLES_TOKEN:
         description: >-
-          A credential that can read ORGANISATION Actions variables. The job
-          token cannot: it reads this repository and nothing above it, and the
-          organisation read returns HTTP 403. Optional, because a repository
-          whose jobs pin literals or whose variables are all shadowed locally
-          never needs the organisation scope -- the gate reads it lazily and
-          refuses by name only when a value it actually needs is unresolvable
-          without it. Pass `secrets.CROSS_REPO_PAT`, an organisation secret
+          A credential that can read Actions VARIABLES, at repository and
+          organisation scope. The Actions job token cannot read either: that
+          needs the Variables permission, which a workflow cannot grant itself
+          through `permissions:`, and both scopes return HTTP 403 without one.
+          Optional, because the gate reads every scope lazily and a repository
+          whose jobs pin their labels as literals never consults a variable at
+          all -- it refuses by name only when a value it actually needs is
+          unresolvable. Pass `secrets.CROSS_REPO_PAT`, an organisation secret
           visible to every repository.
         required: false
 
@@ -84,19 +85,21 @@ jobs:
         run: pip install PyYAML==6.0.2
 
       # GH_TOKEN is the job token: it reads this repository`s own
-      # visibility and its Actions variables. It CANNOT read organisation
-      # variables -- that returns HTTP 403 -- so the organisation scope is read
-      # under ORG_VARIABLES_TOKEN when a caller supplies one, and lazily: a
-      # repository that never needs an organisation value never needs the
+      # visibility, which is all it can read. It CANNOT read Actions variables
+      # at EITHER scope -- both return HTTP 403, measured on seven live runs on
+      # 2026-09-16 -- so those reads use ACTIONS_VARIABLES_TOKEN when a caller
+      # supplies one, and happen lazily: a repository whose jobs pin their
+      # labels as literals never consults a variable and never needs the
       # secret. A failure to read something the verdict depends on is exit 2,
       # never a pass -- see the script`s GateError paths.
       - name: Run the placement gate
         env:
           GH_TOKEN: ${{ github.token }}
-          # Used ONLY for the organisation-variable read. Empty when the caller
-          # passes nothing, in which case that read is attempted with the job
-          # token and the gate refuses by name if it needed the answer.
-          GH_TOKEN_ORG: ${{ secrets.ORG_VARIABLES_TOKEN }}
+          # Used ONLY for Actions-variable reads, at both scopes. Empty when
+          # the caller passes nothing, in which case those reads are attempted
+          # with the job token and the gate refuses by name if it needed an
+          # answer from one.
+          GH_TOKEN_VARIABLES: ${{ secrets.ACTIONS_VARIABLES_TOKEN }}
         run: |
           set -euo pipefail
           args=(--repo-root . --repo "${GITHUB_REPOSITORY}")

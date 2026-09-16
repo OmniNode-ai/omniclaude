@@ -153,11 +153,11 @@ def _gh(
     """Run `gh`, optionally under a different token than the job token.
 
     The job token can read its own repository and nothing above it. Reading
-    ORGANISATION variables needs a credential with organisation scope, so that
-    read is made under `GH_TOKEN_ORG` when a caller supplies one and under the
-    job token otherwise -- which is the case that 403s, and is handled by
-    failing closed at the point a value is actually needed rather than at
-    startup.
+    Actions VARIABLES, at either scope, needs the Variables permission, which a
+    workflow cannot grant itself. That read is therefore made under
+    `GH_TOKEN_VARIABLES` when a caller supplies one and under the job token
+    otherwise -- which is the case that 403s, and is handled by failing closed
+    at the point a value is actually needed rather than at startup.
     """
     env = os.environ.copy()
     token = os.environ.get(env_name)
@@ -193,78 +193,84 @@ class Variables:
     A repo-scoped shadow overrides the organisation value, which is the whole
     trap in rule 14: flipping the org value while a shadow still holds the old
     one drains nothing, and the org readback looks correct. So both scopes are
-    consulted -- but the organisation scope is read with a credential the job
-    token does not have, and demanding it up front made this gate unrunnable in
-    every repository whose jobs never name a variable at all.
+    consulted -- but NEITHER is readable with the Actions job token. Reading
+    Actions variables needs the Variables permission, which a workflow cannot
+    grant itself through the `permissions:` key, and both scopes return HTTP
+    403 without a supplied credential. Measured on seven live runs, 2026-09-16.
 
-    The resolution is therefore deferred to the point a NAME is looked up. A
-    name present at repository scope is answered without ever touching the
-    organisation. A name absent there, in a repository where the organisation
-    read failed, is a REFUSAL naming the token -- never a silent fall through
-    to the expression own literal default, which is how a repository carrying
-    no shadow at all would come back green while inheriting a hosted
-    organisation value.
+    Demanding that credential up front made the gate unrunnable in every
+    repository, including the majority whose jobs pin labels as literals and
+    never consult a variable at all. So every read is deferred to the point a
+    NAME is looked up, and a repository whose placement is decided entirely by
+    literals needs no credential.
+
+    When a name IS looked up and the scope holding the answer cannot be read,
+    that is a REFUSAL naming the credential -- never a silent fall through to
+    the expression own literal default. Those are different facts: "unset"
+    means the default applies, "unreadable" means nobody knows whether it does,
+    and the organisation seam currently holds a hosted value, so falling
+    through would turn the exact violation this gate exists to catch into a
+    pass.
     """
 
     def __init__(self, slug: str) -> None:
+        self._slug = slug
         self._org_name = slug.split("/", 1)[0]
-        self._repo = self._read(["--repo", slug], slug)
-        self._org: dict[str, str] | None = None
-        self._org_error: str | None = None
-
-    @staticmethod
-    def _read(scope: list[str], label: str) -> dict[str, str]:
-        result = _gh(
-            ["variable", "list", *scope, "--json", "name,value"],
-            env_name="GH_TOKEN_ORG" if scope[0] == "--org" else "GH_TOKEN",
-        )
-        if result.returncode != 0:
-            raise GateError(
-                f"could not list variables for scope {label} "
-                f"({result.stderr.strip()[:200]}). Placement cannot be "
-                "resolved. THE GATE DID NOT RUN."
-            )
-        return {
-            item["name"]: item["value"] for item in json.loads(result.stdout or "[]")
-        }
-
-    def _org_scope(self) -> dict[str, str] | None:
-        if self._org is None and self._org_error is None:
-            try:
-                self._org = self._read(["--org", self._org_name], self._org_name)
-            except GateError as error:
-                self._org_error = str(error)
-        return self._org
+        self._scopes: dict[str, dict[str, str] | None] = {}
+        self._errors: dict[str, str] = {}
 
     @classmethod
     def from_fixture(cls, values: dict[str, str]) -> Variables:
         """A fully-resolved map, for TESTS only. CI never takes this path."""
-        instance = cls.__new__(cls)
-        instance._org_name = ""
-        instance._repo = dict(values)
-        instance._org = {}
-        instance._org_error = None
+        instance = cls("fixture/fixture")
+        instance._scopes = {"repo": dict(values), "org": {}}
         return instance
 
-    def get(self, name: str) -> str | None:
-        """The value this repository resolves `name` to, or None if unset.
+    @staticmethod
+    def _read(flag: str, target: str) -> dict[str, str]:
+        result = _gh(
+            ["variable", "list", flag, target, "--json", "name,value"],
+            env_name="GH_TOKEN_VARIABLES",
+        )
+        if result.returncode != 0:
+            raise GateError(result.stderr.strip()[:200])
+        return {
+            item["name"]: item["value"] for item in json.loads(result.stdout or "[]")
+        }
 
-        Raises rather than answering None when the organisation scope could not
-        be read, because "unset here" and "unreadable above here" are different
-        facts and only one of them means the expression own default applies.
-        """
-        if name in self._repo:
-            return self._repo[name]
-        org = self._org_scope()
-        if org is None:
-            raise GateError(
-                f"{name} is not set on this repository and the organisation "
-                f"scope could not be read, so whether it is set above this "
-                f"repository is unknown -- and an organisation value overrides "
-                f"the expression own default. Pass an organisation-readable "
-                f"credential as the ORG_VARIABLES_TOKEN secret. Underlying "
-                f"read: {self._org_error} THE GATE DID NOT RUN."
+    def _scope(self, which: str) -> dict[str, str] | None:
+        if which not in self._scopes and which not in self._errors:
+            flag, target = (
+                ("--repo", self._slug) if which == "repo" else ("--org", self._org_name)
             )
+            try:
+                self._scopes[which] = self._read(flag, target)
+            except GateError as error:
+                self._errors[which] = str(error)
+        return self._scopes.get(which)
+
+    def _refuse(self, name: str, which: str) -> GateError:
+        where = "this repository" if which == "repo" else "the organisation"
+        return GateError(
+            f"{name} is needed to resolve a runs-on expression and {where} "
+            f"variable scope could not be read ({self._errors[which]}). An "
+            "Actions job token cannot read Actions variables at either scope; "
+            "pass a credential that can as the ACTIONS_VARIABLES_TOKEN secret. "
+            "Guessing the expression own default instead would report a "
+            "repository inheriting a hosted organisation value as green. "
+            "THE GATE DID NOT RUN."
+        )
+
+    def get(self, name: str) -> str | None:
+        """The value this repository resolves `name` to, or None if unset."""
+        repo = self._scope("repo")
+        if repo is None:
+            raise self._refuse(name, "repo")
+        if name in repo:
+            return repo[name]
+        org = self._scope("org")
+        if org is None:
+            raise self._refuse(name, "org")
         return org.get(name)
 
 
