@@ -74,6 +74,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import hook_emit_health as health  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 
 logger = logging.getLogger("hook_emit_drainer")
@@ -413,11 +414,48 @@ def run(
             quarantined,
         )
     logger.info("draining %s (pid %s)", journal_dir, os.getpid())
+
+    # OMN-18471 AC4. The alert that is supposed to notice this process
+    # stopping used to read emit_via_daemon's socket fail-counters, which
+    # have been frozen since June and said the same thing whether this
+    # drainer was healthy or dead. It now reads the two facts only this
+    # loop can state: that a cycle completed, and when a publish was last
+    # CONFIRMED. Written every cycle, not only on success -- a file that
+    # appears only when things work cannot tell "it failed" from "nobody
+    # ran it", which is the whole job.
+    status_path = (
+        journal_dir.parent / health.STATUS_FILENAME
+        if journal_dir != health.default_journal_dir()
+        else health.default_status_path()
+    )
+    last_publish_at: float | None = None
+    published_total = 0
+
+    def _record_cycle() -> None:
+        try:
+            health.write_status(
+                status_path,
+                health.ModelDrainerStatus(
+                    last_cycle_at=time.time(),
+                    last_publish_at=last_publish_at,
+                    published_total=published_total,
+                    pid=os.getpid(),
+                ),
+            )
+        except OSError as exc:  # pragma: no cover - reported, never fatal
+            # A drainer that cannot write its own health file must keep
+            # draining: losing the signal is strictly better than losing
+            # the telemetry it is reporting on.
+            logger.warning("could not write drainer status %s: %s", status_path, exc)
+
     try:
         while True:
             published, failed = drain_once(journal_dir, emitter)
             if published:
                 logger.info("published %d event(s)", published)
+                published_total += published
+                last_publish_at = time.time()
+            _record_cycle()
             if once:
                 return 0
             if _shutdown:

@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -50,6 +51,24 @@ _BUS_MIRROR_SCRIPTS = (
 )
 
 _RESOLVER_BASENAME = "hook_edge_lane.sh"
+
+# OMN-18471 AC2. Every place a hook script names an event class as a literal:
+# the ``--event-type`` handed to hook_emit_append.py (the journal path), and
+# the first argument of emit_to_journal / emit_via_daemon. A class emitted
+# here and absent from the contract's ``governed_event_classes`` is the defect
+# this pattern exists to refuse -- eight of them sat on this edge undelivered
+# for three months because no gate compared the two lists.
+#
+# Deliberately literal-only. ``post_tool_use_team_observability.sh`` passes a
+# VARIABLE (``emit_via_daemon "$event_type"``), which this cannot resolve and
+# does not pretend to: a regex that guessed at a shell variable's runtime
+# value would both report classes that are never emitted and miss ones that
+# are. That file is the single known gap, recorded here rather than left to be
+# rediscovered.
+_EVENT_CLASS_LITERAL_RE = re.compile(
+    r"(?:--event-type|\bemit_to_journal|\bemit_via_daemon)\s+"
+    r'"([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)"'
+)
 
 # OMN-17224 moved the publish off the *_bus_mirror.sh path and into a singleton
 # drainer that launchd starts with {OMNI_HOME, ONEX_STATE_DIR, HOME} and
@@ -143,6 +162,47 @@ def _check_static(repo_root: Path) -> list[str]:
                     f"contract does not declare. A hook cannot join the edge "
                     "without joining the lane policy."
                 )
+
+    # --- every class emitted on the edge is declared (OMN-18471 AC2) -------
+    # The topic check above governs TOPICS. It could not have caught the
+    # OMN-18471 defect, where eight CLASSES had call sites on this edge and no
+    # delivery path: their topics were either already declared or not declared
+    # either, and in neither case did anything compare the emitted class list
+    # against the contract.
+    declared_classes = set(contract.governed_event_classes)
+    emitted_classes: dict[str, str] = {}
+    for path in sorted(scripts.glob("*.sh")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:  # noqa: PERF203 - reported, not swallowed
+            violations.append(f"{path}: unreadable ({exc})")
+            continue
+        for lineno, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            for match in _EVENT_CLASS_LITERAL_RE.finditer(stripped):
+                emitted_classes.setdefault(match.group(1), f"{path}:{lineno}")
+
+    for event_class, where in sorted(emitted_classes.items()):
+        if event_class not in declared_classes:
+            violations.append(
+                f"{where}: emits event class {event_class!r}, which the "
+                f"hook-edge lane contract does not declare in "
+                f"governed_event_classes. A class on this edge that nothing "
+                f"declares is a class nothing can notice going undelivered "
+                f"(OMN-18471)."
+            )
+
+    # A declared class that nothing emits is stale policy, not a hazard, but
+    # it is still a lie about what this edge produces -- and a reader
+    # provisioning broker permissions from this list would over-grant.
+    for event_class in sorted(declared_classes - set(emitted_classes)):
+        violations.append(
+            f"{contract_path}: declares event class {event_class!r} in "
+            f"governed_event_classes, but no hook script under {scripts} "
+            f"emits it as a literal. Remove it, or name the emitter."
+        )
 
     # --- the resolver is applied, and applied last -------------------------
     for name in _BUS_MIRROR_SCRIPTS:

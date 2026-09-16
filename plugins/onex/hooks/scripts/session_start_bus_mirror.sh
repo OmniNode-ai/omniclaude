@@ -171,4 +171,32 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
     disown 2>/dev/null || true
 fi
 
+# --- hook-emit delivery liveness (OMN-18471 AC4) ---------------------------
+# Once per session, ask the path that actually delivers whether it is
+# delivering: journal backlog depth, and the drainer's last confirmed publish.
+#
+# This replaces the milestone alert that used to fire out of emit_via_daemon
+# in common.sh. That one read the ~/.claude/emit.sock fail-counters, which
+# have been frozen since 2026-06-08 and reported the same numbers whether hook
+# capture was healthy or dead -- during the 22-hour drainer outage of
+# 2026-09-15/16 they produced no signal at all.
+#
+# Session start, not per tool call: the drainer cannot report its own death,
+# so the check has to run in a different process, and OMN-17224 is the standing
+# reason not to fork a Python interpreter on the per-tool-call path. Backgrounded
+# and fail-open; slack_notify is rate-limited to one message per category per
+# five minutes.
+_EMIT_HEALTH_PY="${HOOKS_LIB}/hook_emit_health.py"
+if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_HEALTH_PY" ]]; then
+    (
+        _health_detail="$("$PYTHON_CMD" "$_EMIT_HEALTH_PY" --message 2>>"$LOG_FILE")"
+        _health_rc=$?
+        if (( _health_rc == 1 )) && [[ -n "$_health_detail" ]]; then
+            slack_notify "hook_emit_delivery" \
+                "[omniclaude][${_SLACK_HOST}] hook capture is not delivering: ${_health_detail}"
+        fi
+    ) >>"$LOG_FILE" 2>&1 &
+    disown 2>/dev/null || true
+fi
+
 exit 0
