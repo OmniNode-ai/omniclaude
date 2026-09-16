@@ -7,9 +7,8 @@ Asserts that ``.github/workflows/hostile-reviewer.yml`` is wired correctly:
 - Triggers on the expected ``pull_request`` event types.
 - Runs on the ``omnibase-ci`` self-hosted runner that exposes the local
   DeepSeek-R1 endpoint.
-- Invokes ``omniintelligence.review_pairing.cli_review`` with at least one
-  ``--model`` flag (no model is hardcoded by this test — only that the entry
-  point and the model arg are present).
+- Invokes ``omniintelligence.review_pairing.cli_review`` with at least TWO
+  ``--model`` flags, naming both fleet-standard keys (OMN-18473).
 - Defines a ``hostile-review-gate`` job that depends on ``hostile-review``
   and exits non-zero when the review job reports ``failure``.
 - Posts a PR summary comment via ``actions/github-script``.
@@ -154,10 +153,27 @@ def test_same_repo_dev_prs_do_not_use_public_runner_branch(
 def test_review_step_invokes_cli_review_with_model(
     workflow: dict[object, object],
 ) -> None:
-    """At least one step must invoke ``cli_review`` with ``--model``.
+    """A step must invoke ``cli_review`` with AT LEAST TWO ``--model`` flags.
 
-    Does not pin a specific model — model selection is a tunable per OMN-8524
-    (currently ``deepseek-r1`` only; ``codex`` blocked on non-interactive auth).
+    OMN-18473 pins the model COUNT, and both keys by name, mirroring
+    ``omnibase_infra`` ``tests/ci/test_hostile_reviewer_ci_gate.py``
+    (``test_hostile_review_job_uses_live_local_models``), which asserts its own
+    two keys the same way.
+
+    Why the count is load-bearing rather than a style preference: cli_review
+    returns 0 only when >= 2 models succeed and 2 ("DEGRADED -- a minimum of 2
+    models is required for a full pass") when exactly one does. From 2026-04-11
+    (71d816a99) to 2026-09-16 this workflow passed exactly one ``--model``, so
+    exit 0 was unreachable and every verdict it produced was DEGRADED by
+    construction. Nothing caught that, because the assertion this replaces
+    accepted "at least one ``--model``".
+
+    Both keys are named because the pair is a deliberate choice, not an
+    arbitrary one. ``deepseek-r1`` and ``qwen3-review`` are two registry keys
+    for ONE backend (same endpoint, same ``api_model_id``, OMN-16481), so
+    pairing THOSE two would satisfy a naive count while passing one backend
+    twice under two spellings -- exactly the defect a count-only assertion
+    cannot see.
     """
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
@@ -177,9 +193,20 @@ def test_review_step_invokes_cli_review_with_model(
     assert "omniintelligence.review_pairing.cli_review" in combined, (
         "review job must invoke omniintelligence.review_pairing.cli_review"
     )
-    assert "--model" in combined, (
-        "review job must pass at least one --model flag to cli_review"
+    model_flag_count = combined.count("--model ")
+    assert model_flag_count >= 2, (
+        "review job must pass at least TWO --model flags to cli_review "
+        f"(found {model_flag_count}) -- cli_review returns 0 only when >= 2 "
+        "models succeed, so a single-model invocation is DEGRADED by "
+        "construction on every run (OMN-18473)"
     )
+    for model_key in ("--model deepseek-r1", "--model qwen3-review-b"):
+        assert model_key in combined, (
+            f"review job must pass {model_key} -- both fleet-standard keys are "
+            "named because deepseek-r1 and qwen3-review are two keys for one "
+            "backend (OMN-16481), so a count-only assertion would accept a "
+            "pair that reviews with a single model twice"
+        )
     assert "--pr" in combined and "--repo" in combined, (
         "review job must pass --pr and --repo to cli_review"
     )
@@ -285,20 +312,27 @@ def test_review_exit_captured_from_command_not_if_statement(
     )
 
 
-def test_single_model_degraded_exit_code_is_not_treated_as_infra_error(
+def test_degraded_exit_code_is_not_treated_as_infra_error(
     workflow: dict[object, object],
 ) -> None:
     """OMN-18409 follow-up: cli_review's exit-code contract is 0 only when
     at least 2 models succeeded, 2 for exactly one model succeeding
     (DEGRADED -- a real, valid verdict, not a failure), and 1 when every
-    model failed. This step passes only a single ``--model``, so a
-    successful run can NEVER return 0 -- it always returns 2.
+    model failed.
+
+    OMN-18473 amended what exit 2 MEANS here without changing that it is
+    accepted. The step now passes two ``--model`` flags, so a healthy run
+    returns 0 and exit 2 is the exception: one of the two models failed
+    mid-review while the other returned a real verdict on a single opinion.
+    That must still be accepted rather than retried into a false infra_error.
+    Before OMN-18473 the step passed one model, exit 0 was unreachable, and
+    exit 2 was the normal case rather than a degradation worth noticing.
 
     Fixing the REVIEW_EXIT capture bug in isolation, without widening the
-    retry/infra_error checks to accept exit 2, would turn every ordinary
-    single-model DEGRADED success into a false infra_error -- strictly
-    worse than the bug it replaces, since the old (buggy) post-fi ``$?``
-    read accidentally treated any nonzero-but-valid-JSON exit as success.
+    retry/infra_error checks to accept exit 2, would turn a genuine
+    partial-failure verdict into a false infra_error -- strictly worse than
+    the bug it replaces, since the old (buggy) post-fi ``$?`` read
+    accidentally treated any nonzero-but-valid-JSON exit as success.
 
     Reproduced live 2026-09-15 against omniclaude PR #2181's own diff:
     cli_review --model deepseek-r1 succeeded (0 findings) and exited 2.
@@ -306,18 +340,18 @@ def test_single_model_degraded_exit_code_is_not_treated_as_infra_error(
     run_text = _review_step_run_text(workflow)
 
     assert 'REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2' in run_text, (
-        "the retry loop's success check must accept exit 2 (single-model "
-        "DEGRADED) as well as exit 0 -- this step only ever passes one "
-        "--model, so exit 0 can never occur on a genuine success"
+        "the retry loop's success check must accept exit 2 (DEGRADED -- one "
+        "of the two models returned) as well as exit 0, because a verdict on "
+        "a single opinion is still a real verdict"
     )
 
     condition_line = next(
         line for line in run_text.splitlines() if '"$REVIEW_EXIT" -ne 0' in line
     )
     assert '"$REVIEW_EXIT" -ne 2' in condition_line, (
-        "the infra_error fail-closed check must exempt exit 2 -- otherwise "
-        "a real single-model DEGRADED success (the normal case for this "
-        "single-model workflow) reports infra_error after two attempts"
+        "the infra_error fail-closed check must exempt exit 2 -- otherwise a "
+        "real DEGRADED success, where one of the two models returned "
+        "findings, reports infra_error after two attempts"
     )
 
 
