@@ -36,6 +36,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final
@@ -59,6 +60,20 @@ _GATE_BIT_NAME: Final[str] = "LINEAR_DONE_VERIFY"
 _GATE_BIT: Final[int] = 0x80000000000
 
 _TIMEOUT_S = 120
+
+
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    scrubbed = dict(env)
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ):
+        scrubbed.pop(key, None)
+    return scrubbed
 
 
 def _load_guard() -> ModuleType:
@@ -310,6 +325,7 @@ def _prd_at(checkout: Path, revision: str) -> str | None:
         cwd=checkout,
         capture_output=True,
         text=True,
+        env=scrub_git_location_env(os.environ),
         timeout=_TIMEOUT_S,
         check=False,
     )
