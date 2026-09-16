@@ -55,10 +55,9 @@ jobs:
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
-         (github.event.pull_request.head.repo.full_name != github.repository ||
-          github.event.pull_request.base.ref == 'dev'))
+         github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON('["self-hosted","omnibase-ci"]')
       }}
     timeout-minutes: 20
     env:
@@ -176,24 +175,55 @@ jobs:
           # operator wants a model-outage escape it needs to be a
           # MEASURED_NOT_ENFORCED exemption backed by a measured outage rate
           # and a ticket, not a self-reported exit 0 inside this step.
+          # 2026-09-15 (OMN-18409): `REVIEW_EXIT=$?` must be read directly
+          # after the command substitution, never after a `fi` -- an `if
+          # COND; then BODY; fi` with no `else` itself exits 0 when COND is
+          # false, so reading `$?` after the closing `fi` silently captures
+          # the if-statement's own status (always 0) instead of the failed
+          # command's real exit code. That bug zeroed out REVIEW_EXIT on
+          # every cli_review failure, so the infra_error fail-closed check
+          # below never fired and the script fell through to json.loads() an
+          # empty $REVIEW_JSON (omniclaude#2180, run 35017674790).
+          # set +e/-e brackets the substitution so `set -euo pipefail` above
+          # does not abort the script on a genuine cli_review failure.
+          #
+          # OMN-18409 follow-up: cli_review's own exit-code contract is 0
+          # only when >=2 models succeeded, 2 for exactly one model
+          # succeeding (DEGRADED -- a real, valid verdict), 1 when every
+          # model failed. This step only ever passes a single --model, so a
+          # successful run can NEVER return 0 -- it always returns 2. Before
+          # this fix that was masked by the very REVIEW_EXIT=$?-after-fi bug
+          # this commit fixes (a nonzero-but-valid-JSON exit was silently
+          # read as 0 and the JSON parsed anyway); fixing the exit-code
+          # capture alone, without widening this check, would have turned
+          # every ordinary single-model DEGRADED success into a false
+          # infra_error. Treat exit 0 (full pass) and exit 2 (single-model
+          # DEGRADED, still a real verdict) as "cli_review produced output";
+          # only exit 1 (every model failed / crashed) is retried.
           REVIEW_EXIT=1
           for attempt in 1 2; do
-            if REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
+            set +e
+            REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
               --model deepseek-r1 \
-              2>/dev/null); then
-              REVIEW_EXIT=0
+              2>/dev/null)
+            REVIEW_EXIT=$?
+            set -e
+            if [ "$REVIEW_EXIT" -eq 0 ] || [ "$REVIEW_EXIT" -eq 2 ]; then
               break
             fi
-            REVIEW_EXIT=$?
             echo "::warning::cli_review attempt ${attempt}/2 failed (exit ${REVIEW_EXIT})"
             if [ "$attempt" -eq 1 ]; then
               sleep 15
             fi
           done
 
-          if [ "$REVIEW_EXIT" -ne 0 ]; then
+          # Exit 0 (full pass) and exit 2 (single-model DEGRADED) both mean
+          # cli_review produced a real verdict document -- only exit 1
+          # (every model failed / crashed) after both attempts is a genuine
+          # infra_error.
+          if [ "$REVIEW_EXIT" -ne 0 ] && [ "$REVIEW_EXIT" -ne 2 ]; then
             {
               echo "verdict=infra_error"
               echo "blocking_count=0"
@@ -213,6 +243,7 @@ jobs:
           data = json.loads(os.environ["REVIEW_JSON"])
           models_succeeded = data.get("models_succeeded", [])
           total_findings = data.get("total_findings", 0)
+          skipped_reason = data.get("skipped_reason")
 
           # Count blocking findings (critical or error severity)
           blocking = 0
@@ -223,7 +254,16 @@ jobs:
                   if f.get("severity") in ("critical", "error"):
                       blocking += 1
 
-          if not models_succeeded:
+          # OMN-18409: an empty PR diff (e.g. a merge/ancestry commit whose
+          # tree is identical to the base branch) is a real, reviewable
+          # "nothing to review" outcome that cli_review reports via
+          # skipped_reason. It must resolve to a genuine passed verdict, not
+          # fall through to degraded -- degraded's framing ("all reviewer
+          # models failed or were unavailable") misdescribes a diff that was
+          # never sent to any model at all.
+          if skipped_reason == "empty_diff":
+              verdict = "passed"
+          elif not models_succeeded:
               verdict = "degraded"
           elif blocking > 0:
               verdict = "blocked"
