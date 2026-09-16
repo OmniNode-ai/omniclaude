@@ -301,7 +301,7 @@ exit 1
 
 # A placeholder chosen so each ENCODING of it differs from the raw spelling --
 # it carries a quote, a slash and a plus, and no whitespace (a real signing
-# value has none, and a token-scoped redaction cannot match across a space). A
+# value has none, and line-scoped redaction cannot match across a space). A
 # value made only of unreserved characters would pass an encoding test that
 # tested nothing.
 ENCODED_VALUE = 'pl@ceholder/"not+real"0123456789'
@@ -475,10 +475,10 @@ def test_the_signing_value_is_redacted_before_it_is_logged(tmp_path: Path) -> No
     )
 
 
-def test_secret_redaction_does_not_mutate_partial_token_matches(
+def test_secret_redaction_replaces_lines_with_partial_token_matches(
     tmp_path: Path,
 ) -> None:
-    """A redaction must replace the whole containing token, not splice it."""
+    """A redaction must replace the containing line, not splice it."""
     result, artifact, _ = _run_review_script(
         tmp_path,
         stub=PARTIAL_SECRET_STUB,
@@ -524,11 +524,10 @@ def test_encoded_spellings_of_the_signing_value_are_redacted_too(
             f"the {label} spelling of the signing value reached the artifact"
         )
 
-    for prefix in ("json: ", "query: ", "b64: "):
-        assert f"{prefix}***{SIGNING_KEY_VAR}-redacted***" in payload["stderr"], (
-            f"the {prefix.strip()} line must keep its marker, so a reader can "
-            "tell a redacted line from a line that never existed"
-        )
+    assert payload["stderr"].count(f"***{SIGNING_KEY_VAR}-redacted***") >= 3, (
+        "each encoded spelling line must keep a marker, so a reader can tell "
+        "redacted lines from lines that never existed"
+    )
 
 
 def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:
