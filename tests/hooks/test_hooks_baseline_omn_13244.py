@@ -144,6 +144,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -909,20 +912,32 @@ def test_auto_checkpoint_writes_a_checkpoint_on_git_commit(tmp_path: Path) -> No
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@t",
     }
-    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=env)
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main", str(repo)],
+        check=True,
+        env=scrub_git_location_env(env),
+    )
     (repo / "a.txt").write_text("one\n")
-    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "."],
+        check=True,
+        env=scrub_git_location_env(env),
+    )
     subprocess.run(
         ["git", "-C", str(repo), "commit", "-q", "-m", "OMN-17207 first"],
         check=True,
-        env=env,
+        env=scrub_git_location_env(env),
     )
     (repo / "a.txt").write_text("two\n")
-    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "."],
+        check=True,
+        env=scrub_git_location_env(env),
+    )
     subprocess.run(
         ["git", "-C", str(repo), "commit", "-q", "-m", "OMN-17207 second"],
         check=True,
-        env=env,
+        env=scrub_git_location_env(env),
     )
 
     home = tmp_path / "home"
@@ -990,17 +1005,33 @@ def test_changeset_guard_writes_jsonl_above_threshold(tmp_path: Path) -> None:
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@t",
     }
-    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=env)
-    (repo / "seed.txt").write_text("seed\n")
-    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
     subprocess.run(
-        ["git", "-C", str(repo), "commit", "-q", "-m", "seed"], check=True, env=env
+        ["git", "init", "-q", "-b", "main", str(repo)],
+        check=True,
+        env=scrub_git_location_env(env),
+    )
+    (repo / "seed.txt").write_text("seed\n")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "."],
+        check=True,
+        env=scrub_git_location_env(env),
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "seed"],
+        check=True,
+        env=scrub_git_location_env(env),
     )
     for i in range(20):  # 20 > the 15-file threshold
         (repo / f"f{i}.txt").write_text(f"{i}\n")
-    subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env)
     subprocess.run(
-        ["git", "-C", str(repo), "commit", "-q", "-m", "big"], check=True, env=env
+        ["git", "-C", str(repo), "add", "."],
+        check=True,
+        env=scrub_git_location_env(env),
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "big"],
+        check=True,
+        env=scrub_git_location_env(env),
     )
 
     home = tmp_path / "home"
