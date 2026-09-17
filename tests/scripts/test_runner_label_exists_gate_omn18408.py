@@ -659,3 +659,58 @@ def test_a_repository_whose_arms_are_all_matrix_computed_refuses(
         },
     )
     assert _run(with_decidable, runners, tmp_path).returncode == 0
+
+
+def test_a_note_does_not_claim_the_gate_did_not_run(tmp_path: Path) -> None:
+    """A reported arm is not a refused run, and the text must not say it is.
+
+    The resolver this gate borrows phrases its errors for a gate that REFUSES
+    on them. Reported verbatim, those notes end in "THE GATE DID NOT RUN" on a
+    run that did run and did judge every other arm. That wording cost a real
+    misdiagnosis: a reviewer read the notes on a red run as its cause and filed
+    a defect against four workflows that place correctly and run green today.
+    """
+    repo = _tree(
+        tmp_path,
+        {
+            "routed.yml": """\
+            name: routed
+            on: {pull_request: {}}
+            jobs:
+              route:
+                runs-on: [self-hosted, omnibase-ci]
+                outputs: {labels: "${{ steps.pick.outputs.labels }}"}
+                steps: [{id: pick, run: "true"}]
+              consume:
+                needs: route
+                runs-on: ${{ fromJSON(needs.route.outputs.labels) }}
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    runners = _fixture(tmp_path, "runners.json", ONLINE_FLEET)
+    result = _run(repo, runners, tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    note = [ln for ln in result.stdout.splitlines() if ln.startswith("note:")]
+    assert note, "the undecidable arm must still be reported"
+    assert "THE GATE DID NOT RUN" not in "\n".join(note)
+    assert "reported, not failed" in "\n".join(note)
+
+    # Positive control: the sentence is still used where it IS true -- a run
+    # that judged nothing really did not run.
+    only_routed = _tree(
+        tmp_path / "only",
+        {
+            "routed.yml": """\
+            name: routed
+            on: {pull_request: {}}
+            jobs:
+              consume:
+                runs-on: ${{ fromJSON(needs.route.outputs.labels) }}
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    refused = _run(only_routed, runners, tmp_path)
+    assert refused.returncode == 2
+    assert "THE GATE DID NOT RUN" in refused.stderr
