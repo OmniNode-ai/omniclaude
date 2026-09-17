@@ -2583,6 +2583,7 @@ jobs:
         run: bash scripts/dod-pre-push-check.sh
         env:
           DOD_ENFORCEMENT: hard
+          DOD_TICKET_ID: ${{ steps.dod-evidence.outputs.ticket }}
           ONEX_STATE_DIR: .onex_state
 
   # ============================================================================
