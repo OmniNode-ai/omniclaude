@@ -184,6 +184,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
             '{session_id: $sid, outcome: $outcome, reason: $reason, correlation_id: $cid, error: (if $outcome == "failed" then {code: "session_failed", message: $reason, component: "claude_code"} else null end)}' 2>/dev/null)
 
         if [[ -n "$OUTCOME_PAYLOAD" ]] && [[ "$OUTCOME_PAYLOAD" != "null" ]]; then
+            # OMN-18471: the last two classes, re-homed under the 2026-09-17
+            # operator consent granting their onex.cmd.omniintelligence.*
+            # fan-out topics on the dev broker. All twelve now deliver via the
+            # journal, which is what lets emit_via_daemon be retired (AC5).
+            emit_to_journal "session.outcome" "$OUTCOME_PAYLOAD" "${CORRELATION_ID:-$SESSION_ID}"
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
     ) &
@@ -226,6 +231,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
                     '{session_id: $sid, correlation_id: $cid, session_outcome: $outcome, injected_pattern_ids: $patterns}' 2>/dev/null)
 
                 if [[ -n "$SCORING_PAYLOAD" ]] && [[ "$SCORING_PAYLOAD" != "null" ]]; then
+                    # OMN-18471: the last two classes, re-homed under the 2026-09-17
+                    # operator consent granting their onex.cmd.omniintelligence.*
+                    # fan-out topics on the dev broker. All twelve now deliver via the
+                    # journal, which is what lets emit_via_daemon be retired (AC5).
+                    emit_to_journal "utilization.scoring.requested" "$SCORING_PAYLOAD" "${CORRELATION_ID:-$SESSION_ID}"
                     emit_via_daemon "utilization.scoring.requested" "$SCORING_PAYLOAD" 100
                 fi
             fi

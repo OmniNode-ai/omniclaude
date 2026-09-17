@@ -308,9 +308,13 @@ governed_topics:
 #   j  agent.action                 onex.evt.omniclaude.agent-actions.v1
 #   j  routing.feedback             onex.evt.omniclaude.routing-feedback.v1
 #   j  llm.cost.completed           onex.evt.omniintelligence.llm-call-completed.v1
-#   L  session.outcome              onex.evt.omniclaude.session-outcome.v1
-#                                 + onex.cmd.omniintelligence.session-outcome.v1   <-- UNGRANTED
-#   L  utilization.scoring.requested onex.cmd.omniintelligence.utilization-scoring.v1  <-- UNGRANTED
+#   j  session.outcome              onex.evt.omniclaude.session-outcome.v1
+#                                 + onex.cmd.omniintelligence.session-outcome.v1
+#   j  utilization.scoring.requested onex.cmd.omniintelligence.utilization-scoring.v1
+#
+# Every class on this edge is now `j`. That is the precondition AC5 waited on:
+# emit_via_daemon can be retired as one change because nothing depends on it
+# as a sole call site any more.
 #
 # Fan-out is read from omnimarket `node_emit_daemon/registries/topics.yaml`,
 # which is what the drainer's HandlerEventEmitEffect resolves against. The
@@ -320,22 +324,22 @@ governed_topics:
 # actually uses). Read the fan-out registry, never this one, when the
 # question is which topic a class lands on.
 #
-# WHY TWO CLASSES ARE STILL NOT RE-HOMED. `session.outcome` and
-# `utilization.scoring.requested` are the only classes left on the legacy
-# path, and the reason is a permission rather than a defect. Both fan out to
-# an `onex.cmd.omniintelligence.*` topic -- the access-restricted class this
-# repository reserves for full prompts and file contents -- and the operator
-# consent of 2026-09-17 deliberately granted the six `onex.evt.*` topics and
-# HELD those two pending a separate decision. `session.outcome` is the
-# awkward one: its evt half IS granted, but a class is only as deliverable as
-# its least-permitted fan-out target, so it stays on the legacy path whole.
+# ALL TWELVE CLASSES ARE NOW RE-HOMED (2026-09-17). The last two --
+# `session.outcome` and `utilization.scoring.requested` -- were held not by a
+# defect but by a permission: both fan out to an
+# `onex.cmd.omniintelligence.*` topic, the access-restricted class this
+# repository reserves for full prompts and file contents, and they waited on
+# their own operator consent rather than riding the six `onex.evt.*` grants.
+# `session.outcome` was the instructive one: its evt half was already granted,
+# and it still could not be re-homed, because a class is only as deliverable
+# as its LEAST-permitted fan-out target.
 #
-# A journal call site for either would put a record in the queue the drainer
-# cannot publish, and a denied topic does not fail only its own record: it
-# stops the drain. Measured, not inferred -- a journal holding
-# [authorized, denied, authorized] published 1 of 3 and then 0 of 2, with an
-# authorized record sitting untouched behind the denied one. That is why the
-# grant comes first and the call site second, never the other way round.
+# The ordering rule that produced this sequence is worth keeping: the grant
+# comes first and the call site second, never the other way round. A journal
+# call site for a class whose fan-out includes an ungranted topic does not
+# merely lose that class -- it stops the drain for every record behind it.
+# Measured: a journal holding [authorized, denied, authorized] published 1 of
+# 3 and then 0 of 2, with an authorized record untouched behind the denied one.
 #
 # The same mechanism was measured on the LIVE path and it is the strongest
 # evidence in this file. `onex.evt.omniclaude.dod-guard-fired.v1` had a
