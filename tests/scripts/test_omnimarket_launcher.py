@@ -1,7 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Tests for OMN-10117: session-start.sh must launch the omnimarket runner."""
+"""Tests for OMN-10117, as narrowed by the OMN-18471 retirement.
+
+omniclaude#2214 removed ``start_emit_daemon_if_needed`` and its socket/pid
+plumbing from ``session-start.sh``, and ``_try_restart_emit_daemon`` from
+``common.sh``: the daemon socket had not existed since 2026-06-08, so the
+launcher was session-start latency spent on a socket nobody wrote to. The
+assertions that session-start.sh and common.sh LAUNCH the daemon were left
+behind by that change and are deleted here. What survives is what the
+retirement did not touch: the event registry, the ``ONEX_EMIT_EVENT_REGISTRY``
+export, the stop path in ``session-end.sh``, and the negative assertions that
+no launcher may reach for the legacy publisher or the deprecated CLI flags.
+"""
 
 import sys
 from pathlib import Path
@@ -34,40 +45,22 @@ def _known_transforms() -> set[str]:
     return set(TRANSFORM_NAME_TO_CALLABLE)
 
 
-def test_launcher_invokes_omnimarket_node() -> None:
-    legacy_module = "omniclaude" + ".publisher"
-    text = SESSION_START.read_text()
-    assert "omnimarket.nodes.node_emit_daemon" in text, (
-        f"session-start.sh must invoke omnimarket.nodes.node_emit_daemon, not {legacy_module}"
-    )
-    assert "--kafka-bootstrap-servers" in text, (
-        "session-start.sh must use --kafka-bootstrap-servers (omnimarket CLI arg)"
-    )
-    assert "--event-registry" in text, (
-        "session-start.sh must pass --event-registry to the omnimarket daemon"
-    )
-
-
 def test_launcher_does_not_invoke_omniclaude_publisher() -> None:
+    """No legacy emit-daemon invocation may return to session-start.sh.
+
+    OMN-18471 retired the launcher entirely, so the positive half of this test
+    (assert the omnimarket invocation is present, then read its arguments) was
+    deleted with it. The negative assertions stand on their own and are the
+    half worth keeping: whatever session-start.sh grows next, it must not be
+    the legacy publisher or the removed omnibase_infra fallback.
+    """
     legacy_module = "omniclaude" + ".publisher"
     text = SESSION_START.read_text()
-    # The old invocation line must be gone
     assert f"-m {legacy_module} start" not in text, (
         f"session-start.sh must NOT invoke -m {legacy_module} start (use omnimarket node)"
     )
     assert "omnibase_infra.runtime.emit_daemon.cli start" not in text, (
         "session-start.sh must NOT keep the removed omnibase_infra emit-daemon fallback"
-    )
-    # The active daemon launch must not use the deprecated --kafka-servers CLI arg.
-    assert "omnimarket.nodes.node_emit_daemon start" in text, (
-        "sanity: omnimarket daemon start must be present before checking for arg absence"
-    )
-    omnimarket_block_start = text.index("omnimarket.nodes.node_emit_daemon start")
-    # Find the end of the nohup block (next & after the start invocation)
-    omnimarket_block_end = text.index(" &\n", omnimarket_block_start)
-    omnimarket_invocation = text[omnimarket_block_start:omnimarket_block_end]
-    assert "--kafka-servers " not in omnimarket_invocation, (
-        "omnimarket daemon launch must not use deprecated --kafka-servers (use --kafka-bootstrap-servers)"
     )
 
 
@@ -139,56 +132,6 @@ def test_common_exports_onex_emit_event_registry() -> None:
         "common.sh must declare ONEX_EMIT_EVENT_REGISTRY env var "
         "so all launchers and consumers reference the single event registry path"
     )
-
-
-def test_launcher_uses_pid_path_flag() -> None:
-    text = SESSION_START.read_text()
-    assert "--pid-path" in text, (
-        "session-start.sh must pass --pid-path to the omnimarket daemon "
-        "(was implicit in the legacy config; must be explicit now)"
-    )
-
-
-def test_launcher_uses_spool_dir_flag() -> None:
-    text = SESSION_START.read_text()
-    assert "--spool-dir" in text, (
-        "session-start.sh must pass --spool-dir to preserve event spool continuity "
-        "across daemon restart (OMN-10116 Part 4)"
-    )
-
-
-def test_launcher_uses_log_path_without_appending_stdout_to_log() -> None:
-    text = SESSION_START.read_text()
-    marker = (
-        'nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
-    )
-    assert marker in text
-    block_start = text.index(marker)
-    block_end = text.index(" &\n", block_start)
-    invocation = text[block_start:block_end]
-
-    assert "--log-path" in invocation
-    assert '>> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log"' not in invocation
-    assert ">/dev/null 2>&1" in invocation
-
-
-def test_common_restart_path_uses_omnimarket_node() -> None:
-    legacy_module = "omniclaude" + ".publisher"
-    text = COMMON.read_text()
-    marker = 'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
-    assert marker in text
-    block_start = text.index(marker)
-    block_end = text.index(" &\n", block_start)
-    invocation = text[block_start:block_end]
-    assert "--kafka-bootstrap-servers" in invocation
-    assert "--pid-path" in invocation
-    assert "--spool-dir" in invocation
-    assert "--event-registry" in invocation
-    assert "--log-path" in invocation
-    assert '>> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log"' not in invocation
-    assert ">/dev/null 2>&1" in invocation
-    assert f"-m {legacy_module} start" not in invocation
-    assert "omnibase_infra.runtime.emit_daemon.cli start" not in invocation
 
 
 def test_session_end_stop_path_uses_omnimarket_node() -> None:
