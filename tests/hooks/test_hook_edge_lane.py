@@ -911,3 +911,55 @@ def test_validator_has_no_per_file_or_per_class_suppression(tmp_path: Path) -> N
         "needed it belongs in `scan_surfaces` as a directory the edge does "
         "not emit from, justified in the source."
     )
+
+
+def test_validator_reports_the_call_site_line_for_a_multi_line_emission(
+    tmp_path: Path,
+) -> None:
+    """OMN-18627: the reported line is the CALL SITE line, and it is exact.
+
+    Two reviewer findings meet here. The line number is now resolved by binary
+    search over a per-file index of line starts rather than by counting
+    newlines in the prefix of every match, which was quadratic in file length
+    times match count. And a multi-line call has two candidate lines -- the one
+    carrying `emit_event(` and the one carrying the literal -- so which one is
+    reported has to be pinned rather than left to whichever the implementation
+    happens to produce. The call-site line is the useful one: it is where a
+    reader edits.
+
+    The probe file puts deliberate padding before the call so an off-by-one or
+    a prefix-counting regression cannot pass by landing on line 1.
+    """
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    lib_dir = fake_root / "plugins" / "onex" / "hooks" / "lib"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    body = [
+        "from emit_client_wrapper import emit_event",  # 1
+        "",  # 2
+        "# a comment-only line, blanked by the scanner but still a line",  # 3
+        "",  # 4
+        "def emit() -> None:",  # 5
+        "    emit_event(",  # 6  <- the call site
+        '        "omn18627.lineno.probe",',  # 7  <- the literal
+        "        {},",  # 8
+        "    )",  # 9
+    ]
+    probe = lib_dir / "omn18627_lineno_probe.py"
+    probe.write_text("\n".join(body) + "\n", encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    assert proc.returncode != 0, "the undeclared probe class must fail the gate"
+    assert f"{probe}:6" in combined, (
+        "the refusal must cite the CALL SITE line (6), not the literal's line "
+        "(7), not line 1, and not a line shifted by the blanked comment. "
+        f"Got: {combined}"
+    )

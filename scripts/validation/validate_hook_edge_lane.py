@@ -34,6 +34,7 @@ Exit codes: ``0`` clean, ``1`` violation, ``2`` the gate itself could not run.
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import os
 import re
@@ -79,6 +80,15 @@ _EVENT_CLASS_LITERAL_RE = re.compile(
 # denials stopped the drain outright: `drain_once` halts at the first failure
 # to preserve ordering, so one ungranted class held 1,333 spooled records of
 # four AUTHORIZED classes behind it.
+#
+# LITERAL-ONLY, and narrow ON PURPOSE -- the same bound the shell pattern
+# above already declares. A class passed as a VARIABLE, or emitted through a
+# project-specific wrapper this pattern does not name, is not resolved and is
+# not pretended to be: a regex that guessed at a runtime value would both
+# report classes that are never emitted and miss ones that are, and the
+# "declared but not emitted" check below would then refuse a contract that is
+# actually correct. Widening the set means adding the wrapper's name to this
+# pattern, which is a one-line change and a deliberate one.
 #
 # CALL SITES ONLY, NEVER THE DUTY TABLE. `emit_client_wrapper.py` carries a
 # ~60-entry tuple of classes the edge *supports*. Scanning that would force
@@ -220,8 +230,20 @@ def _check_static(repo_root: Path) -> list[str]:
             scannable = "\n".join(
                 "" if line.strip().startswith("#") else line for line in lines
             )
+            # Line starts are indexed ONCE per file and the line number is
+            # found by binary search. Counting newlines per match instead
+            # (`scannable.count("\n", 0, match.start())`) rescans the whole
+            # prefix for every hit, which is quadratic in file length times
+            # match count. The reported line is the line the MATCH STARTS on,
+            # which for a multi-line call is the line carrying the call itself
+            # rather than the line carrying the literal -- that is the line a
+            # reader needs, and `test_..._reports_the_call_site_line` pins it.
+            line_starts = [0]
+            for index, char in enumerate(scannable):
+                if char == "\n":
+                    line_starts.append(index + 1)
             for match in literal_re.finditer(scannable):
-                lineno = scannable.count("\n", 0, match.start()) + 1
+                lineno = bisect.bisect_right(line_starts, match.start())
                 emitted_classes.setdefault(match.group(1), f"{path}:{lineno}")
 
     for event_class, where in sorted(emitted_classes.items()):
