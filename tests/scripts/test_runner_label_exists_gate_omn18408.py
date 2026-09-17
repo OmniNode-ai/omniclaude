@@ -480,6 +480,60 @@ def test_a_run_time_computed_arm_is_reported_not_silently_skipped(
     assert "routed.yml::consume" in result.stdout
 
 
+def test_a_matrix_label_inside_a_literal_list_is_reported_not_failed(
+    tmp_path: Path,
+) -> None:
+    """A matrix expression is not a literal label named ``${{ matrix.host }}``.
+
+    The arm64 proof workflow pins the static class and architecture labels and
+    gets the host label from the matrix leg. That leg is real at run time but
+    not knowable from source, so this gate must report it as undecidable rather
+    than fail it as a label no runner carries.
+    """
+    fleet = json.loads(json.dumps(ONLINE_FLEET))
+    fleet["runners"].append(
+        {
+            "name": "omninode-mini-runner-1",
+            "status": "online",
+            "labels": [
+                {"name": "self-hosted"},
+                {"name": "omnibase-verify"},
+                {"name": "arch-arm64"},
+                {"name": "host-101"},
+            ],
+        }
+    )
+    repo = _tree(
+        tmp_path,
+        {
+            "arm64.yml": """\
+            name: arm64
+            on: {pull_request: {}}
+            jobs:
+              arm64-verify-proof:
+                strategy:
+                  matrix:
+                    host: [host-101]
+                runs-on:
+                  - self-hosted
+                  - omnibase-verify
+                  - arch-arm64
+                  - ${{ matrix.host }}
+                steps: [{run: "true"}]
+              fleet:
+                runs-on: [self-hosted, omnibase-ci]
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    runners = _fixture(tmp_path, "runners.json", fleet)
+    result = _run(repo, runners, tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "computed at run time" in result.stdout
+    assert "arm64.yml::arm64-verify-proof" in result.stdout
+    assert "${{ matrix.host }}" in result.stdout
+
+
 def test_the_runner_listing_command_carries_no_credential_on_argv() -> None:
     """The credential reaches `gh` through the environment, never through argv.
 

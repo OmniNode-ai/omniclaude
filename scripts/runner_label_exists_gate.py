@@ -256,6 +256,10 @@ def _arm_is_hosted(branch: Branch) -> bool:
     return bool(branch.hosted)
 
 
+def _labels_are_runtime_computed(labels: list[str]) -> bool:
+    return any("${{" in label for label in labels)
+
+
 def scan(
     repo_root: Path, runners: list[Runner], variables: Variables
 ) -> tuple[list[Unclaimed], list[str], int]:
@@ -307,6 +311,13 @@ def scan(
                 if _arm_is_hosted(branch):
                     # GitHub-hosted labels have no organisation runner entry;
                     # whether they are ALLOWED is the placement gate's question.
+                    continue
+                if _labels_are_runtime_computed(branch.labels):
+                    undecidable.append(
+                        f"{path.name}::{job_id} -- a runs-on label is computed "
+                        f"at run time: {str(definition['runs-on']).strip()!r}. "
+                        "THE GATE DID NOT RUN."
+                    )
                     continue
                 wanted = _labels_lower(branch.labels)
                 if not wanted:
