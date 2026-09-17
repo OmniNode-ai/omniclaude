@@ -44,13 +44,19 @@
 # path -- both BIFROST_CONTRACT_PATH and the reconciled venv (pinned to the
 # clone HEAD by OMN-16366) faithfully served that frozen tree.
 #
-# The re-attachment target is DERIVED, never guessed: the most recent
-# `checkout: moving from <branch> to ...` entry in the clone's HEAD reflog,
-# accepted only when that local branch still exists AND has an upstream.
-# --to-branch <name> overrides the derivation. When neither resolves the script
-# refuses rather than picking a default. Commits reachable only from the
-# detached HEAD are preserved as patches first, exactly like branch mode's
-# ahead-commits.
+# The re-attachment target is DERIVED, never guessed, from two ordered sources:
+# first the most recent `checkout: moving from <branch> to ...` entry in the
+# clone's HEAD reflog, then -- OMN-18567 -- the default branch the remote itself
+# publishes at `refs/remotes/<remote>/HEAD`. Either is accepted only when it
+# names a local branch that still exists AND has an upstream. The reflog wins
+# when both resolve, because it names the branch THIS clone was on. The second
+# source exists because a reflog is local, mutable and expiring: a long-lived
+# machine tree whose reflog aged out past its first detachment had no derivable
+# target at all and needed a human to type --to-branch. --to-branch overrides
+# both. When none resolves the script refuses rather than picking a default.
+#
+# Commits reachable only from the detached HEAD are preserved as patches first,
+# exactly like branch mode's ahead-commits.
 #
 # WRONG BRANCH (OMN-16497) is the third drift class, and until this ticket it was
 # the invisible one. A clone left ATTACHED to a feature branch -- `gh pr checkout`
@@ -313,8 +319,37 @@ if [[ -z "$branch" ]]; then
     done < <(g reflog show HEAD --format='%gs' 2>/dev/null \
                | sed -n 's/^checkout: moving from \([^ ]*\) to .*$/\1/p')
     branch_source="derived from HEAD reflog"
+
+    # OMN-18567: the reflog is the FIRST source, not the only one. It names the
+    # branch this clone was actually on, which is why it is consulted first and
+    # why it still wins when both resolve. But a reflog is local, mutable and
+    # expiring: a long-lived machine-driven tree whose HEAD reflog has aged out
+    # past the checkout that detached it had no derivable target at all, so it
+    # refused and needed a human to type --to-branch -- the same dead end
+    # OMN-17313 set out to remove, arriving through the passage of time instead
+    # of through a guard.
+    #
+    # `refs/remotes/<remote>/HEAD` is the default branch the REMOTE ITSELF
+    # publishes, and the attached path of this same script already treats it as
+    # authoritative (OMN-16497). Using it here is a derived published fact, not
+    # a default: it is accepted only when it names a local branch that still
+    # exists AND has an upstream -- the same two conditions every reflog
+    # candidate must pass -- so a clone whose branch was deleted still refuses.
+    if [[ -z "$branch" ]]; then
+      fallback_remote="$(g remote | head -n1)"
+      if [[ -n "$fallback_remote" ]]; then
+        cand="$(g symbolic-ref -q --short "refs/remotes/$fallback_remote/HEAD" 2>/dev/null || true)"
+        cand="${cand#"$fallback_remote/"}"
+        if [[ -n "$cand" ]] \
+           && g show-ref --verify --quiet "refs/heads/$cand" \
+           && g rev-parse --abbrev-ref --symbolic-full-name "${cand}@{u}" >/dev/null 2>&1; then
+          branch="$cand"
+          branch_source="derived from refs/remotes/$fallback_remote/HEAD"
+        fi
+      fi
+    fi
   fi
-  [[ -n "$branch" ]] || refuse "detached HEAD in $clone and no re-attachment target could be derived from the HEAD reflog (no prior 'checkout: moving from <branch>' entry names a local branch that still exists and has an upstream). Name one explicitly: --to-branch <name>"
+  [[ -n "$branch" ]] || refuse "detached HEAD in $clone and no re-attachment target could be derived: the HEAD reflog names no local branch that still exists and has an upstream, and refs/remotes/<remote>/HEAD does not resolve to one either. Name one explicitly: --to-branch <name>"
   g show-ref --verify --quiet "refs/heads/$branch" \
     || refuse "detached HEAD in $clone; re-attachment target '$branch' ($branch_source) is not a local branch"
 else
