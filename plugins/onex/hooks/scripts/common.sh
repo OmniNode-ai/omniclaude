@@ -77,8 +77,21 @@ export ONEX_EMIT_EVENT_REGISTRY
 
 # Shared emit-daemon paths for hook launch/restart/stop surfaces.
 # Session-start may override EMIT_DAEMON_SOCKET before sourcing common.sh.
-# OMN-18471 AC5: the emit-daemon socket and pid paths are gone with the
-# path that used them. Nothing opens ~/.claude/emit.sock any more.
+: "${EMIT_DAEMON_PID_FILE:=${ONEX_STATE_DIR:-/tmp/onex-state}/hooks/emit-daemon.pid}"
+: "${EMIT_DAEMON_SPOOL_DIR:=${ONEX_STATE_DIR:-/tmp/onex-state}/hooks/emit-spool}"
+: "${EMIT_DAEMON_LOG_FILE:=${ONEX_STATE_DIR:-/tmp/onex-state}/hooks/logs/emit-daemon.log}"
+export EMIT_DAEMON_PID_FILE EMIT_DAEMON_SPOOL_DIR EMIT_DAEMON_LOG_FILE
+
+restart_emit_daemon() {
+    mkdir -p "$(dirname "$EMIT_DAEMON_PID_FILE")" "$EMIT_DAEMON_SPOOL_DIR" "$(dirname "$EMIT_DAEMON_LOG_FILE")" 2>/dev/null || true
+    env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start \
+        --kafka-bootstrap-servers "${KAFKA_BOOTSTRAP_SERVERS:-}" \
+        --pid-path "$EMIT_DAEMON_PID_FILE" \
+        --spool-dir "$EMIT_DAEMON_SPOOL_DIR" \
+        --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
+        --log-path "$EMIT_DAEMON_LOG_FILE" \
+        >/dev/null 2>&1 &
+}
 
 # Strict priority chain with NO fallbacks. If no valid Python is found,
 # hooks refuse to run. This prevents silent degradation where hooks run

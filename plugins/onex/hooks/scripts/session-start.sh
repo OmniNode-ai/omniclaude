@@ -218,6 +218,18 @@ fi
 source "${HOOKS_DIR}/scripts/common.sh"
 onex_hook_gate SESSION_START || exit 0
 
+if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    mkdir -p "$(dirname "$EMIT_DAEMON_PID_FILE")" "$EMIT_DAEMON_SPOOL_DIR" "$(dirname "$EMIT_DAEMON_LOG_FILE")" 2>/dev/null || true
+    nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start \
+        --kafka-bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        --pid-path "$EMIT_DAEMON_PID_FILE" \
+        --spool-dir "$EMIT_DAEMON_SPOOL_DIR" \
+        --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
+        --log-path "$EMIT_DAEMON_LOG_FILE" \
+        >/dev/null 2>&1 &
+    log "Emit daemon start requested"
+fi
+
 # Daemon status file path (used by write_daemon_status for observability)
 readonly DAEMON_STATUS_FILE="${HOOKS_DIR}/logs/daemon-status"
 
