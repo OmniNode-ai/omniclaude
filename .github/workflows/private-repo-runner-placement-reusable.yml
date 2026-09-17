@@ -9,6 +9,17 @@
 # exported `private-repo-runner-placement` pre-commit hook runs the SAME
 # script, so a local verdict and a CI verdict cannot diverge (operating rule 5).
 #
+# PLACEMENT IS READ PER TRIGGER EVENT (OMN-18205 residual 4). The gate
+# evaluates each job's `runs-on` once per cell of a fixed event matrix --
+# pull_request from a fork and from the base repository, pull_request_review in
+# both shapes, push, workflow_dispatch, repository_dispatch, schedule,
+# merge_group, workflow_run, release -- and fails when any cell except a fork
+# pull request selects a GitHub-hosted label. That is a property of the CHECKED
+# TREE, not of the event this run happens to be firing under, so a pull-request
+# run already judges every event. The `push` trigger in each caller exists for
+# a different reason: it is what makes the default branch itself judged after a
+# merge, which is the surface where OMN-18616 went unseen for nine days.
+#
 # WHY IT MUST RUN ON THE FLEET ITSELF. This job judges private repositories,
 # so by its own rule it cannot be placed on a hosted runner: a gate that has to
 # break the invariant it enforces in order to run is not an enforcement

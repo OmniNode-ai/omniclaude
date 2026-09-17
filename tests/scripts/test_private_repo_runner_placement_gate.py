@@ -9,6 +9,15 @@ it declined to resolve. Both read as a clean bill of health. So every test
 here goes through the real parser against a real workflow tree, and the suite
 opens with a positive control: a tree that MUST fail. A gate suite with no
 failing fixture proves only that the gate is silent.
+
+There is a THIRD way, added by OMN-18205 residual 4 after it cost nine days of
+ungreenable `main`-push CI (OMN-18616): the gate can resolve the arms correctly
+and never ask WHICH EVENT reaches them. `A && X || Y` has no single answer, and
+a guard spelled as a fork test is true under a push for a reason that has
+nothing to do with forks -- the head-repository field is simply null there. So
+the assertions below are a MATRIX: each selector shape is asserted per trigger
+event, and the real pre-fix and post-fix omninode_infra expressions are carried
+verbatim as the positive and negative control of the whole change.
 """
 
 from __future__ import annotations
@@ -22,6 +31,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "private_repo_runner_placement_gate.py"
@@ -29,6 +39,12 @@ SCRIPT = REPO_ROOT / "scripts" / "private_repo_runner_placement_gate.py"
 FLEET = '["self-hosted","omnibase-ci"]'
 HOSTED = '["ubuntu-latest"]'
 
+# THE PRE-FIX SHAPE, copied verbatim from omninode_infra `ci.yml` at
+# `c9d0ae9d` -- the commit whose push to `main` acquired no runner at all
+# (empty `runner_name`, `labels: ["ubuntu-latest"]`, zero steps). It tests the
+# head repository WITHOUT testing the event first, so on every event carrying
+# no pull-request payload the field is null, the inequality holds, and the
+# public hosted arm is selected. This is the positive control of the change.
 SEAM_EXPRESSION = (
     "${{\n"
     "  (github.event.pull_request.head.repo.full_name != github.repository)\n"
@@ -37,6 +53,29 @@ SEAM_EXPRESSION = (
     '\'["self-hosted","omnibase-ci"]\')\n'
     "}}"
 )
+
+# THE POST-FIX SHAPE, copied verbatim from omninode_infra `ci.yml` at
+# `origin/dev` after `#1540`. The event is tested BEFORE the head repository,
+# so every non-pull-request event falls through to the fleet arm. This is the
+# negative control: a gate that fails this one is refusing the fix.
+GUARDED_SEAM_EXPRESSION = (
+    "${{\n"
+    '  (contains(fromJSON(\'["pull_request","pull_request_review"]\'), '
+    "github.event_name) &&\n"
+    "   github.event.pull_request.head.repo.full_name != github.repository)\n"
+    "  && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+    "  || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+    '\'["self-hosted","omnibase-ci"]\')\n'
+    "}}"
+)
+
+# The triggers omninode_infra `ci.yml` actually declares, at both commits.
+CI_TRIGGERS = ("push", "pull_request", "merge_group")
+
+SEAM_VARIABLES = {
+    "OMNI_TRUSTED_CI_RUNS_ON_JSON": '["self-hosted","omnibase-ci"]',
+    "OMNI_PUBLIC_PR_RUNS_ON_JSON": '["ubuntu-latest"]',
+}
 
 
 def _module():
@@ -74,29 +113,47 @@ def _fixture_call(call: Callable[[], int]) -> int:
         return call()
 
 
-def _run(module, root: Path, variables: dict[str, str], tmp_path: Path) -> int:
+def _run(
+    module,
+    root: Path,
+    variables: dict[str, str],
+    tmp_path: Path,
+    branches: list[str] | None = None,
+) -> int:
     vars_file = tmp_path / "vars.json"
     vars_file.write_text(json.dumps(variables), encoding="utf-8")
-    return _fixture_call(
-        lambda: module.main(
-            [
-                "--repo-root",
-                str(root),
-                "--repo",
-                "OmniNode-ai/fixture",
-                "--assume-visibility",
-                "private",
-                "--variables-json",
-                str(vars_file),
-            ]
-        )
-    )
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--assume-visibility",
+        "private",
+        "--variables-json",
+        str(vars_file),
+    ]
+    # Default to a repository with no branch this gate could read, which is the
+    # pessimistic reading: a ref comparison is assumed satisfiable. Tests that
+    # care about the branch list pass one explicitly.
+    argv += ["--branches-json", json.dumps(branches if branches is not None else [])]
+    return _fixture_call(lambda: module.main(argv))
 
 
-def _seam_job(expression: str = SEAM_EXPRESSION) -> str:
-    """One pull-request job whose runs-on is `expression`, indented for YAML."""
+def _seam_job(
+    expression: str = SEAM_EXPRESSION,
+    triggers: tuple[str, ...] = ("pull_request",),
+) -> str:
+    """One job whose runs-on is `expression`, under the given triggers.
+
+    The trigger list is a parameter rather than a constant because it is half
+    of the verdict: the same selector is a live defect in a workflow that
+    declares `push` and a latent one in a workflow that does not, and a fixture
+    that hardcoded one trigger could only ever assert half the matrix.
+    """
     return (
-        "name: CI\non:\n  pull_request: {}\njobs:\n"
+        "name: CI\non:\n"
+        + "".join(f"  {trigger}: {{}}\n" for trigger in triggers)
+        + "jobs:\n"
         "  build:\n    runs-on: >-\n      "
         + expression.replace("\n", "\n      ")
         + "\n    steps:\n      - run: true\n"
@@ -202,28 +259,74 @@ def test_the_fork_branch_may_be_hosted_when_the_trusted_branch_is_not(
     isolation -- so the hosted fork branch is the REQUIRED placement here and
     reporting it as a violation would be asking for the prohibited one.
 
-    The property that survives: the branch a same-repo pull request actually
-    takes must still be the fleet, and that is asserted by the next two tests.
+    THE NEGATIVE CONTROL OF THIS WHOLE CHANGE. The expression is the post-fix
+    omninode_infra one, verbatim, under the triggers that file really declares.
+    A gate that fails this is refusing the fix rather than the defect.
     """
     module = _module()
-    root = _tree(tmp_path, "ci.yml", _seam_job())
-    variables = {
-        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
-        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
-    }
-    assert _run(module, root, variables, tmp_path) == 0
+    root = _tree(tmp_path, "ci.yml", _seam_job(GUARDED_SEAM_EXPRESSION, CI_TRIGGERS))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 0
+
+
+def test_positive_control_the_pre_fix_omninode_infra_expression_is_caught(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The defect this change exists to see, in the bytes that carried it.
+
+    omninode_infra `ci.yml` at `c9d0ae9d`: the head repository tested with no
+    event test in front of it, in a workflow declaring `push`, `pull_request`
+    and `merge_group`. On `push` and on `merge_group` the head-repository field
+    is null, `null != 'OmniNode-ai/fixture'` holds, and the run takes the
+    public hosted arm. The pre-change gate reported this repository GREEN for
+    nine days while `main`-push CI could not go green at all.
+    """
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _seam_job(SEAM_EXPRESSION, CI_TRIGGERS))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
+    reported = capsys.readouterr().err
+    assert "push" in reported and "merge_group" in reported, reported
+    # The fork cell is the one hosted placement that is REQUIRED, so it must
+    # not be named among the offending events -- otherwise the gate would be
+    # asking for the prohibited placement.
+    assert "pull_request:fork" not in reported, reported
+
+
+def test_the_same_pre_fix_expression_is_latent_not_red_without_the_trigger(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The narrowing, asserted rather than assumed.
+
+    A job cannot run under a trigger its workflow does not carry, so the very
+    same expression in a pull-request-only workflow places nothing hosted
+    today. It is still PRINTED, on the pass path, because that is the state
+    `infra-consistency-check.yml` sat in for months -- its own comment said
+    "a live defect the day somebody adds a push trigger" and nothing but that
+    comment was watching. The pull request that adds the trigger is judged by
+    this gate at that moment, which is the mechanism this narrowing rests on.
+    """
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _seam_job(SEAM_EXPRESSION, ("pull_request",)))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 0
+    printed = capsys.readouterr().out
+    assert "LATENT" in printed and "push" in printed, printed
 
 
 def test_an_inverted_guard_that_defaults_to_hosted_is_still_reported(
-    tmp_path: Path,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The OMN-16683 inversion, which is what the carve-out must not readmit.
+    """The OMN-16683 inversion, judged for the reason it is actually wrong.
 
     Here the guard selects the TRUSTED class and the unguarded default is the
-    public one, so an ordinary same-repo pull request lands on a hosted runner
-    while the file still reads as fork-isolated. The rule is scoped to the
-    branch a fork takes; a hosted DEFAULT is a finding however the expression
-    is spelled.
+    public one. The previous revision of this test asserted that "an ordinary
+    same-repo pull request lands on a hosted runner", and that claim was FALSE
+    of this expression: on a same-repo pull request the equality holds and the
+    run goes to the fleet. The old gate flagged it anyway, because it reported
+    any hosted arm that was not fork-guarded without asking which event reached
+    it -- a correct verdict resting on a wrong reading.
+
+    Evaluated per event the inversion is still a defect, and now for its real
+    reason: on every event with no pull-request payload the equality is FALSE,
+    so the fall-through hosted arm is the one that places the run.
     """
     module = _module()
     inverted = (
@@ -234,22 +337,22 @@ def test_an_inverted_guard_that_defaults_to_hosted_is_still_reported(
         "  || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
         "}}"
     )
-    root = _tree(tmp_path, "ci.yml", _seam_job(inverted))
-    variables = {
-        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
-        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
-    }
-    assert _run(module, root, variables, tmp_path) == 1
+    root = _tree(tmp_path, "ci.yml", _seam_job(inverted, CI_TRIGGERS))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
+    assert "push" in capsys.readouterr().err
 
 
 def test_a_fork_guarded_branch_that_is_the_only_branch_is_reported(
-    tmp_path: Path,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A carve-out with nothing to fall back to is just a hosted pin.
 
-    The exemption exists because a NON-fork branch carries the ordinary
-    placement. With no such branch every event resolves hosted, which is the
-    thing the ruling forbids, so the fork guard excuses nothing.
+    Seen from the event side this is not a hosted placement at all, it is a
+    placement onto NOTHING: under an ordinary same-repository pull request the
+    fork guard is false, no arm is selected, `runs-on` evaluates to a falsy
+    value and GitHub schedules the job onto no runner. Reported as its own
+    finding, because "the job cannot start" is a different defect from "the job
+    starts in the wrong place" and the fix is different too.
     """
     module = _module()
     only_fork = (
@@ -259,22 +362,20 @@ def test_a_fork_guarded_branch_that_is_the_only_branch_is_reported(
         "}}"
     )
     root = _tree(tmp_path, "ci.yml", _seam_job(only_fork))
-    variables = {
-        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
-        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
-    }
-    assert _run(module, root, variables, tmp_path) == 1
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
+    assert "selects no arm at all" in capsys.readouterr().err
 
 
 def test_a_guard_that_is_not_a_fork_test_excuses_nothing(
-    tmp_path: Path,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Fail closed on any guard the rule does not recognise as a fork test.
+    """A non-fork guard cannot inherit the fork cell's exemption.
 
-    Only two spellings of `is a fork` are recognised. Anything else guarding a
-    hosted branch -- an event name, a label, a schedule -- is judged as an
-    ordinary hosted placement, so a new selector shape cannot quietly inherit
-    the exemption.
+    The exemption is now one CELL of the matrix -- a pull request whose head
+    repository is a fork -- rather than a list of blessed guard spellings, so
+    there is no spelling to inherit. A hosted arm reached by a schedule is a
+    hosted arm reached by a schedule, and the workflow here declares `schedule`
+    so the cell is live rather than latent.
     """
     module = _module()
     not_a_fork_test = (
@@ -285,12 +386,11 @@ def test_a_guard_that_is_not_a_fork_test_excuses_nothing(
         '\'["self-hosted","omnibase-ci"]\')\n'
         "}}"
     )
-    root = _tree(tmp_path, "ci.yml", _seam_job(not_a_fork_test))
-    variables = {
-        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
-        "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
-    }
-    assert _run(module, root, variables, tmp_path) == 1
+    root = _tree(
+        tmp_path, "ci.yml", _seam_job(not_a_fork_test, ("pull_request", "schedule"))
+    )
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
+    assert "schedule" in capsys.readouterr().err
 
 
 def test_an_annotated_job_passes_and_an_unannotated_twin_does_not(
@@ -375,34 +475,298 @@ def test_fleet_labels_are_not_matched(label: str) -> None:
     assert not module.HOSTED_LABEL.match(label)
 
 
+# ---------------------------------------------------------------------------
+# THE EVALUATOR. The fork regex these tests replaced asserted that a STRING
+# looked like a fork test. It could not answer the only question that matters
+# -- when is the guard TRUE -- so `head.repo.full_name != github.repository`
+# passed as "a fork test" while being true on every push in the estate. What is
+# asserted now is the truth value of each guard under each event.
+# ---------------------------------------------------------------------------
+
+
+def _context(module, key: str):
+    for context in module.EVENT_MATRIX:
+        if context.key == key:
+            return context
+    raise AssertionError(f"no such event context: {key}")
+
+
+FORK_SPELLINGS = [
+    "github.event.pull_request.head.repo.full_name != github.repository",
+    "github.event.pull_request.head.repo.fork == true",
+    "github.event.pull_request.head.repo.fork",
+]
+
+
+@pytest.mark.parametrize("guard", FORK_SPELLINGS)
 @pytest.mark.parametrize(
-    "guard",
+    ("event", "expected"),
     [
-        "github.event.pull_request.head.repo.full_name != github.repository",
-        "github.event.pull_request.head.repo.fork == true",
-        "github.event.pull_request.head.repo.fork",
+        ("pull_request:fork", True),
+        ("pull_request:base", False),
+        ("push", None),
+        ("workflow_dispatch", None),
+        ("repository_dispatch", None),
+        ("schedule", None),
+        ("merge_group", None),
+        ("workflow_run", None),
+        ("release", None),
     ],
 )
-def test_the_recognised_fork_tests(guard: str) -> None:
+def test_each_fork_spelling_is_evaluated_per_event(
+    guard: str, event: str, expected: bool | None
+) -> None:
+    """The whole defect, reduced to a truth table.
+
+    `expected is None` marks the events with no pull-request payload, where the
+    three spellings DISAGREE and the disagreement is the bug. The `!=` form is
+    TRUE there -- null is unequal to a non-empty slug -- and selects the public
+    hosted arm on every push, dispatch and schedule in a private repository.
+    The two `fork`-flag forms are FALSE there, because null is falsy. A gate
+    that matched these three as interchangeable "fork tests" was reading a
+    string where the estate's behaviour differs.
+    """
     module = _module()
-    assert module.FORK_TEST.search(guard)
+    context = _context(module, event)
+    actual = module._guard(guard, context, "OmniNode-ai/fixture", "fixture::job")
+    if expected is None:
+        expected = "full_name" in guard
+    assert actual is expected
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        ("pull_request:fork", True),
+        ("pull_request:base", False),
+        ("pull_request_review:fork", True),
+        ("pull_request_review:base", False),
+        ("push", False),
+        ("workflow_dispatch", False),
+        ("repository_dispatch", False),
+        ("schedule", False),
+        ("merge_group", False),
+        ("workflow_run", False),
+        ("release", False),
+    ],
+)
+def test_the_event_guarded_spelling_is_true_only_for_a_fork_pull_request(
+    event: str, expected: bool
+) -> None:
+    """The fix, asserted cell by cell rather than as a subset claim.
+
+    Testing the event FIRST collapses every non-pull-request cell to false, so
+    the public arm becomes reachable from exactly the two cells where a hosted
+    placement is required. Both `pull_request_review` cells are asserted
+    because the estate's guard names that event in its `contains()` list; a
+    matrix that never fired it would leave half the guard unexercised.
+    """
+    module = _module()
+    guard = (
+        '(contains(fromJSON(\'["pull_request","pull_request_review"]\'), '
+        "github.event_name) && "
+        "github.event.pull_request.head.repo.full_name != github.repository)"
+    )
+    context = _context(module, event)
+    assert (
+        module._guard(guard, context, "OmniNode-ai/fixture", "fixture::job") is expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("guard", "event", "expected"),
+    [
+        ("github.event_name == 'push'", "push", True),
+        ("github.event_name == 'push'", "schedule", False),
+        ("github.event_name != 'push'", "schedule", True),
+        ("!(github.event_name == 'push')", "push", False),
+        ("github.repository == 'OmniNode-ai/fixture'", "push", True),
+        ("github.repository_owner == 'OmniNode-ai'", "push", True),
+        ("contains('abcdef', 'cd')", "push", True),
+        (
+            "github.event_name == 'push' || github.event_name == 'schedule'",
+            "schedule",
+            True,
+        ),
+        (
+            "github.event_name == 'push' && github.repository == 'other/repo'",
+            "push",
+            False,
+        ),
+        # A parenthesised disjunction of conjunctions -- omniclaude's own
+        # kb-doc-gate reusable writes exactly this, and parsing its arms as a
+        # comparison produced three operands and a refusal that hid a live
+        # omnistream finding.
+        (
+            "((github.event_name == 'pull_request' && github.base_ref == 'dev') || "
+            "(github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.repo.full_name != github.repository))",
+            "push",
+            False,
+        ),
+        # The OMN-16683 inversion, and the reason it is a defect: the equality
+        # is FALSE on every event with no pull-request payload.
+        (
+            "github.event.pull_request.head.repo.full_name == github.repository",
+            "push",
+            False,
+        ),
+        # GitHub casts mismatched types to number: null -> 0 and false -> 0,
+        # so `null == false` is TRUE. This guard therefore selects its arm on
+        # every event with no pull-request payload -- the inverted twin of the
+        # OMN-18616 defect, and just as invisible to a textual reading.
+        ("github.event.pull_request.head.repo.fork == false", "push", True),
+        (
+            "github.event.pull_request.head.repo.fork == false",
+            "pull_request:base",
+            True,
+        ),
+    ],
+)
+def test_the_expression_subset_the_estate_writes(
+    guard: str, event: str, expected: bool
+) -> None:
+    module = _module()
+    context = _context(module, event)
+    assert (
+        module._guard(guard, context, "OmniNode-ai/fixture", "fixture::job") is expected
+    )
 
 
 @pytest.mark.parametrize(
     "guard",
     [
-        # The OMN-16683 inversion: this guards the TRUSTED arm.
-        "github.event.pull_request.head.repo.full_name == github.repository",
-        "github.event.pull_request.head.repo.fork == false",
-        "github.event.pull_request.head.repo.fork != true",
-        "github.event_name == 'schedule'",
+        # A context field the evaluator has not been taught.
+        "github.event.pull_request.draft == true",
+        # A filter expression -- the shape the old regex list happened to name.
         "contains(github.event.pull_request.labels.*.name, 'fork')",
+        # An ordering comparison: nothing routes on one, so its arrival means
+        # a shape landed that this gate was never taught.
+        "github.run_number > 3",
+        # A function it does not implement.
+        "startsWith(github.ref, 'refs/tags/')",
+        # Chained equality, which GitHub does not mean the way it reads.
+        "github.event_name == 'push' == true",
     ],
 )
-def test_an_inverted_or_unrelated_guard_is_not_a_fork_test(guard: str) -> None:
-    """The exemption must not be reachable by a guard that means the opposite."""
+def test_an_unreadable_guard_refuses_rather_than_passing(guard: str) -> None:
+    """Fail closed, naming the job -- never a silent pass.
+
+    This is the property that makes the narrowing safe. A gate that skipped a
+    guard it could not parse would report exactly the green it reported for
+    nine days; refusing means a new selector shape stops the merge until
+    somebody teaches the evaluator what it means.
+    """
     module = _module()
-    assert not module.FORK_TEST.search(guard)
+    context = _context(module, "push")
+    with pytest.raises(module.GateError) as caught:
+        module._guard(guard, context, "OmniNode-ai/fixture", "ci.yml::build")
+    assert "ci.yml::build" in str(caught.value)
+    assert "THE GATE DID NOT RUN" in str(caught.value)
+
+
+def test_an_unreadable_guard_in_an_all_fleet_expression_is_not_refused(
+    tmp_path: Path,
+) -> None:
+    """Evaluation is demanded exactly where the answer depends on it.
+
+    When no arm carries a hosted label and some arm is unguarded, every event
+    lands on some arm and none of them is hosted -- whatever the guard means.
+    Refusing there would take the gate down over a shape that cannot change any
+    verdict, which is how an enforcement surface gets switched off.
+    """
+    module = _module()
+    exotic = (
+        "${{\n"
+        "  startsWith(github.ref, 'refs/tags/')\n"
+        "  && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON)\n"
+        "  || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON)\n"
+        "}}"
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(exotic, CI_TRIGGERS))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 0
+
+
+def test_null_compares_the_way_github_compares_it() -> None:
+    """The one semantic the entire defect turns on, pinned on its own.
+
+    An absent context field is null. Null is unequal to a non-empty string and
+    equal to the empty one, and it is falsy. Bound here as a named assertion
+    rather than left implicit inside a guard, because if this is wrong every
+    cell of the matrix is wrong in the same direction.
+    """
+    module = _module()
+    assert module._equal(module.MISSING, "OmniNode-ai/fixture") is False
+    assert module._equal(module.MISSING, "") is True
+    assert module._equal(module.MISSING, False) is True
+    assert module._truthy(module.MISSING) is False
+
+
+@pytest.mark.parametrize(
+    ("block", "expected"),
+    [
+        ("on:\n  pull_request: {}\n", {"pull_request"}),
+        ("on: push\n", {"push"}),
+        ("on: [push, schedule]\n", {"push", "schedule"}),
+        ("'on':\n  push: {}\n", {"push"}),
+    ],
+)
+def test_the_trigger_block_is_read_through_the_yaml_boolean_key(
+    block: str, expected: set[str]
+) -> None:
+    """`on` is the YAML 1.1 boolean true, and PyYAML resolves it that way.
+
+    A gate that read only the string key would find no triggers in any real
+    workflow file, judge every job over an empty matrix, and pass everything --
+    a silent green produced by a parser quirk rather than by the estate.
+    """
+    module = _module()
+    document = yaml.safe_load(block + "jobs:\n  build:\n    runs-on: x\n")
+    contexts = module.declared_contexts(document, "ci.yml")
+    assert {context.event_name for context in contexts} == expected
+
+
+def test_a_reusable_workflow_is_judged_over_the_whole_matrix() -> None:
+    """A called workflow runs under whatever event its CALLER fired.
+
+    Its own `on:` block says only `workflow_call`, which names no event at all,
+    so narrowing to it would judge every reusable over an empty matrix. The
+    whole matrix is the only honest reading available from here.
+    """
+    module = _module()
+    document = yaml.safe_load(
+        "on:\n  workflow_call: {}\njobs:\n  build:\n    runs-on: x\n"
+    )
+    contexts = module.declared_contexts(document, "reusable.yml")
+    assert contexts == module.EVENT_MATRIX
+
+
+def test_an_event_outside_the_matrix_is_modelled_with_no_pull_request_payload(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unmodelled trigger is judged, not skipped.
+
+    Every event outside the pull-request family shares the one property any
+    routing guard in this estate reads: no pull-request payload. So an
+    `issue_comment`-triggered workflow carrying the pre-fix selector takes the
+    public arm exactly as a push does, and is reported as such.
+    """
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _seam_job(SEAM_EXPRESSION, ("issue_comment",)))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
+    assert "issue_comment" in capsys.readouterr().err
+
+
+def test_a_workflow_with_no_trigger_block_fails_closed(tmp_path: Path) -> None:
+    """Which events reach a job is what decides where it runs."""
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "ci.yml",
+        "name: CI\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: true\n",
+    )
+    assert _run(module, root, {}, tmp_path) == 2
 
 
 def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
@@ -882,3 +1246,61 @@ def test_the_same_flags_still_work_outside_github_actions(
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     root = _tree(tmp_path, "ci.yml", _seam_job())
     assert _run(module, root, {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}, tmp_path) == 0
+
+
+# ---------------------------------------------------------------------------
+# A COMPARISON AGAINST A REF THIS GATE CANNOT KNOW. omniclaude's own
+# kb-doc-gate reusable sends a pull request whose BASE is `dev` to the public
+# hosted class. Whether that can happen in a given private repository is not a
+# property of the expression, it is a property of the repository: omnistream
+# has exactly one branch, `main`, so no pull request there can ever reach that
+# arm. Both readings are asserted, because a gate that reported the
+# unreachable one would be teaching people to scroll past it.
+# ---------------------------------------------------------------------------
+
+KB_DOC_GATE_EXPRESSION = (
+    "${{\n"
+    "  ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||\n"
+    "   (github.event_name == 'pull_request' &&\n"
+    "    github.event.pull_request.head.repo.full_name != github.repository))\n"
+    "  && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+    "  || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+    '\'["self-hosted","omnibase-ci"]\')\n'
+    "}}"
+)
+
+
+def test_a_reachable_base_ref_comparison_is_a_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A repository that HAS the branch can take the hosted arm, so it is red."""
+    module = _module()
+    root = _tree(tmp_path, "kb.yml", _seam_job(KB_DOC_GATE_EXPRESSION))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path, ["main", "dev"]) == 1
+    assert "ref matches" in capsys.readouterr().err
+
+
+def test_an_unreachable_base_ref_comparison_is_not_a_finding(
+    tmp_path: Path,
+) -> None:
+    """omnistream, live: one branch, `main`, so that arm is unreachable.
+
+    The live branch list is what makes this answerable. A hardcoded list would
+    go stale the first time somebody cuts a branch, and the first cut would
+    turn a silent pass into a live hosted placement with nothing watching.
+    """
+    module = _module()
+    root = _tree(tmp_path, "kb.yml", _seam_job(KB_DOC_GATE_EXPRESSION))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path, ["main"]) == 0
+
+
+def test_an_unreadable_branch_list_assumes_the_comparison_can_match(
+    tmp_path: Path,
+) -> None:
+    """Fail closed: unreadable must never become "unreachable"."""
+    module = _module()
+    refs = module.RefNames("OmniNode-ai/does-not-exist-anywhere")
+    # Force the unreadable path without a network round trip.
+    refs._readable = False
+    assert refs.names() is None
+    assert refs.could_match({"dev"}) is True
