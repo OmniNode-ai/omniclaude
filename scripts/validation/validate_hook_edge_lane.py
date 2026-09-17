@@ -70,6 +70,28 @@ _EVENT_CLASS_LITERAL_RE = re.compile(
     r'"([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)"'
 )
 
+# OMN-18627. The edge does not emit only from shell. `hooks/lib/*.py` carries
+# real emission call sites too, and because this gate scanned `scripts/*.sh`
+# ONLY, two classes emitted from there -- `routing.decision`
+# (route_via_events_wrapper.py) and `artifact.captured`
+# (skill_output_suppressor.py) -- were never declared, so nothing derived from
+# the contract could provision their grants. On 2026-09-17 the first of those
+# denials stopped the drain outright: `drain_once` halts at the first failure
+# to preserve ordering, so one ungranted class held 1,333 spooled records of
+# four AUTHORIZED classes behind it.
+#
+# CALL SITES ONLY, NEVER THE DUTY TABLE. `emit_client_wrapper.py` carries a
+# ~60-entry tuple of classes the edge *supports*. Scanning that would force
+# declaring classes that have no call site, and a reader provisioning broker
+# permissions from the result would over-grant by roughly a factor of three --
+# the exact failure the "declared but not emitted" check below already refuses
+# in the other direction. These patterns match an emission, not an intention.
+_PY_EVENT_CLASS_LITERAL_RE = re.compile(
+    r"(?:\bevent_type\s*=\s*|"
+    r"\b(?:emit_event|emit_to_journal|emit_via_daemon)\s*\(\s*)"
+    r'"([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)"'
+)
+
 # OMN-17224 moved the publish off the *_bus_mirror.sh path and into a singleton
 # drainer that launchd starts with {OMNI_HOME, ONEX_STATE_DIR, HOME} and
 # nothing else. From that moment the four scripts this gate governed were the
@@ -171,17 +193,35 @@ def _check_static(repo_root: Path) -> list[str]:
     # against the contract.
     declared_classes = set(contract.governed_event_classes)
     emitted_classes: dict[str, str] = {}
-    for path in sorted(scripts.glob("*.sh")):
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError as exc:  # noqa: PERF203 - reported, not swallowed
-            violations.append(f"{path}: unreadable ({exc})")
-            continue
-        for lineno, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
+    # (directory, glob, pattern) -- every surface the edge emits from. Adding a
+    # surface here is how a new emitter joins the lane policy; there is no
+    # per-file or per-class suppression, deliberately (OMN-18627 AC5), because
+    # a gate that can be silenced file by file is one edit away from the gap
+    # it exists to close.
+    scan_surfaces = (
+        (scripts, "*.sh", _EVENT_CLASS_LITERAL_RE),
+        (hooks / "lib", "*.py", _PY_EVENT_CLASS_LITERAL_RE),
+    )
+    for directory, pattern_glob, literal_re in scan_surfaces:
+        for path in sorted(directory.glob(pattern_glob)):
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError as exc:  # noqa: PERF203 - reported, not swallowed
+                violations.append(f"{path}: unreadable ({exc})")
                 continue
-            for match in _EVENT_CLASS_LITERAL_RE.finditer(stripped):
+            # Blank out comment-only lines rather than dropping them, so the
+            # offset of a match still maps to the real line number, and scan
+            # the WHOLE text rather than line by line. A Python emission
+            # routinely puts the class literal on the line after the open
+            # paren -- `emit_event(\n    "artifact.captured",` in
+            # skill_output_suppressor.py is exactly that shape -- and a
+            # line-scoped scan reports such a call site as absent, which is
+            # indistinguishable from a class that is genuinely not emitted.
+            scannable = "\n".join(
+                "" if line.strip().startswith("#") else line for line in lines
+            )
+            for match in literal_re.finditer(scannable):
+                lineno = scannable.count("\n", 0, match.start()) + 1
                 emitted_classes.setdefault(match.group(1), f"{path}:{lineno}")
 
     for event_class, where in sorted(emitted_classes.items()):
@@ -201,7 +241,8 @@ def _check_static(repo_root: Path) -> list[str]:
         violations.append(
             f"{contract_path}: declares event class {event_class!r} in "
             f"governed_event_classes, but no hook script under {scripts} "
-            f"emits it as a literal. Remove it, or name the emitter."
+            f"and no module under {hooks / 'lib'} emits it as a literal. "
+            f"Remove it, or name the emitter."
         )
 
     # --- the resolver is applied, and applied last -------------------------
