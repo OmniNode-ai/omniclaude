@@ -51,6 +51,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 from scripts import lane_identity as li
 
@@ -123,7 +126,9 @@ def workspace(tmp_path: Path) -> dict:
 
     remote = tmp_path / "remote.git"
     subprocess.run(
-        ["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True
+        ["git", "init", "-q", "--bare", "-b", "main", str(remote)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
 
     repo = home / "widget"
@@ -149,7 +154,7 @@ def workspace(tmp_path: Path) -> dict:
             check=True,
             capture_output=True,
             text=True,
-            env=env,
+            env=scrub_git_location_env(env),
         )
 
     git("init", "-q", "-b", "main")
@@ -179,7 +184,7 @@ def _lane_identity(workspace: dict, *args: str) -> subprocess.CompletedProcess:
         [sys.executable, str(REPO_ROOT / "scripts" / "lane_identity.py"), *args],
         capture_output=True,
         text=True,
-        env=workspace["env"],
+        env=scrub_git_location_env(workspace["env"]),
     )
 
 
@@ -188,7 +193,7 @@ def _branch_claim(workspace: dict, *args: str) -> subprocess.CompletedProcess:
         [sys.executable, str(REPO_ROOT / "scripts" / "branch_claim.py"), *args],
         capture_output=True,
         text=True,
-        env=workspace["env"],
+        env=scrub_git_location_env(workspace["env"]),
     )
 
 
@@ -468,7 +473,7 @@ def test_a_peer_lane_push_onto_a_held_branch_is_refused(
         cwd=str(worktree),
         capture_output=True,
         text=True,
-        env=workspace["env"],
+        env=scrub_git_location_env(workspace["env"]),
     )
     combined = push.stdout + push.stderr
     assert push.returncode != 0, combined
@@ -513,7 +518,7 @@ def test_the_holder_pushing_the_same_branch_is_the_green_control(
         cwd=str(worktree),
         capture_output=True,
         text=True,
-        env=workspace["env"],
+        env=scrub_git_location_env(workspace["env"]),
     )
     assert push.returncode == 0, push.stdout + push.stderr
 
@@ -562,7 +567,7 @@ def test_the_pre_push_install_preserves_and_chains_the_repository_own_hook(
         cwd=str(worktree),
         capture_output=True,
         text=True,
-        env=workspace["env"],
+        env=scrub_git_location_env(workspace["env"]),
     )
     # The chained hook refused, so the push failed with ITS status, not ours.
     assert push.returncode != 0

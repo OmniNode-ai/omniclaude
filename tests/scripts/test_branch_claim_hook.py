@@ -45,6 +45,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 from scripts import lane_identity as li
 
@@ -84,7 +87,9 @@ def scratch(tmp_path: Path) -> dict:
     """A clone with a real remote, one stamped commit, and a scratch store."""
     remote = tmp_path / "remote.git"
     subprocess.run(
-        ["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True
+        ["git", "init", "-q", "--bare", "-b", "main", str(remote)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
     repo = tmp_path / "clone"
     repo.mkdir()
@@ -101,7 +106,7 @@ def scratch(tmp_path: Path) -> dict:
             check=True,
             capture_output=True,
             text=True,
-            env=env,
+            env=scrub_git_location_env(env),
         )
 
     run("init", "-q", "-b", "main")
@@ -203,7 +208,7 @@ def _push(scratch: dict) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         check=False,
-        env=_hook_env(scratch),
+        env=scrub_git_location_env(_hook_env(scratch)),
     )
 
 
@@ -288,6 +293,7 @@ def test_a_push_to_a_branch_held_by_another_lane_is_refused(scratch: dict) -> No
         capture_output=True,
         text=True,
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
     assert refs.stdout.strip() == ""
 
@@ -385,7 +391,7 @@ def test_deleting_a_branch_is_not_refused(scratch: dict) -> None:
         capture_output=True,
         text=True,
         check=False,
-        env=_hook_env(scratch),
+        env=scrub_git_location_env(_hook_env(scratch)),
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -405,7 +411,7 @@ def test_a_branch_with_no_ticket_in_its_name_is_not_refused(scratch: dict) -> No
         capture_output=True,
         text=True,
         check=False,
-        env=_hook_env(scratch),
+        env=scrub_git_location_env(_hook_env(scratch)),
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -430,7 +436,7 @@ def test_an_unreadable_claim_store_refuses_the_push(scratch: dict) -> None:
         capture_output=True,
         text=True,
         check=False,
-        env=env,
+        env=scrub_git_location_env(env),
     )
     assert result.returncode != 0, result.stdout + result.stderr
     assert "no-such-store.md" in result.stdout + result.stderr
@@ -451,7 +457,7 @@ def test_the_installer_refuses_a_hooks_directory_outside_the_repo(
         check=True,
         capture_output=True,
         text=True,
-        env=scratch["env"],
+        env=scrub_git_location_env(scratch["env"]),
     )
     result = subprocess.run(
         [
@@ -521,6 +527,7 @@ def test_this_repository_has_no_branch_claim_pre_push_installed() -> None:
         capture_output=True,
         text=True,
         check=True,
+        env=scrub_git_location_env(os.environ),
     ).stdout.strip()
     candidates.append(Path(configured) / "pre-push")
     candidates.append(Path(REPO_ROOT / ".git" / "hooks" / "pre-push"))
