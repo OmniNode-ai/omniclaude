@@ -828,6 +828,38 @@ def _archive_dir_for(ledger: Path) -> Path:
     return ledger.parent / "archive"
 
 
+def _is_real_file_inside(candidate: Path, directory: Path) -> bool:
+    """Whether ``candidate`` is a regular file that really lives in ``directory``.
+
+    THE GLOB RESTRICTS THE NAME, NOT THE INODE. A symlink called
+    `<ledger stem>_<date>-split.md` matches the pattern, and `read_text` follows
+    symlinks, so without this a link planted in the archive directory could point
+    at any file on the host and answer a consent citation with whatever that file
+    contains. The name is attacker-choosable; the target must not be.
+
+    Four conditions, each load-bearing: the DIRECTORY is not itself a symlink
+    (otherwise every entry in it resolves consistently and the check passes while
+    reading a tree somewhere else entirely -- a case found by the test for it,
+    not by inspection); the entry is not a symlink; it is a regular file, not a
+    fifo, device or directory; and it resolves to something whose parent really
+    is this directory.
+
+    What this does NOT claim: the archive is not a trusted store. Anyone who can
+    plant a file in it can also append a row to the live ledger, which is read
+    with no such check because it is the file the citation names. This closes one
+    specific vector -- a name that matches the roll pattern standing for content
+    that lives anywhere on the host -- and nothing wider.
+    """
+    try:
+        if directory.is_symlink():
+            return False
+        if candidate.is_symlink() or not candidate.is_file():
+            return False
+        return candidate.resolve().parent == directory.resolve()
+    except OSError:
+        return False
+
+
 def _rows_with_stamp(rows: list[str], stamp: str) -> list[str]:
     """Every row whose FIRST field is exactly ``stamp``.
 
@@ -906,6 +938,8 @@ def _read_consent_row(
             for archive in sorted(
                 _archive_dir_for(ledger).glob(f"{ledger.stem}_*-split.md")
             ):
+                if not _is_real_file_inside(archive, _archive_dir_for(ledger)):
+                    continue
                 try:
                     archived = archive.read_text(encoding="utf-8").splitlines()
                 except OSError:

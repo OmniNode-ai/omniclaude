@@ -1303,3 +1303,58 @@ def test_a_conforming_archive_name_is_still_read(
     )
 
     assert findings == [], f"archive resolution stopped working entirely: {findings}"
+
+
+def test_a_symlinked_archive_entry_is_not_read(
+    policy: Policy, stamped_home: Path, tmp_path: Path
+) -> None:
+    """The glob restricts the NAME; this restricts the inode.
+
+    A symlink called ``<ledger stem>_<date>-split.md`` matches the pattern, and
+    ``read_text`` follows symlinks, so without the check a link planted in the
+    archive directory could point at any file on the host and answer a citation
+    with whatever that file contains. The name is attacker-choosable; the target
+    must not be.
+    """
+    tracking = stamped_home / "docs" / "tracking"
+    archive = tracking / "archive"
+    archive.mkdir()
+    elsewhere = tmp_path / "planted.md"
+    elsewhere.write_text(_UNIQUE_ROW + "\n", encoding="utf-8")
+    (archive / "ROLLING_WORK_LEDGER_2026-09-06-split.md").symlink_to(elsewhere)
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
+
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    )
+
+    assert "consent_stamp_absent" in codes(findings), (
+        "a consent row reached through a symlink out of the archive directory "
+        f"was accepted: {findings}"
+    )
+
+
+def test_a_symlinked_archive_directory_does_not_defeat_the_check(
+    policy: Policy, stamped_home: Path, tmp_path: Path
+) -> None:
+    """The second half: the directory itself can be the link.
+
+    Checking only the entry would still read a real file sitting in a real
+    directory that the archive path merely points at.
+    """
+    tracking = stamped_home / "docs" / "tracking"
+    real_dir = tmp_path / "planted_archive"
+    real_dir.mkdir()
+    (real_dir / "ROLLING_WORK_LEDGER_2026-09-06-split.md").write_text(
+        _UNIQUE_ROW + "\n", encoding="utf-8"
+    )
+    (tracking / "archive").symlink_to(real_dir, target_is_directory=True)
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
+
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    )
+
+    assert "consent_stamp_absent" in codes(findings), (
+        f"an archive directory that is a symlink out of the tree was read: {findings}"
+    )
