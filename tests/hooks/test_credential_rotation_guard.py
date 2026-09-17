@@ -1252,3 +1252,54 @@ def test_a_non_consent_row_cited_by_timestamp_is_still_refused(
 
     assert findings, "citing a CLAIM row by timestamp was allowed"
     assert "consent_row_not_operator_consent" in codes(findings)
+
+
+def test_an_archive_file_outside_the_roll_naming_shape_is_not_read(
+    policy: Policy, stamped_home: Path
+) -> None:
+    """The archive search is scoped to the names a roll actually writes.
+
+    A bare ``*.md`` glob would read every markdown file in the archive
+    directory, so anything that could land a file there -- a stray doc, a
+    partial write, a crafted name -- could carry a row with the target timestamp
+    and the required fields and authorise a rotation nobody consented to. This
+    plants exactly such a file under a name no roll produces and asserts the
+    guard does not see it.
+    """
+    tracking = stamped_home / "docs" / "tracking"
+    archive = tracking / "archive"
+    archive.mkdir()
+    (archive / "notes.md").write_text(_UNIQUE_ROW + "\n", encoding="utf-8")
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
+
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    )
+
+    assert "consent_stamp_absent" in codes(findings), (
+        f"a consent row planted under a name no roll writes was accepted: {findings}"
+    )
+
+
+def test_a_conforming_archive_name_is_still_read(
+    policy: Policy, stamped_home: Path
+) -> None:
+    """Positive control for the scoping above.
+
+    Without it, narrowing the glob to something that matches nothing would
+    satisfy the test above while silently retiring archive resolution -- which
+    is the one behaviour the timestamp form exists to provide.
+    """
+    tracking = stamped_home / "docs" / "tracking"
+    archive = tracking / "archive"
+    archive.mkdir()
+    (archive / "ROLLING_WORK_LEDGER_2026-09-06-split.md").write_text(
+        _UNIQUE_ROW + "\n", encoding="utf-8"
+    )
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
+
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    )
+
+    assert findings == [], f"archive resolution stopped working entirely: {findings}"
