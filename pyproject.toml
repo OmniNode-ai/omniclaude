@@ -257,7 +257,15 @@ override-dependencies = [
     # with our direct omnimarket rev below -- force our rev to win transitively.
     # OMN-16979: approved dispatch baseline carrying canonical projection
     # adapter query support required by the all-class producer path.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@fa7f0d26f37a638f3985c1b19c43728a118a7dba",
+    # OMN-18622: advanced to the v0.4.113 release commit (= omnimarket main,
+    # 2026-09-17). The previous rev was a dev commit, not a tag, so the pin
+    # never tracked the release line; pin release commits from here on.
+    # OMN-18639: v0.4.113 -> v0.4.114 (3 commits). v0.4.114 published
+    # 2026-09-17T20:51:56Z, 51 min BEFORE the OMN-18622 bump merged, so that
+    # pin was one release behind on the day it landed. Not a mistake in that
+    # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
+    # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@9818ae563581c762e91968a65f6cc035bfe4b400",
 ]
 
 [tool.uv.sources]
@@ -283,7 +291,10 @@ onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_contro
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret
 # OMN-16979: pin the approved dispatch commit; never substitute a branch head or
 # a PyPI source because the dispatch-drift guard verifies direct VCS provenance.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "fa7f0d26f37a638f3985c1b19c43728a118a7dba" }  # pragma: allowlist secret
+# OMN-18622: this override is why `sibling-lock-refresh.yml` can never move this
+# package -- `uv lock --upgrade-package` cannot move an immutable rev -- so a bump
+# here is a deliberate act. Advance it to a RELEASE commit, never a branch head.
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "9818ae563581c762e91968a65f6cc035bfe4b400" }  # pragma: allowlist secret
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]

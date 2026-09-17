@@ -94,7 +94,22 @@ jobs:
           # bump time). The prior pin predates the canonical projection
           # adapter query surface this PR exercises; locking it locally made
           # ordered/query metadata tests fail against the older adapter.
-          SHA="fa7f0d26f37a638f3985c1b19c43728a118a7dba"
+          # OMN-18622: bumped fa7f0d26 -> 00aefdee, which is the v0.4.113
+          # RELEASE commit (published 2026-09-17T15:58:51Z) and is also
+          # omnimarket's release-synced main -- not a dev tip. Every previous
+          # entry above pinned a dev tip, which is why the pin never tracked
+          # the release line and rotted 58 commits: sibling-lock-refresh.yml
+          # names omnimarket in its default package set but cannot move it,
+          # because `uv lock --upgrade-package` cannot move an immutable rev
+          # in [tool.uv.sources]. Pin release commits from here on, so this
+          # baseline is a mechanical diff against `gh release list`.
+          # Operator ruling, in-session 2026-09-17T19:40:00Z, firm.
+          # OMN-18639: bumped 00aefdee -> 9818ae56, the v0.4.114 release
+          # commit, 3 commits on. This baseline is the FOURTH touch point of
+          # an omnimarket bump and the one most easily missed -- the gate
+          # failed on OMN-18622 naming exactly this literal. It is hand-held
+          # because sibling-lock-refresh.yml cannot move an immutable rev.
+          SHA="9818ae563581c762e91968a65f6cc035bfe4b400"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Expected omnimarket dispatch SHA: $SHA"
 
