@@ -825,3 +825,89 @@ def test_every_granted_class_has_a_journal_call_site() -> None:
         f"for, so a journal call site would stop the drain for every record "
         f"behind them: {sorted(wrongly_journalled)}"
     )
+
+
+def test_validator_catches_an_undeclared_class_emitted_from_lib(
+    tmp_path: Path,
+) -> None:
+    """OMN-18627 AC2: the gate scans `hooks/lib/*.py`, not only `scripts/*.sh`.
+
+    This is the case that went undetected. `routing.decision` and
+    `artifact.captured` had real call sites under `hooks/lib/` and no entry in
+    `governed_event_classes`, so nothing derived from the contract could
+    provision their broker grants. On 2026-09-17 the first of those denials
+    stopped the drain outright -- `drain_once` halts at the first failure to
+    preserve ordering -- and held 1,333 spooled records of four AUTHORIZED
+    classes behind one ungranted class.
+
+    The new module is written into `hooks/lib/` rather than `scripts/`
+    precisely so that a gate which still scanned shell only would pass it.
+    """
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    lib_dir = fake_root / "plugins" / "onex" / "hooks" / "lib"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    # Multi-line call shape on purpose: the real `artifact.captured` emission
+    # puts the literal on the line AFTER the open paren, and a line-scoped
+    # scan reports that call site as absent -- indistinguishable from a class
+    # that is genuinely never emitted.
+    (lib_dir / "omn18627_probe_emitter.py").write_text(
+        "from emit_client_wrapper import emit_event\n"
+        "\n"
+        "def emit() -> None:\n"
+        "    emit_event(\n"
+        '        "omn18627.undeclared.probe",\n'
+        "        {},\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    assert proc.returncode != 0, (
+        "gate passed a class emitted from hooks/lib that the contract does "
+        "not declare -- this is the OMN-18627 defect, and a gate that only "
+        "scans scripts/*.sh cannot see it"
+    )
+    assert "omn18627.undeclared.probe" in combined, (
+        "the refusal must name the class; a reader has to know WHICH class to "
+        f"declare. Got: {combined}"
+    )
+    assert "omn18627_probe_emitter.py" in combined, (
+        "the refusal must name the file and line, not just the class"
+    )
+
+
+def test_validator_has_no_per_file_or_per_class_suppression(tmp_path: Path) -> None:
+    """OMN-18627 AC5: the widened scan cannot be silenced by narrowing it.
+
+    A gate that carries an exclusion list is one edit away from the gap it
+    exists to close: the cheapest way to make the previous test green is to
+    add the offending file to an allowlist, and that is exactly how the
+    original `scripts/`-only scope stopped being a deliberate bound and became
+    an invisible one. This asserts no such mechanism exists to reach for.
+    """
+    source = _VALIDATOR.read_text(encoding="utf-8")
+    forbidden = (
+        "SUPPRESS",
+        "IGNORE_CLASSES",
+        "EXEMPT",
+        "ALLOWLIST",
+        "ALLOWED_UNDECLARED",
+        "SKIP_CLASSES",
+        "noqa: hook-edge",
+    )
+    present = [token for token in forbidden if token in source]
+    assert not present, (
+        "the hook-edge lane gate must carry no per-file or per-class "
+        f"suppression surface; found {present}. If a scope bound is genuinely "
+        "needed it belongs in `scan_surfaces` as a directory the edge does "
+        "not emit from, justified in the source."
+    )
