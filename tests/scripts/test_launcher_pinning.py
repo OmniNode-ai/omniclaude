@@ -84,9 +84,16 @@ def test_other_launchers_source_common_and_use_brew_py_var():
         if "python" not in text.lower():
             continue
         assert "common.sh" in text, f"{path} must source common.sh"
-        assert "$BREW_PY" in text or "${BREW_PY}" in text, (
-            f"{path} must reference $BREW_PY (not the literal /opt/homebrew path)"
-        )
+        # OMN-18471: the "must REFERENCE $BREW_PY" expectation is deleted. It was
+        # satisfied in session-start.sh only by the emit-daemon launcher that
+        # omniclaude#2214 retired, so after that change a launcher can legitimately
+        # mention python (a realpath fallback, a `uv --project ... run python`) and
+        # invoke nothing through BREW_PY. The load-bearing half is the literal-path
+        # refusal below, which still applies to all three; and every $BREW_PY
+        # invocation that DOES exist is still governed by
+        # test_brew_py_invocations_strip_pythonpath. Consequence stated rather than
+        # hidden: session-end.sh and user-prompt-submit.sh reference $BREW_PY today
+        # and are no longer asserted to keep doing so.
         assert "/opt/homebrew/bin/python3.13" not in text, (
             f"{path} must not hardcode the literal interpreter path; use $BREW_PY from common.sh"
         )
