@@ -104,7 +104,12 @@ jobs:
           # in [tool.uv.sources]. Pin release commits from here on, so this
           # baseline is a mechanical diff against `gh release list`.
           # Operator ruling, in-session 2026-09-17T19:40:00Z, firm.
-          SHA="00aefdee52166dfa1d63e0adb776a7eb04b982d0"
+          # OMN-18639: bumped 00aefdee -> 9818ae56, the v0.4.114 release
+          # commit, 3 commits on. This baseline is the FOURTH touch point of
+          # an omnimarket bump and the one most easily missed -- the gate
+          # failed on OMN-18622 naming exactly this literal. It is hand-held
+          # because sibling-lock-refresh.yml cannot move an immutable rev.
+          SHA="9818ae563581c762e91968a65f6cc035bfe4b400"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Expected omnimarket dispatch SHA: $SHA"
 
