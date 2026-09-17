@@ -596,3 +596,66 @@ def test_a_short_env_value_is_not_treated_as_a_credential() -> None:
         assert gate.redact("a bad request") == "a bad request"
     finally:
         del os.environ["GH_TOKEN"]
+
+
+def test_a_repository_whose_arms_are_all_matrix_computed_refuses(
+    tmp_path: Path,
+) -> None:
+    """The matrix path must not count toward the decidable total either.
+
+    Reporting a matrix arm rather than failing it is correct, but it creates a
+    way to pass vacuously: had the skip been placed one line later, the arm
+    would have incremented the decidable counter on its way out, and a
+    repository whose every arm is matrix-computed would report OK having judged
+    nothing. The sibling test covers that for expression-valued `runs-on`; this
+    covers it for the element-level form, which is a different code path.
+    """
+    repo = _tree(
+        tmp_path,
+        {
+            "arm64.yml": """\
+            name: arm64
+            on: {pull_request: {}}
+            jobs:
+              proof:
+                strategy:
+                  matrix:
+                    host: [host-101]
+                runs-on:
+                  - self-hosted
+                  - omnibase-verify
+                  - ${{ matrix.host }}
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    runners = _fixture(tmp_path, "runners.json", ONLINE_FLEET)
+    result = _run(repo, runners, tmp_path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "judged nothing" in result.stderr
+
+    # Positive control: add one decidable arm and the same tree passes, so the
+    # refusal above is the counter working rather than the parse failing.
+    with_decidable = _tree(
+        tmp_path / "mixed",
+        {
+            "arm64.yml": """\
+            name: arm64
+            on: {pull_request: {}}
+            jobs:
+              proof:
+                strategy:
+                  matrix:
+                    host: [host-101]
+                runs-on:
+                  - self-hosted
+                  - omnibase-verify
+                  - ${{ matrix.host }}
+                steps: [{run: "true"}]
+              fleet:
+                runs-on: [self-hosted, omnibase-ci]
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    assert _run(with_decidable, runners, tmp_path).returncode == 0
