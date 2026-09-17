@@ -142,6 +142,7 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --event-type "session.ended" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
+            --cwd "${CWD:-$(pwd)}" \
             >>"$LOG_FILE" 2>&1
     ) &
     disown 2>/dev/null || true

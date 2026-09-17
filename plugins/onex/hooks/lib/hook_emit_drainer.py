@@ -254,6 +254,38 @@ def apply_declared_lane(
     return brokers
 
 
+#: Payload key carrying the instant the HOOK FIRED, as distinct from the
+#: instant this drainer published it (OMN-18609).
+FIRE_TIME_KEY = "hook_fired_at"
+
+
+def _with_fire_time(record: journal.JournalRecord) -> dict[str, object]:
+    """``record.payload`` plus the instant the hook fired.
+
+    WHY THIS EXISTS. Before it, the only timestamp that survived to the cloud
+    was stamped by the emit envelope at PUBLISH time, so the ledger's time axis
+    was the relay's rather than the work's. The journal has always recorded
+    ``queued_at`` at the moment the hook fired; ``publish`` simply did not carry
+    it, so it was discarded at the last hop.
+
+    MEASURED CONSEQUENCE, 2026-09-17. This drainer died at 15:31Z and was
+    unsupervised, so the last event reaching the cloud before the outage is
+    stamped 15:20:54.543159Z and the next 16:01:46.740871Z -- a hole of 40
+    minutes 52 seconds. The backlog that accumulated inside it was published
+    stamped 16:01 to 16:03, putting 468 rows into the single minute 16:02
+    against a normal rate of 20 to 40. The work happened during the hole; the
+    ledger said it happened after it. Any drop detector reading that table sees
+    a relay recovery as a burst of activity and a relay outage as the silence
+    of every lane at once.
+
+    The original payload is never mutated -- the journal record is re-published
+    on a retry, and a publish must be idempotent in what it sends.
+    """
+    payload = dict(record.payload)
+    payload[FIRE_TIME_KEY] = record.queued_at.isoformat()
+    return payload
+
+
 class _Emitter:
     """Lazily-built, reused handler.
 
@@ -298,7 +330,7 @@ class _Emitter:
             request = self._request_cls(
                 event_type=record.event_type,
                 topic=None,
-                payload=record.payload,
+                payload=_with_fire_time(record),
                 correlation_id=record.correlation_id,
             )
         except Exception as exc:  # noqa: BLE001
