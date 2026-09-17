@@ -303,14 +303,14 @@ governed_topics:
 #   j  dod.guard.fired              onex.evt.omniclaude.dod-guard-fired.v1
 #   j  skill.started                onex.evt.omniclaude.skill-started.v1
 #   j  response.stopped             onex.cmd.omniintelligence.claude-hook-event.v1
-#   L  skill.completed              onex.evt.omniclaude.skill-completed.v1
+#   j  skill.completed              onex.evt.omniclaude.skill-completed.v1
 #                                 + onex.evt.omniclaude.skill-invoked.v1
-#   L  agent.action                 onex.evt.omniclaude.agent-actions.v1
+#   j  agent.action                 onex.evt.omniclaude.agent-actions.v1
+#   j  routing.feedback             onex.evt.omniclaude.routing-feedback.v1
+#   j  llm.cost.completed           onex.evt.omniintelligence.llm-call-completed.v1
 #   L  session.outcome              onex.evt.omniclaude.session-outcome.v1
-#                                 + onex.cmd.omniintelligence.session-outcome.v1
-#   L  routing.feedback             onex.evt.omniclaude.routing-feedback.v1
-#   L  llm.cost.completed           onex.evt.omniintelligence.llm-call-completed.v1
-#   L  utilization.scoring.requested onex.cmd.omniintelligence.utilization-scoring.v1
+#                                 + onex.cmd.omniintelligence.session-outcome.v1   <-- UNGRANTED
+#   L  utilization.scoring.requested onex.cmd.omniintelligence.utilization-scoring.v1  <-- UNGRANTED
 #
 # Fan-out is read from omnimarket `node_emit_daemon/registries/topics.yaml`,
 # which is what the drainer's HandlerEventEmitEffect resolves against. The
@@ -320,21 +320,31 @@ governed_topics:
 # actually uses). Read the fan-out registry, never this one, when the
 # question is which topic a class lands on.
 #
-# WHY THE SIX `L` CLASSES ARE NOT RE-HOMED IN THE SAME CHANGE. Every topic
-# their fan-out requires -- skill-invoked, agent-actions, both session-outcome
-# topics, routing-feedback, llm-call-completed, utilization-scoring -- exists
-# on the dev broker and has NO produce ACL for the hook edge's principal. A
-# journal call site for any of them would therefore put a record in the queue
-# that the drainer cannot publish, and a denied topic does not fail only its
-# own record: it stops the drain. That is measured, not inferred, and it is
-# the same mechanism the eighth topic demonstrated above. Adding those call
-# sites before the grants exist would take hook capture back down, so the
-# grants come first. Broker permissions are the operator's decision.
+# WHY TWO CLASSES ARE STILL NOT RE-HOMED. `session.outcome` and
+# `utilization.scoring.requested` are the only classes left on the legacy
+# path, and the reason is a permission rather than a defect. Both fan out to
+# an `onex.cmd.omniintelligence.*` topic -- the access-restricted class this
+# repository reserves for full prompts and file contents -- and the operator
+# consent of 2026-09-17 deliberately granted the six `onex.evt.*` topics and
+# HELD those two pending a separate decision. `session.outcome` is the
+# awkward one: its evt half IS granted, but a class is only as deliverable as
+# its least-permitted fan-out target, so it stays on the legacy path whole.
 #
-# `dod.guard.fired` is in the same position for a different reason: it
-# already HAS a journal call site (pre_tool_use_dod_completion_guard.sh) and
-# its topic has no grant either, so it is a live hazard rather than a pending
-# one -- the first time that guard fires, the drain stops.
+# A journal call site for either would put a record in the queue the drainer
+# cannot publish, and a denied topic does not fail only its own record: it
+# stops the drain. Measured, not inferred -- a journal holding
+# [authorized, denied, authorized] published 1 of 3 and then 0 of 2, with an
+# authorized record sitting untouched behind the denied one. That is why the
+# grant comes first and the call site second, never the other way round.
+#
+# The same mechanism was measured on the LIVE path and it is the strongest
+# evidence in this file. `onex.evt.omniclaude.dod-guard-fired.v1` had a
+# journal call site and no grant, and the drainer paid a full four-attempt
+# retry ladder against it on every cycle: 2,124 denials in a single hour,
+# the backlog at 503 records, and a publish roughly every 17 minutes. The
+# grant landed at 2026-09-17T00:41Z and the backlog fell to 1 record inside
+# a minute, publishing every ~2 seconds, with zero denials. One ungranted
+# topic in the fan-out throttles the whole edge.
 governed_event_classes:
   - "session.started"
   - "session.ended"
