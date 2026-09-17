@@ -439,6 +439,11 @@ print(result.outcome)
         elif [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
             log "WARNING: outcome payload empty or null, skipping emission"
         else
+            # OMN-18471: the last two classes, re-homed under the 2026-09-17
+            # operator consent granting their onex.cmd.omniintelligence.*
+            # fan-out topics on the dev broker. All twelve now deliver via the
+            # journal, which is what lets emit_via_daemon be retired (AC5).
+            emit_to_journal "session.outcome" "$OUTCOME_PAYLOAD" "${CORRELATION_ID:-}"
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
             log "session.outcome emitted: outcome=$DERIVED_OUTCOME dod_pass=$DOD_PASS success=$SESSION_SUCCESS tokens=${TOTAL_TOKENS_USED} files=${FILES_MODIFIED_COUNT} tasks=${TASKS_COMPLETED_COUNT} treatment_group=${TREATMENT_GROUP}"
         fi

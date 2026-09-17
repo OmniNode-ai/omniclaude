@@ -791,8 +791,15 @@ def test_every_granted_class_has_a_journal_call_site() -> None:
         "agent.action",
         "routing.feedback",
         "llm.cost.completed",
+        "session.outcome",
+        "utilization.scoring.requested",
     }
-    held_classes = {"session.outcome", "utilization.scoring.requested"}
+    # Empty since 2026-09-17: the last two classes were granted their
+    # onex.cmd.omniintelligence.* fan-out topics and re-homed. The set is kept
+    # rather than deleted because it is the mechanism that refuses a journal
+    # call site for a class whose fan-out is not fully permitted, and that
+    # refusal is the thing worth keeping, not the two names that were in it.
+    held_classes: set[str] = set()
 
     journalled: set[str] = set()
     for path in sorted(_SCRIPTS_DIR.glob("*.sh")):
