@@ -260,7 +260,12 @@ override-dependencies = [
     # OMN-18622: advanced to the v0.4.113 release commit (= omnimarket main,
     # 2026-09-17). The previous rev was a dev commit, not a tag, so the pin
     # never tracked the release line; pin release commits from here on.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@00aefdee52166dfa1d63e0adb776a7eb04b982d0",
+    # OMN-18639: v0.4.113 -> v0.4.114 (3 commits). v0.4.114 published
+    # 2026-09-17T20:51:56Z, 51 min BEFORE the OMN-18622 bump merged, so that
+    # pin was one release behind on the day it landed. Not a mistake in that
+    # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
+    # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@9818ae563581c762e91968a65f6cc035bfe4b400",
 ]
 
 [tool.uv.sources]
@@ -289,7 +294,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 # OMN-18622: this override is why `sibling-lock-refresh.yml` can never move this
 # package -- `uv lock --upgrade-package` cannot move an immutable rev -- so a bump
 # here is a deliberate act. Advance it to a RELEASE commit, never a branch head.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "00aefdee52166dfa1d63e0adb776a7eb04b982d0" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "9818ae563581c762e91968a65f6cc035bfe4b400" }  # pragma: allowlist secret
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
