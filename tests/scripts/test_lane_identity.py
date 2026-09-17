@@ -24,6 +24,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 from scripts import lane_identity as li
 
@@ -271,7 +274,7 @@ def _git(repo: Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=scrub_git_location_env(_clean_env()),
     ).stdout.strip()
 
 
@@ -508,7 +511,7 @@ def test_installer_bakes_the_module_path_into_the_installed_hook(
     result = subprocess.run(  # noqa: PLW1510 - the return code IS the assertion
         ["git", "commit", "-m", "feat(OMN-18260): through the installed hook"],
         cwd=repo,
-        env=env,
+        env=scrub_git_location_env(env),
         capture_output=True,
         text=True,
     )
