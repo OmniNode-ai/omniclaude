@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,26 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "converge-canonical-clone.sh"
+
+
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    """Drop the four git location variables that OVERRIDE ``cwd=`` (OMN-18434).
+
+    Defined here rather than imported: ``omnibase_core`` is not a dependency of
+    this repository's test venv, and this is the same local definition
+    ``tests/hooks/test_ticket_creation_guard.py`` already carries.
+    """
+    scrubbed = dict(env)
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ):
+        scrubbed.pop(key, None)
+    return scrubbed
 
 
 def _git_env(home: Path) -> dict[str, str]:
@@ -44,8 +65,19 @@ def _git_env(home: Path) -> dict[str, str]:
 
 
 def git(env: dict[str, str], cwd: Path, *args: str) -> str:
+    # OMN-18434: git exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE into every
+    # hook environment, and those OVERRIDE `cwd=`. Under a pre-push hook an
+    # unscrubbed env makes this fixture operate on the REAL invoking worktree
+    # instead of tmp_path. `_git_env` already drops every GIT_-prefixed key;
+    # scrubbing again at the call site is what makes the guarantee legible to
+    # the static guard rather than an accident of a helper three frames up.
     proc = subprocess.run(
-        ["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True
+        ["git", *args],
+        cwd=cwd,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return proc.stdout.strip()
 
@@ -62,7 +94,7 @@ class Scratch:
     upstream_head: str
 
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        env = {**self.env, "OMNI_HOME": str(self.omni_home)}
+        env = scrub_git_location_env({**self.env, "OMNI_HOME": str(self.omni_home)})
         return subprocess.run(
             ["bash", str(SCRIPT), *args],
             cwd=self.home,
@@ -142,7 +174,7 @@ def _dirty_like_the_incident(scratch: Scratch) -> str:
     status = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=clone,
-        env=env,
+        env=scrub_git_location_env(env),
         capture_output=True,
         text=True,
         check=True,
@@ -748,3 +780,70 @@ def test_script_opens_the_ref_guards_sanctioned_door() -> None:
         "reference-transaction guard names, or its own re-attach is refused"
     )
     assert "export ONEX_CANONICAL_CONVERGE=1" in text, text[:0] or "not exported"
+
+
+# --------------------------------------------------------------------------
+# OMN-18567 -- the reattach derivation needs the remote default as a fallback.
+#
+# The detached path derives its re-attachment target from the HEAD reflog only.
+# That is the right FIRST source: it names the branch this clone was actually
+# on. But a reflog is local, mutable and expiring state, and the attached path
+# of this same script already treats `refs/remotes/<remote>/HEAD` -- the default
+# branch the REMOTE itself publishes -- as an authoritative derived fact
+# (OMN-16497). With no fallback, a machine-driven tree whose reflog has expired
+# past its first detachment refuses and needs a human to type `--to-branch`,
+# which is exactly the dead end OMN-17313 set out to remove.
+#
+# This is not a guess and does not weaken the refusal: the fallback is a
+# published remote fact, and it is accepted only when it names a local branch
+# that still exists AND has an upstream -- the same two conditions the reflog
+# candidates must pass. `test_detached_head_refuses_when_target_cannot_be_derived`
+# above remains the control: there the local branch is deleted, so the remote
+# default resolves to a name that is not a local branch and the script still
+# refuses.
+# --------------------------------------------------------------------------
+def test_detached_head_falls_back_to_the_published_remote_default(
+    scratch: Scratch,
+) -> None:
+    """An expired reflog must not be a dead end when the remote publishes a default."""
+    env, clone = scratch.env, scratch.clone
+    git(env, clone, "remote", "set-head", "origin", "-a")
+    git(env, clone, "checkout", "-q", "--detach")
+    # The live condition: a long-lived machine tree whose HEAD reflog has aged
+    # out past the checkout that detached it. Nothing else about the clone is
+    # unusual -- `dev` still exists and still tracks origin/dev.
+    (clone / ".git" / "logs" / "HEAD").write_text("", encoding="utf-8")
+
+    proc = scratch.run("omnimarket", "--execute")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "refs/remotes/origin/HEAD" in (proc.stdout + proc.stderr), (
+        "the receipt must name WHERE the target came from; a derivation whose "
+        "source is not stated is indistinguishable from a guess"
+    )
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "dev"
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.upstream_head
+
+
+def test_the_reflog_still_wins_over_the_remote_default(
+    scratch: Scratch,
+) -> None:
+    """Order matters, and this is the test that pins it.
+
+    The reflog names the branch this clone was actually on; the remote default
+    names the branch the repository publishes. They usually agree, and when they
+    do not the clone's own history is the better answer -- a fallback that
+    silently outranked it would quietly move clones off a deliberate branch.
+    """
+    env, clone = scratch.env, scratch.clone
+    git(env, clone, "remote", "set-head", "origin", "-a")
+    git(env, clone, "checkout", "-q", "-b", "sidecar")
+    git(env, clone, "branch", "--set-upstream-to", "origin/dev", "sidecar")
+    git(env, clone, "checkout", "-q", "--detach")
+
+    proc = scratch.run("omnimarket")
+
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "re-attach to sidecar" in out, out
+    assert "derived from HEAD reflog" in out, out
