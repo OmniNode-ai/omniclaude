@@ -29,6 +29,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -46,9 +47,36 @@ _STDIN = '{"session_id":"sess-ws-01","cwd":"/tmp"}'
 # --------------------------------------------------------------------------- #
 # Hermetic workspace
 # --------------------------------------------------------------------------- #
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    """Drop the git location variables before shelling out to git (OMN-14891).
+
+    Git exports these into EVERY hook environment and they override both ``cwd=``
+    and ``git -C``. A fixture that shells out to git while a pre-push hook is
+    running would therefore operate on the REAL invoking worktree rather than on
+    ``tmp_path`` -- so this suite's own setup could rewrite the repository it is
+    being pushed from (OMN-18434).
+    """
+    scrubbed = dict(env)
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ):
+        scrubbed.pop(key, None)
+    return scrubbed
+
+
 def _git(*args: str, cwd: Path) -> str:
     return subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=scrub_git_location_env(os.environ),
     ).stdout.strip()
 
 
@@ -66,12 +94,16 @@ def _make_clone_with_remote(root: Path, name: str) -> tuple[Path, Path]:
 
     upstream.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["git", "clone", "--quiet", "--bare", str(seed), str(upstream)], check=True
+        ["git", "clone", "--quiet", "--bare", str(seed), str(upstream)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
 
     clone = root / name
     subprocess.run(
-        ["git", "clone", "--quiet", "-b", "dev", str(upstream), str(clone)], check=True
+        ["git", "clone", "--quiet", "-b", "dev", str(upstream), str(clone)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
     _git("config", "user.email", "test@example.com", cwd=clone)
     _git("config", "user.name", "Test", cwd=clone)
@@ -598,12 +630,16 @@ def _plant_hook_tree(root: Path, name: str) -> tuple[Path, Path]:
     upstream = root / "_lp_upstream" / f"{name}.git"
     upstream.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["git", "clone", "--quiet", "--bare", str(seed), str(upstream)], check=True
+        ["git", "clone", "--quiet", "--bare", str(seed), str(upstream)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
     clone = root / "_lp" / name
     clone.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["git", "clone", "--quiet", "-b", "dev", str(upstream), str(clone)], check=True
+        ["git", "clone", "--quiet", "-b", "dev", str(upstream), str(clone)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
     return clone, seed
 
@@ -785,3 +821,68 @@ def test_load_path_half_apply_alarm_does_not_fire_on_an_ordinary_dirty_tree(
 
     assert result.returncode == 0, result.stderr
     assert "half-applied" not in result.stdout, result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# A decline is recorded as a decline, never as "in sync" (OMN-18608)
+# --------------------------------------------------------------------------- #
+def test_a_declined_reconcile_is_not_recorded_as_in_sync(ws: _Workspace) -> None:
+    """Exit 4 is 'I did nothing, a live peer holds the lock'.
+
+    The reconciler used to return 0 for that, and this verdict table then wrote
+    ``verdict="in sync"`` on a run that reconciled nothing. That is precisely
+    what hid the 2026-09-17 outage for 35 minutes, in the log meant to reveal
+    it: every tick reported success while a leaked lock stopped all work.
+    """
+    ws.set_reconciler_exit(4)
+
+    result = ws.run_tick()
+
+    assert result.returncode == 0, "a tick must never fail the tool call that fired it"
+    receipts = ws.receipts.read_text(encoding="utf-8")
+    assert "reconciler_exit=4" in receipts
+    assert "declined" in receipts
+    assert "in sync" not in receipts, (
+        f"a run that reconciled nothing was recorded as in sync: {receipts!r}"
+    )
+
+
+def test_a_decline_does_not_raise_a_drift_alarm(ws: _Workspace) -> None:
+    """Declining is the NORMAL outcome of concurrent ticks, not a defect.
+
+    Several hook ticks fire at once by design, so most declines are healthy.
+    Reporting DRIFT on each would make the common case look broken, and a status
+    surface that cries wolf on every tick is one nobody reads -- which is how
+    the real failure went unnoticed. Fixing an unreliable receipt by making it
+    noisy is not a fix.
+    """
+    ws.set_reconciler_exit(4)
+
+    ws.run_tick()
+
+    assert not ws.status_file.exists() or "DRIFT" not in ws.status_file.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_a_decline_does_not_overwrite_a_verdict_a_real_run_earned(
+    ws: _Workspace,
+) -> None:
+    """The status file keeps the last verdict some run actually proved.
+
+    A decline proves nothing in either direction, so it must not claim the host
+    is in sync AND must not erase a finding a previous run did earn. This is the
+    pair to the test above: together they say a decline leaves the file alone,
+    rather than merely not writing DRIFT to it.
+    """
+    ws.set_reconciler_exit(2)
+    ws.run_tick()
+    earned = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT" in earned
+
+    ws.set_reconciler_exit(4)
+    ws.run_tick(ONEX_RECONCILE_TICK_SECONDS="0")
+
+    assert ws.status_file.read_text(encoding="utf-8") == earned, (
+        "a decline overwrote the verdict a real run had earned"
+    )

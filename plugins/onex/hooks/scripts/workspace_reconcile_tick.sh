@@ -200,9 +200,16 @@ _run_tick() {
     bash "$reconciler" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
     rc=$?
 
+    # 4 is DECLINED (OMN-18608): the reconciler did nothing because a live peer
+    # holds the lock. It used to return 0 for that, and this table then wrote
+    # `verdict="in sync"` on a run that reconciled nothing -- which is what made
+    # the 2026-09-17 outage invisible for 35 minutes in the very log meant to
+    # reveal it. Still no verdict logic here (OMN-17311): the reconciler decides,
+    # this only names what it decided.
     case "$rc" in
         0) verdict="in sync" ;;
         2) verdict="FAILED" ;;
+        4) verdict="declined (another holder is reconciling)" ;;
         *) verdict="INDETERMINATE (exit $rc)" ;;
     esac
 
@@ -212,9 +219,18 @@ _run_tick() {
     # ---- one-line status for the SessionStart hook ------------------------
     # A file, not a computation: SessionStart is contracted to be fast, and
     # re-deriving this there would mean a git fetch on every session open.
+    #
+    # A DECLINE LEAVES THIS FILE ALONE, and that is the point rather than an
+    # omission. Several hook ticks fire at once by design, so most declines are
+    # healthy -- a peer is reconciling right now. Writing "in sync" would be the
+    # lie this change removes; writing DRIFT would raise an alarm on the normal
+    # case, and a status surface that cries wolf on every tick is one nobody
+    # reads, which is how the real failure went unnoticed. So the last verdict
+    # actually earned by a run that did work stays, and the decline is recorded
+    # in the receipt log above where it belongs.
     if [[ "$rc" -eq 0 ]]; then
         printf 'clones/venv: in sync as of %s\n' "$ts" > "$_STATUS"
-    else
+    elif [[ "$rc" -ne 4 ]]; then
         printf 'DRIFT: reconcile %s as of %s — see %s\n' "$verdict" "$ts" "$_RECEIPTS" > "$_STATUS"
     fi
 }
