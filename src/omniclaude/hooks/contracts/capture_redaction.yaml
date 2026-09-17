@@ -190,6 +190,28 @@ topics:
       emitted_at: capture_verbatim
       entity_id: capture_verbatim
       schema_version: capture_verbatim
+      # OMN-18609 -- lane attribution and hook fire time. Declared here
+      # because this contract's default_field_class is capture_hashed, so a
+      # field the emitter adds and this file does not name arrives as a
+      # sha256 digest. That is the contract working, not failing: the first
+      # live readback of these fields returned `lane=sha256:f0a20dd8...`,
+      # which is unusable as a grouping key and would have shipped a reader
+      # that grouped by a digest.
+      #
+      # Each one is safe to capture verbatim by construction, not by
+      # judgement. `lane` is a slug constrained by the lane registry's own
+      # validator; `lane_source` is one of three constants
+      # (registry | unresolved | unavailable); `lane_ticket` is an OMN
+      # identifier; `workspace_path` is WORKSPACE-RELATIVE and can never be
+      # an absolute local path -- the emitter degrades a path outside the
+      # workspace to its basename precisely so this declaration is true;
+      # `hook_fired_at` is a timestamp. None carries a tool argument, a tool
+      # output, a prompt or a filesystem location outside the workspace.
+      lane: capture_verbatim
+      lane_source: capture_verbatim
+      lane_ticket: capture_verbatim
+      workspace_path: capture_verbatim
+      hook_fired_at: capture_verbatim
 
   "onex.evt.omniclaude.session-ended.v1":
     ticket: OMN-16979
@@ -204,6 +226,28 @@ topics:
       emitted_at: capture_verbatim
       entity_id: capture_verbatim
       schema_version: capture_verbatim
+      # OMN-18609 -- lane attribution and hook fire time. Declared here
+      # because this contract's default_field_class is capture_hashed, so a
+      # field the emitter adds and this file does not name arrives as a
+      # sha256 digest. That is the contract working, not failing: the first
+      # live readback of these fields returned `lane=sha256:f0a20dd8...`,
+      # which is unusable as a grouping key and would have shipped a reader
+      # that grouped by a digest.
+      #
+      # Each one is safe to capture verbatim by construction, not by
+      # judgement. `lane` is a slug constrained by the lane registry's own
+      # validator; `lane_source` is one of three constants
+      # (registry | unresolved | unavailable); `lane_ticket` is an OMN
+      # identifier; `workspace_path` is WORKSPACE-RELATIVE and can never be
+      # an absolute local path -- the emitter degrades a path outside the
+      # workspace to its basename precisely so this declaration is true;
+      # `hook_fired_at` is a timestamp. None carries a tool argument, a tool
+      # output, a prompt or a filesystem location outside the workspace.
+      lane: capture_verbatim
+      lane_source: capture_verbatim
+      lane_ticket: capture_verbatim
+      workspace_path: capture_verbatim
+      hook_fired_at: capture_verbatim
 
   "onex.evt.omniclaude.tool-executed.v1":
     ticket: OMN-16979
@@ -223,6 +267,28 @@ topics:
       emitted_at: capture_verbatim
       entity_id: capture_verbatim
       schema_version: capture_verbatim
+      # OMN-18609 -- lane attribution and hook fire time. Declared here
+      # because this contract's default_field_class is capture_hashed, so a
+      # field the emitter adds and this file does not name arrives as a
+      # sha256 digest. That is the contract working, not failing: the first
+      # live readback of these fields returned `lane=sha256:f0a20dd8...`,
+      # which is unusable as a grouping key and would have shipped a reader
+      # that grouped by a digest.
+      #
+      # Each one is safe to capture verbatim by construction, not by
+      # judgement. `lane` is a slug constrained by the lane registry's own
+      # validator; `lane_source` is one of three constants
+      # (registry | unresolved | unavailable); `lane_ticket` is an OMN
+      # identifier; `workspace_path` is WORKSPACE-RELATIVE and can never be
+      # an absolute local path -- the emitter degrades a path outside the
+      # workspace to its basename precisely so this declaration is true;
+      # `hook_fired_at` is a timestamp. None carries a tool argument, a tool
+      # output, a prompt or a filesystem location outside the workspace.
+      lane: capture_verbatim
+      lane_source: capture_verbatim
+      lane_ticket: capture_verbatim
+      workspace_path: capture_verbatim
+      hook_fired_at: capture_verbatim
 
   "onex.evt.omniclaude.prompt-submitted.v1":
     ticket: OMN-16979
@@ -242,6 +308,28 @@ topics:
       emitted_at: capture_verbatim
       entity_id: capture_verbatim
       schema_version: capture_verbatim
+      # OMN-18609 -- lane attribution and hook fire time. Declared here
+      # because this contract's default_field_class is capture_hashed, so a
+      # field the emitter adds and this file does not name arrives as a
+      # sha256 digest. That is the contract working, not failing: the first
+      # live readback of these fields returned `lane=sha256:f0a20dd8...`,
+      # which is unusable as a grouping key and would have shipped a reader
+      # that grouped by a digest.
+      #
+      # Each one is safe to capture verbatim by construction, not by
+      # judgement. `lane` is a slug constrained by the lane registry's own
+      # validator; `lane_source` is one of three constants
+      # (registry | unresolved | unavailable); `lane_ticket` is an OMN
+      # identifier; `workspace_path` is WORKSPACE-RELATIVE and can never be
+      # an absolute local path -- the emitter degrades a path outside the
+      # workspace to its basename precisely so this declaration is true;
+      # `hook_fired_at` is a timestamp. None carries a tool argument, a tool
+      # output, a prompt or a filesystem location outside the workspace.
+      lane: capture_verbatim
+      lane_source: capture_verbatim
+      lane_ticket: capture_verbatim
+      workspace_path: capture_verbatim
+      hook_fired_at: capture_verbatim
       prompt: never_capture
       prompt_b64: never_capture
       prompt_preview: capture_shape_only
