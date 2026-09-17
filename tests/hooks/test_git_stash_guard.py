@@ -19,11 +19,15 @@ idiom has a non-destructive replacement, not that it needs an exception.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
@@ -62,17 +66,25 @@ def _make_worktree_clone(tmp_path: Path) -> tuple[Path, Path]:
     """
     canonical = tmp_path / "canonical" / "omniclaude"
     canonical.parent.mkdir(parents=True)
-    subprocess.run(["git", "init", "-q", str(canonical)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", str(canonical)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(canonical), "config", "user.email", "t@example.com"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
     subprocess.run(
-        ["git", "-C", str(canonical), "config", "user.name", "t"], check=True
+        ["git", "-C", str(canonical), "config", "user.name", "t"],
+        check=True,
+        env=scrub_git_location_env(os.environ),
     )
     subprocess.run(
         ["git", "-C", str(canonical), "commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
     worktree = tmp_path / "worktrees" / "wt"
     worktree.parent.mkdir(parents=True)
@@ -89,6 +101,7 @@ def _make_worktree_clone(tmp_path: Path) -> tuple[Path, Path]:
         ],
         check=True,
         capture_output=True,
+        env=scrub_git_location_env(os.environ),
     )
     return canonical, worktree
 
@@ -96,15 +109,25 @@ def _make_worktree_clone(tmp_path: Path) -> tuple[Path, Path]:
 def _make_plain_clone(tmp_path: Path) -> Path:
     repo = tmp_path / "elsewhere" / "some-repo"
     repo.parent.mkdir(parents=True)
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", str(repo)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(repo), "config", "user.email", "t@example.com"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "t"],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(repo), "commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
     return repo
 
@@ -164,15 +187,25 @@ def test_refuses_pop_in_canonical_omni_home_clone(
     omni_home_dir = tmp_path / "omni_home_dir"
     omni_home_dir.mkdir()
     clone = omni_home_dir / "omniclaude"
-    subprocess.run(["git", "init", "-q", str(clone)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", str(clone)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(clone), "config", "user.email", "t@example.com"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
-    subprocess.run(["git", "-C", str(clone), "config", "user.name", "t"], check=True)
+    subprocess.run(
+        ["git", "-C", str(clone), "config", "user.name", "t"],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(clone), "commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
     decision = evaluate_bash_command(
         "git stash pop", policy, cwd=clone, omni_home_dir=omni_home_dir
@@ -249,15 +282,25 @@ def test_pop_allowed_in_canonical_clone_when_omni_home_unset(
     # evaluated and is skipped -- this is a plain clone from the guard's
     # point of view, not a clone the guard can identify as canonical.
     clone = tmp_path / "omniclaude"
-    subprocess.run(["git", "init", "-q", str(clone)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", str(clone)],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(clone), "config", "user.email", "t@example.com"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
-    subprocess.run(["git", "-C", str(clone), "config", "user.name", "t"], check=True)
+    subprocess.run(
+        ["git", "-C", str(clone), "config", "user.name", "t"],
+        check=True,
+        env=scrub_git_location_env(os.environ),
+    )
     subprocess.run(
         ["git", "-C", str(clone), "commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
+        env=scrub_git_location_env(os.environ),
     )
     decision = evaluate_bash_command(
         "git stash pop", policy, cwd=clone, omni_home_dir=None

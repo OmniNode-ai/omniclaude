@@ -36,6 +36,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumBranchPrState,
@@ -81,7 +84,7 @@ def _git_ok(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
         ["git", "-C", str(cwd), *args],
         capture_output=True,
         text=True,
-        env=env or _GIT_ENV,
+        env=scrub_git_location_env(env or _GIT_ENV),
         check=False,
         timeout=60,
     )
