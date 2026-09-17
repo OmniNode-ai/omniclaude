@@ -287,3 +287,98 @@ class TestTheAlertNoLongerReadsTheDeadCounters:
         ).read_text(encoding="utf-8")
         assert "hook_emit_health.py" in mirror
         assert "hook_emit_delivery" in mirror
+
+
+@pytest.mark.unit
+class TestTheLegacyEmitPathIsGone:
+    """OMN-18471 AC5: the socket path is retired, not merely unused.
+
+    It could only be retired once every class had been re-homed (AC1), because
+    eight of them had ``emit_via_daemon`` as their ONLY call site -- removing
+    it earlier would have deleted the sole call site those classes had, which
+    is why AC5 was written as gated on AC1-AC4 rather than done first.
+    """
+
+    SCRIPTS = REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts"
+
+    def _live_lines(self, path: Path) -> list[str]:
+        """Non-comment, non-blank lines. Comments may name what was removed."""
+        out = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                out.append(stripped)
+        return out
+
+    def test_no_script_calls_emit_via_daemon(self) -> None:
+        offenders = {
+            p.name: [ln for ln in self._live_lines(p) if "emit_via_daemon" in ln]
+            for p in sorted(self.SCRIPTS.glob("*.sh"))
+        }
+        offenders = {k: v for k, v in offenders.items() if v}
+        assert not offenders, f"the retired socket path is back: {offenders}"
+
+    def test_the_function_itself_is_gone(self) -> None:
+        """Both definitions are gone from the live source.
+
+        Read from live lines, not raw text: the comment that replaced them
+        names them deliberately, so a reader meeting this file learns what was
+        retired and why. Forbidding the explanation would be the wrong gate.
+        """
+        live = "\n".join(self._live_lines(self.SCRIPTS / "common.sh"))
+        assert "emit_via_daemon()" not in live
+        assert "_try_restart_emit_daemon" not in live
+
+    def test_the_emit_health_counter_surface_is_gone(self) -> None:
+        """No script writes or reads ``emit-health/`` any more."""
+        offenders = {
+            p.name: [ln for ln in self._live_lines(p) if "emit-health" in ln]
+            for p in sorted(self.SCRIPTS.glob("*.sh"))
+        }
+        offenders = {k: v for k, v in offenders.items() if v}
+        assert not offenders, f"the dead counter surface is back: {offenders}"
+
+    def test_nothing_starts_the_emit_daemon(self) -> None:
+        """A launcher for a socket nobody writes to is latency spent on nothing."""
+        offenders = {
+            p.name: [
+                ln
+                for ln in self._live_lines(p)
+                if "start_emit_daemon_if_needed" in ln or "emit.sock" in ln
+            ]
+            for p in sorted(self.SCRIPTS.glob("*.sh"))
+        }
+        offenders = {k: v for k, v in offenders.items() if v}
+        assert not offenders, f"the emit daemon is being started again: {offenders}"
+
+    def test_every_class_still_has_its_journal_call_site(self) -> None:
+        """The removal must not have taken a delivery path with it.
+
+        This is the half that makes the removal safe rather than merely tidy:
+        all twelve classes plus dod.guard.fired reach the broker through the
+        journal, and none of them lost its only caller.
+        """
+        expected = {
+            "session.started",
+            "session.ended",
+            "tool.executed",
+            "prompt.submitted",
+            "dod.guard.fired",
+            "skill.started",
+            "skill.completed",
+            "response.stopped",
+            "agent.action",
+            "routing.feedback",
+            "llm.cost.completed",
+            "session.outcome",
+            "utilization.scoring.requested",
+        }
+        found: set[str] = set()
+        for path in sorted(self.SCRIPTS.glob("*.sh")):
+            for line in self._live_lines(path):
+                if "emit_to_journal " in line or "--event-type " in line:
+                    parts = line.split('"')
+                    if len(parts) >= 2 and "." in parts[1]:
+                        found.add(parts[1])
+        missing = expected - found
+        assert not missing, f"classes left with no delivery path: {sorted(missing)}"

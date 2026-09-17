@@ -77,10 +77,8 @@ export ONEX_EMIT_EVENT_REGISTRY
 
 # Shared emit-daemon paths for hook launch/restart/stop surfaces.
 # Session-start may override EMIT_DAEMON_SOCKET before sourcing common.sh.
-: "${EMIT_DAEMON_SOCKET:=${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}}"
-: "${EMIT_DAEMON_PID_FILE:=${HOME}/.claude/emit.pid}"
-export EMIT_DAEMON_SOCKET
-export EMIT_DAEMON_PID_FILE
+# OMN-18471 AC5: the emit-daemon socket and pid paths are gone with the
+# path that used them. Nothing opens ~/.claude/emit.sock any more.
 
 # Strict priority chain with NO fallbacks. If no valid Python is found,
 # hooks refuse to run. This prevents silent degradation where hooks run
@@ -623,279 +621,30 @@ emit_hook_error_event() {
 # =============================================================================
 # Emit Daemon Helper (OMN-1631, OMN-1632)
 # =============================================================================
-# Emit event via emit daemon for fast, non-blocking Kafka emission.
-# Single call - daemon handles fan-out to multiple topics.
-#
-# Requires (must be set before calling):
-#   - PYTHON_CMD: Path to Python interpreter (provided by common.sh)
-#   - HOOKS_LIB: Path to hooks lib directory (set by caller script)
-#   - LOG_FILE: Path to log file (set by caller script)
-#
-# Usage: emit_via_daemon <event_type> <payload_json> [timeout_ms]
-# Returns: 0 on success, 1 on failure (non-fatal)
-
-emit_via_daemon() {
-    local event_type="$1"
-    local payload="$2"
-    local timeout_ms="${3:-50}"
-    local health_dir="${ONEX_STATE_DIR}/hooks/logs/emit-health"
-    # Status file is keyed per event_type so failure counters are isolated.
-    # A sanitized form of event_type is used to produce a safe filename.
-    local _safe_event_type
-    _safe_event_type=$(printf '%s' "$event_type" | tr -cd 'a-zA-Z0-9_-')
-    [[ -z "$_safe_event_type" ]] && _safe_event_type="unknown"
-    local status_file="${health_dir}/status-${_safe_event_type}"
-
-    mkdir -p "$health_dir" 2>/dev/null || true
-
-    if "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
-        --event-type "$event_type" --payload "$payload" --timeout "$timeout_ms" \
-        >> "$LOG_FILE" 2>&1; then
-        # Success: reset failure count, record success timestamp
-        local _now
-        _now=$(date -u +%s)
-        local _tmp="${status_file}.tmp.$$"
-        echo "0 0 $_now $event_type" > "$_tmp" && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
-        return 0
-    else
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type}" >> "$LOG_FILE"
-        # Increment failure count, preserve last_success_ts
-        # Single read splits all fields from the status file in one shot (no TOCTOU)
-        # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
-        local _prev_failures=0 _prev_success_ts=0
-        if [[ -f "$status_file" ]]; then
-            local _prev_fail_ts=0 _prev_evt=""
-            read -r _prev_failures _prev_fail_ts _prev_success_ts _prev_evt < "$status_file" 2>/dev/null \
-                || { _prev_failures=0; _prev_success_ts=0; }
-            [[ "$_prev_failures" =~ ^[0-9]+$ ]] || _prev_failures=0
-            [[ "$_prev_success_ts" =~ ^[0-9]+$ ]] || _prev_success_ts=0
-        fi
-        local _now
-        _now=$(date -u +%s)
-        local _tmp="${status_file}.tmp.$$"
-        echo "$((_prev_failures + 1)) $_now $_prev_success_ts $event_type" > "$_tmp" \
-            && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
-        # Milestone-based Slack alerts for sustained failures (avoid spam)
-        local n=$((_prev_failures + 1))
-        if (( n == 5 )); then
-            # Attempt daemon auto-restart after 5 consecutive failures (OMN-3647)
-            _try_restart_emit_daemon &
-        fi
-        # OMN-18471 AC4: the milestone Slack alert that used to fire here is
-        # GONE, and nothing replaces it on this path. It read _prev_success_ts
-        # off the counter files above, so it reported on the ~/.claude/emit.sock
-        # daemon -- absent since 2026-06-08 -- and not on the journal/drainer
-        # path that actually delivers hook events. Read live 2026-09-16 it
-        # claimed 101,009 consecutive failures for tool.executed with a last
-        # success in June, and it would have said exactly that whether hook
-        # capture was healthy or dead: during the 22-hour drainer outage of
-        # 2026-09-15/16 it produced no signal of its own. The counters are
-        # still written, because emit_via_daemon itself is retired only after
-        # every orphaned class is re-homed (OMN-18471 AC5); what moved is the
-        # ALERT, to hook_emit_health.py, which reads journal backlog depth and
-        # the drainer's last confirmed publish.
-        return 1
-    fi
-}
-
+# The legacy emit path is GONE (OMN-18471 AC5)
 # =============================================================================
-# Journal Append (OMN-17224 fast path, OMN-18471 re-homing)
-# =============================================================================
-# Append one event to the local hook-emit journal. The launchd singleton
-# drainer (hook_emit_drainer.py) publishes it to the contract-declared lane.
+# `emit_via_daemon()` and `_try_restart_emit_daemon()` lived here. They wrote
+# to a Unix socket at ~/.claude/emit.sock and kept per-event-type
+# consecutive-failure counters under ${ONEX_STATE_DIR}/hooks/logs/emit-health/.
 #
-# This is the ONLY delivery path a hook event has. emit_via_daemon above
-# writes to a Unix socket that has not existed since 2026-06-08, so a class
-# whose only call site is emit_via_daemon is not dual-homed -- it is not
-# delivered at all. OMN-18471 exists to move the orphaned classes here.
+# That socket has not existed since 2026-06-08. From that date the function
+# failed on every call and the counters recorded a constant rather than a
+# signal -- read live on 2026-09-16 they claimed 101,009 consecutive failures
+# for tool.executed with a last success in June, and they would have said
+# exactly that whether hook capture was healthy or dead. During the 22-hour
+# drainer outage of 2026-09-15/16 they produced no signal of their own.
 #
-# Requires (set by the caller, as emit_via_daemon does):
-#   - PYTHON_CMD, HOOKS_LIB, LOG_FILE
+# Worse than useless, they were load-bearing in the wrong direction: eight
+# event classes had `emit_via_daemon` as their ONLY call site, so those
+# classes were not dual-homed, they were undelivered. Removing this function
+# before they were re-homed would have deleted the only call site they had,
+# which is why AC5 was gated on AC1-AC4 rather than done first.
 #
-# Backgrounded and fail-open by construction: a hook that cannot record
-# telemetry must never slow or break the operator's session.
-#
-# Usage: emit_to_journal <event_type> <payload_json> [correlation_id]
+# All twelve classes now reach the broker through `emit_to_journal` below.
+# Delivery liveness is `hook_emit_health.py`, which reads journal backlog
+# depth and the drainer's last CONFIRMED publish -- the two facts only the
+# live path can state.
 
-emit_to_journal() {
-    local event_type="$1"
-    local payload="$2"
-    local correlation_id="${3:-}"
-
-    local _append_py="${HOOKS_LIB}/hook_emit_append.py"
-    [[ -n "${PYTHON_CMD:-}" && -f "$_append_py" ]] || return 0
-
-    local -a _args=(--event-type "$event_type" --payload "$payload")
-    [[ -n "$correlation_id" ]] && _args+=(--correlation-id "$correlation_id")
-
-    (
-        "$PYTHON_CMD" "$_append_py" "${_args[@]}" >>"${LOG_FILE:-/dev/null}" 2>&1
-    ) &
-    disown 2>/dev/null || true
-    return 0
-}
-
-# =============================================================================
-# Emit Daemon Self-Healing (OMN-3647)
-# =============================================================================
-# Auto-restart emit daemon after 5 consecutive failures with 4-layer idempotency guards.
-# Called by emit_via_daemon when fail counter reaches 5.
-#
-# Design:
-#   Guard 1: Atomic mkdir lock (prevents concurrent restarts)
-#   Guard 2: Socket ping check (maybe daemon recovered)
-#   Guard 3: Kafka reachability probe with 1s timeout + 10min cooldown
-#   Guard 4: Stale process cleanup with tight pattern matching
-#
-# Returns: 0 on restart attempt (whether successful or not), 1 if skipped
-
-_try_restart_emit_daemon() {
-    local socket_path="${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}"
-    local lock_dir="/tmp/omniclaude-emit-restart.lock"
-    local fail_count_file="/tmp/omniclaude-emit-fail-count"
-    local restart_ts_file="/tmp/omniclaude-emit-restart-last-at"
-    local kafka_unreachable_file="/tmp/omniclaude-emit-kafka-unreachable"
-
-    local now
-    now=$(date +%s)
-
-    # Guard 1: Atomic mkdir lock (prevents concurrent restarts)
-    # Use mkdir's atomicity on POSIX systems to create exclusive lock
-    if ! mkdir "$lock_dir" 2>/dev/null; then
-        log "Emit daemon restart already in progress (lock exists)"
-        return 1
-    fi
-
-    # Ensure trap cleanup runs even if the function exits early
-    trap "rmdir '$lock_dir' 2>/dev/null || true" RETURN
-
-    # Guard 2: Ping socket before restart (exit cleanly if already responsive)
-    if [[ -S "$socket_path" ]]; then
-        if "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" ping \
-            >> "$LOG_FILE" 2>&1; then
-            log "Emit daemon socket responsive, skipping restart"
-            echo "0 0 $now unknown" > "$fail_count_file" 2>/dev/null || true
-            return 0
-        fi
-    fi
-
-    # Guard 3: Kafka reachability probe with 1s timeout + 10min cooldown
-    # Use nc (netcat) for TCP check if available, fall back to Python check
-    local kafka_reachable=false
-    if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        # Parse first broker from comma-separated list
-        local first_broker
-        first_broker=$(echo "$KAFKA_BOOTSTRAP_SERVERS" | cut -d',' -f1)
-        local broker_host broker_port
-        broker_host="${first_broker%:*}"
-        broker_port="${first_broker##*:}"
-
-        if command -v nc &>/dev/null; then
-            # Use nc with 1s timeout (macOS compatible)
-            if nc -z -w 1 "$broker_host" "$broker_port" >/dev/null 2>&1; then
-                kafka_reachable=true
-            fi
-        else
-            # Fallback: Python socket check
-            if "$PYTHON_CMD" -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('$broker_host', $broker_port)); s.close()" >/dev/null 2>&1; then
-                kafka_reachable=true
-            fi
-        fi
-    else
-        # Kafka not configured, treat as reachable to allow restart attempt
-        kafka_reachable=true
-    fi
-
-    if ! $kafka_reachable; then
-        # Kafka unreachable: check cooldown timer
-        local kafka_unreachable_ts=0
-        if [[ -f "$kafka_unreachable_file" ]]; then
-            read -r kafka_unreachable_ts < "$kafka_unreachable_file" 2>/dev/null || kafka_unreachable_ts=0
-        fi
-
-        local cooldown_elapsed=$(( now - kafka_unreachable_ts ))
-        local cooldown_seconds=600  # 10 minutes
-
-        if (( cooldown_elapsed < cooldown_seconds )); then
-            local remaining=$(( cooldown_seconds - cooldown_elapsed ))
-            log "Emit daemon: Kafka unreachable, restart suppressed (cooldown: ${remaining}s remaining)"
-            return 1
-        fi
-
-        # Cooldown expired, record new timestamp and proceed with restart attempt
-        echo "$now" > "$kafka_unreachable_file" 2>/dev/null || true
-    fi
-
-    # Guard 4: Restart cooldown (60s minimum between attempts)
-    local restart_ts=0
-    if [[ -f "$restart_ts_file" ]]; then
-        read -r restart_ts < "$restart_ts_file" 2>/dev/null || restart_ts=0
-    fi
-
-    local restart_cooldown_seconds=60
-    local restart_elapsed=$(( now - restart_ts ))
-    if (( restart_elapsed < restart_cooldown_seconds )); then
-        local remaining=$(( restart_cooldown_seconds - restart_elapsed ))
-        log "Emit daemon: restart attempt suppressed (cooldown: ${remaining}s remaining)"
-        return 1
-    fi
-
-    # All guards passed - attempt restart
-    log "Emit daemon: Attempting restart after 5 consecutive failures"
-
-    # Record restart attempt timestamp before cleanup
-    echo "$now" > "$restart_ts_file" 2>/dev/null || true
-
-    # Clean up stale socket and processes
-    rm -f "$socket_path" 2>/dev/null || true
-
-    # Kill stale daemon process with tight pattern matching
-    # Match process with full socket path to avoid false positives
-    local stale_pids
-    stale_pids=$(pgrep -f "omnimarket\.nodes\.node_emit_daemon start.*--socket-path $(printf '%s\n' "$socket_path" | sed 's/[[\.*^$/]/\\&/g')" 2>/dev/null) || true
-
-    if [[ -n "$stale_pids" ]]; then
-        log "Emit daemon: Killing stale processes: $stale_pids"
-        echo "$stale_pids" | xargs -r kill -9 2>/dev/null || true
-        sleep 0.1  # Brief pause for kernel to clean up resources
-    fi
-
-    # Respawn daemon using same startup sequence as session-start.sh
-    # This requires KAFKA_BOOTSTRAP_SERVERS and PYTHON_CMD to be set
-    if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        log "Emit daemon: Cannot restart, KAFKA_BOOTSTRAP_SERVERS not set"
-        return 1
-    fi
-
-    nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start \
-        --socket-path "$socket_path" \
-        --pid-path "$EMIT_DAEMON_PID_FILE" \
-        --kafka-bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" \
-        --spool-dir "${ONEX_STATE_DIR}/event-spool" \
-        --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
-        --log-path "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" \
-        >/dev/null 2>&1 &
-
-    local daemon_pid=$!
-    log "Emit daemon: Respawned with PID $daemon_pid, socket: $socket_path"
-
-    # Wait briefly for socket to be created (max 200ms in 20ms increments)
-    local wait_count=0
-    local max_wait=10
-    while [[ ! -S "$socket_path" && $wait_count -lt $max_wait ]]; do
-        sleep 0.02
-        ((wait_count++)) || true
-    done
-
-    if [[ -S "$socket_path" ]]; then
-        log "Emit daemon: Socket created successfully, resetting failure counter"
-        echo "0 0 $now unknown" > "$fail_count_file" 2>/dev/null || true
-        return 0
-    else
-        log "Emit daemon: Socket not created after restart (PID: $daemon_pid)"
-        return 1
-    fi
-}
 
 # =============================================================================
 # Tab Activity Helper (Statusline Integration)
