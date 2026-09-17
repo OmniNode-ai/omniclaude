@@ -26,9 +26,17 @@ if [[ "$BRANCH" == "HEAD" || -z "$BRANCH" ]]; then
   BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
 fi
 
-# Extract ticket ID from branch name (e.g., jonahgabriel/omn-1234-description -> OMN-1234)
-TICKET_ID=""
-if [[ "$BRANCH" =~ [Oo][Mm][Nn]-([0-9]+) ]]; then
+# Prefer the ticket resolved from PR evidence metadata when CI supplies it.
+# Fall back to the historical branch-name inference for local/advisory use.
+TICKET_ID="${DOD_TICKET_ID:-}"
+if [[ -n "$TICKET_ID" && ! "$TICKET_ID" =~ ^OMN-[0-9]+$ ]]; then
+  echo "WARNING: DOD_TICKET_ID has invalid format: ${TICKET_ID}"
+  if [[ "$ENFORCEMENT" == "hard" ]]; then
+    exit 1
+  fi
+  TICKET_ID=""
+fi
+if [[ -z "$TICKET_ID" && "$BRANCH" =~ [Oo][Mm][Nn]-([0-9]+) ]]; then
   TICKET_ID="OMN-${BASH_REMATCH[1]}"
 fi
 

@@ -252,8 +252,24 @@ def positive_control(runners: list[Runner]) -> None:
         )
 
 
+# The resolver this gate borrows raises errors phrased for a gate that REFUSES
+# on them. This one reports them instead, so its own verdict sentence has to go.
+REFUSAL_SENTENCE = "THE GATE DID NOT RUN."
+
+
+def _as_note(message: str) -> str:
+    """Re-phrase a resolver refusal as what it is here: a report, not a verdict."""
+    return message.replace(REFUSAL_SENTENCE, "").strip().rstrip(".") + (
+        " -- reported, not failed: this arm is not judged by this gate."
+    )
+
+
 def _arm_is_hosted(branch: Branch) -> bool:
     return bool(branch.hosted)
+
+
+def _labels_are_runtime_computed(labels: list[str]) -> bool:
+    return any("${{" in label for label in labels)
 
 
 def scan(
@@ -301,12 +317,25 @@ def scan(
             try:
                 branches = resolve_branches(definition["runs-on"], variables)
             except GateError as error:
-                undecidable.append(f"{path.name}::{job_id} -- {error}")
+                # Strip the refusal sentence the resolver's own message ends
+                # with. It is true where that resolver is FAILING a run, and
+                # false here: this gate ran, judged every arm it could, and is
+                # reporting the one it could not. Leaving it in made a reviewer
+                # read these notes as the reason a red run was red, and file a
+                # workflow defect against four workflows that place correctly.
+                undecidable.append(f"{path.name}::{job_id} -- {_as_note(str(error))}")
                 continue
             for branch in branches:
                 if _arm_is_hosted(branch):
                     # GitHub-hosted labels have no organisation runner entry;
                     # whether they are ALLOWED is the placement gate's question.
+                    continue
+                if _labels_are_runtime_computed(branch.labels):
+                    undecidable.append(
+                        f"{path.name}::{job_id} -- a runs-on label is computed "
+                        f"at run time: {str(definition['runs-on']).strip()!r}. "
+                        "THE GATE DID NOT RUN."
+                    )
                     continue
                 wanted = _labels_lower(branch.labels)
                 if not wanted:

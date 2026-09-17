@@ -480,6 +480,60 @@ def test_a_run_time_computed_arm_is_reported_not_silently_skipped(
     assert "routed.yml::consume" in result.stdout
 
 
+def test_a_matrix_label_inside_a_literal_list_is_reported_not_failed(
+    tmp_path: Path,
+) -> None:
+    """A matrix expression is not a literal label named ``${{ matrix.host }}``.
+
+    The arm64 proof workflow pins the static class and architecture labels and
+    gets the host label from the matrix leg. That leg is real at run time but
+    not knowable from source, so this gate must report it as undecidable rather
+    than fail it as a label no runner carries.
+    """
+    fleet = json.loads(json.dumps(ONLINE_FLEET))
+    fleet["runners"].append(
+        {
+            "name": "omninode-mini-runner-1",
+            "status": "online",
+            "labels": [
+                {"name": "self-hosted"},
+                {"name": "omnibase-verify"},
+                {"name": "arch-arm64"},
+                {"name": "host-101"},
+            ],
+        }
+    )
+    repo = _tree(
+        tmp_path,
+        {
+            "arm64.yml": """\
+            name: arm64
+            on: {pull_request: {}}
+            jobs:
+              arm64-verify-proof:
+                strategy:
+                  matrix:
+                    host: [host-101]
+                runs-on:
+                  - self-hosted
+                  - omnibase-verify
+                  - arch-arm64
+                  - ${{ matrix.host }}
+                steps: [{run: "true"}]
+              fleet:
+                runs-on: [self-hosted, omnibase-ci]
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    runners = _fixture(tmp_path, "runners.json", fleet)
+    result = _run(repo, runners, tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "computed at run time" in result.stdout
+    assert "arm64.yml::arm64-verify-proof" in result.stdout
+    assert "${{ matrix.host }}" in result.stdout
+
+
 def test_the_runner_listing_command_carries_no_credential_on_argv() -> None:
     """The credential reaches `gh` through the environment, never through argv.
 
@@ -542,3 +596,121 @@ def test_a_short_env_value_is_not_treated_as_a_credential() -> None:
         assert gate.redact("a bad request") == "a bad request"
     finally:
         del os.environ["GH_TOKEN"]
+
+
+def test_a_repository_whose_arms_are_all_matrix_computed_refuses(
+    tmp_path: Path,
+) -> None:
+    """The matrix path must not count toward the decidable total either.
+
+    Reporting a matrix arm rather than failing it is correct, but it creates a
+    way to pass vacuously: had the skip been placed one line later, the arm
+    would have incremented the decidable counter on its way out, and a
+    repository whose every arm is matrix-computed would report OK having judged
+    nothing. The sibling test covers that for expression-valued `runs-on`; this
+    covers it for the element-level form, which is a different code path.
+    """
+    repo = _tree(
+        tmp_path,
+        {
+            "arm64.yml": """\
+            name: arm64
+            on: {pull_request: {}}
+            jobs:
+              proof:
+                strategy:
+                  matrix:
+                    host: [host-101]
+                runs-on:
+                  - self-hosted
+                  - omnibase-verify
+                  - ${{ matrix.host }}
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    runners = _fixture(tmp_path, "runners.json", ONLINE_FLEET)
+    result = _run(repo, runners, tmp_path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "judged nothing" in result.stderr
+
+    # Positive control: add one decidable arm and the same tree passes, so the
+    # refusal above is the counter working rather than the parse failing.
+    with_decidable = _tree(
+        tmp_path / "mixed",
+        {
+            "arm64.yml": """\
+            name: arm64
+            on: {pull_request: {}}
+            jobs:
+              proof:
+                strategy:
+                  matrix:
+                    host: [host-101]
+                runs-on:
+                  - self-hosted
+                  - omnibase-verify
+                  - ${{ matrix.host }}
+                steps: [{run: "true"}]
+              fleet:
+                runs-on: [self-hosted, omnibase-ci]
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    assert _run(with_decidable, runners, tmp_path).returncode == 0
+
+
+def test_a_note_does_not_claim_the_gate_did_not_run(tmp_path: Path) -> None:
+    """A reported arm is not a refused run, and the text must not say it is.
+
+    The resolver this gate borrows phrases its errors for a gate that REFUSES
+    on them. Reported verbatim, those notes end in "THE GATE DID NOT RUN" on a
+    run that did run and did judge every other arm. That wording cost a real
+    misdiagnosis: a reviewer read the notes on a red run as its cause and filed
+    a defect against four workflows that place correctly and run green today.
+    """
+    repo = _tree(
+        tmp_path,
+        {
+            "routed.yml": """\
+            name: routed
+            on: {pull_request: {}}
+            jobs:
+              route:
+                runs-on: [self-hosted, omnibase-ci]
+                outputs: {labels: "${{ steps.pick.outputs.labels }}"}
+                steps: [{id: pick, run: "true"}]
+              consume:
+                needs: route
+                runs-on: ${{ fromJSON(needs.route.outputs.labels) }}
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    runners = _fixture(tmp_path, "runners.json", ONLINE_FLEET)
+    result = _run(repo, runners, tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    note = [ln for ln in result.stdout.splitlines() if ln.startswith("note:")]
+    assert note, "the undecidable arm must still be reported"
+    assert "THE GATE DID NOT RUN" not in "\n".join(note)
+    assert "reported, not failed" in "\n".join(note)
+
+    # Positive control: the sentence is still used where it IS true -- a run
+    # that judged nothing really did not run.
+    only_routed = _tree(
+        tmp_path / "only",
+        {
+            "routed.yml": """\
+            name: routed
+            on: {pull_request: {}}
+            jobs:
+              consume:
+                runs-on: ${{ fromJSON(needs.route.outputs.labels) }}
+                steps: [{run: "true"}]
+            """
+        },
+    )
+    refused = _run(only_routed, runners, tmp_path)
+    assert refused.returncode == 2
+    assert "THE GATE DID NOT RUN" in refused.stderr
