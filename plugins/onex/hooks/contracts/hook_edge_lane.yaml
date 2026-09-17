@@ -349,6 +349,23 @@ governed_topics:
 # grant landed at 2026-09-17T00:41Z and the backlog fell to 1 record inside
 # a minute, publishing every ~2 seconds, with zero denials. One ungranted
 # topic in the fan-out throttles the whole edge.
+# THE EIGHTEEN THIS LIST DID NOT CARRY UNTIL OMN-18627, and why that was not
+# paperwork. This gate scanned `plugins/onex/hooks/scripts/*.sh` ONLY, while
+# the edge also emits from `plugins/onex/hooks/lib/*.py`. Every class below
+# has a real call site there and none was declared, so nothing derived from
+# this contract could provision their broker grants. Measured 2026-09-17: the
+# local drainer looped on `TopicAuthorizationFailedError` for
+# `onex.evt.omniclaude.routing-decision.v1`, and because `drain_once` stops at
+# the first failure to preserve ordering, that single ungranted class held
+# 1,333 spooled records of four AUTHORIZED classes behind it. `artifact.captured`
+# was 513 of those 1,333.
+#
+# DECLARED IS NOT GRANTED. Listing a class here makes the contract honest about
+# what this edge produces; it does not create a broker permission. Of the
+# eighteen, two were granted on the dev lane under OMN-18627 because they were
+# actively blocking delivery. The rest are declared and ungranted, which is the
+# correct fail-closed state: each will refuse on its own first emission rather
+# than surprise a reader who assumed the list was the grant set.
 governed_event_classes:
   - "session.started"
   - "session.ended"
@@ -363,6 +380,24 @@ governed_event_classes:
   - "routing.feedback"
   - "llm.cost.completed"
   - "utilization.scoring.requested"
+  - "agent.status"
+  - "artifact.captured"
+  - "compliance.evaluate"
+  - "correlation.trace.span"
+  - "delegation.shadow.comparison"
+  - "friction.observed"
+  - "hook.health.error"
+  - "intent.commit.bound"
+  - "intent.drift.detected"
+  - "llm.routing.decision"
+  - "llm.routing.fallback"
+  - "pattern.enforcement"
+  - "phase.metrics"
+  - "pr.validation.rollup"
+  - "routing.decision"
+  - "static.context.edit.detected"
+  - "tool.output.captured"
+  - "validator.catch"
 
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).
