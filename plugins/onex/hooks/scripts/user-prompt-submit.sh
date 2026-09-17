@@ -393,10 +393,11 @@ fi
 # since 2026-06-08, so the counters behind that banner recorded a constant,
 # not a signal.
 #
-# Its escalation text also told the reader to run `pkill -f`, which is a
-# hazard in its own right on this machine -- a lane following that shape once
-# killed seven peer lanes' governed pushes, because `pkill -f` matches by
-# command substring across every process on the host.
+# Its escalation text also told the reader to run
+# `pkill -f 'omnimarket.nodes.node_emit_daemon'`, which is a hazard in its own
+# right on this machine -- a lane following that shape once killed seven peer
+# lanes' governed pushes, because `pkill -f` matches by command substring
+# across every process on the host.
 #
 # Delivery liveness now has one home: hook_emit_health.py, evaluated once per
 # session from session_start_bus_mirror.sh, reading journal backlog depth and

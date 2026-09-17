@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
+from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -56,20 +59,37 @@ def _tree(tmp_path: Path, name: str, body: str) -> Path:
     return tmp_path
 
 
+@contextmanager
+def _outside_github_actions():
+    existing = os.environ.pop("GITHUB_ACTIONS", None)
+    try:
+        yield
+    finally:
+        if existing is not None:
+            os.environ["GITHUB_ACTIONS"] = existing
+
+
+def _fixture_call(call: Callable[[], int]) -> int:
+    with _outside_github_actions():
+        return call()
+
+
 def _run(module, root: Path, variables: dict[str, str], tmp_path: Path) -> int:
     vars_file = tmp_path / "vars.json"
     vars_file.write_text(json.dumps(variables), encoding="utf-8")
-    return module.main(
-        [
-            "--repo-root",
-            str(root),
-            "--repo",
-            "OmniNode-ai/fixture",
-            "--assume-visibility",
-            "private",
-            "--variables-json",
-            str(vars_file),
-        ]
+    return _fixture_call(
+        lambda: module.main(
+            [
+                "--repo-root",
+                str(root),
+                "--repo",
+                "OmniNode-ai/fixture",
+                "--assume-visibility",
+                "private",
+                "--variables-json",
+                str(vars_file),
+            ]
+        )
     )
 
 
@@ -119,15 +139,17 @@ def test_a_public_repo_is_not_judged_at_all(tmp_path: Path) -> None:
         "  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
     )
     assert (
-        module.main(
-            [
-                "--repo-root",
-                str(root),
-                "--repo",
-                "OmniNode-ai/fixture",
-                "--assume-visibility",
-                "public",
-            ]
+        _fixture_call(
+            lambda: module.main(
+                [
+                    "--repo-root",
+                    str(root),
+                    "--repo",
+                    "OmniNode-ai/fixture",
+                    "--assume-visibility",
+                    "public",
+                ]
+            )
         )
         == 0
     )
@@ -553,7 +575,7 @@ def _run_delegating(
         called_file = tmp_path / "called.json"
         called_file.write_text(json.dumps(called), encoding="utf-8")
         argv += ["--called-workflows-json", str(called_file)]
-    return module.main(argv)
+    return _fixture_call(lambda: module.main(argv))
 
 
 def test_a_delegated_required_job_inheriting_a_hosted_org_value_fails(
