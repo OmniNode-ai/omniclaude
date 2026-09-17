@@ -214,12 +214,27 @@ GATE_BIT_NAME: Final[str] = "PRE_TOOL_AUTHORIZATION_SHIM"
 TICKET: Final[str] = "OMN-17957"
 
 CONSENT_CITATION_GRAMMAR: Final[str] = (
-    "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:<line>"
+    "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp> "
+    "(or the older :<line> form)"
 )
 
-#: The citation, read from the raw command text.
+#: The citation, read from the raw command text. TWO FORMS (OMN-18620).
+#:
+#: ``@<row timestamp>`` is the durable one and the one to write. A line number
+#: is only true until the ledger is next rolled: a cap-crossing roll on
+#: 2026-09-17 removed 926 lines from the top of the live file, which moved the
+#: operator's qwen hold ruling from ``:4311`` to ``:3385`` and a consent row
+#: from ``:4367`` to ``:3441``. A pending rotation citing either by line would
+#: then resolve to a DIFFERENT row, and this guard would refuse a legitimate
+#: rotation while reporting a reason that describes the wrong row entirely.
+#:
+#: A row timestamp travels with the row -- into the archive when it is rolled --
+#: so the timestamp form survives any number of rolls. The line form is kept
+#: working because citations already written must not be invalidated by the
+#: change that introduces the replacement.
 _CITATION: Final[re.Pattern[str]] = re.compile(
-    r"ROTATION-CONSENT:\s*(?P<path>[^\s:'\"]+):(?P<line>\d+)"
+    r"ROTATION-CONSENT:\s*(?P<path>[^\s:@'\"]+)"
+    r"(?::(?P<line>\d+)|@(?P<stamp>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z))"
 )
 
 #: Shell separators that end one segment and begin another. Matched outside
@@ -808,6 +823,32 @@ def _citation_path_is_canonical(cited: str, policy: Policy) -> bool:
     )
 
 
+def _archive_dir_for(ledger: Path) -> Path:
+    """Where a roll of ``ledger`` puts the rows it removed."""
+    return ledger.parent / "archive"
+
+
+def _rows_with_stamp(rows: list[str], stamp: str) -> list[str]:
+    """Every row whose FIRST field is exactly ``stamp``.
+
+    First field, not "contains": a row body routinely quotes other rows'
+    timestamps, and matching those would resolve a citation to a row that merely
+    mentions the one meant.
+    """
+    return [row for row in rows if row.split("|", 1)[0].strip() == stamp]
+
+
+def _cited_ref(cited: str, match: re.Match[str]) -> str:
+    """The citation as the author wrote it, for use in refusal text.
+
+    Echoing the author's own form matters: telling someone their line citation
+    is wrong by quoting a timestamp they never typed sends them looking in the
+    wrong place.
+    """
+    stamp = match.group("stamp")
+    return f"{cited}@{stamp}" if stamp is not None else f"{cited}:{match.group('line')}"
+
+
 def _read_consent_row(
     command: str, policy: Policy, omni_home: Path
 ) -> _ConsentVerdict | None:
@@ -847,25 +888,73 @@ def _read_consent_row(
             scope="",
         )
 
-    line_no = int(match.group("line"))
-    if line_no < 1 or line_no > len(rows):
-        return _ConsentVerdict(
-            code="consent_line_absent",
-            reason=(
-                f"the citation names line {line_no} of {cited}, which has "
-                f"{len(rows)} lines"
-            ),
-            fix="cite the line number the consent row actually occupies",
-            scope="",
-        )
-
-    row = rows[line_no - 1]
+    stamp = match.group("stamp")
+    if stamp is not None:
+        located = _rows_with_stamp(rows, stamp)
+        if not located and _archive_dir_for(ledger).is_dir():
+            # A rolled row is still a real consent row. This is the whole point
+            # of the timestamp form: the row moved into the archive and its
+            # timestamp went with it.
+            for archive in sorted(_archive_dir_for(ledger).glob("*.md")):
+                try:
+                    archived = archive.read_text(encoding="utf-8").splitlines()
+                except OSError:
+                    continue
+                located.extend(_rows_with_stamp(archived, stamp))
+        if not located:
+            return _ConsentVerdict(
+                code="consent_stamp_absent",
+                reason=(
+                    f"no row in {cited} or its archive carries the timestamp {stamp}"
+                ),
+                fix=(
+                    "cite the timestamp the consent row actually opens with, "
+                    "copied from the row rather than retyped"
+                ),
+                scope="",
+            )
+        if len(located) > 1:
+            # AMBIGUITY IS A REFUSAL, never a pick. Two lanes can append inside
+            # the same second, so a timestamp is not guaranteed unique, and
+            # choosing one of several rows would mean this guard authorising a
+            # rotation against a row nobody cited.
+            return _ConsentVerdict(
+                code="consent_stamp_ambiguous",
+                reason=(
+                    f"{len(located)} rows carry the timestamp {stamp}, so the "
+                    "citation does not name one row"
+                ),
+                fix=(
+                    "cite the line form for this row instead, or have the "
+                    "approver re-append the consent row so its timestamp is "
+                    "unique"
+                ),
+                scope="",
+            )
+        row = located[0]
+    else:
+        line_no = int(match.group("line"))
+        if line_no < 1 or line_no > len(rows):
+            return _ConsentVerdict(
+                code="consent_line_absent",
+                reason=(
+                    f"the citation names line {line_no} of {cited}, which has "
+                    f"{len(rows)} lines"
+                ),
+                fix=(
+                    "cite the line number the consent row actually occupies, or "
+                    "better, cite it as <path>@<row timestamp>, which a ledger "
+                    "roll cannot move"
+                ),
+                scope="",
+            )
+        row = rows[line_no - 1]
     fields = [field.strip() for field in row.split("|")]
     if _REQUIRED_ROW_KIND not in fields:
         return _ConsentVerdict(
             code="consent_row_not_operator_consent",
             reason=(
-                f"{cited}:{line_no} is not an {_REQUIRED_ROW_KIND} row -- its "
+                f"{_cited_ref(cited, match)} is not an {_REQUIRED_ROW_KIND} row -- its "
                 f"fields are {fields[:3]!r}"
             ),
             fix=(
@@ -883,7 +972,7 @@ def _read_consent_row(
         return _ConsentVerdict(
             code="consent_missing_scope_list",
             reason=(
-                f"{cited}:{line_no} does not carry both a non-empty "
+                f"{_cited_ref(cited, match)} does not carry both a non-empty "
                 f"'{_APPROVED_SCOPE}' and a non-empty '{_OUT_OF_SCOPE}' list"
             ),
             fix=(
@@ -901,7 +990,7 @@ def _read_consent_row(
         return _ConsentVerdict(
             code="consent_approver_not_authorized",
             reason=(
-                f"{cited}:{line_no} carries approved_by={approver or '(absent)'}, "
+                f"{_cited_ref(cited, match)} carries approved_by={approver or '(absent)'}, "
                 f"which is not {named}"
             ),
             fix=(

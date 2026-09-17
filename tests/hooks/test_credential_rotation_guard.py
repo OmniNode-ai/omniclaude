@@ -1088,3 +1088,167 @@ def test_hook_script_still_blocks_a_rotation_beside_a_heredoc(
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "BLOCKED" in log.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------
+# The timestamp citation form, which a ledger roll cannot move (OMN-18620)
+# --------------------------------------------------------------------------
+# A line number is only true until the ledger is next rolled. A cap-crossing
+# roll on 2026-09-17 removed 926 lines from the top of the live file, moving the
+# operator's qwen hold ruling from :4311 to :3385 and a consent row from :4367
+# to :3441. A pending rotation citing either by line would then resolve to a
+# DIFFERENT row, and this guard would refuse a legitimate rotation while giving
+# a reason that describes the wrong row entirely.
+#
+# A row timestamp travels with the row, including into the archive when it is
+# rolled, so the timestamp form survives any number of rolls.
+_UNIQUE_STAMP = "2026-09-06T08:30:00Z"
+_UNIQUE_ROW = GOOD_ROW.replace("2026-09-05T12:00:00Z", _UNIQUE_STAMP)
+
+_ROTATE = (
+    "infisical identity universal-auth client-secret create --identity operator-k8s"
+)
+
+
+def _stamp_cite(stamp: str, path: str = "docs/tracking/ROLLING_WORK_LEDGER.md") -> str:
+    return f"# ROTATION-CONSENT: {path}@{stamp}"
+
+
+@pytest.fixture
+def stamped_home(tmp_path: Path) -> Path:
+    """An OMNI_HOME whose ledger carries exactly one uniquely-stamped row."""
+    tracking = tmp_path / "docs" / "tracking"
+    tracking.mkdir(parents=True)
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
+        "\n".join([CLAIM_ROW, _UNIQUE_ROW]) + "\n", encoding="utf-8"
+    )
+    return tmp_path
+
+
+def test_a_timestamp_citation_resolves_the_consent_row(
+    policy: Policy, stamped_home: Path
+) -> None:
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    )
+    assert findings == [], f"a valid timestamp citation was refused: {findings}"
+
+
+def test_the_line_form_still_resolves_the_same_row(
+    policy: Policy, stamped_home: Path
+) -> None:
+    """The replacement must not invalidate citations already written.
+
+    Pending rotations in flight cite lines. A change that made the timestamp
+    form work by breaking the line form would refuse exactly the authorisations
+    it was meant to protect.
+    """
+    findings = check_bash_command(f"{_ROTATE} {_cite(2)}", policy, stamped_home)
+    assert findings == [], f"the line form stopped working: {findings}"
+
+
+def test_a_timestamp_citation_survives_the_row_being_rolled(
+    policy: Policy, stamped_home: Path
+) -> None:
+    """The property the whole form exists for.
+
+    The row is moved out of the live ledger into the archive, exactly as a
+    cap-crossing roll does. Its line number is now meaningless; its timestamp
+    is not.
+    """
+    tracking = stamped_home / "docs" / "tracking"
+    archive = tracking / "archive"
+    archive.mkdir()
+    (archive / "ROLLING_WORK_LEDGER_2026-09-06-split.md").write_text(
+        "## Rolled\n\n" + _UNIQUE_ROW + "\n", encoding="utf-8"
+    )
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
+
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    )
+
+    assert findings == [], (
+        f"a rolled consent row stopped authorising its own rotation: {findings}"
+    )
+
+
+def test_an_absent_timestamp_is_refused(policy: Policy, stamped_home: Path) -> None:
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite('2026-01-01T00:00:00Z')}", policy, stamped_home
+    )
+    assert "consent_stamp_absent" in codes(findings)
+
+
+def test_an_ambiguous_timestamp_is_refused_not_picked(
+    policy: Policy, ledger: Path
+) -> None:
+    """Ambiguity is a refusal, never a choice.
+
+    Two lanes can append inside the same second, so a row timestamp is not
+    guaranteed unique -- four rows in the shared fixture share one. Choosing
+    among them would mean this guard authorising a rotation against a row
+    nobody cited, which is worse than refusing.
+    """
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite('2026-09-05T12:00:00Z')}", policy, ledger
+    )
+
+    assert "consent_stamp_ambiguous" in codes(findings)
+    reason = next(f.reason for f in findings if f.code == "consent_stamp_ambiguous")
+    # Counted from the fixture, not hard-coded: a constant here would drift the
+    # moment a row is added to the shared ledger fixture, and the count is the
+    # part of the message that tells the reader how bad the ambiguity is.
+    rows = (
+        (ledger / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    sharing = sum(
+        1 for row in rows if row.split("|", 1)[0].strip() == "2026-09-05T12:00:00Z"
+    )
+    assert sharing > 1, "the fixture no longer has an ambiguous timestamp"
+    assert f"{sharing} rows" in reason, reason
+
+
+def test_a_timestamp_quoted_inside_a_row_body_does_not_resolve(
+    policy: Policy, tmp_path: Path
+) -> None:
+    """Matched on the row's FIRST field, not anywhere in the line.
+
+    Rows routinely quote other rows' timestamps -- every citation in this fleet
+    does. Matching those would resolve a citation to a row that merely mentions
+    the one meant, which is the same class of wrongness as the line shift but
+    harder to notice.
+    """
+    tracking = tmp_path / "docs" / "tracking"
+    tracking.mkdir(parents=True)
+    mentioning = CLAIM_ROW + f" | see {_UNIQUE_STAMP} for the consent"
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
+        mentioning + "\n", encoding="utf-8"
+    )
+
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, tmp_path
+    )
+
+    assert "consent_stamp_absent" in codes(findings), (
+        f"a row that merely mentions the timestamp resolved the citation: {findings}"
+    )
+
+
+def test_a_non_consent_row_cited_by_timestamp_is_still_refused(
+    policy: Policy, stamped_home: Path
+) -> None:
+    """Control: the new form must not skip the checks the line form runs.
+
+    Resolving a row is only the first half; it still has to BE a consent row
+    with both scope lists and one of the two approvers. A form that resolved
+    rows but bypassed those would be an authorisation bypass, not a fix.
+    """
+    findings = check_bash_command(
+        f"{_ROTATE} {_stamp_cite('2026-09-05T11:00:00Z')}", policy, stamped_home
+    )
+
+    assert findings, "citing a CLAIM row by timestamp was allowed"
+    assert "consent_row_not_operator_consent" in codes(findings)
