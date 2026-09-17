@@ -760,3 +760,61 @@ def test_gate_context_is_asserted_by_the_ci_summary_umbrella() -> None:
     assert f'"{_GATE_CONTEXT}"' in source, (
         f"{_GATE_CONTEXT!r} is not in ci_summary_gate.py's EXPECTED_EXTERNAL_CONTEXTS"
     )
+
+
+def test_every_granted_class_has_a_journal_call_site() -> None:
+    """OMN-18471 AC1: a class whose fan-out is granted must be re-homed.
+
+    The journal is the only path that delivers; ``emit_via_daemon`` writes to a
+    socket absent since 2026-06-08. A class left on the legacy path alone is
+    not dual-homed, it is undelivered -- which is how eight of them went three
+    months with no delivery and no surface reporting it.
+
+    The two classes deliberately absent from this list are
+    ``session.outcome`` and ``utilization.scoring.requested``. Both fan out to
+    an ``onex.cmd.omniintelligence.*`` topic that the hook edge's principal has
+    no produce ACL for, and a denied topic does not fail only its own record --
+    it stops the drain. Measured on the live path: an ungranted topic in the
+    fan-out held the backlog at 503 records and a publish every ~17 minutes;
+    the grant dropped it to 1 record inside a minute. So the grant comes
+    first and the call site second, never the other way round.
+    """
+    granted_classes = {
+        "session.started",
+        "session.ended",
+        "tool.executed",
+        "prompt.submitted",
+        "dod.guard.fired",
+        "skill.started",
+        "response.stopped",
+        "skill.completed",
+        "agent.action",
+        "routing.feedback",
+        "llm.cost.completed",
+    }
+    held_classes = {"session.outcome", "utilization.scoring.requested"}
+
+    journalled: set[str] = set()
+    for path in sorted(_SCRIPTS_DIR.glob("*.sh")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            for token in ("emit_to_journal ", "--event-type "):
+                if token in stripped:
+                    parts = stripped.split('"')
+                    if len(parts) >= 2 and "." in parts[1]:
+                        journalled.add(parts[1])
+
+    missing = granted_classes - journalled
+    assert not missing, (
+        f"classes whose fan-out is granted but which have no journal call "
+        f"site, so they are emitted and never delivered: {sorted(missing)}"
+    )
+
+    wrongly_journalled = held_classes & journalled
+    assert not wrongly_journalled, (
+        f"these classes fan out to a topic the hook edge has no produce ACL "
+        f"for, so a journal call site would stop the drain for every record "
+        f"behind them: {sorted(wrongly_journalled)}"
+    )

@@ -481,6 +481,12 @@ print(result.outcome)
         elif [[ -z "$FEEDBACK_PAYLOAD" || "$FEEDBACK_PAYLOAD" == "null" ]]; then
             log "WARNING: routing.feedback payload empty or null, skipping emission"
         else
+            # OMN-18471: re-homed onto the journal, which is the only path
+            # that delivers. Unblocked by the 2026-09-17 operator consent row
+            # granting this class's fan-out topic(s) on the dev broker. The
+            # emit_via_daemon call stays until every class is re-homed and the
+            # whole legacy surface is retired in one change (AC5).
+            emit_to_journal "routing.feedback" "$FEEDBACK_PAYLOAD" "${CORRELATION_ID:-}"
             emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
             log "routing.feedback emitted: outcome=$DERIVED_OUTCOME feedback_status=$FEEDBACK_STATUS"
         fi
@@ -502,6 +508,12 @@ print(result.outcome)
             if [[ -z "$COST_PAYLOAD" || "$COST_PAYLOAD" == "null" ]]; then
                 log "WARNING: llm.cost.completed payload empty or null, skipping emission"
             else
+                # OMN-18471: re-homed onto the journal, which is the only path
+                # that delivers. Unblocked by the 2026-09-17 operator consent row
+                # granting this class's fan-out topic(s) on the dev broker. The
+                # emit_via_daemon call stays until every class is re-homed and the
+                # whole legacy surface is retired in one change (AC5).
+                emit_to_journal "llm.cost.completed" "$COST_PAYLOAD" "${CORRELATION_ID:-}"
                 emit_via_daemon "llm.cost.completed" "$COST_PAYLOAD" 100
                 _cost_model=$(printf '%s' "$COST_PAYLOAD" | jq -r '.model_id // "unknown"' 2>/dev/null || echo "unknown")
                 _cost_tokens=$(printf '%s' "$COST_PAYLOAD" | jq -r '.total_tokens // 0' 2>/dev/null || echo "0")

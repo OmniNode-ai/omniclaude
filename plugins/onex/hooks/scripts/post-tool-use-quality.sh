@@ -221,6 +221,12 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
                 --arg status "$_SKILL_STATUS" \
                 '{run_id: $run_id, skill_name: $skill_name, repo_id: $repo_id,
                   correlation_id: $correlation_id, status: $status}' 2>/dev/null) || exit 0
+            # OMN-18471: re-homed onto the journal, which is the only path
+            # that delivers. Unblocked by the 2026-09-17 operator consent row
+            # granting this class's fan-out topic(s) on the dev broker. The
+            # emit_via_daemon call stays until every class is re-homed and the
+            # whole legacy surface is retired in one change (AC5).
+            emit_to_journal "skill.completed" "$_SKILL_COMPLETED_PAYLOAD" "$_SKILL_CORR_ID"
             emit_via_daemon "skill.completed" "$_SKILL_COMPLETED_PAYLOAD" 50
         ) &
     fi
@@ -516,6 +522,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 } + (if $duration_ms != "" then {duration_ms: ($duration_ms | tonumber)} else {} end)'
             )
             if [[ -n "$ACTION_PAYLOAD" && "$ACTION_PAYLOAD" != "null" ]]; then
+                # OMN-18471: re-homed onto the journal, which is the only path
+                # that delivers. Unblocked by the 2026-09-17 operator consent row
+                # granting this class's fan-out topic(s) on the dev broker. The
+                # emit_via_daemon call stays until every class is re-homed and the
+                # whole legacy surface is retired in one change (AC5).
+                emit_to_journal "agent.action" "$ACTION_PAYLOAD" "${CORRELATION_ID:-}"
                 emit_via_daemon "agent.action" "$ACTION_PAYLOAD" 50
             fi
         fi
