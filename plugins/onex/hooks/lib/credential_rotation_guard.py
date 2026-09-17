@@ -895,7 +895,17 @@ def _read_consent_row(
             # A rolled row is still a real consent row. This is the whole point
             # of the timestamp form: the row moved into the archive and its
             # timestamp went with it.
-            for archive in sorted(_archive_dir_for(ledger).glob("*.md")):
+            #
+            # SCOPED TO THE ROLL'S OWN FILENAME SHAPE, not `*.md`. A bare glob
+            # would read every markdown file in the directory, so anything that
+            # could land a file there -- a stray doc, a partial write, a crafted
+            # name -- could carry a row with the target timestamp and the
+            # required fields and authorise a rotation nobody consented to. The
+            # names this accepts are the ones `ledger_lock.py` itself writes:
+            # `<ledger stem>_<date>-split.md`, beside THIS ledger.
+            for archive in sorted(
+                _archive_dir_for(ledger).glob(f"{ledger.stem}_*-split.md")
+            ):
                 try:
                     archived = archive.read_text(encoding="utf-8").splitlines()
                 except OSError:
