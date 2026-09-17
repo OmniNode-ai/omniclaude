@@ -288,183 +288,13 @@ fi
 # This enables testing with alternative socket paths and matches emit_client_wrapper.py
 # Note: Not exported because emit_client_wrapper.py reads OMNICLAUDE_EMIT_SOCKET directly
 # Deterministic path under ~/.claude/ — avoids TMPDIR divergence between macOS and Linux
-EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}"
-EMIT_DAEMON_PID_FILE="${HOME}/.claude/emit.pid"
 
 # Check if daemon is responsive via real protocol ping.
 #
 # Uses emit_client_wrapper.py's ping command with explicit socket path
 # passed via OMNICLAUDE_EMIT_SOCKET env var. This ensures we ping the
 # ACTUAL daemon at the expected socket path, not whatever DEFAULT_SOCKET_PATH
-# resolves to (which caused the silent mismatch bug on macOS).
-check_socket_responsive() {
-    local socket_path="$1"
-    local timeout_sec="${2:-0.5}"
-    # Real protocol ping — passes socket path explicitly via env var
-    # so we ping the ACTUAL daemon, not whatever DEFAULT_SOCKET_PATH resolves to.
-    # Each invocation is a fresh process, so OMNICLAUDE_EMIT_SOCKET is read fresh.
-    OMNICLAUDE_EMIT_SOCKET="$socket_path" \
-    OMNICLAUDE_EMIT_TIMEOUT="$timeout_sec" \
-        "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" ping >/dev/null 2>&1
-}
 
-start_emit_daemon_if_needed() {
-    # Pre-check: kill stale daemon whose socket is at a different path (OMN-7229)
-    # This handles the case where a daemon was started with --socket-path /tmp/...
-    # but the expected socket is now at ~/.claude/emit.sock.
-    if [[ -f "$EMIT_DAEMON_PID_FILE" ]]; then
-        local _stale_pid
-        _stale_pid=$(cat "$EMIT_DAEMON_PID_FILE" 2>/dev/null)
-        if [[ -n "$_stale_pid" ]] && kill -0 "$_stale_pid" 2>/dev/null; then
-            if [[ ! -S "$EMIT_DAEMON_SOCKET" ]]; then
-                log "Publisher PID $_stale_pid alive but socket missing at $EMIT_DAEMON_SOCKET — replacing"
-                kill "$_stale_pid" 2>/dev/null || true
-                sleep 1
-                rm -f "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
-            fi
-        else
-            # PID file exists but process is dead — clean up
-            rm -f "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
-        fi
-    fi
-
-    # Check if publisher already running via socket
-    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
-        # Fast path: PID file check via kill -0 (<1ms, no Python spawn).
-        # If the PID file exists and the process is alive, skip the expensive
-        # Python socket ping entirely (~75-215ms saved on every session start).
-        if [[ -f "$EMIT_DAEMON_PID_FILE" ]]; then
-            local _pid
-            _pid=$(cat "$EMIT_DAEMON_PID_FILE" 2>/dev/null)
-            if [[ -n "$_pid" ]] && kill -0 "$_pid" 2>/dev/null; then
-                # Broker mismatch guard: if KAFKA_BOOTSTRAP_SERVERS changed (e.g. stack
-                # switched from main to stability-test on a different port), the running
-                # daemon still targets the old broker. Kill and restart with the new value.
-                if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-                    local _running_args _running_broker
-                    _running_args=$(ps -ww -p "$_pid" -o args= 2>/dev/null || true)
-                    _running_broker=$(printf '%s\n' "$_running_args" | sed -nE 's/.*--kafka-bootstrap-servers[[:space:]]+([^[:space:]]+).*/\1/p' | head -1)
-                    if [[ -z "$_running_broker" ]]; then
-                        # Broker extraction failed (ps output truncated or unavailable) —
-                        # restart to avoid silently keeping a daemon on a stale broker.
-                        log "Publisher broker check unavailable for PID $_pid — restarting to avoid stale broker"
-                        kill "$_pid" 2>/dev/null || true
-                        sleep 0.2
-                        rm -f "$EMIT_DAEMON_SOCKET" "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
-                    elif [[ "$_running_broker" != "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
-                        log "Publisher broker mismatch: running=$_running_broker env=$KAFKA_BOOTSTRAP_SERVERS — restarting"
-                        kill "$_pid" 2>/dev/null || true
-                        sleep 0.2
-                        rm -f "$EMIT_DAEMON_SOCKET" "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
-                        # Fall through to start a fresh daemon below
-                    else
-                        log "Publisher already running (PID $_pid, fast-path skip)"
-                        return 0
-                    fi
-                else
-                    log "Publisher already running (PID $_pid, fast-path skip)"
-                    return 0
-                fi
-            fi
-        fi
-        # Slow path: PID file missing or process dead — fall back to Python ping
-        if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
-            log "Publisher already running and responsive"
-            return 0
-        else
-            # Socket exists but publisher not responsive - remove stale socket
-            log "Removing stale publisher socket"
-            rm -f "$EMIT_DAEMON_SOCKET" 2>/dev/null || true
-            rm -f "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
-        fi
-    fi
-
-    # Check if omnimarket runner is available (OMN-10117: cutover from legacy publisher)
-    if ! env -u PYTHONPATH "$BREW_PY" -c "import omnimarket.nodes.node_emit_daemon" 2>/dev/null; then
-        log "Emit daemon module not available (omnimarket.nodes.node_emit_daemon)"
-        return 0  # Non-fatal, continue without publisher
-    fi
-
-    log "Starting emit daemon (omnimarket.nodes.node_emit_daemon)..."
-
-    # Ensure logs directory exists
-    mkdir -p "${ONEX_STATE_DIR}/hooks/logs"
-
-    if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
-        log "INFO: To enable intelligence gathering, set KAFKA_BOOTSTRAP_SERVERS in your .env file"
-        log "INFO: Example: KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092"
-        write_daemon_status "kafka_not_configured"
-        return 0  # Non-fatal - continue without Kafka, hook still provides ticket context
-    fi
-
-    # Start omnimarket emit daemon in background, detached from this process (OMN-10117)
-    # Dual-bus (secondary cluster) publish is intentionally omitted: KAFKA_SECONDARY_BOOTSTRAP_SERVERS
-    # is unset in this environment and the omnimarket runner does not support it.
-    # Decision: accepted data-loss scope per OMN-10116 audit + OMN-10117 dispatch context.
-    nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start \
-        --socket-path "$EMIT_DAEMON_SOCKET" \
-        --pid-path "$EMIT_DAEMON_PID_FILE" \
-        --kafka-bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" \
-        --spool-dir "${ONEX_STATE_DIR}/event-spool" \
-        --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
-        --log-path "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" \
-        >/dev/null 2>&1 &
-
-    local daemon_pid=$!
-    log "Publisher started with PID $daemon_pid"
-
-    # All readiness verification runs in background to keep SessionStart under 50ms.
-    # Waits for socket to appear, then pings to confirm the daemon is accepting connections,
-    # then writes PID file + health marker. Main hook returns immediately (OMN-10621).
-    local _verify_socket="$EMIT_DAEMON_SOCKET"
-    local _verify_pid="$daemon_pid"
-    (
-        # Phase 1: wait for socket file to appear (max 2s in 100ms increments)
-        local wait_count=0
-        local max_wait=20
-        while [[ ! -S "$_verify_socket" && $wait_count -lt $max_wait ]]; do
-            sleep 0.1
-            ((wait_count++)) || true
-        done
-
-        if [[ ! -S "$_verify_socket" ]]; then
-            log "WARNING: Publisher startup timed out after ${max_wait}x100ms, continuing without publisher"
-            mkdir -p "${ONEX_STATE_DIR}/hooks/logs/emit-health" 2>/dev/null || true
-            local _tmp="${ONEX_STATE_DIR}/hooks/logs/emit-health/warning.tmp.$$"
-            printf 'EVENT EMISSION UNHEALTHY: The emit daemon did not create socket within 2s. Socket: %s. Check: %s/hooks/logs/emit-daemon.log\n' \
-                "$_verify_socket" "${ONEX_STATE_DIR}" > "$_tmp" 2>/dev/null
-            mv -f "$_tmp" "${ONEX_STATE_DIR}/hooks/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
-            exit 0
-        fi
-
-        # Phase 2: ping to confirm the daemon accepts connections
-        local verify_attempt=0
-        local max_verify_attempts=5
-        while [[ $verify_attempt -lt $max_verify_attempts ]]; do
-            if check_socket_responsive "$_verify_socket" 0.5; then
-                log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
-                echo "$_verify_pid" > "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
-                write_daemon_status "running"
-                mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
-                rm -f "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true
-                exit 0
-            fi
-            ((verify_attempt++)) || true
-            sleep 0.01
-        done
-
-        log "WARNING: Publisher socket exists but not responsive after $max_verify_attempts verification attempts"
-        mkdir -p "${ONEX_STATE_DIR}/hooks/logs/emit-health" 2>/dev/null || true
-        local _tmp2="${ONEX_STATE_DIR}/hooks/logs/emit-health/warning.tmp.$$"
-        printf 'EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: %s. Check: %s/hooks/logs/emit-daemon.log\n' \
-            "$_verify_socket" "${ONEX_STATE_DIR}" > "$_tmp2" 2>/dev/null
-        mv -f "$_tmp2" "${ONEX_STATE_DIR}/hooks/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp2"
-        ( slack_notify "daemon_startup" "[omniclaude][${_SLACK_HOST}] Emit daemon failed to start. Intelligence gathering is down. repo=${PROJECT_ROOT:-$PWD} socket=${_verify_socket} log=${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" ) &
-    ) &
-    log "Publisher readiness verification started in background (PID: $!) — hook returns immediately"
-    return 0
-}
 
 # Performance tracking
 START_TIME=$(get_time_ms)
@@ -543,9 +373,10 @@ if [[ -n "$SESSION_ID" ]]; then
     date +%s > "$_SESSION_EPOCH_FILE" 2>/dev/null || true
 fi
 
-# Start emit daemon early (before any Kafka emissions)
-# This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
-start_emit_daemon_if_needed
+# OMN-18471 AC5: the emit daemon is no longer started. Nothing writes to its
+# socket -- emit_via_daemon is gone and every hook class reaches the broker
+# through the journal and the launchd drainer. Starting a daemon no caller
+# talks to spent session-start latency on nothing.
 
 # --- Hook Runtime Daemon [OMN-5309] ---
 # Lazily launch the hook runtime daemon (pure Python, no Kafka dependency).
@@ -792,13 +623,14 @@ if [[ "$KAFKA_ENABLED" == "true" && "$JQ_AVAILABLE" -eq 1 ]]; then
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully
+        # OMN-18471 AC5: the else branch held the emit_via_daemon call and is
+        # gone with it. session.started reaches the broker through
+        # session_start_bus_mirror.sh's journal append.
         if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
             log "WARNING: Failed to construct session payload (jq failed), skipping emission"
-        else
-            emit_via_daemon "session.started" "$SESSION_PAYLOAD" 100
         fi
     ) &
-    log "Session event emission started via emit daemon"
+    log "Session event payload validated"
 else
     if [[ "$JQ_AVAILABLE" -eq 0 ]]; then
         log "Kafka emission skipped (jq not available for payload construction)"
@@ -1348,14 +1180,11 @@ fi
 # so they ARE available immediately.
 # Combined format: handshake first, then ticket context, then skill suggestions.
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    # Check for emit health warning
+    # OMN-18471 AC5: the emit-health warning file is gone with its writer.
+    # Delivery liveness is hook_emit_health.py, raised from
+    # session_start_bus_mirror.sh, which reads journal depth and the drainer's
+    # last confirmed publish rather than a socket that no longer exists.
     COMBINED_CONTEXT=""
-    if [[ -f "${HOOKS_DIR}/logs/emit-health/warning" ]]; then
-        _EMIT_WARN=$(cat "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true)
-        if [[ -n "$_EMIT_WARN" ]]; then
-            COMBINED_CONTEXT="$_EMIT_WARN"
-        fi
-    fi
 
     # --- Env var health check (non-blocking, OMN-6266) ---
     ENV_HEALTH_WARNING=""

@@ -69,5 +69,4 @@ PAYLOAD="$(jq -nc \
 # Neither call contacts Kafka from the Claude hook path. The semantic key is
 # passed so the registry applies redact_capture before any topic fan-out.
 emit_to_journal "skill.started" "$PAYLOAD" "$CORRELATION_ID"
-emit_via_daemon "skill.started" "$PAYLOAD" 50 || true
 exit 0

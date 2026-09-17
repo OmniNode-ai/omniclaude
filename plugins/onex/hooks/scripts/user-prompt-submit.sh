@@ -122,32 +122,13 @@ SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/de
 
 TRANSCRIPT_PATH="$(printf %s "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo "")"
 
-if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
-    # Privacy contract for dual-emission via daemon fan-out:
-    #   - onex.evt.* topics receive ONLY prompt_preview (100-char redacted) + prompt_length
-    #   - onex.cmd.omniintelligence.* topics receive the full prompt via prompt_b64
-    # The daemon's EventRegistry handles per-topic field filtering:
-    #   evt payloads MUST NOT include prompt_b64 (daemon strips it).
-    #   cmd payloads include prompt_b64 for intelligence processing.
-    # Build action_description per OMN-3297: "Prompt: {first_80_chars}"
-    _AD_PROMPT=$(printf '%s' "${PROMPT:0:80}" | tr '\n\r' '  ')
-    _AD_PROMPT_STR="Prompt: ${_AD_PROMPT}"
-    _AD_PROMPT_STR="${_AD_PROMPT_STR:0:160}"
-
-    PROMPT_PAYLOAD=$(jq -n \
-        --arg session_id "$SESSION_ID" \
-        --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | redact_secrets)" \
-        --argjson prompt_length "${#PROMPT}" \
-        --arg prompt_b64 "$PROMPT_B64" \
-        --arg correlation_id "$CORRELATION_ID" \
-        --arg event_type "UserPromptSubmit" \
-        --arg action_description "$_AD_PROMPT_STR" \
-        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, prompt_b64: $prompt_b64, correlation_id: $correlation_id, event_type: $event_type, action_description: $action_description}' 2>/dev/null)
-
-    if [[ -n "$PROMPT_PAYLOAD" ]]; then
-        emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100 &
-    fi
-fi
+# OMN-18471 AC5: the dual-emission block that stood here is gone with
+# emit_via_daemon. It built a prompt.submitted payload and handed it to the
+# socket -- the privacy split it described (preview to onex.evt.*, full prompt
+# to onex.cmd.omniintelligence.*) is a property of the emit node's fan-out
+# registry and is unchanged; only this caller is removed. prompt.submitted
+# reaches the broker through user_prompt_submit_bus_mirror.sh, which appends
+# to the journal, and has done since OMN-17224.
 
 # -----------------------------
 # Workflow Detection (FIXED: Quoted Heredoc)
@@ -404,39 +385,22 @@ if [[ -n "$SESSION_ID" ]]; then
 fi
 
 # -----------------------------
-# Emit Health Check: Surface persistent failures
+# Emit health: read from the live path, not from here (OMN-18471 AC5)
 # -----------------------------
-EMIT_HEALTH_WARNING=""
-_EMIT_STATUS="${ONEX_STATE_DIR}/hooks/logs/emit-health/status"
-if [[ -f "$_EMIT_STATUS" ]]; then
-    # Single read splits all 4 whitespace-delimited fields from the status file
-    # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
-    read -r _FAIL_COUNT _FAIL_TS _SUCCESS_TS _FAIL_EVT < "$_EMIT_STATUS" 2>/dev/null \
-        || { _FAIL_COUNT=0; _FAIL_TS=0; _SUCCESS_TS=0; _FAIL_EVT="unknown"; }
-    [[ "$_FAIL_COUNT" =~ ^[0-9]+$ ]] || _FAIL_COUNT=0
-    [[ "$_FAIL_TS" =~ ^[0-9]+$ ]] || _FAIL_TS=0
-    [[ "$_SUCCESS_TS" =~ ^[0-9]+$ ]] || _SUCCESS_TS=0
-    _NOW=$(date -u +%s)
-    _AGE=$((_NOW - _FAIL_TS))
-    # Guard: negative age = clock skew, treat as stale
-    [[ $_AGE -lt 0 ]] && _AGE=999
-
-    # Guard invariants when fields default to 0:
-    #   _FAIL_COUNT=0 → fails the -ge 3 check, so no warning fires.
-    #   _FAIL_TS=0    → _AGE becomes ~epoch-seconds (~1.7B), fails -le 60.
-    #   _SUCCESS_TS=0 → _FAIL_TS > 0 would pass, but only matters if both
-    #                    _FAIL_COUNT and _AGE already passed their thresholds.
-    # Result: all three conditions must be true, so any zeroed field is safe.
-    if [[ $_FAIL_COUNT -ge 3 && $_AGE -le 60 && $_FAIL_TS -gt $_SUCCESS_TS ]]; then
-        EMIT_HEALTH_WARNING="EVENT EMISSION DEGRADED: ${_FAIL_COUNT} consecutive failures (last: ${_FAIL_EVT}, ${_AGE}s ago). Events not reaching Kafka."
-        log "WARNING: Emit daemon degraded (${_FAIL_COUNT} consecutive failures, last_event=${_FAIL_EVT})"
-    fi
-
-    # Escalation: overrides the degraded warning above for sustained failures
-    if [[ $_FAIL_COUNT -ge 10 && $_AGE -le 600 && $_FAIL_TS -gt $_SUCCESS_TS ]]; then
-        EMIT_HEALTH_WARNING="EVENT EMISSION DOWN: ${_FAIL_COUNT} consecutive failures over ${_AGE}s. Daemon likely crashed. Run: pkill -f 'omnimarket.nodes.node_emit_daemon' and start a new session."
-    fi
-fi
+# This block read ${ONEX_STATE_DIR}/hooks/logs/emit-health/status and injected
+# an "EVENT EMISSION DEGRADED/DOWN" banner into the operator's prompt. It is
+# gone with the socket it reported on: ~/.claude/emit.sock has not existed
+# since 2026-06-08, so the counters behind that banner recorded a constant,
+# not a signal.
+#
+# Its escalation text also told the reader to run `pkill -f`, which is a
+# hazard in its own right on this machine -- a lane following that shape once
+# killed seven peer lanes' governed pushes, because `pkill -f` matches by
+# command substring across every process on the host.
+#
+# Delivery liveness now has one home: hook_emit_health.py, evaluated once per
+# session from session_start_bus_mirror.sh, reading journal backlog depth and
+# the drainer's last confirmed publish.
 
 # -----------------------------
 # Pattern Violation Advisory (OMN-2269)
@@ -792,7 +756,6 @@ elif [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
 
     AGENT_CONTEXT=$(jq -rn \
         --arg preamble "$_TRUST_PREAMBLE" \
-        --arg emit_warn "$EMIT_HEALTH_WARNING" \
         --arg yaml "$AGENT_YAML_INJECTION" \
         --arg patterns "$LEARNED_PATTERNS" \
         --arg code_ctx "${CODE_CONTEXT:-}" \
@@ -809,7 +772,6 @@ elif [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         '
         $preamble + "\n\n" +
         "<omniclaude-context trust=\"system\" source=\"hook-pipeline\">\n" +
-        (if $emit_warn != "" then $emit_warn + "\n\n" else "" end) +
         $yaml + "\n" + $patterns + "\n" +
         (if $code_ctx != "" then $code_ctx + "\n" else "" end) +
         (if $enrichment != "" then $enrichment + "\n" else "" end) +

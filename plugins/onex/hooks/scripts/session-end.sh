@@ -203,10 +203,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully
+        # OMN-18471 AC5: the else branch held the emit_via_daemon call and is
+        # gone with it. The validation stays: a jq failure here is still worth
+        # a log line, and session.ended reaches the broker through
+        # session_end_bus_mirror.sh's journal append.
         if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
             log "WARNING: Failed to construct session payload (jq failed), skipping emission"
-        else
-            emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
         fi
     ) &
     EMIT_PIDS+=($!)
@@ -444,7 +446,6 @@ print(result.outcome)
             # fan-out topics on the dev broker. All twelve now deliver via the
             # journal, which is what lets emit_via_daemon be retired (AC5).
             emit_to_journal "session.outcome" "$OUTCOME_PAYLOAD" "${CORRELATION_ID:-}"
-            emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
             log "session.outcome emitted: outcome=$DERIVED_OUTCOME dod_pass=$DOD_PASS success=$SESSION_SUCCESS tokens=${TOTAL_TOKENS_USED} files=${FILES_MODIFIED_COUNT} tasks=${TASKS_COMPLETED_COUNT} treatment_group=${TREATMENT_GROUP}"
         fi
 
@@ -486,13 +487,10 @@ print(result.outcome)
         elif [[ -z "$FEEDBACK_PAYLOAD" || "$FEEDBACK_PAYLOAD" == "null" ]]; then
             log "WARNING: routing.feedback payload empty or null, skipping emission"
         else
-            # OMN-18471: re-homed onto the journal, which is the only path
-            # that delivers. Unblocked by the 2026-09-17 operator consent row
-            # granting this class's fan-out topic(s) on the dev broker. The
-            # emit_via_daemon call stays until every class is re-homed and the
-            # whole legacy surface is retired in one change (AC5).
+            # OMN-18471: journal-delivered. The legacy emit_via_daemon call
+            # that used to sit beside this one was retired under AC5 once
+            # every class on the edge had been re-homed.
             emit_to_journal "routing.feedback" "$FEEDBACK_PAYLOAD" "${CORRELATION_ID:-}"
-            emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
             log "routing.feedback emitted: outcome=$DERIVED_OUTCOME feedback_status=$FEEDBACK_STATUS"
         fi
 
@@ -513,13 +511,10 @@ print(result.outcome)
             if [[ -z "$COST_PAYLOAD" || "$COST_PAYLOAD" == "null" ]]; then
                 log "WARNING: llm.cost.completed payload empty or null, skipping emission"
             else
-                # OMN-18471: re-homed onto the journal, which is the only path
-                # that delivers. Unblocked by the 2026-09-17 operator consent row
-                # granting this class's fan-out topic(s) on the dev broker. The
-                # emit_via_daemon call stays until every class is re-homed and the
-                # whole legacy surface is retired in one change (AC5).
+                # OMN-18471: journal-delivered. The legacy emit_via_daemon call
+                # that used to sit beside this one was retired under AC5 once
+                # every class on the edge had been re-homed.
                 emit_to_journal "llm.cost.completed" "$COST_PAYLOAD" "${CORRELATION_ID:-}"
-                emit_via_daemon "llm.cost.completed" "$COST_PAYLOAD" 100
                 _cost_model=$(printf '%s' "$COST_PAYLOAD" | jq -r '.model_id // "unknown"' 2>/dev/null || echo "unknown")
                 _cost_tokens=$(printf '%s' "$COST_PAYLOAD" | jq -r '.total_tokens // 0' 2>/dev/null || echo "0")
                 _cost_session=$(printf '%s' "$COST_PAYLOAD" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")

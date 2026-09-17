@@ -140,7 +140,6 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
             # orphaned class is re-homed and the whole legacy surface is
             # retired in one change (AC5).
             emit_to_journal "response.stopped" "$STOP_PAYLOAD" "$SESSION_ID"
-            emit_via_daemon "response.stopped" "$STOP_PAYLOAD" 100
         else
             log "WARNING: Failed to construct stop payload, skipping Kafka emission"
         fi
@@ -189,7 +188,6 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
             # fan-out topics on the dev broker. All twelve now deliver via the
             # journal, which is what lets emit_via_daemon be retired (AC5).
             emit_to_journal "session.outcome" "$OUTCOME_PAYLOAD" "${CORRELATION_ID:-$SESSION_ID}"
-            emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
     ) &
 fi
@@ -236,7 +234,6 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
                     # fan-out topics on the dev broker. All twelve now deliver via the
                     # journal, which is what lets emit_via_daemon be retired (AC5).
                     emit_to_journal "utilization.scoring.requested" "$SCORING_PAYLOAD" "${CORRELATION_ID:-$SESSION_ID}"
-                    emit_via_daemon "utilization.scoring.requested" "$SCORING_PAYLOAD" 100
                 fi
             fi
 

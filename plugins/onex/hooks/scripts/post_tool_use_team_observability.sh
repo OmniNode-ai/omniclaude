@@ -84,29 +84,12 @@ TOOL_NAME=$(printf '%s\n' "$HOOK_EVENT" | jq -r '.tool_name // "unknown"' 2>/dev
 DEDUP_DIR="${ONEX_STATE_DIR}/hooks/logs/team-observability-dedup"
 mkdir -p "$DEDUP_DIR" 2>/dev/null || true
 
-# --- Failure counter for degraded-health marker ---
-HEALTH_DIR="${ONEX_STATE_DIR}/hooks/logs/hook-health"
-mkdir -p "$HEALTH_DIR" 2>/dev/null || true
-FAIL_COUNTER_FILE="${HEALTH_DIR}/team-observability-failures"
-DEGRADED_MARKER="${HEALTH_DIR}/team-observability.degraded"
-
-_increment_failure() {
-    local count=0
-    if [[ -f "$FAIL_COUNTER_FILE" ]]; then
-        count=$(cat "$FAIL_COUNTER_FILE" 2>/dev/null) || count=0
-        [[ "$count" =~ ^[0-9]+$ ]] || count=0
-    fi
-    count=$((count + 1))
-    echo "$count" > "$FAIL_COUNTER_FILE" 2>/dev/null || true
-    if (( count >= 3 )); then
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] DEGRADED: ${count} consecutive emit failures" > "$DEGRADED_MARKER" 2>/dev/null || true
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] team-observability: DEGRADED after ${count} consecutive failures" >> "$LOG_FILE" 2>/dev/null || true
-    fi
-}
-
-_reset_failure() {
-    rm -f "$FAIL_COUNTER_FILE" "$DEGRADED_MARKER" 2>/dev/null || true
-}
+# OMN-18471 AC5: the failure counters that lived here are GONE with the
+# socket they counted. They tracked emit_via_daemon exit status against
+# ~/.claude/emit.sock, absent since 2026-06-08, so from that date they
+# counted a fixed failure rather than a signal. Delivery liveness for the
+# whole hook edge is now one surface -- hook_emit_health.py, which reads
+# journal backlog depth and the drainer's last confirmed publish.
 
 # --- Extract common fields ---
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-$(printf '%s\n' "$HOOK_EVENT" | jq -r '.session_id // "unknown"' 2>/dev/null)}"
@@ -120,11 +103,13 @@ _emit_team_event() {
     local event_type="$1"
     local payload="$2"
 
-    if emit_via_daemon "$event_type" "$payload" 50; then
-        _reset_failure
-    else
-        _increment_failure
-    fi
+    # OMN-18471 AC5: re-homed onto the journal with the rest of the edge. This
+    # is the one call site that passed a VARIABLE rather than a literal class
+    # name, which is why the lane-contract gate could never resolve it and
+    # says so in its own comment. The append is fire-and-forget and cannot
+    # fail the way a socket write could, so the failure counters it used to
+    # drive are gone with the socket.
+    emit_to_journal "$event_type" "$payload" "${CORRELATION_ID:-}"
 }
 
 # --- Tool-specific event mapping ---
