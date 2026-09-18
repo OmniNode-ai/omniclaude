@@ -77,6 +77,26 @@ from typing import Any
 # Lane records live here, one JSON file per lane, under $ONEX_STATE_DIR.
 LANES_SUBDIR = ("hooks", "lanes")
 
+# Append-only resolution journal [OMN-18690]. Lane records are governed:
+# nothing rewrites one after the fact, and a repair that edited them in
+# place would be indistinguishable from the corruption it repairs. A
+# resolution is therefore a new LINE in this file, never an edit to a
+# record, and :func:`reconcile` applies it as a read-time overlay. The
+# ``.jsonl`` extension also keeps it out of ``load_records``'s ``*.json``
+# glob.
+RESOLUTIONS_FILENAME = "resolutions.jsonl"
+
+# The harness spells a named teammate's agent id as ``a`` + the lane name
+# + ``-`` + 16 hex (``aomn18685-sibling-guard-build-1425-a4c6d53620bcd3eb``),
+# and an anonymous subagent's as ``a`` + hex with no name in it at all.
+# Verified against this host's own spawn artifacts: the transcript is
+# written to ``<session>/subagents/agent-<agent id>.jsonl`` beside an
+# ``agent-<agent id>.meta.json`` whose ``name`` is the dispatch-time lane
+# name. OMN-17575 records that an earlier revision guessed at this shape
+# and the guess was deleted; this pattern is only ever used to MATCH a
+# name already recorded by :func:`open_lane`, never to mint one.
+_RE_AGENT_ID = re.compile(r"^a(?P<name>.+)-[0-9a-f]{16}$")
+
 # A lane still OPEN this long after dispatch is reported as a death rather
 # than a pending. Sized above the longest lane observed in the F-09 window
 # (``omn15459-supersession``, 2h48m) so an ordinary long lane is never
@@ -213,6 +233,61 @@ class ModelLaneRecord:
 
 
 @dataclass(frozen=True)
+class ModelLaneResolution:
+    """One appended repair of a mis-attributed lane pair [OMN-18690].
+
+    ``lane_id`` is the OPEN dispatch record the terminal state belongs to.
+    ``superseded_lane_id`` is the synthetic ``unattributed-*`` twin that
+    recorded the same death under an agent-id-shaped name; naming it is
+    what stops one lane being counted as two failures.
+    """
+
+    lane_id: str
+    superseded_lane_id: str
+    terminal_state: EnumLaneTerminalState
+    terminal_reason: str
+    resolved_at: str
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        """Render to the on-disk journal shape."""
+
+        return {
+            "ticket": "OMN-18690",
+            "lane_id": self.lane_id,
+            "superseded_lane_id": self.superseded_lane_id,
+            "terminal_state": self.terminal_state.value,
+            "terminal_reason": self.terminal_reason,
+            "resolved_at": self.resolved_at,
+            "evidence": dict(self.evidence),
+        }
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> ModelLaneResolution | None:
+        """Parse a journal line, or ``None`` if it is not one."""
+
+        lane_id = payload.get("lane_id")
+        if not isinstance(lane_id, str) or not lane_id:
+            return None
+        raw_state = payload.get("terminal_state")
+        if not isinstance(raw_state, str) or not raw_state:
+            return None
+        try:
+            state = EnumLaneTerminalState(raw_state)
+        except ValueError:
+            return None
+        evidence = payload.get("evidence")
+        return cls(
+            lane_id=lane_id,
+            superseded_lane_id=str(payload.get("superseded_lane_id") or ""),
+            terminal_state=state,
+            terminal_reason=str(payload.get("terminal_reason") or ""),
+            resolved_at=str(payload.get("resolved_at") or ""),
+            evidence=dict(evidence) if isinstance(evidence, dict) else {},
+        )
+
+
+@dataclass(frozen=True)
 class ModelLaneReconciliation:
     """Verdict over every lane record in the registry."""
 
@@ -310,6 +385,74 @@ def load_records() -> tuple[ModelLaneRecord, ...]:
         if record is not None:
             records.append(record)
     return tuple(records)
+
+
+def resolutions_path() -> Path | None:
+    """Return the append-only resolution journal, or ``None``."""
+
+    directory = lanes_dir()
+    return None if directory is None else directory / RESOLUTIONS_FILENAME
+
+
+def append_resolution(resolution: ModelLaneResolution) -> bool:
+    """Append one resolution line. Never rewrites an existing record.
+
+    Returns ``False`` rather than raising when the registry is
+    unavailable, matching every other writer in this module.
+    """
+
+    path = resolutions_path()
+    if path is None:
+        return False
+    try:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(resolution.to_json(), sort_keys=True) + "\n")
+    except OSError:
+        return False
+    return True
+
+
+def load_resolutions() -> dict[str, ModelLaneResolution]:
+    """Read the journal, newest line winning per ``lane_id``.
+
+    Unparseable lines are skipped: a half-written line must degrade one
+    repair, never the whole overlay.
+    """
+
+    path = resolutions_path()
+    if path is None:
+        return {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    resolved: dict[str, ModelLaneResolution] = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        resolution = ModelLaneResolution.from_json(payload)
+        if resolution is not None:
+            resolved[resolution.lane_id] = resolution
+    return resolved
+
+
+def lane_name_from_agent_id(agent_id: str) -> str:
+    """Return the lane name embedded in a harness agent id, or ``""``.
+
+    ``a<name>-<16 hex>`` yields ``<name>``; an anonymous ``a<hex>`` id
+    carries no name and yields ``""``. The caller must still confirm the
+    result against a recorded OPEN lane -- this function reads a spelling,
+    it does not assert that a lane by that name exists.
+    """
+
+    match = _RE_AGENT_ID.match(agent_id or "")
+    return match.group("name") if match else ""
 
 
 def extract_lane_name(tool_input: dict[str, Any]) -> str:
@@ -414,6 +557,23 @@ def _select_close_target(
         named = [record for record in open_in_session if record.lane_name == lane_name]
         if named:
             return max(named, key=lambda record: record.dispatched_at)
+        # OMN-18690: ``SubagentStop`` carries no ``tool_input``, so the
+        # closer often arrives holding the harness's agent id rather than
+        # the dispatch-time name. Match the name the id SPELLS against the
+        # names already on disk. This is a lookup, not a derivation: an id
+        # naming no open lane still falls through to ``unattributed-*``,
+        # which is why it cannot close the wrong record.
+        embedded = lane_name_from_agent_id(lane_name)
+        if embedded:
+            candidates = [
+                record for record in open_in_session if record.lane_name == embedded
+            ]
+            if len(candidates) == 1:
+                return candidates[0]
+            if candidates:
+                # Two open lanes share the name. Guessing would close one
+                # death onto the wrong lane and hide the other.
+                return None
     if len(open_in_session) == 1:
         return open_in_session[0]
     return None
@@ -488,7 +648,39 @@ def reconcile(
     failed: list[ModelLaneRecord] = []
     running: list[ModelLaneRecord] = []
 
+    # OMN-18690: appended repairs, applied as a read-time overlay so the
+    # record files themselves stay byte-identical.
+    resolutions = load_resolutions()
+    superseded = {
+        resolution.superseded_lane_id
+        for resolution in resolutions.values()
+        if resolution.superseded_lane_id
+    }
+
     for record in all_records:
+        if record.lane_id in superseded:
+            # The synthetic twin of a repaired pair. Its terminal state is
+            # already carried by the dispatch record it belongs to, so
+            # counting it again would report one lane as two.
+            continue
+
+        resolution = resolutions.get(record.lane_id)
+        if resolution is not None and record.status is EnumLaneStatus.OPEN:
+            record = ModelLaneRecord(
+                lane_id=record.lane_id,
+                lane_name=record.lane_name,
+                session_id=record.session_id,
+                tool_name=record.tool_name,
+                dispatched_at=record.dispatched_at,
+                status=EnumLaneStatus.CLOSED,
+                tickets=record.tickets,
+                prompt_digest=record.prompt_digest,
+                terminal_state=resolution.terminal_state,
+                terminal_reason=resolution.terminal_reason,
+                closed_at=resolution.resolved_at,
+                evidence={**record.evidence, **resolution.evidence},
+            )
+
         if record.status is EnumLaneStatus.CLOSED:
             if record.terminal_state in FAILURE_STATES:
                 failed.append(record)

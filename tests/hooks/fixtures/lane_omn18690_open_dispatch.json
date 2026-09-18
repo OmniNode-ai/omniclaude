@@ -1,0 +1,20 @@
+{
+  "ticket": "OMN-16471",
+  "lane_id": "lane-5f79b31e7a191435c9ce",
+  "lane_name": "omn18685-sibling-guard-build-1425",
+  "session_id": "9787a4a3-ec49-4819-8bdc-5044efb94550",
+  "tool_name": "Agent",
+  "dispatched_at": "2026-09-18T12:41:41.140100+00:00",
+  "status": "open",
+  "tickets": [
+    "OMN-18685",
+    "OMN-18144",
+    "OMN-18573",
+    "OMN-18686"
+  ],
+  "prompt_digest": "b9ce5dd157c20011",
+  "terminal_state": null,
+  "terminal_reason": "",
+  "closed_at": "",
+  "evidence": {}
+}

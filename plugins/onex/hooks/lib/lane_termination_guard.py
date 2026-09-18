@@ -251,6 +251,42 @@ def transcript_metrics(stop_event: dict[str, Any]) -> ModelLaneMetrics:
     )
 
 
+#: Keys of the harness's ``agent-<agent id>.meta.json`` sidecar, in the
+#: precedence :func:`lane_registry.extract_lane_name` uses at dispatch, so
+#: the name read back at close is the name written at open. Verified
+#: against this host's own spawn artifacts (a named teammate's sidecar
+#: carries ``name`` and ``agentType``; an anonymous subagent's carries
+#: ``agentType`` and ``description``) -- OMN-17575 asked for exactly this
+#: contract and recorded that the previous revision guessed instead.
+_META_NAME_KEYS = ("name", "agentType", "description")
+
+
+def _agent_meta_lane_name(stop_event: dict[str, Any]) -> str:
+    """Read the dispatch-time lane name off the transcript's meta sidecar.
+
+    Returns ``""`` whenever the sidecar is absent, unreadable or carries
+    no name -- the guard then falls back exactly as it did before, so a
+    harness that stops writing the sidecar degrades rather than breaks.
+    """
+
+    for key in ("agent_transcript_path", "transcript_path"):
+        raw_path = stop_event.get(key)
+        if not isinstance(raw_path, str) or not raw_path:
+            continue
+        try:
+            meta_path = Path(raw_path).with_suffix(".meta.json")
+            payload = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        for field_name in _META_NAME_KEYS:
+            value = payload.get(field_name)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:120]
+    return ""
+
+
 def _tail_text(stop_event: dict[str, Any]) -> str:
     lines = _read_transcript_lines(stop_event)
     return "\n".join(lines[-TAIL_LINES_SCANNED:])
@@ -280,16 +316,24 @@ def classify_lane_termination(stop_event: dict[str, Any]) -> ModelLaneTerminatio
 
     session_id = str(stop_event.get("session_id") or stop_event.get("sessionId") or "")
     raw_input = stop_event.get("tool_input") or stop_event.get("toolInput") or {}
-    lane_name = (
-        extract_lane_name(raw_input)
-        if isinstance(raw_input, dict) and raw_input
-        else str(
-            stop_event.get("agent_name")
+    # OMN-18690: the ordinary SubagentStop payload carries no ``tool_input``,
+    # so before this the chain fell all the way through to ``agent_id`` --
+    # the harness's ``a<name>-<16 hex>`` spelling, which matches no OPEN
+    # record by name and sent every death to an ``unattributed-*`` id. The
+    # meta sidecar beside the agent transcript carries the dispatch-time
+    # name verbatim, so it is read before the harness-native fields. The
+    # raw ``agent_id`` remains the last resort: it is honest about what was
+    # observed, and ``lane_registry`` now matches the name it spells.
+    if isinstance(raw_input, dict) and raw_input:
+        lane_name = extract_lane_name(raw_input)
+    else:
+        lane_name = str(
+            _agent_meta_lane_name(stop_event)
+            or stop_event.get("agent_name")
             or stop_event.get("subagent_type")
             or stop_event.get("agent_id")
             or ""
         )
-    )
 
     metrics = transcript_metrics(stop_event)
     signature = _death_signature(_tail_text(stop_event))

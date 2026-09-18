@@ -1,0 +1,20 @@
+{
+  "ticket": "OMN-16471",
+  "lane_id": "unattributed-29ecc418f1eab1ec58bd",
+  "lane_name": "aomn18685-sibling-guard-build-1425-a4c6d53620bcd3eb",
+  "session_id": "9787a4a3-ec49-4819-8bdc-5044efb94550",
+  "tool_name": "",
+  "dispatched_at": "",
+  "status": "closed",
+  "tickets": [],
+  "prompt_digest": "",
+  "terminal_state": "died_usage_limit",
+  "terminal_reason": "usage_limit_wall",
+  "closed_at": "2026-09-18T14:01:59.522216+00:00",
+  "evidence": {
+    "tool_calls": 82,
+    "duration_ms": 4817339,
+    "transcript_entries": 704,
+    "recorded_at": "2026-09-18T14:01:59.521998+00:00"
+  }
+}
