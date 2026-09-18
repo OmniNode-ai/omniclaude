@@ -647,6 +647,69 @@ emit_hook_error_event() {
 
 
 # =============================================================================
+# Journal Append (OMN-17224 fast path, OMN-18471 re-homing, OMN-18702 restore)
+# =============================================================================
+# Append one event to the local hook-emit journal. The launchd singleton
+# drainer (hook_emit_drainer.py) publishes it to the contract-declared lane.
+#
+# This is the ONLY delivery path a hook event has, and it is the same writer
+# `post_tool_use_bus_mirror.sh` uses for tool.executed -- which is why that
+# one class kept working while every class routed through this function did
+# not.
+#
+# OMN-18702: this function was added by 0477e64f6 and then DELETED by
+# 7924f64b7, as collateral in the 293-line removal of emit_via_daemon and its
+# counter surface -- it sat in the middle of the block that was cut. Its ten
+# call sites survived, so from 2026-09-17T06:50Z every one of them exited 127
+# and dropped its event. Nothing reported it: the two guards that read this
+# surface (test_hook_edge_lane.py, test_hook_emit_health.py) match the
+# CALL-SITE TOKEN as text and never ask whether the callee exists, so they
+# stayed green for the whole outage. The check that closes that gap is
+# tests/hooks/test_emit_to_journal_callee_omn18702.py, which runs the hook
+# scripts and reports any callee defined nowhere in the tree.
+#
+# Requires: PYTHON_CMD (set by this file). HOOKS_LIB and LOG_FILE are used
+# when the caller sets them, and resolved or defaulted when it does not --
+# a delivery path must not depend on each caller remembering to export a
+# variable.
+#
+# Backgrounded and fail-open by construction: a hook that cannot record
+# telemetry must never slow or break the operator's session. The per-call
+# cost is one stdlib-only Python process; publishing is the drainer's job.
+#
+# Usage: emit_to_journal <event_type> <payload_json> [correlation_id] [cwd]
+
+emit_to_journal() {
+    local event_type="$1"
+    local payload="$2"
+    local correlation_id="${3:-}"
+    # The lane registry is resolved against the directory the HOOK fired in,
+    # not this backgrounded process's own cwd (OMN-18609). Several callers
+    # cd to $HOME before invoking Python, so reading it here would attribute
+    # every record to no lane at all.
+    local cwd="${4:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+
+    local lib_dir="${HOOKS_LIB:-}"
+    if [[ -z "$lib_dir" ]]; then
+        lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)" || lib_dir=""
+    fi
+
+    local append_py="${lib_dir}/hook_emit_append.py"
+    [[ -n "${PYTHON_CMD:-}" && -f "$append_py" ]] || return 0
+
+    local -a args=(--event-type "$event_type" --payload "$payload")
+    [[ -n "$correlation_id" ]] && args+=(--correlation-id "$correlation_id")
+    [[ -n "$cwd" ]] && args+=(--cwd "$cwd")
+
+    (
+        "$PYTHON_CMD" "$append_py" "${args[@]}" >>"${LOG_FILE:-/dev/null}" 2>&1
+    ) &
+    disown 2>/dev/null || true
+    return 0
+}
+
+
+# =============================================================================
 # Tab Activity Helper (Statusline Integration)
 # =============================================================================
 # Updates the tab activity for the statusline tab bar.
