@@ -582,6 +582,16 @@ repos:
       # `detect-secrets audit .secrets.baseline`). Fails closed on missing tool,
       # scan error, or unreadable/corrupt baseline. See the script's module
       # docstring for the full design.
+      # OMN-18521: regenerating was never the problem -- writing position and
+      # timestamp bookkeeping into the COMMITTED file was. Every commit that
+      # grew a file above a tracked finding rewrote that entry, and every
+      # commit rewrote `generated_at`, so every PR carried a baseline hunk and
+      # every pair of concurrent PRs conflicted on it (60 of the last 60
+      # baseline commits were pure churn; 0 changed a finding). The guard now
+      # writes a normalized baseline on the success path -- no `line_number`,
+      # no `generated_at`, canonically ordered -- so a line shift produces a
+      # byte-identical file. The blocking path is unchanged: identity is still
+      # (filename, hashed_secret), so a genuinely new finding still blocks.
       # --------------------------------------------------------------------------
       - id: detect-secrets-update
         name: guard .secrets.baseline (block new unaudited findings, OMN-15068)
