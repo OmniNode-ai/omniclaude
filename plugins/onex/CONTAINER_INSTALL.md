@@ -6,11 +6,16 @@ After installing the plugin (`claude plugin add /path/to/omniclaude`), hooks nee
 a Python interpreter. The plugin auto-detects one in this order:
 
 1. `PLUGIN_PYTHON_BIN` env var (explicit path to python3)
-2. Bundled venv at `<plugin-cache>/lib/.venv/bin/python3`
-3. `OMNICLAUDE_PROJECT_ROOT/.venv/bin/python3` (dev mode)
-4. System `python3` (lite mode only — auto-detected in containers)
+2. `CLAUDE_PLUGIN_DATA/.venv/bin/python3` (the plugin daemon venv)
+3. `<repo root>/.venv/bin/python3` (the omniclaude repo venv, two levels above the plugin)
+4. `ONEX_REGISTRY_ROOT/omniclaude/.venv/bin/python3`
+5. `OMNICLAUDE_PROJECT_ROOT/.venv/bin/python3` (dev mode)
+6. System `python3` (lite mode only — auto-detected in containers)
 
-In containers, option 4 is typically used automatically.
+In containers, option 6 is typically used automatically. This list mirrors
+`find_python()` in `hooks/scripts/common.sh`, which is the authority. There is no
+bundled `lib/.venv`: that path left the chain in `035707dd2` (OMN-7310, 2026-04-02)
+and was removed as an orphan in OMN-18746.
 
 ## Environment Variables
 
@@ -54,10 +59,11 @@ in that file must match the actual filesystem path in the container.
 > differently there. In that case, compare the recorded path against `known_marketplaces.json`
 > by hand before concluding anything about which hooks run.
 
-### Bundled venv has wrong paths (macOS symlinks)
+### Venv has wrong paths (macOS symlinks)
 
-The venv was built on macOS. Delete it and let auto-repair rebuild:
+The venv was built on macOS. Delete the plugin daemon venv and let auto-repair
+rebuild it:
 ```bash
-rm -rf ~/.claude/plugins/cache/omninode-tools/onex/*/lib/.venv
+rm -rf "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/onex-omninode-tools}/.venv"
 ```
 The next hook invocation will auto-create a fresh venv.

@@ -42,6 +42,23 @@ means the daemon venv must be rebuilt with
   dev machines): compare the live venv marker hash + installed package versions
   against the canonical pins, and fail on any divergence.
 
+## Three surfaces, not one (OMN-18746)
+
+Until 2026-09-18 this gate read exactly one interpreter, the plugin daemon venv.
+It now covers three, because that one is not the one the hooks run on:
+
+1. the **plugin daemon venv** — marker hash and installed pins, as above;
+2. the **hook interpreter** — whatever ``find_python()``
+   (``plugins/onex/hooks/scripts/common.sh``) resolves, which on a host setting
+   ``PLUGIN_PYTHON_BIN`` is the omniclaude repo venv. Every PreToolUse and
+   UserPromptSubmit hook executes there and nothing read it back;
+3. the **orphan hooks venv** ``plugins/onex/lib/.venv``, asserted ABSENT. It left
+   the resolution chain in ``035707dd2`` (OMN-7310, 2026-04-02); no builder
+   rebuilds it and no pin file declares it, so it cannot be reconciled — only
+   removed.
+
+Resolution and the orphan assertion live in ``scripts/hook_interpreter.py``.
+
 ## Exit codes
 
 - ``0`` — canonical pins parse cleanly AND (if a live venv exists) it is in sync.
@@ -57,7 +74,17 @@ import os
 import subprocess
 import sys
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
+
+# Sibling module in this same directory, imported by path so the gate behaves
+# identically whether it is run as a script (pre-commit, CI) or loaded from a
+# file location by a test. Same pattern as scripts/branch_claim.py.
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+import hook_interpreter  # noqa: E402
 
 # uv.lock ``source`` kinds that carry no PyPI-pinned wheel version and must be
 # excluded from the installed-vs-lock comparison (the root project installs
@@ -215,6 +242,60 @@ def _check_live_skew(pins: dict[str, str], canonical_hash: str) -> list[str]:
     return findings
 
 
+def _check_hook_interpreter_skew(
+    pins: dict[str, str],
+    env: Mapping[str, str] | None = None,
+    root: Path | None = None,
+) -> list[str]:
+    """Return skew findings for the interpreter the HOOKS run on (OMN-18746).
+
+    The live-skew check above covers the plugin daemon venv. On a developer
+    machine the hooks themselves usually run somewhere else: ``find_python()``
+    resolves ``PLUGIN_PYTHON_BIN`` first, and on this fleet that names the
+    omniclaude repo venv. Until this check existed, that interpreter — the one
+    every PreToolUse and UserPromptSubmit hook executes on — was read back by
+    nothing, so a skew in it was invisible to both gates.
+
+    The comparison is the same one ``_check_live_skew`` makes: iterate the
+    INSTALLED set and assert each package the lock pins matches that pin.
+    Absence is not drift (the lock is a superset), and lock-only packages are
+    not flagged.
+
+    When the chain resolves nothing there is no interpreter on this host to read
+    back — the ordinary CI state — and that is reported by the caller rather than
+    counted as a finding. A resolved interpreter that will not answer IS a
+    finding: an unreadable interpreter is exactly the case that must not pass
+    silently.
+    """
+    resolved = hook_interpreter.resolve_hook_interpreter(env, root)
+    if resolved is None:
+        return []
+
+    try:
+        installed = _installed_versions(resolved.path)
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+        ValueError,
+    ) as exc:
+        return [
+            f"could not read installed versions from the hook interpreter "
+            f"{resolved.path} (resolved via {resolved.source}): {exc}"
+        ]
+
+    findings: list[str] = []
+    for name, actual in sorted(installed.items()):
+        pinned = pins.get(name)
+        if pinned is not None and actual != pinned:
+            findings.append(
+                f"hook interpreter {resolved.path} (via {resolved.source}) has "
+                f"{name!r} {actual}, lock pins {pinned} — every hook on this host "
+                f"runs on that interpreter"
+            )
+    return findings
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -248,11 +329,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"resolved pinned packages: {len(pins)}")
         return 0
 
+    # Always say which interpreter the hooks resolve to, including when nothing
+    # resolves. A readback silent about what it looked at reads the same as one
+    # that looked at nothing (OMN-18663).
+    print(hook_interpreter.describe_hook_interpreter())
+
     # live-skew mode — only when a live daemon venv exists (local dev).
     findings = _check_live_skew(pins, canonical_hash)
+    # the interpreter the hooks actually run on (OMN-18746)
+    findings += _check_hook_interpreter_skew(pins)
+    # the orphan that left the chain in 035707dd2 must stay gone (OMN-18746)
+    findings += hook_interpreter.check_orphan_absent()
     if findings:
         print(
-            "ERROR: live daemon venv is SKEWED from canonical pins "
+            "ERROR: a venv serving the hooks is SKEWED from canonical pins "
             f"({len(findings)} finding(s)):",
             file=sys.stderr,
         )
@@ -261,14 +351,16 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "\nRebuild the live daemon venv off brew python3.13 (Rule 11):\n"
             "    bash scripts/repair-plugin-venv.sh\n"
-            "If uv.lock changed intentionally, that rebuild resyncs the marker + pins.",
+            "If uv.lock changed intentionally, that rebuild resyncs the marker + pins.\n"
+            "For the hook interpreter, re-sync the venv find_python() resolves\n"
+            "(named above) from this repo's uv.lock: uv sync in its own clone.",
             file=sys.stderr,
         )
         return 1
 
     print(
         f"daemon venv skew gate: PASS ({len(pins)} canonical pins; "
-        "live venv in sync or absent)"
+        "daemon venv and hook interpreter in sync or absent; orphan hooks venv absent)"
     )
     return 0
 

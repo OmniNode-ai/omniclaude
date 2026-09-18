@@ -51,7 +51,8 @@ and portable workflow packages belong in [omnimarket](https://github.com/OmniNod
 | Skill-driven workflows | `plugins/onex/skills/` | User-facing workflow entrypoints |
 | Hook Pydantic models | `src/omniclaude/hooks/schemas.py` | Hook payload schemas |
 | Context injection | `plugins/onex/hooks/lib/context_injection_wrapper.py` | Pattern enrichment |
-| Plugin daemon venv | `plugins/onex/lib/.venv` | Brew-interpreter venv for macOS LAN access |
+| Plugin daemon venv | `$CLAUDE_PLUGIN_DATA/.venv` | Brew-interpreter venv for macOS LAN access; built by `scripts/repair-plugin-venv.sh` |
+| Hook interpreter | resolved by `find_python()` (`plugins/onex/hooks/scripts/common.sh`) | `PLUGIN_PYTHON_BIN` first, then the plugin daemon venv, then this repo's `.venv`. `plugins/onex/lib/.venv` is NOT in that chain — it left in `035707dd2` (OMN-7310) and was removed as an orphan in OMN-18746 |
 
 ## What This Repo Does NOT Own
 

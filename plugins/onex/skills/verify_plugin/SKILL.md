@@ -83,11 +83,32 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
    echo "CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-(NOT SET)}"
    ```
 
-   c. **Hook runtime daemon — probe via plugin venv Python (portable, not nc -U):**
+   c. **Resolve the interpreter the hooks actually run on** — do this before the two
+   probes below. The plugin's own `lib/.venv` is NOT it: that venv left `find_python()`'s
+   resolution chain in April 2026 and was removed as an orphan. Probing it verified an
+   interpreter no hook uses. Resolve the chain instead, in `common.sh` `find_python()`'s
+   own order:
+   ```bash
+   PYTHON=""
+   REPO_ROOT="$(cd "$PLUGIN_ROOT/../.." 2>/dev/null && pwd || true)"
+   for candidate in \
+       "${PLUGIN_PYTHON_BIN:-}" \
+       "${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/.venv/bin/python3}" \
+       "${REPO_ROOT:+$REPO_ROOT/.venv/bin/python3}" \
+       "${ONEX_REGISTRY_ROOT:+$ONEX_REGISTRY_ROOT/omniclaude/.venv/bin/python3}" \
+       "${OMNICLAUDE_PROJECT_ROOT:+$OMNICLAUDE_PROJECT_ROOT/.venv/bin/python3}"; do
+     if [[ -n "$candidate" && -x "$candidate" ]]; then PYTHON="$candidate"; break; fi
+   done
+   echo "hook interpreter: ${PYTHON:-(none resolved)}"
+   ```
+   Report which entry answered. "None resolved" is a finding, not a skip — the hooks have
+   no interpreter on this host.
+
+   d. **Hook runtime daemon — probe via the resolved interpreter (portable, not nc -U):**
    ```bash
    SOCKET="$PLUGIN_ROOT/hooks/hook-runtime.sock"
    export PLUGIN_SOCK="$SOCKET"
-   "$PLUGIN_ROOT/lib/.venv/bin/python3" - <<'PYEOF'
+   "$PYTHON" - <<'PYEOF'
    import socket, os, json, sys
    sock_path = os.environ.get("PLUGIN_SOCK", "")
    if not sock_path or not os.path.exists(sock_path):
@@ -105,13 +126,13 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
    PYEOF
    ```
 
-   d. **Python venv accessible from hook context:**
+   e. **Python venv accessible from hook context** — same resolved interpreter:
    ```bash
-   "$PLUGIN_ROOT/lib/.venv/bin/python3" -c \
+   "$PYTHON" -c \
      "import omniclaude; print(f'omniclaude version: {omniclaude.__version__}')"
    ```
 
-   e. **Skill count sanity check (rough proxy only — does not prove discovery or registry resolution):**
+   f. **Skill count sanity check (rough proxy only — does not prove discovery or registry resolution):**
    ```bash
    count=$(ls "$PLUGIN_ROOT/skills/" | grep -v '^_' | wc -l | tr -d ' ')
    echo "Skill directories: $count"
