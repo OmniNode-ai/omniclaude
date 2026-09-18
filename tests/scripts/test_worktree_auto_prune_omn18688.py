@@ -615,6 +615,48 @@ class TestAccounting:
         )
         assert "DISAGREEMENT" in report
 
+    def test_a_dry_run_labels_its_figure_as_planned(self, tmp_path: Path) -> None:
+        """A dry run states the size of what it PROPOSES, not 0.0 GB.
+
+        The execute path counts only what was actually removed, since an
+        eligible path the removal refused is still on disk. Applying that same
+        filter to a dry run reports 0.0 GB, which reads as "there is nothing to
+        reclaim" rather than "nothing has been removed yet" — and the dry-run
+        plan exists precisely to state the size of what it proposes.
+        """
+        report = mod.render_report(
+            [],
+            root=tmp_path,
+            executed=False,
+            generated_at="2026-09-18T00:00:00Z",
+            removals=[],
+            tracker_resolved=0,
+            worktrees_before=94,
+            reclaim_bytes=42 * 1024**3,
+            reclaim_measured_paths=94,
+        )
+        assert "Reclaimable (planned):** 42.0 GB" in report
+        assert "Reclaimed:**" not in report
+
+    def test_an_execute_run_labels_its_figure_as_reclaimed(
+        self, tmp_path: Path
+    ) -> None:
+        """Positive control for the pair: the two labels must differ."""
+        report = mod.render_report(
+            [],
+            root=tmp_path,
+            executed=True,
+            generated_at="2026-09-18T00:00:00Z",
+            removals=[],
+            tracker_resolved=0,
+            worktrees_before=94,
+            worktrees_after_observed=94,
+            reclaim_bytes=42 * 1024**3,
+            reclaim_measured_paths=94,
+        )
+        assert "Reclaimed:** 42.0 GB" in report
+        assert "planned" not in report.lower().split("## before / after")[1][:400]
+
     def test_an_unmeasured_path_is_not_counted_as_zero(self, tmp_path: Path) -> None:
         missing = tmp_path / "gone"
         assert mod.measure_path_size_bytes(missing) is None
