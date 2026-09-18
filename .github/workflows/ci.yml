@@ -75,12 +75,14 @@ jobs:
   #
   # FAIL-CLOSED ON ANY PROBE ERROR. The called workflow catches every internal
   # failure and still emits a usable label set, so a probe that cannot reach
-  # the runner listing degrades to hosted rather than to an empty `runs-on`
-  # that would leave the consumer unable to schedule at all. A refusal — the
-  # private-repository case, which cannot arise here — fails the run loudly
-  # instead of papering itself over with hosted labels. Read the job's `reason`
-  # output rather than its colour: a green route job that decided nothing looks
-  # exactly like one that decided correctly.
+  # the runner listing degrades to hosted rather than to an empty `runs-on`.
+  # A refusal — the private-repository case, which cannot arise here — fails
+  # the run loudly instead of papering itself over with hosted labels. The one
+  # case the called workflow cannot cover is dying BEFORE its own floor runs
+  # (a failed checkout, a cancelled job); the consumer's `runs-on` handles that
+  # case itself, and the comment there says how and why it is still not a pass.
+  # Read this job's `reason` output rather than its colour: a green route job
+  # that decided nothing looks exactly like one that decided correctly.
   #
   # Registered in scripts/ci/ci_summary_gate.py as a GATE_JOBS completeness
   # anchor AND a STRICT_SUCCESS_JOBS member, under the name
@@ -633,7 +635,27 @@ jobs:
     if: always()
     name: "Env Var Registry (OMN-6263)"
     # OMNI_RUNNER_SELECTOR_V2 — placement comes from the route job's decision.
-    runs-on: ${{ fromJSON(needs.route.outputs.runs_on) }}
+    #
+    # The `||` arm is NOT a second opinion about placement and never widens
+    # one: it is reached only when the route job produced no label set at all —
+    # it died before its own fail-closed floor could write one, or was
+    # cancelled — in which case `needs.route.outputs.runs_on` is the empty
+    # string and a bare `fromJSON()` of it raises at scheduling time. That
+    # failure is a red job whose stated cause is a JSON parse error in an
+    # unrelated validator, which buries the real one. So the arm falls back to
+    # `OMNI_PUBLIC_PR_RUNS_ON_JSON` — deliberately the NARROWEST placement this
+    # repository defines, the one untrusted fork code already receives, so a
+    # dead router can never place this job anywhere a fork could not already
+    # go. No runner label is written into this file; both arms resolve through
+    # a routing surface, and nothing here writes an Actions variable (rule 14).
+    #
+    # THE FALLBACK IS NOT A PASS. A route job that failed is still a failed job:
+    # it is a GATE_JOBS completeness anchor AND a STRICT_SUCCESS_JOBS member in
+    # scripts/ci/ci_summary_gate.py, and the default-deny sweep fails on it
+    # independently, so `CI Summary` — the aggregate required context — goes
+    # red on exactly the surface that broke, instead of red on a validator that
+    # merely could not schedule.
+    runs-on: ${{ fromJSON(needs.route.outputs.runs_on || vars.OMNI_PUBLIC_PR_RUNS_ON_JSON) }}
     timeout-minutes: 15
     steps:
       - name: Checkout code
