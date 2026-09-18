@@ -677,12 +677,21 @@ emit_hook_error_event() {
 # telemetry must never slow or break the operator's session. The per-call
 # cost is one stdlib-only Python process; publishing is the drainer's job.
 #
-# Usage: emit_to_journal <event_type> <payload_json> [correlation_id] [cwd]
+# Usage: emit_to_journal <event_type> <payload_json> [correlation_id] [cwd] \
+#                        [agent_id] [transcript_path]
+#
+# agent_id / transcript_path default to the caller's own $AGENT_ID and
+# $TRANSCRIPT_PATH when it parsed them out of the hook payload. They locate the
+# harness spawn sidecar that names the lane (OMN-18609); without them the event
+# is journalled with an explicit "unresolved" lane rather than a guessed one.
 
 emit_to_journal() {
     local event_type="$1"
     local payload="$2"
     local correlation_id="${3:-}"
+    local agent_id="${5:-${AGENT_ID:-}}"
+    local transcript_path="${6:-${TRANSCRIPT_PATH:-}}"
+    local session_id="${SESSION_ID:-}"
     # The lane registry is resolved against the directory the HOOK fired in,
     # not this backgrounded process's own cwd (OMN-18609). Several callers
     # cd to $HOME before invoking Python, so reading it here would attribute
@@ -700,6 +709,9 @@ emit_to_journal() {
     local -a args=(--event-type "$event_type" --payload "$payload")
     [[ -n "$correlation_id" ]] && args+=(--correlation-id "$correlation_id")
     [[ -n "$cwd" ]] && args+=(--cwd "$cwd")
+    [[ -n "$agent_id" ]] && args+=(--agent-id "$agent_id")
+    [[ -n "$transcript_path" ]] && args+=(--transcript-path "$transcript_path")
+    [[ -n "$session_id" ]] && args+=(--session-id "$session_id")
 
     (
         "$PYTHON_CMD" "$append_py" "${args[@]}" >>"${LOG_FILE:-/dev/null}" 2>&1

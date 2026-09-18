@@ -125,6 +125,12 @@ if ! echo "$INPUT" | jq -e . >/dev/null 2>&1; then
 fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
+# OMN-18609: the lane a hook event belongs to is resolved from the harness's
+# own spawn sidecar, keyed by agent id and located from the session transcript.
+# A dispatched lane's cwd is the SESSION's directory, not its worktree, so the
+# worktree registry alone resolved every record on this fleet to "unresolved".
+AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // .agentId // ""' 2>/dev/null) || AGENT_ID=""
+TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // .transcriptPath // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
 SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null) || SESSION_REASON="other"
 # OMN-18704: Codex supplies a per-turn identifier; Claude Code does not.
 # Read it host-agnostically -- absent yields the empty string, which the
@@ -160,6 +166,9 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --event-type "session.ended" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
+            --agent-id "$AGENT_ID" \
+            --transcript-path "$TRANSCRIPT_PATH" \
+            --session-id "$SESSION_ID" \
             --cwd "${CWD:-$(pwd)}" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
