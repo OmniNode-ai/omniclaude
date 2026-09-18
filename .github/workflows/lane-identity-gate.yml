@@ -19,21 +19,21 @@ name: Lane Identity Gate
 # guard pattern, so the hook skipped the path it had just baked in — was
 # invisible to every test that only read the script.
 
+# NO `paths:` FILTER, DELIBERATELY (OMN-18288). This context is REQUIRED on
+# `dev` (.github/required-checks.yaml), and a required context behind a path
+# filter is skip-vector 1: a pull request touching only excluded paths never
+# runs the job, the context never reports, and the pull request sits PENDING
+# forever. The filter list that used to live here named four paths and was
+# already wrong in the direction that matters -- `scripts/hooks/` is resolved
+# at install time from whatever the installer copies, and the arming probe and
+# the canary test were both gate inputs that no line named. Having no filter
+# answers that more completely than any list can: every input, named or not yet
+# written, triggers the gate.
 on:
   push:
     branches: [main, dev, 'hotfix/**']
-    paths:
-      - 'scripts/lane_identity.py'
-      - 'scripts/hooks/prepare-commit-msg-lane'
-      - 'tests/scripts/test_lane_identity.py'
-      - '.github/workflows/lane-identity-gate.yml'
   pull_request:
     branches: [main, dev]
-    paths:
-      - 'scripts/lane_identity.py'
-      - 'scripts/hooks/prepare-commit-msg-lane'
-      - 'tests/scripts/test_lane_identity.py'
-      - '.github/workflows/lane-identity-gate.yml'
 
 permissions:
   contents: read
@@ -51,6 +51,13 @@ jobs:
 
   lane-identity-gate:
     needs: occ-preflight
+    # Skip-vector 5 (OMN-18288). `needs:` with no `if:` means the implicit job
+    # condition is `success()` over `needs:`, so a failed or cancelled
+    # occ-preflight SKIPS this job -- and a skipped job SATISFIES GitHub branch
+    # protection. Requiring this context without `if: always()` would wire a
+    # silent-pass bypass into the gate whose whole purpose is that an unproven
+    # lane identity cannot pass quietly.
+    if: always()
     name: Lane Identity Gate
     runs-on: >-
       ${{
@@ -86,4 +93,6 @@ jobs:
           git config --global init.defaultBranch main
           git config --global user.email ci@example.com
           git config --global user.name ci
-          uv run pytest tests/scripts/test_lane_identity.py -q
+          uv run pytest \
+            tests/scripts/test_lane_identity.py \
+            tests/scripts/test_lane_identity_arming_probe.py -q
