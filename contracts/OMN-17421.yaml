@@ -1,0 +1,72 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-17421
+title: "Lane-termination death signatures are read only from harness lifecycle frames"
+summary: >
+  The lane-termination guard classified terminal state by scanning the
+  transcript tail as raw text, so a tool result, a hook attachment, or the
+  lane's own prose could be read as a session death. A healthy lane that
+  took the wrong-password negative control CLAUDE.md rule 16 mandates was
+  scored dead twelve times on 2026-09-18 while it merged two PRs. Death
+  signatures are now read only from a frame the harness itself wrote, the
+  auth pattern is word-boundary anchored so it cannot match mid-token, and
+  the append-only resolution journal can correct a CLOSED record.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Guard, registry and reconcile tests pass, both directions covered"
+    command: "uv run pytest tests/hooks/test_lane_termination_guard.py -q"
+  - kind: tests
+    description: "Every other consumer of the changed modules still passes"
+    command: "uv run pytest tests/hooks/test_lane_name_attribution_omn18690.py tests/hooks/test_lane_liveness_guard.py tests/hooks/test_hooks_baseline_omn_13244.py tests/unit/hooks/test_hook_lane_attribution.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-false-death-is-green
+    description: >
+      The reproduced 40-entry window from lane
+      omn18691-ci-bus-phase2-bringup-2015 -- the broker refusal in a tool
+      result, hook_success attachments echoing it, and this guard's own
+      prior verdict as a hook_additional_context attachment -- classifies
+      COMPLETED.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_lane_termination_guard.py::TestHarnessScopedDeathSignaturesOmn17421::test_a_mandated_wrong_password_control_is_not_a_lane_death -q"
+  - id: dod-genuine-death-still-fails
+    description: >
+      The positive control: the same window with the harness's own
+      synthetic error frame appended still classifies died_auth_failed, so
+      the narrowing is not a deletion. One assertion covers both
+      directions and is RED at the parent commit, where the two windows
+      are indistinguishable.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_lane_termination_guard.py::TestHarnessScopedDeathSignaturesOmn17421::test_the_classifier_tells_the_two_windows_apart tests/hooks/test_lane_termination_guard.py::TestHarnessScopedDeathSignaturesOmn17421::test_a_genuine_harness_auth_death_is_still_classified -q"
+  - id: dod-guard-never-reads-its-own-verdict
+    description: >
+      The guard's prior notice arrives as a hook_additional_context
+      attachment and is excluded by entry structure, not by matching the
+      notice text.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_lane_termination_guard.py::TestHarnessScopedDeathSignaturesOmn17421::test_the_guards_own_prior_verdict_is_excluded_by_structure -q"
+  - id: dod-closed-record-is-correctable
+    description: >
+      A CLOSED record carrying a wrong terminal state can be corrected by
+      an appended journal line; the record file itself is never rewritten.
+      RED at the parent, where the overlay applied to OPEN records only.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_lane_termination_guard.py::TestCorrectingAMisclassifiedRecordOmn17421 -q"
