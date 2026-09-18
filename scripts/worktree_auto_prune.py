@@ -2032,8 +2032,9 @@ def render_report(
                 "- **Reclaimed:** not measured (re-run with `--measure-reclaim`)"
             )
         else:
+            label = "Reclaimed" if executed else "Reclaimable (planned)"
             lines.append(
-                f"- **Reclaimed:** {_gib(reclaim_bytes)} "
+                f"- **{label}:** {_gib(reclaim_bytes)} "
                 f"({reclaim_measured_paths} path(s) measured before removal; "
                 "unreadable paths are excluded, never counted as zero)"
             )
@@ -2910,10 +2911,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Reclaim is the measured size of the paths that were ACTUALLY removed —
     # never the size of everything that was eligible. An eligible path that the
     # removal refused is still on disk [OMN-18688 AC6].
+    # On an --execute run this is what was ACTUALLY removed: an eligible path the
+    # removal refused is still on disk and must not be counted. On a DRY RUN
+    # nothing was removed, so the same filter would report 0.0 GB — which reads
+    # as "there is nothing to reclaim" rather than "nothing has been removed
+    # yet", and the dry-run plan exists precisely to state the size of what it
+    # proposes. So a dry run reports the PLANNED total over the prune-eligible
+    # set, and the report labels which of the two it is.
     removed_ok_paths = {r.path for r in removals if r.ok}
-    reclaim_measured = {
-        path: size for path, size in reclaim_sizes.items() if path in removed_ok_paths
-    }
+    reclaim_measured = (
+        {path: size for path, size in reclaim_sizes.items() if path in removed_ok_paths}
+        if args.execute
+        else dict(reclaim_sizes)
+    )
     reclaim_bytes = sum(reclaim_measured.values()) if args.measure_reclaim else None
     # Re-walk the tree so the after-count is an OBSERVATION, not the arithmetic
     # the falsifier is meant to check against.
@@ -3008,6 +3018,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "worktrees_after_expected": len(decisions)
                         - sum(1 for r in removals if r.ok),
                         "worktrees_after_observed": worktrees_after_observed,
+                        # `reclaim_bytes` is what was removed on an --execute
+                        # run, and what WOULD be removed on a dry run. The
+                        # `reclaim_is_planned` flag says which, so a consumer
+                        # can never read a plan as an outcome.
+                        "reclaim_is_planned": not args.execute,
                         "reclaim_bytes": reclaim_bytes,
                         "reclaim_gb": (
                             None
