@@ -1147,6 +1147,25 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-18702: a call to a shell function that is defined nowhere exits
+      # 127, and every script on the hook edge is fail-open, so the caller
+      # swallows it and the event is dropped with no error and no log line.
+      # `emit_to_journal` was deleted by omniclaude#2214 as collateral in a
+      # 293-line removal of a neighbouring function and left ten call sites
+      # calling nothing for a day and a half; nine event classes emitted
+      # nothing. The two guards already on that surface match the CALL SITE
+      # as text and stayed green throughout. This one resolves the callee.
+      # `always_run` rather than a file filter, for the same reason the lane
+      # gate above uses one: the deletion and the call site are in different
+      # files, so a filter on either would have missed this.
+      - id: hook-callee-gate
+        name: Hook callees are defined
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_hook_callees.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # OMN-17020: every hook this plugin registers is declared in
       # plugins/onex/hooks/contracts/hook_inventory.yaml, and every deliberate
       # disable carries owner/reason/review_by/restoration. OMN-13244 went dark
