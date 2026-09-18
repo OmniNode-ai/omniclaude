@@ -1065,3 +1065,210 @@ class TestShellWrapperCancel:
             }
         )
         assert result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# OMN-18747 — bare `#N` repo anchoring
+# ---------------------------------------------------------------------------
+
+_OMN_18086_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "omn_18086_description.md"
+).read_text(encoding="utf-8")
+
+
+def _unresolved(refs: list[Any]) -> list[Any]:
+    return [r for r in refs if r.repo is None]
+
+
+class TestBareRefRepoAnchor:
+    """A bare ``PR #N`` resolves when the ticket itself names the repo.
+
+    OMN-18747. The gate refused OMN-18086 on `?#2504: PR #2504 has no
+    associated repo` although the same ticket cites
+    ``OmniNode-ai/omnimarket#2504`` in full in its carrier block and names
+    ``omnimarket`` one word before the bare form. Fail-closed is correct and
+    unchanged; the parser was too narrow.
+    """
+
+    def test_omn_18086_bare_ref_resolves_via_same_number_citation(self) -> None:
+        """AC1 — the live OMN-18086 body, captured verbatim 2026-09-18."""
+        refs = parse_pr_refs(_OMN_18086_FIXTURE, default_repo=None)
+
+        assert _unresolved(refs) == [], (
+            "a bare `PR #2504` anchored by an explicit "
+            "OmniNode-ai/omnimarket#2504 citation in the same ticket must not "
+            f"stay unresolvable; got {[(r.number, r.repo) for r in refs]}"
+        )
+        by_number = {r.number: r.repo for r in refs}
+        assert by_number[2504] == "OmniNode-ai/omnimarket"
+        # The bare AC1/AC2 mentions dedupe into the qualified citation rather
+        # than surviving as a second, repo-less reference to the same PR.
+        assert sum(1 for r in refs if r.number == 2504) == 1
+
+    def test_omn_18086_verifies_clean_when_the_anchored_pr_is_merged(self) -> None:
+        """AC1, at the verify() level — the refusal the lane actually hit.
+
+        The fetcher errors on any reference that carries no repository, exactly
+        as the live ``fetch_pr_status`` does, so this fails while `#2504` is
+        unresolvable and passes only once the anchor resolves it.
+        """
+
+        def _merged_unless_unresolvable(ref: PRRef) -> PRStatus:
+            if ref.repo is None:
+                return PRStatus(
+                    ref=ref,
+                    state="UNKNOWN",
+                    merge_state="UNKNOWN",
+                    error=f"PR #{ref.number} has no associated repo; cannot verify.",
+                )
+            return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+        result = verify(
+            description=_OMN_18086_FIXTURE,
+            labels=[],
+            default_repo=None,
+            fetcher=_merged_unless_unresolvable,
+        )
+        assert result.allowed is True, result.reason
+        assert result.reason == "all_prs_merged"
+
+    def test_sentence_named_repo_resolves_bare_ref(self) -> None:
+        """AC2 — the repo named directly before the PR token anchors it."""
+        refs = parse_pr_refs(
+            "Implemented in omnimarket PR #2504 per ruling b817d8b7.",
+            default_repo=None,
+        )
+        assert len(refs) == 1
+        assert refs[0].number == 2504
+        assert refs[0].repo == "OmniNode-ai/omnimarket"
+
+    def test_sentence_anchor_accepts_underscored_repo_name(self) -> None:
+        refs = parse_pr_refs("Landed in omnibase_infra PR #3468.", default_repo=None)
+        assert [(r.number, r.repo) for r in refs] == [
+            (3468, "OmniNode-ai/omnibase_infra")
+        ]
+
+    def test_ordinary_english_word_before_pr_token_is_not_a_repo(self) -> None:
+        """The anchor is a repo name, not whatever word precedes the token."""
+        for prose in (
+            "Fixed in the PR #2504.",
+            "Superseded by a merged PR #2504.",
+            "See that PR #2504.",
+        ):
+            refs = parse_pr_refs(prose, default_repo=None)
+            assert [r.repo for r in refs] == [None], prose
+
+    def test_two_repos_carrying_the_same_number_leave_the_bare_ref_unresolved(
+        self,
+    ) -> None:
+        """AC3 — ambiguity is refused, never guessed, and names both candidates."""
+        desc = (
+            "Carriers: OmniNode-ai/omnimarket#2504 and "
+            "OmniNode-ai/omnibase_infra#2504.\n"
+            "The behaviour change landed in PR #2504."
+        )
+        refs = parse_pr_refs(desc, default_repo=None)
+
+        unresolved = _unresolved(refs)
+        assert len(unresolved) == 1
+        assert unresolved[0].number == 2504
+        assert sorted(unresolved[0].anchor_candidates) == [
+            "OmniNode-ai/omnibase_infra",
+            "OmniNode-ai/omnimarket",
+        ]
+
+        error = linear_done_verify.fetch_pr_status(unresolved[0]).error or ""
+        assert "OmniNode-ai/omnimarket" in error
+        assert "OmniNode-ai/omnibase_infra" in error
+
+    def test_sentence_anchor_disambiguates_two_same_number_citations(self) -> None:
+        """An explicit in-sentence repo name resolves an otherwise-ambiguous ref."""
+        desc = (
+            "Carriers: OmniNode-ai/omnimarket#2504 and "
+            "OmniNode-ai/omnibase_infra#2504.\n"
+            "The behaviour change landed in omnimarket PR #2504."
+        )
+        refs = parse_pr_refs(desc, default_repo=None)
+        assert _unresolved(refs) == []
+        assert {(r.number, r.repo) for r in refs} == {
+            (2504, "OmniNode-ai/omnimarket"),
+            (2504, "OmniNode-ai/omnibase_infra"),
+        }
+
+    def test_sentence_anchor_conflicting_with_the_only_citation_is_refused(
+        self,
+    ) -> None:
+        """Two anchors that disagree are ambiguous — neither wins."""
+        desc = (
+            "Carrier: OmniNode-ai/omnimarket#2504.\n"
+            "The behaviour change landed in omnibase_infra PR #2504."
+        )
+        refs = parse_pr_refs(desc, default_repo=None)
+        unresolved = _unresolved(refs)
+        assert len(unresolved) == 1
+        assert sorted(unresolved[0].anchor_candidates) == [
+            "OmniNode-ai/omnibase_infra",
+            "OmniNode-ai/omnimarket",
+        ]
+
+    def test_unanchored_bare_ref_is_still_unresolvable(self) -> None:
+        """AC4 — the positive control. Fail-closed is not weakened."""
+        refs = parse_pr_refs("Fixed in PR #999.", default_repo=None)
+        assert len(refs) == 1
+        assert refs[0].repo is None
+        assert refs[0].bare is True
+        assert refs[0].anchor_candidates == ()
+
+        status = linear_done_verify.fetch_pr_status(refs[0])
+        assert status.error is not None
+        assert "no associated repo" in status.error
+        assert linear_done_verify.classify_blocking(status) is True
+
+    def test_unanchored_bare_ref_still_blocks_verify(self) -> None:
+        """AC4 at the verify() level — the OMN-15025 fail-closed shape stands."""
+        result = verify(
+            description="Fixed in PR #999.",
+            labels=["close-if-done"],
+            default_repo=None,
+            fetcher=linear_done_verify.fetch_pr_status,
+        )
+        assert result.allowed is False
+        assert "no associated repo" in result.reason
+
+    def test_default_repo_is_never_re_pointed_by_an_anchor(self) -> None:
+        """AC6 — anchoring applies only where the ref is otherwise unresolvable."""
+        refs = parse_pr_refs(
+            "Depends on https://github.com/OmniNode-ai/omnibase_core/pull/202 "
+            "and closes PR #202",
+            default_repo="OmniNode-ai/omniclaude",
+        )
+        assert len(refs) == 2
+        assert sorted(r.repo or "" for r in refs) == [
+            "OmniNode-ai/omnibase_core",
+            "OmniNode-ai/omniclaude",
+        ]
+
+    def test_anchor_resolved_ref_is_not_treated_as_a_bare_guess(self) -> None:
+        """An anchored repo is the ticket's own explicit statement, so the
+        weak-signal OCC number probe (OMN-15782's bare-ref fallback) does not
+        apply to it — the ref carries a repo, and that repo decides."""
+        refs = parse_pr_refs(
+            "Implemented in omnimarket PR #2504.",
+            default_repo=None,
+        )
+        assert refs[0].bare is False
+
+        def _prober_must_not_be_consulted(_num: int) -> bool:
+            raise AssertionError("weak-signal prober consulted for an anchored ref")
+
+        assert (
+            is_weak_signal_ref(refs[0], prober=_prober_must_not_be_consulted) is False
+        )
+
+    def test_anchor_to_onex_change_control_still_classifies_weak(self) -> None:
+        refs = parse_pr_refs(
+            "Receipt in onex_change_control PR #10244.",
+            default_repo=None,
+        )
+        assert refs[0].repo == "OmniNode-ai/onex_change_control"
+        assert is_weak_signal_ref(refs[0]) is True
