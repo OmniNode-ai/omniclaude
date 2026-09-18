@@ -60,6 +60,20 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 
+# OMN-18704: which agent host is invoking this hook. Declared by the
+# registration the host resolved -- the Codex hooks.json passes
+# `--actor codex` -- and never sniffed, because a Codex hook process inherits
+# its parent's environment and a Codex session started from a Claude Code
+# session runs with CLAUDECODE=1 set. The allowlist lives in
+# hooks/lib/hook_actor.py; this only lifts the raw value out of argv.
+# shellcheck source=../lib/hook_actor.sh
+source "${HOOKS_LIB}/hook_actor.sh" 2>/dev/null || true
+if declare -F onex_hook_actor_arg >/dev/null 2>&1; then
+    HOOK_ACTOR_ARG="$(onex_hook_actor_arg "$@")"
+else
+    HOOK_ACTOR_ARG="${ONEX_HOOK_ACTOR:-}"
+fi
+
 # shellcheck source=onex-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-user-prompt-submit-bus-mirror.log"
@@ -124,6 +138,10 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 WORKING_DIRECTORY="$(basename "$CWD")"
+# OMN-18704: Codex supplies a per-turn identifier; Claude Code does not.
+# Read it host-agnostically -- absent yields the empty string, which the
+# appender records as an explicit null rather than omitting the field.
+TURN_ID=$(echo "$INPUT" | jq -r '.turn_id // ""' 2>/dev/null) || TURN_ID=""
 # Length only -- never the prompt text itself (onex.evt.* privacy invariant).
 PROMPT_LENGTH=$(echo "$INPUT" | jq -r '.prompt // "" | length' 2>/dev/null) || PROMPT_LENGTH=0
 [[ "$PROMPT_LENGTH" =~ ^[0-9]+$ ]] || PROMPT_LENGTH=0
@@ -157,6 +175,8 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
             --cwd "$CWD" \
+            --actor "$HOOK_ACTOR_ARG" \
+            --turn-id "$TURN_ID" \
             >>"$LOG_FILE" 2>&1
     ) &
     disown 2>/dev/null || true

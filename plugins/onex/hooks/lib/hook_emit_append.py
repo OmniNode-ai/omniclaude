@@ -32,6 +32,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import hook_actor  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 import hook_lane_attribution as lane_attribution  # noqa: E402
 
@@ -57,6 +58,27 @@ def main(argv: list[str] | None = None) -> int:
             "The working directory the hook fired in, taken from the harness "
             "hook payload rather than this process's own cwd. Used to resolve "
             "the lane identity merged onto the event (OMN-18609)."
+        ),
+    )
+    parser.add_argument(
+        "--actor",
+        default=None,
+        help=(
+            "The agent host that produced this event, as declared by the hook "
+            "registration that invoked the caller (OMN-18704). Absent means "
+            "the Claude Code host. Never inferred from the environment: a "
+            "Codex hook inherits its parent's environment, so a Codex session "
+            "launched from a Claude Code session carries CLAUDECODE=1."
+        ),
+    )
+    parser.add_argument(
+        "--turn-id",
+        default=None,
+        help=(
+            "The host's per-turn identifier, when it supplies one. Codex does; "
+            "Claude Code's hook input carries no turn identifier, so the field "
+            "is null there rather than absent, and the envelope contract "
+            "records why."
         ),
     )
     parser.add_argument(
@@ -89,6 +111,12 @@ def main(argv: list[str] | None = None) -> int:
         # lane keys are never trusted -- the registry is the authority, so an
         # existing key is overwritten rather than preserved.
         payload.update(lane_attribution.attribution_fields(args.cwd))
+        # The actor is stamped here, after the caller's payload, for the same
+        # reason lane attribution is: a caller-supplied key is never trusted.
+        # The registration that the host resolved is the authority.
+        payload["actor"] = hook_actor.resolve_actor(args.actor)
+        turn_id = (args.turn_id or "").strip()
+        payload["turn_id"] = turn_id or None
         outcome = journal.append(
             target,
             event_type=args.event_type,
