@@ -102,6 +102,28 @@ _PR_OWNER_REPO_HASH_RE = re.compile(
 _ANCHOR_WORD_RE = re.compile(r"([A-Za-z][\w.-]*)[^\w]*$")
 _ORG_REPO_NAME_RE = re.compile(r"^(?:omni|onex|knowledge-base)[\w.-]*$", re.IGNORECASE)
 
+# OMN-18749: a CLOSED-unmerged citation can never become merged, so a gate that
+# treats it like an OPEN one holds its ticket forever and recommends the one
+# thing that cannot happen. Two live holds: two closed proof pull requests whose
+# work landed in a third, and a pull request closed by an accidental branch
+# rename whose work landed in its successor.
+#
+# Such a citation is satisfied ONLY by a successor THE TICKET DECLARES, on one
+# line naming both sides, and only when that successor is verified MERGED. The
+# phrase set is deliberately directional -- everything here reads
+# "<the closed one> <phrase> <the successor>" -- because a symmetric verb such
+# as "replaces" would bind the pair backwards and mark the merged pull request
+# superseded by the closed one.
+#
+# Rejected alternatives, recorded because both look easier: a comment is read by
+# neither gate, and a successor that vouches for itself in its own body is
+# written by the same lane that wants the close.
+_SUPERSESSION_PHRASE_RE = re.compile(
+    r"\b(?:super[sc]eded\s+by|replaced\s+by|re-?landed\s+as|landed\s+as|"
+    r"closed\s+in\s+favou?r\s+of)\b",
+    re.IGNORECASE,
+)
+
 # Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
 # deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
 # satisfies nor blocks a *product* ticket's Done — it is a receipt companion,
@@ -160,12 +182,20 @@ class PRStatus:
     state: str  # OPEN, CLOSED, MERGED
     merge_state: str  # CLEAN, BLOCKED, DIRTY, BEHIND, UNKNOWN, etc.
     error: str | None = None
+    # "owner/repo#N" of a MERGED successor this ticket declared for a
+    # CLOSED-unmerged citation (OMN-18749). Set by :func:`verify` only, only
+    # after the successor's own probe came back MERGED, and never for an OPEN
+    # or unreadable citation. Empty means no proven supersession, which is
+    # what every caller constructing a status directly gets.
+    superseded_by: str = ""
 
     @property
     def is_blocking(self) -> bool:
         if self.error:
             return True
         if self.state == "MERGED":
+            return False
+        if self.superseded_by:
             return False
         if self.state == "OPEN":
             return True
@@ -182,7 +212,11 @@ class VerificationResult:
     pr_statuses: list[PRStatus] = field(default_factory=list)
 
 
-def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
+def parse_pr_refs(
+    text: str,
+    default_repo: str | None = None,
+    anchor_text: str | None = None,
+) -> list[PRRef]:
     """Extract PR references from a ticket description.
 
     Finds both `#123` shorthand and full `https://github.com/owner/repo/pull/N`
@@ -195,6 +229,13 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
     :func:`_resolve_bare_ref_repo`. This never re-points a reference that
     `default_repo` already resolved, and a reference with no anchor, or with two
     anchors that disagree, stays unresolved and therefore blocking.
+
+    OMN-18749: `anchor_text` lets a caller parse a FRAGMENT of a ticket while
+    resolving its bare references against the WHOLE ticket. A supersession
+    declaration is read one line at a time, and the citation that anchors a
+    number usually sits in another paragraph; without this the fragment would
+    lose every anchor the full body supplies. It affects anchoring only —
+    references are still read from `text` alone.
     """
     refs: dict[tuple[str, int], PRRef] = {}
 
@@ -219,7 +260,14 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
     # so they are the ticket's own explicit statements about where a PR lives.
     by_number: dict[int, set[str]] = {}
     by_name: dict[str, str | None] = {}
-    for full_repo, num in refs:
+    anchor_keys: list[tuple[str, int]] = list(refs)
+    if anchor_text is not None and anchor_text != text:
+        anchor_keys = [
+            (ref.repo, ref.number)
+            for ref in parse_pr_refs(anchor_text, default_repo=default_repo)
+            if ref.repo is not None and not ref.bare
+        ]
+    for full_repo, num in anchor_keys:
         by_number.setdefault(num, set()).add(full_repo)
         name = full_repo.rsplit("/", 1)[-1].lower()
         if name in by_name and by_name[name] != full_repo:
@@ -310,6 +358,62 @@ def _resolve_bare_ref_repo(
     if candidates:
         return None, tuple(sorted(candidates))
     return None, ()
+
+
+@dataclass
+class SupersessionDeclaration:
+    """One ticket-declared supersession of a CLOSED-unmerged citation."""
+
+    closed: PRRef
+    # The successor named on the right of the phrase, or None when the right
+    # side carries no reference that resolves to a repo. None is NOT "no
+    # declaration" — it is a declaration whose successor cannot be checked,
+    # which still refuses, and says why (OMN-18749).
+    successor: PRRef | None
+    line: str
+
+
+def parse_supersession_declarations(
+    text: str,
+    default_repo: str | None = None,
+) -> dict[tuple[str | None, int], SupersessionDeclaration]:
+    """Read every ``<closed> <phrase> <successor>`` line the ticket declares.
+
+    Keyed by the CLOSED citation's ``(repo, number)``, which is the key
+    :func:`verify` looks a blocking status up by. Several closed references may
+    share one line — the two-proof-pull-requests-one-successor shape — and each
+    binds to the same successor.
+
+    A line whose right side carries no reference at all is not a declaration
+    and is ignored: "superseded by later work" names nothing to verify. A line
+    whose right side names something unresolvable IS a declaration, recorded
+    with ``successor=None`` so the refusal can say the successor could not be
+    resolved rather than that none was offered.
+
+    Pure function. It proves nothing on its own — the successor's merge state
+    is established by a probe in :func:`verify`.
+    """
+    declarations: dict[tuple[str | None, int], SupersessionDeclaration] = {}
+    for line in text.splitlines():
+        phrase = _SUPERSESSION_PHRASE_RE.search(line)
+        if phrase is None:
+            continue
+        left = parse_pr_refs(
+            line[: phrase.start()], default_repo=default_repo, anchor_text=text
+        )
+        right = parse_pr_refs(
+            line[phrase.end() :], default_repo=default_repo, anchor_text=text
+        )
+        if not left or not right:
+            continue
+        successor = right[0]
+        for closed in left:
+            declarations[(closed.repo, closed.number)] = SupersessionDeclaration(
+                closed=closed,
+                successor=successor if successor.repo is not None else None,
+                line=line.strip(),
+            )
+    return declarations
 
 
 def is_weak_signal_ref(
@@ -496,10 +600,18 @@ def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
 
 
 def classify_blocking(status: PRStatus) -> bool:
-    """Return True if this PR should block a Done transition."""
+    """Return True if this PR should block a Done transition.
+
+    OMN-18749: a CLOSED-unmerged citation carrying a proven ``superseded_by``
+    does not block. The proof is established in :func:`verify`, which is the
+    only writer of that field; this function stays a pure reader so the guard's
+    own re-classification (the OMN-15712 filter) cannot disagree with it.
+    """
     if status.error:
         return True
     if status.state == "MERGED":
+        return False
+    if status.superseded_by:
         return False
     if status.state == "OPEN":
         return True
@@ -508,6 +620,69 @@ def classify_blocking(status: PRStatus) -> bool:
     if status.merge_state in BLOCKING_MERGE_STATES:
         return True
     return False
+
+
+def _apply_declared_supersessions(
+    statuses: list[PRStatus],
+    declarations: dict[tuple[str | None, int], SupersessionDeclaration],
+    fetcher: Any,
+) -> None:
+    """Record a PROVEN supersession on each eligible status, in place.
+
+    OMN-18749. Eligible means CLOSED, unmerged and readable: an OPEN citation
+    can still merge and must keep blocking on its own account, and an errored
+    probe is "I could not check", which never resolves to "so I will ignore
+    it". The successor is probed through the same fetcher as every other
+    citation, and only a MERGED verdict counts — an open, closed or unreadable
+    successor leaves the citation blocking, as does one that resolves to no
+    repository.
+    """
+    by_key = {(s.ref.repo, s.ref.number): s for s in statuses}
+    for status in statuses:
+        if status.error or status.state != "CLOSED" or status.ref.repo is None:
+            continue
+        declaration = declarations.get((status.ref.repo, status.ref.number))
+        if declaration is None or declaration.successor is None:
+            continue
+        successor = declaration.successor
+        successor_status = by_key.get((successor.repo, successor.number))
+        if successor_status is None:
+            # The successor need not itself be a cited product PR — it is
+            # commonly named only on the declaration line — so probe it.
+            successor_status = fetcher(successor)
+        if successor_status.error or successor_status.state != "MERGED":
+            continue
+        status.superseded_by = f"{successor.repo}#{successor.number}"
+
+
+def _closed_unmerged_remedy(
+    status: PRStatus,
+    declaration: SupersessionDeclaration | None,
+) -> str:
+    """The actionable half of a CLOSED-unmerged refusal (OMN-18749)."""
+    citation = f"{status.ref.repo}#{status.ref.number}"
+    if declaration is None:
+        return (
+            f"closed without merging, so merging it is not possible. If the "
+            f"work landed elsewhere, declare that on one line of the ticket "
+            f"description — `{citation} superseded by OmniNode-ai/<repo>#<N>` "
+            f"— and that successor must itself be merged. If nothing replaced "
+            f"it, this is abandoned work and the citation belongs off the "
+            f"ticket."
+        )
+    if declaration.successor is None:
+        return (
+            f"closed without merging, and the successor declared for it "
+            f"resolves to no repository. Spell it as `OmniNode-ai/<repo>#<N>` "
+            f"or a full GitHub URL on the declaration line: "
+            f"{declaration.line!r}"
+        )
+    successor = f"{declaration.successor.repo}#{declaration.successor.number}"
+    return (
+        f"closed without merging, and its declared successor {successor} is "
+        f"not merged either. A chain of unmerged pull requests is still "
+        f"unlanded work."
+    )
 
 
 def verify(
@@ -545,6 +720,10 @@ def verify(
 
     if refs:
         statuses = [fetcher(ref) for ref in refs]
+        declarations = parse_supersession_declarations(
+            description, default_repo=default_repo
+        )
+        _apply_declared_supersessions(statuses, declarations, fetcher)
         blocking = [s for s in statuses if classify_blocking(s)]
         if not blocking:
             return VerificationResult(
@@ -563,6 +742,18 @@ def verify(
                     f"  - {repo}#{status.ref.number}: state={status.state} "
                     f"mergeState={status.merge_state}"
                 )
+                # OMN-18749: "merge it" is not a remedy for something already
+                # closed, and that is exactly what this message used to leave
+                # the reader with. Say what can actually be done instead, and
+                # say it with the citation already filled in.
+                if status.state == "CLOSED" and status.ref.repo:
+                    lines.append(
+                        "      "
+                        + _closed_unmerged_remedy(
+                            status,
+                            declarations.get((status.ref.repo, status.ref.number)),
+                        )
+                    )
         lines.append(
             "A `close-if-done` label/frontmatter does NOT waive an open cited "
             "PR (OMN-14641) — merge the linked PR, or cite the merged "

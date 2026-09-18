@@ -1272,3 +1272,211 @@ class TestBareRefRepoAnchor:
         )
         assert refs[0].repo == "OmniNode-ai/onex_change_control"
         assert is_weak_signal_ref(refs[0]) is True
+
+
+# ---------------------------------------------------------------------------
+# OMN-18749 — a closed-unmerged citation and its declared successor
+# ---------------------------------------------------------------------------
+
+_OMN_18172_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "omn_18172_shape_description.md"
+).read_text(encoding="utf-8")
+
+_INFRA = "OmniNode-ai/omnibase_infra"
+_CLOSED_NUMBERS = (3615, 3626)
+_SUCCESSOR_NUMBER = 3627
+
+_DECLARATION = (
+    f"{_INFRA}#3615 and {_INFRA}#3626 are closed unmerged; superseded by "
+    f"{_INFRA}#{_SUCCESSOR_NUMBER}."
+)
+
+
+def _closed_unless(*merged: int) -> Any:
+    """Fetcher: `merged` numbers are MERGED, every other resolvable ref CLOSED."""
+
+    def _fetch(ref: PRRef) -> PRStatus:
+        if ref.repo is None:
+            return PRStatus(
+                ref=ref,
+                state="UNKNOWN",
+                merge_state="UNKNOWN",
+                error=f"PR #{ref.number} has no associated repo; cannot verify.",
+            )
+        if ref.number in merged:
+            return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+        return PRStatus(ref=ref, state="CLOSED", merge_state="CLEAN")
+
+    return _fetch
+
+
+class TestClosedUnmergedSupersession:
+    """A CLOSED-unmerged citation can never merge, so "merge it" is not a remedy.
+
+    OMN-18749. Two live holds: a closer refusal naming two closed proof pull
+    requests whose work landed in a third, and a guard refusal naming a pull
+    request closed by an accidental branch rename whose work landed in its
+    successor. Both refusals recommended merging something that cannot merge.
+    The citation is satisfied only by a successor the TICKET declares and that
+    is verified merged; everything else still refuses.
+    """
+
+    def test_closed_unmerged_with_no_declaration_still_blocks(self) -> None:
+        """AC3 — the fixture as the ticket stands today."""
+        result = verify(
+            description=_OMN_18172_FIXTURE,
+            labels=[],
+            default_repo=None,
+            fetcher=_closed_unless(_SUCCESSOR_NUMBER),
+        )
+        assert result.allowed is False
+        for number in _CLOSED_NUMBERS:
+            assert f"{_INFRA}#{number}" in result.reason
+
+    def test_the_refusal_names_the_remedy_rather_than_a_merge(self) -> None:
+        """AC3 — the message must be actionable, and today's is not."""
+        result = verify(
+            description=_OMN_18172_FIXTURE,
+            labels=[],
+            default_repo=None,
+            fetcher=_closed_unless(_SUCCESSOR_NUMBER),
+        )
+        assert "closed without merging" in result.reason
+        assert "superseded by" in result.reason
+        # The remedy names the exact citation to declare, so it can be pasted.
+        assert f"{_INFRA}#3615 superseded by" in result.reason
+
+    def test_one_declaration_line_clears_both_closed_refs(self) -> None:
+        """AC1 and AC2 — several closed refs may share one declaration."""
+        result = verify(
+            description=_OMN_18172_FIXTURE + "\n\n" + _DECLARATION,
+            labels=[],
+            default_repo=None,
+            fetcher=_closed_unless(_SUCCESSOR_NUMBER),
+        )
+        assert result.allowed is True, result.reason
+        assert result.reason == "all_prs_merged"
+
+    def test_declared_successor_that_is_open_does_not_satisfy(self) -> None:
+        """AC4 — a successor still in flight proves nothing yet."""
+
+        def _fetch(ref: PRRef) -> PRStatus:
+            if ref.number == _SUCCESSOR_NUMBER:
+                return PRStatus(ref=ref, state="OPEN", merge_state="CLEAN")
+            return PRStatus(ref=ref, state="CLOSED", merge_state="CLEAN")
+
+        result = verify(
+            description=_OMN_18172_FIXTURE + "\n\n" + _DECLARATION,
+            labels=[],
+            default_repo=None,
+            fetcher=_fetch,
+        )
+        assert result.allowed is False
+        assert f"{_INFRA}#{_SUCCESSOR_NUMBER}" in result.reason
+
+    def test_declared_successor_that_is_also_closed_does_not_satisfy(self) -> None:
+        """AC4 — a chain of closed pull requests is still abandoned work."""
+        result = verify(
+            description=_OMN_18172_FIXTURE + "\n\n" + _DECLARATION,
+            labels=[],
+            default_repo=None,
+            fetcher=_closed_unless(),
+        )
+        assert result.allowed is False
+        assert "not merged" in result.reason
+
+    def test_declared_successor_that_resolves_to_no_repo_does_not_satisfy(
+        self,
+    ) -> None:
+        """AC5 — an unresolvable successor is not a successor."""
+        result = verify(
+            description=_OMN_18172_FIXTURE
+            + f"\n\n{_INFRA}#3615 superseded by PR #40404.",
+            labels=[],
+            default_repo=None,
+            fetcher=_closed_unless(_SUCCESSOR_NUMBER),
+        )
+        assert result.allowed is False
+        assert "3615" in result.reason
+
+    def test_an_open_citation_is_never_superseded(self) -> None:
+        """AC6 — supersession is reachable only from CLOSED-unmerged."""
+
+        def _fetch(ref: PRRef) -> PRStatus:
+            if ref.number == 3615:
+                return PRStatus(ref=ref, state="OPEN", merge_state="CLEAN")
+            return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+        result = verify(
+            description=_OMN_18172_FIXTURE + "\n\n" + _DECLARATION,
+            labels=[],
+            default_repo=None,
+            fetcher=_fetch,
+        )
+        assert result.allowed is False
+        assert f"{_INFRA}#3615" in result.reason
+
+    def test_an_errored_probe_is_never_superseded(self) -> None:
+        """AC6 — an unreadable probe is not a closed pull request."""
+
+        def _fetch(ref: PRRef) -> PRStatus:
+            if ref.number == 3615:
+                return PRStatus(
+                    ref=ref,
+                    state="UNKNOWN",
+                    merge_state="UNKNOWN",
+                    error="Timeout querying the pull request",
+                )
+            return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+        result = verify(
+            description=_OMN_18172_FIXTURE + "\n\n" + _DECLARATION,
+            labels=[],
+            default_repo=None,
+            fetcher=_fetch,
+        )
+        assert result.allowed is False
+        assert "Timeout" in result.reason
+
+    def test_parse_binds_every_left_reference_to_the_successor(self) -> None:
+        declarations = linear_done_verify.parse_supersession_declarations(
+            _DECLARATION, default_repo=None
+        )
+        assert set(declarations) == {(_INFRA, 3615), (_INFRA, 3626)}
+        for declaration in declarations.values():
+            assert declaration.successor is not None
+            assert declaration.successor.repo == _INFRA
+            assert declaration.successor.number == _SUCCESSOR_NUMBER
+
+    def test_parse_accepts_the_other_declaration_phrasings(self) -> None:
+        for line in (
+            f"{_INFRA}#3615 replaced by {_INFRA}#3627",
+            f"{_INFRA}#3615 was closed; it landed as {_INFRA}#3627",
+            f"{_INFRA}#3615 closed in favour of {_INFRA}#3627",
+        ):
+            declarations = linear_done_verify.parse_supersession_declarations(
+                line, default_repo=None
+            )
+            assert (_INFRA, 3615) in declarations, line
+            successor = declarations[(_INFRA, 3615)].successor
+            assert successor is not None and successor.number == 3627, line
+
+    def test_parse_records_an_unresolvable_successor_as_absent(self) -> None:
+        declarations = linear_done_verify.parse_supersession_declarations(
+            f"{_INFRA}#3615 superseded by PR #40404", default_repo=None
+        )
+        assert declarations[(_INFRA, 3615)].successor is None
+
+    def test_a_line_with_no_successor_reference_is_not_a_declaration(self) -> None:
+        declarations = linear_done_verify.parse_supersession_declarations(
+            f"{_INFRA}#3615 was superseded by later work", default_repo=None
+        )
+        assert declarations == {}
+
+    def test_classify_blocking_honours_a_recorded_supersession(self) -> None:
+        ref = PRRef(number=3615, repo=_INFRA)
+        status = PRStatus(ref=ref, state="CLOSED", merge_state="CLEAN")
+        assert linear_done_verify.classify_blocking(status) is True
+        status.superseded_by = f"{_INFRA}#3627"
+        assert linear_done_verify.classify_blocking(status) is False
+        assert status.is_blocking is False
