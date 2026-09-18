@@ -453,17 +453,6 @@ events:
     required_fields: [run_id, overall_status, total_tickets]
 
   # =========================================================================
-  # Evidence Write
-  # =========================================================================
-  evidence.written:
-    fan_out:
-      - topic: "onex.evt.omniclaude.evidence-written.v1"
-        tier: telemetry
-        description: "Evidence artifact written to disk"
-    partition_key_field: session_id
-    required_fields: [session_id, ticket_id]
-
-  # =========================================================================
   # Correlation Trace
   # =========================================================================
   correlation.trace.span:

@@ -396,6 +396,12 @@ governed_event_classes:
   - "pr.validation.rollup"
   - "routing.decision"
   - "static.context.edit.detected"
+  # OMN-18627: emitted by src/omniclaude/verification/evidence_writer.py, which
+  # is a scanned surface. It used to reach the broker through an explicit topic
+  # override naming an unprovisioned topic, which is exactly the shape a
+  # class-keyed scan cannot see; the override is gone and this declaration is
+  # what replaces it.
+  - "team.evidence.written"
   - "tool.output.captured"
   - "validator.catch"
 

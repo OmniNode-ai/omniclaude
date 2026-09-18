@@ -533,6 +533,14 @@ def _copy_gate_tree(dest: Path) -> None:
         # gate reads it too -- see test_validator_fails_when_drainer_drops_the_lane.
         Path("plugins/onex/hooks/lib/hook_emit_drainer.py"),
         Path("scripts/launchd/ai.omninode.hook-emit-drainer.plist"),
+        # OMN-18627: the gate resolves a `topic=TopicBase.X` override against
+        # the tree's own enum, and scans the verification directory for
+        # emissions, so both have to exist in the scratch copy. Without the
+        # emitter the contract's `team.evidence.written` declaration would
+        # read as stale policy here and every negative test would carry a
+        # spurious second violation.
+        Path("src/omniclaude/hooks/topics.py"),
+        Path("src/omniclaude/verification/evidence_writer.py"),
         *[Path("plugins/onex/hooks/scripts") / n for n in _BUS_MIRROR_SCRIPTS],
     ):
         target = dest / rel
@@ -962,4 +970,223 @@ def test_validator_reports_the_call_site_line_for_a_multi_line_emission(
         "the refusal must cite the CALL SITE line (6), not the literal's line "
         "(7), not line 1, and not a line shifted by the blanked comment. "
         f"Got: {combined}"
+    )
+
+
+# =============================================================================
+# an explicit topic override cannot escape the lane policy (OMN-18627)
+# =============================================================================
+# The class scan above is blind to `ModelEmitRequest(topic=...)` by
+# construction: the call site declares one class and publishes to another
+# topic, so a class-keyed gate reads it as clean. `evidence_writer.py` did
+# exactly that for `onex.evt.omniclaude.evidence-written.v1` -- a topic no
+# contract declared, that was therefore never provisioned on the lab dev-lane
+# and carried no WRITE grant. From 2026-09-17T20:43Z its denial sat at the
+# head of the emit spool, and because the drain stops at the first failure to
+# preserve ordering it held 126 records of four AUTHORIZED classes behind
+# eight of its own, taxing every journal publish with a full authorization
+# ladder.
+
+
+def test_evidence_writer_emits_through_the_registered_class() -> None:
+    """The evidence writer carries no topic override, and its class is declared.
+
+    Pinned as behaviour rather than left to review: re-adding the override is
+    a one-line edit, and the failure it causes is invisible for hours.
+    """
+    source = (_REPO_ROOT / "src/omniclaude/verification/evidence_writer.py").read_text(
+        encoding="utf-8"
+    )
+    offending = [
+        f"{lineno}: {line.strip()}"
+        for lineno, line in enumerate(source.splitlines(), 1)
+        if not line.strip().startswith("#") and "topic=" in line
+    ]
+    assert not offending, (
+        "evidence_writer.py passes an explicit topic override again. Emit "
+        "through the registered class so the destination comes from the one "
+        f"registry that owns it. Offending lines: {offending}"
+    )
+
+    lib = _load_lib()
+    contract = lib.load_contract(
+        _REPO_ROOT / "plugins/onex/hooks/contracts/hook_edge_lane.yaml"
+    )
+    assert "team.evidence.written" in contract.governed_event_classes, (
+        "the class the evidence writer emits must be declared in "
+        "governed_event_classes, or nothing derived from the contract can "
+        "provision its broker grant"
+    )
+
+
+def test_validator_catches_a_topic_override_to_an_ungoverned_topic(
+    tmp_path: Path,
+) -> None:
+    """A `topic=` override to a topic no governed class produces is REFUSED.
+
+    The probe declares a class the contract DOES declare, so the class scan
+    reports it clean -- which is the whole point. Only the override check can
+    see this, and this is the exact shape that wedged the drainer.
+    """
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    probe = fake_root / "src" / "omniclaude" / "verification" / "omn18627_probe.py"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text(
+        "def emit() -> None:\n"
+        "    handle(\n"
+        '        event_type="team.evidence.written",\n'
+        '        topic="onex.evt.omniclaude.omn18627-ungoverned-probe.v1",\n'
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    assert proc.returncode != 0, (
+        "gate passed a topic override to a topic no governed class produces. "
+        "The class scan cannot see this -- the call site declares a DECLARED "
+        "class -- so a gate without the override check reports the edge clean "
+        "while the bytes go somewhere no contract names"
+    )
+    assert "onex.evt.omniclaude.omn18627-ungoverned-probe.v1" in combined, (
+        f"the refusal must name the topic a reader has to govern. Got: {combined}"
+    )
+    assert "omn18627_probe.py" in combined, (
+        f"the refusal must name the file and line. Got: {combined}"
+    )
+
+
+def test_validator_accepts_a_topic_override_to_a_governed_topic(
+    tmp_path: Path,
+) -> None:
+    """Positive control: the check refuses UNGOVERNED overrides, not overrides.
+
+    Without this, the previous test is also satisfied by a gate that rejects
+    every `topic=` it sees, and the refusal message would be wrong about why.
+    The topic is DERIVED from the contract rather than spelled, so this stays
+    honest the day the governed set changes.
+    """
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    lib = _load_lib()
+    contract = lib.load_contract(
+        fake_root / "plugins/onex/hooks/contracts/hook_edge_lane.yaml"
+    )
+    governed_topic = sorted(
+        lib.resolve_governed_event_types(contract, repo_root=_REPO_ROOT).values()
+    )[0]
+
+    probe = fake_root / "src" / "omniclaude" / "verification" / "omn18627_ok_probe.py"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text(
+        "def emit() -> None:\n"
+        "    handle(\n"
+        '        event_type="team.evidence.written",\n'
+        f'        topic="{governed_topic}",\n'
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    # The scratch tree carries no shell or lib emitters, so the gate legitimately
+    # reports the contract's other classes as declared-but-not-emitted and exits
+    # non-zero whatever this probe does. Asserting on the exit code would
+    # therefore prove nothing either way; the control is that the OVERRIDE check
+    # in particular says nothing about this file.
+    assert "omn18627_ok_probe.py" not in combined, (
+        "gate flagged a topic override to a topic the contract's own governed "
+        f"classes produce ({governed_topic!r}). Such an override is redundant, "
+        f"not ungovernable, and a check that refuses every override would "
+        f"satisfy the negative test above for the wrong reason. Got: {combined}"
+    )
+
+
+def test_phantom_evidence_written_topic_is_gone_from_every_surface() -> None:
+    """`onex.evt.omniclaude.evidence-written.v1` is deleted, not deprecated.
+
+    It survived in four places at once -- the `TopicBase` enum, the topic
+    allowlist, the plugin event registry, and the one call site -- while the
+    canonical daemon registry never carried its class at all. A topic declared
+    in three projections and provisioned in none is not a topic; leaving any
+    one of them is how the next emitter finds it again.
+    """
+    phantom = "onex.evt.omniclaude.evidence-written.v1"
+    surfaces = (
+        Path("src/omniclaude/hooks/topics.py"),
+        Path("src/omniclaude/hooks/topic_allowlist.yaml"),
+        Path("plugins/onex/lib/event_registry/omniclaude.yaml"),
+    )
+    offenders = []
+    for rel in surfaces:
+        text = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+        # `team-evidence-written.v1` legitimately CONTAINS the phantom as a
+        # substring, so the match is anchored on the producer segment.
+        if f".omniclaude.{phantom.split('.omniclaude.')[1]}" in text.replace(
+            "team-evidence-written", "TEAMEVIDENCEWRITTEN"
+        ):
+            offenders.append(str(rel))
+    assert not offenders, (
+        f"the phantom topic {phantom!r} is still declared in {offenders}. It "
+        "is provisioned on no broker and produced by no registered class."
+    )
+
+
+def test_validator_catches_the_historical_build_topic_override_shape(
+    tmp_path: Path,
+) -> None:
+    """The exact shape that wedged the drainer is refused, not just a lookalike.
+
+    The real call site did not spell a topic literal. It read
+    `topic=build_topic(TopicBase.EVIDENCE_WRITTEN)`, so a check that only
+    understood quoted topics would have passed the very line it exists to
+    catch. Both arms are resolved: a member the tree defines is resolved to its
+    topic and checked against the governed set, and a member the tree does not
+    define is refused for being unresolvable rather than waved through.
+    """
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    probe = fake_root / "src" / "omniclaude" / "verification" / "omn18627_hist.py"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text(
+        "from omniclaude.hooks.topics import TopicBase, build_topic\n"
+        "\n"
+        "def emit() -> None:\n"
+        "    handle(\n"
+        '        event_type="team.evidence.written",\n'
+        "        topic=build_topic(TopicBase.EVIDENCE_WRITTEN),\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    assert "omn18627_hist.py:6" in combined, (
+        "the gate did not refuse the historical `build_topic(TopicBase.X)` "
+        f"override shape at its call-site line. Got: {combined}"
+    )
+    assert "EVIDENCE_WRITTEN" in combined, (
+        f"the refusal must name the member a reader has to resolve. Got: {combined}"
     )

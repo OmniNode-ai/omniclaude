@@ -102,6 +102,37 @@ _PY_EVENT_CLASS_LITERAL_RE = re.compile(
     r'"([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)"'
 )
 
+# OMN-18627. The class scan above is blind to an EXPLICIT TOPIC OVERRIDE by
+# construction, and that blindness had a measured cost. ``ModelEmitRequest``
+# accepts a ``topic=`` that bypasses the registry's fan-out entirely; its own
+# field docstring calls it an escape hatch and says the caller "should register
+# the topic properly instead". ``evidence_writer.py`` used it to publish to
+# ``onex.evt.omniclaude.evidence-written.v1`` while declaring the registered
+# class ``team.evidence.written`` for its tier. A class-keyed scan reads that
+# call site as emitting ``team.evidence.written`` -- a class whose declared
+# topic IS provisioned and granted -- and therefore reports the edge as clean
+# while the bytes go somewhere no contract names. That topic was never
+# provisioned on the lab dev lane, the denial sat at the head of the emit
+# spool, and one ungranted override held 126 authorized records behind eight of
+# its own.
+#
+# So the override is scanned on its own terms: any ``topic=`` argument on a
+# scanned surface naming either a quoted ONEX topic or a ``TopicBase`` member
+# must resolve to a topic the contract's OWN governed classes already produce.
+# An override to a governed destination is redundant but harmless; an override
+# to anything else is un-provisionable and is refused.
+#
+# Same literal-only bound as the two patterns above, and for the same reason: a
+# ``topic=`` built from a runtime variable is not resolved and is not pretended
+# to be.
+_PY_TOPIC_OVERRIDE_RE = re.compile(
+    r"\btopic\s*=\s*(?:"
+    r'"(?P<literal>onex\.[a-z0-9.\-]+)"'
+    r"|build_topic\(\s*TopicBase\.(?P<member>[A-Z][A-Z0-9_]*)\s*\)"
+    r"|TopicBase\.(?P<bare_member>[A-Z][A-Z0-9_]*)"
+    r")"
+)
+
 # OMN-17224 moved the publish off the *_bus_mirror.sh path and into a singleton
 # drainer that launchd starts with {OMNI_HOME, ONEX_STATE_DIR, HOME} and
 # nothing else. From that moment the four scripts this gate governed were the
@@ -137,6 +168,29 @@ def _load_lib(repo_root: Path):  # type: ignore[no-untyped-def]
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+_TOPICS_REL = Path("src/omniclaude/hooks/topics.py")
+_TOPIC_BASE_MEMBER_RE = re.compile(
+    r'^\s{4}([A-Z][A-Z0-9_]*)\s*=\s*"(onex\.[a-z0-9.\-]+)"', re.MULTILINE
+)
+
+
+def _topic_base_values(repo_root: Path) -> dict[str, str]:
+    """Map ``TopicBase`` member name -> topic string, read from the tree.
+
+    Parsed textually rather than imported for the same reason ``_load_lib``
+    takes the tree under test as DATA: ``--repo-root`` must be able to point at
+    a scratch copy, and importing the real package would resolve members that
+    the copy does not carry (or miss ones it adds), which is precisely the
+    divergence a gate must not have.
+    """
+    path = repo_root / _TOPICS_REL
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    return dict(_TOPIC_BASE_MEMBER_RE.findall(text))
 
 
 def _check_static(repo_root: Path) -> list[str]:
@@ -208,9 +262,21 @@ def _check_static(repo_root: Path) -> list[str]:
     # per-file or per-class suppression, deliberately (OMN-18627 AC5), because
     # a gate that can be silenced file by file is one edit away from the gap
     # it exists to close.
+    # OMN-18627: ``src/omniclaude/verification`` joins the scanned set because
+    # the edge genuinely emits from it -- ``evidence_writer.py`` calls the emit
+    # effect directly. It is named as a DIRECTORY, not as a file, so a second
+    # emitter added beside it is scanned without anyone remembering to widen
+    # this tuple. The bound that remains is a directory the edge does not emit
+    # from: the rest of ``src/omniclaude`` is deliberately out, because
+    # ``hooks/event_registry.py`` is a ~100-entry REGISTRY of every class the
+    # product knows about rather than a set of call sites, and scanning it
+    # would force declaring classes with no emitter at all -- the same
+    # over-declaration the duty-table exclusion above already refuses.
+    verification = repo_root / "src" / "omniclaude" / "verification"
     scan_surfaces = (
         (scripts, "*.sh", _EVENT_CLASS_LITERAL_RE),
         (hooks / "lib", "*.py", _PY_EVENT_CLASS_LITERAL_RE),
+        (verification, "*.py", _PY_EVENT_CLASS_LITERAL_RE),
     )
     for directory, pattern_glob, literal_re in scan_surfaces:
         for path in sorted(directory.glob(pattern_glob)):
@@ -256,15 +322,71 @@ def _check_static(repo_root: Path) -> list[str]:
                 f"(OMN-18471)."
             )
 
+    # --- no emission escapes through a topic override (OMN-18627) ---------
+    # Resolved against the SAME derived topic set the bus-mirror check above
+    # uses, so there is one definition of "a topic this edge is allowed to
+    # produce" and an override cannot be satisfied by a second list. There is
+    # no per-file and no per-class suppression here either (AC5): the only way
+    # to make an override pass is to make its topic one the contract's own
+    # governed classes already produce, which is the same thing as not needing
+    # the override.
+    topic_base_values = _topic_base_values(repo_root)
+    for directory, pattern_glob, _ in scan_surfaces:
+        for path in sorted(directory.glob(pattern_glob)):
+            if not path.name.endswith(".py"):
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError as exc:  # noqa: PERF203 - reported, not swallowed
+                violations.append(f"{path}: unreadable ({exc})")
+                continue
+            for lineno, line in enumerate(lines, 1):
+                if line.strip().startswith("#"):
+                    continue
+                override = _PY_TOPIC_OVERRIDE_RE.search(line)
+                if override is None:
+                    continue
+                literal = override.group("literal")
+                member = override.group("member") or override.group("bare_member")
+                if literal is not None:
+                    topic = literal
+                    named = repr(literal)
+                elif member in topic_base_values:
+                    topic = topic_base_values[member]
+                    named = f"TopicBase.{member} ({topic!r})"
+                else:
+                    violations.append(
+                        f"{path}:{lineno}: passes an explicit topic override "
+                        f"naming TopicBase.{member}, which "
+                        f"{_TOPICS_REL} does not define. The gate cannot "
+                        f"resolve what this publishes to, so it cannot be "
+                        f"shown to be governed."
+                    )
+                    continue
+                if topic not in declared_event_types:
+                    violations.append(
+                        f"{path}:{lineno}: passes an explicit topic override to "
+                        f"{named}, which none of the hook-edge lane contract's "
+                        f"governed_event_classes produces. An override is "
+                        f"invisible to the class scan above -- the call site "
+                        f"reads as emitting its declared class while the bytes "
+                        f"go to a topic no contract names, so nothing derived "
+                        f"from the contract can ever provision a grant for it "
+                        f"(OMN-18627: this is how one unprovisionable topic "
+                        f"held 126 authorized records behind eight of its own). "
+                        f"Emit through the registered class instead, or declare "
+                        f"a class that produces this topic."
+                    )
+
     # A declared class that nothing emits is stale policy, not a hazard, but
     # it is still a lie about what this edge produces -- and a reader
     # provisioning broker permissions from this list would over-grant.
     for event_class in sorted(declared_classes - set(emitted_classes)):
         violations.append(
             f"{contract_path}: declares event class {event_class!r} in "
-            f"governed_event_classes, but no hook script under {scripts} "
-            f"and no module under {hooks / 'lib'} emits it as a literal. "
-            f"Remove it, or name the emitter."
+            f"governed_event_classes, but nothing under "
+            f"{', '.join(str(d) for d, _, _ in scan_surfaces)} emits it as a "
+            f"literal. Remove it, or name the emitter."
         )
 
     # --- the resolver is applied, and applied last -------------------------

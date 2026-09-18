@@ -98,26 +98,38 @@ def emit_event(event: ModelEvidenceWrittenEvent) -> None:
         )
         return
 
-    from omniclaude.hooks.topics import TopicBase, build_topic
-
-    topic = build_topic(TopicBase.EVIDENCE_WRITTEN)
     try:
         HandlerEventEmitEffect().handle(
             ModelEmitRequest(
-                # `event_type` is looked up in omnimarket's topics.yaml only
-                # to resolve a durability tier -- the registry has no
-                # `evidence.written` entry (only `team.evidence.written`,
-                # a distinct event). `team.evidence.written`'s tier
-                # (telemetry) is borrowed as the closest existing
-                # registration; the explicit `topic` override below still
-                # routes to the correct evidence-written.v1 topic, so
-                # nothing on the wire references `team.evidence.written` --
-                # confirmed by reading handler_event_emit_effect.handle():
-                # event_type is never embedded in the published payload or
-                # headers. Registering a real `evidence.written` entry is
-                # single-owner-registry scope (OMN-15967), not this ticket.
+                # NO explicit `topic` override (OMN-18627). This call site used
+                # to pass `topic=build_topic(TopicBase.EVIDENCE_WRITTEN)` while
+                # borrowing this registered class's durability tier, on the
+                # reasoning that `evidence.written` was the "correct" topic and
+                # `team.evidence.written` merely the nearest registration.
+                #
+                # Both halves of that were wrong, and the cost was measured.
+                # `onex.evt.omniclaude.evidence-written.v1` was never
+                # provisioned on the lab dev-lane broker and carried no WRITE
+                # grant for the hook-edge principal, because nothing derived
+                # from a contract can provision a topic no contract declares --
+                # an override is invisible to a class-keyed scan by
+                # construction. And the override was not routing "around" this
+                # class: `ModelEvidenceWrittenEvent` carries exactly the
+                # `session_id` + `task_id` this registration requires and keys
+                # on, so the registry's own fan-out was always the right
+                # destination. From 2026-09-17T20:43Z the resulting denial sat
+                # at the head of the emit spool, and because `_drain_backlog`
+                # stops at the first failure to preserve ordering, it held 126
+                # records of four AUTHORIZED classes behind eight of these --
+                # about nine seconds of authorization ladder per journal record,
+                # against an arrival rate that would have reached the journal's
+                # drop-oldest bound in roughly 45 hours.
+                #
+                # Resolving through the class is what makes this emission
+                # governable: `team.evidence.written` is declared in
+                # `governed_event_classes`, the gate scans this directory, and
+                # the topic comes from the one registry that owns it.
                 event_type="team.evidence.written",
-                topic=topic,
                 payload=event.model_dump(mode="json"),
                 correlation_id=event.correlation_id or None,
             )
