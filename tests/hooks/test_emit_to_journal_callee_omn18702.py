@@ -97,6 +97,20 @@ def _hook_env(tmp_path: Path) -> dict[str, str]:
             # by the surrounding session cannot silently skip the hook and
             # make this test read as a pass.
             "ONEX_HOOKS_MASK": "",
+            # Pinned, and NOT incidental -- measured, because the unpinned
+            # form passed locally and failed on CI. The quality hook exits 0
+            # at its lite-mode guard before doing anything at all. Proven as
+            # a pair against the real script: `lite` gives exit 0 and zero
+            # records, which is exactly the CI symptom; `full` gives exit 0
+            # and the records.
+            #
+            # Unpinned, this test is green locally and green on CI for
+            # opposite reasons -- one because the hook worked,
+            # one because the hook never ran. That is the failure mode this
+            # whole file exists to catch, so it is not tolerated in the file
+            # itself. `pre_tool_use_skill_started.sh` carries no lite guard,
+            # which is why it ran in both places and hid the asymmetry.
+            "OMNICLAUDE_MODE": "full",
             "ONEX_CORRELATION_ID": SESSION_ID,
         }
     )
@@ -133,6 +147,30 @@ def _await_record(journal_dir: Path, event_type: str) -> dict | None:
                 return record
         time.sleep(_POLL_INTERVAL)
     return None
+
+
+def _diagnostics(result: subprocess.CompletedProcess, tmp_path: Path) -> str:
+    """Why a hook produced no record, gathered at the point of failure.
+
+    A bare "no record" tells the next reader nothing and costs a CI cycle to
+    turn into a fact. The hook's own log is where every early exit on this
+    edge announces itself.
+    """
+    parts = [f"exit={result.returncode}"]
+    if result.stderr.strip():
+        parts.append(f"stderr={result.stderr[-1500:]}")
+    logs = tmp_path / "state" / "hooks" / "logs"
+    if logs.is_dir():
+        for log in sorted(logs.glob("*.log")):
+            tail = log.read_text(encoding="utf-8", errors="replace")[-1500:]
+            if tail.strip():
+                parts.append(f"{log.name}:\n{tail}")
+    else:
+        parts.append(
+            "the hook wrote no log at all, so it exited before its logging "
+            "was set up -- the lite-mode guard is the first such exit"
+        )
+    return "\n".join(parts)
 
 
 def _run_hook(
@@ -265,7 +303,8 @@ def test_pre_tool_use_skill_started_writes_a_skill_started_record(
         "no skill.started record reached the journal. Records present: "
         f"{sorted({r.get('event_type') for r in _journal_records(journal_dir)})}. "
         "This is the live defect: a Skill invocation at 2026-09-18T12:27:51Z "
-        "produced a tool.executed row and zero skill.* rows."
+        "produced a tool.executed row and zero skill.* rows.\n"
+        + _diagnostics(result, tmp_path)
     )
     payload = record.get("payload") or {}
     assert payload.get("run_id") == RUN_ID, (
@@ -306,7 +345,8 @@ def test_post_tool_use_quality_writes_a_matching_skill_completed_record(
     record = _await_record(journal_dir, "skill.completed")
     assert record is not None, (
         "no skill.completed record reached the journal. Records present: "
-        f"{sorted({r.get('event_type') for r in _journal_records(journal_dir)})}"
+        f"{sorted({r.get('event_type') for r in _journal_records(journal_dir)})}\n"
+        + _diagnostics(result, tmp_path)
     )
     payload = record.get("payload") or {}
     assert payload.get("run_id") == RUN_ID, (
