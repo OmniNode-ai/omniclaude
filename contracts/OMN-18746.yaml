@@ -1,0 +1,104 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-18746"
+title: "Hook-interpreter readback, and the orphan hooks venv asserted absent"
+summary: >-
+  Both venv reconcilers in this repo resolved exactly one interpreter,
+  CLAUDE_PLUGIN_DATA/.venv, and both returned no findings when it was absent. On a
+  developer machine that is not the interpreter the hooks run on: find_python()
+  resolves PLUGIN_PYTHON_BIN first, which on this fleet names the omniclaude repo
+  venv, and every PreToolUse and UserPromptSubmit hook executes there. Nothing read
+  it back, so a skew in it was invisible to both gates. Separately,
+  plugins/onex/lib/.venv left find_python()'s chain in 035707dd2 (OMN-7310,
+  2026-04-02); no builder rebuilds it and no pin file under plugins/onex/ declares
+  it, and the copy measured on the operator's machine carried omnimarket 0.2.0 at
+  468f479f, 2023 commits behind, in which node_event_emit_effect does not exist. It
+  is an orphan, so it is asserted ABSENT rather than reconciled - bumping a venv
+  nothing reads manufactures the appearance of a converged surface. This PR adds
+  scripts/hook_interpreter.py (chain resolution, the orphan assertion, and a scan
+  for tracked files that run the orphan as an interpreter), wires both gates to it,
+  fixes the one live hook that preferred the orphan ahead of PLUGIN_PYTHON_BIN, and
+  repoints the verify_plugin skill and four prose surfaces.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Hook-interpreter readback, orphan assertion, and both gate suites pass"
+    command: >-
+      uv run pytest tests/scripts/test_hook_interpreter_readback.py
+      tests/scripts/test_check_daemon_venv_skew.py
+      tests/scripts/test_check_omnimarket_dispatch_drift.py -q
+  - kind: tests
+    description: "The repointed verify_plugin skill still passes skill hygiene"
+    command: "uv run pytest tests/skills/test_no_monorepo_refs_in_plugin_skills.py -q"
+  - kind: ci
+    description: "omniclaude PR #2244 green across required gates"
+    command: "gh pr checks 2244 --repo OmniNode-ai/omniclaude --watch"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-hook-interpreter-readback"
+    description: >-
+      check_daemon_venv_skew.py resolves the hook interpreter the way find_python()
+      does and compares its installed distributions against the canonical uv.lock
+      pins, reporting a finding per divergent package. Resolution reads the
+      environment and the repo layout only, with no machine-specific absolute path
+      in the module, which a test asserts.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/scripts/test_hook_interpreter_readback.py
+          -k "interpreter or resolver or chain or override" -q
+  - id: "dod-orphan-asserted-absent"
+    description: >-
+      Both check scripts assert plugins/onex/lib/.venv does not exist and name its
+      path when it does. The orphan is asserted absent rather than reconciled,
+      because no pin file declares it and no builder rebuilds it.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/scripts/test_hook_interpreter_readback.py
+          -k orphan -q
+  - id: "dod-no-tracked-file-runs-the-orphan"
+    description: >-
+      A test scans every tracked file and fails on any that runs the orphan venv as
+      an interpreter, with an auditable allowlist carrying a stated reason per
+      entry (temp-dir fixtures, a hooks/lib path that never existed, and a
+      changelog of the pre-plugin layout). It caught two live sites the diagnosis
+      missed: user_prompt_session_phase_enforcement.sh preferred the orphan ahead of
+      PLUGIN_PYTHON_BIN, and CONTAINER_INSTALL.md documented it as bundled.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          uv run pytest tests/scripts/test_hook_interpreter_readback.py
+          -k tracked_file -q
+  - id: "dod-verify-plugin-skill-repointed"
+    description: >-
+      plugins/onex/skills/verify_plugin/SKILL.md resolves Python through the
+      find_python() chain instead of probing the orphan, and no longer contradicts
+      its own verify-deploy.sh. It still passes the skill hygiene gates.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/skills/test_no_monorepo_refs_in_plugin_skills.py -q"
+  - id: "dod-gates-name-what-they-read"
+    description: >-
+      Both gates print the resolved interpreter unconditionally, including when the
+      chain resolves nothing. A readback silent about what it looked at reads the
+      same as one that looked at nothing (OMN-18663).
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          python3 scripts/check_daemon_venv_skew.py --print-canonical

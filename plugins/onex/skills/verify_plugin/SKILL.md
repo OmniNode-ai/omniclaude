@@ -91,12 +91,13 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
    ```bash
    PYTHON=""
    REPO_ROOT="$(cd "$PLUGIN_ROOT/../.." 2>/dev/null && pwd || true)"
-   for candidate in \
-       "${PLUGIN_PYTHON_BIN:-}" \
-       "${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/.venv/bin/python3}" \
-       "${REPO_ROOT:+$REPO_ROOT/.venv/bin/python3}" \
-       "${ONEX_REGISTRY_ROOT:+$ONEX_REGISTRY_ROOT/omniclaude/.venv/bin/python3}" \
-       "${OMNICLAUDE_PROJECT_ROOT:+$OMNICLAUDE_PROJECT_ROOT/.venv/bin/python3}"; do
+   CANDIDATES=()
+   CANDIDATES+=("${PLUGIN_PYTHON_BIN:-}")
+   CANDIDATES+=("${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/.venv/bin/python3}")
+   CANDIDATES+=("${REPO_ROOT:+$REPO_ROOT/.venv/bin/python3}")
+   CANDIDATES+=("${ONEX_REGISTRY_ROOT:+$ONEX_REGISTRY_ROOT/omniclaude/.venv/bin/python3}")  # local-path-ok: find_python() chain entry 4, named so this probe matches the interpreter that runs
+   CANDIDATES+=("${OMNICLAUDE_PROJECT_ROOT:+$OMNICLAUDE_PROJECT_ROOT/.venv/bin/python3}")
+   for candidate in "${CANDIDATES[@]}"; do
      if [[ -n "$candidate" && -x "$candidate" ]]; then PYTHON="$candidate"; break; fi
    done
    echo "hook interpreter: ${PYTHON:-(none resolved)}"
