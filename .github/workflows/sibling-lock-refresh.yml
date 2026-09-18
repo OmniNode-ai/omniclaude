@@ -14,10 +14,27 @@
 # ticket asks for, implemented as the ticket-sanctioned "scheduled workflow per
 # repo". On a schedule (and on demand) it runs `uv lock --upgrade-package` for
 # each omninode sibling and, if uv.lock changed, opens a bot PR with the
-# refreshed lock. Repos whose siblings are pinned to an immutable git rev/tag in
-# `[tool.uv.sources]` (e.g. omnibase-infra here, per OMN-13878) are left
-# untouched — `uv lock --upgrade-package` cannot move a pinned rev, so the
-# Dep-Provenance state is preserved automatically with no per-repo tuning.
+# refreshed lock.
+#
+# OMN-18752: it now also advances the one class of pin it used to decline.
+# `uv lock --upgrade-package` cannot move an immutable git rev because the rev
+# is INPUT, not output — so the rev is moved first, in `pyproject.toml`, and uv
+# then re-resolves against it (`scripts/relock_git_sources.py`). This is not
+# applied to every git source: only a source DECLARED clone-governed in
+# `[tool.onex.git-source-authority]` follows its canonical clone, which today
+# is `omnimarket` alone, because the OMN-18675 in-process guard inside the venv
+# refuses every `onex delegate` when the installed commit differs from that
+# clone's HEAD. Every other git rev — onex_change_control, omninode_intelligence
+# — is a reviewed pin with no guard behind it and is deliberately left where
+# review put it, preserving the Dep-Provenance state OMN-13878 established.
+#
+# Why this mattered: omnimarket publishes release-on-merge, so its pin went
+# stale on essentially every omnimarket PR, and each staleness window was one
+# in which the plugin CLI venv and this lock disagreed about which commit was
+# correct. OMN-18622, OMN-18639 and a third bump in the same week were all
+# hand-filed tickets for exactly that. The advance is FORWARD ONLY: a candidate
+# that is not a strict descendant of the current rev is refused and nothing is
+# written.
 #
 # Canary rollout (OMN-13902): landed on omnimemory first per canary-before-
 # fan-out. Once proven green, the same workflow file is copied to the other
@@ -74,6 +91,52 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      # OMN-18752: the clone-governed git sources need a real clone to resolve
+      # ancestry against. fetch-depth: 0 is required — a shallow clone cannot
+      # answer `merge-base --is-ancestor`, and the forward-only refusal is the
+      # whole safety property, so a shallow checkout here would silently turn
+      # the refusal into an error and the advance into a no-op.
+      # No `token:` here, deliberately. The installation token minted above is
+      # scoped `repositories: omniclaude` and carries no grant on omnimarket,
+      # so passing it would authenticate as an identity with no access to this
+      # repository -- misleading at best, and a 403 rather than a clean
+      # anonymous read at worst. omnimarket is public, so the default
+      # unauthenticated read is both sufficient and the honest description of
+      # what this step does. `persist-credentials: false` keeps this checkout
+      # from leaving an extraheader that would override the credentials on any
+      # later push (the OMN-18273 confound).
+      #
+      # `fetch-depth: 0` is required and is not an optimisation to revisit: a
+      # shallow clone cannot answer `merge-base --is-ancestor`, and the
+      # forward-only refusal is the safety property of this whole step. A
+      # shallow checkout would turn every refusal into an error and every
+      # advance into a no-op.
+      - name: Check out clone-governed siblings
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: dev
+          path: .clones/omnimarket
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Advance clone-governed git revs to their clone head
+        id: relock_git
+        run: |
+          set -euo pipefail
+          # --package is named EXPLICITLY rather than letting the script
+          # discover its own set. With a named package an unresolvable clone
+          # RAISES; without one it prints a skip line and exits 0, and a
+          # refresh that quietly advanced nothing because a checkout failed is
+          # indistinguishable from one that had nothing to do. Adding a
+          # clone-governed package means adding it here and to
+          # [tool.onex.git-source-authority] in the same change.
+          test -d .clones/omnimarket/.git \
+            || { echo "::error::omnimarket checkout missing; refusing to report a refresh that examined no clone"; exit 1; }
+          python3 scripts/relock_git_sources.py \
+            --registry-root "$PWD/.clones" \
+            --package omnimarket
+
       - name: Refresh sibling package locks
         id: refresh
         env:
@@ -92,13 +155,17 @@ jobs:
           done
           echo "Refreshing: ${ARGS[*]}"
           uv lock "${ARGS[@]}"
-          if git diff --quiet -- uv.lock; then
+          # pyproject.toml moves only when a clone-governed rev advanced; the
+          # lock then follows it through this same `uv lock`. Both are part of
+          # one change and neither is committable alone — uv refuses to resolve
+          # a tree where the dependency string and [tool.uv.sources] disagree.
+          if git diff --quiet -- uv.lock pyproject.toml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "uv.lock unchanged — all sibling pins already fresh."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Sibling lock delta:"
-            git --no-pager diff --stat -- uv.lock
+            git --no-pager diff --stat -- uv.lock pyproject.toml
           fi
 
       - name: Open refresh PR
@@ -116,7 +183,7 @@ jobs:
           git config user.name "onexbot-occ-writer[bot]"
           git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add uv.lock
+          git add uv.lock pyproject.toml
           git commit -m "chore(deps): refresh omninode sibling locks [bot]" \
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -126,8 +193,12 @@ jobs:
             printf '%s\n' "Automated sibling version-alignment (OMN-13902)."
             printf '\n'
             printf '%s\n' "\`uv lock --upgrade-package\` refreshed the omninode sibling pins in"
-            printf '%s\n' "\`uv.lock\` to the latest in-range PyPI releases. Git/tag-pinned siblings"
-            printf '%s\n' "(see \`[tool.uv.sources]\`) were left untouched."
+            printf '%s\n' "\`uv.lock\` to the latest in-range PyPI releases."
+            printf '\n'
+            printf '%s\n' "Git-pinned siblings declared clone-governed in"
+            printf '%s\n' "\`[tool.onex.git-source-authority]\` were advanced to their canonical"
+            printf '%s\n' "clone head first, forward only (OMN-18752). Every other git rev was"
+            printf '%s\n' "left exactly where review put it."
             printf '\n'
             printf '%s\n' "Opened automatically so stale-sibling-lock drift no longer requires a"
             printf '%s\n' "manual repin ticket. Review the lock delta and merge on green CI."
