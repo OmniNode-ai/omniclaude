@@ -33,6 +33,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import hook_emit_journal as journal  # noqa: E402
+import hook_lane_attribution as lane_attribution  # noqa: E402
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
@@ -49,6 +50,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--event-type", required=True)
     parser.add_argument("--payload", default="{}")
     parser.add_argument("--correlation-id", default=None)
+    parser.add_argument(
+        "--cwd",
+        default=None,
+        help=(
+            "The working directory the hook fired in, taken from the harness "
+            "hook payload rather than this process's own cwd. Used to resolve "
+            "the lane identity merged onto the event (OMN-18609)."
+        ),
+    )
     parser.add_argument(
         "--journal-dir",
         default=None,
@@ -72,10 +82,17 @@ def main(argv: list[str] | None = None) -> int:
             if args.journal_dir
             else journal.default_journal_dir()
         )
+        payload = _parse_payload(args.payload)
+        # Lane attribution is merged here rather than in the shell hook so the
+        # registry read costs nothing on the foreground path: this process is
+        # already forked and disowned by the time it runs. Caller-supplied
+        # lane keys are never trusted -- the registry is the authority, so an
+        # existing key is overwritten rather than preserved.
+        payload.update(lane_attribution.attribution_fields(args.cwd))
         outcome = journal.append(
             target,
             event_type=args.event_type,
-            payload=_parse_payload(args.payload),
+            payload=payload,
             correlation_id=args.correlation_id,
             max_records=args.max_records,
         )
