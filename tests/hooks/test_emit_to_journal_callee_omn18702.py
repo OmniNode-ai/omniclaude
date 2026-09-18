@@ -37,6 +37,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -360,433 +361,20 @@ def test_post_tool_use_quality_writes_a_matching_skill_completed_record(
 # AC3 -- the structural check that would have caught the deletion
 # ---------------------------------------------------------------------------
 
-_SHELL_RESERVED = frozenset(
-    [
-        "if",
-        "then",
-        "else",
-        "elif",
-        "fi",
-        "for",
-        "while",
-        "until",
-        "do",
-        "done",
-        "case",
-        "esac",
-        "function",
-        "select",
-        "time",
-        "in",
-        "coproc",
-        "return",
-        "break",
-        "continue",
-        "exit",
-        "local",
-        "declare",
-        "typeset",
-        "readonly",
-        "export",
-        "unset",
-        "eval",
-        "exec",
-        "source",
-        "shift",
-        "set",
-        "shopt",
-        "trap",
-        "wait",
-        "echo",
-        "printf",
-        "read",
-        "cd",
-        "pwd",
-        "test",
-        "true",
-        "false",
-        "let",
-        "alias",
-        "unalias",
-        "builtin",
-        "command",
-        "type",
-        "getopts",
-        "hash",
-        "umask",
-        "ulimit",
-        "jobs",
-        "kill",
-        "fg",
-        "bg",
-        "disown",
-        "mapfile",
-        "readarray",
-        "caller",
-        "enable",
-        "logout",
-        "suspend",
-        "times",
-        "compgen",
-        "complete",
-        "compopt",
-        "dirs",
-        "popd",
-        "pushd",
-        "help",
-        "history",
-        "bind",
-    ]
+# The scanner itself lives in `scripts/validation/validate_hook_callees.py`,
+# not here. It is a pre-commit hook and a CLI as well as these tests, and a
+# gate with two implementations is a gate that can disagree with itself --
+# which is the shape of the defect this file exists for. One implementation,
+# three callers.
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "validation"))
+
+from validate_hook_callees import (  # noqa: E402
+    _defined_function_names,
+    undefined_shell_callees,
 )
 
-# The naming convention every function in this tree follows: lowercase
-# snake_case carrying at least one underscore. Bounding the scan to that
-# shape is what keeps it from reporting English prose and jq filter words as
-# calls; the cost is stated in the test's own docstring rather than hidden.
-_HELPER_SHAPE = re.compile(r"^[a-z_][a-z0-9_]*$")
-
-# A call is the first word of a statement. An assignment is not a call, so a
-# token immediately followed by `=` is excluded rather than reported.
-_CALL_TOKEN = re.compile(r"^([A-Za-z_][A-Za-z0-9_.-]*)(?:\s|$)")
-_STATEMENT_SPLIT = re.compile(r"(?:[;&|]|&&|\|\||\bthen\b|\bdo\b|\belse\b|\{|\()")
-_HEREDOC_OPEN = re.compile(r"<<-?\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?")
-
-# Spans that are data rather than code, innermost first. An awk or jq program,
-# a log message, and the body of `$(( ... ))` all contain bare words that read
-# as call tokens and are not.
-_SUBSTITUTION = re.compile(r"\$\([^()]*\)")
-_BACKTICK = re.compile(r"`[^`]*`")
-
-# `word)` and `a|b|c)` open a case arm. The words in them are patterns, not
-# calls, and they are the one construct where a bare word legitimately leads a
-# statement without being invoked.
-_CASE_ARM = re.compile(r"^\(?[A-Za-z0-9_*?.@/+|\[\]-]+\)")
-
-
-def _defined_function_names() -> set[str]:
-    """Every shell function defined anywhere under the hooks tree.
-
-    Tree-wide rather than per-script on purpose: which lib a given script
-    sources is a detail that moves, but a callee defined NOWHERE cannot be
-    reached from anywhere, and that is the class of defect this catches.
-    """
-    names: set[str] = set()
-    for path in sorted(PLUGIN_DIR.rglob("*.sh")):
-        for match in re.finditer(
-            r"^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*\(\)\s*\{",
-            path.read_text(encoding="utf-8", errors="replace"),
-            re.MULTILINE,
-        ):
-            names.add(match.group(1))
-    return names
-
-
-def _strip_arithmetic(line: str) -> str:
-    """Blank every `(( ... ))` and `$(( ... ))` span, nesting included.
-
-    A regex cannot do this: `$(((_ms % 1000) / 100))` nests, and a
-    non-greedy `[^()]*` body simply fails to match it, which is how
-    `_timeout_ms` and `_age_secs` read as calls. A subshell `( ... )` is
-    deliberately NOT stripped -- its body is code and does contain calls.
-    """
-    index = 0
-    out: list[str] = []
-    while index < len(line):
-        start = index
-        if line.startswith("$((", index):
-            start = index + 1
-        elif not line.startswith("((", index):
-            out.append(line[index])
-            index += 1
-            continue
-        depth = 0
-        cursor = start
-        while cursor < len(line):
-            if line[cursor] == "(":
-                depth += 1
-            elif line[cursor] == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-            cursor += 1
-        if depth != 0:
-            out.append(line[index])
-            index += 1
-            continue
-        out.append(" " * (cursor + 1 - index))
-        index = cursor + 1
-    return "".join(out)
-
-
-def _strip_literals(line: str) -> str:
-    """Remove substitutions and arithmetic from a shell line.
-
-    Quoted spans are already blanked by the character scanner. What remains
-    here is bare shell words, which is the only place a function call can
-    appear. Without this, `TOTAL=$(( _in + _out ))` reports `_in` as an
-    undefined callee.
-    """
-    previous = None
-    while previous != line:
-        previous = line
-        line = _strip_arithmetic(line)
-        line = _SUBSTITUTION.sub(" ", line)
-    line = _BACKTICK.sub(" ", line)
-    return line
-
-
-def _blank_heredoc_bodies(text: str) -> str:
-    """Replace every heredoc body with blank lines of the same count.
-
-    A line pre-pass, deliberately ahead of the character scanner rather than
-    inside it. `DIRECTIVE="$("$PY" - "$F" <<'PYEOF'` opens its heredoc while
-    a naive scanner still believes it is inside the double quote that opened
-    the command substitution, so the scanner never sees the `<<` and reads
-    the whole inlined Python program as shell. Finding the opener on the raw
-    line does not depend on getting the quote nesting right, and a heredoc
-    body is the single largest source of words that are not code.
-    """
-    lines = text.splitlines(keepends=True)
-    out: list[str] = []
-    terminator: str | None = None
-    for raw in lines:
-        if terminator is not None:
-            out.append("\n" if raw.endswith("\n") else "")
-            if raw.strip() == terminator:
-                terminator = None
-            continue
-        out.append(raw)
-        stripped = raw.strip()
-        if stripped.startswith("#"):
-            continue
-        opened = _HEREDOC_OPEN.search(raw)
-        if opened is not None:
-            terminator = opened.group(1)
-    return "".join(out)
-
-
-def _shell_statement_lines(text: str) -> list[tuple[int, str]]:
-    """The lines of a script that are shell statements, and only those.
-
-    A single character pass over the whole file, because quoting in shell is
-    not a per-line property: an awk program, a jq filter and a multi-line log
-    message all open a quote on one line and close it several lines later.
-    Counting quotes per line gets each of those wrong.
-
-    Heredoc bodies (inline Python, jq programs, injected prompt text), quoted
-    spans and comments are DATA, not code. They come back as blanks so the
-    line numbers still line up with the file, while nothing inside them can
-    be read as a call. Scanning them is how a text-level check starts
-    reporting on English and then gets suppressed into uselessness -- which
-    is the failure mode this whole file exists to replace.
-    """
-    text = _blank_heredoc_bodies(text)
-    out: list[list[str]] = [[]]
-    index = 0
-    length = len(text)
-    state = "code"  # code | single | double | comment | heredoc
-    # Quoting restarts inside a command substitution, so `"$(jq -n '{...}'`
-    # opens a single-quoted jq program even though the outer double quote is
-    # still open. Without this stack that program is read as shell.
-    saved_states: list[str] = []
-    substitution_depth: list[int] = []
-    heredoc_terminator = ""
-    pending_heredoc = ""
-    line_start = True
-
-    def push(char: str) -> None:
-        if char == "\n":
-            out.append([])
-        else:
-            out[-1].append(char)
-
-    while index < length:
-        char = text[index]
-
-        if char == "\n":
-            if state in ("comment", "single_line"):
-                state = "code"
-            if state == "code" and pending_heredoc:
-                state = "heredoc"
-                heredoc_terminator = pending_heredoc
-                pending_heredoc = ""
-            push("\n")
-            index += 1
-            line_start = True
-            continue
-
-        if state == "heredoc":
-            end = text.find("\n", index)
-            end = length if end == -1 else end
-            if text[index:end].strip() == heredoc_terminator:
-                state = "code"
-            push(" " * (end - index))
-            index = end
-            continue
-
-        if state == "comment":
-            push(" ")
-            index += 1
-            continue
-
-        if state == "single":
-            if char == "'":
-                state = "code"
-            push(" ")
-            index += 1
-            continue
-
-        if state == "double" and text.startswith("$(", index):
-            saved_states.append(state)
-            substitution_depth.append(0)
-            state = "code"
-            push("  ")
-            index += 2
-            continue
-
-        if state == "double":
-            if char == "\\" and index + 1 < length:
-                # A line continuation still ends a line: swallowing its newline
-                # silently shifts every subsequent finding's line number.
-                push(" ")
-                push("\n" if text[index + 1] == "\n" else " ")
-                index += 2
-                continue
-            if char == '"':
-                state = "code"
-            push(" ")
-            index += 1
-            continue
-
-        # state == "code"
-        if char == "\\" and index + 1 < length:
-            push(" ")
-            if text[index + 1] == "\n":
-                push("\n")
-                line_start = True
-            else:
-                push(" ")
-                line_start = False
-            index += 2
-            continue
-        if char == "#" and (line_start or text[index - 1] in " \t;&|("):
-            state = "comment"
-            push(" ")
-            index += 1
-            continue
-        if char == "'":
-            state = "single"
-            push(" ")
-            index += 1
-            line_start = False
-            continue
-        if char == '"':
-            state = "double"
-            push(" ")
-            index += 1
-            line_start = False
-            continue
-        if text.startswith("$((", index) or text.startswith("((", index):
-            # Arithmetic, not a command substitution. `$((_ms % 1000) / 100)`
-            # nests, so the span is walked with a depth counter rather than
-            # matched; its body is values, never calls.
-            start = index + 1 if text[index] == "$" else index
-            depth = 0
-            cursor = start
-            while cursor < length:
-                if text[cursor] == "(":
-                    depth += 1
-                elif text[cursor] == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                cursor += 1
-            if depth == 0 and cursor < length:
-                for blanked in text[index : cursor + 1]:
-                    push("\n" if blanked == "\n" else " ")
-                index = cursor + 1
-                line_start = False
-                continue
-
-        if text.startswith("$(", index):
-            saved_states.append(state)
-            substitution_depth.append(0)
-            push("  ")
-            index += 2
-            line_start = False
-            continue
-        if substitution_depth:
-            if char == "(":
-                substitution_depth[-1] += 1
-            elif char == ")":
-                if substitution_depth[-1] == 0:
-                    substitution_depth.pop()
-                    state = saved_states.pop()
-                    push(" ")
-                    index += 1
-                    line_start = False
-                    continue
-                substitution_depth[-1] -= 1
-        if char == "<" and text.startswith("<<", index):
-            opened = _HEREDOC_OPEN.match(text, index)
-            if opened is not None:
-                pending_heredoc = opened.group(1)
-                push(" " * (opened.end() - index))
-                index = opened.end()
-                line_start = False
-                continue
-        push(char)
-        index += 1
-        if not char.isspace():
-            line_start = False
-
-    lines: list[tuple[int, str]] = []
-    for number, chars in enumerate(out, start=1):
-        code = "".join(chars).strip()
-        if code:
-            lines.append((number, code))
-    return lines
-
-
-def undefined_shell_callees(
-    scripts_dir: Path, defined: set[str] | None = None
-) -> list[tuple[Path, int, str]]:
-    """Call tokens resolving to nothing: not a function, builtin, or on PATH.
-
-    Deliberately conservative -- a token is only reported when it has the
-    tree's own helper shape AND all three resolutions fail. The bound is real
-    and is stated rather than implied: a deleted callee named without an
-    underscore would not be reported. What it does catch is the class that
-    actually occurred, and it catches it without a suppression list.
-    """
-    known = _defined_function_names() if defined is None else defined
-    findings: list[tuple[Path, int, str]] = []
-    for path in sorted(scripts_dir.glob("*.sh")):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for number, line in _shell_statement_lines(text):
-            code = _strip_literals(line)
-            if _CASE_ARM.match(code):
-                continue
-            for fragment in _STATEMENT_SPLIT.split(code):
-                fragment = fragment.strip()
-                if not fragment:
-                    continue
-                match = _CALL_TOKEN.match(fragment)
-                if not match:
-                    continue
-                token = match.group(1)
-                if token in known or token in _SHELL_RESERVED:
-                    continue
-                if not _HELPER_SHAPE.match(token) or "_" not in token:
-                    continue
-                remainder = fragment[len(token) :].lstrip()
-                # An assignment is not a call, and `word)` is a case pattern.
-                if remainder.startswith(("=", "+=", ")")):
-                    continue
-                if shutil.which(token) is not None:
-                    continue
-                findings.append((path, number, token))
-    return findings
+PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
+CALLEE_VALIDATOR = REPO_ROOT / "scripts" / "validation" / "validate_hook_callees.py"
 
 
 def test_no_hook_script_calls_a_function_defined_nowhere() -> None:
@@ -869,4 +457,80 @@ def test_hooks_json_registers_both_skill_matchers() -> None:
     assert POST_QUALITY_HOOK.name in commands_for("PostToolUse"), (
         "no PostToolUse Skill matcher runs "
         f"{POST_QUALITY_HOOK.name}, so skill.completed can never fire"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rule 5 -- the check is wired, not merely written
+# ---------------------------------------------------------------------------
+
+
+def test_the_callee_gate_is_registered_as_a_pre_commit_hook() -> None:
+    """Detection that is not wired is advisory, and advisory gets ignored.
+
+    Asserted on the registration rather than trusted, because the whole
+    finding behind this file is a guard that existed, ran, and proved the
+    wrong thing. A gate deleted from the config is exactly as silent as the
+    function that was deleted from `common.sh`.
+
+    The merge-blocking half needs no assertion here: these tests run in the
+    unit suite behind `Tests Gate`, a live required context on `dev`. This
+    hook is the local fail-fast half, which is where a deletion like
+    omniclaude#2214's should have been refused -- at the commit that made it.
+    """
+    config = PRE_COMMIT_CONFIG.read_text(encoding="utf-8")
+    assert "id: hook-callee-gate" in config, (
+        "the undefined-callee gate is not registered in .pre-commit-config.yaml. "
+        "Removing the registration silently disarms it; if it fired wrongly, "
+        "fix the scanner rather than unwiring the check."
+    )
+    assert "validate_hook_callees.py" in config, (
+        "the hook-callee-gate registration does not invoke "
+        "scripts/validation/validate_hook_callees.py, so it runs something else"
+    )
+
+
+def test_the_callee_gate_cli_fails_on_a_planted_callee(tmp_path: Path) -> None:
+    """The CLI exits non-zero, which is the only thing pre-commit reads.
+
+    A scanner that returns findings to Python but exits 0 is a hook that
+    always passes. This asserts the exit status of the same entrypoint the
+    pre-commit registration names, not the function behind it.
+    """
+    planted = tmp_path / "scripts"
+    planted.mkdir()
+    (planted / "planted_hook.sh").write_text(
+        '#!/bin/bash\na_callee_that_does_not_exist "skill.started" "$P"\n',
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [sys.executable, str(CALLEE_VALIDATOR), "--scripts-dir", str(planted)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 1, (
+        f"the callee gate CLI exited {result.returncode} on a planted "
+        f"undefined callee; pre-commit reads the exit status and nothing "
+        f"else, so a zero here is a hook that can never fail. "
+        f"stdout={result.stdout[-800:]} stderr={result.stderr[-800:]}"
+    )
+    assert "a_callee_that_does_not_exist" in result.stderr, (
+        "the gate failed without naming the offending callee, which leaves "
+        f"the author nothing to act on: {result.stderr[-800:]}"
+    )
+
+
+def test_the_callee_gate_passes_on_the_current_tree() -> None:
+    """The committed tree is clean, asserted through the CLI's exit status."""
+    result = subprocess.run(
+        [sys.executable, str(CALLEE_VALIDATOR)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"the callee gate fails on the committed tree: {result.stderr[-2000:]}"
     )
