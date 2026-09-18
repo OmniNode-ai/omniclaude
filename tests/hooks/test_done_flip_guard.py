@@ -19,11 +19,15 @@ probe itself is exercised against a real local temp git repo (no network).
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -705,8 +709,15 @@ def test_receipt_is_pass_bound() -> None:
 
 
 def _git(cwd: Path, *args: str) -> None:
+    # OMN-14891/OMN-18434: git exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE
+    # into every hook environment and those OVERRIDE `-C`, so a fixture run
+    # under a pre-push hook would mutate the real worktree instead of tmp_path.
     subprocess.run(
-        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+        ["git", "-C", str(cwd), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=scrub_git_location_env(os.environ),
     )
 
 
@@ -716,11 +727,17 @@ def _make_occ_clone_with_dev_receipt(
     """Build a clone whose origin/dev carries a receipt absent from its worktree."""
     origin = tmp_path / "origin.git"
     subprocess.run(
-        ["git", "init", "--bare", str(origin)], check=True, capture_output=True
+        ["git", "init", "--bare", str(origin)],
+        check=True,
+        capture_output=True,
+        env=scrub_git_location_env(os.environ),
     )
     clone = tmp_path / "onex_change_control"
     subprocess.run(
-        ["git", "clone", str(origin), str(clone)], check=True, capture_output=True
+        ["git", "clone", str(origin), str(clone)],
+        check=True,
+        capture_output=True,
+        env=scrub_git_location_env(os.environ),
     )
     _git(clone, "config", "user.email", "t@example.com")
     _git(clone, "config", "user.name", "t")
@@ -1092,3 +1109,92 @@ def test_main_allows_non_done(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr("sys.stdin", io.StringIO(payload))
     assert guard.main() == 0
+
+
+def test_errored_probe_still_blocks_even_with_occ_receipts_omn_18747() -> None:
+    """OMN-18747 positive control: an UNRESOLVABLE reference still blocks.
+
+    The bare-reference anchoring added by OMN-18747 resolves a `#N` the ticket
+    itself pins to a repository. A `#N` with no such anchor resolves to no
+    repository, its probe errors, and ``still_blocking`` must keep it blocking
+    regardless of what the OCC contract cites — the ``s.error`` arm of the
+    OMN-15712 filter is untouched by that change.
+    """
+    receipts = [_receipt(9001, "dod-OmniNode-ai-omnimarket-pr-9001")]
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-90002", "state": "Done"},
+    }
+
+    def _errors_on_unresolvable(ref: Any) -> Any:
+        from linear_done_verify import PRStatus
+
+        if ref.repo is None:
+            return PRStatus(
+                ref=ref,
+                state="UNKNOWN",
+                merge_state="UNKNOWN",
+                error=f"PR #{ref.number} has no associated repo; cannot verify.",
+            )
+        return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_errors_on_unresolvable,
+        linear_fetcher=lambda _t: {
+            # #4242 is anchored by nothing — no qualified citation of that
+            # number, and "a"/"the" are not repository names.
+            "description": "Implementing work landed in a PR #4242.",
+            "labels": [],
+            "attachment_urls": [
+                "https://github.com/OmniNode-ai/omnimarket/pull/9001",
+            ],
+        },
+        receipt_lister=lambda _t: receipts,
+    )
+    assert not d.allowed
+    assert "pr_not_merged" in d.reason
+    assert "4242" in d.reason
+
+
+def test_anchored_bare_ref_is_verified_rather_than_refused_omn_18747() -> None:
+    """OMN-18747 companion: the same ticket shape, with the repository named.
+
+    This is the OMN-18086 refusal, reduced. The bare reference is anchored by
+    an explicit ``OmniNode-ai/omnimarket#9001`` citation elsewhere in the body,
+    so it resolves and is verified as merged instead of refused unverifiable.
+    """
+    call = {
+        "tool_name": "mcp__linear-server__update_issue",
+        "tool_input": {"id": "OMN-90003", "state": "Done"},
+    }
+
+    def _errors_on_unresolvable(ref: Any) -> Any:
+        from linear_done_verify import PRStatus
+
+        if ref.repo is None:
+            return PRStatus(
+                ref=ref,
+                state="UNKNOWN",
+                merge_state="UNKNOWN",
+                error=f"PR #{ref.number} has no associated repo; cannot verify.",
+            )
+        return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
+
+    d = guard.decide(
+        call,
+        occ_probe=_never_called_probe,
+        pr_fetcher=_errors_on_unresolvable,
+        linear_fetcher=lambda _t: {
+            "description": (
+                "AC1: implemented in omnimarket PR #9001.\n\n"
+                "Carrier: OmniNode-ai/omnimarket#9001 — merged."
+            ),
+            "labels": [],
+            "attachment_urls": [],
+        },
+        receipt_lister=lambda _t: [],
+    )
+    assert d.allowed, d.reason
+    assert d.reason == "durable_evidence:all_prs_merged"

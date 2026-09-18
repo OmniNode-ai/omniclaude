@@ -84,6 +84,24 @@ _PR_OWNER_REPO_HASH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# OMN-18747: anchors that resolve a bare `PR #N` to a repository the ticket
+# itself names. The gate refused OMN-18086 on `?#2504: PR #2504 has no
+# associated repo` although that ticket cites `OmniNode-ai/omnimarket#2504` in
+# full in its carrier block and writes `omnimarket` one word before the bare
+# form on the acceptance line. Failing closed on a genuinely unresolvable
+# reference is correct and is unchanged; only a reference the ticket
+# unambiguously pins is resolved, and two anchors that disagree stay refused.
+#
+# `_ANCHOR_WORD_RE` reads the last word on the line before the `PR`/`pull`
+# token. A word is accepted as a repository name only when the ticket already
+# spells it as `owner/repo` somewhere (`by_name` below), or when it has this
+# org's repository-name shape — the same `DEFAULT_OWNER` scoping
+# `_PR_OWNER_REPO_HASH_RE` already relies on. Ordinary prose words that
+# commonly precede the token ("the", "a", "merged", "that") match neither and
+# are rejected, so "Fixed in the PR #2504" stays unresolvable.
+_ANCHOR_WORD_RE = re.compile(r"([A-Za-z][\w.-]*)[^\w]*$")
+_ORG_REPO_NAME_RE = re.compile(r"^(?:omni|onex|knowledge-base)[\w.-]*$", re.IGNORECASE)
+
 # Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
 # deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
 # satisfies nor blocks a *product* ticket's Done — it is a receipt companion,
@@ -129,6 +147,11 @@ class PRRef:
     # bare-number fallback is only a guess and must not be trusted the same
     # way when classifying weak-signal (onex_change_control) refs.
     bare: bool = False
+    # Repositories the ticket anchors this number to when it anchors it to more
+    # than one (OMN-18747). Populated only on an unresolved ref, and reported in
+    # the refusal so the drafter is told which citation to make explicit rather
+    # than that the reference is simply unresolvable.
+    anchor_candidates: tuple[str, ...] = ()
 
 
 @dataclass
@@ -164,6 +187,14 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
 
     Finds both `#123` shorthand and full `https://github.com/owner/repo/pull/N`
     URLs. Bare `#N` references use `default_repo` if provided.
+
+    OMN-18747: when no `default_repo` is configured, a bare `#N` is resolved
+    against the ticket's OWN citations before being reported unresolvable — a
+    qualified `owner/repo#N` (or pull URL) of the same number elsewhere in the
+    body, or the repository named in the sentence carrying the reference. See
+    :func:`_resolve_bare_ref_repo`. This never re-points a reference that
+    `default_repo` already resolved, and a reference with no anchor, or with two
+    anchors that disagree, stays unresolved and therefore blocking.
     """
     refs: dict[tuple[str, int], PRRef] = {}
 
@@ -184,15 +215,101 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
             continue
         refs[key] = PRRef(number=num, repo=full_repo)
 
+    # OMN-18747: anchors are read from the qualified citations collected above,
+    # so they are the ticket's own explicit statements about where a PR lives.
+    by_number: dict[int, set[str]] = {}
+    by_name: dict[str, str | None] = {}
+    for full_repo, num in refs:
+        by_number.setdefault(num, set()).add(full_repo)
+        name = full_repo.rsplit("/", 1)[-1].lower()
+        if name in by_name and by_name[name] != full_repo:
+            by_name[name] = None  # same repo name under two owners — ambiguous
+        else:
+            by_name.setdefault(name, full_repo)
+
     repo_key = default_repo or ""
     for num_match in _PR_NUMBER_RE.finditer(text):
         num = int(num_match.group(1))
-        key = (repo_key, num)
+        resolved = default_repo
+        candidates: tuple[str, ...] = ()
+        if resolved is None:
+            resolved, candidates = _resolve_bare_ref_repo(
+                text, num, num_match.start(), by_number, by_name
+            )
+        key = (resolved or repo_key, num)
         if key in refs:
             continue
-        refs[key] = PRRef(number=num, repo=default_repo, bare=True)
+        refs[key] = PRRef(
+            number=num,
+            repo=resolved,
+            # An anchor-resolved repo is an explicit citation in the ticket, not
+            # the `default_repo` guess `bare` marks (OMN-15782).
+            bare=resolved is None or resolved == default_repo,
+            anchor_candidates=candidates,
+        )
 
     return list(refs.values())
+
+
+def _inline_repo_anchor(
+    text: str,
+    match_start: int,
+    by_name: dict[str, str | None],
+) -> str | None:
+    """Return the repository named immediately before a `PR #N` token, if any.
+
+    OMN-18747. Reads the last word on the same line ahead of the match — the
+    ``omnimarket`` in "Implemented in omnimarket PR #2504". Pure function.
+    """
+    line_start = text.rfind("\n", 0, match_start) + 1
+    word_match = _ANCHOR_WORD_RE.search(text[line_start:match_start])
+    if word_match is None:
+        return None
+    name = word_match.group(1).rstrip("._-")
+    if not name:
+        return None
+    known = by_name.get(name.lower(), "")
+    if known:
+        return known
+    if known is None:
+        return None  # the name is spelled under two owners in this ticket
+    if _ORG_REPO_NAME_RE.match(name):
+        return f"{DEFAULT_OWNER}/{name}"
+    return None
+
+
+def _resolve_bare_ref_repo(
+    text: str,
+    number: int,
+    match_start: int,
+    by_number: dict[int, set[str]],
+    by_name: dict[str, str | None],
+) -> tuple[str | None, tuple[str, ...]]:
+    """Resolve a bare ``#N`` against the ticket's own citations (OMN-18747).
+
+    Returns ``(repo, ambiguous_candidates)``. ``repo`` is set only when the
+    ticket pins the number unambiguously: a qualified citation of the SAME
+    number elsewhere in the body, or the repository named in the sentence
+    carrying the reference. When both anchors exist the in-sentence name
+    decides, which lets it pick one of several same-number citations. When the
+    two anchors disagree, or when several same-number citations exist with no
+    in-sentence name, the reference stays unresolved and every candidate is
+    returned so the refusal can name them. A reference with no anchor at all
+    resolves to ``(None, ())`` — exactly today's fail-closed behaviour.
+
+    Pure function.
+    """
+    candidates = set(by_number.get(number, ()))
+    inline = _inline_repo_anchor(text, match_start, by_name)
+    if inline is not None:
+        if not candidates or inline in candidates:
+            return inline, ()
+        return None, tuple(sorted(candidates | {inline}))
+    if len(candidates) == 1:
+        return next(iter(candidates)), ()
+    if candidates:
+        return None, tuple(sorted(candidates))
+    return None, ()
 
 
 def is_weak_signal_ref(
@@ -307,7 +424,16 @@ def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
             merge_state="UNKNOWN",
             error=(
                 f"PR #{ref.number} has no associated repo; cannot verify. "
-                "Include a full GitHub URL in the ticket DoD."
+                + (
+                    # OMN-18747: the ticket anchors the number to more than one
+                    # repo, so say which ones rather than asking for a URL the
+                    # drafter has arguably already supplied twice over.
+                    "This ticket anchors it to more than one repo ("
+                    + ", ".join(ref.anchor_candidates)
+                    + "); cite the one you mean as owner/repo#N."
+                    if ref.anchor_candidates
+                    else "Include a full GitHub URL in the ticket DoD."
+                )
             ),
         )
 
