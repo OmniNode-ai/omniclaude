@@ -61,6 +61,20 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 
+# OMN-18704: which agent host is invoking this hook. Declared by the
+# registration the host resolved -- the Codex hooks.json passes
+# `--actor codex` -- and never sniffed, because a Codex hook process inherits
+# its parent's environment and a Codex session started from a Claude Code
+# session runs with CLAUDECODE=1 set. The allowlist lives in
+# hooks/lib/hook_actor.py; this only lifts the raw value out of argv.
+# shellcheck source=../lib/hook_actor.sh
+source "${HOOKS_LIB}/hook_actor.sh" 2>/dev/null || true
+if declare -F onex_hook_actor_arg >/dev/null 2>&1; then
+    HOOK_ACTOR_ARG="$(onex_hook_actor_arg "$@")"
+else
+    HOOK_ACTOR_ARG="${ONEX_HOOK_ACTOR:-}"
+fi
+
 # shellcheck source=onex-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-post-tool-use-bus-mirror.log"
@@ -125,11 +139,30 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 WORKING_DIRECTORY="$(basename "$CWD")"
+# OMN-18704: Codex supplies a per-turn identifier; Claude Code does not.
+# Read it host-agnostically -- absent yields the empty string, which the
+# appender records as an explicit null rather than omitting the field.
+TURN_ID=$(echo "$INPUT" | jq -r '.turn_id // ""' 2>/dev/null) || TURN_ID=""
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"' 2>/dev/null) || TOOL_NAME="unknown"
-DURATION_MS=$(echo "$INPUT" | jq -r '.duration_ms // 0' 2>/dev/null) || DURATION_MS=0
-[[ "$DURATION_MS" =~ ^[0-9]+$ ]] || DURATION_MS=0
-INTERRUPTED=$(echo "$INPUT" | jq -r '.tool_response.interrupted // false' 2>/dev/null) || INTERRUPTED="false"
-[[ "$INTERRUPTED" == "true" ]] || INTERRUPTED="false"
+# OMN-18704: Codex's PostToolUse input carries neither a duration nor an
+# interrupt flag -- verified against the live 0.154.0 wire format, whose
+# required fields are cwd, hook_event_name, model, permission_mode,
+# session_id, tool_input, tool_name, tool_response, tool_use_id,
+# transcript_path and turn_id. Emitting 0/false for the two it omits would
+# record a measurement the host never made, and a measured zero is
+# indistinguishable from a missing one once it reaches a projection. They are
+# explicitly null for that actor, and hooks/contracts/hook_actor_envelope.yaml
+# carries the reason. The Claude branch is byte-identical to the pre-ticket
+# code: this adds an actor, it does not change what the Claude host records.
+if [[ "$(printf '%s' "${HOOK_ACTOR_ARG:-}" | tr '[:upper:]' '[:lower:]')" == "codex" ]]; then
+    DURATION_MS="null"
+    INTERRUPTED="null"
+else
+    DURATION_MS=$(echo "$INPUT" | jq -r '.duration_ms // 0' 2>/dev/null) || DURATION_MS=0
+    [[ "$DURATION_MS" =~ ^[0-9]+$ ]] || DURATION_MS=0
+    INTERRUPTED=$(echo "$INPUT" | jq -r '.tool_response.interrupted // false' 2>/dev/null) || INTERRUPTED="false"
+    [[ "$INTERRUPTED" == "true" ]] || INTERRUPTED="false"
+fi
 
 PAYLOAD=$(jq -nc \
     --arg session_id "$SESSION_ID" \
@@ -164,6 +197,8 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
             --cwd "$CWD" \
+            --actor "$HOOK_ACTOR_ARG" \
+            --turn-id "$TURN_ID" \
             >>"$LOG_FILE" 2>&1
     ) &
     disown 2>/dev/null || true

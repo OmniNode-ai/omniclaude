@@ -1,0 +1,209 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# The shared hook-journal envelope, across agent hosts (OMN-18704).
+#
+# One journal, two producers. Claude Code and Codex CLI register the same four
+# bus-mirror entrypoints, which append to the same local journal, which the
+# same drainer publishes. This file is the field-by-field statement of what
+# each host can and cannot supply, so a projection can read both without
+# guessing -- and so that a field which is null for one host is null for a
+# RECORDED reason rather than by accident.
+#
+# It is not documentation. tests/unit/hooks/test_codex_hook_actor_envelope.py
+# parses it and fails when an actual record disagrees with a row here, and
+# when a row declares a null with no reason.
+#
+# Scope note: this describes the PAYLOAD of a journal record. The record
+# wrapper (event_id, event_type, payload, correlation_id, queued_at) is owned
+# by hooks/lib/hook_emit_journal.py and is identical for every actor by
+# construction -- both hosts go through the same appender.
+
+schema_version: 1
+ticket: OMN-18704
+
+actors:
+  - claude
+  - codex
+
+actor_sources:
+  claude:
+    registration: plugins/onex/hooks/hooks.json
+    declares_actor: false
+    note: >-
+      The Claude Code registration predates this field and does not declare an
+      actor. An absent declaration resolves to `claude`, which is why the four
+      Claude entries did not have to change.
+  codex:
+    registration: plugins/onex/hooks/codex/hooks.json
+    declares_actor: true
+    note: >-
+      Declared as `--actor codex` on each command line. Never inferred: a Codex
+      hook process inherits its parent's environment, so a Codex session
+      started from a Claude Code session runs its hooks with CLAUDECODE=1 and
+      CLAUDE_CODE_SESSION_ID set, and with no CODEX_* variable of its own
+      (measured on the operator Mac, 2026-09-18).
+
+# Per-field truth. `produced_by` is which hosts supply a real value;
+# `null_for_actors` is which hosts cannot, and `reason` is why.
+fields:
+  actor:
+    type: string
+    produced_by: [claude, codex]
+    values: [claude, codex, unknown]
+    description: >-
+      The agent host that emitted the record. `unknown` means the registration
+      declared a host this build does not recognise -- deliberately not folded
+      into `claude`, because a mislabelled record is indistinguishable from a
+      correct one whereas an `unknown` one is visibly wrong.
+
+  session_id:
+    type: string
+    produced_by: [claude, codex]
+    description: >-
+      The host's session identifier, verbatim. Also the record's correlation
+      id. Both hosts send this on every one of the four events.
+
+  turn_id:
+    type: string
+    produced_by: [codex]
+    null_for_actors: [claude]
+    reason: >-
+      Claude Code's hook input carries no turn identifier at any event. Codex
+      sends one on UserPromptSubmit and PostToolUse, and none on SessionStart
+      or SessionEnd, so the field is null on those two for Codex as well.
+
+  working_directory:
+    type: string
+    produced_by: [claude, codex]
+    description: >-
+      Basename of the hook's `cwd`. Both hosts send `cwd`; only the basename
+      is recorded, as before this ticket.
+
+  hook_source:
+    type: string
+    produced_by: [claude, codex]
+    description: >-
+      Which entrypoint emitted the record (startup, user_prompt_submit,
+      post_tool_use). A constant of the script, not of the host, so it is
+      identical across actors by construction.
+
+  tool_name:
+    type: string
+    produced_by: [claude, codex]
+    events: [tool.executed]
+    description: >-
+      Both hosts send `tool_name`. The vocabularies differ -- Codex names its
+      shell tool `Bash` but has no Skill or Agent primitive -- so a consumer
+      must not assume the Claude tool set for an `actor: codex` record.
+
+  duration_ms:
+    type: integer
+    produced_by: [claude]
+    null_for_actors: [codex]
+    events: [tool.executed]
+    reason: >-
+      Codex's PostToolUse input carries no timing field. Recording 0 would be a
+      measurement the host never made, and a measured zero is indistinguishable
+      from a missing one once it reaches a projection.
+
+  interrupted:
+    type: boolean
+    produced_by: [claude]
+    null_for_actors: [codex]
+    events: [tool.executed]
+    reason: >-
+      Codex sends `tool_response` as a bare string, not as the object Claude
+      Code sends, so there is no interrupt flag to read. Recording false would
+      assert the tool completed when the host said nothing either way.
+
+  prompt_length:
+    type: integer
+    produced_by: [claude, codex]
+    events: [prompt.submitted]
+    description: >-
+      Length only, never the prompt text -- the onex.evt.* preview-safe
+      invariant, unchanged for the new actor. Both hosts send `prompt`.
+
+  reason:
+    type: string
+    produced_by: [claude, codex]
+    events: [session.ended]
+    description: >-
+      Session-end reason, normalised to clear|logout|prompt_input_exit|other.
+      Codex's own value is passed through the same allowlist, so a Codex-only
+      reason string lands as `other` rather than widening the enum.
+
+# Classes that exist on one host and not the other. Recorded so a projection
+# reads a structural gap as a gap and not as a drop.
+absent_classes:
+  codex:
+    - class: skill.started
+      reason: Codex has no skill primitive. Do not synthesize one.
+    - class: skill.completed
+      reason: Codex has no skill primitive. Do not synthesize one.
+    - class: llm.cost.completed
+      reason: >-
+        No Codex hook event carries token accounting. It appears only in the
+        rollout JSONL, which is a reconciler's job, not this edge's.
+  claude:
+    - class: tool.requested
+      reason: >-
+        Codex fires PreToolUse with a governed shape; the Claude side has no
+        equivalent governed class today. Not emitted by either registration
+        yet -- listed so the asymmetry is on the record.
+
+# Deliberately not carried, with the reason, so the next lane does not
+# re-derive it.
+not_carried:
+  - field: host_cli_version
+    reason: >-
+      The cheap sources are unreliable and the reliable source is a fork.
+      `codex --version` on the per-tool-call path is exactly the cost OMN-17224
+      removed, and CLAUDE_CODE_EXECPATH is inherited by a Codex hook so it
+      would report the wrong host's version. Add it via a cached read or not
+      at all.
+
+# The behaviours this contract is answerable for, in the order a reader should
+# walk them. Each line is a case the test suite below actually drives.
+golden_path:
+  - A Codex SessionStart, UserPromptSubmit, PostToolUse and SessionEnd each land a
+    journal record carrying actor=codex and the Codex session_id as correlation id
+  - A Codex UserPromptSubmit and PostToolUse carry the host's turn_id; the two
+    session events carry null, because Codex sends none on them
+  - A Codex PostToolUse records duration_ms and interrupted as null, never as a
+    measured 0/false the host never reported
+  - A Claude-shaped payload with no declaration still yields actor=claude, and
+    every pre-existing field is byte-identical to its pre-ticket value
+  - A Codex-style environment around a Claude invocation still yields actor=claude,
+    because only the registration decides and a hook inherits its parent's env
+  - An unrecognised declared actor yields `unknown`, never the Claude default
+  - Every field shared by both actors agrees in name and JSON type, or is declared
+    nullable here with a recorded reason
+
+dod_evidence:
+  - kind: tests
+    description: >-
+      The Codex actor envelope suite: registration parse, per-event actor stamp,
+      turn_id carry, explicit nulls, the no-sniffing guard, the Claude regression,
+      and the cross-actor shared-field diff against this contract.
+    command: uv run pytest tests/unit/hooks/test_codex_hook_actor_envelope.py -v
+  - kind: tests
+    description: >-
+      The four pre-existing bus-mirror suites, unchanged, proving the Claude side
+      did not move.
+    command: >-
+      uv run pytest tests/unit/hooks/test_post_tool_use_bus_mirror.py
+      tests/unit/hooks/test_session_start_bus_mirror.py
+      tests/unit/hooks/test_session_end_bus_mirror.py
+      tests/unit/hooks/test_user_prompt_submit_bus_mirror.py -v
+  - kind: live
+    description: >-
+      A real Codex 0.154.0 session on the lab Mac, driving this repo's shipped
+      codex/hooks.json into the real hook journal, produced session.started,
+      prompt.submitted, tool.executed and session.ended under one Codex session
+      id, every one carrying actor=codex. Readback by correlation id.
+    command: grep -l "<codex session id>" "$ONEX_STATE_DIR/hook_emit_journal"/*.json
+  - kind: ci
+    description: CI pipeline green
+    command: gh pr checks

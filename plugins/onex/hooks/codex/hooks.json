@@ -1,0 +1,50 @@
+{
+  "description": "Codex CLI hook registration for ONEX capture (OMN-18704). Registers the SAME four bus-mirror entrypoints the Claude Code side uses, against the SAME local journal, with the actor declared on each command line. Codex 0.154.0 ships a native Claude-Code-shaped hooks surface: twelve event names, a field-compatible JSON input schema on stdin, and command strings run through a shell (so both an argv flag and an ONEX_HOOK_ACTOR= prefix work). This adds one producer to the existing pipeline -- it adds no daemon, no tailer and no transport. Deliberately narrow: only the four emitters, never the guard hooks, because a guard written against Claude Code's tool vocabulary has no meaning under a different host's tool names. The `notify` config key is NOT used: it is occupied by the ChatGPT computer-use client and fires at turn boundaries only, which cannot carry per-tool-call events.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_bus_mirror.sh --actor codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_submit_bus_mirror.sh --actor codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_bus_mirror.sh --actor codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_end_bus_mirror.sh --actor codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
