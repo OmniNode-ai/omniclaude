@@ -1270,6 +1270,35 @@ repos:
       # diverges from the SHA .github/workflows/ci.yml pins for the same
       # validator (the DRIFT-3 class that produced two disagreeing
       # omnibase_core blocks in this file before OMN-14655 converged them).
+      # OMN-18752: the LIVE half of this gate was registered nowhere. The
+      # wrapper header, the module docstring and the CI workflow each said it
+      # runs as both a pre-commit hook and a required status check, and the id
+      # appeared in no .pre-commit-config.yaml in the workspace (87 local ids
+      # on dev, this one not among them). CI runners carry no live venv, so
+      # the live half had only ever run when a human typed it, which is how
+      # five findings accumulated unseen on the fleet's own host.
+      #
+      # Scoped to the two files that define the pin set. It is registered only
+      # now, after the host converged, because the plugin venv builder
+      # resolves its project root to the canonical clone unconditionally: the
+      # venv could not be rebuilt against the new lock until that lock landed.
+      #
+      # Its sibling check-omnimarket-dispatch-drift is deliberately NOT
+      # registered here. That gate resolved its baseline from omnimarket's
+      # `main` while the OMN-18675 venv guard resolves the canonical clone's
+      # checked-out `dev` head; main is release-synced, so the two demanded
+      # different commits at every moment except the instant main caught up.
+      # OMN-18752 repointed the drift gate at the clone, and registering it
+      # is the remaining half, tracked separately.
+      # tests/test_venv_gate_registration.py asserts both halves of this.
+      - id: check-daemon-venv-skew
+        name: Daemon/CLI venv skew gate (OMN-13120, OMN-18746, OMN-18752)
+        entry: bash .pre-commit-hooks/check-daemon-venv-skew.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(uv\.lock|pyproject\.toml)$
+
       - id: precommit-pin-parity
         name: Pre-commit/CI pin-parity check (OMN-14655)
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_pin_parity.py
