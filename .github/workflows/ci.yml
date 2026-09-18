@@ -31,6 +31,76 @@ env:
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  # =============================================================================
+  # Per-run runner routing (OMN-18031)
+  # =============================================================================
+  # Decides ONCE PER RUN which runs-on label set the consuming job below should
+  # use, from live org-runner capacity and the most recent lab load record.
+  #
+  # THE SEAM IS READ AS A CEILING AND NEVER WRITTEN. The decision can only ever
+  # DOWNGRADE from what OMNI_TRUSTED_CI_RUNS_ON_JSON already permits, never
+  # widen past it, and nothing in this job or the workflow it calls writes any
+  # Actions variable at any scope (CLAUDE.md rule 14 — those variables are
+  # single-owner, and a lane that writes one clobbers another lane's flip with
+  # no conflict and no error).
+  #
+  # IT IS INERT TODAY AND THAT IS THE POINT. omniclaude is a PUBLIC repository
+  # and its trusted seam reads '["ubuntu-latest"]' at every scope that governs
+  # it — organisation and repo shadow alike, read live 2026-09-18. The ceiling
+  # is therefore already hosted, so the decision is `seam_ceiling_hosted` on
+  # every run and the consumer's placement is byte-identical to what it is
+  # today. Nothing moves to the lab here. Landing it proves the mechanism safe
+  # on this repo's own triggers and records a per-run decision artifact;
+  # changing where anything actually executes is a separate single-owner claim
+  # on the seam variable, which is OMN-16682 and not this ticket.
+  #
+  # THIS REPOSITORY HOSTS THE REUSABLE WORKFLOW AND IS NOW ITS FIRST CALLER.
+  # `.github/workflows/route-runner-reusable.yml` landed here under OMN-18423
+  # with zero real callers — the only other mention of it in this tree is the
+  # prose comment in hostile-reviewer.yml explaining why that lab-touching job
+  # deliberately does NOT route through it. Because the workflow is local, the
+  # `uses:` below is the LOCAL form and carries no cross-repo sha: a caller in
+  # this repository must move with the file it calls, and pinning a sha of our
+  # own history here would let the two drift within a single commit.
+  #
+  # ONE CONSUMER IS WIRED: `env-var-registry`. It is the cheapest job in this
+  # workflow whose `runs-on` currently resolves through the shared V1 seam
+  # expression — a checkout, a uv install and one Python script, with no
+  # container backing it and nothing that touches the lab — and it runs on
+  # every event (`if: always()`), which maximises how often the wiring is
+  # exercised while minimising what a routing defect could cost. EVERY OTHER
+  # JOB IN THIS FILE STILL READS THE OMNI_RUNNER_SELECTOR_V1 EXPRESSION
+  # DIRECTLY and is untouched by this change; widening the consumer set is
+  # separate evidence, not a free extension of this one.
+  #
+  # FAIL-CLOSED ON ANY PROBE ERROR. The called workflow catches every internal
+  # failure and still emits a usable label set, so a probe that cannot reach
+  # the runner listing degrades to hosted rather than to an empty `runs-on`.
+  # A refusal — the private-repository case, which cannot arise here — fails
+  # the run loudly instead of papering itself over with hosted labels. The one
+  # case the called workflow cannot cover is dying BEFORE its own floor runs
+  # (a failed checkout, a cancelled job); the consumer's `runs-on` handles that
+  # case itself, and the comment there says how and why it is still not a pass.
+  # Read this job's `reason` output rather than its colour: a green route job
+  # that decided nothing looks exactly like one that decided correctly.
+  #
+  # Registered in scripts/ci/ci_summary_gate.py as a GATE_JOBS completeness
+  # anchor AND a STRICT_SUCCESS_JOBS member, under the name
+  # "Runner Route (OMN-18031) / route". THAT REGISTRATION IS HALF THE
+  # MECHANISM: the default-deny sweep already fails `CI Summary` when this job
+  # FAILS, but an unregistered job that is `skipped` or ABSENT yields SUCCESS —
+  # so without it, deleting this job would silently retire per-run routing on a
+  # fully green run, and because routing is deliberately inert nothing about
+  # job PLACEMENT would change to reveal it.
+  route:
+    name: Runner Route (OMN-18031)
+    uses: ./.github/workflows/route-runner-reusable.yml
+    with:
+      workflow_path: .github/workflows/ci.yml
+    secrets:
+      RUNNER_FLEET_STATUS_TOKEN: ${{ secrets.RUNNER_FLEET_STATUS_TOKEN }}
+      CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
+
   # OCC preflight is the first non-OCC CI dependency. If central OCC
   # evidence is missing or red, no runner-heavy validation jobs fan out.
   occ-preflight:
@@ -554,19 +624,38 @@ jobs:
         run: uv run python scripts/validation/validate_exports.py
 
   env-var-registry:
-    needs: occ-preflight
+    # OMN-18031: the single wired consumer of the per-run `route` job above.
+    # `if: always()` is retained deliberately and is load-bearing twice over:
+    # this job renders a live required status check, and GitHub's implicit
+    # job-level `if:` is `success()` over `needs:`, so without it a red or
+    # cancelled upstream would SKIP this job and a skipped job satisfies branch
+    # protection. With it the job still runs, and a route job that produced no
+    # label set leaves this one unable to schedule — red, not silently green.
+    needs: [occ-preflight, route]
     if: always()
     name: "Env Var Registry (OMN-6263)"
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         (github.event.pull_request.head.repo.full_name != github.repository ||
-          (github.event.pull_request.head.repo.full_name == github.repository &&
-           github.event.pull_request.base.ref == 'dev')))
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
+    # OMNI_RUNNER_SELECTOR_V2 — placement comes from the route job's decision.
+    #
+    # The `||` arm is NOT a second opinion about placement and never widens
+    # one: it is reached only when the route job produced no label set at all —
+    # it died before its own fail-closed floor could write one, or was
+    # cancelled — in which case `needs.route.outputs.runs_on` is the empty
+    # string and a bare `fromJSON()` of it raises at scheduling time. That
+    # failure is a red job whose stated cause is a JSON parse error in an
+    # unrelated validator, which buries the real one. So the arm falls back to
+    # `OMNI_PUBLIC_PR_RUNS_ON_JSON` — deliberately the NARROWEST placement this
+    # repository defines, the one untrusted fork code already receives, so a
+    # dead router can never place this job anywhere a fork could not already
+    # go. No runner label is written into this file; both arms resolve through
+    # a routing surface, and nothing here writes an Actions variable (rule 14).
+    #
+    # THE FALLBACK IS NOT A PASS. A route job that failed is still a failed job:
+    # it is a GATE_JOBS completeness anchor AND a STRICT_SUCCESS_JOBS member in
+    # scripts/ci/ci_summary_gate.py, and the default-deny sweep fails on it
+    # independently, so `CI Summary` — the aggregate required context — goes
+    # red on exactly the surface that broke, instead of red on a validator that
+    # merely could not schedule.
+    runs-on: ${{ fromJSON(needs.route.outputs.runs_on || vars.OMNI_PUBLIC_PR_RUNS_ON_JSON) }}
     timeout-minutes: 15
     steps:
       - name: Checkout code
