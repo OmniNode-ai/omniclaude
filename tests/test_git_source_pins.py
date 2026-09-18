@@ -441,3 +441,65 @@ def test_probes_ignore_an_inherited_git_dir(
         "an inherited GIT_DIR retargeted the probe at an unrelated repository"
     )
     assert gsp.clone_head(fixture_clone) == head
+
+
+# --------------------------------------------------------------------------
+# the rewrite must not edit prose
+# --------------------------------------------------------------------------
+
+
+def test_rewrite_leaves_comment_lines_alone(
+    tmp_path: Path, fixture_clone: Path
+) -> None:
+    """A rev named in a comment is history, not a pin.
+
+    ``pyproject.toml`` carries a running commentary of every past bump, and
+    those comments name commits. A blanket string replace would silently
+    rewrite that history the moment a comment happened to name the current
+    rev -- turning an accurate record of what was pinned when into a false
+    one. Only the live values move.
+    """
+    from scripts import relock_git_sources as relock  # noqa: PLC0415
+
+    head = _git(fixture_clone, "rev-parse", "HEAD")
+    older = _git(fixture_clone, "rev-parse", "HEAD~2")
+
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        f"# OMN-18639: advanced to {older}, the v0.4.114 release commit.\n"
+        "[tool.uv.sources]\n"
+        'omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", '
+        f'rev = "{older}" }}\n',
+        encoding="utf-8",
+    )
+
+    changed = relock.rewrite_rev(
+        pyproject=pyproject, package="omnimarket", old_rev=older, new_rev=head
+    )
+
+    text = pyproject.read_text(encoding="utf-8")
+    assert changed == 1, "only the live rev should have moved"
+    assert f"# OMN-18639: advanced to {older}" in text, (
+        "the historical comment was rewritten; that record is now false"
+    )
+    assert f'rev = "{head}"' in text
+
+
+def test_rewrite_refuses_when_the_rev_appears_only_in_comments(
+    tmp_path: Path, fixture_clone: Path
+) -> None:
+    """Nothing live to move is a refusal, not a silent success."""
+    from scripts import relock_git_sources as relock  # noqa: PLC0415
+
+    head = _git(fixture_clone, "rev-parse", "HEAD")
+    older = _git(fixture_clone, "rev-parse", "HEAD~2")
+
+    pyproject = tmp_path / "pyproject.toml"
+    body = f"# historical note naming {older}\n[tool.uv.sources]\n"
+    pyproject.write_text(body, encoding="utf-8")
+
+    with pytest.raises(relock.ErrorRevNotFound):
+        relock.rewrite_rev(
+            pyproject=pyproject, package="omnimarket", old_rev=older, new_rev=head
+        )
+    assert pyproject.read_text(encoding="utf-8") == body

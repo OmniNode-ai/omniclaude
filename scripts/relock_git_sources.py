@@ -128,21 +128,34 @@ def plan_rev_advance(
 
 
 def rewrite_rev(*, pyproject: Path, package: str, old_rev: str, new_rev: str) -> int:
-    """Replace every occurrence of ``old_rev`` in ``pyproject``; return the count.
+    """Replace ``old_rev`` on every LIVE line of ``pyproject``; return the count.
 
-    The sha is a 40-hex string, so a literal replace is unambiguous — there is
-    no plausible second meaning for it in this file. Raises when the rev is
-    absent, because silently rewriting nothing and reporting success is the
-    exact failure this whole ticket exists to remove.
+    Comment lines are left alone. ``pyproject.toml`` carries a running
+    commentary of every past bump and those comments name commits, so a
+    blanket replace would rewrite that history the moment a comment happened
+    to name the current rev — turning an accurate record of what was pinned
+    when into a false one. Only live values move.
+
+    Raises when the rev appears on no live line, because silently rewriting
+    nothing and reporting success is the exact failure this ticket exists to
+    remove. A rev present only in prose is that case: there is nothing to
+    advance, and saying so is more useful than a count of zero.
     """
-    text = pyproject.read_text(encoding="utf-8")
-    count = text.count(old_rev)
+    lines = pyproject.read_text(encoding="utf-8").splitlines(keepends=True)
+    count = 0
+    rewritten: list[str] = []
+    for line in lines:
+        if line.lstrip().startswith("#"):
+            rewritten.append(line)
+            continue
+        count += line.count(old_rev)
+        rewritten.append(line.replace(old_rev, new_rev))
     if count == 0:
         raise ErrorRevNotFound(
-            f"{package}: rev {old_rev[:12]} does not appear in {pyproject}; "
-            f"refusing to report a rewrite that did not happen"
+            f"{package}: rev {old_rev[:12]} appears on no live line of "
+            f"{pyproject}; refusing to report a rewrite that did not happen"
         )
-    pyproject.write_text(text.replace(old_rev, new_rev), encoding="utf-8")
+    pyproject.write_text("".join(rewritten), encoding="utf-8")
     return count
 
 
