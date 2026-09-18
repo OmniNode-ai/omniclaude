@@ -84,6 +84,14 @@ LANES_SUBDIR = ("hooks", "lanes")
 # record, and :func:`reconcile` applies it as a read-time overlay. The
 # ``.jsonl`` extension also keeps it out of ``load_records``'s ``*.json``
 # glob.
+#
+# Two repair classes share it. OMN-18690 attribution repairs name a
+# ``superseded_lane_id``. OMN-17421 corrections do not: they exist
+# because the termination guard scored a healthy lane dead, and a
+# CLOSED record carrying a wrong terminal state has to be correctable
+# by someone other than the lane it slandered -- a lane cannot be
+# trusted to clear its own death record, and before this it could not
+# be cleared at all.
 RESOLUTIONS_FILENAME = "resolutions.jsonl"
 
 # The harness spells a named teammate's agent id as ``a`` + the lane name
@@ -248,12 +256,18 @@ class ModelLaneResolution:
     terminal_reason: str
     resolved_at: str
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: The ticket the repair was written under. Two classes share this
+    #: journal: OMN-18690 attribution repairs, which name a
+    #: ``superseded_lane_id``, and OMN-17421 misclassification
+    #: corrections, which do not. A reader must be able to tell them
+    #: apart without inferring it from which fields happen to be set.
+    ticket: str = "OMN-18690"
 
     def to_json(self) -> dict[str, Any]:
         """Render to the on-disk journal shape."""
 
         return {
-            "ticket": "OMN-18690",
+            "ticket": self.ticket,
             "lane_id": self.lane_id,
             "superseded_lane_id": self.superseded_lane_id,
             "terminal_state": self.terminal_state.value,
@@ -284,6 +298,7 @@ class ModelLaneResolution:
             terminal_reason=str(payload.get("terminal_reason") or ""),
             resolved_at=str(payload.get("resolved_at") or ""),
             evidence=dict(evidence) if isinstance(evidence, dict) else {},
+            ticket=str(payload.get("ticket") or "OMN-18690"),
         )
 
 
@@ -664,8 +679,14 @@ def reconcile(
             # counting it again would report one lane as two.
             continue
 
+        # OMN-17421: the overlay applies to a CLOSED record as well as an
+        # OPEN one. It used to apply only to OPEN records, which left a
+        # *misclassified* lane permanently unresolvable -- exactly the
+        # failure the misclassification itself produces. Records are still
+        # never rewritten; a correction is a new journal line, and the
+        # journal names the ticket it was written under.
         resolution = resolutions.get(record.lane_id)
-        if resolution is not None and record.status is EnumLaneStatus.OPEN:
+        if resolution is not None:
             record = ModelLaneRecord(
                 lane_id=record.lane_id,
                 lane_name=record.lane_name,

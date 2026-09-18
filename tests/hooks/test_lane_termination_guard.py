@@ -42,15 +42,22 @@ from lane_registry import (  # noqa: E402
     EnumLaneStatus,
     EnumLaneTerminalState,
     ModelLaneRecord,
+    ModelLaneResolution,
+    append_resolution,
     close_lane,
     load_records,
+    load_resolutions,
     open_lane,
     reconcile,
 )
 from lane_termination_guard import (  # noqa: E402
+    _RE_AUTH_FAILED,
     MIN_LANE_DURATION_MS,
+    TAIL_LINES_SCANNED,
+    _harness_error_text,
     _hook_output,
     classify_lane_termination,
+    harness_death_text,
     record_termination,
     transcript_metrics,
 )
@@ -63,6 +70,24 @@ pytestmark = pytest.mark.unit
 
 _FIXTURE = (
     pathlib.Path(__file__).parent / "fixtures" / "lane_verify_build_drive_death.jsonl"
+)
+
+#: The 40-entry tail of lane ``omn18691-ci-bus-phase2-bringup-2015`` on
+#: 2026-09-18, reproduced: a healthy lane that took the wrong-password
+#: negative control CLAUDE.md rule 16 mandates, and carried the refusal
+#: string back through all three re-injection paths -- the tool result,
+#: ``hook_success`` attachments echoing the command, and a
+#: ``hook_additional_context`` attachment holding this guard's own prior
+#: verdict. That lane merged two PRs and stood a broker up while being
+#: scored dead three times [OMN-17421].
+_FALSE_DEATH = (
+    pathlib.Path(__file__).parent / "fixtures" / "lane_auth_control_false_death.jsonl"
+)
+
+#: The same lane, same window, with one entry changed: the harness's own
+#: synthetic error frame appended last. The positive control.
+_HARNESS_DEATH = (
+    pathlib.Path(__file__).parent / "fixtures" / "lane_harness_auth_death.jsonl"
 )
 
 
@@ -104,6 +129,29 @@ def _entry(
         "type": role,
         "timestamp": stamp.isoformat().replace("+00:00", "Z"),
         "message": {"role": role, "content": content},
+    }
+
+
+def _harness_error(offset_ms: int, text: str) -> dict[str, object]:
+    """The harness's own synthetic error frame [OMN-17421].
+
+    Measured shape, not a guess: an ``isApiErrorMessage`` assistant entry
+    whose ``message.model`` is ``"<synthetic>"``. 592 of these across the
+    25 most recent session transcripts on this host on 2026-09-18.
+    """
+
+    stamp = datetime(2026, 8, 24, 3, 0, 0, tzinfo=UTC) + timedelta(
+        milliseconds=offset_ms
+    )
+    return {
+        "type": "assistant",
+        "isApiErrorMessage": True,
+        "timestamp": stamp.isoformat().replace("+00:00", "Z"),
+        "message": {
+            "role": "assistant",
+            "model": "<synthetic>",
+            "content": [{"type": "text", "text": text}],
+        },
     }
 
 
@@ -250,7 +298,7 @@ class TestDeathSignatures:
             [
                 _entry(0, role="user", text="brief"),
                 _entry(120_000, tool_uses=3),
-                _entry(180_000, role="system", text=text),
+                _harness_error(180_000, text),
             ],
         )
 
@@ -273,10 +321,8 @@ class TestDeathSignatures:
             tmp_path,
             [
                 _entry(0, role="user", text="resume a6cba21e2af066c56"),
-                _entry(
-                    200,
-                    role="system",
-                    text="No transcript found for agent ID a6cba21e2af066c56",
+                _harness_error(
+                    200, "No transcript found for agent ID a6cba21e2af066c56"
                 ),
             ],
         )
@@ -295,7 +341,7 @@ class TestDeathSignatures:
             tmp_path,
             [
                 _entry(0, role="user", text="brief"),
-                _entry(285, role="system", text="Claude usage limit reached"),
+                _harness_error(285, "Claude usage limit reached"),
             ],
         )
 
@@ -315,6 +361,179 @@ class TestDeathSignatures:
         result = classify_lane_termination(_stop_event(path))
 
         assert result.terminal_state is EnumLaneTerminalState.COMPLETED
+
+
+def _entries(path: pathlib.Path) -> list[dict[str, object]]:
+    """Parse a fixture transcript into entries."""
+
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+class TestHarnessScopedDeathSignaturesOmn17421:
+    """A death signature may only be read from a harness-authored frame.
+
+    RED at the parent commit in BOTH directions:
+    ``test_a_mandated_wrong_password_control_is_not_a_lane_death``
+    returned ``DIED_AUTH_FAILED`` on the raw-text scan, and
+    ``test_a_genuine_harness_auth_death_is_still_classified`` is the
+    positive control that keeps the narrowing from being a deletion.
+    """
+
+    _BROKER_REFUSAL = "SASL_AUTHENTICATION_FAILED"
+
+    def test_a_mandated_wrong_password_control_is_not_a_lane_death(self) -> None:
+        """The control that proves a broker authenticates is not a death.
+
+        A broker that merely LISTENS and a broker that AUTHENTICATES are
+        told apart by presenting a wrong password and getting refused.
+        Producing that refusal is the proof; scoring the lane dead for
+        producing it makes the mandated control unsurvivable.
+        """
+
+        result = classify_lane_termination(_stop_event(str(_FALSE_DEATH)))
+
+        assert result.terminal_state is EnumLaneTerminalState.COMPLETED
+        assert not result.is_failure
+
+    def test_the_green_verdict_is_the_scoping_not_an_empty_window(self) -> None:
+        """Positive control on the FIXTURE: the triggers really are in the tail.
+
+        Without this, a fixture that simply carried no trigger would pass
+        the test above and prove nothing.
+        """
+
+        tail = "\n".join(
+            _FALSE_DEATH.read_text(encoding="utf-8").splitlines()[-TAIL_LINES_SCANNED:]
+        )
+
+        assert _RE_AUTH_FAILED.search(tail) is not None
+        assert harness_death_text(_stop_event(str(_FALSE_DEATH))) == ""
+
+    def test_the_guards_own_prior_verdict_is_excluded_by_structure(self) -> None:
+        """The self-sustaining half: a verdict must not re-read itself."""
+
+        notices = [
+            entry
+            for entry in _entries(_FALSE_DEATH)
+            if entry.get("type") == "attachment"
+            and entry["attachment"]["type"] == "hook_additional_context"
+        ]
+
+        assert notices, "fixture must carry the guard's own prior notice"
+        for notice in notices:
+            assert "LANE TERMINATED - FAILURE" in notice["attachment"]["content"]
+            assert _RE_AUTH_FAILED.search(notice["attachment"]["content"]) is not None
+            assert _harness_error_text(notice) == ""
+
+    def test_hook_success_echoes_of_the_command_are_excluded(self) -> None:
+        """The permanent half: hook attachments keep stale text resident.
+
+        A ``hook_success`` attachment's ``stdout`` is the whole
+        ``PreToolUse`` payload, so the command's own text is re-injected
+        every time the hook fires, long after the lane stopped writing it.
+        """
+
+        echoes = [
+            entry
+            for entry in _entries(_FALSE_DEATH)
+            if entry.get("type") == "attachment"
+            and entry["attachment"]["type"] == "hook_success"
+        ]
+
+        assert len(echoes) >= 6
+        assert any(self._BROKER_REFUSAL in e["attachment"]["stdout"] for e in echoes)
+        for echo in echoes:
+            assert _harness_error_text(echo) == ""
+
+    def test_a_tool_result_carrying_the_refusal_is_excluded(self) -> None:
+        """OMN-17421's original instance: a third-party body is not a death."""
+
+        results = [
+            entry
+            for entry in _entries(_FALSE_DEATH)
+            if entry.get("type") == "user"
+            and any(
+                isinstance(part, dict) and part.get("type") == "tool_result"
+                for part in entry["message"]["content"]
+            )
+        ]
+
+        assert any(
+            self._BROKER_REFUSAL in str(entry["message"]["content"])
+            for entry in results
+        )
+        for entry in results:
+            assert _harness_error_text(entry) == ""
+
+    def test_the_lanes_own_prose_is_excluded(self) -> None:
+        """A lane cannot kill itself by describing the defect."""
+
+        prose = [
+            entry
+            for entry in _entries(_FALSE_DEATH)
+            if entry.get("type") == "assistant" and not entry.get("isApiErrorMessage")
+        ]
+
+        assert any(
+            self._BROKER_REFUSAL in str(entry["message"]["content"]) for entry in prose
+        )
+        for entry in prose:
+            assert _harness_error_text(entry) == ""
+
+    def test_a_genuine_harness_auth_death_is_still_classified(self) -> None:
+        """The narrowing is not a deletion."""
+
+        result = classify_lane_termination(_stop_event(str(_HARNESS_DEATH)))
+
+        assert result.terminal_state is EnumLaneTerminalState.DIED_AUTH_FAILED
+        assert result.is_failure
+
+    def test_the_classifier_tells_the_two_windows_apart(self) -> None:
+        """The single assertion that is RED at the parent in both directions.
+
+        The shipped classifier returns ``died_auth_failed`` for BOTH of
+        these fixtures -- a healthy lane that merged two PRs and a lane
+        the harness killed are indistinguishable to it. That is the
+        defect stated as one fact.
+        """
+
+        healthy = classify_lane_termination(_stop_event(str(_FALSE_DEATH)))
+        dead = classify_lane_termination(_stop_event(str(_HARNESS_DEATH)))
+
+        assert healthy.terminal_state is not dead.terminal_state
+        assert not healthy.is_failure
+        assert dead.is_failure
+
+    def test_the_two_fixtures_differ_only_by_the_harness_frame(self) -> None:
+        """So the positive control isolates one cause and nothing else."""
+
+        healthy = _FALSE_DEATH.read_text(encoding="utf-8").splitlines()
+        dead = _HARNESS_DEATH.read_text(encoding="utf-8").splitlines()
+
+        assert dead[: len(healthy) - 1] == healthy[:-1]
+        assert json.loads(dead[-1])["isApiErrorMessage"] is True
+
+    def test_the_system_error_frame_is_still_a_harness_frame(self) -> None:
+        """The F-09 shape keeps working; the P0 fixture is its regression pin."""
+
+        result = classify_lane_termination(_stop_event(str(_FIXTURE)))
+
+        assert result.terminal_state is EnumLaneTerminalState.DIED_USAGE_LIMIT
+
+    def test_the_anchor_refuses_a_match_that_begins_mid_token(self) -> None:
+        """Belt and braces: the pattern itself no longer matches in-token.
+
+        ``_`` is a word character, so a leading ``\b`` refuses the match
+        inside the broker's refusal code while the bare token standing
+        alone still matches.
+        """
+
+        assert _RE_AUTH_FAILED.search(self._BROKER_REFUSAL) is None
+        assert _RE_AUTH_FAILED.search("authentication_failed") is not None
 
 
 class TestLoopSafetyAndFailPosture:
@@ -612,6 +831,108 @@ class TestReconciliation:
         verdict = reconcile(ttl_seconds=3600, now=now, records=(died,))
 
         assert verdict.has_failures
+
+
+class TestCorrectingAMisclassifiedRecordOmn17421:
+    """A closed record carrying a wrong terminal state must be correctable.
+
+    RED at the parent commit: the resolution overlay applied only to
+    records still ``OPEN``, so a lane the guard wrongly scored dead was
+    unresolvable forever -- the same permanence the misclassification
+    itself has. Records are still never rewritten.
+    """
+
+    def _misclassified(self) -> ModelLaneRecord:
+        return ModelLaneRecord(
+            lane_id="lane-59504f674488a7ab72be",
+            lane_name="omn18691-ci-bus-phase2-bringup-2015",
+            session_id="sess-omn18691",
+            tool_name="Agent",
+            dispatched_at="2026-09-18T20:13:31+00:00",
+            status=EnumLaneStatus.CLOSED,
+            tickets=("OMN-18691",),
+            prompt_digest="d",
+            terminal_state=EnumLaneTerminalState.DIED_AUTH_FAILED,
+            terminal_reason="authentication failure signature",
+            closed_at="2026-09-18T20:49:17+00:00",
+            evidence={"tool_calls": 86},
+        )
+
+    def _correction(self) -> ModelLaneResolution:
+        return ModelLaneResolution(
+            lane_id="lane-59504f674488a7ab72be",
+            superseded_lane_id="",
+            terminal_state=EnumLaneTerminalState.COMPLETED,
+            terminal_reason="misclassified; corrected under OMN-17421",
+            resolved_at="2026-09-18T21:30:00+00:00",
+            evidence={"merged_prs": ["omnibase_infra#3780"]},
+            ticket="OMN-17421",
+        )
+
+    def test_a_correction_clears_a_closed_false_death(self) -> None:
+        record = self._misclassified()
+
+        assert reconcile(records=(record,)).has_failures
+
+        append_resolution(self._correction())
+        verdict = reconcile(records=(record,))
+
+        assert not verdict.has_failures
+        assert len(verdict.completed) == 1
+        assert "OMN-17421" in verdict.completed[0].terminal_reason
+
+    def test_the_record_file_is_never_rewritten(self) -> None:
+        """The correction is a new line, not an edit."""
+
+        close_lane(
+            session_id="sess-omn18691",
+            lane_name="omn18691-ci-bus-phase2-bringup-2015",
+            terminal_state=EnumLaneTerminalState.DIED_AUTH_FAILED,
+            terminal_reason="authentication failure signature",
+            evidence={"tool_calls": 86},
+        )
+        before = load_records()
+        assert len(before) == 1
+
+        append_resolution(
+            ModelLaneResolution(
+                lane_id=before[0].lane_id,
+                superseded_lane_id="",
+                terminal_state=EnumLaneTerminalState.COMPLETED,
+                terminal_reason="misclassified; corrected under OMN-17421",
+                resolved_at="2026-09-18T21:30:00+00:00",
+                ticket="OMN-17421",
+            )
+        )
+
+        after = load_records()
+        assert after[0].terminal_state is EnumLaneTerminalState.DIED_AUTH_FAILED
+        assert not reconcile().has_failures
+
+    def test_the_journal_line_names_the_ticket_that_wrote_it(self) -> None:
+        """Two repair classes share the journal; a reader must tell them apart."""
+
+        append_resolution(self._correction())
+
+        loaded = load_resolutions()["lane-59504f674488a7ab72be"]
+
+        assert loaded.ticket == "OMN-17421"
+        assert loaded.superseded_lane_id == ""
+
+    def test_an_attribution_repair_still_defaults_to_its_own_ticket(self) -> None:
+        """OMN-18690 lines predate the field and must keep their meaning."""
+
+        append_resolution(
+            ModelLaneResolution(
+                lane_id="lane-x",
+                superseded_lane_id="unattributed-y",
+                terminal_state=EnumLaneTerminalState.DIED_USAGE_LIMIT,
+                terminal_reason="usage limit",
+                resolved_at="2026-09-18T21:30:00+00:00",
+            )
+        )
+
+        assert load_resolutions()["lane-x"].ticket == "OMN-18690"
 
 
 class TestReconcileCli:

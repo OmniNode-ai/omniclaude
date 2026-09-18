@@ -48,6 +48,31 @@ than noise. Loop safety matches the sibling guard -- ``stop_hook_active``
 means the turn is already continuing because a stop hook blocked it, so
 the verdict stays but the block is dropped and the record is written.
 
+Where a death signature may be read from [OMN-17421]
+----------------------------------------------------
+Only from a frame the HARNESS wrote to report that the session ended:
+an ``isApiErrorMessage`` assistant entry, or a ``system``/``error``
+entry. Never from a tool result, never from a hook attachment, never
+from the lane's own prose. See :func:`_harness_error_text`.
+
+The first revision scanned the tail as raw text, which scored three
+separate false deaths on one healthy lane in a single afternoon
+(``omn18691-ci-bus-phase2-bringup-2015``, 2026-09-18, while that lane
+merged two PRs and stood a broker up). Two properties made it worse
+than an ordinary false positive. It was SELF-SUSTAINING: this guard's
+own notice text lands back in the transcript as a
+``hook_additional_context`` attachment and re-matched itself. And it
+was SELF-CONCEALING: reporting the defect means naming the string that
+triggers it, so the report manufactured the next misclassification --
+the lane measured exactly that and recorded the failed prediction.
+
+Refs: OMN-17421; OMN-17598 row 14, whose original wording (scope to
+harness-authored entries, "``tool_result`` and system entries") is
+inverted here on measured evidence: hook attachments and tool results
+ARE harness-authored and were the dominant re-injection path, so that
+scoping would have kept the 9 offending hook lines and dropped only the
+4 model-authored ones.
+
 Fail posture
 ------------
 Fail-OPEN on every uncertainty: an unreadable transcript, missing
@@ -99,12 +124,21 @@ _RE_USAGE_LIMIT = re.compile(
     r"|rate_limit_error)",
     re.IGNORECASE,
 )
+# Every branch is \b-anchored [OMN-17421]. Without the leading anchor the
+# bare token branch matched INSIDE a longer vendor token -- a message
+# broker's SASL refusal code embeds it -- so a lane that took the
+# wrong-password NEGATIVE CONTROL that CLAUDE.md rule 16 mandates produced
+# the string itself and was scored dead for proving its broker
+# authenticates. ``_`` is a word character, so the leading ``\b`` refuses a
+# match that begins mid-token while still matching the token standing
+# alone. This anchor is a narrowing only; the structural scoping below is
+# what actually closes the class.
 _RE_AUTH_FAILED = re.compile(
-    r"(?:not logged in"
+    r"\b(?:not logged in"
     r"|please run /login"
     r"|authentication_failed"
     r"|oauth token (?:has )?expired"
-    r"|invalid api key)",
+    r"|invalid api key)\b",
     re.IGNORECASE,
 )
 _RE_API_ERROR = re.compile(
@@ -287,9 +321,86 @@ def _agent_meta_lane_name(stop_event: dict[str, Any]) -> str:
     return ""
 
 
-def _tail_text(stop_event: dict[str, Any]) -> str:
-    lines = _read_transcript_lines(stop_event)
-    return "\n".join(lines[-TAIL_LINES_SCANNED:])
+def _harness_error_text(entry: dict[str, Any]) -> str:
+    """Return one entry's harness-authored error text, or ``""``.
+
+    This is the whole of the OMN-17421 fix. A death signature is a fact
+    about how the SESSION ended, so it may only be read from a frame the
+    HARNESS wrote to say so. Two shapes qualify, and nothing else does:
+
+    * ``type == "assistant"`` carrying ``isApiErrorMessage`` -- the
+      current harness's synthetic error frame. Measured on this host on
+      2026-09-18 across the 25 most recent session transcripts: 592
+      occurrences, every one also spelling ``message.model`` as
+      ``"<synthetic>"``; 154 were the logged-out message and the rest
+      session/weekly limit walls and 529s.
+    * ``type == "system"`` with ``subtype == "error"`` -- the shape the
+      F-09 fixture records. It does not occur anywhere in that corpus,
+      and is kept because a harness that emits it again must still be
+      classified.
+
+    Everything else is content someone PUT in the transcript, and the
+    three re-injection paths measured on lane
+    ``omn18691-ci-bus-phase2-bringup-2015`` are all of them:
+
+    * ``type == "attachment"`` -- every hook attachment (20,620
+      ``hook_success`` entries in six transcripts alone). A
+      ``hook_success`` attachment's ``stdout`` echoes the whole
+      ``PreToolUse`` payload, earlier Bash command text included, so a
+      trigger string stays resident long after the lane stopped writing
+      it; and a ``hook_additional_context`` attachment is where THIS
+      GUARD'S OWN prior notice lands, which is how a verdict re-asserted
+      itself forever. Excluded by structure, not by matching the notice
+      text.
+    * ``type == "user"`` -- tool results, and relayed teammate
+      notifications carrying ANOTHER lane's failure reason.
+    * ``type == "assistant"`` without the error flag -- the lane's own
+      prose, including prose describing this defect.
+
+    Fail posture is unchanged: an entry that does not qualify simply
+    contributes no text, so the classifier falls through to the
+    zero-work heuristic and then to ``COMPLETED``.
+    """
+
+    entry_type = entry.get("type")
+    if entry_type == "system" and entry.get("subtype") == "error":
+        content = entry.get("content")
+        return content if isinstance(content, str) else ""
+    if entry_type != "assistant" or entry.get("isApiErrorMessage") is not True:
+        return ""
+    message = entry.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        part.get("text", "")
+        for part in content
+        if isinstance(part, dict) and part.get("type") == "text"
+    )
+
+
+def harness_death_text(stop_event: dict[str, Any]) -> str:
+    """Join the harness error text in the transcript tail.
+
+    The tail window is unchanged, so this is a strict narrowing of what
+    was scanned before: the same last ``TAIL_LINES_SCANNED`` entries,
+    with only the harness's own error frames contributing text.
+    """
+
+    texts: list[str] = []
+    for line in _read_transcript_lines(stop_event)[-TAIL_LINES_SCANNED:]:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        text = _harness_error_text(entry)
+        if text:
+            texts.append(text)
+    return "\n".join(texts)
 
 
 def _death_signature(text: str) -> tuple[EnumLaneTerminalState, str] | None:
@@ -336,7 +447,7 @@ def classify_lane_termination(stop_event: dict[str, Any]) -> ModelLaneTerminatio
         )
 
     metrics = transcript_metrics(stop_event)
-    signature = _death_signature(_tail_text(stop_event))
+    signature = _death_signature(harness_death_text(stop_event))
 
     if signature is not None:
         state, reason = signature
