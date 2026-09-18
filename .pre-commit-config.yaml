@@ -602,6 +602,27 @@ repos:
         stages: [pre-commit]
 
       # --------------------------------------------------------------------------
+      # secrets-baseline wiring gate (OMN-18669)
+      # The guard above is worth exactly as much as the wiring around it. A
+      # repository can carry .secrets.baseline and read it from nowhere: the
+      # file is present, the repository looks protected, and nothing is
+      # checking. Measured 2026-09-18, one registry repository was in that
+      # state with 47 unapproved findings in 18 files.
+      # This is that invariant applied to THIS repository too, on the same
+      # commit that exports it to the rest of the fleet -- a gate whose own
+      # repo is exempt is a recommendation. Dogfooded a second time by
+      # tests/scripts/test_secrets_baseline_wiring_gate.py, which asserts
+      # omniclaude passes its own gate.
+      # --------------------------------------------------------------------------
+      - id: secrets-baseline-wired
+        name: .secrets.baseline must be read by a hook and by CI (OMN-18669)
+        entry: python3 scripts/secrets_baseline_wiring_gate.py --repo-root .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      # --------------------------------------------------------------------------
       # Migration Freeze Check - Block new migrations during DB-per-repo refactor
       # Scope: Only triggers when migration files or .migration_freeze change
       # Purpose: Enforces schema freeze (OMN-2055) while .migration_freeze exists

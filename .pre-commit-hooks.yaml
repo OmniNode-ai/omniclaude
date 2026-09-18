@@ -116,3 +116,33 @@
   pass_filenames: false
   always_run: true
   stages: [pre-commit]
+
+- id: secrets-baseline-wired
+  name: A .secrets.baseline must be read by a hook and by CI (OMN-18669)
+  description: >
+    `.secrets.baseline` is the allowlist a detect-secrets scan is judged
+    against. On its own it is inert: it blocks nothing, it proves nothing, and
+    it looks exactly like a repository that is protected. Measured 2026-09-18,
+    one registry repository carried a committed baseline that no pre-commit
+    hook and no CI workflow read; a full scan against it surfaced 47 findings
+    in 18 files nothing had ever been asked to approve. Nobody had loosened a
+    gate -- there was no gate. This refuses that silent state: a repository
+    carrying the file owes BOTH a pre-commit entry and a CI workflow that read
+    it. Neither half substitutes for the other -- CI alone finds the credential
+    after it has left the machine, and a local hook alone is skippable and
+    never sees a commit made elsewhere. A repository with no baseline passes;
+    this never demands one. Matching is literal over NON-COMMENT lines, so
+    prose about the gate cannot satisfy the gate. Every run executes a positive
+    control, and a control that passes is exit 2 rather than a clean report.
+    There is no force flag and no allowlist file. The honest limit: this proves
+    a reader exists, not that the CI job is a REQUIRED check -- it names the
+    workflow it found so a reviewer can check that instead of assuming it.
+    See scripts/secrets_baseline_wiring_gate.py.
+  language: script
+  entry: scripts/secrets_baseline_wiring_gate.py --repo-root .
+  # WHOLE-TREE, not staged-files: the invariant is over the repository's own
+  # configuration, and a baseline whose reader was deleted in some earlier
+  # commit is exactly the state this exists to catch.
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit, pre-merge-commit]
