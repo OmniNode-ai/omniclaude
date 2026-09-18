@@ -265,7 +265,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@9818ae563581c762e91968a65f6cc035bfe4b400",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@cfd5b4ebe7dec824786bdc4baf0008bd5fdc417e",
 ]
 
 [tool.uv.sources]
@@ -289,12 +289,41 @@ onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_contro
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret
-# OMN-16979: pin the approved dispatch commit; never substitute a branch head or
-# a PyPI source because the dispatch-drift guard verifies direct VCS provenance.
-# OMN-18622: this override is why `sibling-lock-refresh.yml` can never move this
-# package -- `uv lock --upgrade-package` cannot move an immutable rev -- so a bump
-# here is a deliberate act. Advance it to a RELEASE commit, never a branch head.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "9818ae563581c762e91968a65f6cc035bfe4b400" }  # pragma: allowlist secret
+# OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
+# because the dispatch-drift guard verifies direct VCS provenance.
+# OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
+# package -- `uv lock --upgrade-package` cannot move an immutable rev -- so
+# every bump was a hand-filed ticket (OMN-18622, OMN-18639, and a third in the
+# same week). OMN-18752 CORRECTS that and supersedes the instruction that stood
+# here ("Advance it to a RELEASE commit, never a branch head"):
+#
+#   * The rev is INPUT to `uv lock`, not output, so the workflow now moves the
+#     rev first (`scripts/relock_git_sources.py`) and re-resolves against it.
+#   * The authority is the canonical clone, declared below in
+#     `[tool.onex.git-source-authority]`. It is the clone and not a release tag
+#     because the thing that actually enforces this pin -- the OMN-18675
+#     in-process guard living inside the venv -- compares the installed commit
+#     to `$OMNI_HOME/omnimarket` HEAD and refuses every `onex delegate` on a
+#     mismatch. A release-commit rule could not satisfy that guard between
+#     releases, which is precisely the window the host kept breaking in.
+#   * The advance is FORWARD ONLY: a candidate that is not a strict descendant
+#     of the rev below is refused and nothing is written.
+#
+# So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
+# on workflow_dispatch and review the bot PR.
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "cfd5b4ebe7dec824786bdc4baf0008bd5fdc417e" }  # pragma: allowlist secret
+
+# OMN-18752: which surface decides the commit a git-sourced sibling must carry.
+# `clone` is claimed only where something enforces it. omnimarket's in-process
+# guard (OMN-18675) refuses every `onex delegate` when the installed commit
+# differs from the canonical $OMNI_HOME/omnimarket HEAD, so the clone is its
+# authority whether or not any gate agrees; the lock therefore follows the
+# clone for this one package, advanced by scripts/relock_git_sources.py under
+# .github/workflows/sibling-lock-refresh.yml. Every other git source defaults
+# to `lock` and is left exactly where review put it. The set is pinned by
+# tests/test_git_source_pins.py, so widening it is a reviewable act.
+[tool.onex.git-source-authority]
+omnimarket = "clone"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]

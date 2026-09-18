@@ -84,11 +84,20 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+import git_source_pins  # noqa: E402
 import hook_interpreter  # noqa: E402
 
 # uv.lock ``source`` kinds that carry no PyPI-pinned wheel version and must be
 # excluded from the installed-vs-lock comparison (the root project installs
 # editable as ``0.0.0-dev`` and is intentionally version-agnostic).
+#
+# ``git`` is deliberately ABSENT from this set (OMN-18752). Adding it would make
+# a git-sourced sibling silent, and silence is the wrong answer: a git source is
+# routed to ``git_source_pins`` instead, which judges it by COMMIT ANCESTRY
+# against the canonical clone rather than by comparing version strings. The
+# version in the lock for a git source is just the version at that rev, so
+# comparing it to the installed version reports a "downgrade" remedy whenever
+# the other sanctioned reconciler has legitimately advanced the venv.
 _NON_PINNED_SOURCE_KEYS: frozenset[str] = frozenset(
     {"editable", "virtual", "directory"}
 )
@@ -127,6 +136,9 @@ def _canonical_pins(lock_path: Path) -> dict[str, str]:
         if not name:
             raise ValueError(f"{lock_path}: a [[package]] entry has no name")
         if isinstance(source, dict) and _NON_PINNED_SOURCE_KEYS & source.keys():
+            continue
+        # OMN-18752: a git source is judged by ancestry, not by version.
+        if isinstance(source, dict) and "git" in source:
             continue
         if not version:
             raise ValueError(f"{lock_path}: package {name!r} has no pinned version")
@@ -296,6 +308,102 @@ def _check_hook_interpreter_skew(
     return findings
 
 
+def _site_packages(venv_python: Path) -> Path | None:
+    """The ``site-packages`` directory of the venv owning ``venv_python``."""
+    lib = venv_python.parent.parent / "lib"
+    if not lib.is_dir():
+        return None
+    for child in sorted(lib.iterdir()):
+        candidate = child / "site-packages"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _check_git_source_skew(
+    sources: Mapping[str, git_source_pins.ModelGitSource],
+    surfaces: list[tuple[str, Path]],
+    authority: Mapping[str, git_source_pins.EnumGitSourceAuthority],
+) -> tuple[list[str], list[str]]:
+    """Judge every git-sourced sibling against the canonical clone (OMN-18752).
+
+    Returns ``(findings, notes)``. Notes are stated non-evaluations — the
+    ordinary CI shape, where no canonical clone and no live venv exist — and are
+    printed so a run that looked at nothing never reads like a clean bill of
+    health.
+
+    Two different conditions with two different owners are reported here:
+    a SURFACE lagging the clone (owner: the venv reconciler) and the LOCK
+    lagging the clone (owner: the refresh workflow). They are separated because
+    the venv reconciler cannot fix a stale lock and vice versa.
+    """
+    findings: list[str] = []
+    notes: list[str] = []
+
+    for name, source in sorted(sources.items()):
+        declared = authority.get(name, git_source_pins.EnumGitSourceAuthority.LOCK)
+        if declared is not git_source_pins.EnumGitSourceAuthority.CLONE:
+            # Lock-governed: checked against the rev the lock names, never
+            # against the clone head. Not silent — an off-pin install is still
+            # a finding.
+            for label, venv_python in surfaces:
+                site_packages = _site_packages(venv_python)
+                if site_packages is None:
+                    continue
+                installed = git_source_pins.installed_git_commit(site_packages, name)
+                if installed is None:
+                    continue
+                verdict = git_source_pins.classify_lock_governed(
+                    name=name, installed=installed, locked=source.rev
+                )
+                if verdict.finding is not None:
+                    findings.append(f"{label}: {verdict.finding}")
+            continue
+
+        clone = git_source_pins.canonical_clone(source.repo)
+        if clone is None:
+            notes.append(
+                f"git source {name!r}: no canonical clone for {source.repo!r} under "
+                f"OMNI_HOME on this host — clone-authority not evaluated "
+                f"(lock names {source.rev[:12]})"
+            )
+            continue
+        head = git_source_pins.clone_head(clone)
+        if head is None:
+            findings.append(
+                f"git source {name!r}: cannot read HEAD of the canonical clone "
+                f"{clone} — the authority for this pin is unreadable, so this "
+                f"fails closed"
+            )
+            continue
+
+        lag = git_source_pins.lock_lag_finding(
+            name=name, locked=source.rev, clone_head=head, clone=clone
+        )
+        if lag is not None:
+            findings.append(lag)
+
+        for label, venv_python in surfaces:
+            site_packages = _site_packages(venv_python)
+            if site_packages is None:
+                notes.append(f"{label}: no site-packages resolved — not evaluated")
+                continue
+            installed = git_source_pins.installed_git_commit(site_packages, name)
+            if installed is None:
+                notes.append(
+                    f"{label}: {name!r} is not installed from git there "
+                    f"(no PEP 610 direct_url) — clone-authority not evaluated"
+                )
+                continue
+            verdict = git_source_pins.classify(
+                clone=clone, installed=installed, locked=source.rev, clone_head=head
+            )
+            if verdict.finding is not None:
+                findings.append(f"{label}: {verdict.finding}")
+
+    return findings, notes
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -340,6 +448,34 @@ def main(argv: list[str] | None = None) -> int:
     findings += _check_hook_interpreter_skew(pins)
     # the orphan that left the chain in 035707dd2 must stay gone (OMN-18746)
     findings += hook_interpreter.check_orphan_absent()
+
+    # git-sourced siblings answer to the canonical clone, not to the lock
+    # (OMN-18752). Evaluated over every surface this gate already reads, so a
+    # git pin cannot be right on one interpreter and wrong on another without
+    # the gate saying so.
+    surfaces: list[tuple[str, Path]] = []
+    daemon_python = _live_venv_dir() / "bin" / "python3"
+    if daemon_python.exists():
+        surfaces.append(
+            (f"plugin CLI venv {daemon_python.parent.parent}", daemon_python)
+        )
+    resolved_hook = hook_interpreter.resolve_hook_interpreter()
+    if resolved_hook is not None:
+        surfaces.append(
+            (
+                f"hook interpreter {resolved_hook.path} (via {resolved_hook.source})",
+                resolved_hook.path,
+            )
+        )
+    git_findings, git_notes = _check_git_source_skew(
+        git_source_pins.parse_git_sources(lock_path),
+        surfaces,
+        git_source_pins.read_authority(_repo_root() / "pyproject.toml"),
+    )
+    for note in git_notes:
+        print(f"  note: {note}")
+    findings += git_findings
+
     if findings:
         print(
             "ERROR: a venv serving the hooks is SKEWED from canonical pins "
@@ -353,7 +489,10 @@ def main(argv: list[str] | None = None) -> int:
             "    bash scripts/repair-plugin-venv.sh\n"
             "If uv.lock changed intentionally, that rebuild resyncs the marker + pins.\n"
             "For the hook interpreter, re-sync the venv find_python() resolves\n"
-            "(named above) from this repo's uv.lock: uv sync in its own clone.",
+            "(named above) from this repo's uv.lock: uv sync in its own clone.\n"
+            "A GIT-source finding is none of those: the canonical clone is the\n"
+            "authority there, each such finding names its own owner, and no git\n"
+            "source is ever repaired by moving it backwards (OMN-18752).",
             file=sys.stderr,
         )
         return 1
