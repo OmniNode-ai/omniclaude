@@ -189,6 +189,7 @@ _GIT_STASH_GUARD_COMMAND = (
 _PR_BODY_STAMP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_pr_body_stamp_guard.sh"
 )
+_PROSE_COMMAND_SUBSTITUTION_GUARD_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_prose_command_substitution_guard.sh"
 _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
 )
@@ -340,6 +341,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _CREDENTIAL_ROTATION_GUARD_COMMAND,
         _GIT_STASH_GUARD_COMMAND,
         _PR_BODY_STAMP_GUARD_COMMAND,
+        _PROSE_COMMAND_SUBSTITUTION_GUARD_COMMAND,
         _AGENT_MODEL_GUARD_COMMAND,
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
@@ -350,12 +352,12 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "guard, the ticket-creation admission gate, the worktree canonical-root "
         "guard, the PR lane-ownership guard, the credential-rotation admission "
         "gate, the git-stash worktree admission gate, the pull-request body "
-        "stamp-preservation gate, "
+        "stamp-preservation gate, the prose-sink command-substitution gate, "
         "the background-agent model guard, the lane-dispatch recorder, the "
         "lane-liveness guard, the overseer foreground-block guard, and the "
         "Skill-started capture hook, and "
         "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17957 + "
-        "OMN-17334 + OMN-18335 + OMN-17499 + "
+        "OMN-17334 + OMN-18335 + OMN-18750 + OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
         "A different or additional command means either the measurement baseline "
         "was re-enabled without an operator decision (OMN-13846) or one of the "
