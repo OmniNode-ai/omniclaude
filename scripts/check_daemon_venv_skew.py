@@ -381,7 +381,9 @@ def _check_git_source_skew(
             name=name, locked=source.rev, clone_head=head, clone=clone
         )
         if lag is not None:
-            findings.append(lag)
+            # Stated, never silent — but not blocking. See
+            # ``git_source_pins.lock_lag_blocks`` for why.
+            (findings if git_source_pins.lock_lag_blocks() else notes).append(lag)
 
         for label, venv_python in surfaces:
             site_packages = _site_packages(venv_python)

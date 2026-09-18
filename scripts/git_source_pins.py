@@ -321,6 +321,31 @@ def classify(
     )
 
 
+def lock_lag_blocks() -> bool:
+    """Whether a lock lagging the canonical clone should fail the gate. It does not.
+
+    Measured on the operator Mac 2026-09-18: omnimarket published five
+    releases in three hours. It is release-on-merge, so the interval in which
+    omniclaude's lock equals the canonical clone head is the interval between
+    one omnimarket merge and the next — minutes. Blocking on the lag would
+    leave this gate red on a developer host essentially always, on a
+    condition the person committing cannot fix and which
+    ``sibling-lock-refresh.yml`` closes on its own daily schedule. A gate that
+    is red on a correct, self-healing state is one people learn to ignore,
+    which is rule 5's failure approached from the other side.
+
+    Silence is not the alternative. The lag is ALWAYS printed, with the
+    workflow that owns it and the command to run now, so "lagging, known,
+    owned" stays distinguishable from "nobody is looking".
+
+    The findings that do block are unchanged and are the ones that break
+    something: a venv whose git source disagrees with the canonical clone
+    means the OMN-18675 in-process guard refuses every ``onex delegate`` on
+    that interpreter, and that is actionable by the person in front of it.
+    """
+    return False
+
+
 def lock_lag_finding(
     *, name: str, locked: str, clone_head: str, clone: Path
 ) -> str | None:

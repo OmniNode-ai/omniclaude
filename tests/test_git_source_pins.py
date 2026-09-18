@@ -503,3 +503,61 @@ def test_rewrite_refuses_when_the_rev_appears_only_in_comments(
             pyproject=pyproject, package="omnimarket", old_rev=older, new_rev=head
         )
     assert pyproject.read_text(encoding="utf-8") == body
+
+
+# --------------------------------------------------------------------------
+# the lag is reported, and it does not block
+# --------------------------------------------------------------------------
+
+
+def test_lock_lag_is_reported_as_a_note_not_a_blocking_finding(
+    fixture_clone: Path,
+) -> None:
+    """The lock lagging the clone is stated, owned, and does not fail the gate.
+
+    Measured on the operator Mac 2026-09-18: omnimarket published five
+    releases in three hours. omnimarket is release-on-merge, so the interval
+    in which this repo's lock equals the canonical clone head is the interval
+    between one merge and the next — minutes. A blocking finding here would
+    leave the gate red on a developer host essentially always, on a condition
+    the person committing cannot fix and a scheduled workflow closes on its
+    own. That is a gate people learn to ignore, which is rule 5's failure
+    approached from the other side.
+
+    What must never happen is silence. The lag is always reported, with the
+    workflow that owns it and the command to run now, so the difference
+    between "lagging, known, owned" and "nobody is looking" stays visible.
+
+    The findings that DO block are unchanged and are the ones that actually
+    break something: a venv whose git source disagrees with the clone means
+    the OMN-18675 guard refuses every `onex delegate` on that interpreter.
+    """
+    from scripts import git_source_pins as gsp  # noqa: PLC0415
+
+    head = _git(fixture_clone, "rev-parse", "HEAD")
+    older = _git(fixture_clone, "rev-parse", "HEAD~2")
+
+    note = gsp.lock_lag_finding(
+        name="omnimarket", locked=older, clone_head=head, clone=fixture_clone
+    )
+    assert note is not None, "the lag must still be stated"
+    assert gsp.LOCK_RELOCK_OWNER in note
+
+    assert gsp.lock_lag_blocks() is False, (
+        "the lock lag must not fail the gate: it is unactionable by the "
+        "committer and a scheduled owner closes it"
+    )
+
+
+def test_a_venv_behind_the_clone_still_blocks(fixture_clone: Path) -> None:
+    """The teeth stay where the breakage is."""
+    from scripts import git_source_pins as gsp  # noqa: PLC0415
+
+    head = _git(fixture_clone, "rev-parse", "HEAD")
+    older = _git(fixture_clone, "rev-parse", "HEAD~2")
+
+    verdict = gsp.classify(
+        clone=fixture_clone, installed=older, locked=older, clone_head=head
+    )
+    assert verdict.state is gsp.EnumGitPinState.BEHIND_CLONE
+    assert verdict.finding is not None
