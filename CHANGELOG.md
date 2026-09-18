@@ -1,3 +1,34 @@
+## v0.26.0 (2026-09-18)
+
+### Features
+- feat(OMN-18688): prune stale registrations, orphan dirs, and name the stale-dirty class (#2235)
+- feat(OMN-18669): refuse a .secrets.baseline that no hook and no CI reads (#2232)
+- feat(OMN-18609): make a hook event say which lane fired it, and when (#2220)
+- feat(OMN-18620): a consent citation may name a row timestamp, which a roll cannot move (#2224)
+- feat(OMN-18484): admission guard requires a labelled acceptance criterion (#2205)
+- feat(OMN-18408): refuse a runs-on label that no online runner in the org carries (#2203)
+- feat(OMN-18442): classify and report the rescue-only class in the worktree pruner (#2199)
+- feat(OMN-17334): refuse git stash mutations in worktrees and canonical clones (#2198)
+- feat(OMN-18423): a caller outside omnibase_infra can reach the routing node (#2184)
+
+### Bug Fixes
+- fix(OMN-18702): restore the journal callee OMN-18471 AC5 deleted, and check for callees that do not exist (#2237)
+- fix(OMN-18690): SubagentStop guard attributes a dying lane to its open record by exact name (#2236)
+- fix(OMN-18627): scan hooks/lib for emitted classes and declare the eighteen it finds (#2226)
+- fix(OMN-18471): the last two hook classes reach the broker -- all twelve now deliver (#2213)
+- fix(OMN-18205): count runner placement per trigger event, not per arm (#2225)
+- fix(OMN-18521): the committed secrets baseline carries no position or timestamp (#2228)
+- And 30+ additional commits since v0.25.1
+
+### Changed
+- ci(OMN-18031): adopt the per-run runner route job (#2234)
+- ci(OMN-18473)/(OMN-18479): hostile review gate passes two models and blocks only on cross-model agreement (#2202, #2204)
+- refactor(OMN-18471): retire emit_via_daemon and its dead counter surface (#2214)
+
+### Release metadata
+- Dependency pins unchanged from v0.25.1 head of dev: omnibase-core>=0.47.0,<0.48.0; omnibase-spi>=0.23.1,<0.24.0; omnibase-infra>=0.38.29,<0.39.0; omnimarket>=0.4.0
+- Cut to advance omniclaude main, which the omninode_infra hook-topic parity gate reads for a base-main PR (OMN-18652)
+
 ## v0.25.1 (2026-05-31)
 
 ### Bug Fixes
