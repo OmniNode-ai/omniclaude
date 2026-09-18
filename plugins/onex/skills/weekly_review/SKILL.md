@@ -31,8 +31,10 @@ skill_kind: methodology
 # A methodology skill, not a dispatcher: its six steps are a method a reviewer
 # follows, and the only computation anywhere in it is one band lookup. There is
 # no node for the steps to delegate to, because scoring a person is judgement
-# and this skill deliberately produces no verdict. Same declaration, and the
-# same reason, as rolling_plan_governor.
+# and this skill deliberately produces no verdict. The declaration rests on
+# that reason alone and names no sibling skill: this comment used to cite one,
+# that skill was later retired, and an exemption justified by pointing at
+# another surface stops being justified the moment that surface is deleted.
 boundary_exempt: true
 ---
 

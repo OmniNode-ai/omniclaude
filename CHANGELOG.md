@@ -1,3 +1,26 @@
+## Unreleased
+
+### Removed
+- `rolling_plan_governor` — the skill (`plugins/onex/skills/rolling_plan_governor/`) and its
+  orchestrator node (`src/omniclaude/nodes/node_skill_rolling_plan_governor_orchestrator/`) are
+  retired, not repointed (OMN-18754, under OMN-18751). The skill existed to govern one document,
+  `docs/plans/ROLLING_SEVEN_DAY_PLAN.md`; that path was deleted from the canonical workspace repo
+  on 2026-09-16 and its successor under `beta/plans/` on 2026-09-18, and the operator retired the
+  artifact outright the same day — the ruling is the RULING row timestamped `2026-09-18T18:32:57Z`
+  (topic `retire-rolling-seven-day-plan`) at `docs/tracking/ROLLING_WORK_LEDGER.md:4469`. There was
+  nothing left to govern, and re-cutting the document is what the ruling forbids.
+
+  **What replaced it, for a reader who came here looking for the skill.** Two surfaces, neither of
+  them a hand-maintained plan file. `beta/GOAL.md` in the private knowledge base carries the
+  durable session goal, and its `state_as_of` is the freshness fact the ledger's cost-sentence gate
+  reads on every append. The **Program Board** carries the day-by-day sequencing view that the
+  rolling plan used to hold, as a column. Do not reintroduce a rolling plan document to bridge
+  them.
+
+  No shim, no re-export and no stub SKILL.md is left behind: `onex:rolling_plan_governor` is gone
+  from `plugins/distribution_manifest.yaml`, so nothing can dispatch it into a failure, and the
+  frozen handler-shape ratchet baseline was regenerated rather than hand-edited.
+
 ## v0.26.0 (2026-09-18)
 
 ### Features
