@@ -308,7 +308,7 @@ def discover_debris_directories(root: Path, known_worktrees: set[Path]) -> list[
     not merely unprunable, but never even reported. This walks the same three
     depths, keeps whatever is NOT a known valid worktree and NOT already
     carrying a ``.git`` of its own, and drops directories with no file content
-    (``cleanup_empty_ticket_dirs`` already reclaims those; an empty leftover is
+    (``remove_empty_orphan_dirs`` already reclaims those; an empty leftover is
     not debris, it is nothing).
 
     The ``.git``/``known_worktrees`` checks below apply to ``child`` itself —
@@ -1597,17 +1597,300 @@ def remediate_debris(
     )
 
 
-def cleanup_empty_ticket_dirs(root: Path) -> list[str]:
-    """Remove now-empty ``omni_worktrees/<ticket>/`` directories."""
-    removed: list[str] = []
+# ---------------------------------------------------------------------------
+# stale registrations, orphan ticket dirs, the stale-dirty alarm class
+# [OMN-18688]
+# ---------------------------------------------------------------------------
+#
+# Three classes the content-keyed pass above cannot see, because each one is
+# defined by the ABSENCE of the thing that pass keys off:
+#
+#   * a MISSING registration — git still lists the worktree, but its directory
+#     is gone, so ``discover_worktrees``'s ``*/.git`` glob never finds it;
+#   * an ORPHAN ticket dir — a top-level ``<ticket>/`` under the root with no
+#     registered worktree under it at all;
+#   * a STALE-DIRTY tree — dirty, no open pull request, last commit older than
+#     the alarm bar. It is a TRIAGE row like any other today, which is exactly
+#     the problem: the class that can LOSE WORK reads as one more line in a
+#     several-hundred-row block-reason table.
+#
+# None of the three widens what is removed. Registration pruning removes no
+# file (the directory is already gone); empty orphan dirs hold nothing by
+# definition; non-empty orphan dirs and stale-dirty trees are REPORTED and
+# never touched.
+
+
+_PRUNE_ENTRY_RE = re.compile(r"^Removing\s+(?P<entry>.+?)\s*:\s*(?P<reason>.*)$")
+
+
+class ModelStaleRegistrationSweep(BaseModel):
+    """One canonical clone's stale-worktree-registration state [OMN-18688 AC5]."""
+
+    model_config = ConfigDict(frozen=True)
+
+    canonical: str = Field(..., min_length=1, description="Canonical clone path")
+    entries: tuple[str, ...] = Field(
+        default=(), description="Registration entries git reports as prunable"
+    )
+    reasons: tuple[str, ...] = Field(
+        default=(), description="git's own reason per entry, index-aligned"
+    )
+    probe_exit_code: int = Field(..., description="Exit code of the --dry-run probe")
+    probe_stderr: str = Field(
+        default="", description="Probe stderr, kept even on success"
+    )
+    pruned: bool = Field(default=False, description="Whether a real prune was run")
+    prune_exit_code: int | None = Field(
+        default=None, description="Exit code of the real prune, None when not run"
+    )
+    prune_stderr: str = Field(default="", description="Real prune's stderr")
+
+    @property
+    def probe_ok(self) -> bool:
+        return self.probe_exit_code == 0
+
+
+def _parse_prune_entries(stream: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split ``git worktree prune --verbose`` output into (entries, reasons)."""
+    entries: list[str] = []
+    reasons: list[str] = []
+    for line in stream.splitlines():
+        match = _PRUNE_ENTRY_RE.match(line.strip())
+        if not match:
+            continue
+        entries.append(match.group("entry"))
+        reasons.append(match.group("reason"))
+    return tuple(entries), tuple(reasons)
+
+
+def collect_stale_registrations(
+    canonicals: Sequence[Path],
+) -> list[ModelStaleRegistrationSweep]:
+    """Probe every canonical clone for worktree registrations whose directory is gone.
+
+    **``git worktree prune --dry-run --verbose`` writes its ``Removing ...``
+    lines to STDERR, not stdout** [OMN-18688 AC7]. Reading stdout alone — which
+    is what ``cmd 2>/dev/null | grep -c`` does — returns a confident zero on a
+    host that has dozens of stale registrations. That exact false-clean reading
+    happened on this census's own first pass (rule 16: never suppress stderr in
+    a verification sweep, and prove a zero with a positive control).
+
+    ``_git_capture`` returns stdout AND stderr as separate captured streams and
+    discards neither, which is the argv-list equivalent of appending ``2>&1``
+    to the shell form of this command. Both are concatenated and parsed
+    together, so the entries are found wherever this git version chooses to
+    print them. A test drives a real fixture clone with a deleted worktree
+    directory and asserts the entry is found — a behavioural positive control,
+    not a grep over this source.
+    """
+    sweeps: list[ModelStaleRegistrationSweep] = []
+    for canonical in canonicals:
+        code, out, err = _git_capture(
+            canonical, "worktree", "prune", "--dry-run", "--verbose"
+        )
+        stream = "\n".join(part for part in (out, err) if part)
+        entries, reasons = _parse_prune_entries(stream)
+        sweeps.append(
+            ModelStaleRegistrationSweep(
+                canonical=str(canonical),
+                entries=entries,
+                reasons=reasons,
+                probe_exit_code=code,
+                probe_stderr=err,
+            )
+        )
+    return sweeps
+
+
+def prune_stale_registrations(
+    sweeps: Sequence[ModelStaleRegistrationSweep],
+) -> list[ModelStaleRegistrationSweep]:
+    """Run the real ``git worktree prune`` for every clone the probe flagged.
+
+    Removes no file: a stale registration's directory is already gone, and git
+    only drops the administrative record under ``.git/worktrees/``. A clone
+    whose probe itself failed is skipped rather than pruned — a probe that did
+    not answer has not established that anything is safe to drop.
+    """
+    updated: list[ModelStaleRegistrationSweep] = []
+    for sweep in sweeps:
+        if not sweep.probe_ok or not sweep.entries:
+            updated.append(sweep)
+            continue
+        code, _, err = _git_capture(Path(sweep.canonical), "worktree", "prune")
+        updated.append(
+            sweep.model_copy(
+                update={"pruned": True, "prune_exit_code": code, "prune_stderr": err}
+            )
+        )
+    return updated
+
+
+class ModelOrphanTicketDirs(BaseModel):
+    """Top-level ticket dirs under the root with no registered worktree under them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    empty: tuple[str, ...] = Field(
+        default=(), description="Orphan dirs holding nothing at all — removable"
+    )
+    non_empty: tuple[str, ...] = Field(
+        default=(),
+        description="Orphan dirs still holding content — REPORTED, never removed",
+    )
+
+
+def classify_orphan_ticket_dirs(
+    root: Path, known_worktrees: Sequence[Path]
+) -> ModelOrphanTicketDirs:
+    """Split top-level ``<root>/<ticket>/`` dirs into empty and non-empty orphans.
+
+    An orphan is a ticket dir with no registered worktree anywhere beneath it.
+    The empty ones are reclaimable and hold nothing by construction. The
+    non-empty ones are NOT: the census found directories carrying whole clones
+    of repositories outside the registry and a ``peers/`` tree, none of which
+    any predicate in this script has looked at. They are named for individual
+    review and never removed, on a dry run and on ``--execute`` alike
+    [OMN-18688 AC5].
+    """
+    known = {Path(w).resolve() for w in known_worktrees}
+    empty: list[str] = []
+    non_empty: list[str] = []
     for child in sorted(root.iterdir()):
-        if not child.is_dir():
+        if not child.is_dir() or child.is_symlink():
             continue
+        resolved = child.resolve()
+        if any(w == resolved or resolved in w.parents for w in known):
+            continue  # a registered worktree lives here — not an orphan
         if any(child.rglob("*")):
+            non_empty.append(str(child))
+        else:
+            empty.append(str(child))
+    return ModelOrphanTicketDirs(empty=tuple(empty), non_empty=tuple(non_empty))
+
+
+def remove_empty_orphan_dirs(paths: Sequence[str]) -> list[str]:
+    """Remove exactly the directories ``classify_orphan_ticket_dirs`` proved empty.
+
+    Takes the classified list rather than re-walking the tree, so the set that
+    is removed is provably the same set the report named. ``rmdir`` (never
+    ``rm -rf``) is a second, independent gate: it refuses a directory that
+    gained content between classification and removal.
+    """
+    removed: list[str] = []
+    for path in paths:
+        candidate = Path(path)
+        try:
+            candidate.rmdir()
+        except OSError as exc:
+            print(f"  RMDIR REFUSED {path} — {exc}", file=sys.stderr)
             continue
-        child.rmdir()
-        removed.append(str(child))
+        removed.append(path)
     return removed
+
+
+class ModelStaleDirtyRow(BaseModel):
+    """A dirty worktree with no open pull request, older than the alarm bar.
+
+    The lost-work hazard class [OMN-18688 AC4]. It is REPORT-ONLY: no field
+    here is read by any removal path, and the age bar decides only which dirty
+    rows are named, never what is deleted (operator consent row
+    ``docs/tracking/ROLLING_WORK_LEDGER.md:4236``: "age (7 days) is an alarm
+    input, never a deletion key").
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str = Field(..., min_length=1)
+    ticket: str | None = Field(...)
+    repo: str = Field(..., min_length=1)
+    branch: str | None = Field(...)
+    dirty_file_count: int = Field(..., ge=0)
+    commit_age_days: float | None = Field(...)
+    pr_state: EnumBranchPrState = Field(...)
+
+
+def select_stale_dirty(
+    decisions: Sequence[ModelWorktreePruneDecision],
+    *,
+    age_bar_days: float,
+    now: float,
+) -> list[ModelStaleDirtyRow]:
+    """Name every dirty, PR-less, older-than-the-bar worktree individually.
+
+    ``EnumBranchPrState.NOT_MERGED`` is set only from the OPEN pull-request
+    listing in :func:`collect_branch_pr_states` — this script never fetches
+    closed-unmerged pull requests — so "no open PR" is exactly "not
+    ``NOT_MERGED``". ``UNKNOWN`` is INCLUDED: an unresolvable pull-request
+    state has not established that a dirty tree is being looked after, and the
+    cost of naming one extra row in an alarm section is a line of text, while
+    the cost of omitting one is somebody's uncommitted work.
+    """
+    rows: list[ModelStaleDirtyRow] = []
+    for decision in decisions:
+        if decision.dirty_file_count <= 0:
+            continue
+        if decision.pr_state is EnumBranchPrState.NOT_MERGED:
+            continue
+        age = commit_age_days(Path(decision.path), now)
+        if age is None or age <= age_bar_days:
+            continue
+        rows.append(
+            ModelStaleDirtyRow(
+                path=decision.path,
+                ticket=decision.ticket,
+                repo=decision.repo,
+                branch=decision.branch,
+                dirty_file_count=decision.dirty_file_count,
+                commit_age_days=age,
+                pr_state=decision.pr_state,
+            )
+        )
+    return sorted(rows, key=lambda r: (-(r.commit_age_days or 0.0), r.path))
+
+
+DU_TIMEOUT_SECONDS = 120
+
+
+def measure_path_size_bytes(path: Path) -> int | None:
+    """On-disk size of one directory in bytes via ``du -sk``, or None if unreadable.
+
+    Bounded per call and never run over the whole root: the census measured a
+    registry-scale root by summing per-candidate readings for exactly this
+    reason. An unreadable path returns None and is reported as unmeasured
+    rather than as zero — a zero would understate the reclaim figure and read
+    as a real measurement.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            ["du", "-sk", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=DU_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0:
+        return None
+    first = proc.stdout.split("\t", 1)[0].strip()
+    if not first.isdigit():
+        return None
+    return int(first) * 1024
+
+
+def measure_paths(paths: Sequence[str]) -> dict[str, int]:
+    """Measure a set of paths, dropping the ones that could not be read."""
+    sizes: dict[str, int] = {}
+    for path in paths:
+        size = measure_path_size_bytes(Path(path))
+        if size is not None:
+            sizes[path] = size
+    return sizes
+
+
+def _gib(num_bytes: int) -> str:
+    return f"{num_bytes / (1024**3):.1f} GB"
 
 
 # ---------------------------------------------------------------------------
@@ -1653,6 +1936,15 @@ def render_report(
     rescue_only_max_age_days: float | None = None,
     rescue_only_claim_fence_days: float | None = None,
     rescue_only_hand_held_available: bool = False,
+    stale_registrations: Sequence[ModelStaleRegistrationSweep] = (),
+    orphan_dirs: ModelOrphanTicketDirs | None = None,
+    removed_orphan_dirs: Sequence[str] = (),
+    stale_dirty: Sequence[ModelStaleDirtyRow] = (),
+    stale_dirty_age_bar_days: float | None = None,
+    reclaim_bytes: int | None = None,
+    reclaim_measured_paths: int = 0,
+    worktrees_before: int | None = None,
+    worktrees_after_observed: int | None = None,
 ) -> str:
     """Render the markdown report. Every worktree appears exactly once."""
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
@@ -1693,7 +1985,60 @@ def render_report(
         f"- **Partial-mutation debris candidates:** {len(debris_decisions)}",
         f"- **Ticket states resolved from tracker (reported, not decisive):** "
         f"{tracker_resolved}",
+        # --- OMN-18688: the three classes the content-keyed pass cannot see,
+        # plus the before/after accounting AC6 asks the first execution for.
+        f"- **Stale registrations (directory gone, git still lists it):** "
+        f"{sum(len(s.entries) for s in stale_registrations)} across "
+        f"{sum(1 for s in stale_registrations if s.entries)} clone(s)",
+        f"- **Empty orphan ticket dirs:** "
+        f"{0 if orphan_dirs is None else len(orphan_dirs.empty)}"
+        + (f" ({len(removed_orphan_dirs)} removed)" if executed else " (removable)"),
+        f"- **Non-empty orphan ticket dirs (REPORTED, never removed):** "
+        f"{0 if orphan_dirs is None else len(orphan_dirs.non_empty)}",
+        f"- **Stale-dirty (dirty, no open PR, older than the alarm bar):** "
+        f"{len(stale_dirty)} — never removed",
         "",
+    ]
+    if worktrees_before is not None:
+        removed_worktrees = sum(1 for r in removals if r.ok)
+        expected_after = worktrees_before - removed_worktrees
+        lines += [
+            "## Before / after [OMN-18688 AC6]",
+            "",
+            f"- **Worktrees scanned (before):** {worktrees_before}",
+            f"- **Removed in this pass:** {removed_worktrees}",
+            f"- **Expected after (before minus removed):** {expected_after}",
+            f"- **Observed after (re-walked on disk):** "
+            f"{'not re-walked (dry run)' if worktrees_after_observed is None else worktrees_after_observed}",
+        ]
+        if (
+            worktrees_after_observed is not None
+            and worktrees_after_observed != expected_after
+        ):
+            # Stated rather than reconciled away: a peer lane creating or
+            # removing a worktree during a run that lasts tens of minutes is
+            # the ordinary explanation, and hiding the difference would make
+            # the one case that is NOT ordinary invisible.
+            lines.append(
+                f"- **DISAGREEMENT:** observed after "
+                f"({worktrees_after_observed}) is not expected after "
+                f"({expected_after}). This pass did not remove the difference "
+                "— a peer lane added or removed worktrees while it ran, or a "
+                "removal succeeded without being recorded. Reconcile before "
+                "citing these numbers as evidence."
+            )
+        if reclaim_bytes is None:
+            lines.append(
+                "- **Reclaimed:** not measured (re-run with `--measure-reclaim`)"
+            )
+        else:
+            lines.append(
+                f"- **Reclaimed:** {_gib(reclaim_bytes)} "
+                f"({reclaim_measured_paths} path(s) measured before removal; "
+                "unreadable paths are excluded, never counted as zero)"
+            )
+        lines.append("")
+    lines += [
         "Pruning is keyed to **what the worktree holds**, not to its ticket's state",
         "(operator ruling 2026-09-14). Removable when clean and zero commits ahead",
         "with no open ledger `CLAIM`, or clean with a MERGED pull request and no open",
@@ -1800,6 +2145,124 @@ def render_report(
         )
     if not debris_decisions:
         lines.append("| _(none)_ | | | | |")
+
+    # --- stale registrations [OMN-18688 AC5, AC7] -------------------------
+    flagged = [s for s in stale_registrations if s.entries]
+    probe_failures = [s for s in stale_registrations if not s.probe_ok]
+    lines += [
+        "",
+        f"## Stale worktree registrations ({sum(len(s.entries) for s in flagged)})",
+        "",
+        "A registration whose directory is already gone. `discover_worktrees`",
+        "keys off a `*/.git` glob, so these are invisible to every other pass in",
+        "this report — not merely unprunable, never even seen. Pruning one",
+        "removes NO file: the directory is gone and git drops only the",
+        "administrative record under `.git/worktrees/`.",
+        "",
+        "The probe is `git worktree prune --dry-run --verbose`, whose `Removing`",
+        "lines go to **stderr**. Both captured streams are read and neither is",
+        "discarded (the argv-list equivalent of `2>&1`); reading stdout alone",
+        "returns a confident zero on a host with dozens of them.",
+        "",
+        "| Canonical clone | Entries | Probe | Pruned | Detail |",
+        "| --- | ---: | --- | --- | --- |",
+    ]
+    for sweep in stale_registrations:
+        if not sweep.entries and sweep.probe_ok:
+            continue
+        probe_cell = (
+            "ok" if sweep.probe_ok else f"FAILED (exit {sweep.probe_exit_code})"
+        )
+        if not sweep.pruned:
+            pruned_cell = "—" if not sweep.entries else "planned"
+        elif sweep.prune_exit_code == 0:
+            pruned_cell = "yes"
+        else:
+            pruned_cell = f"FAILED (exit {sweep.prune_exit_code})"
+        detail = (
+            (sweep.prune_stderr or sweep.probe_stderr or "—")
+            .replace("|", "\\|")
+            .replace("\n", "<br>")[:400]
+        )
+        lines.append(
+            f"| `{sweep.canonical}` | {len(sweep.entries)} | {probe_cell} "
+            f"| {pruned_cell} | {detail} |"
+        )
+    if not flagged and not probe_failures:
+        lines.append("| _(none)_ | 0 | ok | — | — |")
+    if probe_failures:
+        lines += [
+            "",
+            f"**{len(probe_failures)} clone(s) could not be probed.** A probe that "
+            "did not answer has not established that anything is safe to drop, so "
+            "no prune was run for them. An unprobed clone is NOT a clean one.",
+        ]
+
+    # --- orphan ticket dirs [OMN-18688 AC5] -------------------------------
+    orphans = orphan_dirs or ModelOrphanTicketDirs()
+    lines += [
+        "",
+        f"## Orphan ticket directories "
+        f"({len(orphans.empty)} empty, {len(orphans.non_empty)} non-empty)",
+        "",
+        "Top-level `<ticket>/` directories under the root with no registered",
+        "worktree anywhere beneath them. The empty ones hold nothing by",
+        "construction and are reclaimed with `rmdir` (never `rm -rf`), which is",
+        "a second independent gate: it refuses a directory that gained content",
+        "between classification and removal.",
+        "",
+        "**The non-empty ones are never removed, on a dry run or an `--execute`",
+        "run alike.** No predicate in this script has looked at what is inside",
+        "them — the census found whole clones of repositories outside the",
+        "registry and a `peers/` tree — so they are named here for individual",
+        "review and left exactly where they are.",
+        "",
+        "| Path | Class | Outcome |",
+        "| --- | --- | --- |",
+    ]
+    removed_orphan_set = set(removed_orphan_dirs)
+    for path in orphans.empty:
+        outcome = (
+            "removed"
+            if path in removed_orphan_set
+            else ("REFUSED at rmdir" if executed else "removable (dry run)")
+        )
+        lines.append(f"| `{path}` | empty | {outcome} |")
+    for path in orphans.non_empty:
+        lines.append(f"| `{path}` | non-empty | REPORTED — needs individual review |")
+    if not orphans.empty and not orphans.non_empty:
+        lines.append("| _(none)_ | | |")
+
+    # --- the stale-dirty alarm class [OMN-18688 AC4] ----------------------
+    bar = (
+        "unset" if stale_dirty_age_bar_days is None else f"{stale_dirty_age_bar_days:g}"
+    )
+    lines += [
+        "",
+        f"## Stale-dirty — the lost-work hazard class ({len(stale_dirty)})",
+        "",
+        f"Dirty tree, no open pull request, last commit older than {bar} day(s).",
+        "**Never removed, by any flag.** The age bar decides only which dirty",
+        "rows are NAMED here; it is an alarm input and never a deletion key",
+        "(operator consent row, `docs/tracking/ROLLING_WORK_LEDGER.md:4236`).",
+        "",
+        "Each row is listed individually rather than counted, because a count",
+        "is the one rendering under which somebody's uncommitted work goes",
+        "unnoticed. A worktree whose pull-request state could not be resolved is",
+        "INCLUDED: an unresolvable state has not established that a dirty tree",
+        "is being looked after.",
+        "",
+        "| Path | Ticket | Repo | Branch | Dirty files | Age (days) | PR state |",
+        "| --- | --- | --- | --- | ---: | ---: | --- |",
+    ]
+    for row in stale_dirty:
+        lines.append(
+            f"| `{row.path}` | {row.ticket or '—'} | {row.repo} "
+            f"| {row.branch or 'DETACHED'} | {row.dirty_file_count} "
+            f"| {_age_cell(row.commit_age_days)} | {row.pr_state.value} |"
+        )
+    if not stale_dirty:
+        lines.append("| _(none)_ | | | | | | |")
 
     if removals:
         succeeded = sum(1 for r in removals if r.ok)
@@ -2058,6 +2521,44 @@ def build_parser() -> argparse.ArgumentParser:
             "established that anything is unexcluded."
         ),
     )
+    # --- OMN-18688 --------------------------------------------------------
+    # The three classes the content-keyed pass cannot see, and the reclaim
+    # measurement. Unlike the rescue-only bar above, the stale-dirty bar CAN
+    # carry a default: it gates no removal whatever, deciding only which dirty
+    # rows are named in an alarm section, so a wrong value here misreports and
+    # can never destroy work. The operator consent row names 7 days as the
+    # alarm input; the workflow passes it explicitly regardless.
+    parser.add_argument(
+        "--stale-dirty-age-days",
+        type=float,
+        default=7.0,
+        help=(
+            "Age bar in days for the stale-dirty alarm class (dirty, no open "
+            "pull request, older than the bar). REPORT ONLY — never a removal "
+            "key on any code path. Default 7."
+        ),
+    )
+    parser.add_argument(
+        "--no-registration-prune",
+        action="store_true",
+        help=(
+            "Report stale worktree registrations but never run the real "
+            "`git worktree prune`, even under --execute. The probe still runs, "
+            "so the report is unchanged; only the administrative cleanup is "
+            "withheld."
+        ),
+    )
+    parser.add_argument(
+        "--measure-reclaim",
+        action="store_true",
+        help=(
+            "Measure each prune-eligible path with `du -sk` BEFORE removing it, "
+            "so the report can state GB reclaimed. Off by default: at "
+            "registry scale it is one `du` per candidate and the daily dry run "
+            "does not need the figure. An unreadable path is reported as "
+            "unmeasured, never as zero."
+        ),
+    )
     parser.add_argument("--report-md", help="Write the markdown report to this path")
     parser.add_argument("--report-json", help="Write the JSON report to this path")
     parser.add_argument(
@@ -2119,9 +2620,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    worktrees = discover_worktrees(root)
-    if args.limit > 0:
-        worktrees = worktrees[: args.limit]
+    # `--limit` bounds the CLASSIFIER, never the orphan discovery. An orphan is
+    # defined by the absence of a registered worktree beneath it, so deriving
+    # that from a truncated list reclassifies every ticket dir past the cut as
+    # an orphan: a `--limit 5` run reported 337 non-empty orphans against the
+    # census's 22. Nothing would have been deleted (non-empty orphans are never
+    # removed and an empty dir cannot hold a worktree either way), but the
+    # report would have been wrong in the direction of alarm.
+    all_worktrees = discover_worktrees(root)
+    worktrees = all_worktrees[: args.limit] if args.limit > 0 else all_worktrees
     print(f"Scanning {len(worktrees)} worktree(s) under {root}", flush=True)
 
     ledger = parse_ledger_claims(ledger_path)
@@ -2262,8 +2769,54 @@ def main(argv: Sequence[str] | None = None) -> int:
         if facts.owning_clone:
             debris_owner_by_path[debris_decision.path] = Path(facts.owning_clone)
 
+    # --- the three absence-defined classes [OMN-18688 AC4, AC5] -----------
+    # Each is defined by the absence of what the content-keyed pass keys off,
+    # so each needs its own discovery. All three are PROBED here, before any
+    # removal, so the dry-run report states the full plan.
+    registration_canonicals = discover_canonical_clones(root.parent)
+    stale_registrations = collect_stale_registrations(registration_canonicals)
+    stale_registration_entries = sum(len(s.entries) for s in stale_registrations)
+    print(
+        f"Stale worktree registrations: {stale_registration_entries} across "
+        f"{sum(1 for s in stale_registrations if s.entries)} of "
+        f"{len(registration_canonicals)} canonical clone(s)"
+        f"{'' if all(s.probe_ok for s in stale_registrations) else ' — SOME PROBES FAILED'}",
+        flush=True,
+    )
+
+    orphan_dirs = classify_orphan_ticket_dirs(root, all_worktrees)
+    print(
+        f"Orphan ticket dirs: {len(orphan_dirs.empty)} empty (removable), "
+        f"{len(orphan_dirs.non_empty)} non-empty (reported, never removed)",
+        flush=True,
+    )
+
+    stale_dirty = select_stale_dirty(
+        decisions, age_bar_days=args.stale_dirty_age_days, now=time.time()
+    )
+    print(
+        f"Stale-dirty (dirty, no open PR, >{args.stale_dirty_age_days:g}d): "
+        f"{len(stale_dirty)} — reported by name, never removed",
+        flush=True,
+    )
+
+    # Sizes are taken BEFORE anything is removed — afterwards there is nothing
+    # left to measure, and a figure reconstructed from a removed path would be
+    # a guess presented as a measurement [OMN-18688 AC6].
+    reclaim_sizes: dict[str, int] = {}
+    if args.measure_reclaim and prunable:
+        print(f"Measuring {len(prunable)} prune candidate(s) with du", flush=True)
+        reclaim_sizes = measure_paths([d.path for d in prunable])
+        print(
+            f"  measured {len(reclaim_sizes)}/{len(prunable)} "
+            f"({_gib(sum(reclaim_sizes.values()))}); "
+            f"{len(prunable) - len(reclaim_sizes)} unreadable, excluded",
+            flush=True,
+        )
+
     removals: list[ModelRemovalAttempt] = []
     revalidation_refusals: list[ModelWorktreePruneDecision] = []
+    removed_orphan_dirs: list[str] = []
     if args.execute:
         for decision in prunable:
             # RE-VERIFY LIVE, immediately before the removal. The classification
@@ -2312,8 +2865,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             removals.append(attempt)
             status = "REMOVED" if attempt.ok else "FAILED "
             print(f"  {status} {attempt.path} — {attempt.detail}")
-        for empty_dir in cleanup_empty_ticket_dirs(root):
+        # Re-classify the orphan dirs immediately before removing them: the
+        # worktree removals above have just emptied some ticket dirs that were
+        # non-empty when the pass started, and a dir that gained content in the
+        # meantime must fall out of the removable set rather than into it.
+        orphan_dirs = classify_orphan_ticket_dirs(root, discover_worktrees(root))
+        removed_orphan_dirs = remove_empty_orphan_dirs(orphan_dirs.empty)
+        for empty_dir in removed_orphan_dirs:
             print(f"  RMDIR   {empty_dir}")
+        for kept in orphan_dirs.non_empty:
+            print(f"  KEPT    {kept} — non-empty orphan, needs individual review")
+
+        # Registration pruning last: the removals above may themselves have
+        # left registrations behind (a `git worktree remove` that fell back to
+        # a directory delete), and this pass removes no file either way.
+        if args.no_registration_prune:
+            print(
+                "  Skipping the real `git worktree prune` (--no-registration-prune); "
+                f"{stale_registration_entries} stale registration(s) reported, none dropped"
+            )
+        else:
+            stale_registrations = prune_stale_registrations(
+                collect_stale_registrations(registration_canonicals)
+            )
+            for sweep in stale_registrations:
+                if not sweep.pruned:
+                    continue
+                verdict = "PRUNED " if sweep.prune_exit_code == 0 else "FAILED "
+                print(
+                    f"  {verdict} {sweep.canonical} — {len(sweep.entries)} stale "
+                    f"registration(s){'' if sweep.prune_exit_code == 0 else ': ' + (sweep.prune_stderr or 'no stderr')}"
+                )
+            stale_registration_entries = sum(
+                len(s.entries) for s in stale_registrations
+            )
 
     rescue_candidates = [
         d for d in rescue_decisions if d.disposition is EnumRescueOnlyDisposition.REMOVE
@@ -2321,6 +2906,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     rescue_held = [
         d for d in rescue_decisions if d.disposition is EnumRescueOnlyDisposition.HOLD
     ]
+
+    # Reclaim is the measured size of the paths that were ACTUALLY removed —
+    # never the size of everything that was eligible. An eligible path that the
+    # removal refused is still on disk [OMN-18688 AC6].
+    removed_ok_paths = {r.path for r in removals if r.ok}
+    reclaim_measured = {
+        path: size for path, size in reclaim_sizes.items() if path in removed_ok_paths
+    }
+    reclaim_bytes = sum(reclaim_measured.values()) if args.measure_reclaim else None
+    # Re-walk the tree so the after-count is an OBSERVATION, not the arithmetic
+    # the falsifier is meant to check against.
+    worktrees_after_observed = len(discover_worktrees(root)) if args.execute else None
 
     generated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = render_report(
@@ -2336,6 +2933,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         rescue_only_max_age_days=args.rescue_only_age_days,
         rescue_only_claim_fence_days=args.rescue_only_claim_fence_days,
         rescue_only_hand_held_available=rescue_hand_held is not None,
+        stale_registrations=stale_registrations,
+        orphan_dirs=orphan_dirs,
+        removed_orphan_dirs=removed_orphan_dirs,
+        stale_dirty=stale_dirty,
+        stale_dirty_age_bar_days=args.stale_dirty_age_days,
+        reclaim_bytes=reclaim_bytes,
+        reclaim_measured_paths=len(reclaim_measured),
+        worktrees_before=len(decisions),
+        worktrees_after_observed=worktrees_after_observed,
     )
 
     if args.report_md:
@@ -2366,6 +2972,52 @@ def main(argv: Sequence[str] | None = None) -> int:
                         debris_decision_to_json(d) for d in debris_decisions
                     ],
                     "removals": [r.model_dump(mode="json") for r in removals],
+                    # --- OMN-18688 ---------------------------------------
+                    "stale_registrations": {
+                        "entry_count": stale_registration_entries,
+                        "clones_probed": len(registration_canonicals),
+                        "clones_flagged": sum(
+                            1 for s in stale_registrations if s.entries
+                        ),
+                        "probe_failures": sum(
+                            1 for s in stale_registrations if not s.probe_ok
+                        ),
+                        "pruned": not args.no_registration_prune and args.execute,
+                        "sweeps": [
+                            s.model_dump(mode="json") for s in stale_registrations
+                        ],
+                    },
+                    "orphan_ticket_dirs": {
+                        "empty": list(orphan_dirs.empty),
+                        "non_empty": list(orphan_dirs.non_empty),
+                        "removed": removed_orphan_dirs,
+                        # Structurally 0 and asserted by a test: a non-empty
+                        # orphan is never removed on any code path.
+                        "non_empty_removed": 0,
+                    },
+                    "stale_dirty": {
+                        "age_bar_days": args.stale_dirty_age_days,
+                        "count": len(stale_dirty),
+                        # Structurally 0: this class has no removal path at all.
+                        "removed": 0,
+                        "rows": [r.model_dump(mode="json") for r in stale_dirty],
+                    },
+                    "accounting": {
+                        "worktrees_before": len(decisions),
+                        "removed": sum(1 for r in removals if r.ok),
+                        "worktrees_after_expected": len(decisions)
+                        - sum(1 for r in removals if r.ok),
+                        "worktrees_after_observed": worktrees_after_observed,
+                        "reclaim_bytes": reclaim_bytes,
+                        "reclaim_gb": (
+                            None
+                            if reclaim_bytes is None
+                            else round(reclaim_bytes / (1024**3), 3)
+                        ),
+                        "reclaim_measured_paths": len(reclaim_measured),
+                        "reclaim_unmeasured_paths": len(removed_ok_paths)
+                        - len(reclaim_measured),
+                    },
                     # The rescue-only class, in its own section so it can never
                     # be mistaken for a content-keyed verdict [OMN-18442 AC6].
                     # `removed` is structurally 0: this script reports the class
@@ -2405,6 +3057,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"timed_out={len(timed_out)} debris={len(debris_decisions)} "
         f"revalidation_refused={len(revalidation_refusals)} "
         f"removed={sum(1 for r in removals if r.ok)}{rescue_summary}"
+    )
+    print(
+        f"stale_registrations={stale_registration_entries} "
+        f"orphan_empty={len(orphan_dirs.empty)} "
+        f"orphan_empty_removed={len(removed_orphan_dirs)} "
+        f"orphan_non_empty_reported={len(orphan_dirs.non_empty)} "
+        f"stale_dirty_reported={len(stale_dirty)} "
+        f"before={len(decisions)} "
+        f"after={'—' if worktrees_after_observed is None else worktrees_after_observed} "
+        f"reclaimed={'not measured' if reclaim_bytes is None else _gib(reclaim_bytes)}"
     )
     if args.rescue_only and rescue_candidates:
         print(
