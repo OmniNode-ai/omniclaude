@@ -82,6 +82,26 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--agent-id",
+        default=None,
+        help=(
+            "The harness's id for the agent that fired this hook. Resolves the "
+            "lane through the harness's own spawn sidecar, which is the only "
+            "operand that identifies a lane at emit time: a dispatched lane's "
+            "cwd is the session's directory, not its worktree (OMN-18609)."
+        ),
+    )
+    parser.add_argument(
+        "--transcript-path",
+        default=None,
+        help="The session transcript path, used to locate the agent sidecar.",
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Fallback locator for the agent sidecar when no transcript path is given.",
+    )
+    parser.add_argument(
         "--journal-dir",
         default=None,
         help="Override the journal directory (defaults to ONEX_STATE_DIR).",
@@ -110,7 +130,14 @@ def main(argv: list[str] | None = None) -> int:
         # already forked and disowned by the time it runs. Caller-supplied
         # lane keys are never trusted -- the registry is the authority, so an
         # existing key is overwritten rather than preserved.
-        payload.update(lane_attribution.attribution_fields(args.cwd))
+        payload.update(
+            lane_attribution.attribution_fields(
+                args.cwd,
+                transcript_path=args.transcript_path,
+                session_id=args.session_id,
+                agent_id=args.agent_id,
+            )
+        )
         # The actor is stamped here, after the caller's payload, for the same
         # reason lane attribution is: a caller-supplied key is never trusted.
         # The registration that the host resolved is the authority.

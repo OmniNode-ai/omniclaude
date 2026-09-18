@@ -153,6 +153,12 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse hook triggered for $TOOL_NA
 # Wrapped in set +e to ensure the fallback chain never kills the hook.
 set +e
 SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
+# OMN-18609: locate the harness spawn sidecar that names the lane. Read here
+# rather than in emit_to_journal so the lookup uses the SAME payload the hook
+# was handed; a dispatched lane's cwd is the session's directory, not its
+# worktree, so the worktree registry alone cannot attribute these events.
+AGENT_ID=$(echo "$TOOL_INFO" | jq -r '.agent_id // .agentId // ""' 2>/dev/null) || AGENT_ID=""
+TRANSCRIPT_PATH=$(echo "$TOOL_INFO" | jq -r '.transcript_path // .transcriptPath // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
 if [[ -z "$SESSION_ID" ]]; then
     SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]')
 fi

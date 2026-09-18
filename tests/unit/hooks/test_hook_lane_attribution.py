@@ -461,3 +461,357 @@ def test_every_bus_mirror_passes_the_hook_cwd_to_the_emitter(script: str) -> Non
 
     assert "hook_emit_append.py" in text
     assert "--cwd" in text
+
+
+# --------------------------------------------------------------------------
+# AC1, second operand -- the harness sidecar (OMN-18609 follow-up)
+#
+# The cwd chain above is correct and, on this fleet, never fires. Every
+# dispatched lane makes its tool calls with the harness ``cwd`` set to the
+# SESSION's directory -- the workspace root -- not to its own worktree, so the
+# upward walk's first candidate is the root, the "stop below the root" guard
+# trips immediately, and the answer is ``unresolved``. Measured on 4,720 live
+# journal records: every one carries ``lane: ""``, ``lane_source:
+# "unresolved"``, ``workspace_path: "."``.
+#
+# The operand that DOES identify a lane at emit time is the one OMN-18690 uses
+# at close time: the harness writes ``agent-<agent id>.meta.json`` beside each
+# subagent transcript, and its ``name`` is the dispatch-time lane name. The
+# PostToolUse hook payload carries ``agent_id`` and ``transcript_path``, which
+# is enough to find it.
+# --------------------------------------------------------------------------
+
+
+#: Stands in for the harness's project-directory slug. Its spelling is
+#: irrelevant to the resolver -- the sidecar directory is derived from the
+#: transcript path -- and a real one would carry an operator home directory
+#: into a public tree.
+_PROJECT_SLUG = "-workspace-omni-home"
+
+
+def _harness_sidecar(
+    projects: Path,
+    session_id: str,
+    agent_id: str,
+    meta: dict[str, str] | None,
+    *,
+    slug: str = _PROJECT_SLUG,
+) -> Path:
+    """Write the harness's own spawn artifacts and return the transcript path.
+
+    Mirrors the live layout exactly: ``<projects>/<slug>/<session>.jsonl`` for
+    the parent session, and ``<projects>/<slug>/<session>/subagents/agent-<agent
+    id>.meta.json`` for each lane spawned from it.
+    """
+    project_dir = projects / slug
+    subagents = project_dir / session_id / "subagents"
+    subagents.mkdir(parents=True, exist_ok=True)
+    transcript = project_dir / f"{session_id}.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    if meta is not None:
+        (subagents / f"agent-{agent_id}.meta.json").write_text(
+            json.dumps(meta), encoding="utf-8"
+        )
+    return transcript
+
+
+def test_a_teammate_tool_call_resolves_its_lane_from_the_harness_sidecar(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """AC1 on the path lanes actually take.
+
+    The cwd is the workspace root -- what every dispatched lane reports -- so
+    the registry chain cannot answer. The sidecar can.
+    """
+    transcript = _harness_sidecar(
+        tmp_path / "projects",
+        "9787a4a3-ec49-4819-8bdc-5044efb94550",
+        "aomn18609-emit-lane-attribution-build-1620-30f8f7a7f0a44bb1",
+        {
+            "name": "omn18609-emit-lane-attribution-build-1620",
+            "agentType": "omn18609-emit-lane-attribution-build-1620",
+            "description": "Fix emit-time lane attribution",
+        },
+    )
+
+    fields = attribution.attribution_fields(
+        workspace,
+        transcript_path=str(transcript),
+        agent_id="aomn18609-emit-lane-attribution-build-1620-30f8f7a7f0a44bb1",
+    )
+
+    assert fields["lane"] == "omn18609-emit-lane-attribution-build-1620"
+    assert fields["lane_source"] == attribution.LANE_SOURCE_SIDECAR
+
+
+def test_the_workspace_root_cwd_that_defeats_the_registry_still_resolves(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """The regression this change exists to close, stated as a before/after.
+
+    Same inputs, twice: without the sidecar operand the answer is the live
+    defect (``unresolved``); with it the lane is named.
+    """
+    agent_id = "ahook-drainer-backlog-diag-1610-d7054914fd016c01"
+    transcript = _harness_sidecar(
+        tmp_path / "projects",
+        "9787a4a3-ec49-4819-8bdc-5044efb94550",
+        agent_id,
+        {"name": "hook-drainer-backlog-diag-1610"},
+    )
+
+    before = attribution.attribution_fields(workspace)
+    after = attribution.attribution_fields(
+        workspace, transcript_path=str(transcript), agent_id=agent_id
+    )
+
+    assert before["lane"] == ""
+    assert before["lane_source"] == attribution.LANE_SOURCE_UNRESOLVED
+    assert after["lane"] == "hook-drainer-backlog-diag-1610"
+
+
+def test_the_sidecar_is_preferred_over_a_registered_worktree(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """When both answer, the harness's own record wins.
+
+    The sidecar names the lane the harness dispatched; a worktree record names
+    whichever lane last registered that path, which outlives the lane itself.
+    """
+    worktree = workspace / "omni_worktrees" / "OMN-18609" / "omniclaude"
+    worktree.mkdir(parents=True)
+    _register(workspace / attribution.STATE_SUBDIR, worktree, "a-stale-registration")
+    agent_id = "alive-lane-1620-abc123"
+    transcript = _harness_sidecar(
+        tmp_path / "projects", "session-under-test", agent_id, {"name": "a-live-lane"}
+    )
+
+    fields = attribution.attribution_fields(
+        worktree, transcript_path=str(transcript), agent_id=agent_id
+    )
+
+    assert fields["lane"] == "a-live-lane"
+    assert fields["lane_source"] == attribution.LANE_SOURCE_SIDECAR
+
+
+def test_an_agent_id_with_no_sidecar_falls_back_to_the_registry(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """A missing sidecar degrades to the older operand rather than to nothing."""
+    worktree = workspace / "omni_worktrees" / "OMN-18609" / "omniclaude"
+    worktree.mkdir(parents=True)
+    _register(workspace / attribution.STATE_SUBDIR, worktree, "registered-lane-1650")
+    transcript = _harness_sidecar(
+        tmp_path / "projects", "session-under-test", "some-other-agent", {"name": "x"}
+    )
+
+    fields = attribution.attribution_fields(
+        worktree, transcript_path=str(transcript), agent_id="an-agent-never-spawned"
+    )
+
+    assert fields["lane"] == "registered-lane-1650"
+    assert fields["lane_source"] == attribution.LANE_SOURCE_REGISTRY
+
+
+# --------------------------------------------------------------------------
+# AC3 again -- the sidecar operand must never invent a lane either
+# --------------------------------------------------------------------------
+
+
+def test_no_agent_id_is_the_main_session_and_stays_unresolved(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """The top-level session is not a lane, and must not borrow one.
+
+    Every sidecar in the session directory belongs to some lane; picking any of
+    them for an un-agented tool call would attribute the operator's own work to
+    whichever lane happened to sort first.
+    """
+    _harness_sidecar(
+        tmp_path / "projects",
+        "9787a4a3-ec49-4819-8bdc-5044efb94550",
+        "aonly-lane-1600-deadbeef",
+        {"name": "only-lane-1600"},
+    )
+    transcript = (
+        tmp_path
+        / "projects"
+        / _PROJECT_SLUG
+        / "9787a4a3-ec49-4819-8bdc-5044efb94550.jsonl"
+    )
+
+    fields = attribution.attribution_fields(
+        workspace, transcript_path=str(transcript), agent_id=""
+    )
+
+    assert fields["lane"] == ""
+    assert fields["lane_source"] == attribution.LANE_SOURCE_UNRESOLVED
+
+
+def test_an_unknown_agent_id_never_borrows_a_sibling_lanes_sidecar(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """AC3 for the sidecar operand: 3,469 sidecars, none of them this lane's."""
+    projects = tmp_path / "projects"
+    for suffix in ("aaa", "bbb", "ccc"):
+        _harness_sidecar(
+            projects,
+            "session-under-test",
+            f"a-peer-{suffix}",
+            {"name": f"peer-{suffix}"},
+        )
+    transcript = projects / _PROJECT_SLUG / "session-under-test.jsonl"
+
+    fields = attribution.attribution_fields(
+        workspace, transcript_path=str(transcript), agent_id="a-lane-with-no-sidecar"
+    )
+
+    assert fields["lane"] == ""
+    assert fields["lane_source"] == attribution.LANE_SOURCE_UNRESOLVED
+
+
+def test_a_sidecar_carrying_no_name_resolves_unresolved(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """A sidecar the harness wrote differently is not a licence to guess."""
+    agent_id = "a-nameless-lane-1620"
+    transcript = _harness_sidecar(
+        tmp_path / "projects", "session-under-test", agent_id, {"spawnDepth": "0"}
+    )
+
+    fields = attribution.attribution_fields(
+        workspace, transcript_path=str(transcript), agent_id=agent_id
+    )
+
+    assert fields["lane"] == ""
+    assert fields["lane_source"] == attribution.LANE_SOURCE_UNRESOLVED
+
+
+def test_a_malformed_sidecar_resolves_unresolved_and_never_raises(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """Fail-open: a corrupt sidecar must not break the operator's tool call."""
+    agent_id = "a-corrupt-lane-1620"
+    projects = tmp_path / "projects"
+    transcript = _harness_sidecar(projects, "session-under-test", agent_id, None)
+    (
+        projects
+        / _PROJECT_SLUG
+        / "session-under-test"
+        / "subagents"
+        / f"agent-{agent_id}.meta.json"
+    ).write_text("{not json", encoding="utf-8")
+
+    fields = attribution.attribution_fields(
+        workspace, transcript_path=str(transcript), agent_id=agent_id
+    )
+
+    assert fields["lane"] == ""
+    assert fields["lane_source"] == attribution.LANE_SOURCE_UNRESOLVED
+
+
+def test_an_agent_id_is_never_read_as_a_path(workspace: Path, tmp_path: Path) -> None:
+    """A traversing agent id must not escape the session's subagents directory.
+
+    The agent id arrives from the harness payload and is interpolated into a
+    filename; a value containing separators must be refused rather than
+    resolved, or the lookup reads a file outside the directory it is scoped to.
+    """
+    projects = tmp_path / "projects"
+    transcript = _harness_sidecar(
+        projects, "session-under-test", "a-normal-lane", {"name": "a-normal-lane"}
+    )
+    (tmp_path / "elsewhere").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "elsewhere" / "agent-x.meta.json").write_text(
+        json.dumps({"name": "a-lane-from-outside"}), encoding="utf-8"
+    )
+
+    fields = attribution.attribution_fields(
+        workspace,
+        transcript_path=str(transcript),
+        agent_id="../../../../elsewhere/x",
+    )
+
+    assert fields["lane"] == ""
+    assert fields["lane_source"] == attribution.LANE_SOURCE_UNRESOLVED
+
+
+def test_the_sidecar_name_keys_match_the_close_time_guard() -> None:
+    """Open, close and emit must read the same key, or a lane splits in two.
+
+    ``lane_registry.extract_lane_name`` names the lane at dispatch and
+    ``lane_termination_guard`` reads it back at close. If the emit path read a
+    different key, a lane's tool calls would land under one name and its
+    CLAIM/TERMINAL rows under another, and the reader would report both a
+    silent lane and an unclaimed one.
+    """
+    import lane_termination_guard  # noqa: PLC0415
+
+    assert attribution.SIDECAR_NAME_KEYS == lane_termination_guard._META_NAME_KEYS
+
+
+# --------------------------------------------------------------------------
+# Wiring -- the hooks must hand over the agent id, or none of the above runs
+# --------------------------------------------------------------------------
+
+
+def test_the_emit_cli_resolves_the_lane_from_the_agent_id(
+    workspace: Path, tmp_path: Path
+) -> None:
+    """End to end through the CLI the hook actually invokes."""
+    agent_id = "aomn18609-emit-lane-attribution-build-1620-30f8f7a7"
+    transcript = _harness_sidecar(
+        tmp_path / "projects",
+        "9787a4a3-ec49-4819-8bdc-5044efb94550",
+        agent_id,
+        {"name": "omn18609-emit-lane-attribution-build-1620"},
+    )
+    journal_dir = tmp_path / "journal"
+
+    sys.path.insert(0, str(HOOKS_LIB))
+    import hook_emit_append  # noqa: PLC0415
+
+    rc = hook_emit_append.main(
+        [
+            "--event-type",
+            "tool.executed",
+            "--payload",
+            json.dumps({"tool_name": "Bash"}),
+            "--cwd",
+            str(workspace),
+            "--agent-id",
+            agent_id,
+            "--transcript-path",
+            str(transcript),
+            "--journal-dir",
+            str(journal_dir),
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(sorted(journal_dir.glob("*.json"))[0].read_text())["payload"]
+    assert payload["lane"] == "omn18609-emit-lane-attribution-build-1620"
+    assert payload["lane_source"] == attribution.LANE_SOURCE_SIDECAR
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "post_tool_use_bus_mirror.sh",
+        "user_prompt_submit_bus_mirror.sh",
+        "session_start_bus_mirror.sh",
+        "session_end_bus_mirror.sh",
+    ],
+)
+def test_every_bus_mirror_passes_the_agent_id_and_transcript_path(script: str) -> None:
+    """Without both, the sidecar cannot be found and every row is unresolved.
+
+    This is the half that was missing in anger: the resolver was correct and
+    nothing handed it the operand it needed.
+    """
+    text = (REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts" / script).read_text()
+
+    assert "--agent-id" in text
+    assert "--transcript-path" in text
+    assert ".agent_id" in text
+    assert ".transcript_path" in text

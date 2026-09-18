@@ -35,6 +35,12 @@ fi
 
 RUN_ID="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // ""' 2>/dev/null)" || RUN_ID=""
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null)" || SESSION_ID=""
+# OMN-18609: locate the harness spawn sidecar that names the lane. Read here
+# rather than in emit_to_journal so the lookup uses the SAME payload the hook
+# was handed; a dispatched lane's cwd is the session's directory, not its
+# worktree, so the worktree registry alone cannot attribute these events.
+AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // .agentId // ""' 2>/dev/null)" || AGENT_ID=""
+TRANSCRIPT_PATH="$(printf '%s' "$INPUT" | jq -r '.transcript_path // .transcriptPath // ""' 2>/dev/null)" || TRANSCRIPT_PATH=""
 SKILL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.skill // .tool_input.name // ""' 2>/dev/null)" || SKILL_NAME=""
 CORRELATION_ID="${ONEX_CORRELATION_ID:-$SESSION_ID}"
 
