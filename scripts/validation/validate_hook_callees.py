@@ -469,6 +469,49 @@ def undefined_shell_callees(
     return findings
 
 
+#: A uv-mediated invocation of the onex CLI, as an executable statement.
+#: ``uv run onex ...`` and ``uv run --directory x onex ...`` both match; the
+#: intervening words are uv's own options.
+_UV_RUN_ONEX = re.compile(r"(?:^|[;&|(]\s*|\s)uv\s+run\b[^;&|]*?\bonex\b")
+
+
+def uv_mediated_onex_invocations(scripts_dir: Path) -> list[tuple[Path, int, str]]:
+    """Hook statements that reach the onex CLI through ``uv run`` (OMN-18750).
+
+    Why this is a defect rather than a style preference: ``uv run`` does not
+    pin the command to the project environment. When the entrypoint is absent
+    from the resolved environment uv falls through to PATH, where the
+    sanctioned ``onex`` on the operator Mac is a shell ALIAS -- invisible to
+    uv, and invisible to every non-interactive shell a hook runs in. The
+    invocation then fails with ``Failed to spawn: onex``, and because the hook
+    edge is fail-open the hook does no work and says nothing. That is the
+    worst shape a hook can have: registered, running, and accomplishing
+    nothing.
+
+    The sanctioned entrypoint is the wrapper named in operating rule 11,
+    reached through ``$OMNI_HOME``, or the dispatch venv resolved the way
+    ``common.sh`` resolves an interpreter.
+
+    No hook violated this when the check was written. It is the regression
+    bar: OMN-18750 spent most of a working day testing the hypothesis that a
+    hook was doing exactly this, and a standing check is cheaper than
+    re-running that search the next time the error appears.
+
+    Comments are not statements. A comment or a refusal message that NAMES the
+    forbidden form -- including the ones in this module -- is documentation,
+    and matching it would reproduce the rule-15 shape where a gate fires on
+    prose about the gate.
+    """
+    findings: list[tuple[Path, int, str]] = []
+    for path in sorted(scripts_dir.glob("*.sh")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for number, line in _shell_statement_lines(text):
+            code = _strip_literals(line)
+            if _UV_RUN_ONEX.search(code):
+                findings.append((path, number, line.strip()))
+    return findings
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -492,9 +535,38 @@ def main(argv: list[str] | None = None) -> int:
 
     defined = _defined_function_names(args.plugin_dir) if args.plugin_dir else None
     findings = undefined_shell_callees(args.scripts_dir, defined=defined)
-    if not findings:
-        print("hook-callee gate PASSED (no undefined callees)")
+    uv_findings = uv_mediated_onex_invocations(args.scripts_dir)
+
+    if not findings and not uv_findings:
+        print("hook-callee gate PASSED (no undefined callees, no uv-mediated onex)")
         return 0
+
+    if uv_findings:
+        print(
+            "hook-callee gate FAILED: these hook statements reach the onex CLI "
+            "through uv (OMN-18750). uv does not pin the command to the project "
+            "environment, so when the entrypoint is absent it falls through to "
+            "PATH, where the sanctioned onex is a shell alias uv cannot see. The "
+            "call fails to spawn, and this edge is fail-open, so the hook does "
+            "nothing and reports nothing:",
+            file=sys.stderr,
+        )
+        for path, number, statement in uv_findings:
+            try:
+                shown = path.relative_to(_REPO_ROOT)
+            except ValueError:
+                shown = path
+            print(f"  {shown}:{number}: {statement}", file=sys.stderr)
+        print(
+            "\nUse the sanctioned wrapper resolved through $OMNI_HOME (operating "
+            "rule 11), or the interpreter common.sh already resolves. Do not add "
+            "a suppression: a suppression here is a hook that silently does no "
+            "work.",
+            file=sys.stderr,
+        )
+
+    if not findings:
+        return 1
 
     print(
         "hook-callee gate FAILED: these hook scripts call functions that are "

@@ -555,10 +555,53 @@ expected_hooks:
           - "OMN-18335"
         stdout_absent: []
 
+  - script: "pre_tool_use_prose_command_substitution_guard.sh"
+    event: "PreToolUse"
+    matcher: "Bash"
+    order: 7
+    ticket: "OMN-18750"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Bash command carrying an unescaped backtick command
+      substitution inside a double-quoted string whose destination is a prose
+      sink -- a redirect or tee into a markdown, ledger or checkpoint path, or
+      the text argument of a body/append/message option. Inside double quotes
+      a backtick pair is command substitution, and markdown quotes command
+      names in backticks, so a note ABOUT a command executes it. Measured
+      twice on 2026-09-18: two lanes wrote a checkpoint note quoting the onex
+      CLI, the shell ran it, the quoted words were lost from the note, and the
+      spawn error read as a broken PostToolUse hook until every hook in the
+      plugin had been run against a fixture payload. Registered LAST on the
+      existing Bash matcher, after pre_tool_use_pr_body_stamp_guard.sh.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      # BORROWED BIT. BASH_GUARD already governs the Bash-matcher guards on
+      # this edge and every default-mask ordinal is allocated, so a new bit is
+      # a cross-repo release chain. Recorded here rather than left to be
+      # inferred: clearing BASH_GUARD disables this guard along with its
+      # neighbours, and a disabled run is LOGGED rather than silent.
+      gate_call: "BASH_GUARD"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: 'echo "note: `uv run onex` misread" >> hook-inventory-canary.md'
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "OMN-18750"
+        stdout_absent: []
+
   - script: "pre_tool_use_agent_model_guard.sh"
     event: "PreToolUse"
     matcher: "^(Workflow|Agent)$"
-    order: 7
+    order: 8
     ticket: "OMN-17499"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -607,7 +650,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 8
+    order: 9
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -636,7 +679,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 9
+    order: 10
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -667,7 +710,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 10
+    order: 11
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -1116,7 +1159,7 @@ expected_hooks:
   - script: "pre_tool_use_skill_started.sh"
     event: "PreToolUse"
     matcher: "Skill"
-    order: 11
+    order: 12
     ticket: "OMN-16979"
     owner: "omniclaude hooks lane"
     purpose: >

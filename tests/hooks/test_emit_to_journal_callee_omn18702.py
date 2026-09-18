@@ -534,3 +534,72 @@ def test_the_callee_gate_passes_on_the_current_tree() -> None:
     assert result.returncode == 0, (
         f"the callee gate fails on the committed tree: {result.stderr[-2000:]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# OMN-18750 -- no hook may reach the onex CLI through uv
+# ---------------------------------------------------------------------------
+
+# Why this check lives beside the undefined-callee one: both describe the same
+# failure shape, a hook that runs and accomplishes nothing. An undefined callee
+# exits 127; a `uv run onex` that falls through to PATH fails to spawn. On this
+# fail-open edge each is silent, and on 2026-09-18 a full working day went into
+# testing the hypothesis that a hook was doing the second of those. It was not
+# -- the real cause was a quoting mistake in an agent's own prose (OMN-18750) --
+# but the search is what a standing check is cheaper than.
+
+from validate_hook_callees import uv_mediated_onex_invocations  # noqa: E402
+
+
+def test_no_hook_script_reaches_onex_through_uv() -> None:
+    """OMN-18750 AC4. Zero on the live tree, and the bar going forward."""
+    findings = uv_mediated_onex_invocations(SCRIPTS_DIR)
+    rendered = "\n".join(
+        f"  {path.relative_to(REPO_ROOT)}:{number}: {statement}"
+        for path, number, statement in findings
+    )
+    assert not findings, (
+        "hook scripts reach the onex CLI through uv. uv does not pin the "
+        "command to the project environment, so it falls through to PATH, "
+        "where the sanctioned onex is a shell alias uv cannot see. Use the "
+        "wrapper resolved through $OMNI_HOME (operating rule 11):\n" + rendered
+    )
+
+
+def test_the_uv_onex_check_finds_a_planted_invocation(tmp_path: Path) -> None:
+    """The positive control. Rule 16: a zero with no control proves nothing."""
+    planted = tmp_path / "scripts"
+    planted.mkdir()
+    (planted / "planted_uv_hook.sh").write_text(
+        "#!/bin/bash\n"
+        "set -uo pipefail\n"
+        "RESULT=$(uv run onex run-node node_x --input '{}')\n",
+        encoding="utf-8",
+    )
+    findings = uv_mediated_onex_invocations(planted)
+    assert findings, (
+        "the uv-mediated onex check did not report a planted invocation, so a "
+        "clean result from it proves nothing."
+    )
+
+
+def test_the_uv_onex_check_ignores_a_comment(tmp_path: Path) -> None:
+    """A comment naming the forbidden form is documentation, not a call.
+
+    Workspace rule 15: a gate that fires on prose about the gate is the
+    OCC#7213 shape. This module's own docstrings name the form; so do the
+    refusal messages the scanner prints.
+    """
+    planted = tmp_path / "scripts"
+    planted.mkdir()
+    (planted / "commented_hook.sh").write_text(
+        "#!/bin/bash\n"
+        "set -uo pipefail\n"
+        "# Never reach the CLI with uv run onex -- use the wrapper instead.\n"
+        'echo "done"\n',
+        encoding="utf-8",
+    )
+    assert not uv_mediated_onex_invocations(planted), (
+        "the check fired on a comment, which would refuse the documentation "
+        "that explains the rule."
+    )

@@ -1,0 +1,43 @@
+{
+  "_comment": "OMN-18750 prose-sink backtick command-substitution policy. A backtick pair inside a double-quoted shell string is command substitution, so a note that quotes a command in markdown backticks EXECUTES it. This policy declares what counts as a prose sink: a destination whose content is text a human will read, where a backtick substitution is never intended. Vocabulary lives here rather than in the decision core so a new sink can be declared without editing code.",
+  "version": 1,
+  "ticket": "OMN-18750",
+
+  "_comment_flags": "Text-bearing option names. The VALUE of one of these is prose by construction. --body-file and --description-file are deliberately absent: they name a file, not text.",
+  "prose_text_flags": [
+    "-m",
+    "--message",
+    "--body",
+    "--append",
+    "--comment",
+    "--description",
+    "--note",
+    "--notes",
+    "--reason",
+    "--summary",
+    "--title"
+  ],
+
+  "_comment_suffixes": "Write targets whose content is prose. Matched case-insensitively against the redirect or tee target's basename.",
+  "prose_path_suffixes": [
+    ".md",
+    ".markdown",
+    ".rst",
+    ".txt"
+  ],
+
+  "_comment_stems": "Basename fragments that mark a prose surface whatever its extension: the fleet ledger, lane checkpoints, handoffs and changelogs.",
+  "prose_path_stems": [
+    "ledger",
+    "checkpoint",
+    "changelog",
+    "handoff",
+    "notes",
+    "readme"
+  ],
+
+  "_comment_tee": "Programs that write their stdin to a named file. tee's target is a redirect by another name.",
+  "tee_programs": [
+    "tee"
+  ]
+}
