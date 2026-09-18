@@ -111,7 +111,6 @@ NON_CANONICAL: tuple[str, ...] = (
     "omniclaude.nodes.node_skill_release_orchestrator",
     "omniclaude.nodes.node_skill_resume_session_orchestrator",
     "omniclaude.nodes.node_skill_rewind_orchestrator",
-    "omniclaude.nodes.node_skill_rolling_plan_governor_orchestrator",
     "omniclaude.nodes.node_skill_rrh_orchestrator",
     "omniclaude.nodes.node_skill_runner_orchestrator",
     "omniclaude.nodes.node_skill_runtime_closeout_orchestrator",

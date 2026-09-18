@@ -784,14 +784,6 @@ components:
   path: plugins/onex/skills/rewind/SKILL.md
   backing_nodes: []
   rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
-- id: rolling_plan_governor
-  kind: skill
-  exposure: beta
-  owning_package: onex-skills-beta
-  surface_class: retired
-  path: plugins/onex/skills/rolling_plan_governor/SKILL.md
-  backing_nodes: []
-  rationale: scanner class=retired is a domain-vocabulary keyword FALSE POSITIVE (live+loaded, clean findings); reclassified -> beta-CANDIDATE pending Phase 2 admission proof.
 - id: rrh
   kind: skill
   exposure: beta
