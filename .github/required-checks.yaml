@@ -565,3 +565,47 @@ gates:
     job_path: ["hook-edge-lane-gate"]
     skip_semantics: never
     rationale: "OMN-17204: the hook edge's publish lane and the cloud relay's consume lane are one declared pairing; a mismatch must be a failing check, not a human reading two broker offsets. Path filters removed and `if: always()` added in the same change so the context reports on every PR (skip-vectors 1 and 5). Non-vacuity proven in tests/hooks/test_hook_edge_lane.py: the validator exits 1 on a dropped resolver, on resolver-before-common.sh ordering, on a relay/lane network split, and on a governed topic leaving the registry; 0 on the shipped tree."
+
+  # OMN-18288. The Lane Identity Gate reported on `dev` from 2026-09-13 and
+  # could not block anything: the context was absent from
+  # required_status_checks, which is the advisory-detection gap CLAUDE.md
+  # rule 5 names directly. Lane friction-p5 left it unclaimed at its TERMINAL
+  # row (docs/tracking/ROLLING_WORK_LEDGER.md:7153) because arming a
+  # commit-refusing hook fleet-wide would have frozen every worktree that
+  # predates the mechanism -- a concern OMN-18273 answered separately by
+  # defaulting the unregistered policy to `silent`.
+  #
+  # What this row makes blocking is the MODULE that supplies the missing
+  # operand: the registry, the trailer stamping, the window check, the install
+  # guard, and (OMN-18288) the per-clone arming probe. The pre-push refusal
+  # downstream compares a claim holder against a pushing lane; without this
+  # module the second operand does not exist, so a regression here silently
+  # disarms every gate above it.
+  #
+  # Admitted with its path filters removed and `if: always()` added in the same
+  # change (skip-vectors 1 and 5), proven RED before admission: with the row
+  # present and the filters still in place,
+  # validate_no_required_check_skip_vectors.py reported exactly
+  # `vector-1-paths` and `vector-5-ungated-needs-cascade` on this context.
+  - name: "Lane Identity Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: lane-identity-gate.yml
+    job_path: ["lane-identity-gate"]
+    skip_semantics: never
+    rationale: "OMN-18288: the lane identity module is the operand every downstream lane gate compares against, so a regression in it must fail a merge rather than report one. Non-vacuity is proven by the tests the job runs, which drive real `git commit` calls through the installed hook rather than importing the module: tests/scripts/test_lane_identity.py and tests/scripts/test_lane_identity_arming_probe.py."
+
+  # OMN-18288, pre-existing divergence closed in passing. This context has been
+  # live-required on `dev` since OMN-17172 and had no row here, so the hourly
+  # privileged reconcile (required-check-manifest-reconcile.yml) failed on
+  # EVERY run with `1 live required context(s) missing from manifest`. A
+  # reconcile that is always red cannot report the divergence this change
+  # introduces and then closes, so the row is added here rather than left for
+  # a follow-up: the reconcile is the evidence surface for the row above it.
+  - name: "kb-doc-gate / kb-doc-gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: kb-doc-gate.yml
+    job_path: ["kb-doc-gate", "kb-doc-gate"]
+    skip_semantics: never
+    rationale: "OMN-17172: document-placement gate, called locally (`uses: ./.github/workflows/kb-doc-gate-reusable.yml`) because omniclaude hosts both the validator and the reusable. Live-required on dev; row added under OMN-18288 to clear the manifest reconcile."

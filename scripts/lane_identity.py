@@ -48,8 +48,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -708,6 +710,287 @@ def claim_holders(
 
 
 # ---------------------------------------------------------------------------
+# Arming READBACK: does an armed clone actually let a commit through? (OMN-18288)
+# ---------------------------------------------------------------------------
+
+# The outcomes a probe of one clone/worktree pair can have. Named rather than
+# spelled at each use site so the JSON report, the human report and the tests
+# cannot drift into three vocabularies for the same fact.
+PROBE_ALLOWED = "ALLOWED"
+PROBE_REFUSED = "REFUSED"
+PROBE_UNPROBED = "UNPROBED"
+
+
+@dataclass(frozen=True)
+class ProbeResult:
+    """One clone/worktree pair, run through the INSTALLED hook.
+
+    `stamped` is meaningful only for a registered worktree: it says the hook
+    did its work, not merely that it declined to block. An `ALLOWED` that
+    stamped nothing where a lane IS registered is a silently inert hook, which
+    is the exact failure OMN-18273 found three days of, and it is reported as a
+    refusal-class defect rather than a pass.
+    """
+
+    clone: str
+    worktree: str
+    case: str
+    outcome: str
+    stamped: bool
+    detail: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "clone": self.clone,
+            "worktree": self.worktree,
+            "case": self.case,
+            "outcome": self.outcome,
+            "stamped": self.stamped,
+            "detail": self.detail,
+        }
+
+
+def clone_worktrees(clone: Path) -> list[Path]:
+    """Every working tree attached to `clone`, the main one included.
+
+    Read from `git worktree list`, never from the path convention: a worktree
+    parked outside `omni_worktrees/` is still a directory whose commits this
+    hook governs, and a probe that could not see it would report a pass over a
+    surface it never looked at.
+    """
+    completed = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=clone,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_git_env(),
+    )
+    if completed.returncode != 0:
+        return []
+    return [
+        Path(line[len("worktree ") :].strip())
+        for line in completed.stdout.splitlines()
+        if line.startswith("worktree ")
+    ]
+
+
+def run_installed_hook(
+    worktree: Path,
+    hook: Path,
+    *,
+    message: str = "probe: lane identity arming readback",
+    env_overrides: dict[str, str] | None = None,
+) -> tuple[int, str, str]:
+    """Invoke `hook` exactly as git invokes `prepare-commit-msg`, and return
+    (exit status, the message file's contents afterwards, stderr).
+
+    A REAL INVOCATION OF THE INSTALLED BYTES, not an import of the module they
+    call. The defect this probe exists to catch is a hook that refuses or does
+    nothing in a clone, and both of those live in the shell file, the baked-in
+    module path and the interpreter search -- none of which an import exercises.
+    OMN-18273 is the precedent: every test that only read the script passed
+    while the installed copy skipped the path it had just baked in.
+
+    No commit is created, and NOTHING IS WRITTEN INTO THE WORKING TREE. The
+    scratch message file lives in a temporary directory, because the probe
+    sweeps clones whose worktrees belong to OTHER live lanes and a file
+    appearing in a peer's `git status` -- even for the length of one
+    subprocess -- is the probe creating the interference it is auditing for.
+    Only the working DIRECTORY is the worktree, which is what the hook reads
+    its lane from. git's contract for this hook is exactly
+    (message file, source, [sha]), so this is the whole behaviour.
+    """
+    env = _git_env()
+    if env_overrides:
+        env.update(env_overrides)
+    with tempfile.TemporaryDirectory(prefix="onex-lane-probe-") as tmp:
+        scratch = Path(tmp) / "COMMIT_EDITMSG"
+        scratch.write_text(message + "\n", encoding="utf-8")
+        completed = subprocess.run(
+            [str(hook), str(scratch), "message"],
+            cwd=worktree,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        try:
+            written = scratch.read_text(encoding="utf-8")
+        except OSError:
+            written = ""
+        return completed.returncode, written, completed.stderr
+
+
+def probe_clone(base: Path, clone: Path) -> list[ProbeResult]:
+    """Run the installed hook in `clone`, once per probeable working tree.
+
+    TWO CASES, because the 2026-09-13 incident produced both at once. A
+    registered worktree must be ALLOWED and must come back STAMPED. An
+    unregistered directory -- the canonical clone itself is always one -- must
+    behave as the declared policy says: allowed under `silent`, refused under
+    `refuse`. Probing only the registered case would report a pass over the
+    exact surface that froze, since it was the unregistered worktrees that
+    every clone briefly refused.
+    """
+    try:
+        hook = own_hooks_dir(clone) / "prepare-commit-msg"
+    except (SharedHooksDirectory, subprocess.CalledProcessError, OSError) as exc:
+        return [
+            ProbeResult(
+                clone=clone.name,
+                worktree=str(clone),
+                case="registered",
+                outcome=PROBE_UNPROBED,
+                stamped=False,
+                detail=f"hooks directory did not resolve: {exc}",
+            )
+        ]
+
+    installed = hook.is_file() and OURS_MARKER in hook.read_text(
+        encoding="utf-8", errors="replace"
+    )
+    reachable, reason = hooks_reachable(clone, "prepare-commit-msg")
+    if not (installed and reachable):
+        return [
+            ProbeResult(
+                clone=clone.name,
+                worktree=str(clone),
+                case="registered",
+                outcome=PROBE_UNPROBED,
+                stamped=False,
+                detail=f"not armed ({'installed' if installed else 'not installed'}; {reason})",
+            )
+        ]
+
+    policy = unregistered_mode(base)
+    results: list[ProbeResult] = []
+
+    # THE HOOK MUST RESOLVE THE REGISTRY THIS PROBE IS ASKING ABOUT. The hook
+    # runs as a subprocess and reads its registry from the environment, so
+    # without this a probe pointed at one registry would grade a hook that
+    # answered from another -- and the mismatch presents as "installed but
+    # stamps nothing", i.e. as a defect in the clone rather than in the probe.
+    probed_registry = {"ONEX_LANE_REGISTRY_ROOT": str(base)}
+
+    registered = [wt for wt in clone_worktrees(clone) if resolve(base, wt) is not None]
+    if registered:
+        target, case = registered[0], "registered"
+        record = resolve(base, target)
+        assert record is not None  # noqa: S101 - filtered above
+        lane = record.lane
+        overrides = probed_registry
+        synthetic_dir = None
+    else:
+        # NO LIVE LANE HOLDS A WORKING TREE OF THIS CLONE, and reporting that as
+        # UNPROBED would leave the acceptance criterion answered for some clones
+        # and unanswered for the rest -- exactly the per-clone gap the criterion
+        # names ("not a single spot check"). So the registered path is exercised
+        # against a registration this probe makes for itself, in a throwaway
+        # registry the environment points the hook at, and the row says
+        # `registered-synthetic` so nobody reads it as a live lane's evidence.
+        #
+        # The identity is synthetic; the CODE PATH is not. The hook resolves its
+        # registry from the same environment key in both cases and runs the same
+        # resolution, stamping and chaining. What this cannot show is that some
+        # particular lane is registered -- which is a fact about the registry,
+        # reported by `status`, not about whether the clone refuses.
+        synthetic_dir = tempfile.mkdtemp(prefix="onex-lane-probe-registry-")
+        lane = "probe-arming-readback"
+        register(Path(synthetic_dir), clone, lane=lane, ticket="OMN-18288")
+        target = clone
+        case = "registered-synthetic"
+        overrides = {"ONEX_LANE_REGISTRY_ROOT": synthetic_dir}
+
+    try:
+        status, written, stderr = run_installed_hook(
+            target, hook, env_overrides=overrides
+        )
+        stamped = f"{LANE_TRAILER}: {lane}" in written
+        if status != 0:
+            last = stderr.strip().splitlines()[-1] if stderr.strip() else "no stderr"
+            detail = f"hook exited {status}: {last}"
+            outcome = PROBE_REFUSED
+        elif not stamped:
+            detail = (
+                "hook allowed the commit but stamped no lane trailer, so it is inert -- "
+                "an allowed commit with no identity is what the downstream refusal "
+                "cannot tell from a wrong one"
+            )
+            outcome = PROBE_REFUSED
+        else:
+            detail = f"allowed and stamped {LANE_TRAILER}: {lane}"
+            outcome = PROBE_ALLOWED
+        results.append(
+            ProbeResult(
+                clone=clone.name,
+                worktree=str(target),
+                case=case,
+                outcome=outcome,
+                stamped=stamped,
+                detail=detail,
+            )
+        )
+    finally:
+        if synthetic_dir is not None:
+            shutil.rmtree(synthetic_dir, ignore_errors=True)
+
+    # The clone root is unregistered by construction: no lane registers the
+    # canonical clone, because no lane commits there.
+    if resolve(base, clone) is None:
+        status, _, stderr = run_installed_hook(
+            clone, hook, env_overrides=probed_registry
+        )
+        allowed = status == 0
+        expected_allowed = policy == "silent"
+        if allowed == expected_allowed:
+            outcome = PROBE_ALLOWED if allowed else PROBE_REFUSED
+            detail = f"unregistered directory behaved as the `{policy}` policy declares"
+        else:
+            outcome = PROBE_REFUSED if not allowed else PROBE_ALLOWED
+            detail = (
+                f"unregistered directory exited {status} under the `{policy}` policy, "
+                f"which is not what that policy declares"
+            )
+        results.append(
+            ProbeResult(
+                clone=clone.name,
+                worktree=str(clone),
+                case=f"unregistered/{policy}",
+                outcome=outcome,
+                stamped=False,
+                detail=detail
+                + (
+                    f": {stderr.strip().splitlines()[-1]}"
+                    if not allowed and stderr.strip()
+                    else ""
+                ),
+            )
+        )
+    return results
+
+
+def probe_refusals(results: Sequence[ProbeResult], base: Path) -> list[ProbeResult]:
+    """The results that are DEFECTS, given the declared policy.
+
+    A refusal is only a defect when the policy says the commit should have been
+    allowed. Under `refuse`, an unregistered directory refusing is the
+    mechanism working, and counting it as a failure would make the probe red
+    exactly when the workspace is most strictly armed.
+    """
+    policy = unregistered_mode(base)
+    defects = []
+    for r in results:
+        if r.case.startswith("registered") and r.outcome == PROBE_REFUSED:
+            defects.append(r)
+        elif r.case.startswith("unregistered/"):
+            expected = PROBE_ALLOWED if policy == "silent" else PROBE_REFUSED
+            if r.outcome != expected:
+                defects.append(r)
+    return defects
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -776,6 +1059,21 @@ def main(argv: list[str] | None = None) -> int:
         help="a clone to check; repeatable. Defaults to every clone in the workspace",
     )
     p_stat.add_argument("--json", action="store_true")
+
+    p_probe = sub.add_parser(
+        "probe",
+        help=(
+            "run the INSTALLED hook in every canonical clone and report, per clone, "
+            "whether a commit from a registered worktree is allowed and stamped"
+        ),
+    )
+    p_probe.add_argument(
+        "--repo",
+        action="append",
+        default=None,
+        help="a clone to probe; repeatable. Defaults to every clone in the workspace",
+    )
+    p_probe.add_argument("--json", action="store_true")
 
     p_rec = sub.add_parser(
         "reconcile",
@@ -901,6 +1199,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         return _status(args)
 
+    if args.command == "probe":
+        return _probe(args)
+
     if args.command == "reconcile":
         return _reconcile(args)
 
@@ -992,6 +1293,74 @@ def _status(args: argparse.Namespace) -> int:
             f"lane_identity: {unarmed} clone(s) are NOT armed, so commits there carry no "
             f"lane identity and the pre-push refusal has nothing to compare. Arm with:\n"
             f"    python3 {Path(__file__).resolve()} reconcile --execute",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _probe(args: argparse.Namespace) -> int:
+    """The AC(c) readback: a real hook invocation per clone, reported per clone.
+
+    NOT A SPOT CHECK, and the acceptance criterion says so in those words. One
+    clone answering correctly says nothing about the other twenty-five: the
+    install is per clone, the shared guard dispatch is per hook type, and the
+    registration is per worktree, so every one of the three can be right in one
+    clone and wrong in the next.
+    """
+    base = _base(args)
+    if args.repo:
+        clones = [Path(r) for r in args.repo]
+    else:
+        try:
+            clones = _registry_clones(Path(os.environ[WORKSPACE_ENV]))
+        except KeyError:
+            print(f"lane_identity: {WORKSPACE_ENV} is not set", file=sys.stderr)
+            return 2
+
+    results: list[ProbeResult] = []
+    for clone in clones:
+        results.extend(probe_clone(base, clone))
+
+    defects = probe_refusals(results, base)
+    unprobed = [r for r in results if r.outcome == PROBE_UNPROBED]
+    report = {
+        "clones": len({r.clone for r in results}),
+        "probes": len(results),
+        "refusals": len(defects),
+        "unprobed": len(unprobed),
+        "unregistered_policy": unregistered_mode(base),
+        "results": [r.as_dict() for r in results],
+    }
+
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        for r in results:
+            print(f"{r.outcome:<9} {r.clone} [{r.case}]: {r.detail}")
+        print(
+            f"lane_identity: {report['probes']} probe(s) across {report['clones']} clone(s); "
+            f"{report['refusals']} refusal(s), {report['unprobed']} unprobed; "
+            f"unregistered policy = {report['unregistered_policy']}"
+        )
+
+    if not results or len(unprobed) == len(results):
+        # The empty-sweep refusal, the same one `status` carries, widened to
+        # the sweep that ASKED nothing as well as the one that looked at
+        # nothing. Every row UNPROBED yields zero refusals, which reads exactly
+        # like a clean bill of health while proving nothing at all
+        # (CLAUDE.md rule 16).
+        print(
+            "lane_identity: no clone was actually probed, which is not the same as "
+            "none refusing -- refusing to report a pass on an empty sweep.",
+            file=sys.stderr,
+        )
+        return 2
+    if defects:
+        print(
+            f"lane_identity: {len(defects)} clone/worktree pair(s) did not behave as the "
+            f"`{unregistered_mode(base)}` policy declares. A clone that refuses a "
+            f"registered worktree's commit freezes every lane working in it.",
             file=sys.stderr,
         )
         return 1
