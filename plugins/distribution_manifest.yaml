@@ -1303,6 +1303,14 @@ components:
   path: plugins/onex/hooks/scripts/onex-lane-reconcile.sh
   backing_nodes: []
   rationale: operator/CI reconciliation CLI over the OMN-16471 lane records (not a Claude event hook); exits 1 when any dispatched lane holds a failure terminal state or never reported one.
+- id: hooks/scripts/onex-lane-pair-reconcile.sh
+  kind: hook
+  exposure: hidden
+  owning_package: internal
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/onex-lane-pair-reconcile.sh
+  backing_nodes: []
+  rationale: one-shot operator repair for the OMN-18690 agent-id-mangled lane pairs (not a Claude event hook); dry-run by default and append-only, it never edits a lane record.
 - id: hooks/scripts/hook_edge_lane.sh
   kind: hook
   exposure: hidden
