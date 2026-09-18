@@ -152,6 +152,13 @@ def test_no_live_venv_is_not_a_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
+    # The hook-interpreter readback (OMN-18746) walks find_python()'s chain,
+    # whose first entry is an env var the developer running the suite has set.
+    # Cleared here so this test reads the synthetic lock it wrote, not this
+    # machine's live interpreter.
+    monkeypatch.delenv("PLUGIN_PYTHON_BIN", raising=False)
+    monkeypatch.delenv("ONEX_REGISTRY_ROOT", raising=False)
+    monkeypatch.delenv("OMNICLAUDE_PROJECT_ROOT", raising=False)
     findings = drift._check_dispatch_venv_drift(expected_sha=_STALE_SHA)
     assert findings == []
 
@@ -233,6 +240,13 @@ def test_main_passes_with_canonical_sha_injected(
     lock = tmp_path / "uv.lock"
     lock.write_text(_LOCK_FRESH, encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
+    # The hook-interpreter readback (OMN-18746) walks find_python()'s chain,
+    # whose first entry is an env var the developer running the suite has set.
+    # Cleared here so this test reads the synthetic lock it wrote, not this
+    # machine's live interpreter.
+    monkeypatch.delenv("PLUGIN_PYTHON_BIN", raising=False)
+    monkeypatch.delenv("ONEX_REGISTRY_ROOT", raising=False)
+    monkeypatch.delenv("OMNICLAUDE_PROJECT_ROOT", raising=False)
     rc = drift.main(
         [
             f"--lock={lock}",
@@ -254,6 +268,13 @@ def test_expected_sha_overrides_canonical_sha(
     lock = tmp_path / "uv.lock"
     lock.write_text(_LOCK_STALE, encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
+    # The hook-interpreter readback (OMN-18746) walks find_python()'s chain,
+    # whose first entry is an env var the developer running the suite has set.
+    # Cleared here so this test reads the synthetic lock it wrote, not this
+    # machine's live interpreter.
+    monkeypatch.delenv("PLUGIN_PYTHON_BIN", raising=False)
+    monkeypatch.delenv("ONEX_REGISTRY_ROOT", raising=False)
+    monkeypatch.delenv("OMNICLAUDE_PROJECT_ROOT", raising=False)
     rc = drift.main(
         [
             f"--lock={lock}",
@@ -277,6 +298,13 @@ def test_main_fails_with_stale_lock_pin(
     lock.write_text(_LOCK_STALE, encoding="utf-8")
     canonical_sha = "a" * 40  # not the stale v0.4.0 SHA
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
+    # The hook-interpreter readback (OMN-18746) walks find_python()'s chain,
+    # whose first entry is an env var the developer running the suite has set.
+    # Cleared here so this test reads the synthetic lock it wrote, not this
+    # machine's live interpreter.
+    monkeypatch.delenv("PLUGIN_PYTHON_BIN", raising=False)
+    monkeypatch.delenv("ONEX_REGISTRY_ROOT", raising=False)
+    monkeypatch.delenv("OMNICLAUDE_PROJECT_ROOT", raising=False)
     rc = drift.main(
         [
             f"--lock={lock}",

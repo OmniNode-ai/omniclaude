@@ -40,7 +40,8 @@ uv run pre-commit install --hook-type pre-push
 
 ### Plugin Venv (for daemon processes)
 
-The plugin daemon (`plugins/onex/lib/.venv`) must be built from the brew Python interpreter to obtain the macOS Local Network privacy grant required to reach LAN services (Kafka, Postgres on `<onex-host>`):
+The plugin daemon venv (`$CLAUDE_PLUGIN_DATA/.venv`, default
+`~/.claude/plugins/data/onex-omninode-tools/.venv`) must be built from the brew Python interpreter to obtain the macOS Local Network privacy grant required to reach LAN services (Kafka, Postgres on `<onex-host>`):
 
 ```bash
 # Run from repo root

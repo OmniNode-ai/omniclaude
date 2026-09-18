@@ -23,7 +23,6 @@ exclude_dirs:
   - claude_hooks/tests
   - skills
   - .venv
-  - claude/lib/.venv
   - __pycache__
   - build
   - dist

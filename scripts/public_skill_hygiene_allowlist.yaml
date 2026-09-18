@@ -79,3 +79,14 @@ entries:
     reason: >-
       test-mandated retro traceability for the dispatch-surface first-strike
       guardrail; retained as provenance, not a live workflow reference.
+
+  # The rule-6 assertion in the hook-interpreter readback test names the two
+  # machine-path PREFIXES as probe inputs: it asserts the resolver module
+  # contains neither. They are the pattern the rule forbids, not a path on any
+  # machine, and the test's whole purpose is that they never appear beside it.
+  - path_glob: "tests/scripts/test_hook_interpreter_readback.py"
+    class: machine-path
+    reason: >-
+      probe inputs for the rule-6 assertion that the hook-interpreter resolver
+      carries no machine-specific absolute path; the literals are the forbidden
+      pattern itself, not an operator path.

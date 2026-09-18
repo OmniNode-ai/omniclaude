@@ -56,6 +56,15 @@ import sys
 import tomllib
 from pathlib import Path
 
+# Sibling module in this same directory, imported by path so the gate behaves
+# identically whether it is run as a script (CI, exported pre-commit hook) or
+# loaded from a file location by a test. Same pattern as scripts/branch_claim.py.
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+import hook_interpreter  # noqa: E402
+
 # Remote URL for canonical omnimarket.  Override with OMNIMARKET_REMOTE env var.
 _OMNIMARKET_REMOTE_DEFAULT = "https://github.com/OmniNode-ai/omnimarket.git"
 
@@ -294,6 +303,56 @@ def _check_dispatch_venv_drift(expected_sha: str) -> list[str]:
     return []
 
 
+def _check_orphan_hooks_venv(root: Path | None = None) -> list[str]:
+    """Return a finding when the orphan hooks venv is present (OMN-18746).
+
+    ``plugins/onex/lib/.venv`` left ``find_python()``'s chain in ``035707dd2``
+    (OMN-7310, 2026-04-02). Nothing rebuilds it and no pin file declares it, so
+    the omnimarket it carries answers to no expected SHA at all — the copy found
+    on 2026-09-18 was 2023 commits behind. It is asserted absent rather than
+    compared, because there is nothing to compare it against.
+    """
+    return hook_interpreter.check_orphan_absent(root)
+
+
+def _check_hook_interpreter_omnimarket(
+    lock_pinned_sha: str | None, root: Path | None = None
+) -> list[str]:
+    """Return findings for the omnimarket carried by the HOOK interpreter.
+
+    Deliberately compared against the LOCK PIN rather than against canonical
+    ``omnimarket@main``. The question this answers is "does the interpreter the
+    hooks run on carry what this repo's lock says it should" — a question with a
+    repair. Whether the lock itself trails canonical main is the separate
+    question ``_check_lock_drift`` already answers, and asking it twice would
+    report one pin decay as two findings.
+    """
+    if lock_pinned_sha is None:
+        return []
+    resolved = hook_interpreter.resolve_hook_interpreter(root=root)
+    if resolved is None:
+        return []
+
+    venv_dir = resolved.path.parent.parent
+    installed_sha = _omnimarket_sha_from_venv(venv_dir)
+    if installed_sha is None:
+        # Not every interpreter the chain can resolve installs omnimarket from
+        # git — an editable or absent install is not this gate's finding.
+        return []
+
+    if installed_sha != lock_pinned_sha:
+        return [
+            f"hook interpreter {resolved.path} (via {resolved.source}) carries an "
+            f"omnimarket commit that is not this repo's lock pin:\n"
+            f"    installed commit:  {installed_sha}\n"
+            f"    lock pin:          {lock_pinned_sha}\n"
+            f"Every hook on this host dispatches from that interpreter. Re-sync it "
+            f"from this repo's uv.lock."
+        ]
+
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -363,6 +422,22 @@ def main(argv: list[str] | None = None) -> int:
 
     # Live dispatch-venv mode — only when daemon venv exists.
     findings.extend(_check_dispatch_venv_drift(expected_sha))
+
+    # The interpreter the hooks actually run on, and the orphan that must stay
+    # gone (OMN-18746). Say which interpreter answered either way: a readback
+    # silent about what it looked at reads the same as one that looked at
+    # nothing.
+    #
+    # Scoped to the repo whose lock is being checked, so a caller pointing
+    # --lock at another tree reads that tree's venv back rather than this one's.
+    readback_root = lock_path.parent
+    print(hook_interpreter.describe_hook_interpreter(root=readback_root))
+    findings.extend(
+        _check_hook_interpreter_omnimarket(
+            _extract_omnimarket_sha(lock_text), root=readback_root
+        )
+    )
+    findings.extend(_check_orphan_hooks_venv(readback_root))
 
     if findings:
         print(

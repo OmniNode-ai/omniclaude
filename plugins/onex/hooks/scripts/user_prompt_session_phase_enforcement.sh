@@ -43,18 +43,31 @@ if [[ ! -f "$STATE_FILE" ]]; then
     exit 0
 fi
 
-# Resolve Python interpreter (prefer plugin venv, fall back to system python3)
+# Resolve the Python interpreter in find_python()'s order [OMN-18746].
+#
+# This block used to try the plugin's own lib venv FIRST, ahead of
+# PLUGIN_PYTHON_BIN. That venv left find_python()'s chain in 035707dd2 (OMN-7310,
+# 2026-04-02) and nothing has built it since, so on a host that still had a stale
+# copy lying around this hook ran on an interpreter no other hook uses — the one
+# measured on 2026-09-18 carried packages five months old. The order below is
+# common.sh find_python()'s, minus the hard failure: this hook must never block.
 PYTHON_BIN=""
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
-_VENV="${PLUGIN_ROOT}/lib/.venv/bin/python"
-if [[ -x "${_VENV}" ]]; then
-    PYTHON_BIN="${_VENV}"
-elif [[ -n "${PLUGIN_PYTHON_BIN:-}" && -x "${PLUGIN_PYTHON_BIN}" ]]; then
+_REPO_ROOT="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd || true)"
+if [[ -n "${PLUGIN_PYTHON_BIN:-}" && -x "${PLUGIN_PYTHON_BIN}" ]]; then
     PYTHON_BIN="${PLUGIN_PYTHON_BIN}"
+elif [[ -n "${CLAUDE_PLUGIN_DATA:-}" && -x "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3" ]]; then
+    PYTHON_BIN="${CLAUDE_PLUGIN_DATA}/.venv/bin/python3"
+elif [[ -n "${_REPO_ROOT}" && -x "${_REPO_ROOT}/.venv/bin/python3" ]]; then
+    PYTHON_BIN="${_REPO_ROOT}/.venv/bin/python3"
+elif [[ -n "${ONEX_REGISTRY_ROOT:-}" && -x "${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3" ]]; then
+    PYTHON_BIN="${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3"
+elif [[ -n "${OMNICLAUDE_PROJECT_ROOT:-}" && -x "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3" ]]; then
+    PYTHON_BIN="${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3"
 elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="python3"
 fi
-unset _VENV
+unset _REPO_ROOT
 
 if [[ -z "$PYTHON_BIN" ]]; then
     # No Python available — pass through silently (hook must not block)
