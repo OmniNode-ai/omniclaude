@@ -7,8 +7,9 @@
 # Refuses a Bash command that moves the SHARED registry clone at $OMNI_HOME out
 # from under the lanes working in it -- `git reset`, a non-path-scoped
 # `git checkout`, `git checkout -b`/`-B`, `git switch`, `git clean`,
-# `git rebase`, a `git merge` that is not `--ff-only`, a `git branch`
-# delete/rename whose target is the checked-out branch, a FORCE `git push`,
+# `git rebase`, a `git merge` outside the two sanctioned shapes, a
+# `git branch` creation or a delete/rename whose target is the checked-out
+# branch, a FORCE `git push`,
 # and a path-scoped `git checkout` naming the append-only ledger -- when the
 # command's effective git root (its `-C
 # <path>` argument, or its own cwd) IS that registry clone.
@@ -64,7 +65,17 @@
 # `git push` or `git push origin main:refs/heads/<branch>`, the Operating
 # Rule 17 path-scoped restore recipe (`git checkout <ref> -- <path>`) on
 # every path but the ledger, and every read -- status, log, diff,
-# show, rev-parse, reflog, worktree list. There is deliberately NO escape
+# show, rev-parse, reflog, worktree list.
+#
+# TWO merge shapes are allowed: `git merge --ff-only origin/main`, and the
+# ruled ledger publish loop `git merge --no-edit origin/main` ON `main`.
+# The second is a non-fast-forward merge and an earlier revision of this
+# guard refused it, which would have broken the only working publish path
+# the moment the hook went live. Operator ruling, 2026-09-19: the
+# fast-forward step lost the race against concurrent appends eight cycles
+# running. The BRANCH precondition is the control -- the 14:52:55Z loss was
+# this same verb against this same target, run on a feature branch checked
+# out in the shared clone. There is deliberately NO escape
 # consent citation and no exempt marker: each refused verb has a sanctioned
 # alternative reaching the same outcome without touching state a peer lane
 # owns, so there is nothing a legitimate use needs that this guard blocks.

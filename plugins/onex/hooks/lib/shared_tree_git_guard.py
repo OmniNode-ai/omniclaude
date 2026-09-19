@@ -183,6 +183,10 @@ class Policy:
     branch_destructive_flags: frozenset[str]
     branch_creation_flags: frozenset[str]
     merge_allowed_flags: frozenset[str]
+    merge_allowed_targets: frozenset[str]
+    merge_target_allowed_flags: frozenset[str]
+    merge_allowed_on_branches: frozenset[str]
+    branch_read_flags: frozenset[str]
     blanket_path_operands: frozenset[str]
     push_force_flags: frozenset[str]
     protected_path_operands: tuple[str, ...]
@@ -243,6 +247,14 @@ def load_policy(path: Path | None = None) -> Policy:
         branch_destructive_flags=frozenset(_str_list(raw, "branch_destructive_flags")),
         branch_creation_flags=frozenset(_str_list(raw, "branch_creation_flags")),
         merge_allowed_flags=frozenset(_str_list(raw, "merge_allowed_flags")),
+        merge_allowed_targets=frozenset(_str_list(raw, "merge_allowed_targets")),
+        merge_target_allowed_flags=frozenset(
+            _str_list(raw, "merge_target_allowed_flags")
+        ),
+        merge_allowed_on_branches=frozenset(
+            _str_list(raw, "merge_allowed_on_branches")
+        ),
+        branch_read_flags=frozenset(_str_list(raw, "branch_read_flags")),
         blanket_path_operands=frozenset(_str_list(raw, "blanket_path_operands")),
         push_force_flags=frozenset(_str_list(raw, "push_force_flags")),
         protected_path_operands=tuple(_str_list(raw, "protected_path_operands")),
@@ -620,18 +632,50 @@ def _refusal_detail(
     if sub == "merge":
         if any(arg in policy.merge_allowed_flags for arg in args):
             return None
+        flags = [arg for arg in args if arg.startswith("-")]
+        operands = [arg for arg in args if not arg.startswith("-")]
+        is_publish_loop_shape = (
+            len(operands) == 1
+            and operands[0] in policy.merge_allowed_targets
+            and all(flag in policy.merge_target_allowed_flags for flag in flags)
+        )
+        if is_publish_loop_shape:
+            if current_branch is None:
+                return (
+                    "the checked-out branch of the shared clone could not be "
+                    "read from .git/HEAD, and the sanctioned publish-loop "
+                    f"merge of {operands[0]} is allowed only ON "
+                    f"{sorted(policy.merge_allowed_on_branches)[0]!r}. "
+                    "Whether this is that merge or the feature-branch merge "
+                    "that dropped rows on 2026-09-19 is unknown, so it is "
+                    "refused rather than assumed safe"
+                )
+            if current_branch in policy.merge_allowed_on_branches:
+                return None
+            return (
+                f"this merges {operands[0]} into {current_branch!r}, NOT into "
+                f"{sorted(policy.merge_allowed_on_branches)[0]!r}. On `main` "
+                "this exact command is the sanctioned publish loop and is "
+                "allowed; on a feature branch checked out in the shared "
+                "clone it is the 2026-09-19 14:52:55Z shape, whose round "
+                "trip back to `main` at 14:55:04Z did not carry rows "
+                "appended between 14:48Z and 14:53Z. Put the clone back on "
+                "`main` first, or do the work in a worktree"
+            )
         return (
-            "`git merge` without `--ff-only` runs a three-way CONTENT merge on "
-            "the shared tree, and the file most likely to diverge in it is the "
-            "append-only ledger every lane writes to. A resolution can drop a "
-            "peer lane's rows silently, with no conflict marker and no failure "
-            "-- measured on 2026-09-19, when a merge of origin/main into a "
-            "feature branch checked out in this clone at 14:52:55Z, and the "
-            "round trip back to `main` at 14:55:04Z, did not carry rows "
-            "appended between 14:48Z and 14:53Z. `--ff-only` either advances "
-            "the pointer or refuses, so it can never resolve anything away; "
-            "`--abort`, `--quit` and `--continue` manage a merge already in "
-            "progress and are not refused"
+            "this `git merge` runs an unbounded three-way CONTENT merge on "
+            "the shared tree, and the file most likely to diverge in it is "
+            "the append-only ledger every lane writes to. A resolution can "
+            "drop a peer lane's rows silently, with no conflict marker and "
+            "no failure. Two merge shapes ARE allowed here and neither is "
+            "this one: `git merge --ff-only origin/main`, which either "
+            "advances the pointer or refuses; and the ruled ledger publish "
+            "loop, `git merge --no-edit origin/main` ON `main` and nothing "
+            "else, adopted on 2026-09-19 after the fast-forward step lost "
+            "the race against concurrent appends eight cycles running. A "
+            "different target, an extra operand or a strategy flag is "
+            "neither. `--abort`, `--quit` and `--continue` manage a merge "
+            "already in progress and are not refused"
         )
 
     if sub == "push":
@@ -650,9 +694,25 @@ def _refusal_detail(
 
     if sub == "branch":
         destructive = [arg for arg in args if arg in policy.branch_destructive_flags]
-        if not destructive:
-            return None
         operands = [arg for arg in args if not arg.startswith("-")]
+        if not destructive:
+            reading = any(
+                arg.split("=", 1)[0] in policy.branch_read_flags for arg in args
+            )
+            if operands and not reading:
+                return (
+                    f"`git branch {operands[0]}` CREATES a branch in the clone "
+                    "every lane shares. It moves nothing by itself, which is "
+                    "why it reads as harmless -- but a branch created here "
+                    "exists to be checked out, and the moment it is, "
+                    "commit_lock.py refuses EVERY other lane's ledger commit "
+                    "with exit 78, STRANDED CLONE, and the only signal is an "
+                    "exit code on somebody else's terminal. Create the branch "
+                    "with the worktree that will hold it instead: git -C "
+                    "$OMNI_HOME/<repo> worktree add "
+                    "$OMNI_HOME/omni_worktrees/<ticket>/<repo> -b <branch>"
+                )
+            return None
         renaming = any(arg in ("-m", "-M", "--move") for arg in destructive)
         if current_branch is None:
             return (
