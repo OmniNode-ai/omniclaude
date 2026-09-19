@@ -1,0 +1,153 @@
+# OMN-18790 — per-suite skip-count baseline for omniclaude (mechanism OMN-18776,
+# epic OMN-18775).
+#
+# Each entry records what a suite is ALLOWED to leave unexecuted, and how that
+# number was measured. An entry with no provenance is refused by the gate: a
+# baseline with no recorded measurement is a claim, not a measurement.
+#
+# Lowering a number here is the ONLY way to lower the bar. There is no flag and
+# no environment variable on scripts/ci/skip_count_ratchet.py that does it, and
+# tests/ci/test_skip_count_ratchet_omn18790.py reads the parser's own option
+# strings to keep it that way.
+#
+# mode: count    — the collected set is identical every run; compare the number.
+# mode: nodeids  — an impacted-test selector varies the collected set, so compare
+#                  identities instead. A selector only ever narrows, so a narrowed
+#                  run's skip set is a subset of a full-width baseline.
+#
+# The mode is chosen by MEASUREMENT, not by preference. "Hooks System Tests"
+# runs pytest over tests/hooks/ with nothing in front of it and measured
+# 36/36/36 across three consecutive runs, so its number is comparable. The split
+# matrix sits behind the impacted-test selector (vars.ENABLE_SMART_TESTS reads
+# true on this repository live) and measured 6 skips over 6015 collected on a
+# narrowed run against 43 over 14793 on a full-width one, so only identities are
+# comparable there.
+#
+# NOT REGISTERED, deliberately: "Agent Framework Tests". That job looks for
+# tests/test_enhanced_router.py, tests/test_quality_gates.py and
+# tests/test_performance_thresholds.py; none of the three exists in this repo,
+# so the job writes a synthetic empty JUnit report and reports success on every
+# run without executing a test. Registering it would record a baseline of zero
+# that its own placeholder report satisfies forever — a gate entry that proves
+# nothing. That job is a finding for epic OMN-18775, not a suite to ratchet.
+#
+# Honest limit: this counts skips, it does not judge them. A structurally sound
+# skip and one caused by an env var CI never sets look identical here. What the
+# ratchet removes is the SILENT GROWTH of the set, not the set.
+version: 1
+suites:
+  omniclaude/hooks-tests:
+    repo: omniclaude
+    job: Hooks System Tests
+    mode: count
+    max_skips: 36
+    baseline_collected: 4711
+    provenance:
+      measured_at: '2026-09-18'
+      measured_by: OMN-18790
+      measurement_command: gh run download 35404945505 --repo OmniNode-ai/omniclaude --pattern 'hooks-test-results' --dir <dir> && uv run python scripts/ci/skip_count_ratchet.py --print-observed --suite omniclaude/hooks-tests --junit <dir>/hooks-test-results/junit-hooks.xml
+      source_runs:
+      - '35404945505'
+      corroborating_runs:
+      - '35397791807'
+      - '35396322080'
+      notes: 'This is the frozen-36 surface epic OMN-18775 named. Three consecutive live runs reported 36 unique skipped ids each, and the three SETS are identical, not merely the same size (0 ids outside the baseline in either corroborating run). Collected differs slightly between them (4711, 4696, 4711) because the runs are from different pull-request branches, not because anything narrows the selection: the job runs pytest over tests/hooks/ as a whole directory with no impacted-test selector in front of it, which is why mode is count rather than nodeids. node_ids are recorded anyway so a failure names the test that was added, not just a number.'
+    node_ids:
+    - tests.hooks.test_capture_redaction_omn17959::test_every_daemon_transform_name_is_mapped
+    - tests.hooks.test_capture_redaction_omn17959::test_governed_topics_are_exactly_what_the_owner_governs
+    - tests.hooks.test_capture_redaction_omn17959::test_mirrored_contract_posture_matches_the_omnimarket_owner
+    - tests.hooks.test_capture_redaction_omn17959::test_projection_drift_check_passes_against_the_canonical_registry
+    - tests.hooks.test_deployed_registry_redaction_omn17201::test_the_deployed_registry_agrees_with_the_canonical_one_on_every_transform
+    - tests.hooks.test_emit_client_wrapper.TestIntegration::test_concurrent_socket_operations_with_real_daemon
+    - tests.hooks.test_generate_event_registry.TestLiveProjectionMatchesCommitted::test_committed_event_registry_has_no_drift
+    - tests.hooks.test_hooks_json_script_paths::test_tracker_save_issue_covered_by_workflow_guard_matcher
+    - tests.hooks.test_integration_kafka.TestClaudeHookEventIntegration::test_claude_hook_event_correlation_id_preserved
+    - tests.hooks.test_integration_kafka.TestClaudeHookEventIntegration::test_claude_hook_event_full_prompt_not_truncated
+    - tests.hooks.test_integration_kafka.TestClaudeHookEventIntegration::test_claude_hook_event_partition_key_is_session_id
+    - tests.hooks.test_integration_kafka.TestClaudeHookEventIntegration::test_claude_hook_event_reaches_kafka
+    - tests.hooks.test_integration_kafka.TestClaudeHookEventIntegration::test_claude_hook_event_timestamp_present
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationBasic::test_emit_prompt_submitted_to_kafka
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationBasic::test_emit_session_ended_to_kafka
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationBasic::test_emit_session_started_to_kafka
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationBasic::test_emit_tool_executed_to_kafka
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationBasic::test_kafka_connection
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationEnvelope::test_envelope_structure_matches_schema
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationOrdering::test_events_for_same_session_ordered
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationPrivacy::test_prompt_preview_sanitizes_secrets
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationResilience::test_multiple_rapid_publishes
+    - tests.hooks.test_integration_kafka.TestKafkaIntegrationResilience::test_publish_with_invalid_broker_fails_gracefully
+    - tests.hooks.test_integration_kafka.TestSessionOutcomeIntegration::test_session_outcome_full_golden_path
+    - tests.hooks.test_integration_kafka.TestSessionOutcomeIntegration::test_session_outcome_reaches_cmd_topic
+    - tests.hooks.test_integration_kafka.TestSessionOutcomeIntegration::test_session_outcome_reaches_evt_topic
+    - tests.hooks.test_registry_consistency.TestRegistryConsistency::test_registry_consistency_capture_topics_duty_critical
+    - tests.hooks.test_registry_consistency.TestRegistryConsistency::test_registry_consistency_event_topics_subset_of_daemon_topics
+    - tests.hooks.test_registry_consistency.TestRegistryConsistency::test_registry_consistency_frozenset_subset_of_daemon_registry
+    - tests.hooks.test_skip_token_surface_guard::test_hooks_json_registers_guard_for_stop_and_subagent_stop
+    - tests.hooks.test_sweep_preflight.TestHooksJsonRegistration::test_sweep_preflight_registered
+    - tests.hooks.test_team_observability.TestTeamObservabilityHooksJson::test_hooks_json_has_team_observability
+    - tests.hooks.test_ticket_creation_guard::test_the_criterion_vocabulary_has_not_drifted_from_its_source
+    - tests.hooks.test_ticket_creation_guard::test_the_pin_is_still_current_with_the_prd_on_origin_main
+    - tests.hooks.test_ticket_creation_guard::test_the_pinned_revision_carries_the_shipped_ids
+    - tests.hooks.test_ticket_creation_guard::test_the_runner_allowlist_has_not_drifted_from_its_source
+  omniclaude/test-split:
+    repo: omniclaude
+    job: Tests (Split n/m)
+    mode: nodeids
+    max_skips: 43
+    baseline_collected: 14793
+    provenance:
+      measured_at: '2026-09-18'
+      measured_by: OMN-18790
+      measurement_command: gh run download 35395348934 --repo OmniNode-ai/omniclaude --pattern 'test-results-*' --dir <dir> && uv run python scripts/ci/skip_count_ratchet.py --print-observed --suite omniclaude/test-split --junit <dir>/test-results-*/junit-test-*.xml
+      source_runs:
+      - '35395348934'
+      corroborating_runs:
+      - '35392960545'
+      - '35392248095'
+      - '35404945505'
+      - '35396322080'
+      notes: '35395348934 is a full-width run: 5 splits, 14793 collected, 43 unique skipped ids. Mode is nodeids because this job sits behind the impacted-test selector — vars.ENABLE_SMART_TESTS reads true on this repository live, so the ''Run tests (smart selection)'' step takes a 2-split narrowed path on most pull requests and the raw count legitimately varies: 35404945505 and 35396322080 each collected 6015 and skipped 6. A count comparison would read those as a 37-skip improvement and then miss a newly added skip inside the narrowed set. Both narrowed runs and both corroborating full-width runs had 0 ids outside this baseline. Positive control for that zero: injecting one synthetic id into the same comparison reports 1.'
+    node_ids:
+    - tests.delegation.test_e2e_smoke.TestFailOpenImplementTask::test_classifier_debug_blocked_end_to_end
+    - tests.delegation.test_e2e_smoke.TestFailOpenImplementTask::test_debug_classified_as_not_delegatable
+    - tests.delegation.test_e2e_smoke.TestFailOpenImplementTask::test_hook_runner_returns_not_delegatable_for_debug_task
+    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_classifier_marks_document_as_delegatable
+    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_full_e2e_pipeline_document_path
+    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_runner_returns_delegation_result_with_mock_http
+    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_sensitivity_gate_passes_clean_input
+    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_full_pipeline_short_circuits_on_sensitive_input
+    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[AKIA1234567890ABCDEF-AWS access key (AKIA)]
+    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij-GitHub personal access token]
+    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[password=supersecret123-Password or secret in key=value]
+    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[sk-abcdefghijklmnopqrstu-Secret key (sk-)]
+    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_hook_runner_returns_sensitive_for_api_key_input
+    - tests.hooks.test_capture_redaction_omn17959::test_every_daemon_transform_name_is_mapped
+    - tests.hooks.test_capture_redaction_omn17959::test_governed_topics_are_exactly_what_the_owner_governs
+    - tests.hooks.test_capture_redaction_omn17959::test_mirrored_contract_posture_matches_the_omnimarket_owner
+    - tests.hooks.test_capture_redaction_omn17959::test_projection_drift_check_passes_against_the_canonical_registry
+    - tests.hooks.test_deployed_registry_redaction_omn17201::test_the_deployed_registry_agrees_with_the_canonical_one_on_every_transform
+    - tests.hooks.test_generate_event_registry.TestLiveProjectionMatchesCommitted::test_committed_event_registry_has_no_drift
+    - tests.hooks.test_hooks_json_script_paths::test_tracker_save_issue_covered_by_workflow_guard_matcher
+    - tests.hooks.test_registry_consistency.TestRegistryConsistency::test_registry_consistency_capture_topics_duty_critical
+    - tests.hooks.test_registry_consistency.TestRegistryConsistency::test_registry_consistency_event_topics_subset_of_daemon_topics
+    - tests.hooks.test_registry_consistency.TestRegistryConsistency::test_registry_consistency_frozenset_subset_of_daemon_registry
+    - tests.hooks.test_skip_token_surface_guard::test_hooks_json_registers_guard_for_stop_and_subagent_stop
+    - tests.hooks.test_sweep_preflight.TestHooksJsonRegistration::test_sweep_preflight_registered
+    - tests.hooks.test_team_observability.TestTeamObservabilityHooksJson::test_hooks_json_has_team_observability
+    - tests.hooks.test_ticket_creation_guard::test_the_criterion_vocabulary_has_not_drifted_from_its_source
+    - tests.hooks.test_ticket_creation_guard::test_the_pin_is_still_current_with_the_prd_on_origin_main
+    - tests.hooks.test_ticket_creation_guard::test_the_pinned_revision_carries_the_shipped_ids
+    - tests.hooks.test_ticket_creation_guard::test_the_runner_allowlist_has_not_drifted_from_its_source
+    - tests.integration.skills.gap.test_branch_protection_drift.TestGhApiEvidenceMethod::test_finding_model_accepts_gh_api
+    - tests.integration.skills.gap.test_branch_protection_drift.TestGhApiEvidenceMethod::test_finding_model_has_branch_protection_in_boundary_kind_description
+    - tests.integration.skills.gap.test_branch_protection_drift.TestIntegrationHealthCategory::test_enum_has_integration_health
+    - tests.integration.skills.gap.test_branch_protection_drift.TestIntegrationHealthCategory::test_enum_integration_health_is_string_value
+    - tests.runtime.test_wiring.TestServiceContractPublisherAPI::test_publish_handler_contracts_delegates_to_service_publisher
+    - tests.runtime.test_wiring.TestServiceContractPublisherAPI::test_publish_handler_contracts_strips_whitespace_from_environment
+    - tests.runtime.test_wiring.TestServiceContractPublisherAPI::test_requires_explicit_contract_source_config
+    - tests.unit.hooks.scripts.test_alert_channel_failloud.TestLocalNotifierDefaultsToOsascriptOnMacOS::test_default_notifier_is_osascript
+    - tests.unit.hooks.test_skill_output_suppressor::test_hook_registered_in_hooks_json
+    - tests.unit.nodes.node_channel_discord_adapter.test_handler_inbound
+    - tests.unit.nodes.node_channel_discord_adapter.test_handler_outbound
+    - tests.unit.scripts.test_closeout_phase_compliance.TestMarketNodePhaseParity::test_current_market_node_phase_parity_when_available
+    - tests.workflows.test_route_runner_reusable::test_the_refusal_exit_code_matches_the_node

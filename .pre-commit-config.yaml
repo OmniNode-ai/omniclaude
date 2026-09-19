@@ -1328,6 +1328,21 @@ repos:
         stages: [pre-commit]
         files: ^(uv\.lock|pyproject\.toml)$
 
+      # OMN-18790: the skip-count ratchet's own logic, driven over synthetic
+      # reports locally. The case that matters is the RED one: a reintroduced
+      # environmentally-skipped test must turn the gate red. The shipped
+      # baseline's provenance is validated in the same pass, because a baseline
+      # number with no recorded measurement is a claim, not a measurement.
+      # SYNC with ci.yml job 'skip-count-ratchet' (Operating Rule #5).
+      - id: skip-count-ratchet
+        name: Skip-count baseline ratchet selftest (OMN-18790)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/ci/skip_count_ratchet.py --selftest
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          ^(scripts/ci/skip_count_ratchet\.py|config/skip_count_baseline\.yaml|tests/ci/test_skip_count_ratchet_omn18790\.py|\.github/workflows/ci\.yml)$
+
       - id: precommit-pin-parity
         name: Pre-commit/CI pin-parity check (OMN-14655)
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_pin_parity.py
