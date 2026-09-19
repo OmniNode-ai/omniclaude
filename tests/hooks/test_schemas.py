@@ -2203,3 +2203,73 @@ class TestSanitizeText:
         assert "sk-openai1234567890abcdef" not in result
         assert "AKIAIOSFODNN7EXAMPLE" not in result
         assert result.count("REDACTED") >= 2
+
+
+# =============================================================================
+# OMN-18827: prose false positives in the packaged pattern set
+# =============================================================================
+# schemas.py's _SECRET_PATTERNS and plugins/onex/hooks/lib/secret_redactor.py's
+# SECRET_PATTERNS are two copies of one list (see the "PERFORMANCE FIX
+# (OMN-5138)" comment). This class mirrors
+# tests/hooks/test_secret_redactor.py's OMN-18827 classes so the copies cannot
+# drift apart on the value-shape floor.
+
+# Built by concatenation so the literal phrase is not a single token here --
+# the PostToolUse redact guard rewrites tool OUTPUT, which is the surface
+# under test.
+_OMN18827_ADJECTIVE = "fail" + "-closed"
+_OMN18827_AC1_LINE = (
+    "Token mint is " + _OMN18827_ADJECTIVE + ", no route back to the workflow token"
+)
+
+
+class TestProseValueShapeOmn18827:
+    """The value after a label word must be value-shaped, not merely long."""
+
+    def test_ac1_reproduction_line_passes_through_unmodified(self) -> None:
+        """AC1: the exact OMN-18827 reproduction line is not rewritten."""
+        assert sanitize_text(_OMN18827_AC1_LINE) == _OMN18827_AC1_LINE
+
+    @pytest.mark.parametrize(
+        "sentence",
+        [
+            _OMN18827_AC1_LINE,
+            "The password is unavailable until the operator approves it.",
+            "The api key is provisioned per-tenant, never per-session.",
+            "The credential is rotation-pending and blocks the release.",
+            "The secret is deterministic across replays of the same input.",
+            "The auth token is indistinguishable from an ordinary identifier.",
+        ],
+        ids=lambda s: s[:40],
+    )
+    def test_ac2_prose_corpus_is_unchanged(self, sentence: str) -> None:
+        """AC2: prose naming a credential without containing one."""
+        assert sanitize_text(sentence) == sentence
+
+    @pytest.mark.parametrize(
+        ("text", "needle"),
+        [
+            (
+                "The Postgres password is xK9mP2vL8nQ4wR2ne right now",
+                "xK9mP2vL8nQ4wR2ne",
+            ),
+            (
+                "the leaked credential value is `s3cr3tTok3nHere123`, rotate it",
+                "s3cr3tTok3nHere123",
+            ),
+            (
+                "The api key is aBcDeFgHiJkLmNoPqRsT for that tenant.",
+                "aBcDeFgHiJkLmNoPqRsT",
+            ),
+            ("the token is " + "a1b2c3d4" * 5, "a1b2c3d4" * 5),
+            ("openai key sk-" + "A" * 24, "sk-" + "A" * 24),
+        ],
+        ids=["digits", "backticked", "mixed-case", "hex-run", "sk-prefix"],
+    )
+    def test_ac3_value_shaped_credentials_still_redacted(
+        self, text: str, needle: str
+    ) -> None:
+        """AC3: positive control -- emptying the pattern set fails here."""
+        result = sanitize_text(text)
+        assert needle not in result
+        assert "REDACTED" in result

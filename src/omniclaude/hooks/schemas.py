@@ -286,10 +286,20 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # here; a labeled mention like "the password is <token>" is).
     (
         re.compile(
-            r"(\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
-            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*[`'\"]?)"
-            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})",
-            re.IGNORECASE,
+            # The LABEL half is case-insensitive. The VALUE half deliberately
+            # is not: the mixed-case branch of the shape floor below needs
+            # real case, and a module-level re.IGNORECASE would make
+            # ``[a-z][A-Z]`` match any two letters and nullify it.
+            r"((?i:\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
+            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*)[`'\"]?)"
+            # OMN-18827: the value must be VALUE-SHAPED, not merely long.
+            # Same charset and the same 10-character floor as before, plus a
+            # shape floor -- the token must carry a digit, a non-word special,
+            # or a lowercase-to-uppercase transition. An ordinary hyphenated
+            # English word ("fail-closed", "rotation-pending") carries none of
+            # the three, and was being redacted out of ordinary prose.
+            r"(?=[A-Za-z0-9!@#$%^&*()_+\-.]*(?:[0-9!@#$%^&*()+]|[a-z][A-Z]))"
+            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})"
         ),
         r"\1***REDACTED***",
     ),
