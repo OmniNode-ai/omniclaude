@@ -50,6 +50,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 )
 
 from scripts import lane_identity as li
+from tests.scripts.conftest import link_canonical_module
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TICKET = "OMN-9903"
@@ -93,10 +94,18 @@ def scratch(tmp_path: Path) -> dict:
     )
     repo = tmp_path / "clone"
     repo.mkdir()
+    # `tmp_path` is this suite's registry, and the lane-identity module under
+    # test is its canonical one. Since OMN-18800 the arming verb refuses to bake
+    # any other copy's path into a hook, so a suite that arms anything has to
+    # say which registry it is arming -- and saying `tmp_path` also stops the
+    # ambient OMNI_HOME leaking in, which would aim the verb at the operator's
+    # real workspace.
+    link_canonical_module(tmp_path)
     env = {
         **os.environ,
         "GIT_CONFIG_GLOBAL": str(tmp_path / "gitconfig"),
         "GIT_CONFIG_SYSTEM": str(tmp_path / "gitconfig-system"),
+        li.WORKSPACE_ENV: str(tmp_path),
     }
 
     def run(*args: str) -> subprocess.CompletedProcess:

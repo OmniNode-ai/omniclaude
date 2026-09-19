@@ -95,4 +95,5 @@ jobs:
           git config --global user.name ci
           uv run pytest \
             tests/scripts/test_lane_identity.py \
-            tests/scripts/test_lane_identity_arming_probe.py -q
+            tests/scripts/test_lane_identity_arming_probe.py \
+            tests/scripts/test_lane_identity_canonical_bake.py -q
