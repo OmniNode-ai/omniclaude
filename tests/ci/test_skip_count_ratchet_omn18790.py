@@ -484,13 +484,24 @@ def test_ac7_the_ratchet_job_reads_each_suite_from_its_own_reports() -> None:
     """
     text = WORKFLOW.read_text(encoding="utf-8")
     block = text.split("\n  skip-count-ratchet:\n", 1)[1].split("\n  # ====", 1)[0]
-    assert block.count("skip_count_ratchet.py") == 2, (
-        "each registered suite is enforced by its own invocation over its own reports"
+
+    # Derived from the baseline rather than hardcoded (OMN-18805 added a third
+    # suite and a literal count made that a red test for the wrong reason). The
+    # claim is one invocation per REGISTERED suite, so the baseline is the only
+    # honest source for the number; a suite registered and then never invoked
+    # here is exactly the drift this assertion exists to catch.
+    registered = sorted(yaml.safe_load(BASELINE.read_text(encoding="utf-8"))["suites"])
+    assert block.count("skip_count_ratchet.py") == len(registered), (
+        "each registered suite is enforced by its own invocation over its own "
+        f"reports; the baseline registers {registered}"
     )
-    assert f"--suite {HOOKS_SUITE}" in block
-    assert f"--suite {SPLIT_SUITE}" in block
+    for suite in registered:
+        assert f"--suite {suite}" in block, (
+            f"{suite} is registered in the baseline but never enforced by the job"
+        )
     assert "junit-hooks.xml" in block
     assert "junit-test-" in block
+    assert "junit-agent-framework.xml" in block
 
 
 # ---------------------------------------------------------------- fail-closed

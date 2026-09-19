@@ -23,13 +23,16 @@
 # narrowed run against 43 over 14793 on a full-width one, so only identities are
 # comparable there.
 #
-# NOT REGISTERED, deliberately: "Agent Framework Tests". That job looks for
-# tests/test_enhanced_router.py, tests/test_quality_gates.py and
-# tests/test_performance_thresholds.py; none of the three exists in this repo,
-# so the job writes a synthetic empty JUnit report and reports success on every
-# run without executing a test. Registering it would record a baseline of zero
-# that its own placeholder report satisfies forever — a gate entry that proves
-# nothing. That job is a finding for epic OMN-18775, not a suite to ratchet.
+# REGISTERED SINCE OMN-18805: "Agent Framework Tests". OMN-18790 left that job
+# out on the grounds that it looked for three test files that did not exist,
+# wrote a synthetic empty JUnit report, and reported success on every run
+# without executing a test — so a baseline of zero would have been satisfied by
+# its own placeholder report forever. OMN-18805 established from git log that
+# one of the three, tests/test_enhanced_router.py, was real coverage of code
+# that is still on dev, restored it, and deleted the synthetic branch. The other
+# two were 26 and 36 bare pytest.skip calls with zero assertions and stay
+# deleted. The job now collects 30 real tests, so the entry below has a nonzero
+# baseline and the empty-report refusal bites.
 #
 # Honest limit: this counts skips, it does not judge them. A structurally sound
 # skip and one caused by an env var CI never sets look identical here. What the
@@ -89,6 +92,21 @@ suites:
     - tests.hooks.test_ticket_creation_guard::test_the_pin_is_still_current_with_the_prd_on_origin_main
     - tests.hooks.test_ticket_creation_guard::test_the_pinned_revision_carries_the_shipped_ids
     - tests.hooks.test_ticket_creation_guard::test_the_runner_allowlist_has_not_drifted_from_its_source
+  omniclaude/agent-framework-tests:
+    repo: omniclaude
+    job: Agent Framework Tests
+    mode: count
+    max_skips: 0
+    baseline_collected: 30
+    provenance:
+      measured_at: '2026-09-19'
+      measured_by: OMN-18805
+      measurement_command: uv run pytest tests/test_enhanced_router.py --junitxml=<dir>/junit-agent-framework.xml && uv run python scripts/ci/skip_count_ratchet.py --print-observed --suite omniclaude/agent-framework-tests --junit <dir>/junit-agent-framework.xml
+      source_runs:
+      - local-2026-09-19-restored-suite
+      corroborating_runs: []
+      notes: 'Measured on the restored suite rather than on a CI run, because before this change the job had no CI run that executed a test to measure -- it wrote a synthetic empty report on every one. The number is nonetheless stable by construction: the job runs one file, tests/test_enhanced_router.py, with no impacted-test selector in front of it and no conditional skip inside it, which is why mode is count and max_skips is 0 rather than a tolerance. 30 collected, 0 skipped, 30 passed. The first merge run replaces the local source_run with a real one. A zero here would be satisfied by the placeholder report this ticket deleted, which is the whole reason OMN-18790 refused to write this entry until the tests were real.'
+    node_ids: []
   omniclaude/test-split:
     repo: omniclaude
     job: Tests (Split n/m)
