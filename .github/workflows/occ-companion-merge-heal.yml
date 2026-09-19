@@ -53,6 +53,15 @@
 # of reporting a clean sweep. Behaviour is pinned by
 # tests/ci/test_occ_companion_merge_heal_omn18812.py.
 #
+# WHERE THE IMPLEMENTATION LIVES (OMN-18812 fan-out)
+# This file is now the omniclaude TRIGGER only. The job body moved to
+# `occ-companion-merge-heal-reusable.yml` so that omnibase_infra, omnimarket,
+# omnibase_core and onex_change_control can call the same implementation
+# instead of each carrying a copy of it. omniclaude calls it by LOCAL path,
+# the same way `advisory-job-gate.yml` calls its own reusable: this repo hosts
+# the module, so there is no cross-repo drift to pin against, and a local call
+# keeps the gate honest on the same commit that changes it.
+#
 # TRUST BOUNDARY, STATED PRECISELY RATHER THAN OVERCLAIMED
 # It has no `pull_request` trigger. On a schedule event GitHub runs the default
 # branch's copy of this file, and the checkout below resolves to the default
@@ -102,43 +111,9 @@ permissions:
 
 jobs:
   heal:
-    name: Heal preflights whose companion has since merged
-    timeout-minutes: 10
-    permissions:
-      # `actions: write` is the re-run. `pull-requests: read` is the PR listing
-      # and body. Nothing else is granted, at any scope.
-      actions: write
-      contents: read
-      pull-requests: read
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci.
-    # This job is a handful of API calls and only does work when a companion
-    # has actually merged behind a failed preflight.
-    runs-on: >-
-      ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-
-      - name: Re-run preflights whose companion has since merged
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAL_PR_NUMBER: ${{ inputs.pr-number }}
-          HEAL_DRY_RUN: ${{ inputs.dry-run }}
-        run: |
-          set -euo pipefail
-          args=(--repo "${GITHUB_REPOSITORY}")
-          if [ -n "${HEAL_PR_NUMBER:-}" ]; then
-            args+=(--pr-number "${HEAL_PR_NUMBER}")
-          fi
-          if [ "${HEAL_DRY_RUN:-false}" = "true" ]; then
-            args+=(--dry-run)
-          fi
-          python3 scripts/ci/occ_companion_merge_heal.py "${args[@]}"
+    # Local path, not a pinned SHA: omniclaude hosts the module, so a PR that
+    # edits it must exercise its own edit rather than the last merged copy.
+    uses: ./.github/workflows/occ-companion-merge-heal-reusable.yml
+    with:
+      pr-number: ${{ inputs.pr-number || '' }}
+      dry-run: ${{ inputs.dry-run || false }}

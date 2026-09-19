@@ -1,0 +1,148 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-18812: the companion-merge heal, as a reusable workflow.
+#
+# WHAT IT DOES
+# For each open PR in the CALLING repository that carries a failed
+# `occ-preflight / eligibility` on its current head, resolve whether the cited
+# onex_change_control companion has merged since, and re-run the failed jobs of
+# that PR's failed runs when it has. `gh run rerun --failed` preserves the run
+# id, so an aggregator polling that run's job list observes the new verdict and
+# every already-passing job keeps its result.
+#
+# Live proof of the mechanism, omniclaude run 35454714716 (schedule,
+# 2026-09-19T16:21:53Z): `rerun_required: PR #2274 ... companion OCC#10430 is
+# merged; re-running the failed jobs of 36 run(s)`, and the eligibility check
+# went green at 16:24:46Z with no human. That run is what gates this fan-out.
+#
+# WHY A REUSABLE AND NOT A COPY PER REPO
+# The decision logic is a tested Python module, not shell. Copying it into each
+# repo is the drift OMN-14160 chose against for exactly this family: "(a) is
+# preferred -- avoids drift across 7 copies of the same script." So the caller
+# is a trigger and nothing else, and the module is fetched from omniclaude at
+# the ref the caller pins.
+#
+# HOW THE SCRIPT IS RESOLVED
+# A reusable workflow runs with the CALLER's workspace, so for every repo but
+# omniclaude the module is not in the checkout. It is always fetched from
+# omniclaude into `.occ-heal-deps/omniclaude` and always run from there, so
+# there is ONE code path rather than a conditional that only one caller in
+# five ever takes.
+#
+# The ref is `github.job_workflow_sha`, the commit of THIS workflow file, so
+# the module and the workflow that runs it can never drift: a caller pinning
+# `uses: ...@<sha>` gets the module from that same `<sha>` without pinning
+# anything twice (OMN-16723 -- a caller-side `uses:` pin governs only which
+# workflow FILE loads and cannot reach an inner checkout). On omniclaude's own
+# LOCAL call that resolves to the PR's own head, so a PR editing the module
+# exercises its own edit.
+#
+# The caller's own repository is deliberately NOT checked out: the module
+# reaches everything it needs through `gh`, and a checkout nothing reads is a
+# credential and a minute for nothing.
+#
+# PERMISSIONS, AND WHAT THIS CANNOT DO
+# The job runs with the CALLER's token, so `actions: write` is scoped to the
+# caller's own repository and the re-runs it issues are its own. It therefore
+# CANNOT arm, merge or otherwise mutate a companion in onex_change_control:
+# that is a different repository and this token has no write there. Arming an
+# unarmed-but-green companion (OMN-18797) is a separate change that has to live
+# inside onex_change_control and carry its own credential decision -- see that
+# ticket, which records that both App installations hold only `actions: read`.
+#
+# This workflow is deliberately NOT a required status check and must never
+# become one: it reports on whether a heal was attempted, not on whether any PR
+# is good. It has no `pull_request` trigger of its own, so code from an open PR
+# never executes with the job's Actions token.
+#
+# Behaviour of the module is pinned by omniclaude
+# `tests/ci/test_occ_companion_merge_heal_omn18812.py` (83 tests).
+
+name: OCC Companion Merge Heal (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      heal-ref:
+        description: >-
+          Override the omniclaude ref the heal module is fetched from. Leave
+          EMPTY, which is the supported shape: the module then comes from
+          `github.job_workflow_sha`, the commit of this workflow file, so it
+          cannot drift from the workflow. A branch name here reintroduces
+          exactly the drift OMN-16723 refuses.
+        required: false
+        default: ""
+        type: string
+      occ-repo:
+        description: The change-control repo holding the companions.
+        required: false
+        default: OmniNode-ai/onex_change_control
+        type: string
+      pr-number:
+        description: Consider only this PR. Empty considers every open PR.
+        required: false
+        default: ""
+        type: string
+      dry-run:
+        description: Report the decisions without issuing any re-run.
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  heal:
+    name: Heal preflights whose companion has since merged
+    timeout-minutes: 10
+    permissions:
+      # `actions: write` is the re-run, in the CALLER's repo and nowhere else.
+      # `pull-requests: read` is the PR listing and body. Nothing wider.
+      actions: write
+      contents: read
+      pull-requests: read
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci.
+    # A handful of API calls, and it only does work when a companion has
+    # actually merged behind a failed preflight.
+    runs-on: >-
+      ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    steps:
+      - name: Check out omniclaude for the heal module
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ inputs.heal-ref || github.job_workflow_sha }}
+          path: .occ-heal-deps/omniclaude
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Re-run preflights whose companion has since merged
+        working-directory: .occ-heal-deps/omniclaude
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAL_OCC_REPO: ${{ inputs.occ-repo }}
+          HEAL_PR_NUMBER: ${{ inputs.pr-number }}
+          HEAL_DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f scripts/ci/occ_companion_merge_heal.py ]; then
+            echo "::error::the heal module is absent from the omniclaude" \
+                 "checkout. A heal that cannot run its own guard has not" \
+                 "healed anything, and reporting that as success is the" \
+                 "defect this module exists to refuse."
+            exit 1
+          fi
+
+          args=(--repo "${GITHUB_REPOSITORY}" --occ-repo "${HEAL_OCC_REPO}")
+          if [ -n "${HEAL_PR_NUMBER:-}" ]; then
+            args+=(--pr-number "${HEAL_PR_NUMBER}")
+          fi
+          if [ "${HEAL_DRY_RUN:-false}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python3 scripts/ci/occ_companion_merge_heal.py "${args[@]}"

@@ -51,6 +51,7 @@ from scripts.ci.occ_companion_merge_heal import (  # noqa: E402
 )
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "occ-companion-merge-heal.yml"
+REUSABLE = REPO_ROOT / ".github" / "workflows" / "occ-companion-merge-heal-reusable.yml"
 
 pytestmark = pytest.mark.unit
 
@@ -333,6 +334,12 @@ def test_ac3_main_issues_nothing_at_the_ceiling() -> None:
 # --------------------------------------------------------------------------
 
 
+def _reusable_document() -> dict[str, Any]:
+    document = yaml.safe_load(REUSABLE.read_text(encoding="utf-8"))
+    assert isinstance(document, dict)
+    return document
+
+
 def _workflow_document() -> dict[str, Any]:
     document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     assert isinstance(document, dict)
@@ -386,9 +393,8 @@ def test_ac4_workflow_is_not_pull_request_reachable() -> None:
 def test_ac4_the_write_grant_is_scoped_to_the_one_job_that_mutates() -> None:
     """Workflow-wide `actions: write` would hand the re-run credential to
     every step, the checkout and the interpreter setup included."""
-    document = _workflow_document()
-    assert document["permissions"] == {"contents": "read"}
-    assert document["jobs"]["heal"]["permissions"] == {
+    assert _workflow_document()["permissions"] == {"contents": "read"}
+    assert _reusable_document()["jobs"]["heal"]["permissions"] == {
         "actions": "write",
         "contents": "read",
         "pull-requests": "read",
@@ -396,7 +402,7 @@ def test_ac4_the_write_grant_is_scoped_to_the_one_job_that_mutates() -> None:
 
 
 def test_ac4_the_checkout_persists_no_credential() -> None:
-    steps = _workflow_document()["jobs"]["heal"]["steps"]
+    steps = _reusable_document()["jobs"]["heal"]["steps"]
     checkout = next(
         s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")
     )
@@ -807,3 +813,88 @@ def test_a_nested_caller_eligibility_failure_is_counted() -> None:
         failed_preflight_check_count_in_payload(payload, markers=PREFLIGHT_JOB_MARKERS)
         == 1
     )
+
+
+# --------------------------------------------------------------------------
+# The reusable split (OMN-18812 fan-out).
+#
+# The implementation moved out of the trigger so omnibase_infra, omnimarket,
+# omnibase_core and onex_change_control call ONE module instead of each
+# carrying a copy. These pin the properties the fan-out depends on.
+# --------------------------------------------------------------------------
+
+
+def test_the_reusable_exists_and_is_callable() -> None:
+    assert REUSABLE.is_file(), f"{REUSABLE} is absent"
+    assert _triggers(_reusable_document()) == {"workflow_call"}
+
+
+def test_the_trigger_delegates_to_the_reusable_by_local_path() -> None:
+    """A pinned SHA here would make an omniclaude PR that edits the module
+    test the last merged copy instead of its own edit."""
+    assert (
+        _workflow_document()["jobs"]["heal"]["uses"]
+        == "./.github/workflows/occ-companion-merge-heal-reusable.yml"
+    )
+
+
+def test_the_trigger_declares_no_steps_of_its_own() -> None:
+    """Two implementations of one heal is the drift this split removes."""
+    assert "steps" not in _workflow_document()["jobs"]["heal"]
+
+
+def test_the_reusable_takes_a_heal_ref_a_caller_can_pin() -> None:
+    inputs = _reusable_document()[_trigger_key(_reusable_document())]["workflow_call"][
+        "inputs"
+    ]
+    assert "heal-ref" in inputs, "a caller cannot pin the module without this"
+    assert set(inputs) >= {"heal-ref", "occ-repo", "pr-number", "dry-run"}
+
+
+def test_the_module_cannot_drift_from_the_workflow_that_runs_it() -> None:
+    """OMN-16723: a caller-side `uses:@<sha>` pin governs which workflow FILE
+    loads and cannot reach an inner checkout, so an inner checkout on a branch
+    lets the two drift. `job_workflow_sha` is this workflow file's own commit,
+    which makes the pair atomic and needs no second pin from the caller."""
+    steps = _reusable_document()["jobs"]["heal"]["steps"]
+    fetch = next(
+        s
+        for s in steps
+        if isinstance(s.get("with"), dict)
+        and s["with"].get("repository") == "OmniNode-ai/omniclaude"
+    )
+    assert fetch["with"]["ref"] == "${{ inputs.heal-ref || github.job_workflow_sha }}"
+    assert fetch["with"]["persist-credentials"] is False
+    assert "if" not in fetch, "the fetch is unconditional; one code path, not two"
+
+
+def test_the_heal_ref_override_defaults_to_empty() -> None:
+    """A branch default here would reintroduce the drift above for every
+    caller that does not think to override it."""
+    inputs = _reusable_document()[_trigger_key(_reusable_document())]["workflow_call"][
+        "inputs"
+    ]
+    assert inputs["heal-ref"]["default"] == ""
+
+
+def test_the_module_is_invoked_by_a_repo_relative_path_in_its_own_checkout() -> None:
+    """An absolute path built from an env var in bash is invisible to the
+    OMN-15393 in-tree scanner, so a fan-out that dropped the module would go
+    undetected until the job died with a missing file."""
+    steps = _reusable_document()["jobs"]["heal"]["steps"]
+    run_step = next(s for s in steps if "run" in s)
+    assert run_step["working-directory"] == ".occ-heal-deps/omniclaude"
+    assert "python3 scripts/ci/occ_companion_merge_heal.py" in run_step["run"]
+    assert "$GITHUB_WORKSPACE" not in run_step["run"]
+
+
+def test_the_reusable_has_no_pull_request_trigger() -> None:
+    """Code from an open PR must never run with this job's Actions token."""
+    assert "pull_request" not in _triggers(_reusable_document())
+
+
+def _trigger_key(document: dict[str, Any]) -> Any:
+    for key in (True, "on"):
+        if key in document:
+            return key
+    raise AssertionError("no trigger block")
