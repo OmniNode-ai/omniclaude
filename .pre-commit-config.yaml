@@ -344,10 +344,11 @@ repos:
         name: lane identity — registry, trailers, and the window check (OMN-18260)
         entry: >-
           bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
-          tests/scripts/test_lane_identity.py -q'
+          tests/scripts/test_lane_identity.py
+          tests/scripts/test_lane_identity_canonical_bake.py -q'
         language: system
         pass_filenames: false
-        files: '^(scripts/lane_identity\.py|scripts/hooks/prepare-commit-msg-lane|tests/scripts/test_lane_identity\.py)$'
+        files: '^(scripts/lane_identity\.py|scripts/hooks/prepare-commit-msg-lane|tests/scripts/conftest\.py|tests/scripts/test_lane_identity\.py|tests/scripts/test_lane_identity_canonical_bake\.py)$'
         stages: [pre-commit]
       - id: check-local-paths
         name: check for local path references

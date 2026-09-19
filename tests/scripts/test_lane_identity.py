@@ -29,6 +29,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 )
 
 from scripts import lane_identity as li
+from tests.scripts.conftest import link_canonical_module
 
 
 @pytest.fixture
@@ -482,13 +483,18 @@ def test_registry_root_prefers_the_explicit_variable(
 
 
 def test_installer_bakes_the_module_path_into_the_installed_hook(
-    repo: Path, base: Path, tmp_path: Path
+    repo: Path, base: Path, tmp_path: Path, lane_registry_root: Path
 ) -> None:
     """A hook copied into .git/hooks sits beside no source tree. Discovering its
     own module from the environment at commit time is the shape that fails
     silently on the one box that does not export the workspace variable -- it
     was caught here by running a real `git commit` rather than by reading the
-    script. The installer therefore writes the resolved path in.
+    script. The installer therefore writes an absolute path in.
+
+    WHICH absolute path is the OMN-18800 correction: the REGISTRY's canonical
+    module, never whichever copy of this file the verb ran from. Baking the
+    invoked copy is what left 27 clones naming a worktree path scheduled for
+    deletion by the worktree prune.
     """
     assert li.main(["install-hook", "--repo", str(repo)]) == 0
     installed = repo / ".git" / "hooks" / "prepare-commit-msg"
@@ -497,7 +503,7 @@ def test_installer_bakes_the_module_path_into_the_installed_hook(
         "@LANE_IDENTITY_PATH@"
         not in body.split("INSTALLED_LANE_IDENTITY=")[1].splitlines()[0]
     )
-    assert str(Path(li.__file__).resolve()) in body
+    assert str(li.canonical_module_path(lane_registry_root)) in body
     assert installed.stat().st_mode & 0o111
 
     li.register(base, repo, lane="lane-i", ticket="OMN-18260")
@@ -592,7 +598,7 @@ def test_the_window_check_ignores_an_inherited_git_dir(
 
 
 def test_installer_never_writes_into_a_shared_hooks_directory(
-    repo: Path, tmp_path: Path
+    repo: Path, tmp_path: Path, lane_registry_root: Path
 ) -> None:
     """A clone can point core.hooksPath at a directory SHARED by several
     repositories. Installing a commit-refusing hook there arms every one of
@@ -622,7 +628,7 @@ def test_installer_never_writes_into_a_shared_hooks_directory(
 
 
 def test_installer_reports_reachable_once_the_shared_directory_dispatches(
-    repo: Path, tmp_path: Path
+    repo: Path, tmp_path: Path, lane_registry_root: Path
 ) -> None:
     """The other half of the same fact: with a dispatch entry present, the
     install is reachable and exits 0. Without this control the exit-4 assertion
@@ -638,7 +644,7 @@ def test_installer_reports_reachable_once_the_shared_directory_dispatches(
 
 
 def test_installer_preserves_a_prior_hook_and_chains_to_it(
-    repo: Path, base: Path
+    repo: Path, base: Path, lane_registry_root: Path
 ) -> None:
     """Every canonical clone in this registry already carries a pre-commit
     framework `pre-push`, and the shipped installer wrote over its target
@@ -663,7 +669,9 @@ def test_installer_preserves_a_prior_hook_and_chains_to_it(
     assert li.OURS_MARKER not in preserved.read_text(encoding="utf-8")
 
 
-def test_status_reports_an_unarmed_clone_nonzero(repo: Path, base: Path) -> None:
+def test_status_reports_an_unarmed_clone_nonzero(
+    repo: Path, base: Path, lane_registry_root: Path
+) -> None:
     """The canary the design's part 2 demands: a gate that cannot see its own
     state is not a gate. An unarmed clone must be a nonzero exit, not silence --
     silence is precisely how four Done tickets stayed inert for three days."""
@@ -727,6 +735,11 @@ def workspace(tmp_path: Path) -> Path:
     root = _init_clone(tmp_path / "ws")
     _init_clone(root / "child_repo")
     (root / "omni_worktrees" / "OMN-1" / "child_repo").mkdir(parents=True)
+    # The real registry holds the omniclaude clone this module ships in, and
+    # since OMN-18800 the arming verbs refuse to name any other copy of it. A
+    # miniature registry without that slot cannot be armed at all, which is the
+    # fail-closed half of the fix rather than a fixture inconvenience.
+    link_canonical_module(root)
     return root
 
 

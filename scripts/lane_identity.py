@@ -64,9 +64,12 @@ __all__ = [
     "SESSION_TRAILER",
     "LaneRecord",
     "BadRange",
+    "NotTheCanonicalModule",
     "UnregisteredLane",
     "apply_trailers",
     "SharedHooksDirectory",
+    "baked_module_path",
+    "canonical_module_path",
     "commit_identity",
     "commit_trailers",
     "commits_in_range",
@@ -105,6 +108,15 @@ class BadRange(RuntimeError):
     """The revision range does not resolve. Raised rather than returning an
     empty finding list: no commits and no defects look identical to a caller,
     and this check's whole value is that its zero means something."""
+
+
+class NotTheCanonicalModule(RuntimeError):
+    """Arming was asked to write a hook naming a module that is not this
+    registry's canonical one. Raised rather than corrected silently: the two
+    outcomes a correction could pick between -- bake the canonical path anyway,
+    or bake the invoked one -- differ in what the operator's readback means, and
+    a verb that quietly picks one is how 27 clones came to name a path scheduled
+    for deletion while every readback said armed (OMN-18800)."""
 
 
 class UnregisteredLane(RuntimeError):
@@ -529,6 +541,130 @@ OURS_MARKER = "# onex-lane-hook: managed by lane_identity.py"
 
 _UNREGISTERED_MODES = ("silent", "refuse")
 
+# ---------------------------------------------------------------------------
+# The one module an installed hook may name  (OMN-18800)
+# ---------------------------------------------------------------------------
+#
+# WHAT WENT WRONG, MEASURED 2026-09-19T02:32Z. The arming verbs baked their OWN
+# source path into every hook they wrote. A lane ran `reconcile --execute` from
+# a per-ticket worktree copy of this module and all 27 canonical clones came
+# away naming
+# `<workspace>/omni_worktrees/<ticket>/omniclaude/scripts/lane_identity.py`,
+# a path the worktree prune deletes. One invocation in the wrong directory, and
+# the blast radius is every clone in the registry.
+#
+# WHY REFUSING BEATS CORRECTING. The shipped hook tries four candidates in turn
+# and the last is the workspace copy, so a pruned baked path often still
+# resolves -- the stamping keeps working while the file the operator read back
+# is not the file doing the work. That divergence is the worse failure, because
+# nothing reports it. Refusing at arming time is the only point where the wrong
+# path can still be refused rather than diagnosed.
+#
+# WHY THE INTERPRETER IS NOT TREATED THE SAME WAY. It is not baked at all. The
+# hook scans `ONEX_LANE_PYTHON` then python3.13/3.12/3.11/3 at commit time and
+# takes the first that is 3.11+, because a git hook runs with whatever PATH git
+# has and a baked interpreter would be the same class of stale pointer this
+# section exists to remove. Only the module path is baked and only it is fixed
+# here.
+#
+# THERE IS NO OVERRIDE. A variable naming the module to bake would be the hole
+# reopened under a new name: the incident was a lane running the verb from the
+# wrong copy, and an override is exactly what a lane in that position would
+# reach for. The seam for tests is `OMNI_HOME` -- point it at a workspace whose
+# canonical slot is the module under test -- which states which registry is
+# being armed instead of exempting the arming from the question.
+
+# The module ships in the omniclaude clone. Spelled here as the same path the
+# workspace reconciler already hardcodes
+# (`omnibase_infra/scripts/reconcile-workspace-venvs.sh`, LANE_IDENTITY_SCRIPT),
+# so the arming verb and the surface that reports on it cannot disagree about
+# which file is canonical.
+CANONICAL_CLONE = "omniclaude"
+CANONICAL_MODULE_RELPATH = ("scripts", "lane_identity.py")
+
+# The line the installer rewrites in `hooks/prepare-commit-msg-lane`. Anchored
+# at the start of a line and to a quoted value, so the placeholder's own
+# explanatory comments inside that file can never be read back as a baked path.
+_BAKED_RE = re.compile(r'^INSTALLED_LANE_IDENTITY="([^"]*)"', re.MULTILINE)
+
+
+def canonical_module_path(root: Path | None = None) -> Path:
+    """The one `lane_identity.py` an installed hook in this registry may name.
+
+    `root` defaults to the workspace root read as a REQUIRED key, so a missing
+    one raises instead of silently picking a wrong default (CLAUDE.md rule 8).
+    A default here would be worse than useless: it would name a module in a
+    workspace nobody asked about and then bake that path into every clone.
+    """
+    base = root if root is not None else Path(os.environ[WORKSPACE_ENV])
+    return base.joinpath(CANONICAL_CLONE, *CANONICAL_MODULE_RELPATH)
+
+
+def same_file(left: Path | str, right: Path | str) -> bool:
+    """Whether two paths name one file, compared through their real paths.
+
+    `os.path.realpath` rather than `Path.resolve(strict=True)` or
+    `os.path.samefile`: a baked path that no longer EXISTS is the central case
+    here -- the worktree was pruned -- and both of those raise on it. A missing
+    path simply is not the canonical one, which is a finding, not an error.
+    """
+    return os.path.realpath(left) == os.path.realpath(right)
+
+
+def module_to_bake(invoked: Path | None = None, root: Path | None = None) -> Path:
+    """The path to write into a hook, or a refusal naming both candidates.
+
+    Returns the WORKSPACE's spelling of the canonical module rather than the
+    resolved real file. That spelling is what every other surface names -- the
+    reconciler's `LANE_IDENTITY_SCRIPT`, the remedy lines below, the drift
+    finding -- and baking a resolved path would make a registry reached through
+    a link report drift against itself forever.
+    """
+    here = (invoked if invoked is not None else Path(__file__)).resolve()
+    try:
+        canonical = canonical_module_path(root)
+    except KeyError:
+        raise NotTheCanonicalModule(
+            f"{WORKSPACE_ENV} is not set, so this registry cannot say which "
+            f"lane_identity.py is canonical, and arming would bake {here} into every "
+            f"clone it touched. Set {WORKSPACE_ENV} and run the verb again from "
+            f"<{WORKSPACE_ENV}>/{CANONICAL_CLONE}/{'/'.join(CANONICAL_MODULE_RELPATH)}."
+        ) from None
+    if not canonical.is_file():
+        raise NotTheCanonicalModule(
+            f"the canonical lane-identity module {canonical} does not exist, so there "
+            f"is no path this registry can be armed with. Refused rather than falling "
+            f"back to the invoked copy {here}: a hook naming a module outside the "
+            f"registry outlives the directory it names."
+        )
+    if not same_file(canonical, here):
+        raise NotTheCanonicalModule(
+            f"arming was invoked from {here}, which is not this registry's canonical "
+            f"lane-identity module {canonical}. A hook baked with the invoked path "
+            f"stops resolving the moment that copy is pruned, and every clone armed in "
+            f"the same pass carries it. Run the verb from the canonical module:\n"
+            f"    python3 {canonical} reconcile --execute"
+        )
+    return canonical
+
+
+def baked_module_path(hook: Path) -> Path | None:
+    """The module path an installed hook names, or None when it names none.
+
+    None for a hook that is not ours and for one that is unreadable. Both are
+    the honest answer to "which module does this hook name": a third-party hook
+    names none, and inventing a finding about a file this mechanism does not own
+    would put noise in front of the real one.
+    """
+    try:
+        body = hook.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = _BAKED_RE.search(body)
+    if match is None or not match.group(1) or match.group(1).startswith("@"):
+        return None
+    return Path(match.group(1))
+
 
 def policy_path(base: Path) -> Path:
     return _registry_dir(base) / "policy.json"
@@ -622,9 +758,11 @@ def install_hook(
             else:
                 target.unlink()
 
-    body = source.read_text(encoding="utf-8").replace(
-        placeholder, str(module.resolve())
-    )
+    # Written exactly as `module` spells it. The CALLER decides which path is
+    # legitimate -- `module_to_bake` -- and resolving it again here would undo
+    # that decision by collapsing the workspace's canonical spelling into
+    # whatever real file it happens to link to (OMN-18800).
+    body = source.read_text(encoding="utf-8").replace(placeholder, str(module))
     target.write_text(body, encoding="utf-8")
     target.chmod(0o755)
     _, reason = hooks_reachable(repo, hook_name)
@@ -1169,10 +1307,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "install-hook":
         repo = Path(args.repo)
         try:
-            # Bake the module's absolute path into the copy. The hook then needs
-            # no environment variable at commit time, which removes the failure
-            # mode where a correctly installed hook cannot find its own module on
-            # a box that does not export the workspace variable.
+            # Resolved BEFORE anything is written. The hook needs no environment
+            # variable at commit time because the module's absolute path is baked
+            # in -- and that path is the registry's canonical one, never whichever
+            # copy of this file the verb was invoked from (OMN-18800).
+            module = module_to_bake()
+        except NotTheCanonicalModule as exc:
+            print(f"lane_identity: {exc}", file=sys.stderr)
+            return 5
+        try:
             target, reason = install_hook(
                 repo,
                 source=Path(__file__).resolve().parent
@@ -1180,7 +1323,7 @@ def main(argv: list[str] | None = None) -> int:
                 / "prepare-commit-msg-lane",
                 hook_name="prepare-commit-msg",
                 placeholder="@LANE_IDENTITY_PATH@",
-                module=Path(__file__),
+                module=module,
             )
         except SharedHooksDirectory as exc:
             print(f"lane_identity: {exc}", file=sys.stderr)
@@ -1289,11 +1432,28 @@ def _status(args: argparse.Namespace) -> int:
             print(f"lane_identity: {WORKSPACE_ENV} is not set", file=sys.stderr)
             return 2
 
+    # Which module an armed hook OUGHT to name here. Resolved before the sweep
+    # and fail-closed: a workspace that cannot say what is canonical cannot
+    # judge a baked path either, and reporting every clone armed while being
+    # unable to check half the question is the shape of a false zero
+    # (CLAUDE.md rule 16, OMN-18800).
+    try:
+        canonical = canonical_module_path()
+    except KeyError:
+        print(
+            f"lane_identity: {WORKSPACE_ENV} is not set, so the canonical "
+            "lane-identity module cannot be named and no baked path can be judged. "
+            "Refusing to report on an arming this run cannot check.",
+            file=sys.stderr,
+        )
+        return 2
+
     registry = _registry_dir(base)
     registrations = len(list(registry.glob("*.json"))) if registry.is_dir() else 0
 
-    rows = []
+    rows: list[dict[str, object]] = []
     unarmed = 0
+    drifted = 0
     for repo in repos:
         try:
             hooks = own_hooks_dir(repo)
@@ -1309,19 +1469,34 @@ def _status(args: argparse.Namespace) -> int:
         armed = installed and reachable
         if not armed:
             unarmed += 1
+        # Only an installed hook has a baked path to be wrong about. An unarmed
+        # clone is already its own finding, and grading it as drift too would
+        # bury the real one under rows that say nothing new.
+        baked = baked_module_path(hook) if installed else None
+        baked_canonical = baked is not None and same_file(baked, canonical)
+        if installed and not baked_canonical:
+            drifted += 1
+            reason = (
+                f"installed, but it names {baked or 'no module at all'} rather than "
+                f"the canonical {canonical}"
+            )
         rows.append(
             {
                 "repo": repo.name,
                 "installed": installed,
                 "reachable": reachable,
                 "armed": armed,
+                "baked": str(baked) if baked is not None else None,
+                "baked_canonical": baked_canonical,
                 "reason": reason,
             }
         )
 
-    report = {
+    report: dict[str, object] = {
         "armed_clones": sum(1 for r in rows if r["armed"]),
+        "canonical_module": str(canonical),
         "clones": len(rows),
+        "drifted": drifted,
         "registrations": registrations,
         "unregistered_policy": unregistered_mode(base),
         "repos": rows,
@@ -1330,10 +1505,21 @@ def _status(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         for row in rows:
-            mark = "ARMED   " if row["armed"] else "UNARMED "
+            if row["installed"] and not row["baked_canonical"]:
+                mark = "DRIFT   "
+            elif row["armed"]:
+                mark = "ARMED   "
+            else:
+                mark = "UNARMED "
             print(f"{mark} {row['repo']}: {row['reason']}")
+        # One quotable line. The baked count is stated beside the armed one on
+        # purpose: "27/27 armed" was true on the morning all 27 named a doomed
+        # path, and a readback that cannot tell those two states apart is what
+        # let the arming stand for a day.
         print(
             f"lane_identity: {report['armed_clones']}/{report['clones']} clones armed, "
+            f"{len(rows) - drifted}/{len(rows)} baked at {canonical}, "
+            f"{drifted} with a non-canonical baked path, "
             f"{registrations} worktree registration(s), "
             f"unregistered policy = {report['unregistered_policy']}"
         )
@@ -1349,7 +1535,21 @@ def _status(args: argparse.Namespace) -> int:
         print(
             f"lane_identity: {unarmed} clone(s) are NOT armed, so commits there carry no "
             f"lane identity and the pre-push refusal has nothing to compare. Arm with:\n"
-            f"    python3 {Path(__file__).resolve()} reconcile --execute",
+            f"    python3 {canonical} reconcile --execute",
+            file=sys.stderr,
+        )
+        return 1
+    if drifted:
+        # A finding, not a repair. This verb reads; the reconciler's repair path
+        # re-arms and then reads back through this same code, and a finding it
+        # can see is what makes that readback mean anything (OMN-18800).
+        print(
+            f"lane_identity: {drifted} clone(s) carry a hook naming a module other than "
+            f"{canonical}. A baked path under omni_worktrees/ is deleted by the worktree "
+            f"prune, after which the hook resolves something else or nothing at all, and "
+            f"either way the arming is not what a readback reported. Re-arm FROM the "
+            f"canonical module:\n"
+            f"    python3 {canonical} reconcile --execute",
             file=sys.stderr,
         )
         return 1
@@ -1439,6 +1639,17 @@ def _reconcile(args: argparse.Namespace) -> int:
         print(f"lane_identity: no clones under {root}", file=sys.stderr)
         return 2
 
+    # 0. Which module every hook in this pass will name, decided ONCE and
+    #    before the first write. Inside the loop this check would leave the
+    #    registry half-armed with the very path it exists to refuse -- and a
+    #    half-armed registry is harder to reason about than an unarmed one,
+    #    because `status` then reports two different answers (OMN-18800).
+    try:
+        module = module_to_bake()
+    except NotTheCanonicalModule as exc:
+        print(f"lane_identity: {exc}", file=sys.stderr)
+        return 5
+
     # 1. The shared guard needs a dispatch entry per hook type, or nothing we
     #    install into a clone's own hooks directory is ever invoked.
     announced: set[str] = set()
@@ -1465,7 +1676,7 @@ def _reconcile(args: argparse.Namespace) -> int:
                 / "prepare-commit-msg-lane",
                 hook_name="prepare-commit-msg",
                 placeholder="@LANE_IDENTITY_PATH@",
-                module=Path(__file__),
+                module=module,
             )
         except (SharedHooksDirectory, OSError) as exc:
             print(f"lane_identity: {clone.name}: {exc}", file=sys.stderr)
