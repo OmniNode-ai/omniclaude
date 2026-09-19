@@ -79,9 +79,15 @@ def base(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def clone(tmp_path: Path) -> Path:
-    """A throwaway clone with the stamping hook installed, as a lane's box has."""
-    c = tmp_path / "clones" / "repo"
+def clone(tmp_path: Path, lane_registry_root: Path) -> Path:
+    """A throwaway clone with the stamping hook installed, as a lane's box has.
+
+    Placed inside `lane_registry_root`, which is what makes the install legal:
+    since OMN-18800 the arming verb writes only the registry's own canonical
+    module path into a hook, so a test that arms anything has to name the
+    registry it is arming.
+    """
+    c = lane_registry_root / "clones" / "repo"
     c.mkdir(parents=True)
     _git(c, "init", "-q", "-b", "main")
     toplevel = _git(c, "rev-parse", "--show-toplevel")

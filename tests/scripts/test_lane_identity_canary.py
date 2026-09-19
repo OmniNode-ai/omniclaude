@@ -56,6 +56,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 )
 
 from scripts import lane_identity as li
+from tests.scripts.conftest import link_canonical_module
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LEDGER_NAME = "SCRATCH_LEDGER.md"
@@ -114,6 +115,12 @@ def workspace(tmp_path: Path) -> dict:
     """
     home = tmp_path / "home"
     home.mkdir()
+    # The registry's canonical lane-identity module, which is the only path the
+    # arming verbs will bake into a hook (OMN-18800). Linked rather than copied
+    # so the canary drives the checkout's own code through the workspace's
+    # spelling of it -- a copy would freeze at fixture-build time and go on
+    # passing after the module it is meant to canary had changed.
+    link_canonical_module(home)
     shared = home / "scripts" / "git-hooks" / "canonical-clone"
     shared.mkdir(parents=True)
     guard = home / "scripts" / "git-hooks" / "guard.sh"
