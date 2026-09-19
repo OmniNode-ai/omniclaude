@@ -1,0 +1,792 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Census baseline for the no-new-advisory-job gate. OMN-18777, epic OMN-18775.
+#
+# WHAT THIS IS. Every line below already existed when the gate landed. It is a
+# GRANDFATHER LIST, named line by line, and it is deliberately not a date
+# cutoff: a cutoff waves through anything an author can date, and a file-level
+# allowlist waves through the next setting added to a file that already has
+# one. AC4 of OMN-18777 is that each grandfathered line is individually named,
+# and tests/scripts/test_advisory_job_gate.py asserts the shape of every entry
+# as well as the per-repo counts.
+#
+# HOW TO USE IT. Do not add to it. A NEW advisory setting is annotated on its
+# own line -- "# advisory-ok: OMN-nnnnn <reason>" -- which leaves a citable
+# artifact the way the raw-prod-bypass annotation already does for a prod
+# mutation. A NEW verification job is enforced, or annotated if it is
+# genuinely notification or automation. This list only ever SHRINKS; the gate
+# prints a reconcile line when an entry has gone and does not fail on it,
+# because refusing the removal of an advisory setting would make the gate
+# punish the only fix it wants.
+#
+# HOW IT WAS BUILT. scripts/advisory_job_gate.py --write-baseline, run against
+# each repository .github/workflows tree at origin/dev on 2026-09-19, with the
+# enforcement surface resolved live. The advisory counts it produced --
+# 5, 28, 9, 4, 11, 7 -- reproduce the OMN-18775 census exactly and
+# independently, which is the positive control on the scanner.
+#
+# advisory           one setting that swallows a job or a step failure.
+# verification_jobs  one pull-request-reachable verification-shaped job in
+#                    neither required_status_checks nor the repo
+#                    EXPECTED_EXTERNAL_CONTEXTS umbrella constant. The named
+#                    findings of the OMN-18775 inventory are all here and can
+#                    be read off it: the runner-routing audit, seed-provenance
+#                    and fresh-deploy-fitness under omnibase_infra.
+# recorded_contexts  a dated SNAPSHOT of the enforcement surface, for the
+#                    self-test and for reading. THE GATE NEVER READS IT as an
+#                    enforcement source -- that surface is resolved live on
+#                    every run, because a committed list of what is enforced
+#                    is exactly the asserted verdict this epic is about.
+version: 1
+census: OMN-18775
+repos:
+  OmniNode-ai/omnibase_core:
+    advisory:
+    - path: .github/workflows/ci.yml
+      line: 1125
+      key: .github/workflows/ci.yml::version-pin-check::JOB
+    - path: .github/workflows/ci.yml
+      line: 3677
+      key: .github/workflows/ci.yml::shadow-compare::JOB
+    - path: .github/workflows/publish-downstream-pin-bump.yml
+      line: 92
+      key: .github/workflows/publish-downstream-pin-bump.yml::bump::JOB
+    - path: .github/workflows/release.yml
+      line: 644
+      key: .github/workflows/release.yml::report-partial-state::step[0]
+    - path: .github/workflows/shadow-metrics-harvest.yml
+      line: 66
+      key: .github/workflows/shadow-metrics-harvest.yml::harvest::step[2]
+    verification_jobs:
+    - path: .github/workflows/todo-audit-on-merge.yml
+      line: 35
+      key: .github/workflows/todo-audit-on-merge.yml::todo-audit
+    recorded_contexts:
+    - AST Risk Labeler
+    - CI Naming Convention
+    - CI Summary
+    - Canonical Inference Gate
+    - Check architecture handshake
+    - CodeQL
+    - CodeQL / CodeQL Analysis (python)
+    - DB ownership CI twin (B1)
+    - Decommissioned Pattern Scanner (OMN-4801)
+    - Dep Provenance Gate
+    - Ecosystem Integration Validation
+    - LLM refs drift check (OMN-11932)
+    - Legacy Compatibility Check
+    - No Faked Boundary Gate
+    - ONEX Architecture Compliance
+    - Precommit Parity Gate
+    - Stale TODO Gate
+    - URL Authority Gate
+    - call-reject-skip-token / occ-preflight / eligibility
+    - call-reject-skip-token / scan / reject-skip-gate-token
+    - contract-validation
+    - deploy-gate / deploy-gate
+    - fsm-handler-drift
+    - kb-doc-gate / kb-doc-gate
+    - lint (shadow)
+    - main-target-guard
+    - no-plugin-daemon-classes
+    - no-unguarded-git-subprocess
+    - occ-companion-effect / Publish occ-companion-effect command
+    - occ-preflight / eligibility
+    - pr-title / check-title
+    - product-readiness / evaluate
+    - reason-graph
+    - receipt-honesty
+    - required-check-skip-guard / check-skip-vectors
+    - runtime-profiles
+    - tests+coverage (shadow)
+    - typecheck (shadow)
+    - verify / verify
+  OmniNode-ai/omnibase_infra:
+    advisory:
+    - path: .github/workflows/branch-protection-audit.yml
+      line: 171
+      key: .github/workflows/branch-protection-audit.yml::audit::step[6]
+    - path: .github/workflows/ci.yml
+      line: 765
+      key: .github/workflows/ci.yml::onex-validation::step[8]
+    - path: .github/workflows/ci.yml
+      line: 780
+      key: .github/workflows/ci.yml::onex-validation::step[9]
+    - path: .github/workflows/ci.yml
+      line: 2319
+      key: .github/workflows/ci.yml::version-pin-check::step[1]
+    - path: .github/workflows/ci.yml
+      line: 2330
+      key: .github/workflows/ci.yml::version-pin-check::step[2]
+    - path: .github/workflows/ci.yml
+      line: 2522
+      key: .github/workflows/ci.yml::migration-conflict-check::step[0]
+    - path: .github/workflows/ci.yml
+      line: 2568
+      key: .github/workflows/ci.yml::contract-compliance::step[1]
+    - path: .github/workflows/ci.yml
+      line: 2767
+      key: .github/workflows/ci.yml::test-failure-ratchet::step[4]
+    - path: .github/workflows/ci.yml
+      line: 2785
+      key: .github/workflows/ci.yml::test-failure-ratchet::step[6]
+    - path: .github/workflows/ci.yml
+      line: 2805
+      key: .github/workflows/ci.yml::test-failure-ratchet::step[8]
+    - path: .github/workflows/ci.yml
+      line: 3292
+      key: .github/workflows/ci.yml::application-database-domain-enforcement::step[1]
+    - path: .github/workflows/ci.yml
+      line: 3755
+      key: .github/workflows/ci.yml::ci-summary::step[2]
+    - path: .github/workflows/dev-lane-liveness.yml
+      line: 297
+      key: .github/workflows/dev-lane-liveness.yml::saturation-record::step[2]
+    - path: .github/workflows/dev-lane-liveness.yml
+      line: 304
+      key: .github/workflows/dev-lane-liveness.yml::saturation-record::step[3]
+    - path: .github/workflows/dev-lane-liveness.yml
+      line: 338
+      key: .github/workflows/dev-lane-liveness.yml::saturation-record::step[4]
+    - path: .github/workflows/docker-build.yml
+      line: 317
+      key: .github/workflows/docker-build.yml::docker-integration-tests::JOB
+    - path: .github/workflows/fresh-deploy-fitness.yml
+      line: 175
+      key: .github/workflows/fresh-deploy-fitness.yml::pinned-wheel-skew::JOB
+    - path: .github/workflows/hostile-reviewer.yml
+      line: 309
+      key: .github/workflows/hostile-reviewer.yml::hostile-review::step[8]
+    - path: .github/workflows/omni-standards-compliance.yml
+      line: 67
+      key: .github/workflows/omni-standards-compliance.yml::type-safety::step[1]
+    - path: .github/workflows/omni-standards-compliance.yml
+      line: 123
+      key: .github/workflows/omni-standards-compliance.yml::type-union-check::step[1]
+    - path: .github/workflows/omni-standards-compliance.yml
+      line: 183
+      key: .github/workflows/omni-standards-compliance.yml::handler-contract-compliance::step[3]
+    - path: .github/workflows/release-train-nightly.yml
+      line: 191
+      key: .github/workflows/release-train-nightly.yml::decide::step[3]
+    - path: .github/workflows/runner-route-reusable.yml
+      line: 138
+      key: .github/workflows/runner-route-reusable.yml::route::step[2]
+    - path: .github/workflows/runner-routing-audit.yml
+      line: 58
+      key: .github/workflows/runner-routing-audit.yml::audit::step[2]
+    - path: .github/workflows/runner-routing-audit.yml
+      line: 68
+      key: .github/workflows/runner-routing-audit.yml::audit::step[3]
+    - path: .github/workflows/runtime-rebuild-trigger-reusable.yml
+      line: 406
+      key: .github/workflows/runtime-rebuild-trigger-reusable.yml::verify-sibling-converged::step[3]
+    - path: .github/workflows/runtime-rebuild-trigger.yml
+      line: 403
+      key: .github/workflows/runtime-rebuild-trigger.yml::verify-lane-converged::step[3]
+    - path: .github/workflows/seed-provenance-check.yml
+      line: 44
+      key: .github/workflows/seed-provenance-check.yml::seed-provenance-check::JOB
+    verification_jobs:
+    - path: .github/workflows/arm64-verify-runner-proof.yml
+      line: 49
+      key: .github/workflows/arm64-verify-runner-proof.yml::arm64-verify-proof
+    - path: .github/workflows/auto-merge.yml
+      line: 143
+      key: .github/workflows/auto-merge.yml::auto-merge
+    - path: .github/workflows/check-env-reads-gate.yml
+      line: 45
+      key: .github/workflows/check-env-reads-gate.yml::check-env-reads-gate
+    - path: .github/workflows/check-handshake.yml
+      line: 17
+      key: .github/workflows/check-handshake.yml::check-handshake
+    - path: .github/workflows/check-sibling-compat.yml
+      line: 25
+      key: .github/workflows/check-sibling-compat.yml::sibling-compat
+    - path: .github/workflows/compose-config-lint.yml
+      line: 33
+      key: .github/workflows/compose-config-lint.yml::compose-config-lint
+    - path: .github/workflows/delegation-seam-gate.yml
+      line: 68
+      key: .github/workflows/delegation-seam-gate.yml::delegation-seam-gate
+    - path: .github/workflows/delegation-seam-gate.yml
+      line: 136
+      key: .github/workflows/delegation-seam-gate.yml::consumer-kwarg-parity
+    - path: .github/workflows/dispatch-parity-gate.yml
+      line: 60
+      key: .github/workflows/dispatch-parity-gate.yml::dispatch-parity-gate
+    - path: .github/workflows/docker-build.yml
+      line: 50
+      key: .github/workflows/docker-build.yml::dockerfile-pin-check
+    - path: .github/workflows/docker-build.yml
+      line: 296
+      key: .github/workflows/docker-build.yml::docker-integration-tests
+    - path: .github/workflows/docker-build.yml
+      line: 396
+      key: .github/workflows/docker-build.yml::security-scan
+    - path: .github/workflows/docker-build.yml
+      line: 511
+      key: .github/workflows/docker-build.yml::attest-source-hash
+    - path: .github/workflows/env-parity.yml
+      line: 28
+      key: .github/workflows/env-parity.yml::env-parity
+    - path: .github/workflows/fresh-deploy-fitness.yml
+      line: 47
+      key: .github/workflows/fresh-deploy-fitness.yml::release-identity
+    - path: .github/workflows/fresh-deploy-fitness.yml
+      line: 78
+      key: .github/workflows/fresh-deploy-fitness.yml::terminal-cost-completeness
+    - path: .github/workflows/fresh-deploy-fitness.yml
+      line: 97
+      key: .github/workflows/fresh-deploy-fitness.yml::context-field-presence
+    - path: .github/workflows/fresh-deploy-fitness.yml
+      line: 118
+      key: .github/workflows/fresh-deploy-fitness.yml::sibling-lock-pins
+    - path: .github/workflows/git-env-scrub.yml
+      line: 44
+      key: .github/workflows/git-env-scrub.yml::git-env-scrub
+    - path: .github/workflows/hostile-reviewer.yml
+      line: 89
+      key: .github/workflows/hostile-reviewer.yml::hostile-review
+    - path: .github/workflows/hostile-reviewer.yml
+      line: 556
+      key: .github/workflows/hostile-reviewer.yml::hostile-review-gate
+    - path: .github/workflows/hostile-reviewer.yml
+      line: 598
+      key: .github/workflows/hostile-reviewer.yml::hostile-review-thread-gate
+    - path: .github/workflows/lane-census-staleness.yml
+      line: 60
+      key: .github/workflows/lane-census-staleness.yml::lane-census-staleness
+    - path: .github/workflows/node-migration-sync.yml
+      line: 110
+      key: .github/workflows/node-migration-sync.yml::deployed-migration-tree-sync-logic
+    - path: .github/workflows/omnigate.yml
+      line: 18
+      key: .github/workflows/omnigate.yml::verify
+    - path: .github/workflows/precommit-parity-gate.yml
+      line: 54
+      key: .github/workflows/precommit-parity-gate.yml::precommit-parity-gate
+    - path: .github/workflows/prod-promotion-lineage.yml
+      line: 64
+      key: .github/workflows/prod-promotion-lineage.yml::guard-tests
+    - path: .github/workflows/prod-promotion-lineage.yml
+      line: 97
+      key: .github/workflows/prod-promotion-lineage.yml::lineage-check
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 111
+      key: .github/workflows/product-readiness-shadow.yml::lint-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 137
+      key: .github/workflows/product-readiness-shadow.yml::typecheck-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 160
+      key: .github/workflows/product-readiness-shadow.yml::tests-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 202
+      key: .github/workflows/product-readiness-shadow.yml::reason-graph
+    - path: .github/workflows/public-repo-hygiene.yml
+      line: 38
+      key: .github/workflows/public-repo-hygiene.yml::public-repo-hygiene
+    - path: .github/workflows/runner-disk-preflight.yml
+      line: 61
+      key: .github/workflows/runner-disk-preflight.yml::runner-disk-preflight
+    - path: .github/workflows/runner-routing-audit.yml
+      line: 27
+      key: .github/workflows/runner-routing-audit.yml::audit
+    - path: .github/workflows/runtime-rebuild-trigger.yml
+      line: 76
+      key: .github/workflows/runtime-rebuild-trigger.yml::trigger-rebuild
+    - path: .github/workflows/runtime-rebuild-trigger.yml
+      line: 234
+      key: .github/workflows/runtime-rebuild-trigger.yml::verify-lane-converged
+    - path: .github/workflows/runtime-rebuild-trigger.yml
+      line: 728
+      key: .github/workflows/runtime-rebuild-trigger.yml::verify-lab-overlay-converged
+    - path: .github/workflows/s6-runtime-seam-gate.yml
+      line: 54
+      key: .github/workflows/s6-runtime-seam-gate.yml::s6-runtime-seam-gate
+    - path: .github/workflows/seed-provenance-check.yml
+      line: 34
+      key: .github/workflows/seed-provenance-check.yml::seed-provenance-check
+    - path: .github/workflows/shellcheck-gate.yml
+      line: 28
+      key: .github/workflows/shellcheck-gate.yml::shell-hygiene
+    - path: .github/workflows/skill-node-mapping-sync.yml
+      line: 44
+      key: .github/workflows/skill-node-mapping-sync.yml::skill-node-mapping-sync
+    - path: .github/workflows/todo-audit-on-merge.yml
+      line: 38
+      key: .github/workflows/todo-audit-on-merge.yml::todo-audit
+    recorded_contexts:
+    - CI Summary
+    - Canonical Inference Gate
+    - CodeQL
+    - Dep Provenance Gate
+    - Duplication Sweep
+    - Governed helper primitive gate
+    - Integration Test Removal Gate
+    - Omni Standards Gate
+    - Stale TODO Gate
+    - Type Safety Validation
+    - URL Authority Gate
+    - call-reject-skip-token / scan / reject-skip-gate-token
+    - ci-bus-overlay-binding
+    - contract-validation
+    - deploy-gate / deploy-gate
+    - dispatcher-route-coverage
+    - exposure-reader-coverage
+    - imperative-contract-guard / Imperative Contract Guard
+    - kb-doc-gate / kb-doc-gate
+    - main-target-guard
+    - non-dev-base-guard
+    - pr-title / check-title
+    - receipt-honesty
+    - required-check-skip-guard / check-skip-vectors
+    - verify / verify
+  OmniNode-ai/omnimarket:
+    advisory:
+    - path: .github/workflows/call-occ-companion-author.yml
+      line: 123
+      key: .github/workflows/call-occ-companion-author.yml::occ-companion-author::JOB
+    - path: .github/workflows/call-occ-companion-observe.yml
+      line: 78
+      key: .github/workflows/call-occ-companion-observe.yml::occ-companion-observe::JOB
+    - path: .github/workflows/ci.yml
+      line: 1771
+      key: .github/workflows/ci.yml::dep-health::step[5]
+    - path: .github/workflows/dep-health-gate.yml
+      line: 127
+      key: .github/workflows/dep-health-gate.yml::dep-health::step[3]
+    - path: .github/workflows/hostile-reviewer.yml
+      line: 371
+      key: .github/workflows/hostile-reviewer.yml::hostile-review::step[8]
+    - path: .github/workflows/occ-behavior-proof-backfill.yml
+      line: 95
+      key: .github/workflows/occ-behavior-proof-backfill.yml::backfill::JOB
+    - path: .github/workflows/occ-receipt-runner.yml
+      line: 93
+      key: .github/workflows/occ-receipt-runner.yml::occ-receipt-runner::JOB
+    - path: .github/workflows/pr-arch-review.yml
+      line: 313
+      key: .github/workflows/pr-arch-review.yml::arch-lint::step[2]
+    - path: .github/workflows/release-on-merge.yml
+      line: 737
+      key: .github/workflows/release-on-merge.yml::sync-main::JOB
+    verification_jobs:
+    - path: .github/workflows/auto-merge.yml
+      line: 71
+      key: .github/workflows/auto-merge.yml::occ-preflight
+    - path: .github/workflows/auto-merge.yml
+      line: 161
+      key: .github/workflows/auto-merge.yml::auto-merge
+    - path: .github/workflows/call-occ-attestation-observe.yml
+      line: 145
+      key: .github/workflows/call-occ-attestation-observe.yml::occ-attestation-observe
+    - path: .github/workflows/ci-bus-overlay-parity.yml
+      line: 85
+      key: .github/workflows/ci-bus-overlay-parity.yml::ci-bus-overlay-parity
+    - path: .github/workflows/dep-health-gate.yml
+      line: 19
+      key: .github/workflows/dep-health-gate.yml::occ-preflight
+    - path: .github/workflows/dep-health-gate.yml
+      line: 109
+      key: .github/workflows/dep-health-gate.yml::dep-health
+    - path: .github/workflows/kb-doc-gate.yml
+      line: 19
+      key: .github/workflows/kb-doc-gate.yml::kb-doc-gate
+    - path: .github/workflows/market-skill-baseline.yml
+      line: 25
+      key: .github/workflows/market-skill-baseline.yml::occ-preflight
+    - path: .github/workflows/market-skill-baseline.yml
+      line: 115
+      key: .github/workflows/market-skill-baseline.yml::market-skill-baseline
+    - path: .github/workflows/occ-receipt-runner.yml
+      line: 79
+      key: .github/workflows/occ-receipt-runner.yml::occ-receipt-runner
+    - path: .github/workflows/plugin-compat-gate.yml
+      line: 35
+      key: .github/workflows/plugin-compat-gate.yml::occ-preflight
+    - path: .github/workflows/plugin-compat-gate.yml
+      line: 125
+      key: .github/workflows/plugin-compat-gate.yml::plugin-compat-handshake
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 55
+      key: .github/workflows/product-readiness-shadow.yml::lint-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 81
+      key: .github/workflows/product-readiness-shadow.yml::typecheck-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 103
+      key: .github/workflows/product-readiness-shadow.yml::tests-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 162
+      key: .github/workflows/product-readiness-shadow.yml::reason-graph
+    - path: .github/workflows/public-repo-hygiene.yml
+      line: 38
+      key: .github/workflows/public-repo-hygiene.yml::public-repo-hygiene
+    - path: .github/workflows/security-scan.yml
+      line: 30
+      key: .github/workflows/security-scan.yml::dependency-scan
+    - path: .github/workflows/security-scan.yml
+      line: 70
+      key: .github/workflows/security-scan.yml::secret-scan
+    - path: .github/workflows/shellcheck-gate.yml
+      line: 30
+      key: .github/workflows/shellcheck-gate.yml::shell-hygiene
+    - path: .github/workflows/todo-audit-on-merge.yml
+      line: 26
+      key: .github/workflows/todo-audit-on-merge.yml::todo-audit
+    recorded_contexts:
+    - Architectural Compliance Lint
+    - BYOK Catalogue No House Entry
+    - CI Naming Convention
+    - CI Summary
+    - Canonical Inference Gate
+    - Customer Path Boundary (OMN-18012)
+    - Dep Provenance Gate
+    - Ecosystem Integration Validation
+    - Enforce validator-requirements.yaml (OMN-13291)
+    - Git env scrub gate
+    - Hostile Review Gate
+    - Hostile Reviewer (adversarial gate)
+    - JS Toolchain Hermetic (OMN-18012)
+    - Leaked Literals Gate
+    - Legacy Compatibility Check
+    - No Faked Boundary Gate
+    - OCC Emitter Golden Gate
+    - ONEX Change Control Schema Compatibility
+    - Omni Standards Gate
+    - PR Arch Review Gate
+    - Precommit Fail-Loud Gate
+    - Projection Exposure Drift Gate
+    - Repository Structure Validation
+    - Resolve Bot Token
+    - Routing Tier Bindability
+    - Stale TODO Gate
+    - URL Authority Gate
+    - call / validate-docs
+    - call-reject-skip-token / occ-preflight / eligibility
+    - call-reject-skip-token / scan / reject-skip-gate-token
+    - contract-validation
+    - deploy-gate / deploy-gate
+    - dispatcher-route-coverage
+    - fsm-handler-drift
+    - handler-event-type-source
+    - imperative-contract-guard / Imperative Contract Guard
+    - local-ingress-alias-collision
+    - main-target-guard
+    - mixed-category-routing
+    - no-baseline-refreeze
+    - no-literal-event-type-in-tests
+    - node-drift-gate
+    - node-migration-vendor-parity-gate
+    - non-dev-base-guard
+    - occ-preflight / eligibility
+    - pr-title / check-title
+    - receipt-honesty
+    - required-check-skip-guard / check-skip-vectors
+    - routing-input-model-fit
+    - skill-mapping-input-coverage-gate
+    - state-coverage-gate
+    - subscriber-dispatcher-resolution
+    - validate
+    - verify / verify
+  OmniNode-ai/omniclaude:
+    advisory:
+    - path: .github/workflows/ci.yml
+      line: 2231
+      key: .github/workflows/ci.yml::test::step[9]
+    - path: .github/workflows/ci.yml
+      line: 2240
+      key: .github/workflows/ci.yml::test::step[10]
+    - path: .github/workflows/ci.yml
+      line: 2874
+      key: .github/workflows/ci.yml::version-pin-check::JOB
+    - path: .github/workflows/security-scan.yml
+      line: 65
+      key: .github/workflows/security-scan.yml::dependency-scan::step[4]
+    verification_jobs:
+    - path: .github/workflows/branch-claim-check.yml
+      line: 23
+      key: .github/workflows/branch-claim-check.yml::branch-claim-check
+    - path: .github/workflows/closes-ref-gate.yml
+      line: 36
+      key: .github/workflows/closes-ref-gate.yml::closes-ref-gate
+    - path: .github/workflows/git-env-scrub.yml
+      line: 44
+      key: .github/workflows/git-env-scrub.yml::git-env-scrub
+    - path: .github/workflows/public-repo-hygiene.yml
+      line: 29
+      key: .github/workflows/public-repo-hygiene.yml::public-repo-hygiene
+    - path: .github/workflows/public-skill-hygiene.yml
+      line: 32
+      key: .github/workflows/public-skill-hygiene.yml::public-skill-hygiene
+    - path: .github/workflows/todo-audit-on-merge.yml
+      line: 37
+      key: .github/workflows/todo-audit-on-merge.yml::todo-audit
+    - path: .github/workflows/verifier-stamp-selftest.yml
+      line: 49
+      key: .github/workflows/verifier-stamp-selftest.yml::selftest
+    recorded_contexts:
+    - AI-Slop Pattern Check (strict, PR diff)
+    - Agent Contract Validation
+    - Aislop Sweep
+    - 'Arch: ModelCostLedger confined to effects (check 5)'
+    - 'Arch: ModelCostLedger run_id field + index (check 9)'
+    - 'Arch: No DB access in orchestrator/compute (checks 1 & 8)'
+    - 'Arch: No LinearClient outside effects (check 3)'
+    - 'Arch: No datetime.utcnow() (check 11)'
+    - 'Arch: No direct EventBus instantiation (OMN-10725)'
+    - 'Arch: No direct Kafka producer outside publisher (check 10)'
+    - 'Arch: No direct adapter imports in business logic (check 13)'
+    - 'Arch: No git/gh calls outside effects (check 2)'
+    - 'Arch: No hardcoded internal IPs (check 12)'
+    - 'Arch: No localhost/default env fallbacks (OMN-10658)'
+    - 'Arch: No polymorphic-agent in enforcement paths (OMN-9143)'
+    - 'Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)'
+    - 'Arch: No repository adapter imports in orchestrator/compute (check 4)'
+    - 'Arch: omnidash_readonly role provisioning + CI (check 7)'
+    - 'Arch: onex.* topic naming convention (check 6)'
+    - Architecture Handshake
+    - Architecture Invariants
+    - CI Summary
+    - Canonical Inference Gate
+    - Code Quality
+    - Cross-Repo Boundary Parity
+    - Database Schema Validation
+    - DoD Evidence Check
+    - Enum Governance
+    - Env Var Registry (OMN-6263)
+    - Exports Validation
+    - F5.1 No compact cmd topic
+    - Hook Edge Lane Gate
+    - Hostile Review Gate
+    - Kafka Import Guard
+    - Lane Identity Gate
+    - Markdown Link Check
+    - Merge-Sweep Contract
+    - Migration Freeze
+    - Mode Metadata Integrity
+    - No Faked Boundary Gate
+    - ONEX Compliance
+    - Omni Standards Gate
+    - Quality Gate
+    - Secret Detection
+    - Skill Contract Validation
+    - Skill Hygiene
+    - Skill Monorepo-Ref Gate
+    - Tests Gate
+    - URL Authority Gate
+    - Version Pin Compliance
+    - advisory-job-gate / advisory-job-gate
+    - call-reject-skip-token / scan / reject-skip-gate-token
+    - contract-validation
+    - deploy-gate
+    - kb-doc-gate / kb-doc-gate
+    - main-target-guard
+    - no-noncanonical-lifecycle-classes
+    - non-dev-base-guard
+    - occ-preflight / eligibility
+    - pr-title / check-title
+    - reason-graph
+    - receipt-honesty
+    - required-check-skip-guard / check-skip-vectors
+  OmniNode-ai/omninode_infra:
+    advisory:
+    - path: .github/workflows/deploy-onex-staging.yml
+      line: 5212
+      key: .github/workflows/deploy-onex-staging.yml::deploy-staging::step[73]
+    - path: .github/workflows/staging-green-bar.yml
+      line: 109
+      key: .github/workflows/staging-green-bar.yml::staging-green-bar::step[1]
+    - path: .github/workflows/staging-green-bar.yml
+      line: 314
+      key: .github/workflows/staging-green-bar.yml::staging-green-bar::step[12]
+    - path: .github/workflows/terraform-plan.yml
+      line: 175
+      key: .github/workflows/terraform-plan.yml::plan::step[2]
+    - path: .github/workflows/terraform-plan.yml
+      line: 221
+      key: .github/workflows/terraform-plan.yml::plan::step[6]
+    - path: .github/workflows/test-composite-actions.yml
+      line: 69
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest::step[1]
+    - path: .github/workflows/test-composite-actions.yml
+      line: 80
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest::step[2]
+    - path: .github/workflows/test-composite-actions.yml
+      line: 144
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest-fallback::step[1]
+    - path: .github/workflows/test-composite-actions.yml
+      line: 159
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest-fallback::step[2]
+    - path: .github/workflows/test-composite-actions.yml
+      line: 176
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest-fallback::step[3]
+    - path: .github/workflows/test-composite-actions.yml
+      line: 248
+      key: .github/workflows/test-composite-actions.yml::test-ssm-port-forward::step[1]
+    verification_jobs:
+    - path: .github/workflows/application-database-topology-parity.yml
+      line: 42
+      key: .github/workflows/application-database-topology-parity.yml::parity
+    - path: .github/workflows/auto-merge.yml
+      line: 93
+      key: .github/workflows/auto-merge.yml::auto-merge
+    - path: .github/workflows/ban-hardcoded-aws-ci-identifiers.yml
+      line: 43
+      key: .github/workflows/ban-hardcoded-aws-ci-identifiers.yml::ban-hardcoded-aws-ci-identifiers
+    - path: .github/workflows/beta-board-reconciliation.yml
+      line: 71
+      key: .github/workflows/beta-board-reconciliation.yml::reconcile
+    - path: .github/workflows/kafka-schema-handshake.yml
+      line: 29
+      key: .github/workflows/kafka-schema-handshake.yml::validate
+    - path: .github/workflows/lab-store-mirror-parity.yml
+      line: 51
+      key: .github/workflows/lab-store-mirror-parity.yml::lab-store-mirror-parity
+    - path: .github/workflows/migration-freeze.yml
+      line: 18
+      key: .github/workflows/migration-freeze.yml::check-freeze
+    - path: .github/workflows/no-silent-fallbacks.yml
+      line: 16
+      key: .github/workflows/no-silent-fallbacks.yml::check
+    - path: .github/workflows/omnidash-ci.yml
+      line: 13
+      key: .github/workflows/omnidash-ci.yml::dockerfile-lint
+    - path: .github/workflows/onex-api-tests.yml
+      line: 21
+      key: .github/workflows/onex-api-tests.yml::pytest
+    - path: .github/workflows/test-composite-actions.yml
+      line: 43
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest
+    - path: .github/workflows/test-composite-actions.yml
+      line: 118
+      key: .github/workflows/test-composite-actions.yml::test-resolve-ecr-digest-fallback
+    - path: .github/workflows/test-composite-actions.yml
+      line: 225
+      key: .github/workflows/test-composite-actions.yml::test-ssm-port-forward
+    - path: .github/workflows/test-composite-actions.yml
+      line: 267
+      key: .github/workflows/test-composite-actions.yml::test-install-kubeconform
+    - path: .github/workflows/test-composite-actions.yml
+      line: 323
+      key: .github/workflows/test-composite-actions.yml::test-install-kustomize
+    - path: .github/workflows/test-composite-actions.yml
+      line: 417
+      key: .github/workflows/test-composite-actions.yml::test-install-yq
+    - path: .github/workflows/test-composite-actions.yml
+      line: 476
+      key: .github/workflows/test-composite-actions.yml::test-summary
+    - path: .github/workflows/todo-audit-on-merge.yml
+      line: 35
+      key: .github/workflows/todo-audit-on-merge.yml::todo-audit
+    - path: .github/workflows/validate-cronjob-manifests.yml
+      line: 19
+      key: .github/workflows/validate-cronjob-manifests.yml::validate-cronjob-manifests
+    - path: .github/workflows/validate-deployment-manifests.yml
+      line: 31
+      key: .github/workflows/validate-deployment-manifests.yml::validate-manifests
+    - path: .github/workflows/validate-migration-filenames.yml
+      line: 34
+      key: .github/workflows/validate-migration-filenames.yml::validate-migration-filenames
+    - path: .github/workflows/validate-priority-class-manifest.yml
+      line: 19
+      key: .github/workflows/validate-priority-class-manifest.yml::validate
+    recorded_contexts:
+    - CI Summary
+    - CRLF Gate
+    - Check architecture handshake
+    - Infra Consistency Check
+    - Pydantic to TypeScript schema parity
+    - Security Gate
+    - Stale TODO Gate
+    - call-reject-skip-token / scan / reject-skip-gate-token
+    - contract-validation
+    - deploy-gate
+    - desired-clients.json k8s vs omnibase_infra parity
+    - desired-user-profile.json invariants
+    - desired-user-profile.json k8s vs omnibase_infra parity
+    - kb-doc-gate / kb-doc-gate
+    - main-target-guard
+    - omniclaude hook classes vs MSK produce grant
+    - omnidash contract ConfigMap parity
+    - pr-title / check-title
+    - pre-commit
+    - private-repo-runner-placement / private-repo-runner-placement
+    - verify / verify
+  OmniNode-ai/onex_change_control:
+    advisory:
+    - path: .github/workflows/ci.yml
+      line: 687
+      key: .github/workflows/ci.yml::url-authority-gate::step[2]
+    - path: .github/workflows/ci.yml
+      line: 716
+      key: .github/workflows/ci.yml::no-new-os-environ::step[2]
+    - path: .github/workflows/ci.yml
+      line: 1480
+      key: .github/workflows/ci.yml::contract-compliance::step[7]
+    - path: .github/workflows/ci.yml
+      line: 1514
+      key: .github/workflows/ci.yml::contract-compliance::step[8]
+    - path: .github/workflows/release-staleness-gate.yml
+      line: 100
+      key: .github/workflows/release-staleness-gate.yml::release-staleness::step[3]
+    - path: .github/workflows/staleness-monitor.yml
+      line: 210
+      key: .github/workflows/staleness-monitor.yml::check::step[8]
+    - path: .github/workflows/staleness-monitor.yml
+      line: 331
+      key: .github/workflows/staleness-monitor.yml::check::step[9]
+    verification_jobs:
+    - path: .github/workflows/auto-merge.yml
+      line: 141
+      key: .github/workflows/auto-merge.yml::auto-merge
+    - path: .github/workflows/governance-file-advisory-gate.yml
+      line: 60
+      key: .github/workflows/governance-file-advisory-gate.yml::governance-file-advisory-gate
+    - path: .github/workflows/human-authored-privileged-pr-gate.yml
+      line: 52
+      key: .github/workflows/human-authored-privileged-pr-gate.yml::check-human-authored-privileged-pr
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 48
+      key: .github/workflows/product-readiness-shadow.yml::lint-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 68
+      key: .github/workflows/product-readiness-shadow.yml::typecheck-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 86
+      key: .github/workflows/product-readiness-shadow.yml::tests-shadow
+    - path: .github/workflows/product-readiness-shadow.yml
+      line: 118
+      key: .github/workflows/product-readiness-shadow.yml::reason-graph
+    - path: .github/workflows/public-repo-hygiene.yml
+      line: 38
+      key: .github/workflows/public-repo-hygiene.yml::public-repo-hygiene
+    - path: .github/workflows/todo-audit-on-merge.yml
+      line: 39
+      key: .github/workflows/todo-audit-on-merge.yml::todo-audit
+    recorded_contexts:
+    - CI Naming Convention
+    - CI Summary
+    - CodeQL / CodeQL Analysis (python)
+    - Dep Provenance Gate
+    - Doctrine Coverage Matrix
+    - Enforce validator-requirements.yaml (OMN-13299)
+    - Git env scrub gate
+    - Stale TODO Gate
+    - call / validate-docs
+    - call-reject-skip-token / scan / reject-skip-gate-token
+    - kb-doc-gate / kb-doc-gate
+    - main-target-guard
+    - non-dev-base-guard
+    - occ-preflight / eligibility
+    - pr-title / check-title
+    - release-staleness
+    - required-check-skip-guard / check-skip-vectors
+    - validate-localhost-url
+    - validate-private-ip
+    - validate-todo-marker
+    - validate-topic-string
+    - verify / verify

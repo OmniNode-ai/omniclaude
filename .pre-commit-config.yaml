@@ -623,6 +623,35 @@ repos:
         stages: [pre-commit]
 
       # --------------------------------------------------------------------------
+      # No-new-advisory-job gate (OMN-18777, epic OMN-18775). Refuses a new
+      # workflow setting that swallows a job's or a step's own failure unless
+      # the census baseline names that exact line or the line carries
+      # `# advisory-ok: OMN-nnnnn <reason>`, and refuses a new
+      # verification-shaped job that runs on every pull request while
+      # appearing in neither enforcement surface. Same module as the CI gate
+      # (.github/workflows/advisory-job-gate.yml), so the two verdicts cannot
+      # diverge. Exported for other repos as the `advisory-job-gate` hook in
+      # .pre-commit-hooks.yaml.
+      # --------------------------------------------------------------------------
+      - id: advisory-job-gate
+        name: No new advisory job — a check that cannot fail needs a ticket (OMN-18777)
+        entry: python3 scripts/advisory_job_gate.py --repo-root . --repo OmniNode-ai/omniclaude
+        language: system
+        # pass_filenames: false is the WHOLE-TREE half -- the gate always scans
+        # every workflow, never only the staged ones, because a hook whose
+        # invariant is over the tracked set and which inspects the diff reports
+        # green over everything that landed before it existed (OMN-17993).
+        # `files:` is the TRIGGER half and is a different thing: it decides
+        # whether the scan runs at all on this commit, and a commit touching no
+        # workflow cannot introduce either refusal. `always_run: true` is
+        # deliberately absent -- pre-commit ignores `files:` when it is set,
+        # and every commit in the repo would then pay a live enforcement-surface
+        # read.
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^\.github/workflows/.*\.ya?ml$
+
+      # --------------------------------------------------------------------------
       # Migration Freeze Check - Block new migrations during DB-per-repo refactor
       # Scope: Only triggers when migration files or .migration_freeze change
       # Purpose: Enforces schema freeze (OMN-2055) while .migration_freeze exists

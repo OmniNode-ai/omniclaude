@@ -62,7 +62,10 @@
   # repository. That is the price of the invariant, and it is the right trade
   # against a gate that cannot see what it is supposed to govern.
   pass_filenames: false
-  always_run: true
+  # `files:` is the trigger, `pass_filenames: false` is the scope. A commit
+  # touching no workflow cannot introduce either refusal, and `always_run`
+  # would suppress `files:` and make every commit pay a live surface read.
+  files: ^\.github/workflows/.*\.ya?ml$
   stages: [pre-commit, pre-merge-commit]
 
 - id: private-repo-runner-placement
@@ -145,4 +148,31 @@
   # commit is exactly the state this exists to catch.
   pass_filenames: false
   always_run: true
+  stages: [pre-commit, pre-merge-commit]
+
+- id: advisory-job-gate
+  name: No new advisory job — a check that cannot fail needs a ticket (OMN-18777)
+  description: >
+    Refuses a workflow setting that swallows a job's or a step's own failure
+    unless the census baseline names that exact line or the line carries
+    `# advisory-ok: OMN-nnnnn <reason>`, and refuses a new verification-shaped
+    job that runs on every pull request while appearing in neither
+    `required_status_checks` nor the repo's `EXPECTED_EXTERNAL_CONTEXTS`.
+    The enforcement surface is read LIVE per repository through `gh`, with a
+    24h cache under .git/ so a local commit is cheap; when neither the live
+    read nor a fresh cache answers, the hook fails closed rather than passing
+    on an empty surface. Free-text justification does not pass — the
+    annotation needs a real OMN ticket AND a reason, the same shape
+    `# raw-prod-bypass-ok:` already uses. There is no skip flag.
+    See scripts/advisory_job_gate.py for the full rules and the honest limit.
+  language: script
+  entry: scripts/advisory_job_gate.py --repo-root .
+  # WHOLE-TREE, not staged-files. The invariant is over every workflow in the
+  # repository: a gate whose hook only inspects the diff reports green over
+  # everything that landed before it existed, which is the OMN-17993 lesson.
+  pass_filenames: false
+  # `files:` is the TRIGGER, `pass_filenames: false` is the SCOPE. A commit
+  # touching no workflow cannot introduce either refusal, and `always_run`
+  # would suppress `files:` and make every commit pay a live surface read.
+  files: ^\.github/workflows/.*\.ya?ml$
   stages: [pre-commit, pre-merge-commit]
