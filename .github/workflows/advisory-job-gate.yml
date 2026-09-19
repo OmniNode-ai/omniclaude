@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Advisory Job Gate — thin caller for omniclaude's own PRs. OMN-18777.
+#
+# omniclaude hosts the validator, its baseline and the reusable workflow, so it
+# calls them by local path (`./`) rather than by pinned SHA: there is no
+# cross-repo drift to pin against, and a local call keeps the gate's own repo
+# honest on the same commit that changes the gate. Every other repo pins
+# `OmniNode-ai/omniclaude/.github/workflows/advisory-job-gate-reusable.yml@<sha>`.
+#
+# Surfaced check context: `advisory-job-gate / advisory-job-gate` (caller job
+# id / reusable job name), registered in this repo's dev branch protection.
+# AC6 of OMN-18777: a gate that could swallow its own failure would be
+# self-refuting, so neither this file nor the reusable one may carry that
+# setting, and a test reads both files to keep it that way.
+
+name: Advisory Job Gate
+
+on:
+  pull_request:
+    branches: [dev]
+
+jobs:
+  advisory-job-gate:
+    uses: ./.github/workflows/advisory-job-gate-reusable.yml
+    secrets: inherit

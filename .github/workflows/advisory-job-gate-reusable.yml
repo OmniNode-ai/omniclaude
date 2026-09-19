@@ -1,0 +1,117 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# No-new-advisory-job gate (reusable). OMN-18777, epic OMN-18775.
+#
+# Refuses two shapes of check that runs and cannot fail:
+#
+#   1. a new advisory setting (a job or step that swallows its own failure)
+#      that is neither in the census baseline nor annotated
+#      `# advisory-ok: OMN-nnnnn <reason>` on its own line;
+#   2. a new verification-shaped job reachable by a pull request that appears
+#      in neither `required_status_checks` nor the repo's
+#      `EXPECTED_EXTERNAL_CONTEXTS` umbrella constant.
+#
+# The rules live in scripts/advisory_job_gate.py in THIS repo, and the
+# exported `advisory-job-gate` pre-commit hook runs the same script, so a
+# local verdict and a CI verdict cannot diverge.
+#
+# Usage in caller repos:
+#   jobs:
+#     advisory-job-gate:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/advisory-job-gate-reusable.yml@<immutable-sha>
+#       secrets: inherit
+#
+# Surfaced check context in the caller: `advisory-job-gate / advisory-job-gate`
+# (caller job id / this job's name).
+#
+# NO INPUTS, on purpose. An input is a surface through which a caller can
+# soften a refusal, and AC7 of OMN-18777 is that no such surface exists. The
+# validator and its baseline travel on ONE pin -- `github.job_workflow_sha`,
+# the commit the caller pinned this file to -- for the reason the kb-doc-gate
+# header records at length: `main` is release-synced and does not carry the
+# script, and `github.sha` inside a reusable workflow is the CALLER's commit.
+#
+# `secrets: inherit` IS REQUIRED. Reading a branch's required status checks
+# needs `administration: read`, which the workflow GITHUB_TOKEN does not have;
+# the job mints an installation token from the org App instead. Without the
+# secrets the mint fails and the gate fails CLOSED, which is the correct
+# reading: a gate that cannot resolve the enforcement surface has not passed,
+# it has not run.
+
+name: Advisory Job Gate (reusable)
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-job-gate:
+    name: advisory-job-gate
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public FORK PRs default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The validator AND its baseline come from the same omniclaude commit the
+      # caller pinned. Two files, one pin: a baseline fetched at a different ref
+      # from the script that reads it is how a grandfather list silently stops
+      # matching the tree it describes.
+      - name: Fetch the gate (omniclaude canonical source)
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ github.job_workflow_sha }}
+          path: .omniclaude-advisory-job-gate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/advisory_job_gate.py
+            config/advisory_job_baseline.yaml
+          sparse-checkout-cone-mode: false
+
+      # Branch protection is readable only with `administration: read`. The
+      # workflow GITHUB_TOKEN does not carry it, so a run that used it would
+      # resolve an empty enforcement surface and report every verification job
+      # in the repository as unenforced -- a confident, total false positive.
+      - name: Mint a token that can read branch protection
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+
+      - name: Run the advisory-job gate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SCRIPT_PATH: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-advisory-job-gate/scripts/advisory_job_gate.py'
+                || 'scripts/advisory_job_gate.py' }}
+        run: |
+          set -euo pipefail
+          # A sparse checkout of a path absent at the requested ref SUCCEEDS
+          # and leaves an empty side path, so a bad pin surfaces here as an
+          # exit-2 that reads like a verdict but is "the gate never ran".
+          if [ ! -f "${SCRIPT_PATH}" ]; then
+            echo "::error::advisory-job gate not found at ${SCRIPT_PATH}." \
+                 "Pin this caller's 'uses:' to an omniclaude commit that" \
+                 "carries scripts/advisory_job_gate.py and" \
+                 "config/advisory_job_baseline.yaml. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          python3 "${SCRIPT_PATH}" \
+            --repo-root . \
+            --repo "${GITHUB_REPOSITORY}"
