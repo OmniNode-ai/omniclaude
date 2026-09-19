@@ -480,10 +480,106 @@ expected_hooks:
           - "OMN-17334"
         stdout_absent: []
 
-  - script: "pre_tool_use_pr_body_stamp_guard.sh"
+  - script: "pre_tool_use_shared_tree_git_guard.sh"
     event: "PreToolUse"
     matcher: "Bash"
     order: 6
+    ticket: "OMN-18798"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Bash command that moves the SHARED registry clone at
+      $OMNI_HOME out from under the lanes working in it -- `git reset`, a
+      non-path-scoped `git checkout`, `git checkout -b`/`-B`, `git switch`,
+      `git clean`, `git rebase`, a `git merge` that is not `--ff-only`, and a
+      `git branch` delete or rename whose
+      target is the checked-out branch -- when the command's effective git
+      root (its `-C <path>` argument, or its own cwd) IS that registry clone.
+      The registry clone at $OMNI_HOME is the one repository where many
+      concurrent agent lanes commit into the same working tree; code repos use per-ticket worktrees
+      and do not have this problem. Two measured classes, neither of which
+      any pre-commit hook or CI job can see, because both are commands typed
+      in a session: DESTRUCTION -- 20 `reset: moving to origin/main` reflog
+      entries in that clone on 2026-09-18 alone, twice re-orphaning a staged
+      1.9 MB ledger-roll archive of 1,258 append-only coordination rows
+      (untracked on one disk, in no commit, on no branch, on no remote, for
+      2h22m, where a `git clean -fd` would have destroyed them) and twice
+      dropping a peer lane's unpushed commit from local main; and STRANDING,
+      which destroys nothing and is quieter -- a feature branch checked out
+      in the shared clone makes commit_lock.py refuse EVERY other lane's
+      ledger commit with exit 78, STRANDED CLONE, for as long as it stays
+      checked out, the only signal being an exit code on somebody else's
+      terminal. Operating Rule 19 states the prohibition and was doctrine
+      only until this guard. Scope is narrow deliberately: the guard fires
+      ONLY when the effective git root is the registry clone ITSELF. A
+      worktree under omni_worktrees/ has its own .git file and so its own
+      root, and a code-repo canonical clone under $OMNI_HOME has root
+      $OMNI_HOME/<repo>; neither is matched, and both already carry the
+      OMN-7018/OMN-14330 worktree guard. Inside the registry clone,
+      everything not in the declared refused vocabulary passes untouched --
+      `git merge --ff-only` (which advances a pointer or refuses, so it can
+      never resolve a peer lane's rows away, unlike the ort merge measured
+      at 14:52:55Z on 2026-09-19), `git merge --abort`/`--quit`/`--continue`
+      (refusing those would strand the tree mid-conflict), `git fetch`,
+      `git pull --ff-only`, the Operating Rule 17 path-scoped restore recipe
+      (`git checkout <ref> -- <path>`), and every read. There is deliberately
+      no consent-citation escape hatch: every refused verb has a sanctioned
+      alternative reaching the same outcome without touching state a peer
+      lane owns. Registered AFTER pre_tool_use_git_stash_guard.sh on the same
+      matcher, which only ever inspects stash shapes and this one never does,
+      so the two can never contend for the same call.
+    enforcement: true
+    lite_mode_exit: false
+    mask:
+      # BORROWED BIT, recorded rather than left for a reader to infer, the
+      # same pattern as pre_tool_use_git_stash_guard.sh's SWEEP_PREFLIGHT
+      # borrow and pre_tool_use_credential_rotation_guard.sh's
+      # PRE_TOOL_AUTHORIZATION_SHIM borrow. A dedicated bit is unavailable:
+      # hook_bits.sh is GENERATED from omnibase_core's hook_activations.yaml,
+      # all 60 default-mask ordinals are allocated, 60-62 are the
+      # disabled-by-default trio, and bit-governance rule 7 forbids ordinal
+      # 63 outright.
+      #
+      # SCOPE_GATE is `bit_defined: true` in hook_bits.sh and is set in
+      # HOOK_BITS_DEFAULT_MASK, so a gate_call naming it can actually fire --
+      # unlike SKILL_SUBSTITUTION_GUARD, which is not bit_defined and whose
+      # gate_call therefore returns 0 unconditionally. Its own namesake
+      # script (pre_tool_use_scope_gate.sh) is on disk and UNREGISTERED, and
+      # no other registered script gates on it, so
+      # `onex hooks disable SCOPE_GATE` disables exactly this guard and
+      # nothing else that is live.
+      #
+      # tests/hooks/test_shared_tree_git_guard.py pins the borrow:
+      # registering pre_tool_use_scope_gate.sh would silently share the
+      # switch between two independent controls.
+      gate_call: "SCOPE_GATE"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Bash"
+        tool_input:
+          command: "git reset --hard origin/main"
+      env:
+        # CLAUDE_PROJECT_DIR (set by _prepare to {repo_root}) is this
+        # canary's target directory, since the stdin carries no explicit
+        # `cwd`. Pointing OMNI_HOME at {repo_root} makes that directory the
+        # registry clone from the guard's point of view, which is the
+        # condition under test. It works in a worktree checkout and a plain
+        # one alike: the registry test is an exact path comparison against
+        # the resolved env value, not a test of the .git entry's type.
+        OMNI_HOME: "{repo_root}"
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "OMN-18798"
+        stdout_absent: []
+
+  - script: "pre_tool_use_pr_body_stamp_guard.sh"
+    event: "PreToolUse"
+    matcher: "Bash"
+    order: 7
     ticket: "OMN-18335"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -558,7 +654,7 @@ expected_hooks:
   - script: "pre_tool_use_prose_command_substitution_guard.sh"
     event: "PreToolUse"
     matcher: "Bash"
-    order: 7
+    order: 8
     ticket: "OMN-18750"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -601,7 +697,7 @@ expected_hooks:
   - script: "pre_tool_use_agent_model_guard.sh"
     event: "PreToolUse"
     matcher: "^(Workflow|Agent)$"
-    order: 8
+    order: 9
     ticket: "OMN-17499"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -650,7 +746,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 9
+    order: 10
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -679,7 +775,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 10
+    order: 11
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -710,7 +806,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 11
+    order: 12
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -1159,7 +1255,7 @@ expected_hooks:
   - script: "pre_tool_use_skill_started.sh"
     event: "PreToolUse"
     matcher: "Skill"
-    order: 12
+    order: 13
     ticket: "OMN-16979"
     owner: "omniclaude hooks lane"
     purpose: >
