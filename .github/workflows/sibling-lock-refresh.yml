@@ -174,7 +174,15 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-          BRANCH="bot/sibling-lock-refresh-$(date -u +%Y%m%d%H%M%S)"
+          # OMN-18753: the ticket goes in the BRANCH NAME and the COMMIT
+          # MESSAGE, not only the PR title. The Receipt Gate's identity
+          # binding reads Evidence-Ticket from the title and then requires
+          # that same ticket to appear in the branch name or in one of the
+          # PR's commit messages. This workflow named it in the title alone,
+          # so every PR it opened failed that check and needed a hand-pushed
+          # commit before it could merge -- an automation that cannot land
+          # its own output. First observed on #2262, its first real PR.
+          BRANCH="bot/omn-13902-sibling-lock-refresh-$(date -u +%Y%m%d%H%M%S)"
           # OMN-18273: commit as the App this job already authenticates as. The
           # previous identity resolved to no GitHub account, so the commit rendered
           # unlinked and named neither a bot nor a run; the credential and the
@@ -184,7 +192,7 @@ jobs:
           git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add uv.lock pyproject.toml
-          git commit -m "chore(deps): refresh omninode sibling locks [bot]" \
+          git commit -m "chore(deps, OMN-13902): refresh omninode sibling locks [bot]" \
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           git push origin "$BRANCH"
