@@ -682,9 +682,7 @@ def worktree_dirs(worktrees_root: Path) -> list[tuple[Path, str]]:
     return found
 
 
-def claim_holders(
-    ledger_text: str, ledger_name: str, claim_index: Any
-) -> dict[str, str]:
+def claim_holders(ledger: Path, ledger_name: str, claim_index: Any) -> dict[str, str]:
     """Ticket -> LIVE holder lane, resolved by the authoritative claim index.
 
     ONE RESOLUTION, NOT A SECOND PARSER. The claim store is the ledger and the
@@ -699,8 +697,17 @@ def claim_holders(
     holder, so its worktree stays unregistered rather than being stamped with
     the name of a lane that stopped days ago. A trailer naming a dead lane is
     a wrong trailer, and a wrong trailer is the one outcome ruled out.
+
+    It takes the ledger's PATH rather than its text because the store is not
+    one file: the ledger rolls daily and the rows move into
+    `<ledger dir>/archive/` (OMN-18791). A backfill blind to those rolls leaves
+    a live holder's worktree unregistered, and an unregistered worktree is
+    silent to the pre-push hook -- so the resolution's false negative
+    propagates into the arming.
     """
-    index = claim_index.build_index(ledger_text, ledger_name, now=datetime.now(UTC))
+    now = datetime.now(UTC)
+    sources = claim_index.window_sources(ledger, ledger_name, now=now)
+    index = claim_index.build_index_from_sources(sources, now=now)
     holders: dict[str, str] = {}
     for ticket in index.get("tickets", {}):
         held = claim_index.holder(index, ticket)
@@ -1428,11 +1435,9 @@ def _reconcile(args: argparse.Namespace) -> int:
         or os.environ.get("ONEX_BRANCH_CLAIM_LEDGER")
         or root / "docs/tracking/ROLLING_WORK_LEDGER.md"
     )
-    try:
-        ledger_text = ledger.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
+    if not ledger.is_file():
         print(
-            f"lane_identity: cannot read the claim store {ledger}: {exc}",
+            f"lane_identity: cannot read the claim store {ledger}",
             file=sys.stderr,
         )
         return 2
@@ -1473,7 +1478,19 @@ def _reconcile(args: argparse.Namespace) -> int:
         )
         return 1 if failures else 0
 
-    holders = claim_holders(ledger_text, ledger.name, claim_index)
+    try:
+        holders = claim_holders(ledger, ledger.name, claim_index)
+    except (OSError, claim_index.ClaimStoreIncomplete) as exc:
+        # The store named one of its own files and it could not be read.
+        # Reported, never substituted with the readable half: a partial store
+        # resolves a live holder as absent, and an absent holder leaves the
+        # worktree unregistered and therefore silent (OMN-18791).
+        print(
+            f"lane_identity: the claim store could not be resolved ({exc}), so NO "
+            "worktree was backfilled. The hooks above are installed.",
+            file=sys.stderr,
+        )
+        return 1
 
     registered = skipped = 0
     for worktree, ticket in worktree_dirs(root / "omni_worktrees"):
