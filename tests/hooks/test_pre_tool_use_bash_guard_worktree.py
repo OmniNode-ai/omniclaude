@@ -99,16 +99,36 @@ _MASK_WORKTREE_GUARD_OFF = hex(0xFFFFFFFFFFFFFFFF & ~_WORKTREE_GUARD_BIT)
 class TestWorktreeGuardToggle:
     """OMN-9906: opt-out via ONEX_HOOKS_MASK (WORKTREE_GUARD bit cleared)."""
 
-    def test_mask_with_worktree_guard_cleared_short_circuits(self) -> None:
+    def test_mask_with_worktree_guard_cleared_short_circuits(
+        self, sandbox_home: Path
+    ) -> None:
         """Clearing the WORKTREE_GUARD bit in ONEX_HOOKS_MASK bypasses the guard.
 
         OMN-9906: replaces the legacy ONEX_WORKTREE_GUARD=off env-var opt-out.
         Without the toggle, ``git worktree add /tmp/anywhere`` is blocked
         because ``/tmp`` is not under any canonical worktree root.
+
+        ``sandbox_home`` is REQUIRED here, and its absence was a real
+        defect (OMN-18798). ``common.sh`` sources ``~/.omnibase/.env``
+        under ``set -a``, and that file pins ``ONEX_HOOKS_MASK`` on a
+        developer machine -- so the override below was silently
+        overwritten with a mask whose WORKTREE_GUARD bit is SET, the
+        guard enforced, and the test failed with exit 2 while asserting
+        the opposite. The guard itself was never broken: invoked
+        directly with the cleared mask and no ``.env`` in reach, it
+        short-circuits correctly.
+
+        That is why this was red on a developer machine and green in CI,
+        which has no ``~/.omnibase/.env``. The ``sandbox_home`` fixture
+        exists for exactly this hazard: added in 6d1805b69 (OMN-9896,
+        2026-04-27), three weeks before this test arrived without it in
+        572b2f783 (OMN-9906, 2026-05-13). ``_run_hook``'s own docstring
+        already spelled the hazard out.
         """
         result = _run_hook(
             "git worktree add /tmp/non-canonical-but-allowed -b feat/test",
             env_overrides={"ONEX_HOOKS_MASK": _MASK_WORKTREE_GUARD_OFF},
+            sandbox_home=sandbox_home,
         )
         assert result.returncode == 0, (
             f"ONEX_HOOKS_MASK with WORKTREE_GUARD cleared should bypass the guard, "

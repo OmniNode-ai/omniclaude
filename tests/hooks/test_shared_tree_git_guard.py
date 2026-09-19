@@ -173,6 +173,11 @@ def test_policy_loads_and_declares_expected_vocabulary(policy: Policy) -> None:
     # The append-only coordination surface a path-scoped checkout may not
     # name. Declared as repo-relative paths, resolved against the git root.
     assert "docs/tracking/ROLLING_WORK_LEDGER.md" in policy.protected_path_operands
+    # The ledger publish loop's merge, allowed on `main` only.
+    assert "origin/main" in policy.merge_allowed_targets
+    assert "--no-edit" in policy.merge_target_allowed_flags
+    assert "main" in policy.merge_allowed_on_branches
+    assert "--list" in policy.branch_read_flags
     # checkout and branch are the two with a sanctioned shape, so they are
     # the two that must NOT be unconditional.
     assert policy.unconditional_subcommands == frozenset(
@@ -225,11 +230,19 @@ REFUSED_IN_REGISTRY = [
     "git rebase origin/main",
     "git rebase --continue",
     "git rebase -i HEAD~3",
-    # A merge that is not --ff-only runs a content merge on the shared tree.
-    "git merge origin/main",
+    # A merge that is not --ff-only and is not the sanctioned publish-loop
+    # shape runs an unbounded content merge on the shared tree.
     "git merge",
     "git merge --no-ff origin/main",
     "git merge -X theirs origin/main",
+    "git merge --squash origin/main",
+    "git merge origin/dev",
+    "git merge some-local-branch",
+    "git merge origin/main origin/dev",
+    # Branch CREATION in the shared clone: strands every peer lane's ledger
+    # commit for as long as the clone sits off `main`.
+    "git branch lane/new-branch",
+    "git branch lane/new-branch origin/main",
 ]
 
 #: OMN-18798 FOLLOW-UP shapes. The merged guard admitted every one of these
@@ -288,11 +301,18 @@ PROTECTED_PATH_CHECKOUT_REFUSED = [
 #: working tree; while the clone sat on the branch, commit_lock.py refused
 #: every other lane with exit 78 (STRANDED-CLONE at 14:53:23Z); and rows
 #: appended between 14:48Z and 14:53Z did not survive the round trip.
+#: NOTE on the merge shape. `git merge origin/main` is NOT in this list any
+#: more, and its absence is the point: on `main` that command is the
+#: SANCTIONED publish loop (see PUBLISH_LOOP_MERGE_ALLOWED). What made the
+#: 14:52:55Z merge lossy was the branch it ran ON -- a feature branch
+#: checked out in the shared clone, reached by the `checkout -b` this list
+#: still carries. The guard refuses the precondition, not the merge; the
+#: off-main case is covered by
+#: test_refuses_the_publish_loop_merge_when_the_clone_is_off_main.
 INCIDENT_2026_09_19_SHAPES = [
     "git reset --hard 637e93c5a87d3314d0784d4321a90dbcddc4efc3",
     "git reset 637e93c5a8",
     "git checkout -b lane/ledger-rows-1435-fix",
-    "git merge origin/main",
     "git checkout main",
 ]
 
@@ -428,17 +448,143 @@ def test_force_push_refusal_names_the_sanctioned_sync_loop(
         assert fragment in decision.reason, fragment
 
 
+#: The ledger publish loop, ruled by the operator on 2026-09-19 after the
+#: `--ff-only` step lost the race against concurrent appends EIGHT cycles
+#: running: commit_lock rows, `git merge --no-edit origin/main`, push a
+#: fresh branch, pull request, land it. Lanes ledger-publish-1655 and -1750
+#: ran it cleanly (registry pull requests 439-443).
+#:
+#: This is a non-fast-forward merge and the first revision of this guard
+#: refused it, which would have broken the only working publish path the
+#: moment the hook went live in a new session. It is allowed for exactly
+#: one target, on exactly one branch.
+PUBLISH_LOOP_MERGE_ALLOWED = [
+    "git merge origin/main",
+    "git merge --no-edit origin/main",
+    "git -C {registry} merge --no-edit origin/main",
+]
+
+
+@pytest.mark.parametrize("command", PUBLISH_LOOP_MERGE_ALLOWED)
+def test_allows_the_ruled_publish_loop_merge_on_main(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command.format(registry=registry),
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert not decision.blocked, (command, decision.reason)
+
+
+def test_refuses_the_publish_loop_merge_when_the_clone_is_off_main(
+    registry: Path, policy: Policy
+) -> None:
+    """The 14:52:55Z shape: the same merge, run on a feature branch.
+
+    This is the discriminator the whole allowance rests on. `git merge
+    origin/main` on `main` fast-forwards or makes one merge commit on the
+    branch every lane commits to; the SAME command on a feature branch
+    checked out in the shared clone is what dropped rows appended between
+    14:48Z and 14:53Z. Allowing the verb without pinning the branch would
+    re-open the measured loss.
+    """
+    _git("-C", str(registry), "checkout", "-q", "-b", "lane/ledger-rows-1435-fix")
+    try:
+        for command in ("git merge origin/main", "git merge --no-edit origin/main"):
+            decision = evaluate_bash_command(
+                command, policy, cwd=registry, registry_root=registry
+            )
+            assert decision.blocked, command
+            assert "main" in decision.reason
+    finally:
+        _git("-C", str(registry), "checkout", "-q", "main")
+
+    # Positive control: back on main, the same command is allowed again.
+    allowed = evaluate_bash_command(
+        "git merge --no-edit origin/main", policy, cwd=registry, registry_root=registry
+    )
+    assert not allowed.blocked, allowed.reason
+
+
+def test_publish_loop_merge_fails_closed_when_head_is_unreadable(
+    registry: Path, policy: Policy
+) -> None:
+    """No readable HEAD means the branch precondition cannot be checked."""
+    (registry / ".git" / "HEAD").unlink()
+    decision = evaluate_bash_command(
+        "git merge --no-edit origin/main", policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked
+
+
+def test_publish_loop_allowance_does_not_widen_to_other_targets_or_flags(
+    registry: Path, policy: Policy
+) -> None:
+    """The allowance is one target and one flag, not `merge` in general."""
+    for command in (
+        "git merge origin/dev",
+        "git merge --no-ff origin/main",
+        "git merge --squash origin/main",
+        "git merge -X theirs origin/main",
+        "git merge origin/main origin/dev",
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry, registry_root=registry
+        )
+        assert decision.blocked, command
+
+
+def test_refuses_branch_creation_in_the_shared_clone(
+    registry: Path, policy: Policy
+) -> None:
+    """Creation strands peer lanes as surely as the checkout that follows it.
+
+    `git branch <name>` does not itself move the tree, which is why the
+    first revision allowed it. But it exists only to be checked out, and
+    the refusal points at the worktree that is the actual remedy.
+    """
+    decision = evaluate_bash_command(
+        "git branch lane/new-branch", policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked
+    assert "omni_worktrees" in decision.reason
+
+
+def test_branch_read_shapes_are_not_mistaken_for_creation(
+    registry: Path, policy: Policy
+) -> None:
+    """A listing flag with an operand is a filter, not a new branch."""
+    for command in (
+        "git branch --list 'lane/*'",
+        "git branch --contains HEAD",
+        "git branch --merged origin/main",
+        "git branch -a",
+        "git branch",
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry, registry_root=registry
+        )
+        assert not decision.blocked, (command, decision.reason)
+
+
 def test_refuses_a_non_ff_merge_but_allows_the_ff_only_sync(
     registry: Path, policy: Policy
 ) -> None:
     """The merge arm's two sides, asserted together.
 
-    The pair is the point: `--ff-only` is the sanctioned sync verb and must
+    The pair is the point: `--ff-only` is a sanctioned sync verb and must
     stay open, so a guard that refused both would be refusing the remedy its
     own message recommends.
+
+    The blocked case uses a DIFFERENT target deliberately. `git merge
+    origin/main` on `main` is the ruled publish loop and is allowed -- see
+    PUBLISH_LOOP_MERGE_ALLOWED -- so asserting it blocked here would pin the
+    behaviour this revision exists to remove.
     """
     blocked = evaluate_bash_command(
-        "git merge origin/main", policy, cwd=registry, registry_root=registry
+        "git merge origin/dev", policy, cwd=registry, registry_root=registry
     )
     assert blocked.blocked
     assert "CONTENT merge" in blocked.reason
@@ -580,10 +726,17 @@ ALLOWED_IN_REGISTRY = [
     "git pull --ff-only origin main",
     "git fetch origin",
     "git fetch --all --prune",
-    # Branch shapes that do not move the tree.
-    "git branch lane/new-branch",
+    # The ledger publish loop, ruled 2026-09-19 after `--ff-only` lost the
+    # race against concurrent appends eight cycles running.
+    "git merge origin/main",
+    "git merge --no-edit origin/main",
+    # Branch shapes that neither move the tree nor create a branch in it.
     "git branch -D some-other-branch",
     "git branch --list",
+    "git branch --list 'lane/*'",
+    "git branch -a",
+    "git branch --show-current",
+    "git branch --contains HEAD",
     # Every read.
     "git status --porcelain",
     "git log --oneline -5",
