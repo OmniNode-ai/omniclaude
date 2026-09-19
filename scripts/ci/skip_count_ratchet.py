@@ -88,7 +88,9 @@ from __future__ import annotations
 import argparse
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
+
+# The parse call in `observe` carries the justification for both B405 and B314.
+import xml.etree.ElementTree as ET  # nosec B405
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -231,7 +233,14 @@ def observe(paths: list[Path]) -> Observation:
         if not path.is_file():
             raise InputError(f"JUnit report not found: {path}")
         try:
-            root = ET.parse(path).getroot()  # noqa: S314 — JUnit XML is CI-generated, not untrusted
+            # Justification: the input is a JUnit report this same workflow run
+            # produced and uploaded, fetched by run id through the GitHub
+            # artifact API, never a caller-supplied path in CI. Stdlib
+            # ElementTree does not resolve external entities, so XXE is not
+            # reachable; the residual is expansion/nesting DoS against a job
+            # that is already running that same PR's test code, under its own
+            # timeout. Parse errors are caught below and fail CLOSED.
+            root = ET.parse(path).getroot()  # noqa: S314  # nosec B314
         except ET.ParseError as exc:
             raise InputError(
                 f"JUnit report is not parsable XML: {path}: {exc}"
