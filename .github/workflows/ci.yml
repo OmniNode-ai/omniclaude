@@ -2425,24 +2425,27 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
 
+      # OMN-18805: named directly, with no existence check in front of them.
+      #
+      # This step used to loop over three paths, keep the ones that existed, and
+      # write a synthetic empty JUnit report when none did. All three had been
+      # deleted -- `test_enhanced_router.py` in `9f9d3369d` (2025-10-29), the
+      # other two with the `_archive/` tree in `1a605099e` -- so for seven months
+      # the job reported success without executing a test. A file-existence
+      # guard converts a deleted test file into a silent narrowing; pytest's own
+      # exit 4 converts it into a red job, which is what a missing test deserves.
+      #
+      # Enforcement does not rest on this step alone. `Skip Count Ratchet` reads
+      # the report below against a recorded baseline of 30 collected, and its
+      # nonzero-baseline rule refuses a report that collected nothing. A future
+      # edit that empties this suite fails there even if it exits 0 here.
       - name: Run agent framework tests
         working-directory: ${{ github.workspace }}
         run: |
-          AGENT_TESTS=""
-          for test_file in tests/test_enhanced_router.py tests/test_quality_gates.py tests/test_performance_thresholds.py; do
-            if [ -f "$test_file" ]; then
-              AGENT_TESTS="$AGENT_TESTS $test_file"
-            fi
-          done
-          if [ -n "$AGENT_TESTS" ]; then
-            uv run pytest $AGENT_TESTS -v \
-              --cov=src/omniclaude \
-              --cov-report=term-missing \
-              --junitxml=junit-agent-framework.xml
-          else
-            echo "No agent framework tests found -- skipping"
-            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="agent-framework" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-agent-framework.xml
-          fi
+          uv run pytest tests/test_enhanced_router.py -v \
+            --cov=src/omniclaude \
+            --cov-report=term-missing \
+            --junitxml=junit-agent-framework.xml
 
       - name: Upload agent framework test results
         uses: actions/upload-artifact@v7
@@ -3052,7 +3055,7 @@ jobs:
   # ============================================================================
   skip-count-ratchet:
     name: "Skip Count Ratchet (OMN-18776)"
-    needs: [test, hooks-tests, tests-gate]
+    needs: [test, hooks-tests, tests-gate, agent-framework-tests]
     if: always()
     timeout-minutes: 15
     permissions:
@@ -3081,9 +3084,10 @@ jobs:
         env:
           SPLIT_RESULT: ${{ needs.test.result }}
           HOOKS_RESULT: ${{ needs.hooks-tests.result }}
+          AGENT_RESULT: ${{ needs.agent-framework-tests.result }}
         run: |
           any=false
-          for pair in "split:${SPLIT_RESULT}" "hooks:${HOOKS_RESULT}"; do
+          for pair in "split:${SPLIT_RESULT}" "hooks:${HOOKS_RESULT}" "agent:${AGENT_RESULT}"; do
             suite="${pair%%:*}"
             result="${pair##*:}"
             if [ "$result" = "success" ] || [ "$result" = "failure" ]; then
@@ -3097,7 +3101,7 @@ jobs:
           done
           echo "any=${any}" >> "$GITHUB_OUTPUT"
           if [ "$any" != "true" ]; then
-            echo "Neither test job produced a report. The verdict on whether those"
+            echo "No test job produced a report. The verdict on whether those"
             echo "skips were legitimate belongs to Tests Gate, which is registered"
             echo "and strict. This job does not fork it."
           fi
@@ -3134,6 +3138,7 @@ jobs:
                  --repo "${{ github.repository }}" \
                  --pattern 'test-results-*' \
                  --pattern 'hooks-test-results' \
+                 --pattern 'agent-framework-test-results' \
                  --dir junit-reports; then
               echo "JUnit reports downloaded on attempt ${attempt}."
               find junit-reports -name '*.xml' -type f | sort
@@ -3194,6 +3199,36 @@ jobs:
           echo "Reading ${#reports[@]} JUnit report(s)."
           uv run --no-project --with pyyaml python scripts/ci/skip_count_ratchet.py \
             --suite omniclaude/test-split \
+            --junit "${reports[@]}"
+
+      # OMN-18805. This suite is `count` mode with max_skips 0: it is a single
+      # file of 30 unconditional tests with no selector in front of it and no
+      # skip in it, so both the number and the zero are comparable run to run.
+      #
+      # The entry exists because the job it guards was green from nothing until
+      # OMN-18805 restored real tests to it. OMN-18790 refused to register it
+      # then, and was right to: a baseline of zero collected is satisfied by the
+      # placeholder report forever. A nonzero baseline is what makes the
+      # ratchet's empty-report refusal bite, so registering it now is the half
+      # that keeps the phantom shape from returning unnoticed.
+      - name: Enforce the skip-count baseline — Agent Framework Tests
+        if: steps.decide.outputs.ratchet_agent == 'true'
+        run: |
+          echo "================================================================"
+          echo "Skip Count Ratchet (OMN-18776) — omniclaude/agent-framework-tests"
+          echo "This job reported success from a synthetic empty report for seven"
+          echo "months. The baseline of 30 collected is what refuses a repeat:"
+          echo "an empty report is not an empty result."
+          echo "================================================================"
+          mapfile -t reports < <(find junit-reports -name 'junit-agent-framework.xml' -type f | sort)
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "::error::Agent Framework Tests ran but produced no JUnit report to read."
+            echo "That is an uploader defect, not an empty result -- failing closed."
+            exit 1
+          fi
+          echo "Reading ${#reports[@]} JUnit report(s)."
+          uv run --no-project --with pyyaml python scripts/ci/skip_count_ratchet.py \
+            --suite omniclaude/agent-framework-tests \
             --junit "${reports[@]}"
 
   # ============================================================================
