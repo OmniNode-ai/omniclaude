@@ -1,0 +1,128 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-18812: re-run a preflight that gave up before its companion merged.
+#
+# THE FAILURE THIS CLEARS
+# `occ-preflight / eligibility` waits a bounded 1500 seconds for the cited
+# onex_change_control companion to merge, then fails closed (OMN-17864,
+# omnibase_core scripts/ci/occ_preflight_wait.py). Re-measured 2026-09-19 over
+# the 1000 most recently merged evidence companions, open-to-merge latency is
+# p50 27.6 min / p75 50.8 min / p95 183.7 min, so that budget covers 46.3% of
+# them. The OMN-17864 docstring's own basis, three days older, was p50 16 min /
+# p95 55 min and "covers 141/188 (75%)". The budget no longer covers the
+# median, and the job's `timeout-minutes: 30` caps every admissible budget
+# below p75 — so this is not a number to re-cut.
+#
+# It is also replicated: 56 omniclaude workflows each instantiate the preflight
+# reusable and gate a real check on `needs: occ-preflight`. On omniclaude#2265,
+# one head sha carried 42 `occ-preflight / eligibility` check runs — 8 failure,
+# 34 success, 29,107 s of summed wall clock — and 24 workflow runs that a human
+# re-ran by hand. Failures started 11:07:30Z/11:08:06Z, first-wave successes
+# 11:07:30Z/11:08:21Z: tens of seconds of fleet scheduling jitter decided the
+# verdict on an identical fact.
+#
+# WHAT THIS DOES
+# Every 10 minutes, for each open PR carrying a failed preflight check on its
+# current head, resolve whether the cited companion has MERGED since, and if it
+# has, `gh run rerun --failed` that PR's failed runs. The run id is preserved,
+# so `CI Summary` re-polls the same job list and observes the new verdict, and
+# every already-passing job keeps its result. This is the command all three of
+# the 2026-09-19 occurrences were cleared by, issued by the schedule instead of
+# by a person.
+#
+# It does NOT weaken the gate. The re-run executes the eligibility validator
+# from scratch against the merged companion SHA and can still fail. A product
+# PR still cannot merge without its merged companion.
+#
+# WHY A SCHEDULE
+# The event that makes the fact true is the companion merging, in
+# onex_change_control. Dispatching from there needs `actions: write` on this
+# repo and no identity this org holds has it (OMN-18797, read live: both
+# installations hold `actions: read`; the org PAT's uses are ratcheted by
+# OMN-16373). Of the in-repo events, `pull_request: edited` fires when the
+# stamp lands ~1 min after the push and `workflow_run: completed` fires when
+# the wait deadlines — both tens of minutes before the median companion merge,
+# which is why omnibase_infra's OMN-18352 heal, which listens to exactly those
+# two, does not clear this failure. A schedule needs no new credential: the
+# ambient GITHUB_TOKEN already carries `actions: write` in its own repository.
+#
+# This workflow is deliberately NOT a required status check and must never
+# become one: it reports on whether a heal was attempted, not on whether any PR
+# is good. It carries no `continue-on-error`, so a broken heal goes red instead
+# of reporting a clean sweep. Behaviour is pinned by
+# tests/ci/test_occ_companion_merge_heal_omn18812.py.
+#
+# It has no `pull_request` trigger, so it always runs the default branch's copy
+# of both this file and the guard it calls: PR-authored code never executes
+# with this job's `actions: write` token, which is the exposure omnibase_infra's
+# heal has to spend a trusted-ref checkout to close.
+
+name: OCC Companion Merge Heal
+
+on:
+  schedule:
+    # Every 10 minutes. The floor on how long a PR sits red after its companion
+    # merges, against a p50 companion latency of 27.6 minutes and a status quo
+    # in which it sits red until a human notices.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: Consider only this PR. Empty considers every open PR.
+        required: false
+        default: ""
+        type: string
+      dry-run:
+        description: Report the decisions without issuing any re-run.
+        required: false
+        default: false
+        type: boolean
+
+# One heal pass at a time. A second pass overlapping the first would read the
+# same failed runs and issue a duplicate re-run for them.
+concurrency:
+  group: occ-companion-merge-heal
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  heal:
+    name: Heal preflights whose companion has since merged
+    timeout-minutes: 10
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci.
+    # This job is a handful of API calls and only does work when a companion
+    # has actually merged behind a failed preflight.
+    runs-on: >-
+      ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Re-run preflights whose companion has since merged
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAL_PR_NUMBER: ${{ inputs.pr-number }}
+          HEAL_DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          args=(--repo "${GITHUB_REPOSITORY}")
+          if [ -n "${HEAL_PR_NUMBER:-}" ]; then
+            args+=(--pr-number "${HEAL_PR_NUMBER}")
+          fi
+          if [ "${HEAL_DRY_RUN:-false}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python3 scripts/ci/occ_companion_merge_heal.py "${args[@]}"
