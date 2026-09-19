@@ -1313,17 +1313,35 @@ repos:
       # resolves its project root to the canonical clone unconditionally: the
       # venv could not be rebuilt against the new lock until that lock landed.
       #
-      # Its sibling check-omnimarket-dispatch-drift is deliberately NOT
-      # registered here. That gate resolved its baseline from omnimarket's
-      # `main` while the OMN-18675 venv guard resolves the canonical clone's
-      # checked-out `dev` head; main is release-synced, so the two demanded
-      # different commits at every moment except the instant main caught up.
-      # OMN-18752 repointed the drift gate at the clone, and registering it
-      # is the remaining half, tracked separately.
+      # OMN-18753: its sibling check-omnimarket-dispatch-drift is registered
+      # below. It was held out of this file deliberately, not by oversight:
+      # it resolved its baseline from omnimarket's `main` while the OMN-18675
+      # venv guard resolves the canonical clone's checked-out `dev` head, and
+      # main is release-synced, so the two demanded different commits at
+      # every moment except the instant main caught up. Registering a gate
+      # that structurally cannot pass is worse than leaving it unregistered.
+      # OMN-18752 deleted that resolution source; both gates now read the
+      # clone head, so the deferral's reason is gone and the gate is wired.
       # tests/test_venv_gate_registration.py asserts both halves of this.
       - id: check-daemon-venv-skew
         name: Daemon/CLI venv skew gate (OMN-13120, OMN-18746, OMN-18752)
         entry: bash .pre-commit-hooks/check-daemon-venv-skew.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(uv\.lock|pyproject\.toml)$
+
+      # OMN-13536 / OMN-18752 / OMN-18753: the dispatch-drift gate's live
+      # half. Skills dispatch ONEX nodes from the INSTALLED omnimarket, so a
+      # lock pin or a live venv that lags the canonical clone means executing
+      # bytes nobody approved. CI runners carry no live venv, so pre-commit is
+      # the only surface where the second of its two checks can run at all.
+      # Same trigger set as the skew gate above and for the same reason: the
+      # authority table and the source revs live in pyproject.toml, so a
+      # change there moves what this gate checks with uv.lock untouched.
+      - id: check-omnimarket-dispatch-drift
+        name: omnimarket dispatch-drift gate (OMN-13536, OMN-18752, OMN-18753)
+        entry: bash .pre-commit-hooks/check-omnimarket-dispatch-drift.sh
         language: system
         pass_filenames: false
         stages: [pre-commit]
