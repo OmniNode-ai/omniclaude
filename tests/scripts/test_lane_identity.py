@@ -691,3 +691,142 @@ def test_unregistered_policy_defaults_to_silent_and_is_armed_explicitly(
     assert li.unregistered_mode(base) == "refuse"
     li.set_unregistered_mode(base, "silent")
     assert li.unregistered_mode(base) == "silent"
+
+
+# ---------------------------------------------------------------------------
+# The workspace root is itself a clone -- OMN-18792
+# ---------------------------------------------------------------------------
+#
+# THE DEFECT, MEASURED. `lane_identity status` on this host reported
+# `26/26 clones armed` on 2026-09-19T01:45Z, and the registry repository at the
+# workspace root was not one of the 26. It
+# was not unarmed-and-reported; it was absent, which is the shape CLAUDE.md rule
+# 16 is about: a surface nobody enumerates reads exactly like a surface that
+# passed. The enumeration walked `root.iterdir()` and a directory is not its own
+# child, so the one repository many lanes commit into through a SHARED working
+# tree (rule 19) was the only one with no stamping hook.
+
+
+def _init_clone(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-q", "-b", "main")
+    _git(path, "config", "user.email", "t@example.com")
+    _git(path, "config", "user.name", "t")
+    return path
+
+
+@pytest.fixture
+def workspace(tmp_path: Path) -> Path:
+    """A workspace root that is ITSELF a clone, holding one child clone and a
+    worktrees directory that is not one.
+
+    Shaped after the real registry: `$OMNI_HOME` is a git repository, its
+    children are the canonical clones, and `omni_worktrees/` is a plain
+    directory of per-ticket worktrees that must never be counted as a clone.
+    """
+    root = _init_clone(tmp_path / "ws")
+    _init_clone(root / "child_repo")
+    (root / "omni_worktrees" / "OMN-1" / "child_repo").mkdir(parents=True)
+    return root
+
+
+def test_the_registry_root_is_enumerated_as_a_clone(workspace: Path) -> None:
+    """RED before the fix: the root is a git repository and was skipped."""
+    clones = li._registry_clones(workspace)
+    assert workspace.resolve() in [c.resolve() for c in clones], (
+        f"the workspace root {workspace} is a clone and was not enumerated; "
+        f"enumerated {[c.name for c in clones]}"
+    )
+
+
+def test_the_registry_root_is_enumerated_exactly_once(workspace: Path) -> None:
+    """Counted once, never twice. A root that appeared as both itself and a
+    child would double every per-clone install and make the armed/total ratio
+    in `status` unreadable."""
+    resolved = [c.resolve() for c in li._registry_clones(workspace)]
+    assert resolved.count(workspace.resolve()) == 1
+    assert len(resolved) == len(set(resolved))
+
+
+def test_the_worktrees_directory_is_never_enumerated_as_a_clone(
+    workspace: Path,
+) -> None:
+    """`omni_worktrees/` carries no `.git`, and adding the root must not change
+    that. Installing a hook there would write into a directory that is not a
+    repository at all."""
+    names = [c.name for c in li._registry_clones(workspace)]
+    assert "omni_worktrees" not in names
+
+
+def test_status_names_the_registry_root_when_only_the_root_is_unarmed(
+    workspace: Path,
+    base: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """AC1 as a test: the root gets its own row, and an unarmed root is a
+    nonzero exit rather than silence."""
+    monkeypatch.setenv(li.WORKSPACE_ENV, str(workspace))
+    assert li.main(["install-hook", "--repo", str(workspace / "child_repo")]) == 0
+
+    rc = li.main(["--registry-root", str(base), "status"])
+    out = capsys.readouterr().out
+
+    assert f"UNARMED  {workspace.name}:" in out, (
+        f"the root was not reported as its own row; status said:\n{out}"
+    )
+    assert rc == 1
+
+
+def test_the_repair_arms_the_registry_root_and_a_fresh_status_reads_it_back(
+    workspace: Path,
+    base: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC2: `reconcile --execute` installs into the root, and the proof is a
+    second status read rather than the installer's own exit code."""
+    monkeypatch.setenv(li.WORKSPACE_ENV, str(workspace))
+    ledger = workspace / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text("# ledger\n", encoding="utf-8")
+
+    assert (
+        li.main(
+            [
+                "--registry-root",
+                str(base),
+                "reconcile",
+                "--execute",
+                "--workspace-root",
+                str(workspace),
+            ]
+        )
+        == 0
+    )
+
+    installed = workspace / ".git" / "hooks" / "prepare-commit-msg"
+    assert installed.is_file()
+    assert li.OURS_MARKER in installed.read_text(encoding="utf-8")
+    assert li.main(["--registry-root", str(base), "status"]) == 0
+
+
+def test_a_registration_on_the_root_reaches_every_unregistered_path_beneath_it(
+    workspace: Path, base: Path
+) -> None:
+    """WHY THE SHARED ROOT IS ARMED BUT LEFT UNREGISTERED IN THE SHARED
+    REGISTRY. `resolve` walks upward, so a lane record written against the
+    workspace root answers for every path below it that has no record of its
+    own -- including the hundreds of worktrees `reconcile` deliberately leaves
+    unregistered because no live claim holder resolves. Registering the root in
+    the shared registry would stamp one lane's name onto every one of them,
+    which is the wrong-trailer outcome this module refuses by design.
+
+    A lane that wants its own commits in the shared tree stamped points
+    `ONEX_LANE_REGISTRY_ROOT` at a registry of its own, which no peer process
+    reads. This test pins the leak so the reason is mechanical, not prose.
+    """
+    li.register(base, workspace, lane="root-lane", ticket="OMN-18792")
+    orphan = workspace / "omni_worktrees" / "OMN-1" / "child_repo"
+
+    leaked = li.resolve(base, orphan)
+    assert leaked is not None and leaked.lane == "root-lane"

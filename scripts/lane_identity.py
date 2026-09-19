@@ -1216,15 +1216,65 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _registry_clones(root: Path) -> list[Path]:
-    """Every directory under the workspace root that is a git CLONE (not a
-    worktree). Read from the filesystem, never from a hardcoded list: a list in
-    this file goes stale the first time a repository is added, and a clone
-    missing from it reads as armed because it was never checked."""
+    """Every git CLONE in the workspace: the ROOT itself when it is one, plus
+    each of its children that is one. Read from the filesystem, never from a
+    hardcoded list: a list in this file goes stale the first time a repository
+    is added, and a clone missing from it reads as armed because it was never
+    checked.
+
+    THE ROOT IS ONE OF THEM (OMN-18792). This walked `root.iterdir()` alone, and
+    a directory is not its own child, so the registry repository at the
+    workspace root was never enumerated -- not unarmed and reported, ABSENT.
+    Measured on this host 2026-09-19T01:45Z: `status` printed `26/26 clones
+    armed` and the root was in neither number. That is the shape CLAUDE.md rule
+    16 refuses, because a surface nobody enumerates is indistinguishable from
+    one that passed, and it left the single repository where many concurrent
+    lanes commit into a SHARED working tree (rule 19) as the only one with no
+    stamping hook -- the repository where per-commit attribution matters most.
+
+    A worktree is still excluded, at the root as at any child: `.git` is a FILE
+    in a linked worktree and a directory in a clone, which is the same
+    predicate both places. So a workspace root that is itself a worktree
+    enumerates its children and not itself, and `omni_worktrees/`, which
+    carries no `.git` at all, is a clone nowhere.
+
+    ARMED IS NOT REGISTERED, and for the shared root that distinction is
+    deliberate. Arming installs the hook; it stamps nothing until some registry
+    resolves a lane for the directory being committed in. The shared registry
+    deliberately holds no record for the workspace root, because `resolve`
+    walks upward and one record there would answer for every path beneath it
+    that has none -- including the worktrees `_reconcile` leaves unregistered
+    on purpose when no live claim holder resolves. A lane that wants its own
+    commits in the shared tree stamped points `ONEX_LANE_REGISTRY_ROOT` at a
+    registry of its own, which no peer process reads. Pinned by
+    `test_a_registration_on_the_root_reaches_every_unregistered_path_beneath_it`.
+    """
     clones: list[Path] = []
+    seen: set[Path] = set()
+
+    def _add(candidate: Path) -> None:
+        if not (candidate / ".git").is_dir():
+            return
+        try:
+            key = candidate.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
+        clones.append(candidate)
+
+    # The root first, so the row that used to be missing is the row that leads
+    # the report rather than one sorted into the middle of the children.
+    _add(root)
     for child in sorted(root.iterdir()):
-        if child.name.startswith(".") or not (child / ".git").is_dir():
+        if child.name.startswith("."):
             continue
-        clones.append(child)
+        # `seen` rather than a name comparison: a child that is a symlink back
+        # to the workspace root resolves to a path already added, and counting
+        # it twice would double every install and make the armed/total ratio
+        # `status` prints unreadable.
+        _add(child)
     return clones
 
 
