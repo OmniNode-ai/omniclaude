@@ -29,6 +29,7 @@ import scripts.ci.occ_companion_merge_heal as heal_module  # noqa: E402
 from scripts.ci.occ_companion_merge_heal import (  # noqa: E402
     _OPEN_PR_LIMIT,
     MAX_HEAL_RUN_ATTEMPT,
+    PREFLIGHT_JOB_MARKERS,
     EnumCompanionHealOutcome,
     EnumCompanionState,
     GhCli,
@@ -42,6 +43,7 @@ from scripts.ci.occ_companion_merge_heal import (  # noqa: E402
     decide_companion_heal,
     failed_preflight_check_count_in_payload,
     failed_runs_in_payload,
+    is_preflight_job_name,
     main,
     parse_companion_number,
     parse_evidence_source,
@@ -269,7 +271,7 @@ def test_a_failed_preflight_job_is_recognised_in_a_jobs_payload() -> None:
             {"name": "Stale TODO Gate", "conclusion": "skipped"},
         ]
     }
-    assert run_failed_on_preflight(payload, prefix="occ-preflight") is True
+    assert run_failed_on_preflight(payload, markers=PREFLIGHT_JOB_MARKERS) is True
 
 
 def test_a_run_with_no_failed_preflight_job_is_not_recognised() -> None:
@@ -279,12 +281,12 @@ def test_a_run_with_no_failed_preflight_job_is_not_recognised() -> None:
             {"name": "Hooks System Tests", "conclusion": "failure"},
         ]
     }
-    assert run_failed_on_preflight(payload, prefix="occ-preflight") is False
+    assert run_failed_on_preflight(payload, markers=PREFLIGHT_JOB_MARKERS) is False
 
 
 @pytest.mark.parametrize("payload", [None, [], "jobs", {}, {"jobs": 3}, {"jobs": [7]}])
 def test_an_unreadable_jobs_payload_leaves_the_run_alone(payload: Any) -> None:
-    assert run_failed_on_preflight(payload, prefix="occ-preflight") is False
+    assert run_failed_on_preflight(payload, markers=PREFLIGHT_JOB_MARKERS) is False
 
 
 # --------------------------------------------------------------------------
@@ -493,7 +495,10 @@ def test_only_failed_preflight_check_runs_are_counted() -> None:
             {"name": "occ-preflight / eligibility", "conclusion": "failure"},
         ]
     }
-    assert failed_preflight_check_count_in_payload(payload, prefix="occ-preflight") == 2
+    assert (
+        failed_preflight_check_count_in_payload(payload, markers=PREFLIGHT_JOB_MARKERS)
+        == 2
+    )
 
 
 def test_cancelled_runs_are_not_treated_as_failed() -> None:
@@ -727,3 +732,78 @@ def test_ghcli_run_failed_on_preflight_reads_that_runs_jobs(
 def test_ghcli_satisfies_the_port() -> None:
     port: GhPort = GhCli()
     assert port is not None
+
+
+# --------------------------------------------------------------------------
+# The job-name matcher (OMN-15727 AC1 cross-link).
+#
+# The shipped revision matched a case-sensitive `startswith`, which skipped
+# both of omnimarket#2676's red runs and every nested caller's eligibility
+# job. These pin the live names that must and must not match.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "occ-preflight / eligibility",
+        "call-reject-skip-token / occ-preflight / eligibility",
+        "OCC Preflight Dependency",
+        "occ preflight dependency",
+        "OCC-PREFLIGHT / ELIGIBILITY",
+    ],
+)
+def test_live_preflight_family_job_names_match(name: str) -> None:
+    assert is_preflight_job_name(name, markers=PREFLIGHT_JOB_MARKERS) is True
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Stale TODO Gate",
+        "CI Summary",
+        "Hooks System Tests",
+        "preflight",
+        "Runtime Profiles",
+        "OCC Companion Merged Gate (OMN-15214)",
+    ],
+)
+def test_unrelated_job_names_do_not_match(name: str) -> None:
+    """A bare `preflight` marker would sweep these in; the markers are
+    deliberately narrower than that."""
+    assert is_preflight_job_name(name, markers=PREFLIGHT_JOB_MARKERS) is False
+
+
+def test_both_markers_are_load_bearing() -> None:
+    """Neither marker alone covers the live set, so neither may be dropped."""
+    hyphen_only = ("occ-preflight",)
+    space_only = ("occ preflight",)
+    assert (
+        is_preflight_job_name("OCC Preflight Dependency", markers=hyphen_only) is False
+    )
+    assert (
+        is_preflight_job_name("occ-preflight / eligibility", markers=space_only)
+        is False
+    )
+
+
+def test_a_run_whose_only_failure_is_the_dependency_poller_is_in_scope() -> None:
+    """omnimarket#2676 runs 35441922101 and 35441921945 exactly: the dependency
+    poller is the sole failed job, and the shipped prefix match skipped them."""
+    payload = {"jobs": [{"name": "OCC Preflight Dependency", "conclusion": "failure"}]}
+    assert run_failed_on_preflight(payload, markers=PREFLIGHT_JOB_MARKERS) is True
+
+
+def test_a_nested_caller_eligibility_failure_is_counted() -> None:
+    payload = {
+        "check_runs": [
+            {
+                "name": "call-reject-skip-token / occ-preflight / eligibility",
+                "conclusion": "failure",
+            }
+        ]
+    }
+    assert (
+        failed_preflight_check_count_in_payload(payload, markers=PREFLIGHT_JOB_MARKERS)
+        == 1
+    )

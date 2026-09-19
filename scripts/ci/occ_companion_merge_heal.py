@@ -112,9 +112,38 @@ OCC_REPO_DEFAULT: Final[str] = "OmniNode-ai/onex_change_control"
 #: it exists so that an unforeseen state cannot produce an unbounded re-run.
 MAX_HEAL_RUN_ATTEMPT: Final[int] = 5
 
-#: The reusable publishes its job as ``occ-preflight / eligibility``. Matched
-#: as a prefix so a caller that renames its own job id is still recognised.
-PREFLIGHT_CHECK_PREFIX: Final[str] = "occ-preflight"
+#: Job-name markers for the preflight family, matched as case-insensitive
+#: SUBSTRINGS rather than as a prefix.
+#:
+#: The first revision of this module matched ``name.startswith("occ-preflight")``
+#: case-sensitively, and that missed two live shapes (found on `omnimarket#2676`
+#: and `omniclaude#2263`, OMN-15727 AC1):
+#:
+#: * ``call-reject-skip-token / occ-preflight / eligibility`` -- a nested caller
+#:   prefixes the reusable's job id with its own, so the name does not START
+#:   with the marker even though it is the same job;
+#: * ``OCC Preflight Dependency`` -- the poller that WAITS on eligibility, whose
+#:   name differs in case and uses a space rather than a hyphen. On
+#:   `omnimarket#2676` two runs had that job as their ONLY failure, so a
+#:   prefix match skipped the exact runs the heal exists to re-run.
+#:
+#: Both markers are required: `occ preflight` alone would not match the hyphenated
+#: reusable job, and `occ-preflight` alone would not match the dependency poller.
+#: Deliberately NOT a bare `preflight`, which would sweep in unrelated jobs.
+PREFLIGHT_JOB_MARKERS: Final[tuple[str, ...]] = ("occ-preflight", "occ preflight")
+
+
+def is_preflight_job_name(name: str, *, markers: tuple[str, ...]) -> bool:
+    """Whether a check-run or job name belongs to the preflight family.
+
+    Case-insensitive substring, so a nested caller's prefix and the dependency
+    poller's spelling both match. Under-matching here is not neutral: it skips
+    the runs the heal exists to re-run, which is how the shipped prefix match
+    missed both of `omnimarket#2676`'s red runs.
+    """
+    lowered = name.lower()
+    return any(marker in lowered for marker in markers)
+
 
 #: Mirrors ``occ_preflight_wait.EVIDENCE_SOURCE_RE`` and ``OCC_PR_REF_RE``. The
 #: stamp is authored by the OCC autobind, so the two must agree on its shape.
@@ -352,7 +381,9 @@ def companion_state_from_payload(payload: object) -> EnumCompanionState:
     return EnumCompanionState.UNRESOLVED
 
 
-def failed_preflight_check_count_in_payload(payload: object, *, prefix: str) -> int:
+def failed_preflight_check_count_in_payload(
+    payload: object, *, markers: tuple[str, ...]
+) -> int:
     """How many FAILED preflight check runs a check-runs payload carries."""
     if not isinstance(payload, dict):
         return 0
@@ -367,7 +398,7 @@ def failed_preflight_check_count_in_payload(payload: object, *, prefix: str) -> 
         conclusion = entry.get("conclusion")
         if not isinstance(name, str) or not isinstance(conclusion, str):
             continue
-        if name.startswith(prefix) and conclusion == "failure":
+        if is_preflight_job_name(name, markers=markers) and conclusion == "failure":
             count += 1
     return count
 
@@ -405,7 +436,7 @@ def failed_runs_in_payload(payload: object) -> tuple[RunSnapshot, ...]:
     return tuple(out)
 
 
-def run_failed_on_preflight(payload: object, *, prefix: str) -> bool:
+def run_failed_on_preflight(payload: object, *, markers: tuple[str, ...]) -> bool:
     """Whether a run's jobs payload carries a FAILED preflight job.
 
     This is the precision control, and it is why the heal is not simply "re-run
@@ -431,7 +462,7 @@ def run_failed_on_preflight(payload: object, *, prefix: str) -> bool:
         conclusion = entry.get("conclusion")
         if not isinstance(name, str) or not isinstance(conclusion, str):
             continue
-        if name.startswith(prefix) and conclusion == "failure":
+        if is_preflight_job_name(name, markers=markers) and conclusion == "failure":
             return True
     return False
 
@@ -529,7 +560,7 @@ class GhCli:
         # `--slurp` wraps each page in a list; sum across pages.
         pages = payload if isinstance(payload, list) else [payload]
         return sum(
-            failed_preflight_check_count_in_payload(page, prefix=PREFLIGHT_CHECK_PREFIX)
+            failed_preflight_check_count_in_payload(page, markers=PREFLIGHT_JOB_MARKERS)
             for page in pages
         )
 
@@ -571,7 +602,7 @@ class GhCli:
             return False
         pages = payload if isinstance(payload, list) else [payload]
         return any(
-            run_failed_on_preflight(page, prefix=PREFLIGHT_CHECK_PREFIX)
+            run_failed_on_preflight(page, markers=PREFLIGHT_JOB_MARKERS)
             for page in pages
         )
 
