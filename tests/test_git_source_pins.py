@@ -561,3 +561,51 @@ def test_a_venv_behind_the_clone_still_blocks(fixture_clone: Path) -> None:
     )
     assert verdict.state is gsp.EnumGitPinState.BEHIND_CLONE
     assert verdict.finding is not None
+
+
+def test_the_refresh_workflow_names_its_ticket_where_the_gate_reads_it() -> None:
+    """OMN-18753: the refresh automation must be able to land its own output.
+
+    The Receipt Gate resolves ``Evidence-Ticket`` from the PR title and then
+    requires that same ticket to appear in the branch name or in one of the
+    PR's commit messages. ``sibling-lock-refresh.yml`` named the ticket in the
+    title alone, so the first PR it ever opened (#2262) failed identity
+    binding with ``neither the branch name nor any commit message references
+    OMN-13902`` and could not merge without a hand-pushed commit.
+
+    That is worse than an ordinary red check. This workflow is the sanctioned
+    path for advancing a clone-governed pin, and ``pyproject.toml`` tells
+    readers not to hand-bump the rev. An automation whose output always needs
+    a human push is one people route around, and routing around it here means
+    hand-editing the rev -- the exact act that desynchronises the lock from
+    the canonical clone and takes ``onex delegate`` down for every lane.
+    """
+    workflow = (
+        Path(__file__).resolve().parent.parent
+        / ".github"
+        / "workflows"
+        / "sibling-lock-refresh.yml"
+    ).read_text(encoding="utf-8")
+
+    branch_lines = [
+        line for line in workflow.splitlines() if line.strip().startswith("BRANCH=")
+    ]
+    assert branch_lines, "the workflow no longer assigns BRANCH"
+    for line in branch_lines:
+        assert "omn-13902" in line.lower(), (
+            f"the bot branch name carries no ticket ({line.strip()!r}); the "
+            f"Receipt Gate's identity binding reads the branch name, and the "
+            f"PR title alone does not satisfy it"
+        )
+
+    commit_lines = [
+        line
+        for line in workflow.splitlines()
+        if line.strip().startswith("git commit -m")
+    ]
+    assert commit_lines, "the workflow no longer commits"
+    for line in commit_lines:
+        assert "OMN-" in line, (
+            f"the bot commit message carries no ticket ({line.strip()!r}); it is "
+            f"the other surface the identity binding accepts"
+        )
