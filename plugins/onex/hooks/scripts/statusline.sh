@@ -423,7 +423,15 @@ if [ "$HAS_JQ" -eq 1 ]; then
 
   # PR cache — populated in background (first run may be empty; subsequent runs use cache).
   # Cache is best-effort: stale/missing/invalid JSON must never break rendering.
-  PR_CACHE="/tmp/omniclaude-pr-cache.json"
+  #
+  # Schema (OMN-18841):
+  #   {"_status":"ok"|"degraded"|"failed","_at":<epoch>,"<short>":"<main>/<dev>"|"?"}
+  # A repo whose count could not be READ is recorded as "?", never as "0/0" —
+  # an unmeasured zero and a measured zero must not be the same byte. Caches
+  # written before this change carry no "_status" and no "?" and still render.
+  #
+  # ONEX_PR_CACHE_FILE overrides the path; tests drive fixtures through it.
+  PR_CACHE="${ONEX_PR_CACHE_FILE:-/tmp/omniclaude-pr-cache.json}"
   PR_FRESH=0
   if [ -f "$PR_CACHE" ]; then
     PR_MTIME=$(stat -f %m "$PR_CACHE" 2>/dev/null || stat -c %Y "$PR_CACHE" 2>/dev/null || echo 0)
@@ -432,20 +440,45 @@ if [ "$HAS_JQ" -eq 1 ]; then
   fi
   if [ "$PR_FRESH" -eq 0 ] && command -v gh >/dev/null 2>&1; then
     (
-      result='{'
-      first=1
+      result=''
+      ok_n=0
+      err_n=0
       for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control" "market:omnimarket"; do
         short="${pair%%:*}"; repo="${pair##*:}"
         # One call per repo; split open PRs by base branch (main vs dev/develop).
-        bases=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json baseRefName --jq '[.[].baseRefName]' 2>/dev/null || echo "[]")
-        main_cnt=$(printf '%s' "$bases" | jq '[.[] | select(. == "main" or . == "master")] | length' 2>/dev/null || echo "0")
-        dev_cnt=$(printf '%s' "$bases" | jq '[.[] | select(. == "dev" or . == "develop")] | length' 2>/dev/null || echo "0")
-        [ "$first" -eq 1 ] || result="${result},"
-        result="${result}\"${short}\":\"${main_cnt}/${dev_cnt}\""
-        first=0
+        # Primary transport is `gh pr list --json`, which is served by GraphQL.
+        bases=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --limit 100 \
+                  --json baseRefName --jq '[.[].baseRefName]' 2>/dev/null) || bases=""
+        if [ -z "$bases" ]; then
+          # Fallback to REST. The org's shared GraphQL quota is refused
+          # fleet-wide for long stretches under lane load while the REST pulls
+          # endpoint serves the identical facts unthrottled (OMN-18841).
+          bases=$(gh api "repos/OmniNode-ai/${repo}/pulls?state=open&per_page=100" \
+                    --jq '[.[].base.ref]' 2>/dev/null) || bases=""
+        fi
+        if [ -z "$bases" ] || ! printf '%s' "$bases" | jq empty 2>/dev/null; then
+          # UNREADABLE. Never write 0/0 here: a zero nobody measured renders
+          # identically to one that was, and that is the false zero this
+          # ticket exists to remove.
+          val='?'
+          err_n=$((err_n + 1))
+        else
+          main_cnt=$(printf '%s' "$bases" | jq '[.[] | select(. == "main" or . == "master")] | length' 2>/dev/null || echo "0")
+          dev_cnt=$(printf '%s' "$bases" | jq '[.[] | select(. == "dev" or . == "develop")] | length' 2>/dev/null || echo "0")
+          val="${main_cnt}/${dev_cnt}"
+          ok_n=$((ok_n + 1))
+        fi
+        result="${result},\"${short}\":\"${val}\""
       done
-      result="${result}}"
-      printf '%s' "$result" > "$PR_CACHE" 2>/dev/null
+      if [ "$err_n" -eq 0 ]; then
+        pr_status="ok"
+      elif [ "$ok_n" -eq 0 ]; then
+        pr_status="failed"
+      else
+        pr_status="degraded"
+      fi
+      printf '{"_status":"%s","_at":%s%s}' "$pr_status" "$(date +%s)" "$result" \
+        > "$PR_CACHE" 2>/dev/null
     ) &
   fi
 
@@ -457,16 +490,38 @@ if [ "$HAS_JQ" -eq 1 ]; then
       PR_DATA='{}'
     fi
     PR_PARTS=""
+    PR_ERRS=0
     for short in core infra spi claude node dash intel mem web cc market; do
-      # Value is "main/dev" (e.g. "2/1"); tolerate legacy flat integer form.
-      val=$(printf '%s' "$PR_DATA" | jq -r ".${short} // \"0/0\"" 2>/dev/null) || val="0/0"
+      # Value is "main/dev" (e.g. "2/1"); "?" means the refresh could not read
+      # this repo. Tolerate the legacy flat integer form. A missing key is
+      # unreadable, not zero.
+      val=$(printf '%s' "$PR_DATA" | jq -r ".${short} // \"?\"" 2>/dev/null) || val="?"
+      if [ "$val" = "?" ] || [ "$val" = "null" ] || [ -z "$val" ]; then
+        PR_ERRS=$((PR_ERRS + 1))
+        continue
+      fi
       case "$val" in */*) : ;; *) val="${val}/0" ;; esac
       m="${val%%/*}"; d="${val##*/}"
       if [[ "$m" =~ ^[1-9] ]] || [[ "$d" =~ ^[1-9] ]]; then
         PR_PARTS="${PR_PARTS}${short}·${m}/${d} "
       fi
     done
-    [ -n "$PR_PARTS" ] && PR_LINE="${SEP}${DIM}PRs(main/dev):${RESET} ${PR_PARTS% }"
+    # The segment is ALWAYS rendered. An absent segment cannot be told apart
+    # from a fleet with no open PRs, which is how a total refresh failure
+    # stayed invisible for a whole morning (OMN-18841).
+    if [ -n "$PR_PARTS" ]; then
+      PR_BODY="${PR_PARTS% }"
+      [ "$PR_ERRS" -gt 0 ] && PR_BODY="${PR_BODY} ${YELLOW}⚠${PR_ERRS} unreadable${RESET}"
+    elif [ "$PR_ERRS" -gt 0 ]; then
+      PR_BODY="${YELLOW}⚠ unavailable (${PR_ERRS} unreadable)${RESET}"
+    else
+      PR_BODY="${DIM}none open${RESET}"
+    fi
+    PR_LINE="${SEP}${DIM}PRs(main/dev):${RESET} ${PR_BODY}"
+  else
+    # No cache file at all: the first refresh has not landed yet. Say so
+    # rather than rendering nothing.
+    PR_LINE="${SEP}${DIM}PRs(main/dev): …${RESET}"
   fi
 
   SVC="${DIM}pg:${RESET}${PG_DOT} ${DIM}rp:${RESET}${RP_DOT} ${DIM}vk:${RESET}${VK_DOT} ${DIM}rt:${RESET}${RT_DOT} ${DIM}intel:${RESET}${INTEL_DOT} ${DIM}phx:${RESET}${PHX_DOT}"
