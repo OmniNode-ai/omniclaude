@@ -27,6 +27,20 @@ surrounding label text will not be caught here -- that gap is a detection
 limit, not a bug, and needs a different control (e.g. do not put agents in
 a position where they read a raw secret and then narrate it back at all;
 see the OMN-15062 PR body for the read-vs-emit boundary discussion).
+
+SECOND COVERAGE LIMIT (OMN-18827): the prose-form rule requires the value to
+be VALUE-SHAPED -- a digit, a non-word special, or a lowercase-to-uppercase
+transition -- on top of its 10-character floor. This is what stops ordinary
+English from being rewritten: "the token mint is fail-closed" names a token
+and is followed by an 11-character word, and the pre-OMN-18827 matcher
+redacted it in both the delegate's echoed prompt and every Bash tool result
+the PostToolUse guard touched. The cost of the floor is that an all-lowercase
+alphabetic passphrase narrated in prose ("the password is correcthorsestaple")
+is no longer caught here. That is deliberate: such a value is not
+distinguishable from prose by shape, and the alternative -- matching any long
+word after the copula -- silently rewrites the artifacts this codebase
+produces. Labeled values with an "=" or ":" separator are unaffected and are
+still matched on length alone.
 """
 
 from __future__ import annotations
@@ -127,10 +141,20 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # what this cannot catch (bare unlabeled high-entropy strings).
     (
         re.compile(
-            r"(\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
-            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*[`'\"]?)"
-            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})",
-            re.IGNORECASE,
+            # The LABEL half is case-insensitive. The VALUE half deliberately
+            # is not: the mixed-case branch of the shape floor below needs
+            # real case, and a module-level re.IGNORECASE would make
+            # ``[a-z][A-Z]`` match any two letters and nullify it.
+            r"((?i:\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
+            r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*)[`'\"]?)"
+            # OMN-18827: the value must be VALUE-SHAPED, not merely long.
+            # Same charset and the same 10-character floor as before, plus a
+            # shape floor -- the token must carry a digit, a non-word special,
+            # or a lowercase-to-uppercase transition. An ordinary hyphenated
+            # English word ("fail-closed", "rotation-pending") carries none of
+            # the three, and was being redacted out of ordinary prose.
+            r"(?=[A-Za-z0-9!@#$%^&*()_+\-.]*(?:[0-9!@#$%^&*()+]|[a-z][A-Z]))"
+            r"([A-Za-z0-9!@#$%^&*()_+\-.]{10,})"
         ),
         r"\1***REDACTED***",
     ),

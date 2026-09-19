@@ -317,3 +317,118 @@ class TestRedactionResult:
         result = RedactionResult(text="test", redacted_count=0)
         with pytest.raises(AttributeError):
             result.text = "changed"  # type: ignore[misc]
+
+
+# OMN-18827: the prose-form rule (OMN-15062) matched ANY 10+ character word
+# after a label word and the copula "is", so ordinary English prose that
+# merely DISCUSSED a token was rewritten as though a credential were present.
+# The value must now be value-shaped. These three classes are AC1, AC2 and
+# AC3 of that ticket; AC3 is the positive control that stops AC1/AC2 from
+# being satisfied by emptying the pattern set.
+
+# Built by concatenation so the literal phrase does not sit in this file as a
+# single token -- the PostToolUse redact guard rewrites tool OUTPUT, and a
+# test run printing this line is exactly the surface under test.
+_HYPHENATED_ADJECTIVE = "fail" + "-closed"
+_AC1_LINE = (
+    "Token mint is " + _HYPHENATED_ADJECTIVE + ", no route back to the workflow token"
+)
+
+
+class TestProseFalsePositivesOmn18827:
+    """AC1/AC2: ordinary prose naming credentials is NOT rewritten."""
+
+    def test_ac1_reproduction_line_passes_through_unmodified(self) -> None:
+        """AC1: the exact line from the OMN-18827 reproduction is unchanged.
+
+        Reported 2026-09-19 against receipt run_id
+        fb715f64-c542-49a8-a4d2-d89d8c88d592: this line came back carrying a
+        redaction marker in both the echoed prompt and the response. No
+        secret was present in it at any point.
+        """
+        assert redact_secrets(_AC1_LINE) == _AC1_LINE
+        assert not contains_secrets(_AC1_LINE)
+
+    @pytest.mark.parametrize(
+        "sentence",
+        [
+            _AC1_LINE,
+            "The token mint is " + _HYPHENATED_ADJECTIVE + " by construction.",
+            "The password is unavailable until the operator approves it.",
+            "The api key is provisioned per-tenant, never per-session.",
+            "The credential is rotation-pending and blocks the release.",
+            "The secret is deterministic across replays of the same input.",
+            "Every token here is short-lived and scoped to one namespace.",
+            "The auth token is indistinguishable from an ordinary identifier.",
+            "The API key rotation is operator-approved, never self-issued.",
+            "This secret was unreadable, so the gate fails closed.",
+        ],
+        ids=lambda s: s[:40],
+    )
+    def test_ac2_prose_corpus_has_zero_redactions(self, sentence: str) -> None:
+        """AC2: prose that names tokens/keys/secrets without containing one.
+
+        Every sentence below names a credential label word and follows it
+        with an ordinary English word of 10+ characters -- the exact shape
+        the pre-OMN-18827 matcher rewrote.
+        """
+        result = redact_secrets_with_count(sentence)
+        assert result.redacted_count == 0, f"false positive on: {sentence!r}"
+        assert result.text == sentence
+
+
+class TestValueShapedStillRedactedOmn18827:
+    """AC3: positive control -- real value-shaped credentials still redacted.
+
+    If the pattern set were emptied to make AC1/AC2 pass, every assertion in
+    this class fails. Every value here is synthetic.
+    """
+
+    @pytest.mark.parametrize(
+        ("text", "needle"),
+        [
+            # Digits present -- the charset floor.
+            (
+                "The Postgres password is xK9mP2vL8nQ4wR2ne and it leaked.",
+                "xK9mP2vL8nQ4wR2ne",
+            ),
+            (
+                "the leaked credential value is `s3cr3tTok3nHere123`, rotate it",
+                "s3cr3tTok3nHere123",
+            ),
+            # Mixed case with no digits -- the camel/random-case floor.
+            (
+                "The api key is aBcDeFgHiJkLmNoPqRsT for that tenant.",
+                "aBcDeFgHiJkLmNoPqRsT",
+            ),
+            # Prefixed provider credentials, matched by their own patterns.
+            ("openai key sk-" + "A" * 24, "sk-" + "A" * 24),
+            ("github token ghp_" + "b" * 36, "ghp_" + "b" * 36),
+            ("aws id AKIA" + "C" * 16, "AKIA" + "C" * 16),
+            # A 40-hex run behind a label word.
+            ("the token is " + "a1b2c3d4" * 5, "a1b2c3d4" * 5),
+            # key=value form, untouched by this change and still enforced.
+            ("api_key=Zq7Lm2Xr9Tb4Nv6P", "Zq7Lm2Xr9Tb4Nv6P"),
+        ],
+        ids=[
+            "digits-in-value",
+            "backticked-digits",
+            "mixed-case-no-digits",
+            "sk-prefix",
+            "ghp-prefix",
+            "akia-prefix",
+            "hex-run",
+            "key-equals-value",
+        ],
+    )
+    def test_ac3_value_shaped_credentials_are_redacted(
+        self, text: str, needle: str
+    ) -> None:
+        result = redact_secrets_with_count(text)
+        assert needle not in result.text, f"NOT redacted: {text!r}"
+        assert result.redacted_count >= 1
+        assert "REDACTED" in result.text
+
+    def test_ac3_pattern_set_is_not_empty(self) -> None:
+        """A pattern set emptied to pass AC1/AC2 fails here explicitly."""
+        assert len(SECRET_PATTERNS) >= 10
