@@ -80,6 +80,21 @@ GATE_JOBS: tuple[str, ...] = (
     # "occ-preflight / eligibility"; renaming either half breaks this
     # registration and leaves CI Summary permanently PENDING.
     "Runner Route (OMN-18031) / route",
+    # OMN-18790: the skip-count baseline ratchet (mechanism OMN-18776, epic
+    # OMN-18775). THIS LINE IS HALF THE MECHANISM, on the identical reasoning as
+    # the entries above: the default-deny sweep below already fails CI Summary
+    # when this job FAILS, but an unregistered job that is `skipped` or ABSENT
+    # yields SUCCESS. The failure mode it closes is itself silent and measured --
+    # this repo's `Hooks System Tests` skipped 36 tests on three consecutive
+    # runs, the same 36 every time -- so a gate that could be silently deleted
+    # would reproduce the exact shape it exists to refuse. A raw required context
+    # was deliberately NOT added to branch protection: it would block every
+    # in-flight PR whose run predates the job, and CI Summary is already
+    # required, so this registration is enforcement-equivalent. The job is
+    # unconditional in ci.yml (`if: always()`), so a skip is anomalous and never
+    # a legitimate opt-out, which is why it is ALSO a STRICT_SUCCESS_JOBS member
+    # below. Pinned by tests/ci/test_skip_count_ratchet_omn18790.py.
+    "Skip Count Ratchet (OMN-18776)",  # skip-count-ratchet
     "Cross-Repo Boundary Parity",  # boundary-parity (OMN-16000) — DIRECTLY REQUIRED live; was previously mis-marked SOFT_ALLOWLIST "warn-only" while a `contains()` substring bug in its `if:` silently skipped it on any PR whose changed-file count contained the digit '0' (10/20/100/...). Fixed 2026-08-13: `if:` no longer branches on changed_files, and the job is now a completeness-anchor member so CI Summary WAITS for it and only accepts success/skipped (occ-preflight's own legitimate skip carve-out), never a false green from the old bug.
 )
 
@@ -101,6 +116,13 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
         # present + completed + EXACTLY-success posture omnibase_infra's
         # STRICT_GATE_JOBS gives the same job in the pilot.
         "Runner Route (OMN-18031) / route",
+        # OMN-18790: see the GATE_JOBS entry above. GATE_JOBS membership alone
+        # accepts `skipped`; this job is unconditional, so a skip means the
+        # skip-count comparison did not happen and must fail closed rather than
+        # read as a legitimate opt-out. Together the two memberships reproduce
+        # the present + completed + EXACTLY-success posture omnibase_infra's
+        # STRICT_GATE_JOBS gives the same job in the OMN-18776 pilot.
+        "Skip Count Ratchet (OMN-18776)",
     }
 )
 
