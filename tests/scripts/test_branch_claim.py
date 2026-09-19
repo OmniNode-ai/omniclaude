@@ -41,6 +41,7 @@ through 7.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -556,3 +557,146 @@ def test_record_mode_never_refuses_even_on_the_wrong_lane(
         _claim_index_module(),
     )
     assert result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# OMN-18791 -- the resolution follows the ledger when it ROLLS
+#
+# The claim store is not one file. A post-merge hook rolls the ledger daily,
+# MOVING rows into `<ledger dir>/archive/`, and a resolution that read only the
+# live file answered "unclaimed" for every claim the roll carried away. An
+# unclaimed branch is clean, so both callers of this resolution passed exactly
+# the case they exist to catch.
+#
+# The fix is in the claim index module, which lives in the private workspace
+# repository this one may not name (rule 23). What is pinned HERE is that
+# this repository's two consumers go through the window-aware entry points
+# rather than reading the live file alone.
+# ---------------------------------------------------------------------------
+
+
+def _rolled_store(tmp_path: Path, *, lane: str = "beta") -> Path:
+    """A ledger whose only CLAIM row has been rolled into the archive."""
+    ledger = tmp_path / "store" / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(
+        _ledger(f"{_real_stamp(1)} | NOTE | lane=gamma | tickets=OMN-1 | unrelated"),
+        encoding="utf-8",
+    )
+    rolled_on = (datetime.now(UTC) - timedelta(hours=3)).strftime("%Y-%m-%d")
+    archive = ledger.parent / "archive" / f"ROLLING_WORK_LEDGER_{rolled_on}-split.md"
+    archive.parent.mkdir(parents=True)
+    archive.write_text(
+        "## rolled\n\n"
+        + _ledger(
+            f"{_real_stamp(3)} | CLAIM | lane={lane} | tickets=OMN-9999 | taking it"
+        ),
+        encoding="utf-8",
+    )
+    return ledger
+
+
+def test_a_claim_the_roll_moved_is_still_a_finding(tmp_path: Path, claim_index) -> None:
+    """The 2026-09-12 14:17Z shape, with the claim row on the far side of a
+    roll. Before this change the same input read `unclaimed` and passed."""
+    ledger = _rolled_store(tmp_path)
+    verdict = bc.resolve_store(
+        claim_index,
+        branch="lane/omn-9999-thing",
+        commits=[_stamped("alpha")],
+        ledger=ledger,
+        ledger_name=LEDGER_NAME,
+        now=datetime.now(UTC),
+    )
+    assert verdict.outcome == "held-elsewhere"
+    assert verdict.holder is not None and "beta" in verdict.holder
+    assert "archive/ROLLING_WORK_LEDGER_" in verdict.findings[0], (
+        "the refusal must cite the file the row is actually in; the live "
+        f"ledger's line no longer holds it. Got: {verdict.findings[0]}"
+    )
+
+
+def test_reading_the_live_file_alone_is_the_defect_this_replaces(
+    tmp_path: Path, claim_index
+) -> None:
+    """The positive control. Same store, same commits, resolved against the
+    live text only -- which is what this repository did before OMN-18791 -- and
+    the collision is invisible."""
+    ledger = _rolled_store(tmp_path)
+    verdict = bc.resolve(
+        claim_index,
+        branch="lane/omn-9999-thing",
+        commits=[_stamped("alpha")],
+        ledger_text=ledger.read_text(encoding="utf-8"),
+        ledger_name=LEDGER_NAME,
+        now=datetime.now(UTC),
+    )
+    assert verdict.outcome == "unclaimed"
+    assert verdict.clean
+
+
+def test_a_claim_index_without_the_window_entry_points_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Fail closed on an OLD module. The entry points this resolution needs are
+    required at load time, so a store repository pinned before the fix produces
+    a named refusal rather than a silently live-file-only resolution -- which
+    would look identical to a passing check."""
+    stub = tmp_path / "claim_index.py"
+    stub.write_text(
+        "def ticket_from_branch(branch): return None\n"
+        "def build_index(text, name, *, now): return {}\n"
+        "def holder(index, ticket): return None\n"
+        "def refusal_for_push(index, ticket, lane, *, fence, now): return None\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(bc.ResolutionUnavailable) as caught:
+        bc.load_claim_index(stub)
+    assert "window_sources" in str(caught.value)
+
+
+def test_the_command_line_reports_an_incomplete_store_as_a_check_that_did_not_run(
+    tmp_path: Path, stamped_message_file: Path
+) -> None:
+    """Exit 2, not a verdict. The live ledger's own roll pointer says rows went
+    into an archive inside the staleness window and that file is absent -- the
+    sparse-checkout case. Every rolled claim would read unclaimed, which is a
+    clean bill of health over exactly the rows nobody can see."""
+    ledger = tmp_path / "LEDGER.md"
+    rolled_on = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%d")
+    pointer = json.dumps(
+        {
+            "archive": f"docs/tracking/archive/ROLLING_WORK_LEDGER_{rolled_on}-split.md",
+            "entries_rolled": 9,
+            "rolled_at": _real_stamp(1),
+        },
+        sort_keys=True,
+    )
+    ledger.write_text(f"<!-- ledger-roll: {pointer} -->\n", encoding="utf-8")
+    result = _run_cli(
+        [
+            "check",
+            "--mode",
+            "record",
+            "--branch",
+            "lane/omn-9999-thing",
+            "--messages-from",
+            str(stamped_message_file),
+        ],
+        ledger,
+        _claim_index_module(),
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "THE CLAIM STORE IS INCOMPLETE" in result.stderr
+
+
+def test_the_backfill_resolves_a_holder_from_a_rolled_claim(tmp_path: Path) -> None:
+    """`lane_identity reconcile` registers worktrees from the same store. A
+    holder it cannot see is a worktree left unregistered, and an unregistered
+    worktree is silent to the pre-push hook -- so the false negative propagates
+    from the resolution into the arming."""
+    ledger = _rolled_store(tmp_path, lane="delta")
+    holders = li.claim_holders(
+        ledger, LEDGER_NAME, bc.load_claim_index(_claim_index_module())
+    )
+    assert holders.get("OMN-9999") == "delta"

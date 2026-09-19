@@ -82,6 +82,7 @@ __all__ = [
     "Verdict",
     "load_claim_index",
     "resolve",
+    "resolve_store",
     "resolve_with_index",
 ]
 
@@ -120,6 +121,14 @@ _REQUIRED_ENTRY_POINTS = (
     "build_index",
     "holder",
     "refusal_for_push",
+    # OMN-18791. The claim store is the live ledger AND the rolls it has
+    # spilled into; these two are how the resolution reaches the archives. They
+    # are REQUIRED rather than probed-for, because a module without them
+    # resolves against the live file alone -- and that answers "unclaimed" for
+    # every rolled claim, which is indistinguishable from a passing check.
+    "window_sources",
+    "build_index_from_sources",
+    "ClaimStoreIncomplete",
 )
 
 
@@ -214,9 +223,11 @@ def resolve_with_index(
     held = claim_index.holder(index, ticket)
     holder_text = None
     if held is not None and held.state == "held":
-        holder_text = (
-            f"{held.lane} ({ledger_name}:{held.claim_line}, fence {held.fence})"
-        )
+        # The HOLDER's own source file, which after a roll is an archive rather
+        # than the live ledger (OMN-18791). Falling back to `ledger_name` keeps
+        # this readable against an index built before that field existed.
+        source = getattr(held, "source", None) or ledger_name
+        holder_text = f"{held.lane} ({source}:{held.claim_line}, fence {held.fence})"
 
     findings: list[str] = []
     outcomes: set[str] = set()
@@ -286,8 +297,47 @@ def resolve(
     ledger_name: str,
     now: datetime,
 ) -> Verdict:
-    """The resolution, building the index from `ledger_text`."""
+    """The resolution against ONE text.
+
+    This is the shape for a caller that already holds the text and is asking
+    about that text alone. A caller resolving the real store wants
+    `resolve_store`: the store is the live ledger plus the rolls it has spilled
+    into, and this form cannot see them (OMN-18791).
+    """
     index = claim_index.build_index(ledger_text, ledger_name, now=now)
+    return resolve_with_index(
+        claim_index,
+        index,
+        branch=branch,
+        commits=commits,
+        ledger_name=ledger_name,
+        now=now,
+    )
+
+
+def resolve_store(
+    claim_index: ModuleType,
+    *,
+    branch: str,
+    commits: list[tuple[str, str]],
+    ledger: Path,
+    ledger_name: str,
+    now: datetime,
+) -> Verdict:
+    """The resolution against the whole claim store.
+
+    The ledger ROLLS: a post-merge hook moves rows out of the live file into
+    `<ledger dir>/archive/`, daily. Reading the live file alone therefore lost
+    every claim the last roll carried away, and a lost claim reads as an
+    UNCLAIMED branch -- which is clean. Both callers of this resolution passed
+    exactly the case they exist to catch, once a day, silently (OMN-18791).
+
+    Which files that is, and the bound that keeps it cheap, are the claim
+    index's decision and not re-implemented here -- the same reason nothing in
+    this module re-implements the comparison.
+    """
+    sources = claim_index.window_sources(ledger, ledger_name, now=now)
+    index = claim_index.build_index_from_sources(sources, now=now)
     return resolve_with_index(
         claim_index,
         index,
@@ -422,6 +472,14 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         claim_index = load_claim_index(Path(args.claim_index_module))
+    except ResolutionUnavailable as exc:
+        # Loaded before the resolution below, and separately, because that
+        # block catches an exception type the module itself declares -- naming
+        # it while the module is unbound would raise from the handler.
+        print(f"branch-claim: {exc}", file=sys.stderr)
+        return 2
+
+    try:
         ledger = Path(args.ledger)
         if not ledger.is_file():
             raise ResolutionUnavailable(
@@ -445,14 +503,22 @@ def main(argv: list[str] | None = None) -> int:
                 now=now,
             )
         else:
-            verdict = resolve(
+            verdict = resolve_store(
                 claim_index,
                 branch=args.branch,
                 commits=commits,
-                ledger_text=ledger.read_text(encoding="utf-8"),
+                ledger=ledger,
                 ledger_name=args.ledger_name,
                 now=now,
             )
+    except claim_index.ClaimStoreIncomplete as exc:
+        # The store itself says a file exists that this cannot read. Reported
+        # with the same exit code as any other could-not-run, because that is
+        # what it is: resolving the readable half would report every rolled
+        # claim as unclaimed, which is a clean bill of health over exactly the
+        # rows nobody can see.
+        print(f"branch-claim: {exc}\nTHE CHECK DID NOT RUN.", file=sys.stderr)
+        return 2
     except ResolutionUnavailable as exc:
         # Exit 2 in BOTH modes. Record mode tolerates a finding; it does not
         # tolerate a gate that could not run, and the two must not share an exit

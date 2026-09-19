@@ -100,6 +100,21 @@ on:
         type: string
         required: false
         default: docs/workflows/_shared/claim_index.py
+      ledger_archive_glob:
+        description: >-
+          Where the ledger's ROLLS live inside that repository.
+
+          The claim store is not one file. A post-merge hook rolls the ledger
+          daily, MOVING rows into this directory, and a resolution that fetched
+          only the live file answered "unclaimed" for every claim the roll had
+          carried away -- which is clean, so this check reported green over
+          exactly the collisions it exists to catch (OMN-18791).
+
+          The resolution decides which of these files it needs and opens no
+          others; this pattern only has to make them reachable.
+        type: string
+        required: false
+        default: docs/tracking/archive/
 
 permissions:
   contents: read
@@ -208,7 +223,7 @@ jobs:
       # markdown store and one first-party module from a PRIVATE first-party
       # repository, and the resolution validates what it reads -- a module
       # missing its entry points is a refusal, an unreadable store is a refusal.
-      - name: Fetch the claim store and its index module
+      - name: Fetch the claim store, its rolls, and its index module
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/${{ steps.store-repo.outputs.name }}
@@ -218,6 +233,7 @@ jobs:
           sparse-checkout: |
             ${{ inputs.ledger_path }}
             ${{ inputs.claim_index_path }}
+            ${{ inputs.ledger_archive_glob }}
           sparse-checkout-cone-mode: false
 
       - name: Resolve this branch against the claim store
@@ -239,12 +255,26 @@ jobs:
           LEDGER: .branch-claim-store/${{ inputs.ledger_path }}
           LEDGER_NAME: ${{ inputs.ledger_path }}
           CLAIM_INDEX: .branch-claim-store/${{ inputs.claim_index_path }}
+          # Asserted below alongside the other three, for the same reason and a
+          # sharper one: a sparse pattern that silently missed this leaves the
+          # store as the live file alone, which is the pre-OMN-18791 behaviour
+          # and reports UNCLAIMED for every rolled claim. That reads as a clean
+          # check, so it has to be proven fetched rather than assumed.
+          ARCHIVE_DIR: .branch-claim-store/${{ inputs.ledger_archive_glob }}
         run: |
           set -euo pipefail
           # Fail LOUD, not with a bare "can't open file ... Errno 2". A sparse
           # checkout of a path that does not exist at the requested ref SUCCEEDS
           # and leaves an empty side path, so a bad ref surfaces only here, as an
           # exit that reads like a verdict but is actually "the check never ran".
+          if [ ! -d "${ARCHIVE_DIR}" ]; then
+            echo "::error::${ARCHIVE_DIR} was not fetched. The claim store is the" \
+                 "live ledger AND the rolls it has spilled into; without them every" \
+                 "claim the last roll moved resolves as unclaimed, which reads as a" \
+                 "clean bill of health over exactly those rows (OMN-18791)." \
+                 "THE CHECK DID NOT RUN."
+            exit 1
+          fi
           for required in "${RESOLVER}" "${IDENTITY}" "${LEDGER}" "${CLAIM_INDEX}"; do
             if [ ! -f "${required}" ]; then
               echo "::error::${required} was not fetched. The check refuses rather" \
