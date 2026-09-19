@@ -160,9 +160,19 @@ def test_policy_loads_and_declares_expected_vocabulary(policy: Policy) -> None:
         "rebase",
         "branch",
         "merge",
+        "push",
     ):
         assert verb in policy.refused_subcommands
     assert "--ff-only" in policy.merge_allowed_flags
+    # OMN-18798 follow-up. `push` joins the refused set for its FORCE shapes
+    # only, so it is conditional like checkout/branch/merge, never
+    # unconditional -- an ordinary push is how work leaves this clone.
+    assert "--force" in policy.push_force_flags
+    assert "--force-with-lease" in policy.push_force_flags
+    assert "-f" in policy.push_force_flags
+    # The append-only coordination surface a path-scoped checkout may not
+    # name. Declared as repo-relative paths, resolved against the git root.
+    assert "docs/tracking/ROLLING_WORK_LEDGER.md" in policy.protected_path_operands
     # checkout and branch are the two with a sanctioned shape, so they are
     # the two that must NOT be unconditional.
     assert policy.unconditional_subcommands == frozenset(
@@ -222,6 +232,45 @@ REFUSED_IN_REGISTRY = [
     "git merge -X theirs origin/main",
 ]
 
+#: OMN-18798 FOLLOW-UP shapes. The merged guard admitted every one of these
+#: -- measured live against the real shared clone before this change, with a
+#: worktree positive control -- and each is named in the ticket's brief.
+#:
+#: A force-push is the one verb here that destroys rows which are ALREADY
+#: SAFE. Every other refused verb costs the tree's uncommitted state; this
+#: one rewrites the published history on the remote, which is where the
+#: ledger's committed rows are the only surviving copy after a roll. The
+#: guard exists because that copy has been the last one before.
+FORCE_PUSH_REFUSED = [
+    "git push --force",
+    "git push --force origin main",
+    "git push -f origin main",
+    "git push --force-with-lease origin main",
+    "git push --force-with-lease=main:abc123 origin main",
+    "git push --force-if-includes origin main",
+    "git push origin main --force",
+    # A bundled short cluster git accepts and an exact match would admit.
+    "git push -fu origin lane-branch",
+]
+
+#: A path-scoped checkout is the Operating Rule 17 restore recipe and stays
+#: allowed -- EXCEPT on the append-only ledger itself. Rule 17's own text
+#: warns that the restore returns the file to HEAD rather than to what was
+#: in the working tree, and on this one path that silently discards every
+#: row appended since the last commit. It is the verb the 14:46-14:55Z
+#: incident used, and the two spellings below were asserted ALLOWED by this
+#: suite until this change; the reversal is deliberate.
+PROTECTED_PATH_CHECKOUT_REFUSED = [
+    "git checkout -- docs/tracking/ROLLING_WORK_LEDGER.md",
+    "git checkout origin/main -- docs/tracking/ROLLING_WORK_LEDGER.md",
+    "git checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md",
+    "git checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md",
+    # Mixed with an innocent path: the protected one still decides.
+    "git checkout HEAD -- docs/a.md docs/tracking/ROLLING_WORK_LEDGER.md",
+    # The archive directory a roll writes into, same surface.
+    "git checkout HEAD -- docs/tracking/archive/2026-09-18.md",
+]
+
 #: The four command shapes of the 2026-09-19 14:43-14:55Z incident, read
 #: verbatim off the shared clone's own reflog, plus the merge that produced
 #: the lossy resolution. Kept as a named list rather than folded into the
@@ -278,6 +327,105 @@ def test_refuses_every_shape_of_the_2026_09_19_incident(
     )
     assert decision.blocked, command
     assert TICKET in decision.reason
+
+
+@pytest.mark.parametrize("command", FORCE_PUSH_REFUSED)
+def test_refuses_a_force_push_from_the_registry_clone(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked, command
+    assert TICKET in decision.reason
+    assert "Operating Rule 19" in decision.reason
+    assert GATE_BIT_NAME in decision.reason
+
+
+@pytest.mark.parametrize("command", PROTECTED_PATH_CHECKOUT_REFUSED)
+def test_refuses_a_path_scoped_checkout_of_the_protected_ledger(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked, command
+    assert TICKET in decision.reason
+
+
+def test_protected_path_is_resolved_against_the_git_root_not_the_cwd(
+    registry: Path, policy: Policy
+) -> None:
+    """A checkout run from a SUBDIRECTORY still names the same file.
+
+    The operand is relative to the caller's cwd, the protected path is
+    declared relative to the repo root, and conflating the two is how a
+    guard refuses from the root and admits from one level down.
+    """
+    subdir = registry / "docs" / "tracking"
+    subdir.mkdir(parents=True, exist_ok=True)
+    decision = evaluate_bash_command(
+        "git checkout HEAD -- ROLLING_WORK_LEDGER.md",
+        policy,
+        cwd=subdir,
+        registry_root=registry,
+    )
+    assert decision.blocked, decision.reason
+
+    # Positive control: the same relative operand from the root names a
+    # DIFFERENT, unprotected file and is allowed.
+    allowed = evaluate_bash_command(
+        "git checkout HEAD -- ROLLING_WORK_LEDGER.md",
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert not allowed.blocked, allowed.reason
+
+
+def test_protected_path_checkout_is_allowed_in_a_worktree(
+    registry_worktree: Path, policy: Policy, registry: Path
+) -> None:
+    """Scope holds for the new arm too: a worktree is never the shared tree.
+
+    Without this, the protected-path arm would be the one rule in this guard
+    that fires outside the clone it is scoped to.
+    """
+    decision = evaluate_bash_command(
+        "git checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md",
+        policy,
+        cwd=registry_worktree,
+        registry_root=registry,
+    )
+    assert not decision.blocked, decision.reason
+
+
+def test_force_push_is_allowed_in_a_worktree(
+    registry_worktree: Path, policy: Policy, registry: Path
+) -> None:
+    decision = evaluate_bash_command(
+        "git push --force origin lane-branch",
+        policy,
+        cwd=registry_worktree,
+        registry_root=registry,
+    )
+    assert not decision.blocked, decision.reason
+
+
+def test_force_push_refusal_names_the_sanctioned_sync_loop(
+    registry: Path, policy: Policy
+) -> None:
+    """The refusal has to say what to do instead, not only what is refused.
+
+    Text drafted through the governed delegation path, receipt
+    9f38bfae-9648-496f-ada1-7b571ed6699e.
+    """
+    decision = evaluate_bash_command(
+        "git push --force origin main", policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked
+    for fragment in ("commit_lock", "--ff-only", "pull request", "squash"):
+        assert fragment in decision.reason, fragment
 
 
 def test_refuses_a_non_ff_merge_but_allows_the_ff_only_sync(
@@ -406,10 +554,25 @@ def test_wrapped_invocation_is_still_matched(registry: Path, policy: Policy) -> 
 
 
 ALLOWED_IN_REGISTRY = [
-    # The Operating Rule 17 path-scoped restore recipe, both spellings.
-    "git checkout -- docs/tracking/ROLLING_WORK_LEDGER.md",
-    "git checkout origin/main -- docs/tracking/ROLLING_WORK_LEDGER.md",
+    # The Operating Rule 17 path-scoped restore recipe, on any path that is
+    # not the protected coordination surface. The two ledger spellings that
+    # sat here until the OMN-18798 follow-up now live in
+    # PROTECTED_PATH_CHECKOUT_REFUSED.
+    "git checkout -- docs/standards/a.md",
+    "git checkout origin/main -- scripts/ledger_lock.py",
     "git checkout HEAD -- docs/a.md docs/b.md",
+    # A path whose name merely STARTS with the protected one is a different
+    # file and is not protected -- prefix matching would refuse it.
+    "git checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak",
+    # An ordinary push is how work leaves this clone; only force is refused.
+    "git push",
+    "git push origin main",
+    "git push origin main:refs/heads/lane-branch",
+    "git push --set-upstream origin lane-branch",
+    # The same cluster WITHOUT the force bit stays allowed -- the positive
+    # control for the bundled-flag arm just above.
+    "git push -u origin lane-branch",
+    "git push -q origin main",
     # Bare checkout changes nothing.
     "git checkout",
     # Fast-forward-only sync.
@@ -613,7 +776,7 @@ def test_no_op_policy_admits_every_refused_shape(
     noop_path = tmp_path / "noop.json"
     noop_path.write_text(json.dumps(raw))
     noop = load_policy(noop_path)
-    for command in REFUSED_IN_REGISTRY:
+    for command in REFUSED_IN_REGISTRY + FORCE_PUSH_REFUSED:
         decision = evaluate_bash_command(
             command, noop, cwd=registry, registry_root=registry
         )
@@ -715,6 +878,10 @@ def _run_hook(
         "git clean -fd",
         "git rebase origin/main",
         "git checkout origin/main",
+        # OMN-18798 follow-up: both new arms proven end to end through the
+        # real shell wrapper, not only through the decision core.
+        "git push --force origin main",
+        "git checkout origin/main -- docs/tracking/ROLLING_WORK_LEDGER.md",
     ],
 )
 def test_shell_wrapper_refuses_in_registry_clone(
@@ -731,7 +898,8 @@ def test_shell_wrapper_refuses_in_registry_clone(
 @pytest.mark.parametrize(
     "command",
     [
-        "git checkout origin/main -- docs/tracking/ROLLING_WORK_LEDGER.md",
+        "git checkout origin/main -- docs/standards/a.md",
+        "git push origin main:refs/heads/lane-branch",
         "git merge --ff-only origin/main",
         "git fetch origin",
         "git status --porcelain",
