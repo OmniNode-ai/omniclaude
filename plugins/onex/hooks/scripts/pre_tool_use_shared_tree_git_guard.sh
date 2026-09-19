@@ -7,10 +7,19 @@
 # Refuses a Bash command that moves the SHARED registry clone at $OMNI_HOME out
 # from under the lanes working in it -- `git reset`, a non-path-scoped
 # `git checkout`, `git checkout -b`/`-B`, `git switch`, `git clean`,
-# `git rebase`, a `git merge` that is not `--ff-only`, and a `git branch`
-# delete/rename whose target is the checked-out branch -- when the
+# `git rebase`, a `git merge` that is not `--ff-only`, a `git branch`
+# delete/rename whose target is the checked-out branch, a FORCE `git push`,
+# and a path-scoped `git checkout` naming the append-only ledger -- when the
 # command's effective git root (its `-C
 # <path>` argument, or its own cwd) IS that registry clone.
+#
+# The last two arms are an OMN-18798 follow-up, added after the first
+# revision was measured live against the real shared clone and found to
+# admit both. A force push is the only refused verb whose damage is to
+# history that is ALREADY committed and pushed rather than to the tree's
+# uncommitted state; the ledger checkout is refused because Operating Rule
+# 17's restore returns a file to HEAD rather than to the working tree, which
+# on that one path discards peer lanes' appended rows silently.
 #
 # Why a hook and not a validator
 # -------------------------------
@@ -51,9 +60,10 @@
 # and both already carry the OMN-7018/OMN-14330 worktree guard.
 #
 # Inside the registry clone, everything that is not a declared refused shape
-# passes untouched: `git fetch`, `git pull --ff-only`, the Operating Rule 17
-# path-scoped restore recipe (`git checkout <ref> -- <path>`), and every
-# read -- status, log, diff,
+# passes untouched: `git fetch`, `git pull --ff-only`, an ordinary
+# `git push` or `git push origin main:refs/heads/<branch>`, the Operating
+# Rule 17 path-scoped restore recipe (`git checkout <ref> -- <path>`) on
+# every path but the ledger, and every read -- status, log, diff,
 # show, rev-parse, reflog, worktree list. There is deliberately NO escape
 # consent citation and no exempt marker: each refused verb has a sanctioned
 # alternative reaching the same outcome without touching state a peer lane
@@ -176,7 +186,7 @@ if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'git'; then
     _hook_status "PASS" "no git vocabulary" "0" 2>/dev/null || true
     exit 0
 fi
-if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'reset|checkout|switch|clean|rebase|branch|merge'; then
+if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'reset|checkout|switch|clean|rebase|branch|merge|push'; then
     _hook_status "PASS" "no refused git verb" "0" 2>/dev/null || true
     exit 0
 fi

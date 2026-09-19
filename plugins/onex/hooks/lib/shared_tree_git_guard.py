@@ -184,6 +184,8 @@ class Policy:
     branch_creation_flags: frozenset[str]
     merge_allowed_flags: frozenset[str]
     blanket_path_operands: frozenset[str]
+    push_force_flags: frozenset[str]
+    protected_path_operands: tuple[str, ...]
     registry_root_envs: tuple[str, ...]
     registry_root_markers: tuple[str, ...]
 
@@ -242,6 +244,8 @@ def load_policy(path: Path | None = None) -> Policy:
         branch_creation_flags=frozenset(_str_list(raw, "branch_creation_flags")),
         merge_allowed_flags=frozenset(_str_list(raw, "merge_allowed_flags")),
         blanket_path_operands=frozenset(_str_list(raw, "blanket_path_operands")),
+        push_force_flags=frozenset(_str_list(raw, "push_force_flags")),
+        protected_path_operands=tuple(_str_list(raw, "protected_path_operands")),
         registry_root_envs=tuple(_str_list(raw, "registry_root_envs")),
         registry_root_markers=tuple(_str_list(raw, "registry_root_markers")),
     )
@@ -436,6 +440,63 @@ def _read_current_branch(git_root: Path) -> str | None:
     return None
 
 
+def _is_force_push_flag(token: str, policy: Policy) -> bool:
+    """Does this token make a `git push` a FORCE push?
+
+    Three spellings, all real: the exact long flag, the `=<value>` form that
+    `--force-with-lease` and `--force-if-includes` both take, and a bundled
+    short cluster such as `-fu`, which git accepts and a naive exact match
+    would wave through.
+    """
+    if token in policy.push_force_flags:
+        return True
+    for flag in policy.push_force_flags:
+        if flag.startswith("--") and token.startswith(f"{flag}="):
+            return True
+    if re.fullmatch(r"-[A-Za-z]+", token) and "f" in token[1:]:
+        return True
+    return False
+
+
+def _protected_paths_named(
+    invocation: _GitInvocation,
+    policy: Policy,
+    target_dir: Path,
+    git_root: Path,
+) -> list[str]:
+    """Which protected paths, if any, this checkout's operands resolve to.
+
+    The operands are relative to the CALLER's directory and the protected
+    entries are declared relative to the REPO ROOT, so both are made
+    absolute before they are compared -- conflating the two is how a guard
+    refuses from the root and admits the same file from one level down.
+
+    Comparison is by path component, never by string prefix: a declared
+    directory matches everything beneath it, while a sibling whose name
+    merely starts with the same characters does not.
+    """
+    args = list(invocation.args)
+    if "--" not in args:
+        return []
+    operands = args[args.index("--") + 1 :]
+    protected_abs = {
+        os.path.normpath(os.path.join(str(git_root), entry)): entry
+        for entry in policy.protected_path_operands
+    }
+    hits: list[str] = []
+    for operand in operands:
+        candidate = os.path.normpath(
+            operand
+            if Path(operand).is_absolute()
+            else os.path.join(str(target_dir), operand)
+        )
+        for abs_entry, declared in protected_abs.items():
+            if candidate == abs_entry or candidate.startswith(abs_entry + os.sep):
+                if declared not in hits:
+                    hits.append(declared)
+    return hits
+
+
 def _checkout_is_path_scoped(invocation: _GitInvocation, policy: Policy) -> bool:
     """True only for the Operating Rule 17 sanctioned restore shape."""
     args = list(invocation.args)
@@ -450,7 +511,11 @@ def _checkout_is_path_scoped(invocation: _GitInvocation, policy: Policy) -> bool
 
 
 def _refusal_detail(
-    invocation: _GitInvocation, policy: Policy, current_branch: str | None
+    invocation: _GitInvocation,
+    policy: Policy,
+    current_branch: str | None,
+    target_dir: Path,
+    git_root: Path,
 ) -> str | None:
     """Why this invocation is refused, or None when it is allowed.
 
@@ -507,6 +572,21 @@ def _refusal_detail(
                 "already -- three rows appended at 01:24Z reached a "
                 "committed copy at 11:17Z"
             )
+        protected = _protected_paths_named(invocation, policy, target_dir, git_root)
+        if protected:
+            return (
+                f"the path operand resolves to {protected[0]}, the "
+                "append-only coordination surface every lane appends to "
+                "through commit_lock.py. A path-scoped restore is the "
+                "Operating Rule 17 recipe and is allowed on every other "
+                "path, but on THIS one it returns the file to HEAD -- not "
+                "to what was in the working tree -- so every row appended "
+                "since the last commit is discarded with no diff, no "
+                "conflict and no failure. Rows were lost exactly this way "
+                "in the 14:46-14:55Z window on 2026-09-19. Re-append the "
+                "row through ledger_lock.py instead, or read the old "
+                "version without writing the tree: git show <ref>:<path>"
+            )
         if _checkout_is_path_scoped(invocation, policy):
             return None
         if "--" in args:
@@ -552,6 +632,20 @@ def _refusal_detail(
             "the pointer or refuses, so it can never resolve anything away; "
             "`--abort`, `--quit` and `--continue` manage a merge already in "
             "progress and are not refused"
+        )
+
+    if sub == "push":
+        if not any(_is_force_push_flag(arg, policy) for arg in args):
+            return None
+        return (
+            "a FORCE push from this clone can destroy published append-only "
+            "coordination rows on the remote. Every other verb this guard "
+            "refuses costs the tree's UNCOMMITTED state; this one rewrites "
+            "history that is already safe, and after a ledger roll the "
+            "remote copy is the only surviving one. Nothing here needs it: "
+            "append rows through commit_lock.py, sync with "
+            "`git merge --ff-only origin/main`, push to a FRESH branch, "
+            "open a pull request and land it by squash"
         )
 
     if sub == "branch":
@@ -675,7 +769,13 @@ def evaluate_bash_command(
                 "not the shared registry clone"
             )
             continue
-        detail = _refusal_detail(invocation, policy, _read_current_branch(git_root))
+        detail = _refusal_detail(
+            invocation,
+            policy,
+            _read_current_branch(git_root),
+            target_dir=target_dir,
+            git_root=git_root,
+        )
         if detail is None:
             continue
         return Decision(
