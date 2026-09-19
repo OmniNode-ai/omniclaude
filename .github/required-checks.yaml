@@ -624,3 +624,22 @@ gates:
     job_path: ["kb-doc-gate", "kb-doc-gate"]
     skip_semantics: never
     rationale: "OMN-17172: document-placement gate, called locally (`uses: ./.github/workflows/kb-doc-gate-reusable.yml`) because omniclaude hosts both the validator and the reusable. Live-required on dev; row added under OMN-18288 to clear the manifest reconcile."
+
+  # OMN-18790 wired the skip-count ratchet (omniclaude#2258, mechanism
+  # OMN-18776) and registered it in GATE_JOBS/STRICT_SUCCESS_JOBS only — the
+  # job's own header comment in ci.yml states the raw context was deliberately
+  # NOT added to branch protection, on the reasoning that the CI Summary
+  # umbrella already covers it. Live branch protection on dev disagrees: `gh
+  # api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks`
+  # returns "Skip Count Ratchet (OMN-18776)" as a required context. The row
+  # below records the manifest side of that live fact so the reconcile job
+  # stops failing every push; it does not resolve the contradiction between
+  # the code comment and the live protection setting, which is a design
+  # question for OMN-18776/OMN-18790, not a manifest-drift question.
+  - name: "Skip Count Ratchet (OMN-18776)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["skip-count-ratchet"]
+    skip_semantics: never
+    rationale: "OMN-18790/OMN-18776: skip-count baseline ratchet, direct job in ci.yml (`if: always()`, unconditional). Live-required on dev; row added under OMN-18790 to clear the manifest reconcile."
