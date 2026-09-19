@@ -602,6 +602,21 @@ gates:
   # reconcile that is always red cannot report the divergence this change
   # introduces and then closes, so the row is added here rather than left for
   # a follow-up: the reconcile is the evidence surface for the row above it.
+  # OMN-18777: the no-new-advisory-job gate. Its context was registered on live
+  # branch protection before this row existed, and the manifest reconcile went
+  # red on the next scheduled run (35412008973, 01:14:09Z) having been green at
+  # 00:10:33Z (35408435728) -- the divergence window the header above warns
+  # about, and the same failure the kb-doc-gate note below records. Recorded
+  # here rather than left as a follow-up for the reason given there: a
+  # reconcile that is always red cannot report the next divergence.
+  - name: "advisory-job-gate / advisory-job-gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: advisory-job-gate.yml
+    job_path: ["advisory-job-gate", "advisory-job-gate"]
+    skip_semantics: never
+    rationale: "OMN-18777: refuses an unannotated advisory workflow setting and a pull-request-reachable verification job in no enforcement surface. Called locally (`uses: ./.github/workflows/advisory-job-gate-reusable.yml`) because omniclaude hosts both the validator and the reusable. Live-required on dev since 2026-09-19."
+
   - name: "kb-doc-gate / kb-doc-gate"
     mode: REQUIRED
     producer_kind: local
