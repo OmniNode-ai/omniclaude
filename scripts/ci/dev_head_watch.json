@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "OMN-18836. The watchlist is DATA, not a Python literal, so adding a",
+    "repository the day its own `push: branches: [dev]` trigger lands is an",
+    "edit to this file and nothing else. scripts/ci/dev_head_red_alert.py",
+    "reads it and carries no repository slug of its own; a test asserts that.",
+    "",
+    "A repository belongs here only once its ci.yml actually triggers on a",
+    "push to `dev`. Listing one that does not produces `no_completed_run`",
+    "every tick forever, which is a false quiet rather than a signal.",
+    "Measured 2026-09-19 at origin/dev: omnibase_infra gains the trigger in",
+    "omnibase_infra#3842 (OMN-18835); omnimarket and omniclaude lack it and",
+    "are added when theirs land; omnibase_core already has it but its push",
+    "runs carry a separate known red (OMN-16641) and it is NOT added until",
+    "that is closed, because a watchlist entry that is always red is an alarm",
+    "that gets muted."
+  ],
+  "linear": {
+    "team_key": "OMN",
+    "parent_issue": "OMN-18834"
+  },
+  "targets": [
+    {
+      "repo": "OmniNode-ai/omnibase_infra",
+      "workflow": "ci.yml",
+      "branch": "dev"
+    }
+  ]
+}

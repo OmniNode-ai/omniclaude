@@ -142,3 +142,99 @@ jobs:
             args+=(--dry-run)
           fi
           python3 scripts/ci/occ_companion_merge_heal.py "${args[@]}"
+
+  # ===========================================================================
+  # OMN-18836: notice that a watched repository's `dev` head is red.
+  # ===========================================================================
+  # A SIBLING JOB, not an extension of the heal above, and the separation is
+  # deliberate: the two answer different questions about different
+  # repositories and must be able to fail independently. What they share is
+  # the only scarce thing here — a ten-minute schedule that already exists,
+  # already has its trust boundary reasoned about (see this file's header),
+  # and costs nothing more to hang a second reader off.
+  #
+  # WHY THIS IS NOT IN THE REPOSITORY IT WATCHES. The event that makes the
+  # fact true is a push-triggered CI run concluding in ANOTHER repository, and
+  # `workflow_run` does not cross a repository boundary. A schedule here needs
+  # no new event, and the App identity below already holds `actions: read`
+  # org-wide (OMN-18797), so nothing new is granted to make this work.
+  #
+  # NOT A REQUIRED STATUS CHECK, and it must never become one. It reports on
+  # whether a red head was recorded, not on whether any pull request is good.
+  # It carries no `continue-on-error`, so a monitor that cannot read the
+  # status it reasons about goes red rather than reporting a clean sweep.
+  #
+  # Behaviour is pinned by tests/ci/test_dev_head_red_alert_omn18836.py; the
+  # watchlist is data, in scripts/ci/dev_head_watch.json.
+  dev-head-red-alert:
+    name: Notice a red dev head on a watched repository
+    timeout-minutes: 10
+    permissions:
+      # Nothing here reads or writes THIS repository beyond its own checkout.
+      # Every cross-repository read and the one write go through the App token
+      # minted below, scoped to the watched repositories and to two verbs.
+      contents: read
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci.
+    # A handful of API calls, and on a green tick it writes nothing at all.
+    runs-on: >-
+      ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # The App token is scoped to exactly the repositories on the watchlist,
+      # read out of the watchlist itself rather than duplicated here. A second
+      # copy of the list is a second thing to forget to update, and the
+      # failure it produces — a token that cannot read a repository the script
+      # is about to ask about — reads as an API error rather than as drift.
+      - name: Resolve the watched repositories
+        id: watchlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          names="$(python3 -c '
+          import json, pathlib, sys
+          config = json.loads(pathlib.Path("scripts/ci/dev_head_watch.json").read_text())
+          targets = config["targets"]
+          print("\n".join(sorted({t["repo"].split("/")[-1] for t in targets})))
+          ')"
+          if [ -z "${names}" ]; then
+            echo "::error::the watchlist resolved to no repositories"
+            exit 1
+          fi
+          {
+            echo "repositories<<EOF"
+            echo "${names}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+          echo "watching:"; echo "${names}"
+
+      - name: Mint a scoped installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: ${{ steps.watchlist.outputs.repositories }}
+          # `actions: read` is the run and job lists. `pull-requests: write`
+          # is the one comment. Nothing else, at any scope. There is no
+          # fallback to secrets.GITHUB_TOKEN: that token cannot read another
+          # repository at all, so a silent substitution would read every
+          # watched head as unreadable rather than failing on the mint.
+          permission-actions: read
+          permission-pull-requests: write
+
+      - name: Read each watched dev head and record a red one
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: python3 scripts/ci/dev_head_red_alert.py
