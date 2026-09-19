@@ -65,6 +65,24 @@ jobs:
         with:
           persist-credentials: false
 
+      # PyYAML IS THE VALIDATOR'S ONE THIRD-PARTY IMPORT, and `python3` on a
+      # runner image is not a promise that it is there. OMN-18796: the gate's
+      # first cross-repo run, on omninode_infra, exited 1 with
+      # `ModuleNotFoundError: No module named 'yaml'` before it read a single
+      # workflow file, while the same commit passed on four other repositories
+      # whose runners happened to carry it. A gate whose verdict depends on
+      # what is installed on the runner that picked the job up has not run; it
+      # is also the shape that produces a confident green somewhere else. The
+      # interpreter and the dependency are both pinned here so the verdict is a
+      # property of the validator and not of the fleet.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install the validator dependency
+        run: python -m pip install --disable-pip-version-check --quiet 'PyYAML==6.0.2'
+
       # The validator AND its baseline come from the same omniclaude commit the
       # caller pinned. Two files, one pin: a baseline fetched at a different ref
       # from the script that reads it is how a grandfather list silently stops
