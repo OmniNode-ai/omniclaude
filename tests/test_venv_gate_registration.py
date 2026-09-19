@@ -23,6 +23,7 @@ to read the config.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
 
@@ -32,10 +33,59 @@ import yaml
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_REQUIRED_HOOK_IDS = ("check-daemon-venv-skew",)
+_REQUIRED_HOOK_IDS = (
+    "check-daemon-venv-skew",
+    # OMN-18753: registered once its baseline was settled. OMN-18752 repointed
+    # this gate at the canonical clone's checked-out head, the same fact the
+    # OMN-18675 venv guard resolves, so it is no longer a gate that
+    # structurally cannot pass. Both now name one expected commit.
+    "check-omnimarket-dispatch-drift",
+)
 
-# Deliberately NOT registered — see test_dispatch_drift_gate_deferral_is_recorded.
-_DEFERRED_HOOK_IDS = ("check-omnimarket-dispatch-drift",)
+
+def _executable_source(path: Path) -> str:
+    """The module's code with every PROSE string and comment removed.
+
+    Prose and code must be separated here, and neither direction may be
+    skipped. The module's own docstrings DESCRIBE the removed remote-branch
+    probe on purpose, so a plain substring search over the file matches the
+    text that records the removal and can never go green. Stripping every
+    string would be the opposite error: the probe, if it came back, would be
+    the literal ``"ls-remote"`` inside a ``subprocess`` argument list, so a
+    string in an executable position is the one thing this must still see.
+
+    Prose is therefore defined structurally, as a string-literal EXPRESSION
+    statement -- a string evaluated for nothing, which is what a docstring is
+    and also what a bare explanatory string between statements is. That is
+    wider than ``ast.get_docstring``, which sees only the first statement of a
+    module, class or function and would miss a bare literal placed anywhere
+    else. A string passed as an argument, assigned to a name, or built into a
+    list is not an expression statement and is kept.
+    """
+    source = path.read_text(encoding="utf-8")
+    prose_spans: list[tuple[int, int]] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Expr):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            continue
+        if value.end_lineno is None:
+            raise ValueError(
+                f"{path} has a string expression at line {value.lineno} with no "
+                f"end position; the prose/code split cannot be made safely, and "
+                f"guessing it would be how a reintroduced probe slips through"
+            )
+        prose_spans.append((value.lineno, value.end_lineno))
+
+    kept: list[str] = []
+    for number, line in enumerate(source.splitlines(), start=1):
+        if any(start <= number <= end for start, end in prose_spans):
+            continue
+        if line.lstrip().startswith("#"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
 
 
 def _local_hooks() -> dict[str, dict[str, Any]]:
@@ -118,30 +168,118 @@ def test_gate_is_also_wired_in_ci(hook_id: str) -> None:
     ), f"no workflow in .github/workflows references {hook_id!r}"
 
 
-@pytest.mark.parametrize("hook_id", _DEFERRED_HOOK_IDS)
-def test_dispatch_drift_gate_deferral_is_recorded(hook_id: str) -> None:
-    """The sibling gate stays unregistered, and the config says why.
+def test_the_two_gates_resolve_one_authority_not_two() -> None:
+    """OMN-18753 AC1/AC3: the reason the sibling gate was deferred is gone.
 
-    ``check_omnimarket_dispatch_drift.py`` resolves its expected commit from
-    ``git ls-remote <remote> refs/heads/main``. The OMN-18675 venv guard
-    resolves the canonical clone's checked-out ``dev`` HEAD. omnimarket's
-    ``main`` is release-synced, so it lags ``dev`` by the unreleased commits
-    and the two gates demand different commits at every moment except the
-    instant main catches up. Observed live 2026-09-18: the venv guard required
-    ``cfd5b4eb`` (dev) while the dispatch gate required ``7f77f9d8`` (main).
+    It was deferred because it resolved its expected commit from
+    ``git ls-remote <remote> refs/heads/main`` while the OMN-18675 venv guard
+    resolves the canonical clone's checked-out ``dev`` head. omnimarket's
+    ``main`` is release-synced, so it lags ``dev`` and the two demanded
+    different commits at every moment except the instant main caught up —
+    observed live 2026-09-18, the venv guard requiring ``cfd5b4eb`` while the
+    dispatch gate required ``7f77f9d8`` on the same host in the same minute.
+    Registering a gate that structurally cannot pass would have been worse
+    than leaving it unregistered.
 
-    Neither had its live half registered, which is why the contradiction had
-    never surfaced. Registering a gate that structurally cannot pass would be
-    worse than leaving it unregistered, so it stays out until the baseline
-    question is settled — and this test exists so "not registered" stays a
-    recorded decision rather than drifting back into an oversight.
+    OMN-18752 deleted that resolution source. This test reads the gate's
+    source for the probe rather than trusting the comment that says it is
+    gone, because the deferral can only be lifted for as long as it stays
+    gone: re-adding a remote-branch probe would restore the contradiction and
+    a registered gate would then block every commit on this host.
     """
-    assert hook_id not in _local_hooks(), (
-        f"{hook_id!r} was registered without settling its baseline against the "
-        f"clone authority; see this test's docstring"
+    gate = _REPO_ROOT / "scripts" / "check_omnimarket_dispatch_drift.py"
+    # Shipped code, unchanged by the PR that registers the hook -- the gate
+    # itself was repointed at the clone by OMN-18752 and this reads it back.
+    # Asserted rather than assumed: a missing file would otherwise surface as
+    # a FileNotFoundError, and a guard that errors reads to a hurried eye like
+    # a guard that is merely noisy.
+    assert gate.is_file(), (
+        f"{gate} is missing. The registered hook's entry runs it, so the hook "
+        f"would fail at every commit; this test cannot vouch for a file that "
+        f"is not there"
     )
-    config_text = (_REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-    assert hook_id in config_text, (
-        "the config must carry the reason this gate is absent, or the next "
-        "reader sees only an omission"
+    code = _executable_source(gate)
+    assert "ls-remote" not in code and "ls_remote" not in code, (
+        "check_omnimarket_dispatch_drift.py resolves a remote branch again. That "
+        "is the split OMN-18752 removed and OMN-18753 registered the gate on the "
+        "strength of; with the gate now registered it would block every commit"
+    )
+
+
+@pytest.mark.parametrize("hook_id", _REQUIRED_HOOK_IDS)
+def test_the_wrapper_does_not_prescribe_a_remedy_that_breaks_the_host(
+    hook_id: str,
+) -> None:
+    """A registered gate's header is the first thing a blocked committer reads.
+
+    ``uv lock --upgrade-package omnimarket`` cannot move the pin: the rev is
+    immutable and is INPUT to the resolve, not output. A committer who reaches
+    for it and then hand-edits the rev to make it "work" desynchronises the
+    lock from the canonical clone, and the OMN-18675 in-process guard then
+    refuses every ``onex delegate`` on the host. OMN-18753 names that standing
+    trap, and it was printed by the dispatch gate's own wrapper header.
+    """
+    hook = _local_hooks()[hook_id]
+    entry = str(hook["entry"])
+    script = next(part for part in entry.split() if part.endswith(".sh"))
+    wrapper = _REPO_ROOT / script
+    assert wrapper.is_file(), (
+        f"{hook_id!r} is registered with entry {script}, which does not exist"
+    )
+    header = wrapper.read_text(encoding="utf-8")
+    offending = "uv lock --upgrade-package omnimarket"
+    for line in header.splitlines():
+        stripped = line.lstrip("# ").strip()
+        if stripped.startswith(offending):
+            raise AssertionError(
+                f"{script} prescribes {offending!r} as a remedy. It cannot move an "
+                f"immutable rev, and hand-editing the rev instead breaks "
+                f"`onex delegate` for every lane on the host. The sanctioned "
+                f"advance is sibling-lock-refresh.yml (OMN-18752)."
+            )
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "must_be_seen"),
+    [
+        (
+            "a probe in a subprocess argument list",
+            'import subprocess\nsubprocess.run(["git", "ls-remote", "origin"])\n',
+            True,
+        ),
+        ("a probe assigned to a name", 'CMD = "ls-remote"\n', True),
+        (
+            "a bare explanatory string between statements",
+            'x = 1\n"we used to call git ls-remote here"\ny = 2\n',
+            False,
+        ),
+        (
+            "module and function docstrings",
+            '"""module prose about ls-remote"""\n'
+            "def f():\n"
+            '    """more prose: ls_remote"""\n'
+            "    return 1\n",
+            False,
+        ),
+    ],
+)
+def test_the_prose_code_split_is_exact_in_both_directions(
+    tmp_path: Path, label: str, source: str, must_be_seen: bool
+) -> None:
+    """The guard is only as good as where it draws the line between the two.
+
+    Too narrow and the module's own prose about the removed probe keeps it
+    permanently red, which is how a guard gets deleted. Too wide and the
+    probe itself — a string in an executable position — becomes invisible,
+    which is how a guard gets kept and proves nothing. Both failure modes are
+    silent, so both directions are pinned here rather than argued in a
+    docstring.
+    """
+    module = tmp_path / "subject.py"
+    module.write_text(source, encoding="utf-8")
+    code = _executable_source(module)
+    seen = "ls-remote" in code or "ls_remote" in code
+    assert seen is must_be_seen, (
+        f"{label}: expected the split to "
+        f"{'keep' if must_be_seen else 'strip'} it, and it did not"
     )
