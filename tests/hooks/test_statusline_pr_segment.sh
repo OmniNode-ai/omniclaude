@@ -136,6 +136,32 @@ case "$R_COLD" in
   *) fail "a cold cache renders a pending segment, not absence" "got: $R_COLD" ;;
 esac
 
+# --- portability: a GNU-coreutils stat must not blank the segment ----------
+#
+# `stat -f` is "format" on BSD and "filesystem status" on GNU, where it SUCCEEDS
+# and prints a mount point. The BSD-first probe therefore fed "/" into the
+# freshness arithmetic on Linux, and the resulting syntax error aborted the rest
+# of the section, leaving line 3 empty — this segment disappearing again, by a
+# second route. This is the case CI caught that a macOS-only run cannot.
+
+echo "portability — a GNU-style stat does not blank the segment"
+
+GNUSTAT="$WORK/bin.gnustat"
+mkdir -p "$GNUSTAT"
+cat > "$GNUSTAT/stat" <<'GSTUB'
+#!/bin/bash
+# GNU semantics: -f is filesystem status (%m = mount point), -c is file format.
+if [ "$1" = "-f" ]; then echo "/"; exit 0; fi
+exec /usr/bin/stat "$@"
+GSTUB
+chmod +x "$GNUSTAT/stat"
+
+R_GNU="$(render "$C_COUNTS" "$GNUSTAT")"
+case "$R_GNU" in
+  *"PRs(main/dev):"*) pass "a GNU-style stat still renders the segment" ;;
+  *) fail "a GNU-style stat still renders the segment" "got: $R_GNU" ;;
+esac
+
 # --- AC1: the producer records a per-repo sentinel and a status field -------
 
 echo "AC1 — the cache distinguishes a failed repo from a repo with no open PRs"

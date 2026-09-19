@@ -437,7 +437,14 @@ if [ "$HAS_JQ" -eq 1 ]; then
   PR_ERR_SENTINEL="err"
   PR_FRESH=0
   if [ -f "$PR_CACHE" ]; then
-    PR_MTIME=$(stat -f %m "$PR_CACHE" 2>/dev/null || stat -c %Y "$PR_CACHE" 2>/dev/null || echo 0)
+    # GNU `stat -f` means "filesystem status", not "format", so on Linux the old
+    # BSD-first order SUCCEEDED and returned a mount point. `$((NOW - /))` is an
+    # arithmetic syntax error, which aborts the rest of this section and leaves
+    # line 3 empty — the same disappearance this ticket is about, by a second
+    # route. Try the GNU form first, then the BSD one, then refuse anything that
+    # is not a plain integer.
+    PR_MTIME=$(stat -c %Y "$PR_CACHE" 2>/dev/null || stat -f %m "$PR_CACHE" 2>/dev/null || echo 0)
+    case "$PR_MTIME" in ""|*[!0-9]*) PR_MTIME=0 ;; esac
     PR_AGE=$((NOW - PR_MTIME))
     [ "$PR_AGE" -le 300 ] && PR_FRESH=1
   fi
