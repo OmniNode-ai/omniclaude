@@ -44,33 +44,43 @@ _REQUIRED_HOOK_IDS = (
 
 
 def _executable_source(path: Path) -> str:
-    """The module's code with every docstring and comment removed.
+    """The module's code with every PROSE string and comment removed.
 
-    Both are stripped and neither may be skipped. The docstrings of this
-    module DESCRIBE the removed remote-branch probe on purpose, so a plain
-    substring search over the file matches the prose that records the removal
-    and can never go green. Stripping strings wholesale would be the opposite
-    error: the probe, if it came back, would be the literal ``"ls-remote"`` in
-    a ``subprocess`` argument list, so the one thing the check must still see
-    is a string.
+    Prose and code must be separated here, and neither direction may be
+    skipped. The module's own docstrings DESCRIBE the removed remote-branch
+    probe on purpose, so a plain substring search over the file matches the
+    text that records the removal and can never go green. Stripping every
+    string would be the opposite error: the probe, if it came back, would be
+    the literal ``"ls-remote"`` inside a ``subprocess`` argument list, so a
+    string in an executable position is the one thing this must still see.
+
+    Prose is therefore defined structurally, as a string-literal EXPRESSION
+    statement -- a string evaluated for nothing, which is what a docstring is
+    and also what a bare explanatory string between statements is. That is
+    wider than ``ast.get_docstring``, which sees only the first statement of a
+    module, class or function and would miss a bare literal placed anywhere
+    else. A string passed as an argument, assigned to a name, or built into a
+    list is not an expression statement and is kept.
     """
     source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    docstring_spans: list[tuple[int, int]] = []
-    for node in ast.walk(tree):
-        if not isinstance(
-            node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
-        ):
+    prose_spans: list[tuple[int, int]] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Expr):
             continue
-        if ast.get_docstring(node, clean=False) is None:
+        value = node.value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
             continue
-        first = node.body[0]
-        assert first.end_lineno is not None
-        docstring_spans.append((first.lineno, first.end_lineno))
+        if value.end_lineno is None:
+            raise ValueError(
+                f"{path} has a string expression at line {value.lineno} with no "
+                f"end position; the prose/code split cannot be made safely, and "
+                f"guessing it would be how a reintroduced probe slips through"
+            )
+        prose_spans.append((value.lineno, value.end_lineno))
 
     kept: list[str] = []
     for number, line in enumerate(source.splitlines(), start=1):
-        if any(start <= number <= end for start, end in docstring_spans):
+        if any(start <= number <= end for start, end in prose_spans):
             continue
         if line.lstrip().startswith("#"):
             continue
@@ -177,9 +187,18 @@ def test_the_two_gates_resolve_one_authority_not_two() -> None:
     gone: re-adding a remote-branch probe would restore the contradiction and
     a registered gate would then block every commit on this host.
     """
-    code = _executable_source(
-        _REPO_ROOT / "scripts" / "check_omnimarket_dispatch_drift.py"
+    gate = _REPO_ROOT / "scripts" / "check_omnimarket_dispatch_drift.py"
+    # Shipped code, unchanged by the PR that registers the hook -- the gate
+    # itself was repointed at the clone by OMN-18752 and this reads it back.
+    # Asserted rather than assumed: a missing file would otherwise surface as
+    # a FileNotFoundError, and a guard that errors reads to a hurried eye like
+    # a guard that is merely noisy.
+    assert gate.is_file(), (
+        f"{gate} is missing. The registered hook's entry runs it, so the hook "
+        f"would fail at every commit; this test cannot vouch for a file that "
+        f"is not there"
     )
+    code = _executable_source(gate)
     assert "ls-remote" not in code and "ls_remote" not in code, (
         "check_omnimarket_dispatch_drift.py resolves a remote branch again. That "
         "is the split OMN-18752 removed and OMN-18753 registered the gate on the "
@@ -203,7 +222,11 @@ def test_the_wrapper_does_not_prescribe_a_remedy_that_breaks_the_host(
     hook = _local_hooks()[hook_id]
     entry = str(hook["entry"])
     script = next(part for part in entry.split() if part.endswith(".sh"))
-    header = (_REPO_ROOT / script).read_text(encoding="utf-8")
+    wrapper = _REPO_ROOT / script
+    assert wrapper.is_file(), (
+        f"{hook_id!r} is registered with entry {script}, which does not exist"
+    )
+    header = wrapper.read_text(encoding="utf-8")
     offending = "uv lock --upgrade-package omnimarket"
     for line in header.splitlines():
         stripped = line.lstrip("# ").strip()
@@ -214,3 +237,49 @@ def test_the_wrapper_does_not_prescribe_a_remedy_that_breaks_the_host(
                 f"`onex delegate` for every lane on the host. The sanctioned "
                 f"advance is sibling-lock-refresh.yml (OMN-18752)."
             )
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "must_be_seen"),
+    [
+        (
+            "a probe in a subprocess argument list",
+            'import subprocess\nsubprocess.run(["git", "ls-remote", "origin"])\n',
+            True,
+        ),
+        ("a probe assigned to a name", 'CMD = "ls-remote"\n', True),
+        (
+            "a bare explanatory string between statements",
+            'x = 1\n"we used to call git ls-remote here"\ny = 2\n',
+            False,
+        ),
+        (
+            "module and function docstrings",
+            '"""module prose about ls-remote"""\n'
+            "def f():\n"
+            '    """more prose: ls_remote"""\n'
+            "    return 1\n",
+            False,
+        ),
+    ],
+)
+def test_the_prose_code_split_is_exact_in_both_directions(
+    tmp_path: Path, label: str, source: str, must_be_seen: bool
+) -> None:
+    """The guard is only as good as where it draws the line between the two.
+
+    Too narrow and the module's own prose about the removed probe keeps it
+    permanently red, which is how a guard gets deleted. Too wide and the
+    probe itself — a string in an executable position — becomes invisible,
+    which is how a guard gets kept and proves nothing. Both failure modes are
+    silent, so both directions are pinned here rather than argued in a
+    docstring.
+    """
+    module = tmp_path / "subject.py"
+    module.write_text(source, encoding="utf-8")
+    code = _executable_source(module)
+    seen = "ls-remote" in code or "ls_remote" in code
+    assert seen is must_be_seen, (
+        f"{label}: expected the split to "
+        f"{'keep' if must_be_seen else 'strip'} it, and it did not"
+    )
