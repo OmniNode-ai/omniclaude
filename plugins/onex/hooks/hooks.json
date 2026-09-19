@@ -36,6 +36,10 @@
           },
           {
             "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_shared_tree_git_guard.sh"
+          },
+          {
+            "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_pr_body_stamp_guard.sh"
           },
           {

@@ -186,6 +186,9 @@ _CREDENTIAL_ROTATION_GUARD_COMMAND = (
 _GIT_STASH_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_git_stash_guard.sh"
 )
+_SHARED_TREE_GIT_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_shared_tree_git_guard.sh"
+)
 _PR_BODY_STAMP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_pr_body_stamp_guard.sh"
 )
@@ -340,6 +343,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _PR_OWNERSHIP_GUARD_COMMAND,
         _CREDENTIAL_ROTATION_GUARD_COMMAND,
         _GIT_STASH_GUARD_COMMAND,
+        _SHARED_TREE_GIT_GUARD_COMMAND,
         _PR_BODY_STAMP_GUARD_COMMAND,
         _PROSE_COMMAND_SUBSTITUTION_GUARD_COMMAND,
         _AGENT_MODEL_GUARD_COMMAND,
@@ -351,13 +355,14 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the ticket-creation admission gate, the worktree canonical-root "
         "guard, the PR lane-ownership guard, the credential-rotation admission "
-        "gate, the git-stash worktree admission gate, the pull-request body "
+        "gate, the git-stash worktree admission gate, the shared-tree git "
+        "admission gate, the pull-request body "
         "stamp-preservation gate, the prose-sink command-substitution gate, "
         "the background-agent model guard, the lane-dispatch recorder, the "
         "lane-liveness guard, the overseer foreground-block guard, and the "
         "Skill-started capture hook, and "
         "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17957 + "
-        "OMN-17334 + OMN-18335 + OMN-18750 + OMN-17499 + "
+        "OMN-17334 + OMN-18798 + OMN-18335 + OMN-18750 + OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
         "A different or additional command means either the measurement baseline "
         "was re-enabled without an operator decision (OMN-13846) or one of the "
