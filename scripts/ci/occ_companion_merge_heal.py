@@ -124,7 +124,10 @@ EVIDENCE_SOURCE_RE: Final[re.Pattern[str]] = re.compile(
 OCC_PR_REF_RE: Final[re.Pattern[str]] = re.compile(r"^OCC#(\d+)$", re.IGNORECASE)
 
 _PAGE_SIZE: Final[int] = 100
-_MAX_PAGES: Final[int] = 20
+
+#: Ceiling on the open-PR listing. ``gh pr list`` truncates at ``--limit``
+#: without saying so, so reaching this is an error rather than a result.
+_OPEN_PR_LIMIT: Final[int] = 2000
 
 
 class EnumCompanionHealOutcome(StrEnum):
@@ -135,6 +138,7 @@ class EnumCompanionHealOutcome(StrEnum):
     NO_EVIDENCE_STAMP = "no_evidence_stamp"
     NOT_COMPANION_FORM = "not_companion_form"
     COMPANION_UNMERGED = "companion_unmerged"
+    COMPANION_CLOSED = "companion_closed"
     COMPANION_UNRESOLVED = "companion_unresolved"
     ATTEMPT_CEILING = "attempt_ceiling"
     NO_FAILED_RUNS = "no_failed_runs"
@@ -262,6 +266,20 @@ def decide_companion_heal(pr: PrHealInput) -> HealDecision:
             pr_number=pr.pr_number,
             detail=(
                 f"{where}: companion OCC#{pr.companion_number} state could not be read"
+            ),
+        )
+
+    if pr.companion_state is EnumCompanionState.CLOSED:
+        # Permanent, not "not yet". This is the OMN-15214 incident state and
+        # no re-run repairs it; it is its own outcome so a log reader can tell
+        # a PR that is waiting from one that is stuck.
+        return HealDecision(
+            outcome=EnumCompanionHealOutcome.COMPANION_CLOSED,
+            pr_number=pr.pr_number,
+            detail=(
+                f"{where}: companion OCC#{pr.companion_number} was CLOSED "
+                "without merging — a re-run cannot un-close it; the companion "
+                "has to be reopened or re-minted"
             ),
         )
 
@@ -466,13 +484,19 @@ class GhCli:
                 "--state",
                 "open",
                 "--limit",
-                str(_PAGE_SIZE * _MAX_PAGES),
+                str(_OPEN_PR_LIMIT),
                 "--json",
                 "number,headRefOid,body",
             ]
         )
         if not isinstance(payload, list):
-            return ()
+            # A dict here is an error object from gh. Returning () would print
+            # "considered 0 open PR(s)" and exit 0 -- the green-job-that-healed
+            # -nothing shape this module exists to refuse.
+            raise RuntimeError(
+                f"gh pr list returned {type(payload).__name__}, not a list of "
+                "pull requests"
+            )
         out: list[tuple[int, str, str]] = []
         for entry in payload:
             if not isinstance(entry, dict):
@@ -482,6 +506,15 @@ class GhCli:
             body = entry.get("body") or ""
             if isinstance(number, int) and isinstance(head, str):
                 out.append((number, head, body if isinstance(body, str) else ""))
+        if len(out) >= _OPEN_PR_LIMIT:
+            # gh caps silently. A partial pass that reads as a complete one is
+            # the same failure mode as the error object above: some PR stays
+            # red and the log says the sweep was clean.
+            raise RuntimeError(
+                f"gh pr list returned {len(out)} open PRs, at or above the "
+                f"{_OPEN_PR_LIMIT} cap, so this pass would be silently "
+                "partial; raise the cap rather than healing an unknown subset"
+            )
         return tuple(out)
 
     def failed_preflight_check_count(self, *, repo: str, head_sha: str) -> int:

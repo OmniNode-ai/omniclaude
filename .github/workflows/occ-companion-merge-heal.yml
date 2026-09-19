@@ -53,10 +53,21 @@
 # of reporting a clean sweep. Behaviour is pinned by
 # tests/ci/test_occ_companion_merge_heal_omn18812.py.
 #
-# It has no `pull_request` trigger, so it always runs the default branch's copy
-# of both this file and the guard it calls: PR-authored code never executes
-# with this job's `actions: write` token, which is the exposure omnibase_infra's
-# heal has to spend a trusted-ref checkout to close.
+# TRUST BOUNDARY, STATED PRECISELY RATHER THAN OVERCLAIMED
+# It has no `pull_request` trigger. On a schedule event GitHub runs the default
+# branch's copy of this file, and the checkout below resolves to the default
+# branch too, so code from an open PR never executes with this job's Actions
+# token. That is the exposure `omnibase_infra`'s heal spends a trusted-ref
+# checkout to close, and the absence of the trigger closes it here for free.
+#
+# What that does NOT buy, because no workflow in any repository gets it: code
+# that has already MERGED to the default branch runs with whatever token its
+# workflow declares. Merging is the trust boundary, and this workflow sits
+# inside it exactly like every other one. The narrowing available is the size
+# of the grant, so `actions: write` is scoped to the one job that issues the
+# re-run rather than declared workflow-wide, and the token is passed only to
+# the step that needs it. The checkout runs with `persist-credentials: false`
+# so no credential is left in the workspace for a later step to pick up.
 
 name: OCC Companion Merge Heal
 
@@ -85,15 +96,20 @@ concurrency:
   group: occ-companion-merge-heal
   cancel-in-progress: false
 
+# Read-only by default. The one job that mutates widens its own grant below.
 permissions:
-  actions: write
   contents: read
-  pull-requests: read
 
 jobs:
   heal:
     name: Heal preflights whose companion has since merged
     timeout-minutes: 10
+    permissions:
+      # `actions: write` is the re-run. `pull-requests: read` is the PR listing
+      # and body. Nothing else is granted, at any scope.
+      actions: write
+      contents: read
+      pull-requests: read
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci.
     # This job is a handful of API calls and only does work when a companion
     # has actually merged behind a failed preflight.

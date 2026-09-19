@@ -14,6 +14,7 @@ Each acceptance criterion of OMN-18812 has its falsifier here:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,10 +25,13 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
+import scripts.ci.occ_companion_merge_heal as heal_module  # noqa: E402
 from scripts.ci.occ_companion_merge_heal import (  # noqa: E402
+    _OPEN_PR_LIMIT,
     MAX_HEAL_RUN_ATTEMPT,
     EnumCompanionHealOutcome,
     EnumCompanionState,
+    GhCli,
     GhPort,
     HealDecision,
     PrHealInput,
@@ -163,13 +167,21 @@ def test_ac1_dry_run_decides_but_issues_nothing() -> None:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "state",
-    [EnumCompanionState.OPEN, EnumCompanionState.CLOSED],
-)
-def test_ac2_unmerged_companion_is_not_rerun(state: EnumCompanionState) -> None:
-    decision = decide_companion_heal(_pr(companion_state=state))
+def test_ac2_an_open_companion_is_not_rerun() -> None:
+    decision = decide_companion_heal(_pr(companion_state=EnumCompanionState.OPEN))
     assert decision.outcome is EnumCompanionHealOutcome.COMPANION_UNMERGED
+    assert decision.rerun is False
+    assert decision.run_ids == ()
+
+
+def test_ac2_a_closed_companion_is_its_own_outcome_not_a_not_yet() -> None:
+    """A companion closed without merging is permanent.
+
+    Folding it into the waiting case would tell a log reader that a stuck PR
+    is merely slow. No re-run un-closes a companion.
+    """
+    decision = decide_companion_heal(_pr(companion_state=EnumCompanionState.CLOSED))
+    assert decision.outcome is EnumCompanionHealOutcome.COMPANION_CLOSED
     assert decision.rerun is False
     assert decision.run_ids == ()
 
@@ -346,21 +358,47 @@ def test_ac4_no_job_or_step_swallows_its_own_failure() -> None:
             assert swallowing not in step, f"job {job_id} step {index} swallows"
 
 
+def _triggers(document: dict[str, Any]) -> set[str]:
+    """The workflow's trigger names.
+
+    YAML 1.1, which PyYAML implements, parses the bare key ``on`` as the
+    boolean ``True``; a YAML 1.2 parser keeps it a string. Reading only one
+    spelling makes this test a hostage to the parser version rather than to
+    the workflow, so both are accepted and a missing block is an error.
+    """
+    for key in (True, "on"):
+        if key in document:
+            block = document[key]
+            assert isinstance(block, dict), "the trigger block is not a mapping"
+            return set(block)
+    raise AssertionError("the workflow declares no trigger block")
+
+
 def test_ac4_workflow_is_not_pull_request_reachable() -> None:
-    """No `pull_request` trigger, so PR-authored code never runs with the
-    `actions: write` token this job holds, and no branch protection can make
-    this a required context for a PR it never reports on."""
-    triggers = set(_workflow_document()[True])
-    assert triggers == {"schedule", "workflow_dispatch"}
+    """No `pull_request` trigger, so code from an open PR never runs with this
+    job's Actions token, and no branch protection can make this a required
+    context for a PR it never reports on."""
+    assert _triggers(_workflow_document()) == {"schedule", "workflow_dispatch"}
 
 
-def test_ac4_workflow_requests_actions_write_and_nothing_wider() -> None:
-    permissions = _workflow_document()["permissions"]
-    assert permissions == {
+def test_ac4_the_write_grant_is_scoped_to_the_one_job_that_mutates() -> None:
+    """Workflow-wide `actions: write` would hand the re-run credential to
+    every step, the checkout and the interpreter setup included."""
+    document = _workflow_document()
+    assert document["permissions"] == {"contents": "read"}
+    assert document["jobs"]["heal"]["permissions"] == {
         "actions": "write",
         "contents": "read",
         "pull-requests": "read",
     }
+
+
+def test_ac4_the_checkout_persists_no_credential() -> None:
+    steps = _workflow_document()["jobs"]["heal"]["steps"]
+    checkout = next(
+        s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")
+    )
+    assert checkout["with"]["persist-credentials"] is False
 
 
 def test_ac4_concurrency_does_not_cancel_a_pass_in_flight() -> None:
@@ -539,3 +577,153 @@ def test_heal_decision_rerun_is_true_only_for_the_rerun_outcome() -> None:
     for outcome in EnumCompanionHealOutcome:
         decision = HealDecision(outcome=outcome, pr_number=1, detail="")
         assert decision.rerun is (outcome is EnumCompanionHealOutcome.RERUN_REQUIRED)
+
+
+# --------------------------------------------------------------------------
+# GhCli: the argv it builds and the errors it refuses to swallow.
+#
+# The stub above proves the decision logic. It cannot catch a typo in a `gh`
+# argument string, which would surface only on the live schedule. These drive
+# the real client against a recorded subprocess.
+# --------------------------------------------------------------------------
+
+
+class _FakeCompleted:
+    def __init__(self, stdout: str = "", returncode: int = 0, stderr: str = "") -> None:
+        self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def _record_gh(
+    monkeypatch: pytest.MonkeyPatch, *, stdout: str = "null", returncode: int = 0
+) -> list[list[str]]:
+    """Capture every argv ``GhCli`` hands to ``subprocess.run``."""
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> _FakeCompleted:
+        calls.append(list(argv))
+        return _FakeCompleted(stdout=stdout, returncode=returncode)
+
+    monkeypatch.setattr(heal_module.subprocess, "run", fake_run)
+    return calls
+
+
+def test_ghcli_rerun_issues_the_failed_only_rerun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _record_gh(monkeypatch)
+    GhCli().rerun_failed(repo="OmniNode-ai/omniclaude", run_id=42)
+    assert calls == [
+        ["gh", "run", "rerun", "42", "--repo", "OmniNode-ai/omniclaude", "--failed"]
+    ]
+
+
+def test_ghcli_rerun_raises_when_gh_exits_non_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _record_gh(monkeypatch, returncode=1)
+    with pytest.raises(RuntimeError, match="rerun"):
+        GhCli().rerun_failed(repo="OmniNode-ai/omniclaude", run_id=42)
+
+
+def test_ghcli_lists_open_prs_with_the_fields_the_guard_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _record_gh(
+        monkeypatch,
+        stdout='[{"number": 1, "headRefOid": "abc", "body": "Evidence-Source: OCC#2"}]',
+    )
+    assert GhCli().open_pull_requests(repo="OmniNode-ai/omniclaude") == (
+        (1, "abc", "Evidence-Source: OCC#2"),
+    )
+    argv = calls[0]
+    assert argv[:4] == ["gh", "pr", "list", "--repo"]
+    assert "--json" in argv
+    assert argv[argv.index("--json") + 1] == "number,headRefOid,body"
+    assert "open" in argv
+
+
+def test_ghcli_refuses_an_error_object_instead_of_reporting_zero_prs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The failure mode this module exists to refuse: a clean-looking sweep
+    over a listing that was never a listing."""
+    _record_gh(monkeypatch, stdout='{"message": "Bad credentials"}')
+    with pytest.raises(RuntimeError, match="not a list"):
+        GhCli().open_pull_requests(repo="OmniNode-ai/omniclaude")
+
+
+def test_ghcli_refuses_a_listing_at_the_truncation_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gh pr list` truncates at `--limit` silently, so a full page is an
+    unknown-completeness result, not a result."""
+    rows = [
+        {"number": n, "headRefOid": "a" * 40, "body": ""} for n in range(_OPEN_PR_LIMIT)
+    ]
+    _record_gh(monkeypatch, stdout=json.dumps(rows))
+    with pytest.raises(RuntimeError, match="cap"):
+        GhCli().open_pull_requests(repo="OmniNode-ai/omniclaude")
+
+
+def test_ghcli_refuses_non_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    _record_gh(monkeypatch, stdout="not json at all")
+    with pytest.raises(RuntimeError, match="non-JSON"):
+        GhCli().open_pull_requests(repo="OmniNode-ai/omniclaude")
+
+
+def test_ghcli_companion_state_reads_the_state_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _record_gh(monkeypatch, stdout='{"state": "MERGED"}')
+    state = GhCli().companion_state(
+        occ_repo="OmniNode-ai/onex_change_control", number=10373
+    )
+    assert state is EnumCompanionState.MERGED
+    assert calls[0][:3] == ["gh", "pr", "view"]
+    assert "10373" in calls[0]
+
+
+def test_ghcli_an_unreadable_companion_is_unresolved_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A companion read that fails must refuse the heal, not abort the whole
+    pass: one unreadable companion should not stop every other PR's heal."""
+    _record_gh(monkeypatch, returncode=1)
+    assert (
+        GhCli().companion_state(occ_repo="OmniNode-ai/onex_change_control", number=1)
+        is EnumCompanionState.UNRESOLVED
+    )
+
+
+def test_ghcli_paginates_the_runs_and_jobs_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _record_gh(
+        monkeypatch,
+        stdout='[{"workflow_runs": [{"id": 7, "conclusion": "failure", "run_attempt": 1}]}]',
+    )
+    assert GhCli().failed_runs(repo="OmniNode-ai/omniclaude", head_sha="abc") == (
+        RunSnapshot(run_id=7, run_attempt=1, name=""),
+    )
+    assert "--paginate" in calls[0] and "--slurp" in calls[0]
+    assert any("head_sha=abc" in part for part in calls[0])
+
+
+def test_ghcli_run_failed_on_preflight_reads_that_runs_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _record_gh(
+        monkeypatch,
+        stdout='[{"jobs": [{"name": "occ-preflight / eligibility", "conclusion": "failure"}]}]',
+    )
+    assert (
+        GhCli().run_failed_on_preflight(repo="OmniNode-ai/omniclaude", run_id=7) is True
+    )
+    assert any("/actions/runs/7/jobs" in part for part in calls[0])
+
+
+def test_ghcli_satisfies_the_port() -> None:
+    port: GhPort = GhCli()
+    assert port is not None
