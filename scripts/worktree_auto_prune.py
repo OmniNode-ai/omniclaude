@@ -83,7 +83,7 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -2398,6 +2398,99 @@ def debris_decision_to_json(
 
 
 # ---------------------------------------------------------------------------
+# checkpoint / resume [OMN-18832]
+# ---------------------------------------------------------------------------
+#
+# The classification loop in ``main`` is the expensive part of a registry-scale
+# run — several git subprocesses per worktree, ~439 of them measured on this
+# host — and it runs BEFORE any removal. A run killed mid-scan (the usage-limit
+# outages of 2026-09-20 among them) previously restarted from zero on its next
+# fire, so a host that never gets an uninterrupted window never finishes a
+# scan. The checkpoint below records only the LAST WORKTREE PROCESSED, in the
+# same deterministic sort order ``discover_worktrees`` returns; a resumed run
+# skips every worktree at or before that point and classifies only the rest.
+#
+# This is a position-based resume, not a result cache: the resumed run's
+# report covers the REMAINING worktrees only, not the full root. That is a
+# deliberate, stated tradeoff (see the module docstring's Safety posture and
+# the PR that added this) — it trades a complete-but-never-finishing scan for
+# a partial-but-forward-progressing one, which is what a host stuck in a
+# recurring outage window needs. A caller that wants one full-root report
+# should run without ``--execute`` after enough clean windows have elapsed for
+# the checkpoint to retire on its own (see the 24h staleness rule below), or
+# pass ``--no-checkpoint`` for a one-off full scan.
+_CHECKPOINT_MAX_AGE_H = 24.0
+
+
+def _default_checkpoint_path() -> Path | None:
+    """Best-effort default under this host's OMNI_HOME state dir.
+
+    Returns ``None`` when ``OMNI_HOME`` is unset — checkpointing is a resume
+    optimization, not a correctness requirement, so an unresolved default
+    disables it rather than guessing a cross-machine path [Rule 8].
+    """
+    home = os.environ.get("OMNI_HOME")
+    if not home:
+        return None
+    return Path(home) / ".onex_state" / "worktree-auto-prune" / "checkpoint.json"
+
+
+def _load_checkpoint_resume_point(
+    checkpoint_path: Path, root: Path, *, max_age_h: float = _CHECKPOINT_MAX_AGE_H
+) -> str | None:
+    """Return the ``last_processed`` worktree path string to resume after, or
+    ``None`` when there is nothing to resume (absent, unreadable, stale, or
+    recorded against a different worktrees root).
+    """
+    if not checkpoint_path.is_file():
+        return None
+    try:
+        data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or data.get("worktrees_root") != str(root):
+        return None
+    updated_at = data.get("updated_at")
+    if not isinstance(updated_at, str):
+        return None
+    try:
+        ts = datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    if datetime.now(UTC) - ts > timedelta(hours=max_age_h):
+        return None
+    last_processed = data.get("last_processed")
+    return last_processed if isinstance(last_processed, str) else None
+
+
+def _write_checkpoint(checkpoint_path: Path, root: Path, last_processed: str) -> None:
+    """Record the last worktree processed. Written atomically (temp file +
+    rename) so a kill mid-write never leaves a corrupt checkpoint that a
+    subsequent JSON-decode failure would just treat as absent anyway.
+    """
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = checkpoint_path.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(
+            {
+                "worktrees_root": str(root),
+                "last_processed": last_processed,
+                "updated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    tmp.replace(checkpoint_path)
+
+
+def _clear_checkpoint(checkpoint_path: Path) -> None:
+    """Remove the checkpoint after a full, uninterrupted classification pass —
+    there is nothing left to resume."""
+    checkpoint_path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
 # entrypoint
 # ---------------------------------------------------------------------------
 
@@ -2565,6 +2658,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--limit", type=int, default=0, help="Scan at most N worktrees (0 = all)"
     )
+    # --- checkpoint / resume [OMN-18832] -----------------------------------
+    parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help=(
+            "Path to the resume checkpoint (default: "
+            "$OMNI_HOME/.onex_state/worktree-auto-prune/checkpoint.json). Only "
+            "consulted/written when --limit is 0 — a --limit run is an "
+            "explicit partial scan, not a crash-resume scenario, and must not "
+            "read or corrupt the full-scan checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--no-checkpoint",
+        action="store_true",
+        help=(
+            "Disable checkpoint/resume entirely: always classify every "
+            "worktree from the start, and never write a checkpoint file."
+        ),
+    )
     return parser
 
 
@@ -2630,6 +2743,38 @@ def main(argv: Sequence[str] | None = None) -> int:
     # report would have been wrong in the direction of alarm.
     all_worktrees = discover_worktrees(root)
     worktrees = all_worktrees[: args.limit] if args.limit > 0 else all_worktrees
+
+    # --- checkpoint / resume [OMN-18832] -----------------------------------
+    # Only in play for a full-root scan (--limit 0): see the flag's help text.
+    checkpoint_enabled = not args.no_checkpoint and args.limit == 0
+    checkpoint_path: Path | None = None
+    if checkpoint_enabled:
+        checkpoint_path = (
+            Path(args.checkpoint).expanduser()
+            if args.checkpoint
+            else _default_checkpoint_path()
+        )
+        if checkpoint_path is None:
+            print(
+                "WARNING: no --checkpoint and OMNI_HOME unresolved; "
+                "checkpoint/resume disabled for this run",
+                file=sys.stderr,
+            )
+            checkpoint_enabled = False
+
+    resume_after: str | None = None
+    if checkpoint_enabled and checkpoint_path is not None:
+        resume_after = _load_checkpoint_resume_point(checkpoint_path, root)
+        if resume_after is not None:
+            before = len(worktrees)
+            worktrees = [w for w in worktrees if str(w) > resume_after]
+            print(
+                f"Resuming from checkpoint {checkpoint_path}: skipping "
+                f"{before - len(worktrees)} already-classified worktree(s) at "
+                f"or before {resume_after!r}",
+                flush=True,
+            )
+
     print(f"Scanning {len(worktrees)} worktree(s) under {root}", flush=True)
 
     ledger = parse_ledger_claims(ledger_path)
@@ -2729,8 +2874,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                     claim_fence_days=args.rescue_only_claim_fence_days,
                 )
             )
+        if checkpoint_enabled and checkpoint_path is not None:
+            _write_checkpoint(checkpoint_path, root, str(worktree))
         if index % 100 == 0 or index == len(worktrees):
             print(f"  classified {index}/{len(worktrees)}", flush=True)
+
+    # A full, uninterrupted pass over the (possibly resumed) worktree list
+    # just completed — nothing is left to resume, whether or not this run
+    # itself resumed from an earlier checkpoint. Retiring it here, rather than
+    # only at the very end of main(), means a classification-only report run
+    # (no --execute) still clears stale resume state correctly.
+    if checkpoint_enabled and checkpoint_path is not None:
+        _clear_checkpoint(checkpoint_path)
 
     prunable = [d for d in decisions if d.disposition is EnumPruneDisposition.PRUNE]
     triage = [d for d in decisions if d.disposition is EnumPruneDisposition.TRIAGE]
