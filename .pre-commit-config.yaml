@@ -1369,7 +1369,7 @@ repos:
         stages:
           - pre-commit
         additional_dependencies:
-          - omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@5d562ab415bcbeb60eb852f5fb6d80b455da1624
+          - omnibase-core==0.47.18  # OMN-18033: released PyPI pin (not git+https) so pip/uv verify a package hash; 0.47.18 is the first tag carrying the gitignore_baseline wheel data-file fix (omnibase_core#1710, sha 5d562ab415bcbeb60eb852f5fb6d80b455da1624)
 
 
 # Configuration
