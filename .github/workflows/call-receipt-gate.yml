@@ -59,4 +59,4 @@ jobs:
     if: always()
     # self-gating-ok: intentional cross-repo caller — omniclaude does not host
     # receipt-gate.yml itself; the reusable workflow lives in omnibase_core.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@53055e39c1a5f3e2329f0a80d583530fd16111ce # OMN-16432: pinned to fix SHA — main is release-synced; repoint to @main after the next core release ships
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@76532c203a2dccd5f928fba6657d5dd5ff3bdf10 # OMN-18882: immutable SHA pin, advanced from 53055e39. Provenance: the squash commit of omnibase_core#1723 on that repo's dev branch, which adds the dependency-pin-only exemption to the Receipt Gate; verified by reading .github/workflows/receipt-gate.yml at this exact SHA. A 40-hex pin is the intended long-term form here, not a placeholder for a branch ref: it is immutable, so the gate this repo runs cannot change under it without a reviewed edit to this line
