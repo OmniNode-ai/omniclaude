@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 
@@ -379,6 +380,33 @@ class TestDiscoverWorktrees:
 # against real throwaway repos rather than mocking subprocess.
 # =============================================================================
 
+
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    """Drop the git location variables that OVERRIDE ``cwd=`` (OMN-18434).
+
+    Git exports these into every hook environment, and they beat both ``cwd=``
+    and ``git -C``. A fixture that shells out to git under a pre-push hook
+    without dropping them mutates the REAL invoking worktree instead of
+    ``tmp_path`` — several tests in this file create and delete throwaway
+    worktrees, which is exactly the hazard.
+
+    Defined here rather than imported, matching the local definition every
+    sibling git-harness test file already carries (e.g.
+    ``tests/scripts/test_worktree_auto_prune_omn18688.py``).
+    """
+    scrubbed = dict(env)
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ):
+        scrubbed.pop(key, None)
+    return scrubbed
+
+
 _GIT_ENV = {
     **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
     "GIT_AUTHOR_NAME": "omn16951",
@@ -393,7 +421,7 @@ def _git_ok(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", "-C", str(cwd), *args],
         capture_output=True,
         text=True,
-        env=_GIT_ENV,
+        env=scrub_git_location_env(_GIT_ENV),
         check=False,
         timeout=60,
     )
@@ -552,7 +580,7 @@ def _branch_exists(clone: Path, branch: str) -> bool:
         ["git", "-C", str(clone), "branch", "--list", branch],
         capture_output=True,
         text=True,
-        env=_GIT_ENV,
+        env=scrub_git_location_env(_GIT_ENV),
         check=False,
         timeout=60,
     )
@@ -576,7 +604,7 @@ class TestBranchDeleteThroughAGuardPermittedPath:
             ],
             capture_output=True,
             text=True,
-            env=_GIT_ENV,
+            env=scrub_git_location_env(_GIT_ENV),
             check=False,
             timeout=60,
         )
@@ -928,6 +956,249 @@ class TestReportIsPathPortable:
         )
         assert "omni_worktrees/OMN-2/omnibase_infra" in body, (
             "the portable form of the path must survive"
+        )
+
+
+# =============================================================================
+# Checkpoint / resume [OMN-18832]
+# =============================================================================
+
+
+class TestCheckpointHelpers:
+    """Unit coverage for the resume-point helpers, no git or main() involved."""
+
+    def test_absent_checkpoint_returns_none(self, tmp_path: Path) -> None:
+        assert (
+            mod._load_checkpoint_resume_point(tmp_path / "missing.json", tmp_path)
+            is None
+        )
+
+    def test_corrupt_json_returns_none(self, tmp_path: Path) -> None:
+        cp = tmp_path / "checkpoint.json"
+        cp.write_text("{not json", encoding="utf-8")
+        assert mod._load_checkpoint_resume_point(cp, tmp_path) is None
+
+    def test_written_checkpoint_round_trips(self, tmp_path: Path) -> None:
+        cp = tmp_path / "checkpoint.json"
+        mod._write_checkpoint(cp, tmp_path, str(tmp_path / "OMN-1" / "repo"))
+        assert mod._load_checkpoint_resume_point(cp, tmp_path) == str(
+            tmp_path / "OMN-1" / "repo"
+        )
+
+    def test_a_different_worktrees_root_is_not_resumed_from(
+        self, tmp_path: Path
+    ) -> None:
+        cp = tmp_path / "checkpoint.json"
+        mod._write_checkpoint(cp, tmp_path / "root-a", "some/path")
+        assert mod._load_checkpoint_resume_point(cp, tmp_path / "root-b") is None
+
+    def test_a_checkpoint_older_than_24h_is_not_resumed_from(
+        self, tmp_path: Path
+    ) -> None:
+        cp = tmp_path / "checkpoint.json"
+        stale = (mod.datetime.now(mod.UTC) - mod.timedelta(hours=25)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        cp.write_text(
+            mod.json.dumps(
+                {
+                    "worktrees_root": str(tmp_path),
+                    "last_processed": "some/path",
+                    "updated_at": stale,
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert mod._load_checkpoint_resume_point(cp, tmp_path) is None
+
+    def test_a_checkpoint_just_under_24h_is_still_resumed_from(
+        self, tmp_path: Path
+    ) -> None:
+        cp = tmp_path / "checkpoint.json"
+        fresh = (mod.datetime.now(mod.UTC) - mod.timedelta(hours=23)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        cp.write_text(
+            mod.json.dumps(
+                {
+                    "worktrees_root": str(tmp_path),
+                    "last_processed": "some/path",
+                    "updated_at": fresh,
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert mod._load_checkpoint_resume_point(cp, tmp_path) == "some/path"
+
+    def test_clear_checkpoint_is_safe_when_absent(self, tmp_path: Path) -> None:
+        mod._clear_checkpoint(tmp_path / "never-existed.json")  # must not raise
+
+
+class TestCheckpointResumeEndToEnd:
+    """[OMN-18832] The classification loop is what a killed registry-scale run
+    (~439 worktrees, the usage-limit outages of 2026-09-20) would otherwise
+    restart from zero. These prove both branches against the real ``main()``
+    entrypoint: a fresh full pass retires its own checkpoint, and a seeded
+    checkpoint causes the next run to skip everything at or before it."""
+
+    def _two_worktrees(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> tuple[Path, Path, Path]:
+        root = tmp_path / "omni_worktrees"
+        wt_a = root / "OMN-1" / "omnibase_infra"
+        wt_b = root / "OMN-2" / "omnibase_infra"
+        wt_a.parent.mkdir(parents=True)
+        wt_b.parent.mkdir(parents=True)
+        _git_ok(
+            guarded_canonical_repo, "worktree", "add", "-q", str(wt_a), "-b", "wt-a"
+        )
+        _git_ok(
+            guarded_canonical_repo, "worktree", "add", "-q", str(wt_b), "-b", "wt-b"
+        )
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text("", encoding="utf-8")
+        return root, wt_a, wt_b
+
+    def test_a_full_pass_scans_everything_and_clears_its_own_checkpoint(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        root, _wt_a, _wt_b = self._two_worktrees(guarded_canonical_repo, tmp_path)
+        ledger = tmp_path / "ledger.md"
+        checkpoint = tmp_path / "state" / "checkpoint.json"
+        report_json = tmp_path / "report.json"
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+                "--checkpoint",
+                str(checkpoint),
+                "--report-json",
+                str(report_json),
+            ]
+        )
+
+        assert exit_code == 0
+        payload = mod.json.loads(report_json.read_text(encoding="utf-8"))
+        assert payload["scanned"] == 2, "an uninterrupted run must scan both"
+        assert not checkpoint.exists(), (
+            "a completed pass must retire its own checkpoint"
+        )
+
+    def test_a_seeded_checkpoint_skips_the_already_processed_worktree(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        root, wt_a, wt_b = self._two_worktrees(guarded_canonical_repo, tmp_path)
+        ledger = tmp_path / "ledger.md"
+        checkpoint = tmp_path / "state" / "checkpoint.json"
+        report_json = tmp_path / "report.json"
+
+        # wt_a sorts before wt_b (OMN-1 < OMN-2); seed the checkpoint as if a
+        # prior run classified wt_a and was killed before reaching wt_b.
+        assert str(wt_a) < str(wt_b)
+        mod._write_checkpoint(checkpoint, root, str(wt_a))
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+                "--checkpoint",
+                str(checkpoint),
+                "--report-json",
+                str(report_json),
+            ]
+        )
+
+        assert exit_code == 0
+        payload = mod.json.loads(report_json.read_text(encoding="utf-8"))
+        assert payload["scanned"] == 1, (
+            "a resumed run must classify only the worktree after the checkpoint"
+        )
+        assert not checkpoint.exists(), (
+            "reaching the end of the (resumed) list retires the checkpoint"
+        )
+
+    def test_no_checkpoint_flag_disables_resume_and_writes_nothing(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        root, wt_a, wt_b = self._two_worktrees(guarded_canonical_repo, tmp_path)
+        ledger = tmp_path / "ledger.md"
+        checkpoint = tmp_path / "state" / "checkpoint.json"
+        report_json = tmp_path / "report.json"
+
+        mod._write_checkpoint(checkpoint, root, str(wt_a))
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+                "--checkpoint",
+                str(checkpoint),
+                "--no-checkpoint",
+                "--report-json",
+                str(report_json),
+            ]
+        )
+
+        assert exit_code == 0
+        payload = mod.json.loads(report_json.read_text(encoding="utf-8"))
+        assert payload["scanned"] == 2, "--no-checkpoint must classify everything"
+        assert checkpoint.exists(), (
+            "--no-checkpoint must not touch a checkpoint left by a prior run"
+        )
+
+    def test_limit_flag_never_reads_or_writes_the_checkpoint(
+        self, guarded_canonical_repo: Path, tmp_path: Path
+    ) -> None:
+        root, wt_a, wt_b = self._two_worktrees(guarded_canonical_repo, tmp_path)
+        ledger = tmp_path / "ledger.md"
+        checkpoint = tmp_path / "state" / "checkpoint.json"
+        report_json = tmp_path / "report.json"
+
+        mod._write_checkpoint(checkpoint, root, str(wt_a))
+
+        exit_code = mod.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--ledger",
+                str(ledger),
+                "--no-debris",
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+                "--checkpoint",
+                str(checkpoint),
+                "--limit",
+                "1",
+                "--report-json",
+                str(report_json),
+            ]
+        )
+
+        assert exit_code == 0
+        payload = mod.json.loads(report_json.read_text(encoding="utf-8"))
+        assert payload["scanned"] == 1, "--limit 1 still bounds the classifier"
+        assert mod._load_checkpoint_resume_point(checkpoint, root) == str(wt_a), (
+            "a --limit run must not overwrite or clear the full-scan checkpoint"
         )
 
 
