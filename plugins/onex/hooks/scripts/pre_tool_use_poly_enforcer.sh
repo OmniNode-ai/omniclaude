@@ -32,18 +32,24 @@ _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
 unset _SCRIPT_DIR _MODE_SH
 
-# Ensure stable CWD before any processing.
-cd "$HOME" 2>/dev/null || cd /tmp || true
-
 # Portable Plugin Configuration
+# Resolved BEFORE any `cd`: BASH_SOURCE[0] may be relative [OMN-19047].
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 PROJECT_ROOT="${PROJECT_ROOT:-}"
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
+
+# Ensure stable CWD before any processing.
+# Absolute script directory, resolved while the caller's CWD is still in
+# effect. BASH_SOURCE[0] may be relative, so a sibling sourced after the
+# cd below cannot be found through it [OMN-19047].
+HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+cd "$HOME" 2>/dev/null || cd /tmp || true
+source "${HOOK_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_HOOK_LOG}"
 source "${HOOKS_DIR}/scripts/common.sh"
 onex_hook_gate POLY_ENFORCER || exit 0

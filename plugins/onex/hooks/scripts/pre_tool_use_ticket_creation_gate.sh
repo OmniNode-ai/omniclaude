@@ -17,16 +17,10 @@
 # flips, parent re-links, ticked checkboxes, evidence paragraphs appended below
 # a criterion -- passes untouched.
 #
-# It also refuses a create whose named parent already carries more than
-# `unstarted_children_cap` children in an unstarted state (rule 8, OMN-18323).
-# That is the one rule here that reads state outside the payload, and it is the
-# reason this script's decision core may make ONE outbound request: rules 1-7
-# bound a ticket's SHAPE, and the backlog trend they were built to stop is a
-# question of VOLUME. Measured 2026-09-13, across a window lying entirely after
-# this gate shipped: created against Done at 3.1 : 1 over fifteen days, a net
-# +815, and 59 parents already carrying more than ten children nobody started.
-# With no `LINEAR_API_KEY` reachable, rule 8 is skipped and rules 1-7 still run
-# -- see the decision core's docstring for why that direction and not the other.
+# The unstarted-children cap that OMN-18323 added as rule 8 was RESCINDED by the
+# operator on 2026-09-21 (rolling work ledger RULING row 2026-09-21T14:46:45Z,
+# item (f), "that's not something I made") and is gone. Nothing here caps how
+# many children a parent may carry.
 #
 # Why a hook and not a validator
 # ------------------------------
@@ -124,7 +118,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 # Resolve this script's own location BEFORE any `cd`. BASH_SOURCE[0] may be
 # relative, and resolving it afterwards lands in the wrong tree.
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 GUARD_PY="${SCRIPT_DIR}/../lib/ticket_creation_guard.py"
@@ -150,6 +144,9 @@ if ! onex_hook_gate LINEAR_DONE_VERIFY; then
 fi
 
 _block() {
+    # OMN-18946: a refusal reaches an aggregated surface, not only this
+    # turn's terminal and a log nobody reads. Backgrounded and fail-open.
+    hook_record_refusal "$1" "$2" 2>/dev/null || true
     _hook_status "BLOCKED" "$1" "0" 2>/dev/null || true
     _log "BLOCKED: $1"
     jq -n --arg reason "$2" '{"decision": "block", "reason": $reason}'

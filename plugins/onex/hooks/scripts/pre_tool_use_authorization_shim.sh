@@ -33,22 +33,23 @@ _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
 unset _SCRIPT_DIR _MODE_SH
 
-# Ensure stable CWD before any Python invocation.
-# The session CWD may be on an external drive that disconnects/remounts;
-# Python's <frozen getpath> calls os.getcwd() during startup and crashes
-# with "failed to make path absolute" if the CWD is unavailable.
-cd "$HOME" 2>/dev/null || cd /tmp || true
-
 # Portable Plugin Configuration
 # Resolve absolute path of this script, handling relative invocation (e.g. ./pre_tool_use_authorization_shim.sh).
 # Falls back to python3 if realpath is unavailable (non-GNU macOS without coreutils).
+# Resolved BEFORE any `cd`: BASH_SOURCE[0] may be relative [OMN-19047].
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
+
+# Ensure stable CWD before any Python invocation.
+# The session CWD may be on an external drive that disconnects/remounts;
+# Python's <frozen getpath> calls os.getcwd() during startup and crashes
+# with "failed to make path absolute" if the CWD is unavailable.
+cd "$HOME" 2>/dev/null || cd /tmp || true
 
 # --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then

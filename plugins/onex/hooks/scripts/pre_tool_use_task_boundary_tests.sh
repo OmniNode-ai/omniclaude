@@ -22,14 +22,14 @@ if declare -F is_omninode_repo >/dev/null 2>&1; then
     }
 fi
 
-cd "$HOME" 2>/dev/null || cd /tmp || true
-
 if ! _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"; then
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"; then
     _OMNICLAUDE_PASSTHROUGH=$(cat)
     echo "$_OMNICLAUDE_PASSTHROUGH"
     exit 0
 fi
+
+cd "$HOME" 2>/dev/null || cd /tmp || true
 if ! SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"; then
     _OMNICLAUDE_PASSTHROUGH=$(cat)
     echo "$_OMNICLAUDE_PASSTHROUGH"

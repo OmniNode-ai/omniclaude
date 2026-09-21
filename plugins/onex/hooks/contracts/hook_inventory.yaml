@@ -175,15 +175,11 @@ expected_hooks:
       gated -- gating it would block every state flip and parent re-link the
       OMN-16729 board-truth work depends on. Measured cause: 1553 tickets
       created in the fourteen days to 2026-09-04 against ~35/day closed, 1537
-      of them under the single API identity every lane writes as. Also refuses
-      a create whose named parent already carries more than
-      unstarted_children_cap children in an unstarted state (rule 8,
-      OMN-18323) -- the earlier rules bound a ticket's shape and say nothing
-      about volume, and the trend they were built to stop kept running after
-      they shipped: created against Done at 3.1 : 1 over the fifteen days to
-      2026-09-13, with 59 parents already over a cap of ten. That rule makes
-      one read-only tracker request per create and is skipped, loudly, when no
-      read credential is reachable. Registered
+      of them under the single API identity every lane writes as. The
+      unstarted-children cap that OMN-18323 added as rule 8 was RESCINDED by
+      the operator on 2026-09-21 (rolling work ledger RULING row
+      2026-09-21T14:46:45Z item (f)) and is gone; nothing here caps how many
+      children a parent may carry. Registered
       AFTER pre_tool_use_done_flip_guard.sh on the same matcher, which only
       ever inspects updates, so the two never contend for the same call.
 
@@ -1415,6 +1411,866 @@ disabled_hooks:
 # ---------------------------------------------------------------------------
 # Golden path — the behaviour this inventory is responsible for.
 # ---------------------------------------------------------------------------
+  # -------------------------------------------------------------------------
+  # OMN-18530 placeholder declarations -- 34 entries, not one of them a verdict
+  # -------------------------------------------------------------------------
+  # The gate gained a third parity direction: a gate-shaped script on disk and
+  # named in neither half of this file. It matched 34 scripts against the tree
+  # at 37ad6d64f -- that count IS the measurement -- and it fails closed, so
+  # the change adding the kind cannot merge while any of them stays undeclared.
+  #
+  # Declaring them `re_register` would claim they should come back; `delete`
+  # would claim they should not. Nobody has run the two controls that decide
+  # either way, so both are a fabricated verdict, and a fabricated verdict is
+  # what OMN-13244 left behind. `triage` records what is true: dark, owned,
+  # dated, on a list. OMN-18531 holds the list, and `review_by` is the date
+  # this gate stops accepting "not yet" as the answer.
+  #
+  # Ordered by filename. Every `reason` quotes that script's own header rather
+  # than a house sentence, because the triage starts from what it claims to do.
+
+  - script: "ensure-plugin-venv.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, carrying no event
+      prefix in its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says ensure-plugin-venv.sh
+      — Build plugin venv in CLAUDE_PLUGIN_DATA. Whether that rule is enforced
+      by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "hook_idle_notification_ratelimit.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, carrying no event
+      prefix in its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says preToolUse Idle
+      Notification Rate Limiter (OMN-8924). Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "hook_verifier_role_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, carrying no event
+      prefix in its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says preToolUse Verifier
+      Role Guard (OMN-8925). Whether that rule is enforced by another live
+      surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "post-tool-delegation-counter.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, carrying no event
+      prefix in its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says postToolUse:
+      Delegation Counter. Whether that rule is enforced by another live surface
+      today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "post_tool_use_agent_result_verifier.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PostToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says postToolUse
+      Agent-Result Verifier (OMN-9055/OMN-9107). Whether that rule is enforced
+      by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "post_tool_use_aislop_gate.py"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PostToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says postToolUse
+      aislop blocking gate for high-severity write content. Whether that rule is
+      enforced by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre-tool-use-quality.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Quality Enforcement Hook - Portable Plugin Version Intercepts
+      Write/Edit/MultiEdit operations for quality validation. Whether that rule
+      is enforced by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_agent_dispatch_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Agent Dispatch Gate [OMN-8510]. Whether that rule is enforced by another
+      live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_agent_tool_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Agent Tool Gate (OMN-8842). Whether that rule is enforced by another live
+      surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_authorization_shim.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Authorization Gate Hook - Portable Plugin Version Intercepts Edit/Write
+      operations for authorization validation. Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_branch_protection_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Branch Protection Rollout-Verification Guard. Whether that rule is
+      enforced by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_context_scope_auditor.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says context Scope
+      Auditor — PreToolUse hook (OMN-5237). Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_delegation.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Delegation Hook (OMN-10607). Whether that rule is enforced by another live
+      surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_dispatch_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Dispatch Guard Hook (OMN-6230) Blocks hardcoded connection URLs /
+      credentials before any file is written, and surfaces advisory warnings for
+      direct ONEX node implementation writes that bypass subagent dispatch.
+      Whether that rule is enforced by another live surface today is NOT decided
+      here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_dispatch_guard_ticket_evidence.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Dispatch Guard — Ticket + DoD Evidence (OMN-8490). Whether that rule is
+      enforced by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_dod_completion_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says doD Completion
+      Guard — PreToolUse hook. Whether that rule is enforced by another live
+      surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_hostile_review_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Hostile Review Gate [OMN-8702]. Whether that rule is enforced by another
+      live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_linear_done_verify.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says linear Done-
+      state PR verification guard [OMN-8415]. Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_model_router.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Model Router Hook (OMN-7810) Advisory-mode hook that classifies tool calls
+      by complexity and suggests delegation to cheaper models for simple
+      implementation tasks. Whether that rule is enforced by another live
+      surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_pipeline_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says pipeline Gate
+      — PreToolUse hook. Whether that rule is enforced by another live surface
+      today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_plan_existence_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Plan Existence Gate Hook Blocks Edit/Write on ticket-shaped branches
+      when no file exists under docs/plans/ in the repository root. Whether that rule is enforced by another live surface today is NOT
+      decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_poly_enforcer.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Agent Dispatch Enforcer Hook Intercepts Task and Agent tool calls and
+      blocks any that don't use an onex:-prefixed subagent_type. This ensures
+      all automated workflows go through the proper agent layer for ONEX
+      capabilities. Whether that rule is enforced by another live surface today
+      is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_prepush_validator.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Pre-Push Validator Hook Intercepts git push commands and runs adaptive
+      validation checks before allowing push. Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_scope_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Scope Gate Hook Fires before Edit and Write tool calls. Reads the scope
+      manifest (produced by /onex:scope_check) and blocks edits to files outside
+      the declared scope. If no scope manifest exists, passes through. Whether
+      that rule is enforced by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_sweep_preflight.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Sweep Pre-Flight Hook [OMN-7057] Validates infrastructure readiness before
+      sweep/close-out operations. Checks: (1) gh auth status, (2) GitHub API
+      rate limit, (3) Linear MCP process. Uses a 5-minute cache to avoid running
+      full checks on every Bash invocation. Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_task_boundary_tests.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Task-Boundary Tests Hook [OMN-7261] Intercepts git commit / gh pr create
+      and runs targeted tests first. Whether that rule is enforced by another
+      live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_tdd_dispatch_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse TDD
+      Dispatch Gate (OMN-8846). Whether that rule is enforced by another live
+      surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_team_lead_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Team-Lead Foreground Guard (OMN-7843). Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "pre_tool_use_workflow_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the
+      PreToolUse event by its name, able to refuse a tool call, and reached by
+      nothing registered -- an entrypoint rather than a called module, which is
+      why no check in this gate could see it. Its own header says preToolUse
+      Workflow Guard Hook (OMN-6231, OMN-7810) Enforces workflow preconditions:.
+      Whether that rule is enforced by another live surface today is NOT decided
+      here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "skip_token_surface_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, carrying no event
+      prefix in its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says stop/SubagentStop
+      guard for unauthorized agent-surfaced [skip-*] bypass tokens. Whether that
+      rule is enforced by another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "stop_quality_gate.py"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the Stop
+      event by its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says stop-phase changed-
+      file quality gate. Whether that rule is enforced by another live surface
+      today is NOT decided here. hooks.json carries no Stop key at all, so this
+      script is unreachable today whatever any registration says; restoring it
+      means adding the event group, not only a row.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "stop_quality_gate.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the Stop
+      event by its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says stop hook — changed-
+      file lint/type/test gate. Whether that rule is enforced by another live
+      surface today is NOT decided here. hooks.json carries no Stop key at all,
+      so this script is unreachable today whatever any registration says;
+      restoring it means adding the event group, not only a row.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "stop_session_bootstrap_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, shaped for the Stop
+      event by its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says stop hook — Session
+      bootstrap completeness gate [OMN-8845] and org-wide backlog completeness
+      gate [OMN-9054 plan Task 5]. Whether that rule is enforced by another live
+      surface today is NOT decided here. hooks.json carries no Stop key at all,
+      so this script is unreachable today whatever any registration says;
+      restoring it means adding the event group, not only a row.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
+  - script: "subagent_skip_token_surface_guard.sh"
+    owner: "omniclaude hooks lane"
+    reason: >
+      Declared nowhere. The OMN-18530 pass found it on disk, carrying no event
+      prefix in its name, able to refuse a tool call, and reached by nothing
+      registered -- an entrypoint rather than a called module, which is why no
+      check in this gate could see it. Its own header says subagentStop wrapper
+      for the shared skip-token surface guard. Whether that rule is enforced by
+      another live surface today is NOT decided here.
+    review_by: "2026-10-05"
+    restoration:
+      kind: "triage"
+      reenable_ticket: "OMN-18531"
+      action: >
+        OMN-18531 takes the verdict under the rule inherited from OMN-17474 and
+        replaces this row with one of the three real kinds. Register requires TWO
+        controls -- the script refuses a synthetic violation AND passes a
+        synthetic non-violation, both recorded; the violating case alone is not a
+        verdict. Delete requires naming the live surface that already enforces the
+        rule and showing this script adds nothing that surface lacks. No signal in
+        either direction is declare-dark, never delete. If review_by passes first,
+        DISABLE_REVIEW_LAPSED turns this row red and the triage stops being
+        optional.
+
 golden_path:
   - A hook is removed from hooks.json — validate_hook_inventory.py exits 1 with UNREGISTERED_EXPECTED naming the script, its ticket and its owner. This is the OMN-13244 direction, and before this file it produced no signal for 16 of 18 days.
   - A hook is added to hooks.json without a declaration here — exits 1 with UNDECLARED_REGISTRATION. An inventory that only catches removals rots by addition.
@@ -1424,6 +2280,8 @@ golden_path:
   - An enforcement hook is declared with no canary — exits 1 with ENFORCEMENT_WITHOUT_CANARY. `enforcement: true` is a claim about refusal; the OMN-8928 gate made that claim, returned a correct deny, and still exited 0.
   - A registered hook's ONEX_HOOKS_MASK bit is cleared on the operator Mac — session_start_hook_parity.sh prints MASKED_OFF at session start and exits 0. CI never reports on the mask: a runner has no ~/.omnibase/.env, and a check that passes because its input is absent is worse than no check.
   - The inventory is unreadable at session start — the bootstrap hook prints SKIPPED with the reason and exits 0, degrading to pre-OMN-17020 behaviour for one session instead of blocking a start. The merge gate is what keeps a malformed inventory off a machine.
+  - A gate-shaped script is added to plugins/onex/hooks/scripts and declared in neither half of this file — exits 1 with UNDECLARED_GATE_SCRIPT naming the file (OMN-18530). This is the third parity direction, and before it 34 scripts that can refuse a tool call sat on disk owned by nobody. A library a registered hook calls is NOT reported: reachability from a registered root is what separates an undeclared gate from a called module.
+  - An expected hook declares an event hooks.json has no key for — exits 1 with EVENT_KEY_ABSENT naming the key (OMN-18530). UNREGISTERED_EXPECTED already fires and says "re-register it", which reads as a one-line addition to a group that does not exist. hooks.json carries no Stop key today, so a Stop row written without the group is a registration that never runs.
 
 dod_evidence:
   - kind: tests
@@ -1435,3 +2293,6 @@ dod_evidence:
   - kind: ci
     description: "hook-inventory-gate runs on every PR touching the hook surface"
     command: "gh pr checks"
+  - kind: tests
+    description: "The third parity direction: a gate-shaped script declared nowhere, and the reachability control that keeps a called module out of it"
+    command: "uv run pytest tests/hooks/test_hook_inventory_undeclared_gate.py -v"

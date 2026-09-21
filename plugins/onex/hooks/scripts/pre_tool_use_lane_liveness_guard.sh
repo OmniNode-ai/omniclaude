@@ -70,6 +70,9 @@ set +e
 rc=$?
 set -e
 if [[ "$rc" -eq 2 ]]; then
+    # OMN-18946: the verdict is the Python guard's; the row is recorded here
+    # because this is where the refusal becomes the hook's exit code.
+    hook_record_refusal "lane liveness guard refused the send" "a bare harness ref, or a death claim lane_liveness.py did not corroborate" 2>/dev/null || true
     exit 2
 fi
 exit 0

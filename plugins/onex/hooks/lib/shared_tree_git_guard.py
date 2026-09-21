@@ -187,6 +187,8 @@ class Policy:
     merge_target_allowed_flags: frozenset[str]
     merge_allowed_on_branches: frozenset[str]
     branch_read_flags: frozenset[str]
+    protected_push_refs: frozenset[str]
+    directory_changing_programs: frozenset[str]
     blanket_path_operands: frozenset[str]
     push_force_flags: frozenset[str]
     protected_path_operands: tuple[str, ...]
@@ -255,6 +257,10 @@ def load_policy(path: Path | None = None) -> Policy:
             _str_list(raw, "merge_allowed_on_branches")
         ),
         branch_read_flags=frozenset(_str_list(raw, "branch_read_flags")),
+        protected_push_refs=frozenset(_str_list(raw, "protected_push_refs")),
+        directory_changing_programs=frozenset(
+            _str_list(raw, "directory_changing_programs")
+        ),
         blanket_path_operands=frozenset(_str_list(raw, "blanket_path_operands")),
         push_force_flags=frozenset(_str_list(raw, "push_force_flags")),
         protected_path_operands=tuple(_str_list(raw, "protected_path_operands")),
@@ -442,6 +448,21 @@ def _read_current_branch(git_root: Path) -> str | None:
     try:
         if head.is_dir():
             text = (head / "HEAD").read_text(encoding="utf-8").strip()
+        elif head.is_file():
+            # A WORKTREE: `.git` is a file holding `gitdir: <admin dir>`,
+            # and HEAD lives in that admin directory. OMN-18974 -- without
+            # this branch every worktree reads as "HEAD unreadable", which
+            # the protected-force-push arm fails closed on, refusing a lane
+            # pushing its own branch. That is the defect this ticket is
+            # about, reintroduced one layer down.
+            pointer = head.read_text(encoding="utf-8").strip()
+            marker = "gitdir:"
+            if not pointer.startswith(marker):
+                return None
+            admin = Path(pointer[len(marker) :].strip())
+            if not admin.is_absolute():
+                admin = git_root / admin
+            text = (admin / "HEAD").read_text(encoding="utf-8").strip()
         else:
             return None
     except OSError:
@@ -450,6 +471,86 @@ def _read_current_branch(git_root: Path) -> str | None:
     if text.startswith(prefix):
         return text[len(prefix) :].strip() or None
     return None
+
+
+def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path | None:
+    """The directory a `cd` segment moves to, or None when unresolvable.
+
+    OMN-18974. The harness resets a Bash call's working directory between
+    calls, so a lane working in its own worktree -- which Operating Rule 9
+    requires -- reaches it with a `cd <worktree> &&` prefix and the payload
+    cwd still at the registry root. A guard that reads only the payload cwd
+    refuses that lane and then advises it to move to the worktree it is
+    already in, which is the whole of the reported defect.
+
+    Resolution is deliberately literal. `shlex` does not expand variables,
+    so `cd "$WT"` arrives as an unexpanded token; `$OMNI_HOME`, `$HOME` and
+    `~` are the three this guard can answer from its own environment, and
+    anything else returns None. `cd` with no operand goes HOME. A relative
+    operand resolves against the directory in force at that point, so a
+    chain composes.
+    """
+    stripped = _strip_wrappers(tokens)
+    if not stripped:
+        return None
+    if os.path.basename(stripped[0]) not in policy.directory_changing_programs:
+        return None
+    operands = [tok for tok in stripped[1:] if not tok.startswith("-")]
+    if not operands:
+        home = os.environ.get("HOME")
+        return Path(home) if home else None
+    if len(operands) > 1:
+        return None
+    target = operands[0]
+    if target == "-":
+        # `cd -` returns to the PREVIOUS directory, which this guard does
+        # not track. Unresolvable rather than guessed.
+        return None
+    for name in ("OMNI_HOME", "ONEX_REGISTRY_ROOT", "HOME"):
+        value = os.environ.get(name)
+        if not value:
+            continue
+        for spelling in (f"${name}", "${" + name + "}"):
+            if target == spelling:
+                target = value
+            elif target.startswith(spelling + os.sep):
+                target = value + target[len(spelling) :]
+    if target.startswith("~"):
+        expanded = os.path.expanduser(target)
+        if expanded.startswith("~"):
+            return None
+        target = expanded
+    if "$" in target:
+        # An unexpanded variable this guard cannot answer. Returning None
+        # leaves the effective directory where it was, which is exactly the
+        # behaviour before this change: nothing in the shared tree stops
+        # being refused, and nothing outside it starts being refused.
+        return None
+    candidate = Path(target)
+    if not candidate.is_absolute():
+        candidate = current / candidate
+    return Path(os.path.normpath(str(candidate)))
+
+
+def _push_destination_refs(invocation: _GitInvocation) -> list[str]:
+    """The branch names a push would WRITE, normalised.
+
+    Only the destination half of a refspec matters: `lane/mine:dev`
+    rewrites `dev`, and `dev:lane/mine` does not. A leading `+` is force
+    in refspec spelling, and `refs/heads/` is the same ref written long.
+    """
+    operands = [arg for arg in invocation.args if not arg.startswith("-")]
+    if len(operands) < 2:
+        return []
+    refs: list[str] = []
+    for spec in operands[1:]:
+        dst = spec.split(":")[-1]
+        dst = dst.lstrip("+")
+        if dst.startswith("refs/heads/"):
+            dst = dst[len("refs/heads/") :]
+        if dst:
+            refs.append(dst)
+    return refs
 
 
 def _is_force_push_flag(token: str, policy: Policy) -> bool:
@@ -740,6 +841,81 @@ def _refusal_detail(
     return None
 
 
+def _protected_push_detail(
+    invocation: _GitInvocation,
+    policy: Policy,
+    git_root: Path,
+    registry_root: Path | None,
+) -> str | None:
+    """Why a force push is refused OUTSIDE the registry clone, or None.
+
+    OMN-18974 arm two. Everything else this guard refuses is about one
+    shared working tree, so a per-ticket worktree -- which has exactly one
+    owner -- is rightly out of scope and stays that way. `dev` and `main`
+    are the exception: they are shared by every lane and by CI, and
+    rewriting one is not a per-lane decision however private the tree the
+    command is typed in. Measured allowed before this change from the
+    worktree in the report.
+
+    Scope is the registry root's own subtree. A clone elsewhere on the disk
+    is nobody's business here.
+    """
+    if invocation.subcommand != "push":
+        return None
+    if not any(_is_force_push_flag(arg, policy) for arg in invocation.args):
+        return None
+    if registry_root is None:
+        return None
+    try:
+        git_root.relative_to(registry_root)
+    except ValueError:
+        return None
+    refs = _push_destination_refs(invocation)
+    if not refs:
+        # No refspec: git pushes the CURRENT branch. Without reading HEAD
+        # this form would be the hole in the arm.
+        current = _read_current_branch(git_root)
+        if current is None:
+            return (
+                "a FORCE push with no refspec pushes the CHECKED-OUT branch, "
+                "and .git/HEAD could not be read here, so whether it rewrites "
+                f"{sorted(policy.protected_push_refs)} is unknown. An "
+                "unverifiable force push to a shared branch is refused, never "
+                "assumed safe -- name the destination explicitly"
+            )
+        refs = [current]
+    hit = [ref for ref in refs if ref in policy.protected_push_refs]
+    if not hit:
+        return None
+    return (
+        f"this force-pushes {hit[0]!r}, a branch every lane and CI share. "
+        "Rewriting it is not a per-lane decision however private the tree "
+        "this was typed in, and it can destroy commits no local clone has "
+        "a copy of. Force-pushing your OWN feature branch is untouched and "
+        "is the normal way to land a rebase -- name it explicitly, as in "
+        "`git push --force-with-lease origin HEAD:<your-branch>`. To change "
+        f"{hit[0]!r} itself, open a pull request and land it"
+    )
+
+
+def _render_protected_push_reason(policy: Policy, git_root: Path, detail: str) -> str:
+    """The refusal used OUTSIDE the registry clone.
+
+    It may not reuse the shared-clone wording. That message opens by naming
+    the directory "the shared registry clone" and closes by advising the
+    reader to move to a worktree -- said to a lane standing in its worktree,
+    both halves are false and the advice is the loop OMN-18974 AC-4 exists
+    to remove. This one names the real directory and recommends something
+    the reader can actually do from it.
+    """
+    return (
+        f"BLOCKED: `git push --force` in {git_root} ({policy.ticket}, "
+        f"{policy.rule}). This is your own tree and almost everything in it "
+        f"is your business -- but {detail}. To disable this guard: onex "
+        f"hooks disable {GATE_BIT_NAME}"
+    )
+
+
 def _render_block_reason(
     policy: Policy, invocation: _GitInvocation, git_root: Path, detail: str
 ) -> str:
@@ -797,14 +973,19 @@ def evaluate_bash_command(
             notes=("untokenisable command naming no refused git verb",),
         )
 
+    effective_cwd = cwd
     for segment in segments:
+        moved_to = _resolve_cd_target(segment, policy, effective_cwd)
+        if moved_to is not None:
+            effective_cwd = moved_to
+            continue
         invocation = _parse_git(segment)
         if invocation is None:
             continue
         if invocation.subcommand not in policy.refused_subcommands:
             continue
         try:
-            target_dir = _resolve_target_dir(invocation, cwd)
+            target_dir = _resolve_target_dir(invocation, effective_cwd)
         except OSError as exc:
             return Decision(
                 blocked=True,
@@ -824,6 +1005,14 @@ def evaluate_bash_command(
             # itself will refuse the command; nothing to gate here.
             continue
         if not _is_registry_root(git_root, registry_root, policy):
+            protected = _protected_push_detail(
+                invocation, policy, git_root, registry_root
+            )
+            if protected is not None:
+                return Decision(
+                    blocked=True,
+                    reason=_render_protected_push_reason(policy, git_root, protected),
+                )
             notes.append(
                 f"`git {invocation.subcommand}` targets {git_root}, which is "
                 "not the shared registry clone"
