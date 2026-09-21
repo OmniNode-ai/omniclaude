@@ -149,7 +149,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 # Resolve this script's own location BEFORE any `cd`. BASH_SOURCE[0] may be
 # relative, and resolving it afterwards lands in the wrong tree.
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 GUARD_PY="${SCRIPT_DIR}/../lib/credential_rotation_guard.py"
