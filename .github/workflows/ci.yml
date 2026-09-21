@@ -4047,6 +4047,10 @@ jobs:
           # commits/{sha}/check-runs aggregates check-runs from EVERY workflow
           # file that reported against this SHA, not just ci.yml's own run.
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # OMN-18970: the L5 default-deny sweep runs on pull_request only.
+          # Declared explicitly rather than read from the runner's ambient
+          # GITHUB_EVENT_NAME so a test can read the wiring off this file.
+          EVENT_NAME: ${{ github.event_name }}
           # Bounded poll window (minutes) — kept under the run-cancel window so
           # the required context always reaches a terminal state first.
           DEADLINE_MINUTES: "90"
@@ -4084,7 +4088,22 @@ jobs:
             else
               echo 'null' > check_runs.json
             fi
-            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json
+            # OMN-18970: the workflow runs on this same head, read ONLY to
+            # resolve which EVENT wrote each check-run so the L5 default-deny
+            # sweep can skip non-pull-request rows. A failed fetch leaves the
+            # file ABSENT, under which every row's event is unknown and every
+            # row is SWEPT -- the stricter reading, so a transient API error
+            # cannot exempt a check. It therefore does not abort the poll.
+            rm -f workflow_runs.json
+            if gh api --paginate \
+                "repos/${GH_REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+                --jq '.workflow_runs[]' > workflow_runs_raw.ndjson 2>/dev/null; then
+              jq -s '.' workflow_runs_raw.ndjson > workflow_runs.json
+            else
+              echo "workflow-runs fetch failed (attempt ${attempt}); sweeping every row (fail-closed)"
+              rm -f workflow_runs.json
+            fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}"
             rc=$?
             case "${rc}" in
               0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
@@ -4094,7 +4113,7 @@ jobs:
             esac
             if [ "$(date +%s)" -ge "${deadline}" ]; then
               echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
-              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --report-only || true
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}" --report-only || true
               exit 1
             fi
             sleep "${POLL_INTERVAL_SECONDS}"

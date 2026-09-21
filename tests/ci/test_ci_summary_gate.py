@@ -20,19 +20,33 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from datetime import UTC, datetime, timedelta  # noqa: E402
+from typing import Any  # noqa: E402
+
+import yaml  # noqa: E402
+
+from scripts.ci import ci_summary_gate  # noqa: E402
 from scripts.ci.ci_summary_gate import (  # noqa: E402
     ALL_MUST_SUCCEED_EXTERNAL_NAMES,
     EXIT_FAILURE,
     EXIT_PENDING,
     EXIT_SUCCESS,
     EXPECTED_EXTERNAL_CONTEXTS,
+    EXTERNAL_SWEEP_EXCLUSIONS,
     GATE_JOBS,
     SOFT_ALLOWLIST,
     STRICT_SUCCESS_JOBS,
+    SWEEP_EXCLUSION_MAX_DAYS,
+    SWEEP_FAILING_CONCLUSIONS,
+    SweepExclusion,
+    active_sweep_exclusions,
+    check_run_event_index,
     combine_verdicts,
     drop_superseded_skips,
     evaluate,
     evaluate_external,
+    evaluate_external_sweep,
+    validate_sweep_exclusions,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -984,3 +998,554 @@ class TestSupersededSkipIsPartitionedByHeadSha:
             ]
         )
         assert states[0].head_sha == self.HEAD_A
+
+
+# ---------------------------------------------------------------------------
+# OMN-18970 (parent OMN-18943, epic OMN-18527) — L5, the default-deny external
+# sweep. Ported from omnibase_infra OMN-18960; the measurement is this
+# repository's own.
+# ---------------------------------------------------------------------------
+
+CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+SWEEP_FIXTURE = FIXTURES_DIR / "omn18970_external_sweep_check_runs.json"
+SWEEP_NOW = datetime(2026, 9, 21, 5, 0, 0, tzinfo=UTC)
+
+# The one name the shipped registry admits, and the head it was measured on.
+FLAKY_AUTOBIND_OUTCOME = "occ-autobind / outcome"
+RED_AT_MERGE_PR = "2279"
+
+
+def _sweep_head(pr: str) -> dict[str, Any]:
+    payload = json.loads(SWEEP_FIXTURE.read_text(encoding="utf-8"))
+    return payload["pull_requests"][pr]
+
+
+def _at_merge(head: dict[str, Any]) -> list[dict[str, Any]]:
+    """The rows a PRE-MERGE poller could have seen on that head.
+
+    The filter lives here rather than in the fixture so it is readable in the
+    assertion: a row that STARTED after the merge decision was written by a
+    post-merge trigger and is structurally invisible to the gate.
+    """
+
+    merged = head["merged_at"]
+    return [r for r in head["check_runs_all"] if (r.get("started_at") or "") <= merged]
+
+
+def _sweep_row(
+    name: str,
+    conclusion: str | None = "success",
+    *,
+    status: str = "completed",
+    run_id: int | None = None,
+    completed_at: str | None = "2026-09-21T04:00:00Z",
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "id": abs(hash(name)) % 10_000_000,
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "started_at": "2026-09-21T03:00:00Z",
+        "completed_at": completed_at,
+        "head_sha": "c" * 40,
+    }
+    if run_id is not None:
+        row["html_url"] = (
+            f"https://github.com/OmniNode-ai/omniclaude/actions/runs/{run_id}/job/1"
+        )
+    return row
+
+
+def _sweep_waiver(name: str) -> dict[str, SweepExclusion]:
+    """A well-formed, unexpired synthetic exclusion. Test-only."""
+
+    today = datetime.now(UTC).date()
+    return {
+        name: SweepExclusion(
+            reason="synthetic, test-only",
+            ticket="OMN-18970",
+            added=today.isoformat(),
+            expires=(today + timedelta(days=30)).isoformat(),
+        )
+    }
+
+
+def _sweep(
+    rows: list[dict[str, Any]], **kw: Any
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    kw.setdefault("now", SWEEP_NOW)
+    kw.setdefault("exclusions", {})
+    return evaluate_external_sweep(rows, **kw)
+
+
+@pytest.mark.unit
+class TestExternalDefaultDenySweep:
+    """AC-1 / AC-3 — a red nothing else names must fail the umbrella."""
+
+    def test_red_unregistered_context_is_a_failure_and_green_is_not(self) -> None:
+        """THE red test. Today's behaviour is the first assertion's falsifier."""
+        failures, _f, swept, _e = _sweep(
+            [_sweep_row("Some Unregistered Gate", "failure")]
+        )
+        assert failures == ["Some Unregistered Gate (failure)"]
+        assert swept == ["Some Unregistered Gate"]
+
+        failures, _f, swept, _e = _sweep(
+            [_sweep_row("Some Unregistered Gate", "success")]
+        )
+        assert failures == []
+        assert swept == ["Some Unregistered Gate"]
+
+    def test_a_registered_name_is_not_swept(self) -> None:
+        """L4 owns those; judging them twice is how the layers could disagree."""
+        name = EXPECTED_EXTERNAL_CONTEXTS[0]
+        failures, _f, swept, _e = _sweep([_sweep_row(name, "failure")])
+        assert failures == []
+        assert swept == []
+
+    def test_an_all_must_succeed_name_is_not_swept(self) -> None:
+        name = sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES)[0]
+        _failures, _f, swept, _e = _sweep([_sweep_row(name, "failure")])
+        assert swept == []
+
+    def test_an_in_run_job_is_not_double_judged(self) -> None:
+        """A soft-allowlisted in-run job also appears as a check-run."""
+        allowlisted = sorted(SOFT_ALLOWLIST)[0]
+        _failures, _f, swept, _e = _sweep(
+            [_sweep_row(allowlisted, "failure")],
+            in_run_names=frozenset({allowlisted}),
+        )
+        assert swept == []
+
+    @pytest.mark.parametrize(
+        "conclusion", sorted(SWEEP_FAILING_CONCLUSIONS - {"cancelled"})
+    )
+    def test_every_refusal_conclusion_fails(self, conclusion: str) -> None:
+        failures, _f, _s, _e = _sweep([_sweep_row("Gate X", conclusion)])
+        assert failures == [f"Gate X ({conclusion})"]
+
+    @pytest.mark.parametrize("conclusion", ["success", "skipped", "neutral"])
+    def test_measured_always_non_green_conclusions_do_not_fail(
+        self, conclusion: str
+    ) -> None:
+        """8 of the 53 names in the measured window are never green by design.
+
+        Failing on these conclusions wedges every pull request here on the
+        first run, and a gate reverted within the hour enforces nothing. The
+        strict bar is bought by registering a name instead.
+        """
+        failures, _f, _s, _e = _sweep([_sweep_row("Gate X", conclusion)])
+        assert failures == []
+
+    def test_a_cancelled_row_waits_inside_the_grace_and_fails_outside_it(self) -> None:
+        inside = _sweep_row(
+            "Gate X",
+            "cancelled",
+            completed_at=(SWEEP_NOW - timedelta(seconds=30)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+        )
+        outside = _sweep_row(
+            "Gate X",
+            "cancelled",
+            completed_at=(SWEEP_NOW - timedelta(hours=4)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+        )
+        assert _sweep([inside])[0] == []
+        assert _sweep([outside])[0] == ["Gate X (cancelled)"]
+
+    def test_a_still_running_row_is_reported_and_does_not_fail(self) -> None:
+        """The documented residual, pinned so a later change has to argue."""
+        failures, in_flight, swept, _e = _sweep(
+            [_sweep_row("Gate X", None, status="in_progress", completed_at=None)]
+        )
+        assert failures == []
+        assert in_flight == ["Gate X"]
+        assert swept == ["Gate X"]
+
+    def test_a_non_pull_request_event_row_is_not_swept(self) -> None:
+        failures, _f, swept, _e = _sweep(
+            [_sweep_row("Nightly", "failure", run_id=777)],
+            events={777: "schedule"},
+        )
+        assert failures == []
+        assert swept == []
+
+    def test_a_pull_request_event_row_is_swept(self) -> None:
+        failures, _f, _s, _e = _sweep(
+            [_sweep_row("Nightly", "failure", run_id=777)],
+            events={777: "pull_request"},
+        )
+        assert failures == ["Nightly (failure)"]
+
+    def test_an_unattributable_app_row_is_swept_not_exempted(self) -> None:
+        """22 rows in this repository's measured window carry no run URL.
+
+        An allow list of pull-request events would exempt every one for free.
+        """
+        failures, _f, _s, _e = _sweep(
+            [_sweep_row("App Written Gate", "failure")],
+            events={1: "pull_request"},
+        )
+        assert failures == ["App Written Gate (failure)"]
+
+    def test_a_row_whose_run_is_absent_from_the_index_is_swept(self) -> None:
+        failures, _f, _s, _e = _sweep(
+            [_sweep_row("Unlisted", "failure", run_id=999)],
+            events={1: "schedule"},
+        )
+        assert failures == ["Unlisted (failure)"]
+
+    def test_an_empty_event_index_enforces_rather_than_exempts(self) -> None:
+        failures, _f, _s, _e = _sweep([_sweep_row("Nightly", "failure", run_id=777)])
+        assert failures == ["Nightly (failure)"]
+
+    def test_check_run_event_index_drops_unusable_rows(self) -> None:
+        assert check_run_event_index(
+            [{"id": 42, "event": "push"}, {"id": 0, "event": "push"}, {"id": 43}]
+        ) == {42: "push"}
+        assert check_run_event_index(None) == {}
+
+    def test_an_absent_payload_sweeps_nothing_rather_than_greening(self) -> None:
+        """A failed fetch is PENDING at L4; L5 must add no verdict of its own."""
+        assert evaluate_external_sweep(None) == ([], [], [], [])
+
+
+@pytest.mark.unit
+class TestSweepFoldsIntoTheCombinedVerdict:
+    """AC-4 — the verdict and the report both have to move."""
+
+    def test_a_sweep_failure_fails_the_combined_verdict(self) -> None:
+        code, report = combine_verdicts(
+            (EXIT_SUCCESS, "in-run: SUCCESS"),
+            "SUCCESS",
+            [],
+            [],
+            sweep_failures=["Gate X (failure)"],
+            sweep_names=["Gate X"],
+            sweep_ran=True,
+        )
+        assert code == EXIT_FAILURE
+        assert "Gate X (failure)" in report
+
+    def test_a_clean_sweep_records_what_it_looked_at(self) -> None:
+        """Rule 16 — a sweep that finds nothing and says nothing is not evidence."""
+        code, report = combine_verdicts(
+            (EXIT_SUCCESS, "in-run: SUCCESS"),
+            "SUCCESS",
+            [],
+            [],
+            sweep_names=["A", "B"],
+            sweep_ran=True,
+        )
+        assert code == EXIT_SUCCESS
+        assert (
+            "external default-deny sweep (L5): 2 unregistered context(s) judged"
+            in report
+        )
+
+    def test_the_layer_prints_nothing_about_itself_when_it_did_not_run(self) -> None:
+        _code, report = combine_verdicts(
+            (EXIT_SUCCESS, "in-run: SUCCESS"), "SUCCESS", [], []
+        )
+        assert "default-deny sweep (L5)" not in report
+
+    def test_a_malformed_registry_fails_the_combined_verdict(self) -> None:
+        code, report = combine_verdicts(
+            (EXIT_SUCCESS, "in-run: SUCCESS"),
+            "SUCCESS",
+            [],
+            [],
+            sweep_findings=["malformed sweep exclusion: X: reason is empty"],
+            sweep_ran=True,
+        )
+        assert code == EXIT_FAILURE
+        assert "exclusion registry REFUSED" in report
+
+    def test_the_sweep_cannot_improve_a_worse_verdict(self) -> None:
+        code, _ = combine_verdicts(
+            (EXIT_PENDING, "in-run: PENDING"), "SUCCESS", [], [], sweep_ran=True
+        )
+        assert code == EXIT_PENDING
+
+
+@pytest.mark.unit
+class TestSweepExclusions:
+    """AC-2 / AC-3 — the registry is closed-ended, and its one entry is real."""
+
+    def test_the_shipped_registry_holds_exactly_the_measured_flake(self) -> None:
+        """This repository is the one where the measurement was not a zero."""
+        assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {FLAKY_AUTOBIND_OUTCOME}
+
+    def test_every_shipped_entry_is_wellformed(self) -> None:
+        assert validate_sweep_exclusions(EXTERNAL_SWEEP_EXCLUSIONS) == []
+
+    def test_the_shipped_entry_carries_a_reason_a_ticket_and_both_dates(self) -> None:
+        entry = EXTERNAL_SWEEP_EXCLUSIONS[FLAKY_AUTOBIND_OUTCOME]
+        assert entry.ticket == "OMN-18939"
+        assert entry.added == "2026-09-21"
+        assert entry.expires == "2026-11-05"
+        assert "15/16" in entry.reason and "1/16" in entry.reason
+
+    def test_no_shipped_entry_has_expired(self) -> None:
+        """The calendar tripwire.
+
+        An expiry reaches a person through THIS red test rather than through a
+        wedged pull request, because `active_sweep_exclusions` drops an expired
+        entry silently and re-arms the gate.
+        """
+        _active, expired = active_sweep_exclusions(
+            EXTERNAL_SWEEP_EXCLUSIONS, now=datetime.now(UTC)
+        )
+        assert expired == (), (
+            f"expired sweep exclusion(s) {expired}: re-argue the entry with fresh "
+            "numbers and a new date, or delete it and let the sweep judge the name"
+        )
+
+    @pytest.mark.parametrize(
+        ("entry", "fragment"),
+        [
+            (
+                SweepExclusion("", "OMN-1", "2026-09-20", "2026-10-20"),
+                "reason is empty",
+            ),
+            (
+                SweepExclusion("r", "see the ticket", "2026-09-20", "2026-10-20"),
+                "is not an OMN-<number> reference",
+            ),
+            (SweepExclusion("r", "OMN-1", "soon", "2026-10-20"), "added 'soon'"),
+            (SweepExclusion("r", "OMN-1", "2026-09-20", ""), "expires ''"),
+            (
+                SweepExclusion("r", "OMN-1", "2026-09-20", "2026-09-20"),
+                "is not after added",
+            ),
+            (
+                SweepExclusion("r", "OMN-1", "2026-09-20", "2027-09-20"),
+                f"exceeds the {SWEEP_EXCLUSION_MAX_DAYS}d cap",
+            ),
+        ],
+    )
+    def test_a_malformed_entry_is_refused(
+        self, entry: SweepExclusion, fragment: str
+    ) -> None:
+        findings = validate_sweep_exclusions({"X": entry})
+        assert findings
+        assert any(fragment in f for f in findings), findings
+
+    def test_an_expired_entry_stops_excluding(self) -> None:
+        expired = {"Gate X": SweepExclusion("r", "OMN-1", "2026-08-01", "2026-09-01")}
+        failures, _f, _s, excluded = _sweep(
+            [_sweep_row("Gate X", "failure")], exclusions=expired
+        )
+        assert failures == ["Gate X (failure)"]
+        assert excluded == []
+        _active, names = active_sweep_exclusions(expired, now=SWEEP_NOW)
+        assert names == ("Gate X",)
+
+    def test_a_missing_clock_admits_nothing(self) -> None:
+        failures, _f, _s, _e = evaluate_external_sweep(
+            [_sweep_row("Gate X", "failure")],
+            exclusions=_sweep_waiver("Gate X"),
+            now=None,
+        )
+        assert failures == ["Gate X (failure)"]
+
+    def test_an_active_entry_excludes_and_is_reported(self) -> None:
+        failures, _f, swept, excluded = evaluate_external_sweep(
+            [_sweep_row("Gate X", "failure")],
+            exclusions=_sweep_waiver("Gate X"),
+            now=datetime.now(UTC),
+        )
+        assert failures == []
+        assert excluded == ["Gate X"]
+        assert swept == []
+
+
+@pytest.mark.unit
+class TestSweepAgainstRealHeads:
+    """AC-5 — proven on this repository's real pre-change heads."""
+
+    CLEAN_PRS = ("2289", "2288")
+
+    def test_the_fixture_is_the_real_unfiltered_head_state(self) -> None:
+        """Positive control for the fixture before anything is read off it."""
+        payload = json.loads(SWEEP_FIXTURE.read_text(encoding="utf-8"))
+        assert set(payload["pull_requests"]) == {*self.CLEAN_PRS, RED_AT_MERGE_PR}
+        for pr in payload["pull_requests"]:
+            head = _sweep_head(pr)
+            assert len(head["check_runs_all"]) > 100, pr
+            assert len(head["workflow_runs"]) > 40, pr
+            assert len(head["in_run_job_names"]) > 60, pr
+            assert len(head["head_sha"]) == 40
+
+    @pytest.mark.parametrize("pr", CLEAN_PRS)
+    def test_merge_time_state_is_clean_and_the_sweep_really_looked(
+        self, pr: str
+    ) -> None:
+        """Zero failures AND a non-zero population — rule 16's two halves."""
+        head = _sweep_head(pr)
+        failures, _in_flight, swept, _excluded = evaluate_external_sweep(
+            _at_merge(head),
+            in_run_names=frozenset(head["in_run_job_names"]),
+            events=check_run_event_index(head["workflow_runs"]),
+            now=SWEEP_NOW,
+        )
+        assert failures == [], failures
+        assert len(swept) >= 30, (pr, len(swept))
+
+    def test_the_shipped_exclusion_is_load_bearing_on_the_head_that_merged_red(
+        self,
+    ) -> None:
+        """AC-3. Without the entry this real head FAILS; with it, it passes.
+
+        Pull request 2279 merged 2026-09-19 with the autobind outcome context
+        concluded `failure` at merge time, on a transient error from the
+        version-control step inside the companion-authoring effect rather than
+        anything about the pull request. This is the measurement that put the
+        one real entry in the registry, replayed.
+        """
+        head = _sweep_head(RED_AT_MERGE_PR)
+        rows = _at_merge(head)
+        common: dict[str, Any] = {
+            "in_run_names": frozenset(head["in_run_job_names"]),
+            "events": check_run_event_index(head["workflow_runs"]),
+            "now": SWEEP_NOW,
+        }
+
+        # The payload really does carry the red, so neither arm below passes
+        # for an unrelated reason.
+        assert any(
+            r["name"] == FLAKY_AUTOBIND_OUTCOME and r.get("conclusion") == "failure"
+            for r in rows
+        )
+
+        without, _f, _s, _e = evaluate_external_sweep(rows, exclusions={}, **common)
+        assert without == [f"{FLAKY_AUTOBIND_OUTCOME} (failure)"], without
+
+        with_entry, _f, _s, excluded = evaluate_external_sweep(
+            rows, exclusions=EXTERNAL_SWEEP_EXCLUSIONS, **common
+        )
+        assert with_entry == [], with_entry
+        assert excluded == [FLAKY_AUTOBIND_OUTCOME]
+
+    def test_flipping_one_real_row_flips_the_verdict(self) -> None:
+        """A synthetic red on an otherwise-clean REAL payload, and back again."""
+        head = _sweep_head("2289")
+        rows = _at_merge(head)
+        common: dict[str, Any] = {
+            "in_run_names": frozenset(head["in_run_job_names"]),
+            "events": check_run_event_index(head["workflow_runs"]),
+            "now": SWEEP_NOW,
+        }
+        _f0, _i0, swept, _e0 = evaluate_external_sweep(rows, **common)
+        target = swept[0]
+
+        assert evaluate_external_sweep(rows, **common)[0] == []
+        flipped = [
+            {**r, "conclusion": "failure"} if r["name"] == target else r for r in rows
+        ]
+        assert evaluate_external_sweep(flipped, **common)[0] == [f"{target} (failure)"]
+        assert evaluate_external_sweep(rows, **common)[0] == []
+
+
+@pytest.mark.unit
+class TestSweepIsWiredIntoTheProductionPoller:
+    """The module can be perfect and the gate still ship inert.
+
+    This module's own entry point carries the record: a port of an earlier
+    change edited the gate and not a sibling repository's poller, every unit
+    test passed, and the gate shipped COMPLETELY INERT. L5 has the same shape
+    and a worse one, because it is OFF for any event name but pull_request.
+    """
+
+    @staticmethod
+    def _poll_step() -> dict[str, Any]:
+        job = yaml.safe_load(CI_YML.read_text(encoding="utf-8"))["jobs"]["ci-summary"]
+        steps = [
+            st
+            for st in job["steps"]
+            if "ci_summary_gate.py" in str(st.get("run") or "")
+        ]
+        assert len(steps) == 1, f"expected one poll step, found {len(steps)}"
+        return steps[0]
+
+    def test_the_poller_fetches_the_runs_and_passes_both_new_flags(self) -> None:
+        step = self._poll_step()
+        run = str(step["run"])
+        assert "actions/runs?head_sha=${HEAD_SHA}&per_page=100" in run, (
+            "the poller does not fetch the workflow runs, so L5 resolves no "
+            "events and every row is swept blind"
+        )
+        assert "--workflow-runs-file workflow_runs.json" in run
+        assert '--event-name "${EVENT_NAME}"' in run, (
+            "without the event name the sweep never turns on and ships inert"
+        )
+        assert "rm -f workflow_runs.json" in run, (
+            "a stale workflow_runs.json from an earlier poll would attribute "
+            "rows against the wrong index"
+        )
+        assert step["env"]["EVENT_NAME"] == "${{ github.event_name }}"
+
+    def test_main_runs_the_sweep_for_pull_request_and_not_for_push(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        def _fake_combine(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            captured.clear()
+            captured.update(kwargs)
+            return EXIT_PENDING, "stubbed"
+
+        monkeypatch.setattr(ci_summary_gate, "combine_verdicts", _fake_combine)
+        (tmp_path / "jobs.json").write_text("[]", encoding="utf-8")
+        (tmp_path / "check_runs.json").write_text(
+            json.dumps([_sweep_row("Gate X", "failure")]), encoding="utf-8"
+        )
+        (tmp_path / "runs.json").write_text(
+            '{"workflow_runs": [{"id": 7, "event": "push"}]}', encoding="utf-8"
+        )
+        base = [
+            "--jobs-file",
+            str(tmp_path / "jobs.json"),
+            "--check-runs-file",
+            str(tmp_path / "check_runs.json"),
+            "--workflow-runs-file",
+            str(tmp_path / "runs.json"),
+        ]
+
+        ci_summary_gate.main([*base, "--event-name", "pull_request"])
+        assert captured["sweep_ran"] is True
+        assert captured["sweep_failures"] == ["Gate X (failure)"]
+
+        ci_summary_gate.main([*base, "--event-name", "push"])
+        assert captured["sweep_ran"] is False
+        assert captured["sweep_failures"] == []
+
+    def test_a_forgotten_event_name_enforces_rather_than_skipping(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        def _fake_combine(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            captured.update(kwargs)
+            return EXIT_PENDING, "stubbed"
+
+        monkeypatch.setattr(ci_summary_gate, "combine_verdicts", _fake_combine)
+        (tmp_path / "jobs.json").write_text("[]", encoding="utf-8")
+        (tmp_path / "check_runs.json").write_text("[]", encoding="utf-8")
+        ci_summary_gate.main(
+            [
+                "--jobs-file",
+                str(tmp_path / "jobs.json"),
+                "--check-runs-file",
+                str(tmp_path / "check_runs.json"),
+            ]
+        )
+        assert captured["sweep_ran"] is True
+
+    def test_an_unreadable_workflow_runs_file_sweeps_rather_than_exempting(
+        self, tmp_path: Path
+    ) -> None:
+        assert ci_summary_gate._load_workflow_runs(str(tmp_path / "nope.json")) is None
+        assert ci_summary_gate._load_workflow_runs(None) is None
