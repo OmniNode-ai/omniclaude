@@ -62,6 +62,20 @@ _SELF_RESOLUTION = re.compile(r"_SELF=\"\$\(realpath ")
 #: resolution itself is written, so folding them in would flag the fix.
 _LEADING_CD = re.compile(r"^\s*cd\s+\S")
 
+#: Scripts in this directory that the harness never invokes, so "invoked by a
+#: relative path" is not something that happens to them. ``ensure-plugin-venv.sh``
+#: says so in its own header -- it BUILDS the plugin venv, is run by hand or by
+#: ``scripts/repair-plugin-venv.sh``, and fail-fasts on ``CLAUDE_PLUGIN_ROOT``
+#: then ``OMNI_HOME`` before doing anything. Supplying those to get past the
+#: fail-fast would make a hermetic test build a virtualenv, which is worse than
+#: not running it.
+#:
+#: An exclusion list is how a suite quietly stops covering the thing it was
+#: written for, so :func:`test_nothing_excluded_from_the_behavioural_leg_is_a_live_hook`
+#: is the control: nothing registered can ever be named here, and the static
+#: ratchet above covers every script in the directory regardless.
+_NOT_HARNESS_INVOKED: frozenset[str] = frozenset({"ensure-plugin-venv.sh"})
+
 #: error-guard's documented refusal code. A guard that refuses a tool call
 #: exits 2 after clearing the EXIT trap, so 2 is a pass, not a failure.
 _BLOCK_CODE = 2
@@ -96,7 +110,11 @@ def _declared_scripts() -> list[str]:
         for group in groups
         for hook in group.get("hooks", [])
     }
-    return sorted(n for n in names | registered if (_SCRIPTS_DIR / n).is_file())
+    return sorted(
+        n
+        for n in names | registered
+        if (_SCRIPTS_DIR / n).is_file() and n not in _NOT_HARNESS_INVOKED
+    )
 
 
 def _payload_for(script: str) -> str:
@@ -187,6 +205,33 @@ def test_the_realpath_fallback_refuses_a_path_that_does_not_exist() -> None:
     assert stale == [], (
         "these scripts fall back to a realpath that never checks existence, so "
         "they return a phantom path instead of failing: " + ", ".join(stale)
+    )
+
+
+def test_nothing_excluded_from_the_behavioural_leg_is_a_live_hook() -> None:
+    """The control on the exclusion list, so it cannot grow into a blind spot.
+
+    A name here is claimed to be something the harness never invokes. If the
+    harness does invoke it, that claim is false and the exclusion is hiding a
+    live hook from the only test that runs one.
+    """
+    registered = {
+        hook["command"].rsplit("/", 1)[-1]
+        for groups in json.loads(_HOOKS_JSON.read_text(encoding="utf-8"))[
+            "hooks"
+        ].values()
+        for group in groups
+        for hook in group.get("hooks", [])
+    }
+    live = sorted(_NOT_HARNESS_INVOKED & registered)
+    assert live == [], (
+        "these scripts are excluded from the behavioural leg but ARE registered "
+        "in hooks.json, so the harness does invoke them: " + ", ".join(live)
+    )
+    absent = sorted(n for n in _NOT_HARNESS_INVOKED if not (_SCRIPTS_DIR / n).is_file())
+    assert absent == [], (
+        "these excluded scripts are not on disk, so the entry is stale and the "
+        "static ratchet is not covering them either: " + ", ".join(absent)
     )
 
 
