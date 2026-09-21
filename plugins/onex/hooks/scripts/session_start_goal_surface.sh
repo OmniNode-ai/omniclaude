@@ -144,6 +144,22 @@ if [[ -f "$_INTENT_SH" ]]; then
     fi
 fi
 
+# Reads one string field out of the tick's failure notice, which is JSON written
+# by python's json.dump. Field extraction is `grep` plus `sed` rather than a JSON
+# parser, because this hook spins up no interpreter (see the header) -- so the
+# escapes json.dump emits have to be undone here.
+#
+# The three that actually occur are handled and the rest are LEFT LITERAL on
+# purpose: a wrong decoding is worse than a visible backslash, and the field is
+# a human-read cause line, not a value anything parses. `\u00b7` is the one that
+# showed up live -- the harness writes the separator into its own failure text.
+_notice_field() {
+    local key="$1"
+    grep -m1 -E "\"${key}\"[[:space:]]*:" "${OMNI_HOME}/${_TICK_NOTICE_REL}" \
+        | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//' \
+        | sed -E 's/\\u00b7/·/g; s/\\"/"/g; s/\\\\/\\/g'
+}
+
 _TODAY="$(date +%F)"
 
 print_rebaseline_command() {
@@ -352,18 +368,9 @@ if (( _stale == 1 )); then
     # goal with no cause sends the reader to re-run a workflow that will fail
     # the same way.
     if [[ -n "${OMNI_HOME:-}" && -r "${OMNI_HOME}/${_TICK_NOTICE_REL}" ]]; then
-        _fail_phase="$(
-            grep -m1 -E '"phase"[[:space:]]*:' "${OMNI_HOME}/${_TICK_NOTICE_REL}" \
-                | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//'
-        )"
-        _fail_ts="$(
-            grep -m1 -E '"ts"[[:space:]]*:' "${OMNI_HOME}/${_TICK_NOTICE_REL}" \
-                | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//'
-        )"
-        _fail_first="$(
-            grep -m1 -E '"first_line"[[:space:]]*:' "${OMNI_HOME}/${_TICK_NOTICE_REL}" \
-                | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//'
-        )"
+        _fail_phase="$(_notice_field phase)"
+        _fail_ts="$(_notice_field ts)"
+        _fail_first="$(_notice_field first_line)"
         say "  last tick outcome: ${_fail_phase:-unreported} at ${_fail_ts:-unknown} — ${_fail_first:-no cause recorded}"
     elif [[ -z "${OMNI_HOME:-}" ]]; then
         say "  last tick outcome: UNRESOLVED — OMNI_HOME is unset, so ${_TICK_NOTICE_REL} cannot be located. No default is applied."

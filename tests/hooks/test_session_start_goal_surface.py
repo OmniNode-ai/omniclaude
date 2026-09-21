@@ -567,6 +567,31 @@ def test_a_stale_goal_names_the_last_tick_failure(tmp_path: Path) -> None:
     assert _REBASELINE_FRAGMENT in res.stdout
 
 
+def test_the_cause_line_decodes_the_escapes_the_tick_writes(tmp_path: Path) -> None:
+    """The notice is JSON; this hook has no JSON parser and must not leak one.
+
+    Observed live on 2026-09-21: the real notice carried the separator as a
+    six-character escape, and the hook printed it raw into an operator-facing
+    line. Only the escapes that actually occur are decoded; the rest are left
+    literal, because a visible backslash beats a wrong decoding.
+    """
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    _write_goal(kb, _iso(timedelta(hours=-30)))
+    _write_tick_notice(
+        omni,
+        phase="failed",
+        ts="2026-09-21T00:04:55Z",
+        first_line="You've hit your session limit \\u00b7 resets 10:20pm",
+    )
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "session limit \u00b7 resets 10:20pm" in res.stdout
+    assert "\\u00b7" not in res.stdout
+
+
 def test_a_stale_goal_with_no_notice_says_the_fire_was_missed(tmp_path: Path) -> None:
     """A missed fire and a failed fire are different defects; do not conflate."""
     kb = tmp_path / "kb"
