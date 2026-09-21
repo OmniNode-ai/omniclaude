@@ -417,14 +417,27 @@ def resolve_states(tickets: set[str], *, token: str | None = None) -> dict[str, 
             "query": "query($id:String!){ issue(id:$id){ identifier state { type } } }",
             "variables": {"id": ticket},
         }
-        request = urllib.request.Request(  # noqa: S310 - fixed https endpoint
+        # B310 asks whether this can be pointed at `file:` or a custom scheme.
+        # It cannot: the endpoint is a module constant and the scheme is
+        # asserted here rather than assumed, so the suppression below rests on
+        # a check rather than on a promise.
+        if not TICKET_STATE_ENDPOINT.startswith("https://"):
+            raise GateError(
+                f"refusing to resolve ticket state over a non-https endpoint: "
+                f"{TICKET_STATE_ENDPOINT!r}"
+            )
+        request = urllib.request.Request(  # noqa: S310 - https asserted above
             TICKET_STATE_ENDPOINT,
             data=json.dumps(query).encode("utf-8"),
             headers={"Authorization": key, "Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
+            # https scheme asserted above, so B310's file:/custom-scheme
+            # concern cannot apply.
+            with urllib.request.urlopen(  # noqa: S310  # nosec B310
+                request, timeout=_HTTP_TIMEOUT_SECONDS
+            ) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise GateError(
