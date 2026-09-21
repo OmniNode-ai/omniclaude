@@ -175,15 +175,11 @@ expected_hooks:
       gated -- gating it would block every state flip and parent re-link the
       OMN-16729 board-truth work depends on. Measured cause: 1553 tickets
       created in the fourteen days to 2026-09-04 against ~35/day closed, 1537
-      of them under the single API identity every lane writes as. Also refuses
-      a create whose named parent already carries more than
-      unstarted_children_cap children in an unstarted state (rule 8,
-      OMN-18323) -- the earlier rules bound a ticket's shape and say nothing
-      about volume, and the trend they were built to stop kept running after
-      they shipped: created against Done at 3.1 : 1 over the fifteen days to
-      2026-09-13, with 59 parents already over a cap of ten. That rule makes
-      one read-only tracker request per create and is skipped, loudly, when no
-      read credential is reachable. Registered
+      of them under the single API identity every lane writes as. The
+      unstarted-children cap that OMN-18323 added as rule 8 was RESCINDED by
+      the operator on 2026-09-21 (rolling work ledger RULING row
+      2026-09-21T14:46:45Z item (f)) and is gone; nothing here caps how many
+      children a parent may carry. Registered
       AFTER pre_tool_use_done_flip_guard.sh on the same matcher, which only
       ever inspects updates, so the two never contend for the same call.
 
