@@ -566,6 +566,31 @@ gates:
     skip_semantics: never
     rationale: "OMN-17204: the hook edge's publish lane and the cloud relay's consume lane are one declared pairing; a mismatch must be a failing check, not a human reading two broker offsets. Path filters removed and `if: always()` added in the same change so the context reports on every PR (skip-vectors 1 and 5). Non-vacuity proven in tests/hooks/test_hook_edge_lane.py: the validator exits 1 on a dropped resolver, on resolver-before-common.sh ordering, on a relay/lane network split, and on a governed topic leaving the registry; 0 on the shipped tree."
 
+  # OMN-18530 AC8. The hook inventory gate reported on `dev` and could block
+  # only what it happened to run on. Its `UNDECLARED_GATE_SCRIPT` finding kind
+  # (omniclaude#2295) matched 34 gate-shaped hook scripts declared in neither
+  # the expected nor the disabled list -- the population that went dark
+  # unowned after OMN-13244, and the same class as the enforcing hook that sat
+  # switched off while the rule it enforced was corrected by hand ~61 times.
+  # omniclaude#2297 removed the `paths:` filter and added `if: always()`, so
+  # the context now reports on every PR (skip-vectors 1 and 5), proven live on
+  # that PR itself, which touches no hook file and on which the gate rendered
+  # and passed in 10s.
+  #
+  # This row is the branch-protection half, and it is the ONLY half a lane
+  # cannot land: a required-context mutation is outside lane authority, so it
+  # was requested rather than taken. Flip protection first or in the same
+  # change -- required-check-manifest-reconcile.yml fails closed when this
+  # file and live branch protection diverge in EITHER direction, so a row here
+  # ahead of the flip is itself a red gate.
+  - name: "Hook Inventory Gate"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: hook-inventory-gate.yml
+    job_path: ["hook-inventory-gate"]
+    skip_semantics: never
+    rationale: "OMN-18530: a gate-shaped hook script declared in neither the expected nor the disabled list must be a failing check, not a finding nobody reads -- that silence is what let 34 scripts go dark unowned. Path filter removed and `if: always()` added in omniclaude#2297 so the context reports on every PR (skip-vectors 1 and 5). Non-vacuity proven in tests/hooks/test_hook_inventory_undeclared_gate.py: measured against the pre-change commit 37ad6d64f the checker exits 1 with 34 findings of the new kind and 0 once they are subtracted, identical to the pre-change baseline; 0 on the shipped tree. Trigger shape pinned by tests/ci/test_hook_inventory_gate_blocking.py, whose every predicate carries a known-positive (hook-edge-lane-gate.yml) and a known-negative (a synthesised filtered workflow)."
+
   # OMN-18288. The Lane Identity Gate reported on `dev` from 2026-09-13 and
   # could not block anything: the context was absent from
   # required_status_checks, which is the advisory-detection gap CLAUDE.md

@@ -234,6 +234,33 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # `if: always()` added in the same change, so it reports on every PR
     # (skip-vectors 1 and 5) rather than wedging PRs that touch no hook file.
     "Hook Edge Lane Gate",  # hook-edge-lane-gate.yml
+    # OMN-18530 AC8, the second of the two surfaces that criterion names.
+    #
+    # OMN-18530 shipped the inventory gate's `UNDECLARED_GATE_SCRIPT` finding
+    # kind -- a gate-shaped hook script declared in neither the expected nor
+    # the disabled list is reported rather than invisible -- and it matched 34
+    # scripts on the pre-change tree. omniclaude#2297 then removed the `paths:`
+    # filter and added `if: always()`, so the context reports on every pull
+    # request instead of only those touching six hook paths (skip-vectors 1
+    # and 5). From that point the gate already BLOCKS, through the layer-5
+    # default-deny sweep below: a check-run in neither registry must conclude
+    # `success` or the required `CI Summary` fails.
+    #
+    # This entry is the second, independent assertion, and it is strictly
+    # stronger than the sweep: layer 5 can only deny a check-run that EXISTS,
+    # so a future change that deletes this workflow, renames its job, or
+    # re-filters it by path returns the gate to silence with nothing going
+    # red. Layer 4 requires the name to be PRESENT and `success`, which is the
+    # case the sweep structurally cannot cover.
+    #
+    # LANDS ONLY WITH THE BRANCH-PROTECTION ROW, never before it. Every other
+    # member of this tuple is also a live required context, and
+    # TestExternalContextCompleteness::test_no_classified_entry_is_a_phantom
+    # enforces that in the phantom direction against the dated snapshot
+    # fixture. Adding this line while the gate is absent from protection makes
+    # that test red and the manifest reconcile job red, which is the intended
+    # behaviour of both and the reason this change is held as a draft.
+    "Hook Inventory Gate",  # hook-inventory-gate.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
