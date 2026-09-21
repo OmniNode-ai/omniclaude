@@ -472,3 +472,258 @@ def test_unreadable_contract_leaves_env_untouched(
 
     assert drainer.apply_declared_lane(contract_path=tmp_path / "absent.yaml") is None
     assert os.environ["KAFKA_BOOTSTRAP_SERVERS"] == "other-lane.invalid:9999"
+
+
+# ---------------------------------------------------------------------------
+# OMN-19074: the journal's own dead-letter.
+#
+# `test_poison_record_does_not_block_the_queue` above covers the case the
+# emitter can recognise -- a MALFORMED record, which `_Emitter.publish` acks
+# deliberately because it can never be published. These cover the case it
+# cannot: a well-formed record the BROKER refuses. That one returned False
+# forever, `drain_once` stopped on it every cycle, and the edge delivered
+# nothing until a person moved the file. It happened four times, most recently
+# on 2026-09-21 when four records held roughly four thousand for 105 minutes.
+# ---------------------------------------------------------------------------
+
+
+class RefusingEmitter:
+    """Refuses one event type the way a broker ACL refuses a topic.
+
+    Well-formed, resolvable, and permanently unpublishable. The emitter cannot
+    tell that from a transient failure, which is the whole difficulty: on the
+    live path the transport masked the refusal as a TimeoutError for three days
+    (OMN-19073), so nothing keyed on an exception type would have helped.
+    """
+
+    def __init__(self, refused_event_type: str) -> None:
+        self.published: list[str] = []
+        self.attempts: list[str] = []
+        self._refused = refused_event_type
+
+    def publish(self, record: journal.JournalRecord) -> bool:
+        self.attempts.append(record.event_id)
+        if record.event_type == self._refused:
+            return False
+        self.published.append(record.event_id)
+        return True
+
+
+class DeadBrokerEmitter:
+    """Every publish fails. Stands in for an unreachable broker."""
+
+    def __init__(self) -> None:
+        self.published: list[str] = []
+
+    def publish(self, record: journal.JournalRecord) -> bool:
+        return False
+
+
+def _drain_n_cycles(
+    jdir: Path,
+    emitter: object,
+    cycles: int,
+    counts: dict[str, int] | None = None,
+) -> dict[str, int]:
+    """Run N cycles sharing one failure map, as `run()` does.
+
+    The map is threaded through and returned so a test can continue a run
+    rather than restart it. That is not a convenience: a fresh map per call
+    resets every count, which is the same bug as owning the map inside
+    `drain_once`, and a test carrying it would silently never reach the
+    threshold.
+
+    Cycle COUNT, never wall clock: the threshold is a count, and a test that
+    slept for the real 30s backoff would take two and a half minutes to assert
+    one thing (OMN-19074 AC9).
+    """
+    counts = {} if counts is None else counts
+    for _ in range(cycles):
+        _drain_once_compat(jdir, emitter, counts)
+    return counts
+
+
+def _drain_once_compat(
+    jdir: Path, emitter: object, counts: dict[str, int]
+) -> tuple[int, int]:
+    """Call `drain_once`, tolerating a build that has no `failure_counts` yet.
+
+    This exists so the RED run of these tests fails on BEHAVIOUR rather than
+    on a TypeError. Against the pre-OMN-19074 drainer the parameter does not
+    exist, and a test that simply exploded on the signature would prove only
+    that a keyword argument is new -- not that one refused record holds the
+    whole queue, which is the defect. With this shim the pre-change build runs
+    its real drain loop for every cycle the test asks for, and the assertion
+    that the authorized records eventually publish is what fails.
+    """
+    try:
+        return drainer.drain_once(jdir, emitter, failure_counts=counts)
+    except TypeError:
+        return drainer.drain_once(jdir, emitter)
+
+
+def test_a_refused_record_does_not_hold_the_queue_forever(jdir: Path) -> None:
+    """OMN-19074 AC1, the defect itself: one refused class holds everything.
+
+    Deliberately references no threshold constant, so that against the
+    pre-OMN-19074 drainer it fails on BEHAVIOUR rather than on a missing
+    attribute. However many cycles run, the authorized records never publish.
+    That is exactly what 105 minutes of dead hook capture looked like from
+    the outside on 2026-09-21.
+    """
+    journal.append(
+        jdir, event_type="denied.class", payload={"i": 0}, correlation_id=None
+    )
+    for i in range(1, 4):
+        journal.append(
+            jdir, event_type="ok.class", payload={"i": i}, correlation_id=None
+        )
+
+    emitter = RefusingEmitter("denied.class")
+    _drain_n_cycles(jdir, emitter, 20)
+
+    assert len(emitter.published) == 3, (
+        f"the three authorized records behind the refused one never "
+        f"published across 20 cycles: {emitter.published}"
+    )
+    assert journal.list_pending(jdir) == [], "the journal did not drain"
+
+
+def test_ordering_holds_until_the_threshold_is_reached(jdir: Path) -> None:
+    """OMN-19074 AC4 and AC9: nothing overtakes a record still under the bound.
+
+    The dead-letter is a last resort, not a first one. Below the threshold the
+    refused record is still treated as owed, so the queue behind it waits.
+    """
+    journal.append(
+        jdir, event_type="denied.class", payload={"i": 0}, correlation_id=None
+    )
+    for i in range(1, 4):
+        journal.append(
+            jdir, event_type="ok.class", payload={"i": i}, correlation_id=None
+        )
+
+    emitter = RefusingEmitter("denied.class")
+    _drain_n_cycles(jdir, emitter, drainer.DEFAULT_QUARANTINE_AFTER_FAILURES - 1)
+
+    assert emitter.published == [], (
+        "an authorized record published while a refused record was still "
+        "ahead of it and under the threshold -- ordering was abandoned early"
+    )
+    assert len(journal.list_pending(jdir)) == 4
+
+
+def test_the_refused_record_is_moved_to_quarantine_with_a_reason(jdir: Path) -> None:
+    """OMN-19074 AC7: moved, never deleted, and the reason says why."""
+    journal.append(
+        jdir, event_type="denied.class", payload={"k": "v"}, correlation_id=None
+    )
+    journal.append(jdir, event_type="ok.class", payload={}, correlation_id=None)
+    original = json.loads(journal.list_pending(jdir)[0].path.read_text())
+
+    _drain_n_cycles(
+        jdir,
+        RefusingEmitter("denied.class"),
+        drainer.DEFAULT_QUARANTINE_AFTER_FAILURES + 1,
+    )
+
+    qdir = jdir / "quarantine"
+    records = [p for p in qdir.glob("*.json") if not p.name.endswith(".reason.json")]
+    assert len(records) == 1, (
+        f"expected exactly one dead-lettered record, got {records}"
+    )
+
+    assert json.loads(records[0].read_text()) == original, (
+        "the dead-lettered record must be byte-for-byte what was queued; a "
+        "rewritten record cannot be replayed as the thing that was refused"
+    )
+
+    reason = json.loads((qdir / f"{records[0].stem}.reason.json").read_text())
+    assert reason["reason_code"] == "publish_failed_repeatedly"
+    assert reason["event_type"] == "denied.class"
+    assert reason["consecutive_failures"] >= drainer.DEFAULT_QUARANTINE_AFTER_FAILURES
+
+
+def test_an_unreachable_broker_dead_letters_nothing(jdir: Path) -> None:
+    """OMN-19074 AC8, the negative control, and the one that matters most.
+
+    A failure count alone cannot tell a refused record from a dead broker:
+    both produce an unbounded run of failures at the head. Under a count-only
+    rule a long outage would dead-letter the entire backlog one record at a
+    time -- strictly worse than the stall this change exists to end, because a
+    stall is recoverable and mass dead-lettering buries the evidence.
+
+    The stand-down probe is what prevents it, so this test is the reason the
+    probe exists rather than a formality.
+    """
+    for i in range(5):
+        journal.append(
+            jdir, event_type="ok.class", payload={"i": i}, correlation_id=None
+        )
+    before = {p.path.name for p in journal.list_pending(jdir)}
+
+    _drain_n_cycles(
+        jdir, DeadBrokerEmitter(), drainer.DEFAULT_QUARANTINE_AFTER_FAILURES * 3
+    )
+
+    assert {p.path.name for p in journal.list_pending(jdir)} == before, (
+        "records were dead-lettered during a broker outage; the stand-down "
+        "probe did not fire, and a recoverable stall became data in a "
+        "dead-letter directory"
+    )
+    assert not (jdir / "quarantine").exists() or not list(
+        (jdir / "quarantine").glob("*.json")
+    )
+
+
+def test_a_transient_failure_still_halts_the_drain(jdir: Path) -> None:
+    """OMN-19074 AC4: ordinary ordering is untouched.
+
+    One failure is not a dead-letter candidate. The record is still owed, so
+    nothing behind it may overtake it.
+    """
+    for i in range(4):
+        journal.append(
+            jdir, event_type="ok.class", payload={"i": i}, correlation_id=None
+        )
+
+    emitter = FakeEmitter(fail_after=1)
+    published, failed = _drain_once_compat(jdir, emitter, {})
+
+    assert published == 1
+    assert failed == 3
+    assert len(journal.list_pending(jdir)) == 3, (
+        "a single transient failure skipped a record instead of halting the "
+        "drain, which reorders the stream"
+    )
+
+
+def test_a_dead_lettered_record_replays_when_moved_back(jdir: Path) -> None:
+    """OMN-19074 AC10: the dead-letter is replayable by the move that filled it.
+
+    This is not a hypothetical. On 2026-09-21 the four quarantined
+    `team.task.assigned` records were replayed exactly this way once their
+    grant landed, taking the topic's high watermark from 0 to 4 with no
+    duplication.
+    """
+    journal.append(
+        jdir, event_type="denied.class", payload={"i": 0}, correlation_id=None
+    )
+    journal.append(jdir, event_type="ok.class", payload={"i": 1}, correlation_id=None)
+    _drain_n_cycles(
+        jdir,
+        RefusingEmitter("denied.class"),
+        drainer.DEFAULT_QUARANTINE_AFTER_FAILURES + 1,
+    )
+
+    qdir = jdir / "quarantine"
+    dead = next(p for p in qdir.glob("*.json") if not p.name.endswith(".reason.json"))
+
+    # The grant lands: move it back, exactly as an operator would.
+    dead.replace(jdir / dead.name)
+
+    emitter = FakeEmitter()
+    _drain_once_compat(jdir, emitter, {})
+
+    assert len(emitter.published) == 1, "the replayed record did not publish"
+    assert journal.list_pending(jdir) == []
