@@ -696,6 +696,12 @@ def verdict_is_provisional(state: CheckRunState, now: datetime | None) -> bool:
 SWEEP_NON_PR_EVENTS: frozenset[str] = frozenset(
     {
         "push",
+        # OMN-18970 adversarial review: a queue run's rows are a verdict about
+        # a queue commit, not about this pull request. The sweep only runs on
+        # `pull_request` today so this cannot currently fire, and it is listed
+        # anyway because the deny list is the place a reader looks to learn
+        # which events are not pull-request verdicts.
+        "merge_group",
         "schedule",
         "workflow_dispatch",
         "release",

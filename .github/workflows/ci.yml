@@ -4061,6 +4061,18 @@ jobs:
           # (2 = PENDING must NOT terminate the poll loop).
           set +e
           set -uo pipefail
+          # OMN-18970: GH_REPO comes from github.repository and is used
+          # double-quoted in an argv position rather than interpolated into a
+          # shell string, so it can neither word-split nor inject; the two
+          # fetches below have used that exact form in production for months.
+          # This assertion is defence in depth and costs one comparison: a
+          # value that is not owner/repo fails the poll loudly here instead of
+          # reaching the API.
+          case "${GH_REPO}" in
+            */*/* | */ | /* | "") echo "::error::GH_REPO is not owner/repo: ${GH_REPO}"; exit 1 ;;
+            */*) : ;;
+            *) echo "::error::GH_REPO is not owner/repo: ${GH_REPO}"; exit 1 ;;
+          esac
           deadline=$(( $(date +%s) + DEADLINE_MINUTES * 60 ))
           attempt=0
           while true; do
@@ -4095,10 +4107,17 @@ jobs:
             # row is SWEPT -- the stricter reading, so a transient API error
             # cannot exempt a check. It therefore does not abort the poll.
             rm -f workflow_runs.json
+            # BOUNDED at 500 runs, and truncation is FAIL-CLOSED rather than
+            # fail-open: a check-run whose producing run is past the cap
+            # resolves to an unknown event and is therefore SWEPT, never
+            # exempted. Measured 21 to 65 runs per head across four
+            # repositories, so the cap is an order of magnitude of headroom
+            # and exists to bound the memory the slurp below can be made to
+            # allocate on a re-run-heavy sha, not to change any verdict.
             if gh api --paginate \
                 "repos/${GH_REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
                 --jq '.workflow_runs[]' > workflow_runs_raw.ndjson 2>/dev/null; then
-              jq -s '.' workflow_runs_raw.ndjson > workflow_runs.json
+              jq -s '.[0:500]' workflow_runs_raw.ndjson > workflow_runs.json
             else
               echo "workflow-runs fetch failed (attempt ${attempt}); sweeping every row (fail-closed)"
               rm -f workflow_runs.json

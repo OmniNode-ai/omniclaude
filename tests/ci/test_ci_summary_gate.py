@@ -1007,6 +1007,19 @@ class TestSupersededSkipIsPartitionedByHeadSha:
 # ---------------------------------------------------------------------------
 
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+
+
+def _poll_step_run() -> str:
+    """The `run:` body of the ci-summary job's poll step, read from ci.yml."""
+
+    job = yaml.safe_load(CI_YML.read_text(encoding="utf-8"))["jobs"]["ci-summary"]
+    steps = [
+        st for st in job["steps"] if "ci_summary_gate.py" in str(st.get("run") or "")
+    ]
+    assert len(steps) == 1, f"expected one poll step, found {len(steps)}"
+    return str(steps[0]["run"])
+
+
 SWEEP_FIXTURE = FIXTURES_DIR / "omn18970_external_sweep_check_runs.json"
 SWEEP_NOW = datetime(2026, 9, 21, 5, 0, 0, tzinfo=UTC)
 
@@ -1666,3 +1679,58 @@ class TestSweepIsWiredIntoTheProductionPoller:
     ) -> None:
         assert ci_summary_gate._load_workflow_runs(str(tmp_path / "nope.json")) is None
         assert ci_summary_gate._load_workflow_runs(None) is None
+
+
+@pytest.mark.unit
+class TestTheReviewFindingsThatWereReal:
+    """OMN-18970: findings the adversarial reviewer raised that held up.
+
+    Kept as a named class rather than folded in, because a finding worth
+    fixing is worth pinning where the next reader can see what was argued.
+    """
+
+    def test_a_queue_event_row_is_not_a_pull_request_verdict(self) -> None:
+        """A queue run's rows are a verdict about a queue commit.
+
+        The deny list omitted the queue event. It cannot fire today, because
+        the sweep runs on pull requests only, and it is listed so the deny
+        list reads as the complete answer to which events are not
+        pull-request verdicts.
+        """
+        assert "merge_group" in ci_summary_gate.SWEEP_NON_PR_EVENTS
+        failures, _f, swept, _e = _sweep(
+            [_sweep_row("Queue Thing", "failure", run_id=555)],
+            events={555: "merge_group"},
+        )
+        assert failures == []
+        assert swept == []
+
+    def test_an_absent_event_index_sweeps_every_row_end_to_end(self) -> None:
+        """The fetch-failure path, asserted on the verdict and not only the loader.
+
+        The poller deletes the index file when its fetch fails, so the gate
+        reads no index at all. Two models called that path untested. The
+        loader returning None was already pinned; this pins what the SWEEP
+        then does with it, which is the half that matters.
+        """
+        rows = [_sweep_row("Nightly", "failure", run_id=777)]
+        # With the index, the row is attributed to a schedule and left alone.
+        assert _sweep(rows, events={777: "schedule"})[0] == []
+        # With the index gone, the same row is judged.
+        assert _sweep(rows, events={})[0] == ["Nightly (failure)"]
+
+    def test_the_poller_bounds_the_index_it_slurps(self) -> None:
+        """Truncation is fail-closed, so a cap cannot exempt anything.
+
+        A check-run whose producing run falls past the cap resolves to an
+        unknown event, and an unknown event is swept. The cap therefore
+        bounds memory without being able to change a verdict in the
+        permissive direction.
+        """
+        run = _poll_step_run()
+        assert "jq -s '.[0:500]' workflow_runs_raw.ndjson" in run
+
+    def test_the_poller_refuses_a_malformed_repository_slug(self) -> None:
+        """Defence in depth on a value the runner sets, asserted as wiring."""
+        run = _poll_step_run()
+        assert "GH_REPO is not owner/repo" in run
