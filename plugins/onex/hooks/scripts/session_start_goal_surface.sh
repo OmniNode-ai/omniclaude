@@ -28,6 +28,8 @@
 #   Reads:   $KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md
 #            $OMNI_HOME/.onex_state/morning-workflows/notifications/
 #              morning-ground-state.failure.json  (only when the goal is STALE)
+#            $OMNI_HOME/.onex_state/morning-workflows/deferred/
+#              morning-ground-state.json          (only when the goal is STALE)
 #   Writes:  stdout only. No files, no state, no network, ever.
 #   Blocks:  never. Exit 0 on every user-visible outcome, including a missing
 #            file and an unset env var.
@@ -104,6 +106,12 @@ _DROPPED_KEYS=(
 # a stale goal is the CAUSE of the staleness rather than a second mystery.
 _TICK_NOTICE_REL=".onex_state/morning-workflows/notifications/${_WORKFLOW_NAME}.failure.json"
 
+# Where the tick records a re-fire it has scheduled against an announced
+# usage-limit reset (OMN-18961). A stale goal with a pending re-fire is a
+# DIFFERENT state from a stale goal nobody is coming back to, and telling
+# them apart is the difference between waiting and re-baselining by hand.
+_TICK_DEFERRAL_REL=".onex_state/morning-workflows/deferred/${_WORKFLOW_NAME}.json"
+
 # SessionStart delivers a JSON payload on stdin. Nothing here needs it, but an
 # unread stdin can hand the caller an EPIPE, so drain it unconditionally.
 cat >/dev/null 2>&1 || true
@@ -144,18 +152,19 @@ if [[ -f "$_INTENT_SH" ]]; then
     fi
 fi
 
-# Reads one string field out of the tick's failure notice, which is JSON written
-# by python's json.dump. Field extraction is `grep` plus `sed` rather than a JSON
-# parser, because this hook spins up no interpreter (see the header) -- so the
-# escapes json.dump emits have to be undone here.
+# Reads one string field out of a small JSON file the tick wrote with python's
+# json.dump -- the failure notice, or the deferral record. Field extraction is
+# `grep` plus `sed` rather than a JSON parser, because this hook spins up no
+# interpreter (see the header) -- so the escapes json.dump emits have to be
+# undone here.
 #
 # The three that actually occur are handled and the rest are LEFT LITERAL on
 # purpose: a wrong decoding is worse than a visible backslash, and the field is
 # a human-read cause line, not a value anything parses. `\u00b7` is the one that
 # showed up live -- the harness writes the separator into its own failure text.
-_notice_field() {
-    local key="$1"
-    grep -m1 -E "\"${key}\"[[:space:]]*:" "${OMNI_HOME}/${_TICK_NOTICE_REL}" \
+_json_field() {
+    local key="$1" file="$2"
+    grep -m1 -E "\"${key}\"[[:space:]]*:" "$file" \
         | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//' \
         | sed -E 's/\\u00b7/·/g; s/\\"/"/g; s/\\\\/\\/g'
 }
@@ -368,14 +377,23 @@ if (( _stale == 1 )); then
     # goal with no cause sends the reader to re-run a workflow that will fail
     # the same way.
     if [[ -n "${OMNI_HOME:-}" && -r "${OMNI_HOME}/${_TICK_NOTICE_REL}" ]]; then
-        _fail_phase="$(_notice_field phase)"
-        _fail_ts="$(_notice_field ts)"
-        _fail_first="$(_notice_field first_line)"
+        _fail_phase="$(_json_field phase "${OMNI_HOME}/${_TICK_NOTICE_REL}")"
+        _fail_ts="$(_json_field ts "${OMNI_HOME}/${_TICK_NOTICE_REL}")"
+        _fail_first="$(_json_field first_line "${OMNI_HOME}/${_TICK_NOTICE_REL}")"
         say "  last tick outcome: ${_fail_phase:-unreported} at ${_fail_ts:-unknown} — ${_fail_first:-no cause recorded}"
     elif [[ -z "${OMNI_HOME:-}" ]]; then
         say "  last tick outcome: UNRESOLVED — OMNI_HOME is unset, so ${_TICK_NOTICE_REL} cannot be located. No default is applied."
     else
         say "  last tick outcome: no failure notice on disk — the last completed tick was clean, so the staleness is a MISSED fire, not a failed one."
+    fi
+
+    # A pending re-fire changes what the reader should DO. Printed after the
+    # cause and before the re-baseline command, because the command below is
+    # the right action when nothing is coming and the wrong one when a
+    # re-fire is minutes away.
+    if [[ -n "${OMNI_HOME:-}" && -r "${OMNI_HOME}/${_TICK_DEFERRAL_REL}" ]]; then
+        _refire_at="$(_json_field refire_at "${OMNI_HOME}/${_TICK_DEFERRAL_REL}")"
+        say "  a re-fire IS scheduled for ${_refire_at:-an unrecorded time} — the tick deferred itself to the reset its refusal announced. Re-baseline by hand only if you need the goal before then."
     fi
     print_rebaseline_command
 fi
