@@ -78,6 +78,8 @@ case "${rc}" in
             log "subagent_stop_report_contract_guard: empty/invalid guard output (rc=2), failing open"
             exit 0
         fi
+        # OMN-18946: see hook_record_refusal in error-guard.sh.
+        hook_record_refusal "subagent report contract refused" "the lane's final return matched the bare-Done clobber signature" 2>/dev/null || true
         printf '%s\n' "${OUTPUT}"
         exit 2
         ;;

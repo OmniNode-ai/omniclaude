@@ -159,6 +159,7 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
     else
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: cannot resolve worktree root — OMNI_HOME unset and no ONEX_WORKTREES_ROOT override" >> "$LOG_FILE"
         _hook_status "BLOCKED" "worktree root unresolvable (OMNI_HOME unset)" "0"
+        hook_record_refusal "worktree root unresolvable" "OMNI_HOME unset and no ONEX_WORKTREES_ROOT override" 2>/dev/null || true
         jq -n --arg reason "BLOCKED: cannot resolve canonical worktree root. Set OMNI_HOME (preferred), set ONEX_WORKTREES_ROOT, or disable this guard by clearing the WORKTREE_GUARD bit: onex hooks disable WORKTREE_GUARD" \
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
@@ -169,6 +170,7 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
         # Could not parse path — fail closed
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Could not parse worktree path from command" >> "$LOG_FILE"
         _hook_status "BLOCKED" "worktree path unparseable" "0"
+        hook_record_refusal "worktree path unparseable" "could not parse the worktree path from the command" 2>/dev/null || true
         jq -n --arg reason "BLOCKED: Could not parse worktree path from command. Use: git worktree add <path> [-b <branch>]. To disable this guard: onex hooks disable WORKTREE_GUARD" \
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
@@ -181,6 +183,7 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
     if [[ "$NORMALIZED_WORKTREE" != "$NORMALIZED_ROOT"/* ]]; then
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Worktree path outside canonical root: $NORMALIZED_WORKTREE" >> "$LOG_FILE"
         _hook_status "BLOCKED" "worktree path outside canonical root" "0"
+        hook_record_refusal "worktree path outside canonical root" "worktree must be created under the canonical root" 2>/dev/null || true
         jq -n --arg reason "BLOCKED: Worktrees must be created under $NORMALIZED_ROOT. Got: $NORMALIZED_WORKTREE. To use a different root set ONEX_WORKTREES_ROOT, or to disable this guard: onex hooks disable WORKTREE_GUARD" \
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
