@@ -1731,6 +1731,37 @@ class TestTheReviewFindingsThatWereReal:
         assert "jq -s '.[0:500]' workflow_runs_raw.ndjson" in run
 
     def test_the_poller_refuses_a_malformed_repository_slug(self) -> None:
-        """Defence in depth on a value the runner sets, asserted as wiring."""
+        """Defence in depth on a value the runner sets, asserted as wiring.
+
+        A strict character class rather than a shape glob: after it the value
+        provably holds nothing but two non-empty runs of the allowed
+        characters separated by one slash, so no shell metacharacter can be
+        present and the escaping question does not arise.
+        """
         run = _poll_step_run()
-        assert "GH_REPO is not owner/repo" in run
+        assert "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" in run
+        assert "GH_REPO is not a strict owner/repo value" in run
+
+    @pytest.mark.parametrize(
+        ("value", "allowed"),
+        [
+            ("OmniNode-ai/omniclaude", True),
+            ("owner/repo", True),
+            ("owner_x/repo.y", True),
+            ("owner//repo", False),
+            ("owner/repo/extra", False),
+            ("owner", False),
+            ("", False),
+            ("owner/repo;whoami", False),
+            ("owner/repo$(id)", False),
+            ("owner/repo repo", False),
+        ],
+    )
+    def test_the_slug_pattern_admits_only_a_strict_owner_repo(
+        self, value: str, allowed: bool
+    ) -> None:
+        """The pattern itself, exercised rather than only asserted present."""
+        import re as _re
+
+        pattern = _re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+        assert bool(pattern.match(value)) is allowed
