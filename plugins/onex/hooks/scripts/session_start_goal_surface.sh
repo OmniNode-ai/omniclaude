@@ -81,22 +81,27 @@ _GOAL_ROWS=20
 _PREFIX="[session-goal]"
 _WORKFLOW_NAME="morning-ground-state"
 
-# The five dropped-work headline keys the morning workflow writes into the goal
-# file's header (OMN-18954). Spelled here and in
+# The six dropped-work headline keys the morning workflow writes into the goal
+# file's header (OMN-18954, sixth key added by OMN-18948). Spelled here and in
 # the registry clone's .claude/workflows/morning-ground-state.js, as
 # DROPPED_HEADLINE_KEYS;
 # each side pins its own copy, because neither repo's CI checks out the other.
 #
-# The counts they carry are the four sections that name work NOBODY is driving
+# The counts they carry are the five sections that name work NOBODY is driving
 # -- a red integration head, a plan that stopped moving, a ticket minted and
-# never started, and the dispatch candidates ranked from those. Every other
-# morning surface measures work somebody already has; those go unseen unless a
-# session opens on them.
+# never started, a lane report nobody opened, and the dispatch candidates
+# ranked from those. Every other morning surface measures work somebody
+# already has; those go unseen unless a session opens on them.
+#
+# A key the workflow writes and this list omits is printed NOWHERE: the section
+# would be measured every morning and read by no one, which is the same failure
+# the section itself exists to report.
 _DROPPED_KEYS=(
     "dropped_work"
     "red_on_dev_head"
     "stale_plans"
     "unstarted_work_by_age"
+    "unread_lane_reports"
     "proposed_dispatch"
 )
 
