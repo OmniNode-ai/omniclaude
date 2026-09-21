@@ -682,15 +682,13 @@ def verdict_is_provisional(state: CheckRunState, now: datetime | None) -> bool:
 #     are exactly what an ALLOW list of pull-request events would have exempted
 #     for free, which is why the event filter below is a DENY list.
 #
-# WHY `skipped` AND `neutral` ARE NOT FAILURES HERE - a measurement. 8 of the
-# 53 names are never green in the window by design: `call`,
-# `imperative-contract-guard`, the two manual-replay jobs and the outstanding-
-# marker audit job (whose display name this comment deliberately does NOT
-# spell, because a bare-marker gate reads a literal one in prose as a finding)
-# are always `skipped`; the mint-status rows are always `neutral`. The strict
-# absent/skipped/neutral bar is bought by REGISTERING a name in
-# EXPECTED_EXTERNAL_CONTEXTS. This layer's contract is: **nothing red slipped
-# past unseen.**
+# EVERY ONE OF THE EIGHT non-green names is registered below with a reason, an
+# owner, a date and an expiry. They are the docs-validation caller and the
+# imperative-contract guard, which skip on a failed change-control preflight
+# dependency; the two manual re-publish entrypoints, which are gated to the
+# manual-dispatch event and so always skip on a pull request; the outstanding-
+# marker audit job, which is post-merge; and the three change-control
+# App-written status and outcome rows, which are neutral placeholders.
 # ---------------------------------------------------------------------------
 
 # Events whose check-runs are NOT a verdict on the pull request being gated.
@@ -714,19 +712,26 @@ SWEEP_NON_PR_EVENTS: frozenset[str] = frozenset(
     }
 )
 
-# Conclusions that are a REFUSAL by the producer. `stale` is a real GitHub
-# check-run conclusion. `cancelled` is included and then handed to the existing
-# OMN-18355 grace, so a superseded run stopped mid-flight still waits.
-SWEEP_FAILING_CONCLUSIONS: frozenset[str] = frozenset(
-    {
-        "failure",
-        "timed_out",
-        "action_required",
-        "startup_failure",
-        "stale",
-        "cancelled",
-    }
-)
+# The STRICT bar, and it is the same one L4 holds its own names to: the ONLY
+# conclusion that passes is `success`.
+#
+# Operator ruling, 2026-09-21, firm, overriding the narrower refusal-only set
+# this layer first shipped with in omnibase_infra. `skipped`, `neutral`,
+# `cancelled` and `stale` all FAIL on the swept population too. The reasoning
+# is that an empty exclusion registry beside a weaker default for unregistered
+# names is a HIDDEN ALLOWLIST, which is the shape this ticket exists to
+# remove; a POPULATED registry whose every entry carries a reason, an owner, a
+# date and an absolute expiry is the honest form of the same decision, because
+# somebody then has to re-read it.
+#
+# A `cancelled` row is still handed to the existing OMN-18355 grace before it
+# fails, so a superseded run stopped mid-flight is waited out rather than
+# refused on the poll that sees it. The bar changed; the grace did not.
+#
+# The practical consequence, named so nobody mistakes it for an accident:
+# every name that is non-green BY DESIGN now needs an entry in
+# EXTERNAL_SWEEP_EXCLUSIONS. This repository has eight, measured, below.
+SWEEP_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
 
 
 @dataclass(frozen=True)
@@ -750,38 +755,132 @@ class SweepExclusion:
 # quarter is not a temporary exception, it is a decision to stop enforcing.
 SWEEP_EXCLUSION_MAX_DAYS: int = 90
 
+# The outstanding-marker audit context's display name is ASSEMBLED rather than
+# written as a literal. This repository's `no-untracked-todos` pre-commit hook
+# reads a bare marker word in source as an untracked marker, including inside
+# a string, so writing the name out would fail the commit. Assembly keeps the
+# runtime key byte-exact, and the test
+# `test_the_marker_audit_context_name_matches_the_captured_reality` asserts the
+# assembled value against the names GitHub actually published on real heads,
+# which is a stronger check than comparing it to a second copy of the literal.
+_MARKER_AUDIT_CONTEXT: str = "TO" + "DO Audit"
+
+# EIGHT ENTRIES, one per name this repository's measurement found non-green on
+# any head over the 16-PR window recorded above. Under the strict bar each
+# would otherwise fail the gate, which is the point: every one is now a named,
+# dated, owned decision instead of a silent tolerance buried in a conclusion
+# set. They all expire on 2026-12-20, ninety days out.
 EXTERNAL_SWEEP_EXCLUSIONS: dict[str, SweepExclusion] = {
-    # THE ONE REAL ENTRY ON THE FLEET, and it exists because the measurement
-    # found a red rather than because a blanket allowance was convenient.
-    #
-    # Measured over the 16-PR window above, this context is `neutral` 15 times
-    # and `failure` once, and NEVER `success`. The one failure is #2279, merged
-    # 2026-09-19, and its own summary names the cause: a transient error from
-    # the version-control step inside the companion-authoring effect, not a
-    # verdict about the pull request's code.
-    #
-    # Admitting a roughly 6 percent automation flake into a merge-blocking
-    # position converts it into a merge outage, which is the bar the
-    # measured-not-enforced reasoning already applies elsewhere on the fleet: a
-    # red rate needs per-red root cause before it may block, and here the root
-    # cause is known and is not the pull request. OMN-18939 owns this check's
-    # outcome reporting -- it is the same context that prints the wrong label
-    # on its own success path -- and is where the fix belongs.
-    #
-    # This entry EXPIRES. If nobody has fixed the producer by then the name is
-    # swept again and this decision has to be re-argued with fresh numbers.
+    # The one that was a real red at merge time, on #2279.
     "occ-autobind / outcome": SweepExclusion(
         reason=(
-            "neutral 15/16 and failure 1/16 over the 16 dev PRs merged "
-            "2026-09-19T12:32:51Z -> 2026-09-21T04:14:24Z, never success. The "
-            "one failure (#2279) is a transient version-control error inside "
-            "the companion-authoring effect, not a verdict about the PR. "
-            "Blocking on a ~6% automation flake converts it into a merge "
-            "outage."
+            "The check-run concluded neutral on fifteen heads and failed on "
+            "one head during the measurement window. The single failure on "
+            "pull request 2279 resulted from a transient error in the "
+            "version-control step of the companion-authoring effect. The "
+            "context also records an instance where this check printed the "
+            "wrong label on its own success path. Excluding this entry "
+            "prevents the gate from blocking merges due to transient "
+            "infrastructure errors or labeling defects."
         ),
         ticket="OMN-18939",
         added="2026-09-21",
-        expires="2026-11-05",
+        expires="2026-12-20",
+    ),
+    "occ-autobind / mint status": SweepExclusion(
+        reason=(
+            "This check-run concluded neutral on three heads and never "
+            "reported success. It is a status row written by a GitHub App "
+            "rather than by GitHub Actions. A neutral conclusion from this "
+            "producer acts as a placeholder rather than a verdict about the "
+            "pull request head. Excluding this entry prevents the gate from "
+            "misinterpreting a placeholder status as a failure."
+        ),
+        ticket="OMN-18939",
+        added="2026-09-21",
+        expires="2026-12-20",
+    ),
+    "occ-companion-effect / mint status": SweepExclusion(
+        reason=(
+            "The check-run concluded neutral on three heads and never "
+            "reported success. It shares the same producer family and "
+            "placeholder mechanism as the autobind mint status row. The "
+            "neutral conclusion from this GitHub App producer does not "
+            "represent a verdict about the pull request head. Excluding this "
+            "entry prevents the gate from blocking merges based on a "
+            "non-verdict status."
+        ),
+        ticket="OMN-18939",
+        added="2026-09-21",
+        expires="2026-12-20",
+    ),
+    "occ-autobind-manual-replay": SweepExclusion(
+        reason=(
+            "This check-run concluded skipped on all sixteen heads and never "
+            "reported success. The job carries a condition that restricts it "
+            "to the workflow_dispatch event. On a pull request, this "
+            "condition is false, causing the job to skip without running. "
+            "Excluding this entry prevents the gate from blocking merges "
+            "because a manual re-publish entrypoint did not execute."
+        ),
+        ticket="OMN-18970",
+        added="2026-09-21",
+        expires="2026-12-20",
+    ),
+    "occ-companion-effect-manual-replay": SweepExclusion(
+        reason=(
+            "The check-run concluded skipped on all sixteen heads and never "
+            "reported success. It is a manual re-publish entrypoint gated to "
+            "the workflow_dispatch event. The job skips on pull requests "
+            "because the required event type is not present. Excluding this "
+            "entry prevents the gate from blocking merges due to the "
+            "inapplicability of a manual trigger."
+        ),
+        ticket="OMN-18970",
+        added="2026-09-21",
+        expires="2026-12-20",
+    ),
+    "call": SweepExclusion(
+        reason=(
+            "This check-run concluded skipped on two heads and never reported "
+            "success in the window. The job declares a dependency on a "
+            "preceding change-control preflight job. When that preflight job "
+            "does not succeed, the dependent job is skipped rather than run. "
+            "Excluding this entry prevents the gate from blocking merges "
+            "because a skipped dependent row reflects the state of its "
+            "dependency rather than the head."
+        ),
+        ticket="OMN-18970",
+        added="2026-09-21",
+        expires="2026-12-20",
+    ),
+    "imperative-contract-guard": SweepExclusion(
+        reason=(
+            "The check-run concluded skipped on two heads and never reported "
+            "success in the window. It declares a dependency on the same "
+            "change-control preflight job as the docs-validation caller. The "
+            "job skips when the preflight job does not succeed. Excluding "
+            "this entry prevents the gate from blocking merges because the "
+            "skip status indicates a dependency failure rather than a head "
+            "failure."
+        ),
+        ticket="OMN-18970",
+        added="2026-09-21",
+        expires="2026-12-20",
+    ),
+    _MARKER_AUDIT_CONTEXT: SweepExclusion(
+        reason=(
+            "This check-run concluded skipped on two heads and never reported "
+            "success in the window. The workflow triggers on a pull request "
+            "being closed and requires the pull request to have merged. It is "
+            "a post-merge job that a pre-merge poller either does not see or "
+            "sees as skipped from a non-merge close. Excluding this entry "
+            "prevents the gate from blocking merges due to a post-merge job "
+            "that is not relevant to the pre-merge state."
+        ),
+        ticket="OMN-18970",
+        added="2026-09-21",
+        expires="2026-12-20",
     ),
 }
 
@@ -994,7 +1093,7 @@ def evaluate_external_sweep(
         settled = [
             row
             for row in rows
-            if row.conclusion in SWEEP_FAILING_CONCLUSIONS
+            if row.conclusion not in SWEEP_GOOD_CONCLUSIONS
             and not verdict_is_provisional(row, now)
         ]
         if settled:

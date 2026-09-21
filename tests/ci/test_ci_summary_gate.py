@@ -37,7 +37,7 @@ from scripts.ci.ci_summary_gate import (  # noqa: E402
     SOFT_ALLOWLIST,
     STRICT_SUCCESS_JOBS,
     SWEEP_EXCLUSION_MAX_DAYS,
-    SWEEP_FAILING_CONCLUSIONS,
+    SWEEP_GOOD_CONCLUSIONS,
     SweepExclusion,
     active_sweep_exclusions,
     check_run_event_index,
@@ -1118,26 +1118,44 @@ class TestExternalDefaultDenySweep:
         assert swept == []
 
     @pytest.mark.parametrize(
-        "conclusion", sorted(SWEEP_FAILING_CONCLUSIONS - {"cancelled"})
+        "conclusion",
+        [
+            "failure",
+            "timed_out",
+            "action_required",
+            "startup_failure",
+            "stale",
+            "skipped",
+            "neutral",
+        ],
     )
-    def test_every_refusal_conclusion_fails(self, conclusion: str) -> None:
+    def test_the_bar_is_strict_and_only_success_passes(self, conclusion: str) -> None:
+        """Operator ruling, 2026-09-21: the swept population takes L4's bar.
+
+        skipped, neutral and stale all FAIL here. A weaker default for
+        unregistered names beside an empty registry is a hidden allowlist,
+        which is the shape this ticket exists to remove. The eight names that
+        are non-green by design carry dated entries instead.
+        """
         failures, _f, _s, _e = _sweep([_sweep_row("Gate X", conclusion)])
         assert failures == [f"Gate X ({conclusion})"]
 
-    @pytest.mark.parametrize("conclusion", ["success", "skipped", "neutral"])
-    def test_measured_always_non_green_conclusions_do_not_fail(
-        self, conclusion: str
-    ) -> None:
-        """8 of the 53 names in the measured window are never green by design.
+    def test_only_success_is_in_the_good_set(self) -> None:
+        assert frozenset({"success"}) == SWEEP_GOOD_CONCLUSIONS
 
-        Failing on these conclusions wedges every pull request here on the
-        first run, and a gate reverted within the hour enforces nothing. The
-        strict bar is bought by registering a name instead.
-        """
-        failures, _f, _s, _e = _sweep([_sweep_row("Gate X", conclusion)])
+    def test_a_success_row_passes(self) -> None:
+        failures, _f, swept, _e = _sweep([_sweep_row("Gate X", "success")])
         assert failures == []
+        assert swept == ["Gate X"]
 
     def test_a_cancelled_row_waits_inside_the_grace_and_fails_outside_it(self) -> None:
+        """The bar changed; the grace did not.
+
+        A cancellation is the absence of a verdict, and this module already
+        has the right answer to that: wait, bounded. The strict bar makes a
+        settled cancellation a failure, and the grace still decides which
+        cancellations are settled.
+        """
         inside = _sweep_row(
             "Gate X",
             "cancelled",
@@ -1154,6 +1172,22 @@ class TestExternalDefaultDenySweep:
         )
         assert _sweep([inside])[0] == []
         assert _sweep([outside])[0] == ["Gate X (cancelled)"]
+
+    def test_a_skip_inside_the_rerun_window_still_waits(self) -> None:
+        """`skipped` is in this module's supersedable set, so the grace covers it.
+
+        Under the strict bar a settled skip fails, but a skip whose producer
+        is demonstrably about to re-run is still PENDING rather than a
+        terminal refusal.
+        """
+        fresh = _sweep_row(
+            "Gate X",
+            "skipped",
+            completed_at=(SWEEP_NOW - timedelta(seconds=30)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+        )
+        assert _sweep([fresh])[0] == []
 
     def test_a_still_running_row_is_reported_and_does_not_fail(self) -> None:
         """The documented residual, pinned so a later change has to argue."""
@@ -1274,19 +1308,69 @@ class TestSweepFoldsIntoTheCombinedVerdict:
 class TestSweepExclusions:
     """AC-2 / AC-3 — the registry is closed-ended, and its one entry is real."""
 
-    def test_the_shipped_registry_holds_exactly_the_measured_flake(self) -> None:
-        """This repository is the one where the measurement was not a zero."""
-        assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {FLAKY_AUTOBIND_OUTCOME}
+    def test_the_registry_holds_exactly_the_eight_measured_names(self) -> None:
+        """Under the strict bar, every by-design non-green name needs an entry.
+
+        That is the point of the ruling: the tolerance is written down with a
+        reason, an owner and a date, instead of hiding inside a conclusion set
+        nobody reads. These eight are every name the measurement found
+        non-green on any head.
+        """
+        assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {
+            FLAKY_AUTOBIND_OUTCOME,
+            "occ-autobind / mint status",
+            "occ-companion-effect / mint status",
+            "occ-autobind-manual-replay",
+            "occ-companion-effect-manual-replay",
+            "call",
+            "imperative-contract-guard",
+            ci_summary_gate._MARKER_AUDIT_CONTEXT,
+        }
+
+    def test_every_entry_carries_a_reason_an_owner_and_both_dates(self) -> None:
+        for name, entry in EXTERNAL_SWEEP_EXCLUSIONS.items():
+            assert entry.reason.strip(), name
+            assert entry.ticket.startswith("OMN-"), name
+            assert entry.added == "2026-09-21", name
+            assert entry.expires == "2026-12-20", name
+
+    def test_no_entry_overlaps_either_registered_set(self) -> None:
+        """A name in both would be judged by L4 and never reach this layer."""
+        registered = set(EXPECTED_EXTERNAL_CONTEXTS) | set(
+            ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        )
+        assert not set(EXTERNAL_SWEEP_EXCLUSIONS) & registered
+
+    def test_the_marker_audit_context_name_matches_the_captured_reality(self) -> None:
+        """The one key assembled from parts is checked against the real API.
+
+        Its display name is not written as a literal because this
+        repository's bare-marker pre-commit hook reads one in source as an
+        untracked marker. Comparing the assembled value to a second copy of
+        the literal would defeat that, so it is compared to the names GitHub
+        actually published on the captured heads, which is the stronger check.
+        """
+        payload = json.loads(SWEEP_FIXTURE.read_text(encoding="utf-8"))
+        names = {
+            r["name"]
+            for head in payload["pull_requests"].values()
+            for r in head["check_runs_all"]
+        }
+        assert ci_summary_gate._MARKER_AUDIT_CONTEXT in names
 
     def test_every_shipped_entry_is_wellformed(self) -> None:
         assert validate_sweep_exclusions(EXTERNAL_SWEEP_EXCLUSIONS) == []
 
-    def test_the_shipped_entry_carries_a_reason_a_ticket_and_both_dates(self) -> None:
+    def test_the_autobind_outcome_entry_still_records_its_measurement(self) -> None:
+        """The one entry that stands for a real red keeps its numbers.
+
+        Its reason has to carry the measured rate, because renewing it means
+        re-measuring and comparing, not re-reading an adjective.
+        """
         entry = EXTERNAL_SWEEP_EXCLUSIONS[FLAKY_AUTOBIND_OUTCOME]
         assert entry.ticket == "OMN-18939"
-        assert entry.added == "2026-09-21"
-        assert entry.expires == "2026-11-05"
-        assert "15/16" in entry.reason and "1/16" in entry.reason
+        assert "fifteen heads" in entry.reason
+        assert "2279" in entry.reason
 
     def test_no_shipped_entry_has_expired(self) -> None:
         """The calendar tripwire.
@@ -1383,7 +1467,11 @@ class TestSweepAgainstRealHeads:
     def test_merge_time_state_is_clean_and_the_sweep_really_looked(
         self, pr: str
     ) -> None:
-        """Zero failures AND a non-zero population — rule 16's two halves."""
+        """Zero failures AND a non-zero population — rule 16's two halves.
+
+        Run with the SHIPPED registry, because under the strict bar the
+        by-design non-green names are exactly what the registry is for.
+        """
         head = _sweep_head(pr)
         failures, _in_flight, swept, _excluded = evaluate_external_sweep(
             _at_merge(head),
@@ -1393,6 +1481,24 @@ class TestSweepAgainstRealHeads:
         )
         assert failures == [], failures
         assert len(swept) >= 30, (pr, len(swept))
+
+    @pytest.mark.parametrize("pr", CLEAN_PRS)
+    def test_the_registry_is_load_bearing_on_every_real_head(self, pr: str) -> None:
+        """AC-3 generalised: strip the registry and the same real head fails.
+
+        This is the falsification control for the assertion above. Without it,
+        a clean result could mean the sweep found nothing rather than that the
+        entries did their work.
+        """
+        head = _sweep_head(pr)
+        failures, _i, _s, _e = evaluate_external_sweep(
+            _at_merge(head),
+            in_run_names=frozenset(head["in_run_job_names"]),
+            events=check_run_event_index(head["workflow_runs"]),
+            exclusions={},
+            now=SWEEP_NOW,
+        )
+        assert failures, "stripping the registry changed nothing, so it is inert"
 
     def test_the_shipped_exclusion_is_load_bearing_on_the_head_that_merged_red(
         self,
@@ -1421,13 +1527,20 @@ class TestSweepAgainstRealHeads:
         )
 
         without, _f, _s, _e = evaluate_external_sweep(rows, exclusions={}, **common)
-        assert without == [f"{FLAKY_AUTOBIND_OUTCOME} (failure)"], without
+        # Under the strict bar, stripping the registry reds every by-design
+        # non-green name on this head, not only the one real failure. Both
+        # halves matter: the failure is present, and it is present BECAUSE the
+        # entry was removed.
+        assert f"{FLAKY_AUTOBIND_OUTCOME} (failure)" in without, without
+        assert len(without) == len(EXTERNAL_SWEEP_EXCLUSIONS) - 1 or len(without) > 1
 
         with_entry, _f, _s, excluded = evaluate_external_sweep(
             rows, exclusions=EXTERNAL_SWEEP_EXCLUSIONS, **common
         )
         assert with_entry == [], with_entry
-        assert excluded == [FLAKY_AUTOBIND_OUTCOME]
+        assert FLAKY_AUTOBIND_OUTCOME in excluded
+        # Every name the registry admitted on this head is one of its entries.
+        assert set(excluded) <= set(EXTERNAL_SWEEP_EXCLUSIONS)
 
     def test_flipping_one_real_row_flips_the_verdict(self) -> None:
         """A synthetic red on an otherwise-clean REAL payload, and back again."""
@@ -1468,7 +1581,8 @@ class TestSweepIsWiredIntoTheProductionPoller:
             if "ci_summary_gate.py" in str(st.get("run") or "")
         ]
         assert len(steps) == 1, f"expected one poll step, found {len(steps)}"
-        return steps[0]
+        step: dict[str, Any] = steps[0]
+        return step
 
     def test_the_poller_fetches_the_runs_and_passes_both_new_flags(self) -> None:
         step = self._poll_step()
@@ -1515,12 +1629,15 @@ class TestSweepIsWiredIntoTheProductionPoller:
         ]
 
         ci_summary_gate.main([*base, "--event-name", "pull_request"])
-        assert captured["sweep_ran"] is True
-        assert captured["sweep_failures"] == ["Gate X (failure)"]
+        on_pr = dict(captured)
 
         ci_summary_gate.main([*base, "--event-name", "push"])
-        assert captured["sweep_ran"] is False
-        assert captured["sweep_failures"] == []
+        on_push = dict(captured)
+
+        assert on_pr["sweep_ran"] is True
+        assert on_pr["sweep_failures"] == ["Gate X (failure)"]
+        assert on_push["sweep_ran"] is False
+        assert not on_push["sweep_failures"]
 
     def test_a_forgotten_event_name_enforces_rather_than_skipping(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
