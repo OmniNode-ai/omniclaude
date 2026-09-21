@@ -694,23 +694,43 @@ def _path_reference(name: str) -> re.Pattern[str]:
 
 
 def _delegation_reference(name: str) -> re.Pattern[str]:
-    """``exec``/``source``/``.`` of the named script — the caller BECOMES it."""
+    """``exec`` of the named script — the caller IS replaced by it.
+
+    ``exec`` only, deliberately, and this is narrower than it first looks like
+    it should be. ``source`` was tried and removed: sourcing a library pulls in
+    its function definitions, and an ``exit 2`` inside one of those functions
+    fires only if a caller calls it, so treating every sourcing script as
+    refusal-capable infers a refusal nothing may ever reach. ``exec`` carries
+    no such doubt — the process becomes the target, and every refusal the
+    target can make is a refusal this script makes.
+
+    Dropping ``source`` costs nothing measurable here: the one script in the
+    population with no refusal of its own reaches its refusal through ``exec``,
+    and the shared libraries in this tree carry no refusal literal to
+    propagate.
+    """
     return re.compile(
-        r"(?:^|[\s;&|(])(?:exec|source|\.)\s+[^\n]*?/" + re.escape(name) + r"(?![\w.])",
+        r"(?:^|[\s;&|(])exec\s+[^\n]*?/" + re.escape(name) + r"(?![\w.])",
         re.MULTILINE,
     )
 
 
-def refusing_scripts(scripts_dir: Path) -> frozenset[str]:
-    """Every script that can refuse, directly or by delegating its process.
+def refusing_scripts(
+    scripts_dir: Path, sources: dict[str, str] | None = None
+) -> frozenset[str]:
+    """Every script that can refuse, directly or by replacing its process.
 
-    Delegation is followed because ``subagent_skip_token_surface_guard.sh`` is
+    ``exec`` is followed because ``subagent_skip_token_surface_guard.sh`` is
     twelve lines that set one variable and ``exec`` the shared guard: it has no
     refusal of its own and refuses everything the guard refuses. Ordinary
     invocation is NOT followed — ``test-hooks.sh`` runs guards in a loop as
-    subprocesses and is a harness, not a gate.
+    subprocesses and is a harness, not a gate — and neither is ``source``; see
+    :func:`_delegation_reference`.
+
+    ``sources`` lets a caller reading the directory once share it, so the three
+    passes below do not re-read and re-strip every script each time.
     """
-    sources = _script_sources(scripts_dir)
+    sources = _script_sources(scripts_dir) if sources is None else sources
     refusing = {
         name
         for name, text in sources.items()
@@ -735,7 +755,9 @@ def refusing_scripts(scripts_dir: Path) -> frozenset[str]:
 
 
 def scripts_reachable_from_registered(
-    registered: frozenset[str] | set[str], scripts_dir: Path
+    registered: frozenset[str] | set[str],
+    scripts_dir: Path,
+    sources: dict[str, str] | None = None,
 ) -> frozenset[str]:
     """Scripts a registered hook invokes, transitively, excluding the roots.
 
@@ -775,9 +797,11 @@ def event_for_script_name(script: str) -> str | None:
     return best[1] if best else None
 
 
-def delegation_closure(scripts_dir: Path, script: str) -> frozenset[str]:
-    """Scripts ``script`` becomes by ``exec``/``source``, transitively."""
-    sources = _script_sources(scripts_dir)
+def delegation_closure(
+    scripts_dir: Path, script: str, sources: dict[str, str] | None = None
+) -> frozenset[str]:
+    """Scripts ``script`` becomes by ``exec``, transitively."""
+    sources = _script_sources(scripts_dir) if sources is None else sources
     seen: set[str] = set()
     frontier = [script]
     while frontier:
@@ -807,8 +831,11 @@ def undeclared_gate_findings(
     declared = {hook.script for hook in inventory.expected} | {
         hook.script for hook in inventory.disabled
     }
-    refusing = refusing_scripts(scripts_dir)
-    reachable = scripts_reachable_from_registered(registered, scripts_dir)
+    # Read and comment-strip the directory ONCE; both passes below walk the
+    # same text, and re-reading ~120 scripts per pass is pure waste.
+    sources = _script_sources(scripts_dir)
+    refusing = refusing_scripts(scripts_dir, sources)
+    reachable = scripts_reachable_from_registered(registered, scripts_dir, sources)
 
     findings: list[Finding] = []
     for script in sorted(refusing - declared - registered - reachable):

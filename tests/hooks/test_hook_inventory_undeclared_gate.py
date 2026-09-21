@@ -272,6 +272,62 @@ def test_a_mention_in_a_comment_is_not_a_call(tree: Path) -> None:
     assert library in _subjects(tree, _KIND)
 
 
+def test_a_call_carrying_a_trailing_comment_is_still_a_call(tree: Path) -> None:
+    """Comment stripping drops whole-line comments only, never code.
+
+    The reachability pass removes lines whose first non-space character opens a
+    comment. A line that runs code and then comments on it is code, and
+    dropping it would turn a real call into a missed one, which reports a live
+    callee as a dark gate.
+    """
+    library = "omn18530_probe_trailing.sh"
+    _add_script(tree, library, "#!/usr/bin/env bash\nexit 2\n")
+    assert library in _subjects(tree, _KIND)
+
+    caller_path = tree / _SCRIPTS_REL / sorted(_registered_scripts(tree))[0]
+    caller_path.write_text(
+        caller_path.read_text(encoding="utf-8")
+        + f'\n"${{CLAUDE_PLUGIN_ROOT}}/hooks/scripts/{library}"  # shared utils\n',
+        encoding="utf-8",
+    )
+    assert library not in _subjects(tree, _KIND)
+
+
+def test_sourcing_a_library_does_not_make_the_caller_a_gate(tree: Path) -> None:
+    """Refusal propagates through ``exec``, never through ``source``.
+
+    Sourcing pulls in function definitions. An ``exit 2`` inside one of them
+    fires only if something calls it, so treating every sourcing script as
+    refusal-capable infers a refusal that may be unreachable. ``exec`` carries
+    no such doubt: the process becomes the target.
+    """
+    library = "omn18530_probe_sourced_lib.sh"
+    _add_script(
+        tree,
+        library,
+        "#!/usr/bin/env bash\nomn18530_refuse() {\n  exit 2\n}\n",
+    )
+    sourcer = "omn18530_probe_sourcer.sh"
+    _add_script(
+        tree,
+        sourcer,
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f'source "${{CLAUDE_PLUGIN_ROOT}}/hooks/scripts/{library}"\nexit 0\n',
+    )
+    reported = _subjects(tree, _KIND)
+    assert library in reported, "the library itself carries the refusal literal"
+    assert sourcer not in reported, "sourcing it does not make the caller a gate"
+
+    execer = "omn18530_probe_execer.sh"
+    _add_script(
+        tree,
+        execer,
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f'exec "${{CLAUDE_PLUGIN_ROOT}}/hooks/scripts/{library}"\n',
+    )
+    assert execer in _subjects(tree, _KIND), "exec replaces the process, so it does"
+
+
 def test_a_script_that_cannot_refuse_is_not_reported(tree: Path) -> None:
     """An observer is not a gate. This is the other half of the discrimination."""
     observer = "post_tool_use_omn18530_probe_observer.sh"
