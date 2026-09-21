@@ -27,25 +27,25 @@ name: Hook Inventory Gate
 # why this ships as a workflow and a pre-commit hook in the same change as the
 # inventory it enforces.
 
+# OMN-18530 AC8. No `paths:` filter, deliberately, on the same reasoning
+# hook-edge-lane-gate records for itself. This context is now asserted by CI
+# Summary's layer-4 external sweep, which WAITS for it on every pull request.
+# A filtered gate under a context something waits for is skip-vector 1: a pull
+# request touching only excluded paths never runs the job, the context never
+# reports, and the pull request sits PENDING forever.
+#
+# The filter was also wrong on its own terms before that. It listed the hook
+# tree and the checker but not `scripts/validation/`'s siblings, not this file,
+# and not the disable-declaration review dates the gate enforces — those expire
+# with the calendar rather than with a commit, so the one change that must
+# re-run this gate is a change to nothing at all. The gate is a sub-second
+# static read of one contract against one directory, so it runs on every pull
+# request rather than buying either failure back.
 on:
   push:
-    branches: [main, 'hotfix/**']
-    paths:
-      - 'plugins/onex/hooks/hooks.json'
-      - 'plugins/onex/hooks/contracts/hook_inventory.yaml'
-      - 'plugins/onex/hooks/lib/hook_inventory.py'
-      - 'plugins/onex/hooks/lib/hook_bits.sh'
-      - 'plugins/onex/hooks/scripts/**'
-      - 'scripts/validation/validate_hook_inventory.py'
+    branches: [main, dev, 'hotfix/**']
   pull_request:
     branches: [main, dev]
-    paths:
-      - 'plugins/onex/hooks/hooks.json'
-      - 'plugins/onex/hooks/contracts/hook_inventory.yaml'
-      - 'plugins/onex/hooks/lib/hook_inventory.py'
-      - 'plugins/onex/hooks/lib/hook_bits.sh'
-      - 'plugins/onex/hooks/scripts/**'
-      - 'scripts/validation/validate_hook_inventory.py'
 
 jobs:
   occ-preflight:
@@ -60,6 +60,15 @@ jobs:
 
   hook-inventory-gate:
     needs: occ-preflight
+    # Skip-vector 5 (OMN-18530 AC8; same fix hook-edge-lane-gate took under
+    # OMN-17204). `needs:` with no `if:` means the implicit job condition is
+    # `success()` over `needs:`, so a failed or cancelled occ-preflight SKIPS
+    # this job -- and a skipped job renders no check run at all, which reads to
+    # CI Summary's layer 4 as the absent case rather than as a refusal. Wiring
+    # the context without `if: always()` would put a silent-pass bypass into
+    # the one gate whose entire purpose is that a switched-off hook stops
+    # reading as green.
+    if: always()
     name: Hook Inventory Gate
     runs-on: >-
       ${{
