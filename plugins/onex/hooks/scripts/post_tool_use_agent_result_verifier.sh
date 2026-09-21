@@ -50,15 +50,16 @@ if [[ "${OMN_9055_AGENT_VERIFIER_DISABLED:-0}" == "1" ]]; then
     exit 0
 fi
 
-# Ensure stable CWD before any Python invocation.
-cd "$HOME" 2>/dev/null || cd /tmp || true
-
 # Portable plugin root resolution.
+# Resolved BEFORE any `cd`: BASH_SOURCE[0] may be relative [OMN-19047].
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
+
+# Ensure stable CWD before any Python invocation.
+cd "$HOME" 2>/dev/null || cd /tmp || true
 
 # --- Log path -------------------------------------------------------------
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then

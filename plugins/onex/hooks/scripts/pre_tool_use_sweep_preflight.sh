@@ -19,17 +19,23 @@ fi
 # the hook script happens to chdir for I/O safety.
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 
-# Stable CWD (same pattern as bash_guard)
-cd "$HOME" 2>/dev/null || cd /tmp || true
-
 # Resolve paths
+# Resolved BEFORE any `cd`: BASH_SOURCE[0] may be relative [OMN-19047].
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
+
+# Stable CWD (same pattern as bash_guard)
+# Absolute script directory, resolved while the caller's CWD is still in
+# effect. BASH_SOURCE[0] may be relative, so a sibling sourced after the
+# cd below cannot be found through it [OMN-19047].
+HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+cd "$HOME" 2>/dev/null || cd /tmp || true
 
 mkdir -p "$(dirname "$LOG_FILE")"
 
@@ -43,7 +49,7 @@ mkdir -p "$(dirname "$LOG_FILE")"
 # See plugins/onex/hooks/lib/repo_guard.sh.
 # -----------------------------------------------------------------------
 # shellcheck source=../lib/repo_guard.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+. "${HOOK_SCRIPT_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
 if declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {

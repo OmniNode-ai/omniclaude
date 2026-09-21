@@ -57,9 +57,14 @@ _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && { cat; exit 0; }; fi
 unset _SCRIPT_DIR _MODE_SH
 
+# Absolute script directory, resolved while the caller's CWD is still in
+# effect. BASH_SOURCE[0] may be relative, so a sibling sourced after the
+# cd below cannot be found through it [OMN-19047].
+HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
+source "${HOOK_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/agent-dispatch-gate.log"
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 

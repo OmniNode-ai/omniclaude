@@ -71,7 +71,7 @@ HOOK_ORIGINAL_CWD="$(pwd -P 2>/dev/null || pwd)"
 # may be relative, so resolving it after a `cd` yields a path under the wrong
 # tree (observed while testing: it resolved into an unrelated worktree).
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF
@@ -80,8 +80,13 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 # Stable CWD before any Python invocation: the session CWD may live on an
 # external volume that disconnects, and CPython's <frozen getpath> aborts at
 # startup when os.getcwd() fails.
+# Absolute script directory, resolved while the caller's CWD is still in
+# effect. BASH_SOURCE[0] may be relative, so a sibling sourced after the
+# cd below cannot be found through it [OMN-19047].
+HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
 cd "$HOME" 2>/dev/null || cd /tmp || true
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
+source "${HOOK_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_HOOK_LOG:-${HOME}/.claude/onex-hooks.log}"
 mkdir -p "$(dirname "$LOG_FILE")"
 
