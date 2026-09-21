@@ -93,6 +93,9 @@ _log() {
 }
 
 _block() {
+    # OMN-18946: a refusal reaches an aggregated surface, not only this
+    # turn's terminal and a log nobody reads. Backgrounded and fail-open.
+    hook_record_refusal "$1" "$2" 2>/dev/null || true
     _hook_status "BLOCKED" "$1" "0" 2>/dev/null || true
     jq -n --arg reason "$2" '{"decision": "block", "reason": $reason}'
     trap - EXIT

@@ -78,6 +78,8 @@ set -e
 if [[ $EXIT_CODE -eq 2 ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] BLOCKED $TOOL_NAME: delegation guard fired" >> "$LOG_FILE"
     printf '\a' >&2
+    # OMN-18946: see hook_record_refusal in error-guard.sh.
+    hook_record_refusal "foreground work refused for the overseer role" "delegation guard fired on a foreground tool call" 2>/dev/null || true
     echo "$RESULT"
     trap - EXIT
     exit 2

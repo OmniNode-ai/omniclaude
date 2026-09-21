@@ -64,6 +64,8 @@ set +e
 rc=$?
 set -e
 if [[ "$rc" -eq 2 ]]; then
+    # OMN-18946: see hook_record_refusal in error-guard.sh.
+    hook_record_refusal "done flip refused without durable evidence" "a Done transition was refused by the durable-evidence guard" 2>/dev/null || true
     exit 2
 fi
 exit 0

@@ -63,6 +63,8 @@ STDIN_JSON="$(cat || true)"
 # subagent_secret_leak_guard.py's module docstring.
 _fail_safe_block() {
     local reason="$1"
+    # OMN-18946: see hook_record_refusal in error-guard.sh.
+    hook_record_refusal "degraded: $reason" "$reason" 2>/dev/null || true
     printf '{"hookSpecificOutput":{"hookEventName":"SubagentStop","decision":"block","additionalContext":"SubagentStop secret-leak guard degraded (%s) — cannot prove the final message is clean, blocking rather than passing through unredacted. Retry."}}\n' "$reason"
     exit 2
 }
@@ -95,6 +97,8 @@ case "${rc}" in
         exit 0
         ;;
     2)
+        # OMN-18946: see hook_record_refusal in error-guard.sh.
+        hook_record_refusal "subagent secret leak guard refused the stop" "a secret-shaped pattern was found in the final message" 2>/dev/null || true
         printf '%s\n' "${OUTPUT}"
         exit 2
         ;;
