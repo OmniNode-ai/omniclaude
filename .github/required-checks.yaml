@@ -577,12 +577,14 @@ gates:
   # that PR itself, which touches no hook file and on which the gate rendered
   # and passed in 10s.
   #
-  # This row is the branch-protection half, and it is the ONLY half a lane
-  # cannot land: a required-context mutation is outside lane authority, so it
-  # was requested rather than taken. Flip protection first or in the same
-  # change -- required-check-manifest-reconcile.yml fails closed when this
-  # file and live branch protection diverge in EITHER direction, so a row here
-  # ahead of the flip is itself a red gate.
+  # This row is the branch-protection half, and it was the ONLY half a lane
+  # could not land: a required-context mutation is outside lane authority, so
+  # it was requested rather than taken. The operator flipped it on
+  # 2026-09-21T18:12Z -- readback 64 -> 65 contexts, this name present,
+  # `strict` unchanged -- and this row lands after that, which is the required
+  # order. required-check-manifest-reconcile.yml fails closed when this file
+  # and live branch protection diverge in EITHER direction, so a row landing
+  # ahead of its flip would itself be a red gate.
   - name: "Hook Inventory Gate"
     mode: REQUIRED
     producer_kind: local
