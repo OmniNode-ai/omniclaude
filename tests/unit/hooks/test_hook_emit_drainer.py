@@ -765,6 +765,23 @@ def test_the_dead_letter_reason_warns_that_replay_reorders(jdir: Path) -> None:
         "an operator following it is making an ordering decision they were "
         f"never told they were making. Got: {detail}"
     )
+
+    # The caveat must be INSPECTABLE, not just present. Naming the record that
+    # overtook this one is information the drainer holds at the call site; a
+    # bare "records behind this one" states a consequence the operator cannot
+    # go and look at. Second-actor finding on omniclaude#2304.
+    reason = json.loads((qdir / f"{record.stem}.reason.json").read_text())
+    overtaker = reason["overtaken_by_event_id"]
+    assert overtaker, (
+        "the sidecar names an ordering consequence without naming the record "
+        "that caused it, so an operator cannot inspect the pair they are "
+        "being warned about"
+    )
+    assert overtaker in detail, (
+        "the overtaking record's id must appear in the human-readable detail "
+        "too, not only in a machine field a person reading the file may miss"
+    )
+    assert reason["overtaken_by_event_type"] == "ok.class"
     # AC3: the caveat may not be bought by deleting the instruction.
     assert "provision the grant" in detail and "move this file back" in detail, (
         "the replay instruction must survive the caveat -- removing it would "

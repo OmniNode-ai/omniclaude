@@ -462,8 +462,29 @@ def migrate_legacy_journal(journal_dir: Path) -> tuple[int, int]:
     return migrated, quarantined
 
 
+def _overtaken_by_phrase(overtaken_by: journal.JournalEntry | None) -> str:
+    """Name the record that published first, or say plainly that it is unknown.
+
+    Never a bare "records behind this one": that states a consequence the
+    reader cannot inspect. When the caller has the entry -- which it does on
+    the only path that reaches the dead-letter -- the operator gets an id they
+    can go and look at. When it does not, saying so is better than implying a
+    precision that is absent.
+    """
+    if overtaken_by is None:
+        return "a record queued behind this one (its id was not recorded)"
+    return (
+        f"record {overtaken_by.record.event_id} "
+        f"({overtaken_by.record.event_type}), which was queued behind this one,"
+    )
+
+
 def quarantine_record(
-    journal_dir: Path, entry: journal.JournalEntry, *, failures: int
+    journal_dir: Path,
+    entry: journal.JournalEntry,
+    *,
+    failures: int,
+    overtaken_by: journal.JournalEntry | None = None,
 ) -> Path | None:
     """Move one unpublishable record into the journal's dead-letter.
 
@@ -486,6 +507,17 @@ def quarantine_record(
     Found in countersign, not by the author: the text was written for someone
     else to follow and read as complete to the person who wrote it.
 
+    ``overtaken_by`` NAMES the record that went out first, and the boundary it
+    sits on is the useful part. Saying "records behind this one have already
+    published" without saying WHICH one hands the operator a consequence they
+    cannot inspect; the probe entry is in the caller's hand at that moment, so
+    withholding it is throwing away information this process already has. What
+    is deliberately NOT written here is any advice on whether the inversion
+    matters. That depends on what consumes the topic and whether it is
+    order-sensitive, which the drainer cannot know, and a sentence restating
+    the operator's own problem back at them adds length without information.
+    Name the pair; do not judge it. (Second-actor finding, omniclaude#2304.)
+
     The reason is written FIRST and the record moved second, the same ordering
     and for the same reason: a crash between the two then leaves an orphan
     reason beside a still-pending record, which is inert and self-correcting,
@@ -502,9 +534,15 @@ def quarantine_record(
             f"the record behind it published on the same cycle, so the broker "
             f"is reachable and this record is not. To replay: provision the "
             f"grant, then move this file back into the journal directory. "
-            f"REPLAY DOES NOT PRESERVE ORDER -- records that were queued "
-            f"behind this one have already published, so on replay downstream "
-            f"receives this record after them, not before."
+            f"REPLAY DOES NOT PRESERVE ORDER -- {_overtaken_by_phrase(overtaken_by)} "
+            f"already published, so on replay downstream receives this record "
+            f"after it, not before."
+        ),
+        "overtaken_by_event_id": (
+            None if overtaken_by is None else overtaken_by.record.event_id
+        ),
+        "overtaken_by_event_type": (
+            None if overtaken_by is None else overtaken_by.record.event_type
         ),
         "event_id": entry.record.event_id,
         "event_type": entry.record.event_type,
@@ -528,11 +566,12 @@ def quarantine_record(
     logger.warning(
         "dead-lettered journal record %s (%s) after %d consecutive failures; "
         "it is MOVED, not deleted -- provision the grant and move it back to "
-        "replay it, but note REPLAY DOES NOT PRESERVE ORDER: records queued "
-        "behind this one have already published",
+        "replay it, but note REPLAY DOES NOT PRESERVE ORDER: %s already "
+        "published",
         entry.record.event_id,
         entry.record.event_type,
         failures,
+        _overtaken_by_phrase(overtaken_by),
     )
     return target
 
@@ -635,7 +674,12 @@ def drain_once(
                 journal.ack(probe)
                 counts.pop(probe.path.name, None)
                 published += 1
-                if quarantine_record(journal_dir, entry, failures=failures) is not None:
+                if (
+                    quarantine_record(
+                        journal_dir, entry, failures=failures, overtaken_by=probe
+                    )
+                    is not None
+                ):
                     counts.pop(key, None)
                     # Re-list rather than continuing over a stale `pending`:
                     # two entries left it just now, and the next cycle is
