@@ -64,6 +64,7 @@ def _run(
     kb_path: str | None,
     *,
     stdin: str = '{"session_id":"sess-goal-01","cwd":"/tmp"}',
+    omni_root: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the hook with a controlled environment.
 
@@ -73,6 +74,12 @@ def _run(
     """
     env = os.environ.copy()
     env.pop("KNOWLEDGE_BASE_INTERNAL_PATH", None)
+    # OMN-18954: the stale banner reads the morning tick's failure notice under
+    # $OMNI_HOME. Popped unconditionally so no case inherits the developer's
+    # real state directory; `omni_root=` opts a case back in, hermetically.
+    env.pop("OMNI_HOME", None)
+    if omni_root is not None:
+        env["OMNI_HOME"] = omni_root
     # Pin mode so the lite-mode early exit cannot swallow the output depending on
     # the invoking cwd or a developer's ~/.config/omniclaude/mode.
     env["OMNICLAUDE_MODE"] = "full"
@@ -421,3 +428,241 @@ def test_hook_performs_no_network_or_write_calls() -> None:
     # Only the two documented redirects are allowed: draining stdin, and silencing
     # probe stderr. Neither writes a file.
     assert ">>" not in code, "the goal-surface hook must not append to any file"
+
+
+# --------------------------------------------------------------------------- #
+# OMN-18954 — the four dropped-work counts, and the cause behind a STALE goal
+# --------------------------------------------------------------------------- #
+#
+# The morning ground state gained four sections that name work NOBODY is
+# driving: a red integration head, a plan that stopped moving, a ticket minted
+# and never started, and the dispatch candidates ranked from those. They exist
+# because the enforcement-integration plan sat Backlog/unassigned for four days
+# while every daily surface reported truthfully and none of them could see it.
+#
+# They are worth nothing unread, and this hook is where a session reads them.
+
+# Spelled independently of the hook. A test that read the key list out of the
+# script it checks would pass on a script that had renamed every key.
+_DROPPED_KEYS = (
+    "dropped_work",
+    "red_on_dev_head",
+    "stale_plans",
+    "unstarted_work_by_age",
+    "proposed_dispatch",
+)
+
+_DROPPED_BLOCK = """dropped_work: beta/tracking/2026-09-20-dropped-work.md · derived 2026-09-20T04:41:02Z · sections 4/4 conformant
+red_on_dev_head: 3 repo(s) with a failing or absent required context · 2 head sha(s) with no PASS lab-pass receipt · last deploy-agent success 9h ago
+stale_plans: 4 of 17 dated plans contradicted by live Linear · 2 unstarted-only · oldest 8d since minted
+unstarted_work_by_age: 26 ticket(s) >48h old with no assignee and no PR · across 7 epic(s) · oldest 12d
+proposed_dispatch: 10 candidate(s) · top: OMN-18528 BLOCKING-MERGE
+"""
+
+
+def _write_goal_with_dropped_block(root: Path, state_as_of: str) -> Path:
+    beta = root / "beta"
+    beta.mkdir(parents=True, exist_ok=True)
+    goal = beta / "GOAL.md"
+    goal.write_text(
+        f"state_as_of: {state_as_of}\n"
+        "rows_examined: 45\n"
+        "rows_open: 12\n"
+        f"{_DROPPED_BLOCK}"
+        f"{_GOAL_BODY}"
+    )
+    return goal
+
+
+def _write_tick_notice(
+    omni_root: Path, *, phase: str, ts: str, first_line: str
+) -> Path:
+    """Write the notice the launchd tick leaves behind on a failed run."""
+    notices = omni_root / ".onex_state" / "morning-workflows" / "notifications"
+    notices.mkdir(parents=True, exist_ok=True)
+    path = notices / "morning-ground-state.failure.json"
+    path.write_text(
+        "{\n"
+        '  "exit": 1,\n'
+        '  "fire_id": "20260920T084305Z-morning-ground-state",\n'
+        f'  "first_line": "{first_line}",\n'
+        f'  "phase": "{phase}",\n'
+        f'  "ts": "{ts}",\n'
+        '  "workflow": "morning-ground-state"\n'
+        "}\n"
+    )
+    return path
+
+
+def test_dropped_work_counts_are_printed_under_the_banner(tmp_path: Path) -> None:
+    """AC-4: all four sections' headline counts reach the session."""
+    _write_goal_with_dropped_block(tmp_path, _iso(timedelta(hours=-1)))
+    res = _run(str(tmp_path))
+
+    assert res.returncode == 0
+    assert "--- dropped work (nobody is driving these) ---" in res.stdout
+    for key in _DROPPED_KEYS:
+        assert f"{key}:" in res.stdout, (
+            f"the hook must print the '{key}' count; a section nobody reads is "
+            "the failure these sections were added to close"
+        )
+    # The counts themselves, not just the keys.
+    assert "3 repo(s) with a failing or absent required context" in res.stdout
+    assert "26 ticket(s) >48h old" in res.stdout
+
+
+def test_a_goal_file_with_no_dropped_counts_says_so(tmp_path: Path) -> None:
+    """An absent block is REPORTED, never skipped.
+
+    A goal written by a run whose dropped-work phase produced nothing looks
+    identical to one written before the sections existed, and both look
+    identical to a clean zero. Silence cannot distinguish them; a line can.
+    """
+    _write_goal(tmp_path, _iso(timedelta(hours=-1)))
+    res = _run(str(tmp_path))
+
+    assert res.returncode == 0
+    assert "dropped work: NO COUNTS" in res.stdout
+    assert "--- dropped work (nobody is driving these) ---" not in res.stdout
+
+
+def test_the_added_output_stays_within_its_budget(tmp_path: Path) -> None:
+    """The session-start surface is shared; this block is five lines plus one."""
+    _write_goal_with_dropped_block(tmp_path, _iso(timedelta(hours=-1)))
+    with_block = _run(str(tmp_path)).stdout.splitlines()
+    _write_goal(tmp_path, _iso(timedelta(hours=-1)))
+    without_block = _run(str(tmp_path)).stdout.splitlines()
+
+    added = len(with_block) - len(without_block)
+    assert added <= 12, (
+        f"the dropped-work block added {added} lines; the budget is ~12. "
+        "SessionStart output is a shared surface and every hook pays into it."
+    )
+
+
+def test_a_stale_goal_names_the_last_tick_failure(tmp_path: Path) -> None:
+    """AC-4's other half: the staleness AND its cause.
+
+    On 2026-09-20 all three morning timers died on a session limit and the only
+    durable record was a receipt journal nothing read. The staleness showed and
+    the cause did not, which sends the reader to re-run a workflow that will
+    fail the same way.
+    """
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    _write_goal(kb, _iso(timedelta(hours=-30)))
+    _write_tick_notice(
+        omni,
+        phase="failed",
+        ts="2026-09-20T08:43:14Z",
+        first_line="session limit reached",
+    )
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "STALE: older than 12h" in res.stdout
+    assert "last tick outcome: failed at 2026-09-20T08:43:14Z" in res.stdout
+    assert "session limit reached" in res.stdout
+    assert _REBASELINE_FRAGMENT in res.stdout
+
+
+def test_the_cause_line_decodes_the_escapes_the_tick_writes(tmp_path: Path) -> None:
+    """The notice is JSON; this hook has no JSON parser and must not leak one.
+
+    Observed live on 2026-09-21: the real notice carried the separator as a
+    six-character escape, and the hook printed it raw into an operator-facing
+    line. Only the escapes that actually occur are decoded; the rest are left
+    literal, because a visible backslash beats a wrong decoding.
+    """
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    _write_goal(kb, _iso(timedelta(hours=-30)))
+    _write_tick_notice(
+        omni,
+        phase="failed",
+        ts="2026-09-21T00:04:55Z",
+        first_line="You've hit your session limit \\u00b7 resets 10:20pm",
+    )
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "session limit \u00b7 resets 10:20pm" in res.stdout
+    assert "\\u00b7" not in res.stdout
+
+
+def test_a_stale_goal_with_no_notice_says_the_fire_was_missed(tmp_path: Path) -> None:
+    """A missed fire and a failed fire are different defects; do not conflate."""
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    omni.mkdir()
+    _write_goal(kb, _iso(timedelta(hours=-30)))
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "MISSED fire, not a failed one" in res.stdout
+
+
+def test_a_stale_goal_applies_no_default_for_an_unset_registry_root(
+    tmp_path: Path,
+) -> None:
+    """Rule 8: an unset variable is named, never guessed around."""
+    _write_goal(tmp_path, _iso(timedelta(hours=-30)))
+
+    res = _run(str(tmp_path))
+
+    assert res.returncode == 0
+    assert "last tick outcome: UNRESOLVED" in res.stdout
+    assert "OMNI_HOME is unset" in res.stdout
+    assert "No default is applied" in res.stdout
+
+
+def test_a_fresh_goal_does_not_read_the_tick_notice(tmp_path: Path) -> None:
+    """The cause line belongs to the stale path only.
+
+    A fresh goal means the tick that mattered worked. Printing a stale failure
+    notice beside it would report a failure that has since been superseded.
+    """
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    _write_goal(kb, _iso(timedelta(hours=-1)))
+    _write_tick_notice(
+        omni, phase="failed", ts="2026-09-19T08:43:14Z", first_line="an old failure"
+    )
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "an old failure" not in res.stdout
+    assert "last tick outcome" not in res.stdout
+
+
+def test_the_hook_declares_exactly_these_five_keys() -> None:
+    """The key list in the script must match the one spelled here.
+
+    Every other case in this block writes its own fixture, so a rename inside
+    the script plus a matching rename in a fixture would pass all of them while
+    the hook printed nothing against a real goal file. This is the one check
+    that compares the script's own list against a list spelled independently
+    of it.
+
+    The cross-repo half has no mechanical home. The writer is the morning
+    workflow in the registry repository, and neither repo's CI checks out the
+    other, so a comparison here could only ever skip on a runner -- and a test
+    that never executes proves nothing (the skip-count ratchet refuses exactly
+    that, which is how this test arrived at its current shape). Each side
+    instead pins its own list against an independently spelled tuple: this
+    case, and `test_the_five_goal_header_keys_are_declared` over there. A
+    rename is a two-file change by construction, and either half alone goes
+    red.
+    """
+    src = _SCRIPT.read_text()
+    assert "_DROPPED_KEYS=(" in src, "the hook must declare its key list once"
+    block = src.split("_DROPPED_KEYS=(", 1)[1].split(")", 1)[0]
+    declared = tuple(re.findall(r'"([a-z_]+)"', block))
+    assert declared == _DROPPED_KEYS, (
+        "the hook greps keys the morning workflow may no longer write; "
+        f"script declares {declared}, this test expects {_DROPPED_KEYS}"
+    )

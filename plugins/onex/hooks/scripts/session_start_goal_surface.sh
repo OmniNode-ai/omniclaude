@@ -25,7 +25,9 @@
 #
 # Contract
 # --------
-#   Reads:   $KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md          (only)
+#   Reads:   $KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md
+#            $OMNI_HOME/.onex_state/morning-workflows/notifications/
+#              morning-ground-state.failure.json  (only when the goal is STALE)
 #   Writes:  stdout only. No files, no state, no network, ever.
 #   Blocks:  never. Exit 0 on every user-visible outcome, including a missing
 #            file and an unset env var.
@@ -70,9 +72,37 @@ set -u
 _HOOK_PATH="${BASH_SOURCE[0]}"
 _GOAL_REL_PATH="beta/GOAL.md"
 _STALE_HOURS=12
-_GOAL_ROWS=15
+# Raised from 15 by OMN-18954. The goal file's header grew by the five-line
+# dropped-work block; at 15 the raw dump would be almost all header and the
+# goal rows -- the thing this hook exists to surface -- would fall off it.
+_GOAL_ROWS=20
 _PREFIX="[session-goal]"
 _WORKFLOW_NAME="morning-ground-state"
+
+# The five dropped-work headline keys the morning workflow writes into the goal
+# file's header (OMN-18954). Spelled here and in
+# the registry clone's .claude/workflows/morning-ground-state.js, as
+# DROPPED_HEADLINE_KEYS;
+# each side pins its own copy, because neither repo's CI checks out the other.
+#
+# The counts they carry are the four sections that name work NOBODY is driving
+# -- a red integration head, a plan that stopped moving, a ticket minted and
+# never started, and the dispatch candidates ranked from those. Every other
+# morning surface measures work somebody already has; those go unseen unless a
+# session opens on them.
+_DROPPED_KEYS=(
+    "dropped_work"
+    "red_on_dev_head"
+    "stale_plans"
+    "unstarted_work_by_age"
+    "proposed_dispatch"
+)
+
+# Where the launchd tick records a run that did not complete. A tick that could
+# not run at all (the 2026-09-20 session-limit outage took all three) writes
+# this file and clears it on the next clean completion, so its presence beside
+# a stale goal is the CAUSE of the staleness rather than a second mystery.
+_TICK_NOTICE_REL=".onex_state/morning-workflows/notifications/${_WORKFLOW_NAME}.failure.json"
 
 # SessionStart delivers a JSON payload on stdin. Nothing here needs it, but an
 # unread stdin can hand the caller an EPIPE, so drain it unconditionally.
@@ -113,6 +143,22 @@ if [[ -f "$_INTENT_SH" ]]; then
         exit 0
     fi
 fi
+
+# Reads one string field out of the tick's failure notice, which is JSON written
+# by python's json.dump. Field extraction is `grep` plus `sed` rather than a JSON
+# parser, because this hook spins up no interpreter (see the header) -- so the
+# escapes json.dump emits have to be undone here.
+#
+# The three that actually occur are handled and the rest are LEFT LITERAL on
+# purpose: a wrong decoding is worse than a visible backslash, and the field is
+# a human-read cause line, not a value anything parses. `\u00b7` is the one that
+# showed up live -- the harness writes the separator into its own failure text.
+_notice_field() {
+    local key="$1"
+    grep -m1 -E "\"${key}\"[[:space:]]*:" "${OMNI_HOME}/${_TICK_NOTICE_REL}" \
+        | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//' \
+        | sed -E 's/\\u00b7/·/g; s/\\"/"/g; s/\\\\/\\/g'
+}
 
 _TODAY="$(date +%F)"
 
@@ -268,6 +314,35 @@ fi
 
 say "source: ${_GOAL_FILE}"
 
+# --------------------------------------------------------------------------- #
+# Dropped work -- the four sections nobody is driving (OMN-18954)
+# --------------------------------------------------------------------------- #
+# Printed as its own block rather than left to the raw head dump below: the
+# dump is positional and truncates, so a header that grows by one line would
+# silently drop a count. Grepping the keys by name survives that.
+#
+# An ABSENT block is printed, not skipped. A goal file written by a run whose
+# DroppedWork phase produced nothing looks identical to one written before the
+# sections existed, and both look identical to a clean zero -- which is the
+# exact failure class these sections were added to close.
+_dropped_found=0
+for _key in "${_DROPPED_KEYS[@]}"; do
+    _line="$(
+        grep -m1 -E "^[[:space:]]*[-*]?[[:space:]]*${_key}[[:space:]]*:" "$_GOAL_FILE" 2>/dev/null \
+            | sed -E 's/^[[:space:]]*[-*]?[[:space:]]*//; s/[[:space:]]*$//'
+    )"
+    if [[ -n "$_line" ]]; then
+        if (( _dropped_found == 0 )); then
+            say "--- dropped work (nobody is driving these) ---"
+        fi
+        _dropped_found=$(( _dropped_found + 1 ))
+        printf '  %s\n' "$_line"
+    fi
+done
+if (( _dropped_found == 0 )); then
+    say "dropped work: NO COUNTS in this goal file — it predates the four sections, or the run that wrote it produced none."
+fi
+
 _total_lines="$(wc -l <"$_GOAL_FILE" 2>/dev/null | tr -d '[:space:]')"
 [[ -z "$_total_lines" ]] && _total_lines=0
 
@@ -287,6 +362,21 @@ fi
 
 if (( _stale == 1 )); then
     say "STALE: older than ${_STALE_HOURS}h. This goal predates today's ground state."
+    # WHY it is stale, when the tick knows. On 2026-09-20 all three morning
+    # timers died on a session limit and the only durable record was a receipt
+    # journal nothing read; the staleness showed and the cause did not. A stale
+    # goal with no cause sends the reader to re-run a workflow that will fail
+    # the same way.
+    if [[ -n "${OMNI_HOME:-}" && -r "${OMNI_HOME}/${_TICK_NOTICE_REL}" ]]; then
+        _fail_phase="$(_notice_field phase)"
+        _fail_ts="$(_notice_field ts)"
+        _fail_first="$(_notice_field first_line)"
+        say "  last tick outcome: ${_fail_phase:-unreported} at ${_fail_ts:-unknown} — ${_fail_first:-no cause recorded}"
+    elif [[ -z "${OMNI_HOME:-}" ]]; then
+        say "  last tick outcome: UNRESOLVED — OMNI_HOME is unset, so ${_TICK_NOTICE_REL} cannot be located. No default is applied."
+    else
+        say "  last tick outcome: no failure notice on disk — the last completed tick was clean, so the staleness is a MISSED fire, not a failed one."
+    fi
     print_rebaseline_command
 fi
 
