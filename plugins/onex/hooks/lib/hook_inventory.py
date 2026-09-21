@@ -60,8 +60,15 @@ __all__ = [
     "MaskDeclaration",
     "Registration",
     "Restoration",
+    "HOOK_EVENT_NAME_PREFIXES",
+    "absent_event_key_findings",
     "check_parity",
     "defined_mask_bits",
+    "delegation_closure",
+    "event_for_script_name",
+    "refusing_scripts",
+    "scripts_reachable_from_registered",
+    "undeclared_gate_findings",
     "load_inventory",
     "load_registrations",
     "mask_findings",
@@ -78,7 +85,16 @@ CANARY_KINDS: Final = frozenset({"block", "redact", "pass_through"})
 
 #: Restoration kinds. ``re_register`` additionally requires the script to still
 #: be on disk, so "put it back" is a config add rather than a rewrite.
-RESTORATION_KINDS: Final = frozenset({"re_register", "delete", "repoint"})
+#:
+#: ``triage`` (OMN-18530) is the ABSENCE of a verdict, not a fourth verdict. A
+#: script matched by :func:`undeclared_gate_findings` has to be declared for
+#: the gate to go green, and declaring it under ``re_register`` or ``delete``
+#: would record a decision nobody took — the exact shape OMN-13244 left behind.
+#: A ``triage`` entry says "this is dark, here is who owns deciding, here is
+#: the date the decision is due, here is the ticket that takes it", and
+#: ``DISABLE_REVIEW_LAPSED`` turns that date into a red gate. The triage is
+#: OMN-18531, which replaces each of these with one of the other three.
+RESTORATION_KINDS: Final = frozenset({"re_register", "delete", "repoint", "triage"})
 
 _TICKET_RE: Final = re.compile(r"^OMN-\d+$")
 _ISO_DATE_RE: Final = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -580,6 +596,309 @@ def parse_mask(raw: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# The third direction: a script declared NOWHERE (OMN-18530)
+# ---------------------------------------------------------------------------
+# The parity above runs in two directions only. Everything DECLARED must be
+# registered and present, and everything REGISTERED must be declared. A script
+# sitting in the scripts directory and named in neither ``expected_hooks`` nor
+# ``disabled_hooks`` is invisible to both, by construction — and that is the
+# population the measurement found: 123 scripts on disk, 30 registered, 4
+# declared dark, 89 declared nowhere at all.
+#
+# Flagging all 89 would be wrong. Most of them are library modules a
+# registered hook sources, and a called module is not a dark gate. The kind
+# below therefore matches on two facts at once, and the second one is the
+# control that separates the two populations:
+#
+#   1. the script can REFUSE — it is gate-shaped, not merely present, and
+#   2. nothing registered reaches it — it is an entrypoint, not a callee.
+#
+# Both are read off the script's own text rather than declared, because a
+# declaration is the thing that is missing.
+
+
+#: What refusal looks like from a Claude Code hook. ``exit 2`` is the harness's
+#: block code; the JSON forms are the structured equivalents. A script carrying
+#: any of these can stop a tool call, which is what makes it a gate rather than
+#: an observer.
+_REFUSAL_PATTERNS: Final = (
+    re.compile(r"\bexit\s+2\b"),
+    re.compile(r"sys\.exit\(\s*2\s*\)"),
+    re.compile(r"permissionDecision[^\n]{0,30}deny"),
+    re.compile(r'"decision"\s*:\s*"block"'),
+    re.compile(r"\bdecision\b[^\n]{0,20}\bblock\b"),
+    re.compile(r'"continue"\s*:\s*false'),
+)
+
+#: Filename prefixes that declare which harness event a script is shaped for.
+#: The repository writes them with underscores and with hyphens, so both are
+#: listed rather than normalised — a normaliser would also fold names that are
+#: not event prefixes at all.
+HOOK_EVENT_NAME_PREFIXES: Final[dict[str, str]] = {
+    "pre_tool_use": "PreToolUse",
+    "pre-tool-use": "PreToolUse",
+    "post_tool_use": "PostToolUse",
+    "post-tool-use": "PostToolUse",
+    "user_prompt_submit": "UserPromptSubmit",
+    "user-prompt-submit": "UserPromptSubmit",
+    "user_prompt": "UserPromptSubmit",
+    "user-prompt": "UserPromptSubmit",
+    "session_start": "SessionStart",
+    "session-start": "SessionStart",
+    "session_end": "SessionEnd",
+    "session-end": "SessionEnd",
+    "subagent_stop": "SubagentStop",
+    "subagent-stop": "SubagentStop",
+    "pre_compact": "PreCompact",
+    "pre-compact": "PreCompact",
+    "notification": "Notification",
+    "stop": "Stop",
+}
+
+
+def _code_only(text: str) -> str:
+    """The script with whole-line comments removed.
+
+    Comments in this tree name other scripts constantly — "the namesake script
+    (pre_tool_use_scope_gate.sh) is on disk and UNREGISTERED" is a real line —
+    so a reachability pass that reads comments concludes that every guard is
+    called by something. It is not: it is discussed by something.
+    """
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def _script_sources(scripts_dir: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not scripts_dir.is_dir():
+        raise HookInventoryError(f"scripts directory {scripts_dir} does not exist")
+    for path in sorted(scripts_dir.iterdir()):
+        if not path.is_file():
+            continue
+        try:
+            out[path.name] = _code_only(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HookInventoryError(f"cannot read hook script {path}: {exc}") from exc
+    return out
+
+
+def _path_reference(name: str) -> re.Pattern[str]:
+    """``.../<name>`` — the script named as a PATH, i.e. actually invoked.
+
+    The leading slash is what makes this a call rather than a mention: an
+    invocation in this tree always goes through ``${CLAUDE_PLUGIN_ROOT}/...``
+    or ``"$(dirname ...)"/...``, while prose names the bare file.
+    """
+    return re.compile(r"/" + re.escape(name) + r"(?![\w.])")
+
+
+def _delegation_reference(name: str) -> re.Pattern[str]:
+    """``exec``/``source``/``.`` of the named script — the caller BECOMES it."""
+    return re.compile(
+        r"(?:^|[\s;&|(])(?:exec|source|\.)\s+[^\n]*?/" + re.escape(name) + r"(?![\w.])",
+        re.MULTILINE,
+    )
+
+
+def refusing_scripts(scripts_dir: Path) -> frozenset[str]:
+    """Every script that can refuse, directly or by delegating its process.
+
+    Delegation is followed because ``subagent_skip_token_surface_guard.sh`` is
+    twelve lines that set one variable and ``exec`` the shared guard: it has no
+    refusal of its own and refuses everything the guard refuses. Ordinary
+    invocation is NOT followed — ``test-hooks.sh`` runs guards in a loop as
+    subprocesses and is a harness, not a gate.
+    """
+    sources = _script_sources(scripts_dir)
+    refusing = {
+        name
+        for name, text in sources.items()
+        if any(pattern.search(text) for pattern in _REFUSAL_PATTERNS)
+    }
+    edges = {
+        name: {
+            other
+            for other in sources
+            if other != name and _delegation_reference(other).search(text)
+        }
+        for name, text in sources.items()
+    }
+    changed = True
+    while changed:
+        changed = False
+        for name, targets in edges.items():
+            if name not in refusing and targets & refusing:
+                refusing.add(name)
+                changed = True
+    return frozenset(refusing)
+
+
+def scripts_reachable_from_registered(
+    registered: frozenset[str] | set[str], scripts_dir: Path
+) -> frozenset[str]:
+    """Scripts a registered hook invokes, transitively, excluding the roots.
+
+    This is the AC2 control. A library a live hook calls is covered by that
+    hook's own declaration; requiring a second declaration for it would turn
+    every helper into a finding and the gate into noise.
+    """
+    sources = _script_sources(scripts_dir)
+    seen = set(registered)
+    frontier = [name for name in registered if name in sources]
+    while frontier:
+        current = frontier.pop()
+        text = sources.get(current)
+        if text is None:
+            continue
+        for other in sources:
+            if other in seen:
+                continue
+            if _path_reference(other).search(text):
+                seen.add(other)
+                frontier.append(other)
+    return frozenset(seen - set(registered))
+
+
+def event_for_script_name(script: str) -> str | None:
+    """The harness event a filename declares, or ``None`` if it declares none."""
+    stem = script.rsplit(".", 1)[0]
+    best: tuple[str, str] | None = None
+    for prefix, event in HOOK_EVENT_NAME_PREFIXES.items():
+        if (
+            stem == prefix
+            or stem.startswith(f"{prefix}_")
+            or stem.startswith(f"{prefix}-")
+        ):
+            if best is None or len(prefix) > len(best[0]):
+                best = (prefix, event)
+    return best[1] if best else None
+
+
+def delegation_closure(scripts_dir: Path, script: str) -> frozenset[str]:
+    """Scripts ``script`` becomes by ``exec``/``source``, transitively."""
+    sources = _script_sources(scripts_dir)
+    seen: set[str] = set()
+    frontier = [script]
+    while frontier:
+        current = frontier.pop()
+        text = sources.get(current)
+        if text is None:
+            continue
+        for other in sources:
+            if other != current and other not in seen:
+                if _delegation_reference(other).search(text):
+                    seen.add(other)
+                    frontier.append(other)
+    return frozenset(seen)
+
+
+def undeclared_gate_findings(
+    inventory: HookInventory, repo_root: Path
+) -> tuple[Finding, ...]:
+    """Gate-shaped scripts on disk that neither half of the inventory names.
+
+    The third parity direction (OMN-18530). See the section header above for
+    why the population is narrowed to refusal-capable entrypoints.
+    """
+    scripts_dir = repo_root / inventory.scripts_dir
+    registrations = load_registrations(repo_root / inventory.hooks_json)
+    registered = {reg.script for reg in registrations}
+    declared = {hook.script for hook in inventory.expected} | {
+        hook.script for hook in inventory.disabled
+    }
+    refusing = refusing_scripts(scripts_dir)
+    reachable = scripts_reachable_from_registered(registered, scripts_dir)
+
+    findings: list[Finding] = []
+    for script in sorted(refusing - declared - registered - reachable):
+        event = event_for_script_name(script)
+        shape = (
+            f"named for the {event} event"
+            if event
+            else "carrying no event prefix in its name"
+        )
+        findings.append(
+            Finding(
+                "UNDECLARED_GATE_SCRIPT",
+                script,
+                f"on disk in {inventory.scripts_dir} and {shape}, it can refuse a "
+                "tool call, and nothing registered reaches it — so it is an "
+                "entrypoint, not a called module. It appears in neither "
+                f"expected_hooks nor disabled_hooks in {inventory.path.name}, so no "
+                "check in this gate could see it and nobody owns it. That is the "
+                "OMN-13244 shape with the record missing as well as the "
+                "registration. Declare it: expected_hooks if it should run, or "
+                "disabled_hooks with owner, reason, review_by and restoration if it "
+                "should not. OMN-18531 takes the verdict.",
+            )
+        )
+    return tuple(findings)
+
+
+def absent_event_key_findings(
+    inventory: HookInventory, repo_root: Path
+) -> tuple[Finding, ...]:
+    """An expected hook whose event has no key at all in ``hooks.json``.
+
+    ``UNREGISTERED_EXPECTED`` already fires here, and it says the wrong thing:
+    "re-register it" reads as a one-line addition to an existing group. When
+    the whole event key is absent there is no group to add to, and a row
+    written under a key the loader never reads is a registration that cannot
+    run. ``hooks.json`` carries no ``Stop`` key today while five Stop-shaped
+    scripts sit on disk, so every one of them is unreachable no matter what the
+    inventory says about it — the finding below is what stops the triage from
+    "registering" one by writing a row and calling it done.
+    """
+    hooks_json_path = repo_root / inventory.hooks_json
+    try:
+        data = json.loads(hooks_json_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise HookInventoryError(f"cannot read {hooks_json_path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise HookInventoryError(f"{hooks_json_path} is not valid JSON: {exc}") from exc
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        raise HookInventoryError(f"{hooks_json_path}: 'hooks' must be a mapping")
+    present = set(hooks)
+
+    scripts_dir = repo_root / inventory.scripts_dir
+    same_shape: dict[str, list[str]] = {}
+    for path in sorted(scripts_dir.iterdir()) if scripts_dir.is_dir() else []:
+        if not path.is_file():
+            continue
+        event = event_for_script_name(path.name)
+        if event is not None:
+            same_shape.setdefault(event, []).append(path.name)
+
+    findings: list[Finding] = []
+    for hook in inventory.expected:
+        if hook.event in present:
+            continue
+        siblings = [s for s in same_shape.get(hook.event, []) if s != hook.script]
+        also = (
+            f" {len(siblings)} other script(s) on disk are shaped for the same "
+            f"event and are equally unreachable: {', '.join(siblings)}."
+            if siblings
+            else ""
+        )
+        findings.append(
+            Finding(
+                "EVENT_KEY_ABSENT",
+                hook.script,
+                f"declared as an expected {hook.event} hook, but "
+                f"{inventory.hooks_json} carries no {hook.event!r} key at all — not "
+                "an empty group, no key. The harness reads events off those keys, so "
+                "the hook cannot fire however the inventory describes it, and adding "
+                "a row without the key is a registration that never runs."
+                f"{also} Add the {hook.event!r} event group to "
+                f"{inventory.hooks_json} in the same change that declares the hook.",
+            )
+        )
+    return tuple(findings)
+
+
+# ---------------------------------------------------------------------------
 # Parity
 # ---------------------------------------------------------------------------
 
@@ -810,6 +1129,13 @@ def check_parity(
                     "review date is the OMN-13244 defect, not a decision.",
                 )
             )
+
+    # 6. The third direction (OMN-18530): a gate-shaped script declared in
+    #    neither half, and an expected hook whose event key does not exist.
+    #    Appended last so the output of every kind above is byte-identical to
+    #    what this gate produced before these two were added.
+    findings.extend(undeclared_gate_findings(inventory, repo_root))
+    findings.extend(absent_event_key_findings(inventory, repo_root))
 
     return tuple(findings)
 
