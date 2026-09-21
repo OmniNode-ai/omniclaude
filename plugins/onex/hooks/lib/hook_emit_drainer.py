@@ -474,6 +474,18 @@ def quarantine_record(
     replay was proven by hand on 2026-09-21 -- four records took their topic's
     high watermark from 0 to 4 with no duplication.
 
+    REPLAY DOES NOT PRESERVE ORDER, and both surfaces below say so (OMN-19118).
+    By the time a record is dead-lettered the stand-down probe has already
+    published the record that sat BEHIND it, so those two have gone out in the
+    opposite order from the journal. Moving the head back later re-introduces
+    it into a stream that has already moved past it. Nothing about that is
+    fixable here -- a record the broker refuses cannot publish in position
+    under any quarantining design -- but the operator holding the grant is the
+    one who should decide whether it matters, and they can only decide it if
+    the instruction telling them to replay also tells them what replay costs.
+    Found in countersign, not by the author: the text was written for someone
+    else to follow and read as complete to the person who wrote it.
+
     The reason is written FIRST and the record moved second, the same ordering
     and for the same reason: a crash between the two then leaves an orphan
     reason beside a still-pending record, which is inert and self-correcting,
@@ -488,7 +500,11 @@ def quarantine_record(
         "detail": (
             f"{failures} consecutive publish failures at the journal head, and "
             f"the record behind it published on the same cycle, so the broker "
-            f"is reachable and this record is not"
+            f"is reachable and this record is not. To replay: provision the "
+            f"grant, then move this file back into the journal directory. "
+            f"REPLAY DOES NOT PRESERVE ORDER -- records that were queued "
+            f"behind this one have already published, so on replay downstream "
+            f"receives this record after them, not before."
         ),
         "event_id": entry.record.event_id,
         "event_type": entry.record.event_type,
@@ -512,7 +528,8 @@ def quarantine_record(
     logger.warning(
         "dead-lettered journal record %s (%s) after %d consecutive failures; "
         "it is MOVED, not deleted -- provision the grant and move it back to "
-        "replay it",
+        "replay it, but note REPLAY DOES NOT PRESERVE ORDER: records queued "
+        "behind this one have already published",
         entry.record.event_id,
         entry.record.event_type,
         failures,

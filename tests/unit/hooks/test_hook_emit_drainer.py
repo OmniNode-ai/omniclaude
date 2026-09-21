@@ -727,3 +727,65 @@ def test_a_dead_lettered_record_replays_when_moved_back(jdir: Path) -> None:
 
     assert len(emitter.published) == 1, "the replayed record did not publish"
     assert journal.list_pending(jdir) == []
+
+
+def test_the_dead_letter_reason_warns_that_replay_reorders(jdir: Path) -> None:
+    """OMN-19118 AC1: the durable artifact says what replay costs.
+
+    The dead-letter instructs a replay. By the time it is written the
+    stand-down probe has already published the record that sat BEHIND the head,
+    so those two have gone out in the opposite order from the journal, and
+    moving the head back later re-introduces it into a stream that has moved
+    past it.
+
+    Asserted on the SIDECAR rather than on a log line on purpose: the log
+    scrolls away and the sidecar is what an operator finds beside the file
+    weeks later, when they provision the grant. An instruction that is complete
+    only in a log the reader does not have is not complete.
+
+    Found in countersign of omniclaude#2303, not by the author.
+    """
+    journal.append(
+        jdir, event_type="denied.class", payload={"i": 0}, correlation_id=None
+    )
+    journal.append(jdir, event_type="ok.class", payload={}, correlation_id=None)
+
+    _drain_n_cycles(
+        jdir,
+        RefusingEmitter("denied.class"),
+        drainer.DEFAULT_QUARANTINE_AFTER_FAILURES + 1,
+    )
+
+    qdir = jdir / "quarantine"
+    record = next(p for p in qdir.glob("*.json") if not p.name.endswith(".reason.json"))
+    detail = json.loads((qdir / f"{record.stem}.reason.json").read_text())["detail"]
+
+    assert "REPLAY DOES NOT PRESERVE ORDER" in detail, (
+        "the sidecar instructs a replay without saying that replay reorders; "
+        "an operator following it is making an ordering decision they were "
+        f"never told they were making. Got: {detail}"
+    )
+    # AC3: the caveat may not be bought by deleting the instruction.
+    assert "provision the grant" in detail and "move this file back" in detail, (
+        "the replay instruction must survive the caveat -- removing it would "
+        "satisfy the assertion above trivially and make the dead-letter useless"
+    )
+
+
+def test_the_dead_letter_log_line_carries_the_same_caveat() -> None:
+    """OMN-19118 AC2: the log reader is not given a different instruction.
+
+    Two surfaces tell an operator to replay. If only one of them names the
+    cost, which one they read decides what they know, and that is exactly the
+    kind of split that makes an instruction unreliable.
+
+    Asserted against the source of the call rather than by capturing logging,
+    because the point is that the two strings agree, not that one was emitted.
+    """
+    source = (_LIB_DIR / "hook_emit_drainer.py").read_text(encoding="utf-8")
+    _, _, after_instruction = source.partition("provision the grant and move it back")
+    assert "REPLAY DOES NOT PRESERVE ORDER" in after_instruction[:400], (
+        "the log line instructs a replay without the ordering caveat the "
+        "sidecar carries, so what an operator knows depends on which surface "
+        "they happened to read"
+    )
