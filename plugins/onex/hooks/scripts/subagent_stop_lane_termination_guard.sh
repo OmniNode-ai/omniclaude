@@ -89,6 +89,8 @@ case "${rc}" in
             log "subagent_stop_lane_termination_guard: empty/invalid guard output (rc=2), failing open"
             exit 0
         fi
+        # OMN-18946: see hook_record_refusal in error-guard.sh.
+        hook_record_refusal "lane termination refused the stop" "the lane died with zero work, which is a free retry rather than a completed stage" 2>/dev/null || true
         printf '%s\n' "${OUTPUT}"
         exit 2
         ;;

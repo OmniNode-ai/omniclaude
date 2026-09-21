@@ -241,6 +241,14 @@
         "--force-with-lease",
         "--force-if-includes"
     ],
+    "protected_push_refs": [
+        "dev",
+        "main"
+    ],
+    "directory_changing_programs": [
+        "cd",
+        "pushd"
+    ],
     "protected_path_operands": [
         "docs/tracking/ROLLING_WORK_LEDGER.md",
         "docs/tracking/archive"

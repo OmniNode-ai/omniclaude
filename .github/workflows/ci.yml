@@ -4047,6 +4047,10 @@ jobs:
           # commits/{sha}/check-runs aggregates check-runs from EVERY workflow
           # file that reported against this SHA, not just ci.yml's own run.
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # OMN-18970: the L5 default-deny sweep runs on pull_request only.
+          # Declared explicitly rather than read from the runner's ambient
+          # GITHUB_EVENT_NAME so a test can read the wiring off this file.
+          EVENT_NAME: ${{ github.event_name }}
           # Bounded poll window (minutes) — kept under the run-cancel window so
           # the required context always reaches a terminal state first.
           DEADLINE_MINUTES: "90"
@@ -4057,6 +4061,21 @@ jobs:
           # (2 = PENDING must NOT terminate the poll loop).
           set +e
           set -uo pipefail
+          # OMN-18970: GH_REPO comes from github.repository and is used
+          # double-quoted in an argv position rather than interpolated into a
+          # shell string, so it can neither word-split nor inject; the two
+          # fetches below have used that exact form in production for months.
+          # This assertion is defence in depth, and it is a STRICT CHARACTER
+          # CLASS rather than a shape glob on purpose: after it the value
+          # provably contains nothing but two non-empty runs of
+          # [A-Za-z0-9._-] separated by exactly one slash, so a shell
+          # metacharacter cannot be present at all and the question of
+          # escaping does not arise. A glob such as */* would have admitted
+          # owner//repo and metacharacters alike.
+          if ! printf '%s' "${GH_REPO}" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then
+            echo "::error::GH_REPO is not a strict owner/repo value: ${GH_REPO}"
+            exit 1
+          fi
           deadline=$(( $(date +%s) + DEADLINE_MINUTES * 60 ))
           attempt=0
           while true; do
@@ -4084,7 +4103,29 @@ jobs:
             else
               echo 'null' > check_runs.json
             fi
-            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json
+            # OMN-18970: the workflow runs on this same head, read ONLY to
+            # resolve which EVENT wrote each check-run so the L5 default-deny
+            # sweep can skip non-pull-request rows. A failed fetch leaves the
+            # file ABSENT, under which every row's event is unknown and every
+            # row is SWEPT -- the stricter reading, so a transient API error
+            # cannot exempt a check. It therefore does not abort the poll.
+            rm -f workflow_runs.json
+            # BOUNDED at 500 runs, and truncation is FAIL-CLOSED rather than
+            # fail-open: a check-run whose producing run is past the cap
+            # resolves to an unknown event and is therefore SWEPT, never
+            # exempted. Measured 21 to 65 runs per head across four
+            # repositories, so the cap is an order of magnitude of headroom
+            # and exists to bound the memory the slurp below can be made to
+            # allocate on a re-run-heavy sha, not to change any verdict.
+            if gh api --paginate \
+                "repos/${GH_REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+                --jq '.workflow_runs[]' > workflow_runs_raw.ndjson 2>/dev/null; then
+              jq -s '.[0:500]' workflow_runs_raw.ndjson > workflow_runs.json
+            else
+              echo "workflow-runs fetch failed (attempt ${attempt}); sweeping every row (fail-closed)"
+              rm -f workflow_runs.json
+            fi
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}"
             rc=$?
             case "${rc}" in
               0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
@@ -4094,7 +4135,7 @@ jobs:
             esac
             if [ "$(date +%s)" -ge "${deadline}" ]; then
               echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
-              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --report-only || true
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}" --report-only || true
               exit 1
             fi
             sleep "${POLL_INTERVAL_SECONDS}"

@@ -22,10 +22,10 @@ _resolve_self() {
     local src="$1"
     realpath "$src" 2>/dev/null && return 0
     if command -v python3 >/dev/null 2>&1; then
-        python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$src" && return 0
+        python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "$src" && return 0
     fi
     if command -v python >/dev/null 2>&1; then
-        python -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$src" && return 0
+        python -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "$src" && return 0
     fi
     return 1
 }

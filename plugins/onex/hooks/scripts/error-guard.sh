@@ -80,6 +80,97 @@ _hook_status() {
     fi
 }
 
+# =============================================================================
+# Refusal Recorder (OMN-18946)
+# =============================================================================
+# Give a refusal a durable, aggregated home. A guard that refuses a tool call
+# writes its reason to the operator's terminal, which is gone at the end of
+# the turn, and to a per-hook log file under a temporary directory that
+# nothing reads. Neither is aggregated, so a guard refusing the same correct
+# command forty times in a night produces forty invisible events and the
+# morning friction sweep finds nothing.
+#
+# WHY IT LIVES HERE. error-guard.sh is sourced as the VERY FIRST thing in
+# every hook, before common.sh and without depending on it, so this function
+# is in scope on every refusal path in the tree including the hooks that
+# never source common.sh at all. It could not live in common.sh for that
+# reason.
+#
+# WHY NOT THE EXIT TRAP. The obvious seam would be the EXIT trap below, which
+# already sees every non-zero exit. It cannot serve: a deny path runs
+# `trap - EXIT` before `exit 2` precisely so the trap does not swallow the
+# deny, and 48 of the 52 scripts carrying a deny do exactly that. The trap
+# never fires on a refusal. Each deny site therefore calls this explicitly,
+# and tests/hooks/test_refusal_rows_omn18946.py is the ratchet that fails when
+# a registered hook grows a deny path that does not.
+#
+# Backgrounded and disowned like emit_to_journal: the operator's refusal
+# message must never wait on a ledger lock. Fail-open by construction — every
+# failure inside the recorder is swallowed there, and this function returns 0
+# whatever happens, because a recorder that could break a guard would be
+# worse than the gap it fills.
+#
+# Usage: hook_record_refusal <reason> [detail]
+#
+#   reason   the refusal CLASS. Every guard already computes one for its own
+#            log line, so call sites pass that rather than inventing a token.
+#            The recorder NORMALISES it into the dedupe key: lowercased,
+#            slugified, with path-like and digit-heavy segments dropped. That
+#            normalisation is what bounds cardinality — a raw reason carrying
+#            an interpolated file path would make every refusal unique and
+#            defeat the rate limit entirely, which is the failure mode that
+#            would turn this from a fix into a second flood.
+#   detail   the refusal's first line. Redacted and truncated by the recorder,
+#            so it is safe to pass the exact message the operator sees.
+#
+# The guard is always $_OMNICLAUDE_HOOK_NAME, which every hook sets before
+# sourcing this file. Taking it as an argument would let two call sites in one
+# script disagree about which guard they belong to.
+
+hook_record_refusal() {
+    local guard="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
+    local reason="${1:-unspecified}"
+    local detail="${2:-}"
+
+    local lib_dir="${HOOKS_LIB:-}"
+    if [[ -z "$lib_dir" ]]; then
+        lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)" || lib_dir=""
+    fi
+    local recorder="${lib_dir}/hook_refusal_recorder.py"
+    [[ -f "$recorder" ]] || return 0
+
+    local py="${PYTHON_CMD:-}"
+    if [[ -z "$py" ]]; then
+        if [[ -n "${ONEX_REGISTRY_ROOT:-}" && -x "${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3" ]]; then
+            py="${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3"
+        elif command -v python3 >/dev/null 2>&1; then
+            py="python3"
+        else
+            return 0
+        fi
+    fi
+
+    # The lane is resolved against the directory the HOOK fired in, not this
+    # backgrounded process's cwd — the same correction OMN-18609 made for
+    # emit_to_journal, for the same reason.
+    local cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+
+    (
+        "$py" "$recorder" \
+            --guard "$guard" \
+            --reason "$reason" \
+            --detail "$detail" \
+            --cwd "$cwd" \
+            --transcript-path "${TRANSCRIPT_PATH:-}" \
+            --session-id "${SESSION_ID:-}" \
+            --agent-id "${AGENT_ID:-}" \
+            >>"${LOG_FILE:-/dev/null}" 2>&1
+    ) &
+    disown 2>/dev/null || true
+    return 0
+}
+
+
 # --- ERR trap ---
 # Captures the failing command and line number BEFORE the EXIT trap fires.
 # Stores in a variable that the EXIT trap can read.
