@@ -178,6 +178,10 @@ def test_policy_loads_and_declares_expected_vocabulary(policy: Policy) -> None:
     assert "--no-edit" in policy.merge_target_allowed_flags
     assert "main" in policy.merge_allowed_on_branches
     assert "--list" in policy.branch_read_flags
+    # OMN-18974: branches no lane force-pushes, wherever it is standing.
+    assert "dev" in policy.protected_push_refs
+    assert "main" in policy.protected_push_refs
+    assert "cd" in policy.directory_changing_programs
     # checkout and branch are the two with a sanctioned shape, so they are
     # the two that must NOT be unconditional.
     assert policy.unconditional_subcommands == frozenset(
@@ -347,6 +351,255 @@ def test_refuses_every_shape_of_the_2026_09_19_incident(
     )
     assert decision.blocked, command
     assert TICKET in decision.reason
+
+
+#: OMN-18974. THE DEFECT, reproduced before anything was changed.
+#:
+#: A lane following Operating Rule 9 works in a worktree, but the harness
+#: resets a Bash call's working directory between calls, so the PAYLOAD cwd
+#: is the registry root and the lane writes a `cd <worktree> &&` prefix.
+#: The guard read the payload cwd, refused, named the shared clone, and
+#: advised the lane to move to the worktree it was already standing in.
+#:
+#: Measured against the merged guard on the real reported worktree
+#: (`omni_worktrees/OMN-18955/omnibase_infra`), payload cwd at the registry
+#: root: the `cd` form exited 2 on merge, rebase and force-push, while
+#: `git -C <worktree>` exited 0 on all three, and a literal worktree cwd
+#: exited 0 on all three AND on reset. So the ticket's stated cause -- that
+#: the guard resolves a worktree back through its `.git` file -- is FALSE,
+#: and so is its claim that the `-C` form was refused. The bug is the
+#: unread `cd` prefix and nothing else.
+CD_PREFIX_INTO_WORKTREE_ALLOWED = [
+    "cd {worktree} && git merge origin/dev",
+    "cd {worktree} && git rebase origin/dev",
+    "cd {worktree} && git push --force-with-lease origin HEAD:lane/my-branch",
+    "cd {worktree} && git reset --hard origin/dev",
+    "cd {worktree} && git clean -fd",
+    "cd {worktree} && git checkout -b lane/another",
+    # A chain: the last cd wins.
+    "cd {registry} && cd {worktree} && git rebase origin/dev",
+    # Separator-agnostic: a semicolon sequences the same way.
+    "cd {worktree}; git rebase origin/dev",
+]
+
+
+@pytest.mark.parametrize("command", CD_PREFIX_INTO_WORKTREE_ALLOWED)
+def test_cd_prefix_moves_the_effective_directory_into_a_worktree(
+    command: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """AC-1: a lane in its own worktree can merge, rebase and force-push."""
+    decision = evaluate_bash_command(
+        command.format(worktree=registry_worktree, registry=registry),
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert not decision.blocked, (command, decision.reason)
+
+
+#: The same prefix pointing the other way. Allowed BEFORE this change --
+#: the guard read the worktree cwd and never saw the prefix -- so reading
+#: it closes a hole as well as opening the worktree path.
+CD_PREFIX_INTO_REGISTRY_REFUSED = [
+    "cd {registry} && git reset --hard origin/main",
+    "cd {registry} && git clean -fd",
+    "cd {registry} && git rebase origin/main",
+    "cd {registry} && git checkout -b lane/x",
+    "cd {worktree} && cd {registry} && git reset --hard origin/main",
+]
+
+
+@pytest.mark.parametrize("command", CD_PREFIX_INTO_REGISTRY_REFUSED)
+def test_cd_prefix_into_the_registry_is_refused_from_a_worktree_cwd(
+    command: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """AC-3: reading the prefix must not weaken the shared tree."""
+    decision = evaluate_bash_command(
+        command.format(worktree=registry_worktree, registry=registry),
+        policy,
+        cwd=registry_worktree,
+        registry_root=registry,
+    )
+    assert decision.blocked, command
+
+
+def test_unresolvable_cd_target_leaves_the_effective_directory_unchanged(
+    registry: Path, code_clone: Path, policy: Policy
+) -> None:
+    """An unexpanded variable is not a licence, and not a new refusal.
+
+    shlex does not expand a variable, so the target cannot be resolved. The
+    effective directory then stays where it was, which is exactly the
+    behaviour before this change: no protection is lost in the shared tree,
+    and nothing that passed elsewhere starts failing.
+    """
+    blocked = evaluate_bash_command(
+        'cd "$WT" && git reset --hard origin/main',
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert blocked.blocked
+
+    allowed = evaluate_bash_command(
+        'cd "$WT" && git reset --hard origin/dev',
+        policy,
+        cwd=code_clone,
+        registry_root=registry,
+    )
+    assert not allowed.blocked, allowed.reason
+
+
+def test_bare_cd_does_not_silently_target_the_registry(
+    registry: Path, policy: Policy
+) -> None:
+    """A bare cd with no operand goes HOME, which is not the registry."""
+    decision = evaluate_bash_command(
+        "cd && git reset --hard origin/main",
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert not decision.blocked, decision.reason
+
+
+def test_a_refusal_never_fires_inside_a_worktree(
+    registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """AC-4: the advice and the refusal must stop contradicting each other.
+
+    The refusal text tells a lane to move to a worktree. If any refusal can
+    fire while the effective directory IS a worktree, that advice is a
+    loop. Rather than special-casing the wording, this asserts the
+    situation cannot arise: every shape refused in the shared tree passes
+    there, reached both ways.
+    """
+    for command in REFUSED_IN_REGISTRY:
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry_worktree, registry_root=registry
+        )
+        assert not decision.blocked, (command, decision.reason)
+        prefixed = evaluate_bash_command(
+            f"cd {registry_worktree} && {command}",
+            policy,
+            cwd=registry,
+            registry_root=registry,
+        )
+        assert not prefixed.blocked, (command, prefixed.reason)
+
+
+def test_the_one_refusal_that_reaches_a_worktree_gives_usable_advice(
+    registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """AC-4, stated honestly rather than as a blanket.
+
+    Exactly one class of refusal is meant to reach a worktree: a force push
+    to a shared branch. Its message must therefore NOT reuse the
+    shared-clone wording, which calls the directory the registry clone and
+    tells the reader to go to a worktree they are already in.
+    """
+    decision = evaluate_bash_command(
+        "git push --force origin main",
+        policy,
+        cwd=registry_worktree,
+        registry_root=registry,
+    )
+    assert decision.blocked
+    assert "shared registry clone" not in decision.reason
+    # The advice itself, not the path: the fixture worktree lives under a
+    # directory of that name, so matching the bare word would be vacuous.
+    assert "worktree add" not in decision.reason
+    assert "instead of the shared clone" not in decision.reason
+    assert str(registry_worktree) in decision.reason
+    # It has to say what the reader CAN do.
+    assert "your own feature branch" in decision.reason.lower()
+
+
+#: OMN-18974 arm two. A force push to `dev` or `main` is refused ANYWHERE
+#: under the registry root, worktrees included -- those two branches are
+#: shared by every lane and by CI, and rewriting either is not a per-lane
+#: decision however private the tree it is typed in. Measured ALLOWED
+#: before this change from the reported worktree.
+PROTECTED_FORCE_PUSH_REFUSED = [
+    "git push --force origin dev",
+    "git push --force origin main",
+    "git push --force-with-lease origin HEAD:dev",
+    "git push --force-with-lease origin HEAD:main",
+    "git push --force origin refs/heads/main",
+    "git push --force origin +dev",
+    "git push -f origin lane/mine:dev",
+]
+
+
+@pytest.mark.parametrize("command", PROTECTED_FORCE_PUSH_REFUSED)
+def test_force_push_to_a_protected_branch_is_refused_in_a_worktree(
+    command: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry_worktree, registry_root=registry
+    )
+    assert decision.blocked, command
+    assert TICKET in decision.reason
+
+
+@pytest.mark.parametrize("command", PROTECTED_FORCE_PUSH_REFUSED)
+def test_force_push_to_a_protected_branch_is_refused_via_a_cd_prefix(
+    command: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        f"cd {registry_worktree} && {command}",
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert decision.blocked, command
+
+
+def test_force_push_to_a_lane_branch_stays_allowed_in_a_worktree(
+    registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """The whole point of the fix: a lane owns its own branch."""
+    for command in (
+        "git push --force origin HEAD:lane/my-branch",
+        "git push --force-with-lease origin HEAD:lane/my-branch",
+        "git push --force-with-lease origin lane-branch",
+        "git push --force origin refs/heads/lane/my-branch",
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry_worktree, registry_root=registry
+        )
+        assert not decision.blocked, (command, decision.reason)
+
+
+def test_bare_force_push_reads_the_checked_out_branch(
+    registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """A force push with no refspec pushes the current branch.
+
+    The fixture worktree is on `lane-branch`, so it is allowed; the
+    registry is on a protected branch, so it is refused. Without reading
+    HEAD the no-refspec form would be a hole in the protected-branch arm.
+    """
+    allowed = evaluate_bash_command(
+        "git push --force", policy, cwd=registry_worktree, registry_root=registry
+    )
+    assert not allowed.blocked, allowed.reason
+    blocked = evaluate_bash_command(
+        "git push --force", policy, cwd=registry, registry_root=registry
+    )
+    assert blocked.blocked
+
+
+def test_protected_force_push_does_not_reach_outside_the_registry_root(
+    tmp_path: Path, registry: Path, policy: Policy
+) -> None:
+    """Scope: an unrelated clone elsewhere on disk is nobody's business."""
+    outside = tmp_path / "unrelated"
+    _init(outside)
+    decision = evaluate_bash_command(
+        "git push --force origin main", policy, cwd=outside, registry_root=registry
+    )
+    assert not decision.blocked, decision.reason
 
 
 @pytest.mark.parametrize("command", FORCE_PUSH_REFUSED)
