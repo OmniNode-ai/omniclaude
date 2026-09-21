@@ -568,22 +568,86 @@ def test_the_gate_job_name_is_the_context_name() -> None:
 def test_the_gate_is_swept_by_the_ci_summary_default_deny_layer() -> None:
     """AC8, held against the mechanism that actually blocks the merge.
 
-    ``Hook Inventory Gate`` is not a branch-protection context (64 contexts on
-    ``dev``, read live 2026-09-21, and it is not among them). It blocks anyway,
-    through the L5 default-deny sweep OMN-18970 landed under this same epic:
-    CI Summary walks every external check-run on the head, and a name in
-    neither :data:`EXPECTED_EXTERNAL_CONTEXTS` nor
+    AMENDED 2026-09-21. When this test was written ``Hook Inventory Gate`` was
+    not a branch-protection context (64 on ``dev``, and it was not among them),
+    so the L5 default-deny sweep OMN-18970 landed under this same epic was the
+    only thing making it blocking: CI Summary walks every external check-run on
+    the head, and a name in neither :data:`EXPECTED_EXTERNAL_CONTEXTS` nor
     :data:`EXTERNAL_SWEEP_EXCLUSIONS` must conclude ``success`` or CI Summary —
     which IS required — fails.
 
-    This test is the thing that keeps that true. Adding the gate to the
-    exclusion registry would silently return it to advisory, and that is
-    exactly the move this ticket exists to prevent.
+    The gate became a required context on 2026-09-21 (64 -> 65) and was
+    classified at layer 4 in the same change. The original form of this test
+    asserted the gate was NOT in ``EXPECTED_EXTERNAL_CONTEXTS``, which pinned
+    the weaker of the two postures as though it were the invariant. Layer 4 is
+    strictly STRONGER than the sweep: the sweep can only deny a check-run that
+    EXISTS, so it cannot see the gate being deleted, renamed or re-filtered
+    back into silence, and layer 4 requires the name to be present.
+
+    So the invariant is which surface enforces it, resolved below, and the
+    requirement is that SOME surface does.
+
+    The first form of this amendment asserted a plain disjunction,
+    ``in EXPECTED_EXTERNAL_CONTEXTS or SWEEP_GOOD_CONCLUSIONS == {"success"}``.
+    The adversarial reviewer refused it and was right: the second term is a
+    property of the SWEEP, not of this gate, and it is a constant, so the
+    assertion could never fail no matter what happened to the gate. That is a
+    vacuous test in a ticket about mechanisms that report green while checking
+    nothing, which is why the predicate below is resolved per-name and carries
+    its own negative controls.
     """
     gate = _load_lib(
         _REPO_ROOT / "scripts" / "ci" / "ci_summary_gate.py",
         "ci_summary_gate_under_test",
     )
-    assert _GATE_CONTEXT not in gate.EXTERNAL_SWEEP_EXCLUSIONS
-    assert _GATE_CONTEXT not in gate.EXPECTED_EXTERNAL_CONTEXTS
-    assert frozenset({"success"}) == gate.SWEEP_GOOD_CONCLUSIONS
+
+    def surface(
+        name: str, expected: object, exclusions: object, good: object
+    ) -> str | None:
+        """Which CI Summary layer makes ``name`` blocking, or None."""
+        if name in expected:  # type: ignore[operator]
+            return "layer-4"
+        if name in exclusions:  # type: ignore[operator]
+            return None  # exempt from the sweep => advisory
+        if good == frozenset({"success"}):
+            return "layer-5-sweep"
+        return None
+
+    live = (
+        gate.EXPECTED_EXTERNAL_CONTEXTS,
+        gate.EXTERNAL_SWEEP_EXCLUSIONS,
+        gate.SWEEP_GOOD_CONCLUSIONS,
+    )
+
+    # Negative controls first: the predicate must be able to return None, or
+    # its verdict about the gate means nothing.
+    assert (
+        surface(
+            "Some Advisory Job",
+            frozenset(),
+            frozenset({"Some Advisory Job"}),
+            frozenset({"success"}),
+        )
+        is None
+    )
+    assert (
+        surface(
+            "Some Advisory Job",
+            frozenset(),
+            frozenset(),
+            frozenset({"success", "skipped"}),
+        )
+        is None
+    )
+    # Positive control: a name in the tuple resolves to layer 4.
+    assert surface("X", frozenset({"X"}), frozenset(), frozenset()) == "layer-4"
+
+    assert _GATE_CONTEXT not in gate.EXTERNAL_SWEEP_EXCLUSIONS, (
+        f"{_GATE_CONTEXT!r} is exempt from the default-deny sweep, which "
+        "returns it to advisory"
+    )
+    assert surface(_GATE_CONTEXT, *live) is not None, (
+        f"{_GATE_CONTEXT!r} is enforced by no CI Summary layer: it is not a "
+        "layer-4 context, and the default-deny sweep either exempts it or "
+        "tolerates a non-success conclusion"
+    )

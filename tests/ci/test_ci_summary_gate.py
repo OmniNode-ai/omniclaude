@@ -765,19 +765,50 @@ class TestExternalContextCompleteness:
     changes without a snapshot refresh; re-capture the fixture file (and
     review the diff) when branch protection legitimately changes."""
 
-    _EXEMPT_EXTERNAL_CONTEXTS = frozenset({"Hostile Review Gate"})
+    # OMN-18530: re-cut from live on 2026-09-21 when the hook inventory gate
+    # became a required context (64 -> 65). Both fixtures were stale -- the
+    # protection snapshot by five contexts and the ci.yml job-name snapshot by
+    # two -- and re-cutting them truthfully surfaced three REQUIRED contexts
+    # that layer 4 has never asserted.
+    #
+    # They are exempted here rather than added to EXPECTED_EXTERNAL_CONTEXTS,
+    # on exactly the Hostile Review Gate rationale below: each is ALREADY
+    # enforced twice, directly by branch protection and by the layer-5
+    # default-deny sweep, which requires any check-run in neither registry to
+    # conclude `success`. Layer-4 membership would be a THIRD assertion, not
+    # first enforcement, and adding a name there makes CI Summary WAIT for it
+    # on every pull request -- a wedge if it ever stops reporting. That
+    # redundancy is a real decision and it belongs to someone, so it is
+    # ticketed rather than taken as a side effect of this change.
+    #
+    # The exemption is not a pass: the sweep still fails CI Summary if any of
+    # them goes red. What it gives up is layer 4's own purpose, catching a
+    # silent branch-protection DROP of that name -- the same thing the Hostile
+    # Review Gate exemption already gives up.
+    _EXEMPT_EXTERNAL_CONTEXTS = frozenset(
+        {
+            # already directly required; fixed at the source rather than
+            # duplicated here (see the note beside EXPECTED_EXTERNAL_CONTEXTS)
+            "Hostile Review Gate",
+            # OMN-19055: required on `dev` and swept by layer 5, never
+            # classified at layer 4. Decide the redundancy there, not here.
+            "Lane Identity Gate",
+            "advisory-job-gate / advisory-job-gate",
+            "kb-doc-gate / kb-doc-gate",
+        }
+    )
 
     def test_every_snapshot_external_context_is_classified(self) -> None:
         required = {
             line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-30.txt")
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-09-21.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()
         }
         ci_yml_job_names = {
             line.strip()
-            for line in (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-08-13.txt")
+            for line in (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-09-21.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()
@@ -799,7 +830,7 @@ class TestExternalContextCompleteness:
         # never gates anything live.
         required = {
             line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-08-30.txt")
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-09-21.txt")
             .read_text(encoding="utf-8")
             .splitlines()
             if line.strip()
