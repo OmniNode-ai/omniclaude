@@ -639,6 +639,78 @@ def test_a_fresh_goal_does_not_read_the_tick_notice(tmp_path: Path) -> None:
     assert "last tick outcome" not in res.stdout
 
 
+def _write_deferral(omni_root: Path, *, refire_at: str) -> Path:
+    """Write the record the tick leaves when it defers a re-fire (OMN-18961)."""
+    d = omni_root / ".onex_state" / "morning-workflows" / "deferred"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / "morning-ground-state.json"
+    path.write_text(
+        "{\n"
+        '  "note": "one deferral per original fire",\n'
+        '  "origin_fire_id": "20260921T024828Z-morning-ground-state",\n'
+        f'  "refire_at": "{refire_at}",\n'
+        '  "waiter_pid": 4242,\n'
+        '  "workflow": "morning-ground-state"\n'
+        "}\n"
+    )
+    return path
+
+
+def test_a_pending_refire_is_announced_beside_the_staleness(tmp_path: Path) -> None:
+    """A stale goal with a re-fire coming is a different state.
+
+    Without this line the two look identical, and the reader re-baselines by
+    hand against a limit that is about to clear on its own.
+    """
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    _write_goal(kb, _iso(timedelta(hours=-30)))
+    _write_tick_notice(
+        omni,
+        phase="failed",
+        ts="2026-09-21T00:04:55Z",
+        first_line="session limit reached",
+    )
+    _write_deferral(omni, refire_at="2026-09-21T02:23:00Z")
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "a re-fire IS scheduled for 2026-09-21T02:23:00Z" in res.stdout
+    # The cause still prints; the deferral is an addition, not a replacement.
+    assert "session limit reached" in res.stdout
+
+
+def test_no_deferral_record_means_no_refire_claim(tmp_path: Path) -> None:
+    """Silence is the honest output when nothing is scheduled.
+
+    Announcing a re-fire that does not exist is worse than announcing none:
+    it tells the reader to wait for something nobody is going to send.
+    """
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    omni.mkdir()
+    _write_goal(kb, _iso(timedelta(hours=-30)))
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "re-fire IS scheduled" not in res.stdout
+
+
+def test_a_fresh_goal_does_not_announce_a_deferral(tmp_path: Path) -> None:
+    """Same reasoning as the failure cause: the stale branch owns both."""
+    kb = tmp_path / "kb"
+    omni = tmp_path / "omni"
+    _write_goal(kb, _iso(timedelta(hours=-1)))
+    _write_deferral(omni, refire_at="2026-09-21T02:23:00Z")
+
+    res = _run(str(kb), omni_root=str(omni))
+
+    assert res.returncode == 0
+    assert "re-fire IS scheduled" not in res.stdout
+
+
 def test_the_hook_declares_exactly_these_five_keys() -> None:
     """The key list in the script must match the one spelled here.
 
