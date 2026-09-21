@@ -1190,3 +1190,90 @@ def test_validator_catches_the_historical_build_topic_override_shape(
     assert "EVIDENCE_WRITTEN" in combined, (
         f"the refusal must name the member a reader has to resolve. Got: {combined}"
     )
+
+
+def test_contract_declares_the_team_task_classes() -> None:
+    """OMN-19075: the three team lifecycle classes are declared.
+
+    They were emitted and undeclared from the day the wrapper was written. On
+    2026-09-21 a TeamCreate put four ``team.task.assigned`` records on an
+    ungranted topic at the journal head, and because ``drain_once`` stops at
+    the first failure to preserve ordering, hook capture delivered NOTHING for
+    105 minutes while the journal climbed to 4,339 records.
+
+    Declaring all three is deliberate even though only ``assigned`` carries a
+    produce grant. The contract header's own rule is that DECLARED IS NOT
+    GRANTED: a declaration creates no call site, so it cannot cause a stall
+    that the existing emission is not already causing, and an honest contract
+    is the precondition for deriving a grant set from it at all.
+    """
+    lib = _load_lib()
+    contract = lib.load_contract(_CONTRACT_PATH)
+    declared = set(contract.governed_event_classes)
+
+    team_task = {
+        "team.task.assigned",
+        "team.task.completed",
+        "team.task.progress",
+    }
+    assert not team_task - declared, (
+        f"team lifecycle classes the edge emits that the contract does not "
+        f"declare: {sorted(team_task - declared)}"
+    )
+
+
+def test_validator_resolves_a_class_forwarded_through_the_team_event_wrapper(
+    tmp_path: Path,
+) -> None:
+    """OMN-19075: the literal is at the WRAPPER's call site, not the emit call.
+
+    ``post_tool_use_team_observability.sh`` defines ``_emit_team_event``, which
+    takes the class as ``$1`` and forwards ``emit_to_journal "$event_type"``.
+    A scan keyed on the argument of ``emit_to_journal`` therefore resolves a
+    variable NAME and declares nothing, so three real classes were invisible
+    to this gate while sitting in a directory it has scanned since OMN-17204.
+    Widening the scanned DIRECTORIES under OMN-18627 AC2 did not reach them,
+    because the axis that was wrong is the SHAPE of the call site.
+
+    This is the forward direction: an undeclared class reaching the edge
+    through the wrapper must be REFUSED. Against the pre-OMN-19075 scanner
+    this test fails, because the gate passes such a class in silence -- which
+    is precisely how the 105-minute outage of 2026-09-21 became possible.
+    """
+    fake_root = tmp_path / "repo"
+    _copy_gate_tree(fake_root)
+
+    scripts_dir = fake_root / "plugins" / "onex" / "hooks" / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    # The wrapper shape verbatim: the class is a literal one frame UP from the
+    # transport call, which is the whole point.
+    (scripts_dir / "omn19075_probe_wrapper.sh").write_text(
+        "#!/bin/bash\n"
+        "_emit_team_event() {\n"
+        '    local event_type="$1"\n'
+        '    emit_to_journal "$event_type" "$2" ""\n'
+        "}\n"
+        '( _emit_team_event "omn19075.undeclared.probe" "$PAYLOAD" ) &\n',
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(_VALIDATOR), "--repo-root", str(fake_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    assert proc.returncode != 0, (
+        "gate passed a class the edge emits through a local wrapper and the "
+        "contract does not declare -- this is the OMN-19075 defect, and a "
+        "scanner that only reads the transport call's own argument cannot "
+        "see it"
+    )
+    assert "omn19075.undeclared.probe" in combined, (
+        f"the refusal must name the class a reader has to declare. Got: {combined}"
+    )
+    assert "omn19075_probe_wrapper.sh" in combined, (
+        "the refusal must name the file, not just the class"
+    )

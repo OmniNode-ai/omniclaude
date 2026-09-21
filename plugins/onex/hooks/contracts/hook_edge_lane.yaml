@@ -402,6 +402,42 @@ governed_event_classes:
   # class-keyed scan cannot see; the override is gone and this declaration is
   # what replaces it.
   - "team.evidence.written"
+  # OMN-19075: the three team lifecycle classes, emitted from
+  # plugins/onex/hooks/scripts/post_tool_use_team_observability.sh on
+  # TeamCreate, Agent-with-a-team_name, TaskCreate and TaskUpdate.
+  #
+  # THE SCAN COULD NOT SEE THEM, AND THE DIRECTORY WAS NEVER THE PROBLEM. That
+  # file is in `hooks/scripts/`, which this gate has scanned since OMN-17204.
+  # OMN-18627 AC2 then widened the scan to `hooks/lib/` as well. Neither
+  # widening reaches these, because the class is not a literal at the emit
+  # call: `_emit_team_event` takes it as `$1` and forwards `emit_to_journal
+  # "$event_type" ...`, so the literal sits one frame up at the wrapper's own
+  # call sites. A scan keyed on the argument of `emit_to_journal` resolves a
+  # variable name and declares nothing. The wrapper has carried a comment
+  # saying exactly this since OMN-18471; it was never acted on.
+  #
+  # MEASURED COST OF LEAVING IT, 2026-09-21. A TeamCreate at 17:49:36Z put four
+  # `team.task.assigned` records at the journal head on a topic with no grant.
+  # Because `drain_once` stops at the first failure to preserve ordering, hook
+  # capture delivered NOTHING for 105 minutes; the journal reached 4,339
+  # records against four poison ones. That is the fourth outage of this exact
+  # mechanism -- `dod-guard-fired` and `routing-decision` on 2026-09-17,
+  # `evidence-written` on 2026-09-18, and these.
+  #
+  # GRANT STATE IS NOT UNIFORM ACROSS THE THREE, deliberately. Only
+  # `team.task.assigned` carries a produce grant, applied 2026-09-21 under the
+  # operator consent row in docs/tracking/ROLLING_WORK_LEDGER.md:3770, which
+  # names that one topic and puts every other topic out of scope. The other two
+  # are declared here and NOT granted, which is the same correct fail-closed
+  # state the eighteen above sit in: see "DECLARED IS NOT GRANTED" in the
+  # header. Declaring them creates no call site -- the call sites already exist
+  # and already fire -- so this declaration cannot cause a stall that the
+  # emission is not already causing. What it does is make the contract honest
+  # about what this edge produces, which is the precondition for anyone
+  # deriving a grant set from it.
+  - "team.task.assigned"
+  - "team.task.completed"
+  - "team.task.progress"
   - "tool.output.captured"
   - "validator.catch"
 

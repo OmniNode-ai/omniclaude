@@ -60,14 +60,32 @@ _RESOLVER_BASENAME = "hook_edge_lane.sh"
 # this pattern exists to refuse -- eight of them sat on this edge undelivered
 # for three months because no gate compared the two lists.
 #
-# Deliberately literal-only. ``post_tool_use_team_observability.sh`` passes a
-# VARIABLE (``emit_via_daemon "$event_type"``), which this cannot resolve and
-# does not pretend to: a regex that guessed at a shell variable's runtime
-# value would both report classes that are never emitted and miss ones that
-# are. That file is the single known gap, recorded here rather than left to be
-# rediscovered.
+# Deliberately literal-only, and the literal is not always at the transport
+# call. ``post_tool_use_team_observability.sh`` forwards a VARIABLE
+# (``emit_to_journal "$event_type"``), so a scan of the transport call alone
+# resolves a variable NAME and declares nothing. This was recorded here as a
+# known gap rather than closed, and on 2026-09-21 it cost 105 minutes of total
+# hook-capture outage: three undeclared, ungranted ``team.task.*`` classes,
+# four records at the journal head, and ``drain_once`` stopping at the first
+# failure to preserve ordering (OMN-19075).
+#
+# The gap was ALSO blocking its own repair, which is the part worth keeping.
+# The "declared but not emitted" check below is the other direction of this
+# same pattern, so a class this regex cannot resolve could not be declared
+# EITHER -- the gate refused the correct contract entry. Adding the wrapper is
+# the remedy the previous revision of this comment named ("widening the set
+# means adding the wrapper's name to this pattern, which is a one-line change
+# and a deliberate one"), and it is deliberate here.
+#
+# STILL LITERAL-ONLY. ``_emit_team_event "team.task.assigned"`` is matched
+# because the literal is at ITS call site; a class computed at runtime is
+# still not resolved and still not pretended to be, because a regex guessing
+# at a shell variable's value would both invent classes that are never emitted
+# and miss ones that are. The general repair -- REFUSING a call site that
+# passes a class this pattern cannot resolve, instead of skipping it silently
+# -- is deliberately not in this change and is tracked on OMN-19075 AC2.
 _EVENT_CLASS_LITERAL_RE = re.compile(
-    r"(?:--event-type|\bemit_to_journal|\bemit_via_daemon)\s+"
+    r"(?:--event-type|\bemit_to_journal|\bemit_via_daemon|\b_emit_team_event)\s+"
     r'"([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)"'
 )
 
