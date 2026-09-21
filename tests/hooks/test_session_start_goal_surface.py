@@ -449,13 +449,15 @@ _DROPPED_KEYS = (
     "red_on_dev_head",
     "stale_plans",
     "unstarted_work_by_age",
+    "unread_lane_reports",
     "proposed_dispatch",
 )
 
-_DROPPED_BLOCK = """dropped_work: beta/tracking/2026-09-20-dropped-work.md · derived 2026-09-20T04:41:02Z · sections 4/4 conformant
+_DROPPED_BLOCK = """dropped_work: beta/tracking/2026-09-20-dropped-work.md · derived 2026-09-20T04:41:02Z · sections 5/5 conformant
 red_on_dev_head: 3 repo(s) with a failing or absent required context · 2 head sha(s) with no PASS lab-pass receipt · last deploy-agent success 9h ago
 stale_plans: 4 of 17 dated plans contradicted by live Linear · 2 unstarted-only · oldest 8d since minted
 unstarted_work_by_age: 26 ticket(s) >48h old with no assignee and no PR · across 7 epic(s) · oldest 12d
+unread_lane_reports: 9 unclosed lane report(s) in 24h · 118 orphaned >7d · 332 report(s) scanned
 proposed_dispatch: 10 candidate(s) · top: OMN-18528 BLOCKING-MERGE
 """
 
@@ -711,7 +713,7 @@ def test_a_fresh_goal_does_not_announce_a_deferral(tmp_path: Path) -> None:
     assert "re-fire IS scheduled" not in res.stdout
 
 
-def test_the_hook_declares_exactly_these_five_keys() -> None:
+def test_the_hook_declares_exactly_these_keys() -> None:
     """The key list in the script must match the one spelled here.
 
     Every other case in this block writes its own fixture, so a rename inside
@@ -726,7 +728,7 @@ def test_the_hook_declares_exactly_these_five_keys() -> None:
     that never executes proves nothing (the skip-count ratchet refuses exactly
     that, which is how this test arrived at its current shape). Each side
     instead pins its own list against an independently spelled tuple: this
-    case, and `test_the_five_goal_header_keys_are_declared` over there. A
+    case, and `test_the_goal_header_keys_are_declared` over there. A
     rename is a two-file change by construction, and either half alone goes
     red.
     """
