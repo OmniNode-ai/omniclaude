@@ -51,11 +51,13 @@ Pyright Type Checking
 Python Security Scan
 Quality Gate
 Registry Consistency
+Runner Route (OMN-18031)
 Secret Detection
 Security Gate
 Skill Contract Validation
 Skill Hygiene
 Skill Monorepo-Ref Gate
+Skip Count Ratchet (OMN-18776)
 Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
 Tests Gate
 Version Pin Compliance

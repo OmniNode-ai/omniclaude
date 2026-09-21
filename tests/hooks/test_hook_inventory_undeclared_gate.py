@@ -568,22 +568,40 @@ def test_the_gate_job_name_is_the_context_name() -> None:
 def test_the_gate_is_swept_by_the_ci_summary_default_deny_layer() -> None:
     """AC8, held against the mechanism that actually blocks the merge.
 
-    ``Hook Inventory Gate`` is not a branch-protection context (64 contexts on
-    ``dev``, read live 2026-09-21, and it is not among them). It blocks anyway,
-    through the L5 default-deny sweep OMN-18970 landed under this same epic:
-    CI Summary walks every external check-run on the head, and a name in
-    neither :data:`EXPECTED_EXTERNAL_CONTEXTS` nor
+    AMENDED 2026-09-21. When this test was written ``Hook Inventory Gate`` was
+    not a branch-protection context (64 on ``dev``, and it was not among them),
+    so the L5 default-deny sweep OMN-18970 landed under this same epic was the
+    only thing making it blocking: CI Summary walks every external check-run on
+    the head, and a name in neither :data:`EXPECTED_EXTERNAL_CONTEXTS` nor
     :data:`EXTERNAL_SWEEP_EXCLUSIONS` must conclude ``success`` or CI Summary —
     which IS required — fails.
 
-    This test is the thing that keeps that true. Adding the gate to the
-    exclusion registry would silently return it to advisory, and that is
-    exactly the move this ticket exists to prevent.
+    The gate became a required context on 2026-09-21 (64 -> 65) and was
+    classified at layer 4 in the same change. The original form of this test
+    asserted the gate was NOT in ``EXPECTED_EXTERNAL_CONTEXTS``, which pinned
+    the weaker of the two postures as though it were the invariant. Layer 4 is
+    strictly STRONGER than the sweep: the sweep can only deny a check-run that
+    EXISTS, so it cannot see the gate being deleted, renamed or re-filtered
+    back into silence, and layer 4 requires the name to be present.
+
+    So the invariant is the DISJUNCTION, asserted below: the gate blocks
+    through one layer or the other, never neither. That survives either
+    resolution. What must never happen is the gate entering the exclusion
+    registry, which is the one move that silently returns it to advisory and
+    the move this ticket exists to prevent.
     """
     gate = _load_lib(
         _REPO_ROOT / "scripts" / "ci" / "ci_summary_gate.py",
         "ci_summary_gate_under_test",
     )
-    assert _GATE_CONTEXT not in gate.EXTERNAL_SWEEP_EXCLUSIONS
-    assert _GATE_CONTEXT not in gate.EXPECTED_EXTERNAL_CONTEXTS
-    assert frozenset({"success"}) == gate.SWEEP_GOOD_CONCLUSIONS
+    assert _GATE_CONTEXT not in gate.EXTERNAL_SWEEP_EXCLUSIONS, (
+        f"{_GATE_CONTEXT!r} is exempt from the default-deny sweep, which "
+        "returns it to advisory"
+    )
+    blocks_at_layer_4 = _GATE_CONTEXT in gate.EXPECTED_EXTERNAL_CONTEXTS
+    blocks_via_sweep = frozenset({"success"}) == gate.SWEEP_GOOD_CONCLUSIONS
+    assert blocks_at_layer_4 or blocks_via_sweep, (
+        f"{_GATE_CONTEXT!r} is not a layer-4 context AND the default-deny "
+        "sweep tolerates a non-success conclusion, so nothing makes a red "
+        "hook-inventory run block a merge"
+    )
