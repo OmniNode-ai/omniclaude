@@ -118,7 +118,7 @@ _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
 #: first would turn one path into a handful of surviving word-shaped
 #: segments, which is exactly the per-instance variation the key must not
 #: carry.
-_PATHLIKE_TOKEN = re.compile(r"\S*[/\\]\S*")
+_PATHLIKE_SEGMENT = re.compile(r"\S*[/\\]\S*")
 #: A bare number: a line number, a count, a duration. A ticket id like
 #: `omn18335` is NOT dropped — it is stable for the refusal class and is the
 #: most useful thing a reader can see in the key.
@@ -150,13 +150,13 @@ def normalise_reason(reason: str) -> str:
     Returns ``"unspecified"`` rather than an empty token when nothing
     survives, so a row is still written and still groups.
     """
-    lowered = _PATHLIKE_TOKEN.sub(" ", reason.strip().lower())
+    lowered = _PATHLIKE_SEGMENT.sub(" ", reason.strip().lower())
     kept = [
         seg for seg in _SLUG_SPLIT.split(lowered) if seg and not _BARE_NUMBER.match(seg)
     ]
     # The leading words carry the class; a long tail is usually the instance.
-    token = "-".join(kept[:8])
-    return token[:64] or "unspecified"
+    slug = "-".join(kept[:8])
+    return slug[:64] or "unspecified"
 
 
 def dedupe_key(guard: str, reason: str, lane: str) -> str:
