@@ -639,28 +639,30 @@ def test_a_fresh_goal_does_not_read_the_tick_notice(tmp_path: Path) -> None:
     assert "last tick outcome" not in res.stdout
 
 
-def test_the_key_spellings_match_the_morning_workflow(tmp_path: Path) -> None:
-    """Cross-repo parity, checked where both clones exist.
+def test_the_hook_declares_exactly_these_five_keys() -> None:
+    """The key list in the script must match the one spelled here.
 
-    The hook greps and the workflow writes; nothing else connects them, so a
-    rename on one side goes silently unprinted on the other. Neither repo's CI
-    checks out the other, so each pins its own tuple and this test upgrades to
-    a real comparison on a machine that has both.
+    Every other case in this block writes its own fixture, so a rename inside
+    the script plus a matching rename in a fixture would pass all of them while
+    the hook printed nothing against a real goal file. This is the one check
+    that compares the script's own list against a list spelled independently
+    of it.
+
+    The cross-repo half has no mechanical home. The writer is the morning
+    workflow in the registry repository, and neither repo's CI checks out the
+    other, so a comparison here could only ever skip on a runner -- and a test
+    that never executes proves nothing (the skip-count ratchet refuses exactly
+    that, which is how this test arrived at its current shape). Each side
+    instead pins its own list against an independently spelled tuple: this
+    case, and `test_the_five_goal_header_keys_are_declared` over there. A
+    rename is a two-file change by construction, and either half alone goes
+    red.
     """
-    omni_root = os.environ.get("OMNI_HOME")
-    if not omni_root:
-        pytest.skip("OMNI_HOME unset — the sibling registry clone is not resolvable")
-    lane = Path(omni_root) / ".claude" / "workflows" / "morning-ground-state.js"
-    if not lane.is_file():
-        pytest.skip(f"{lane} is absent from this checkout")
-
-    text = lane.read_text()
-    if "DROPPED_HEADLINE_KEYS" not in text:
-        pytest.skip("the sibling clone predates OMN-18954")
-
-    declared = text.split("const DROPPED_HEADLINE_KEYS = [", 1)[1].split("]", 1)[0]
-    for key in _DROPPED_KEYS:
-        assert f"'{key}'" in declared, (
-            f"the hook greps '{key}' but the morning workflow no longer declares "
-            "it; the two surfaces must be renamed together"
-        )
+    src = _SCRIPT.read_text()
+    assert "_DROPPED_KEYS=(" in src, "the hook must declare its key list once"
+    block = src.split("_DROPPED_KEYS=(", 1)[1].split(")", 1)[0]
+    declared = tuple(re.findall(r'"([a-z_]+)"', block))
+    assert declared == _DROPPED_KEYS, (
+        "the hook greps keys the morning workflow may no longer write; "
+        f"script declares {declared}, this test expects {_DROPPED_KEYS}"
+    )
