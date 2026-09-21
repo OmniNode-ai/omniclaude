@@ -104,12 +104,14 @@ Which credential (OMN-18120)
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import signal
 import sys
 import time
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -125,7 +127,30 @@ DEFAULT_IDLE_POLL_SECONDS = 10.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 DEFAULT_BATCH_LIMIT = 200
 
+# How many CONSECUTIVE failures of the same head record before it is treated as
+# poison and moved to the dead-letter (OMN-19074).
+#
+# THE ARITHMETIC, not a round number. A failing cycle costs one publish attempt
+# plus DEFAULT_ERROR_BACKOFF_SECONDS, so with the transport failing fast on a
+# permanent refusal a cycle is ~30s and five of them are ~2.5 minutes. A broker
+# blip that resolves inside two and a half minutes therefore never reaches the
+# threshold, and a record is never set aside for a fault that had already
+# healed. Raising it trades a longer total stall for a margin the stand-down
+# probe below already provides more cheaply; lowering it buys minutes at the
+# cost of that margin.
+#
+# The threshold is the CHEAP half of the guard and deliberately not the whole
+# one. What actually distinguishes "this record is poison" from "the broker is
+# down" is _broker_answers_behind_the_head, which measures rather than guesses.
+DEFAULT_QUARANTINE_AFTER_FAILURES = 5
+
 _QUARANTINE_DIRNAME = "quarantine"
+
+#: Written beside a dead-lettered journal record, in the shape
+#: node_event_emit_effect's own ModelQuarantineReason uses, so one reconcile can
+#: read both dead-letters. Kept as a plain dict because this module is
+#: stdlib-only by contract and must not import a Pydantic model to write a file.
+_QUARANTINE_REASON_SCHEMA_VERSION = 1
 
 _shutdown = False
 
@@ -437,24 +462,177 @@ def migrate_legacy_journal(journal_dir: Path) -> tuple[int, int]:
     return migrated, quarantined
 
 
+def quarantine_record(
+    journal_dir: Path, entry: journal.JournalEntry, *, failures: int
+) -> Path | None:
+    """Move one unpublishable record into the journal's dead-letter.
+
+    A MOVE, never a delete, for the reason ``SpoolOutbox.quarantine`` gives one
+    layer down: the record is unpublishable against today's broker state, which
+    is a statement about a grant and not about the record. Provision the grant,
+    move the file back, and the drainer publishes it on its next cycle. That
+    replay was proven by hand on 2026-09-21 -- four records took their topic's
+    high watermark from 0 to 4 with no duplication.
+
+    The reason is written FIRST and the record moved second, the same ordering
+    and for the same reason: a crash between the two then leaves an orphan
+    reason beside a still-pending record, which is inert and self-correcting,
+    rather than a quarantined record with no reason, which reads exactly like a
+    lost one.
+    """
+    quarantine = journal_dir / _QUARANTINE_DIRNAME
+    reason = {
+        "schema_version": _QUARANTINE_REASON_SCHEMA_VERSION,
+        "quarantined_at": datetime.now(UTC).isoformat(),
+        "reason_code": "publish_failed_repeatedly",
+        "detail": (
+            f"{failures} consecutive publish failures at the journal head, and "
+            f"the record behind it published on the same cycle, so the broker "
+            f"is reachable and this record is not"
+        ),
+        "event_id": entry.record.event_id,
+        "event_type": entry.record.event_type,
+        "queued_at": entry.record.queued_at.isoformat(),
+        "consecutive_failures": failures,
+    }
+    try:
+        quarantine.mkdir(parents=True, exist_ok=True)
+        reason_path = quarantine / f"{entry.path.stem}.reason.json"
+        tmp = reason_path.with_suffix(f".tmp.{os.getpid()}")
+        tmp.write_text(json.dumps(reason, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(reason_path)
+        target = quarantine / entry.path.name
+        entry.path.replace(target)
+    except OSError as exc:
+        # Never fatal. Failing to dead-letter leaves the record queued, which
+        # is the pre-OMN-19074 behaviour, and that is strictly better than
+        # losing it.
+        logger.error("cannot quarantine journal record %s: %s", entry.path, exc)
+        return None
+    logger.warning(
+        "dead-lettered journal record %s (%s) after %d consecutive failures; "
+        "it is MOVED, not deleted -- provision the grant and move it back to "
+        "replay it",
+        entry.record.event_id,
+        entry.record.event_type,
+        failures,
+    )
+    return target
+
+
+def _broker_answers_behind_the_head(
+    pending: list[journal.JournalEntry], emitter: _Emitter
+) -> journal.JournalEntry | None:
+    """Publish the record BEHIND the head. Returns it on success, else None.
+
+    THE WHOLE GUARD IS HERE, and it is why this is not "skip anything that
+    fails". A failure count alone cannot tell a poison record from an
+    unreachable broker: both produce an unbounded run of failures at the head.
+    Under a count-only rule a long outage would dead-letter the entire backlog
+    one record at a time, which is the opposite of what this exists to do.
+
+    So unpublishability is MEASURED rather than inferred. If the next record
+    goes out, the broker is reachable and the head is genuinely refused. If it
+    fails too, the fault is not specific to the head and nothing is moved.
+
+    Deliberately NOT keyed on the exception type. The transport masked a
+    permanent ACL refusal as a TimeoutError for three days (OMN-19073), so a
+    guard that trusted an error type would have been the one thing that could
+    not see the outage it exists to end. A publish that succeeds is evidence no
+    classifier can fake.
+    """
+    if len(pending) < 2:
+        return None
+    candidate = pending[1]
+    if emitter.publish(candidate.record):
+        return candidate
+    return None
+
+
 def drain_once(
-    journal_dir: Path, emitter: _Emitter, *, batch_limit: int = DEFAULT_BATCH_LIMIT
+    journal_dir: Path,
+    emitter: _Emitter,
+    *,
+    batch_limit: int = DEFAULT_BATCH_LIMIT,
+    failure_counts: dict[str, int] | None = None,
+    quarantine_after: int = DEFAULT_QUARANTINE_AFTER_FAILURES,
 ) -> tuple[int, int]:
     """Drain up to ``batch_limit`` records. Returns (published, failed).
 
-    Stops at the first failure so ordering is preserved and a dead broker
-    does not burn the whole backlog against a wall.
+    Stops at the first failure so ordering is preserved and a dead broker does
+    not burn the whole backlog against a wall.
+
+    ONE EXCEPTION, added by OMN-19074. A record that has failed at the head
+    ``quarantine_after`` times in a row, while the record behind it publishes
+    on the same cycle, has been shown not to be an ordering constraint on
+    anything: the broker is answering and is refusing this one. It is
+    dead-lettered and the drain continues.
+
+    Before this, one ungranted event class stopped the edge permanently.
+    ``drain_once`` halted on it every cycle, the handler quarantined its
+    downstream spool copy and still reported ``published=False``, and nothing
+    upstream ever acked the journal record. On 2026-09-21 four such records
+    held roughly four thousand authorized ones for 105 minutes, the fourth
+    outage of that exact shape.
+
+    ``failure_counts`` is owned by the caller so the count survives across
+    cycles; a per-call map would reset every 30 seconds and never reach any
+    threshold. It is keyed by journal FILENAME, which is unique and stable for
+    the life of a record, rather than by event id, because a retried record is
+    handed a fresh request id on every attempt (OMN-19073).
+
+    THE COUNT IS PER-PROCESS AND RESETS ON RESTART, deliberately. It lives in
+    ``run``'s frame rather than on disk, so a drainer restarted mid-run begins
+    counting again and a poison record needs a fresh run of ``quarantine_after``
+    failures inside one process lifetime. That is the right trade for a resident
+    KeepAlive daemon: persisting it would add a second piece of durable state to
+    reconcile against the journal, and the failure it would prevent -- a record
+    that is poison across restarts but never fails often enough within one --
+    requires the drainer to be dying faster than it can count, which is a
+    different defect that this file must not paper over. Worth knowing when
+    reproducing: ``--once`` runs one cycle per PROCESS, so it can never reach
+    the threshold, and the behaviour must be reproduced against the loop.
     """
+    counts = failure_counts if failure_counts is not None else {}
     pending = journal.list_pending(journal_dir)[:batch_limit]
     published = 0
-    for entry in pending:
+    for index, entry in enumerate(pending):
         if _shutdown:
             break
         if emitter.publish(entry.record):
             journal.ack(entry)
+            counts.pop(entry.path.name, None)
             published += 1
-        else:
-            return published, len(pending) - published
+            continue
+
+        key = entry.path.name
+        counts[key] = counts.get(key, 0) + 1
+        failures = counts[key]
+
+        # Only the HEAD of this cycle's batch is ever a dead-letter candidate.
+        # A record further back has not been given the chance to fail on its
+        # own merits -- it has only been waiting -- so its count means nothing.
+        if index == 0 and failures >= quarantine_after:
+            probe = _broker_answers_behind_the_head(pending, emitter)
+            if probe is not None:
+                journal.ack(probe)
+                counts.pop(probe.path.name, None)
+                published += 1
+                if quarantine_record(journal_dir, entry, failures=failures) is not None:
+                    counts.pop(key, None)
+                    # Re-list rather than continuing over a stale `pending`:
+                    # two entries left it just now, and the next cycle is
+                    # milliseconds away.
+                    return published, max(0, len(pending) - published - 1)
+            else:
+                logger.warning(
+                    "head record %s has failed %d times, but the record behind "
+                    "it cannot publish either; the broker is unreachable, so "
+                    "nothing is being dead-lettered",
+                    entry.record.event_id,
+                    failures,
+                )
+        return published, len(pending) - published
     return published, 0
 
 
@@ -503,6 +681,10 @@ def run(
     )
     last_publish_at: float | None = None
     published_total = 0
+    # Owned by the loop, not by drain_once: a record's failures only mean
+    # anything across cycles, and a per-call map would reset every 30 seconds
+    # and never reach the threshold (OMN-19074).
+    failure_counts: dict[str, int] = {}
 
     def _record_cycle() -> None:
         try:
@@ -523,7 +705,9 @@ def run(
 
     try:
         while True:
-            published, failed = drain_once(journal_dir, emitter)
+            published, failed = drain_once(
+                journal_dir, emitter, failure_counts=failure_counts
+            )
             if published:
                 logger.info("published %d event(s)", published)
                 published_total += published
