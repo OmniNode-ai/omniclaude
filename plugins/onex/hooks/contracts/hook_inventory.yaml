@@ -1133,9 +1133,12 @@ expected_hooks:
     ticket: "OMN-17168"
     owner: "Jonah Gray / the session-goal lane"
     purpose: >
-      Prints the state_as_of, age and rows of the durable session goal, and
-      the exact re-baseline command when it is missing or stale. Print-only:
-      pure bash, no interpreter, no network, no writes.
+      Prints the state_as_of, age and rows of the durable session goal, the
+      four dropped-work headline counts it carries (OMN-18954), and the exact
+      re-baseline command when it is missing or stale. A stale goal also names
+      the last morning-tick failure, read from the tick's own notice file under
+      $OMNI_HOME, so the staleness arrives with its cause. Print-only: pure
+      bash, no interpreter, no network, no writes.
     enforcement: false
     lite_mode_exit: true
     mask:
