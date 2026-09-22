@@ -39,10 +39,11 @@ def _steps() -> list[dict[str, Any]]:
 
 
 def _enable_step() -> tuple[int, dict[str, Any]]:
-    for i, step in enumerate(_steps()):
-        if step.get("name") == "Enable auto-merge":
-            return i, step
-    pytest.fail("no 'Enable auto-merge' step")
+    found = [
+        (i, s) for i, s in enumerate(_steps()) if s.get("name") == "Enable auto-merge"
+    ]
+    assert len(found) == 1, "expected exactly one 'Enable auto-merge' step"
+    return found[0]
 
 
 def test_pull_request_trigger_includes_ready_for_review() -> None:
@@ -88,4 +89,7 @@ def test_already_armed_pr_is_not_armed_again() -> None:
 def test_one_arming_run_per_pr() -> None:
     conc = _load().get("concurrency")
     assert isinstance(conc, dict)
-    assert "github.event.pull_request.number" in str(conc["group"])
+    group = str(conc["group"])
+    assert "github.event.pull_request.number" in group
+    assert "github.event.inputs.pr_number" in group
+    assert "github.run_id" not in group, "a per-run key serializes nothing"

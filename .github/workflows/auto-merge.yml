@@ -158,14 +158,17 @@ permissions:
 
 # OMN-19216: one arming run per PR at a time. A newer event queues behind
 # a running one instead of racing it; the already-armed guard makes the
-# queued run a no-op.
+# queued run a no-op. Every arming path carries a PR number. The constant
+# fallback covers only a check_suite with no associated PR, which the
+# resolve step skips, and it keeps those in one group rather than giving
+# each run a unique key that would serialize nothing.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{
       github.event.pull_request.number ||
       github.event.inputs.pr_number ||
       github.event.check_suite.pull_requests[0].number ||
-      github.run_id
+      'no-pr'
     }}
   cancel-in-progress: false
 
