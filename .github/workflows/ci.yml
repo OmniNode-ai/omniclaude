@@ -4051,6 +4051,23 @@ jobs:
           # Declared explicitly rather than read from the runner's ambient
           # GITHUB_EVENT_NAME so a test can read the wiring off this file.
           EVENT_NAME: ${{ github.event_name }}
+          # OMN-19167 — the four facts the CONDITIONAL sweep registry decides
+          # against. `occ-autobind` and `occ-companion-effect` skip by their own
+          # `if:` on a pull request with no ticket token, which doctrine's
+          # PR-title rule deliberately EXEMPTS a dependency bump from carrying.
+          # Measured on #2308: both rows concluded `skipped` and the umbrella
+          # passed ONLY because its verdict landed inside the 1200s supersession
+          # grace; replaying that head with the observation time varied reds at
+          # +20m. Passed as ENV rather than interpolated into the script, so a
+          # title is data and never shell. Each is empty on a non-PR event,
+          # which admits NOTHING -- the registry fails closed on an unresolved
+          # context.
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # NOT the same as PR_AUTHOR: an update-branch makes the actor the
+          # pushing user while the author stays the bot.
+          EVENT_ACTOR: ${{ github.actor }}
           # Bounded poll window (minutes) — kept under the run-cancel window so
           # the required context always reaches a terminal state first.
           DEADLINE_MINUTES: "90"
@@ -4125,7 +4142,7 @@ jobs:
               echo "workflow-runs fetch failed (attempt ${attempt}); sweeping every row (fail-closed)"
               rm -f workflow_runs.json
             fi
-            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}"
+            python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}" --pr-author "${PR_AUTHOR:-}" --pr-title "${PR_TITLE:-}" --pr-head-ref "${PR_HEAD_REF:-}" --event-actor "${EVENT_ACTOR:-}"
             rc=$?
             case "${rc}" in
               0) echo "::notice::CI Summary = SUCCESS (all gating jobs provably passed)"; exit 0 ;;
@@ -4135,7 +4152,7 @@ jobs:
             esac
             if [ "$(date +%s)" -ge "${deadline}" ]; then
               echo "::error::CI Summary poll deadline (${DEADLINE_MINUTES}m) reached with gating jobs still pending — failing closed"
-              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}" --report-only || true
+              python3 scripts/ci/ci_summary_gate.py --jobs-file jobs.json --run-attempt "${RUN_ATTEMPT}" --check-runs-file check_runs.json --workflow-runs-file workflow_runs.json --event-name "${EVENT_NAME}" --pr-author "${PR_AUTHOR:-}" --pr-title "${PR_TITLE:-}" --pr-head-ref "${PR_HEAD_REF:-}" --event-actor "${EVENT_ACTOR:-}" --report-only || true
               exit 1
             fi
             sleep "${POLL_INTERVAL_SECONDS}"
