@@ -176,3 +176,27 @@
   # would suppress `files:` and make every commit pay a live surface read.
   files: ^\.github/workflows/.*\.ya?ml$
   stages: [pre-commit, pre-merge-commit]
+
+- id: doctrine-claim-gate
+  name: Doctrine-claim gate — a claim of "unenforced" must match its ticket (OMN-18529)
+  description: >
+    Refuses a doctrine sentence asserting a mechanism is unbuilt, in flight or
+    blocked when the ticket it names is in a state that claim cannot be true
+    of. Three claim types, each binding a ticket to a role with its own
+    expected state set; "in flight" accepts a started ticket and nothing else,
+    because a reclassified in-flight item lands in Backlog and open-versus-
+    closed would pass it. Fails closed on an unreadable file, an unresolvable
+    ticket, an unreachable tracker, and on a scan matching ZERO claim
+    sentences. See scripts/doctrine_claim_gate.py for the full rule.
+
+    REQUIRES the tracker credential in the environment. That is deliberate and
+    it is the whole design: this gate refuses rather than skipping when it
+    cannot read ticket state, because a gate that cannot read its input has
+    not passed, it has not run. It fires only on the doctrine file, so the
+    blast radius of that strictness is a commit that edits doctrine claims,
+    which is exactly when the check matters.
+  language: script
+  entry: scripts/doctrine_claim_gate.py
+  files: ^CLAUDE\.md$
+  pass_filenames: true
+  stages: [pre-commit, pre-merge-commit]

@@ -1,0 +1,117 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Doctrine-claim gate (reusable). OMN-18529, W2-2 of the enforcement-integration
+# plan, and the companion to OMN-18528 which corrected four doctrine sentences
+# that said a mechanism was unenforced while the ticket each named was Done.
+#
+# What it refuses: a sentence asserting a mechanism is unbuilt, in flight or
+# blocked, when the ticket it names is in a state that claim cannot be true of.
+# Three claim types, each binding a ticket to a ROLE with its own expected state
+# set. "in flight" accepts a `started` ticket and nothing else, because a
+# reclassified in-flight item lands in Backlog and an open-versus-closed
+# predicate would wave it through -- which is how one rule read as imminent for
+# three weeks with its ticket never once started.
+#
+# It fails closed on an unreadable file, an unparseable sentence, an
+# unresolvable ticket id, an unreachable tracker, and on a scan matching ZERO
+# claim sentences. That last one is deliberate: a gate that audits nothing and
+# reports green is the defect this whole workstream exists to remove.
+#
+# Usage in caller repos:
+#   jobs:
+#     doctrine-claim-gate:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/doctrine-claim-gate-reusable.yml@<immutable-sha>
+#       with:
+#         paths: CLAUDE.md
+#       secrets:
+#         linear_api_key: ${{ secrets.LINEAR_API_KEY }}
+#
+# Surfaced check context in the caller: `doctrine-claim-gate / doctrine-claim-gate`.
+#
+# ONE pin, not two: the checker checkout defaults to `github.job_workflow_sha`,
+# the SHA this reusable workflow was resolved at, so the `uses:` SHA above is the
+# single source of truth for both the workflow and the script. Pin to an
+# omniclaude commit on `dev` that carries scripts/doctrine_claim_gate.py.
+#
+# Canonical checker: scripts/doctrine_claim_gate.py (this repo). The same script
+# runs locally via the exported `doctrine-claim-gate` pre-commit hook
+# (.pre-commit-hooks.yaml), so the local and CI verdicts cannot diverge. One
+# implementation, one verdict -- the shape kb_doc_gate.py already uses across the
+# same two repositories.
+#
+# THE CREDENTIAL IS REQUIRED AND ITS ABSENCE IS A FAILURE, not a skip. The
+# nearest precedent in this repository, stale-todo-gate.yml, reads the same
+# secret and prints a warning and exits 0 when it is missing -- a silent pass on
+# a merge-gating path. This workflow deliberately does the opposite.
+
+name: Doctrine Claim Gate
+
+on:
+  workflow_call:
+    inputs:
+      paths:
+        description: Space-separated doctrine files to check.
+        required: false
+        type: string
+        default: CLAUDE.md
+      checker_ref:
+        description: >
+          Override the omniclaude ref the checker is read from. Defaults to the
+          SHA this reusable workflow was resolved at, so the caller's `uses:`
+          pin governs both.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      linear_api_key:
+        description: Tracker credential. Its absence FAILS the gate.
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  doctrine-claim-gate:
+    name: doctrine-claim-gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@v7
+
+      - name: Check out the checker at the pinned omniclaude ref
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ inputs.checker_ref || github.job_workflow_sha }}
+          path: .omniclaude-checker
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Refuse when the tracker credential is absent
+        env:
+          LINEAR_API_KEY: ${{ secrets.linear_api_key }}
+        run: |
+          set -euo pipefail
+          if [ -z "${LINEAR_API_KEY:-}" ]; then
+            echo "::error::The doctrine-claim gate cannot resolve ticket state without a tracker credential, and it REFUSES rather than skipping. A gate that cannot read its input has not passed, it has not run."
+            exit 1
+          fi
+          echo "Tracker credential present."
+
+      - name: Run the doctrine-claim gate
+        env:
+          LINEAR_API_KEY: ${{ secrets.linear_api_key }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 - `paths` is a deliberate word-split list
+          python3 .omniclaude-checker/scripts/doctrine_claim_gate.py ${{ inputs.paths }}
