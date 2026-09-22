@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=b216d363c3b0857226ec69926aa8341eaaa60485" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=ce11a870db3aa478b9967e72c731835539911187" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
 ]
 
@@ -1746,8 +1746,8 @@ wheels = [
 
 [[package]]
 name = "omnimarket"
-version = "0.4.137"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=b216d363c3b0857226ec69926aa8341eaaa60485#b216d363c3b0857226ec69926aa8341eaaa60485" }
+version = "0.4.191"
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=ce11a870db3aa478b9967e72c731835539911187#ce11a870db3aa478b9967e72c731835539911187" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1875,7 +1875,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=b216d363c3b0857226ec69926aa8341eaaa60485" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=ce11a870db3aa478b9967e72c731835539911187" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
