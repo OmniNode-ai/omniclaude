@@ -82,7 +82,9 @@ from typing import Final
 #: because a snapshot introduces a second staleness window of exactly the kind
 #: this gate exists to catch: the snapshot would go stale, the gate would read
 #: it confidently, and a Done ticket would pass as open until someone noticed.
-TICKET_STATE_ENDPOINT: Final[str] = "https://api.linear.app/graphql"
+TICKET_STATE_ENDPOINT: Final[str] = (
+    "https://api.linear.app/graphql"  # url-authority-ok: the tracker's single documented GraphQL endpoint, read-only ticket-state lookups from a CI checker script that is not a runtime node and has no routing authority or integration catalog to resolve from; same endpoint and same reasoning as scripts/worktree_auto_prune.py
+)
 
 #: The credential. Absent means REFUSE, never skip. See the module docstring.
 TICKET_STATE_ENV: Final[str] = "LINEAR_API_KEY"
