@@ -736,7 +736,7 @@ jobs:
       # exits before the reviewer runs at all.
       - name: Upload the verdict artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hostile-review-verdict-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ github.workspace }}/hostile-review-verdict.json
