@@ -72,10 +72,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout the caller repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout the validator at this workflow's own SHA
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
           ref: ${{ github.job_workflow_sha }}
@@ -83,7 +83,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

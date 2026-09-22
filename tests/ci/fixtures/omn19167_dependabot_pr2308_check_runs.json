@@ -1,0 +1,1939 @@
+{
+  "_provenance": {
+    "ticket": "OMN-19167",
+    "repo": "OmniNode-ai/omniclaude",
+    "pr": 2308,
+    "head_sha": "a0b02e0b1c683d31c2e72c9d32ca548d08cdd1ba",
+    "captured_at": "2026-09-22T13:45:00Z",
+    "pr_author": "dependabot[bot]",
+    "pr_title": "chore(deps): bump the actions group with 8 updates",
+    "pr_head_ref": "dependabot/github_actions/actions-group",
+    "event_actor": "dependabot[bot]",
+    "ci_run_id": 35708383674,
+    "caller_rows_completed_at": "2026-09-22T09:05:17Z",
+    "live_verdict_at": "2026-09-22T09:19:35Z",
+    "live_verdict": "SUCCESS",
+    "note": "This head PASSED live, and that is the finding. Both caller rows concluded skipped at 09:05:17Z; the umbrella verdict landed at 09:19:35Z, 14m18s later, INSIDE EXTERNAL_FAILURE_SUPERSESSION_GRACE_S (1200s), where verdict_is_provisional drops the row from `settled` and it passes quietly. Vary ONLY the observation time and the same payload reds from +20m on. The pass was a property of how fast the run happened to be."
+  },
+  "check_runs": [
+    {
+      "name": "TODO Audit",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106687269243,
+      "started_at": "2026-09-22T09:20:06Z",
+      "completed_at": "2026-09-22T09:20:12Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35709772869/job/106687269243",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35709772869/job/106687269243"
+    },
+    {
+      "name": "reason-graph",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106687010885,
+      "started_at": "2026-09-22T09:19:14Z",
+      "completed_at": "2026-09-22T09:19:21Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106687010885",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106687010885"
+    },
+    {
+      "name": "Deploy to Production",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 106685677340,
+      "started_at": "2026-09-22T09:14:52Z",
+      "completed_at": "2026-09-22T09:14:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685677340",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685677340"
+    },
+    {
+      "name": "Deploy to Staging",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 106685677077,
+      "started_at": "2026-09-22T09:14:52Z",
+      "completed_at": "2026-09-22T09:14:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685677077",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685677077"
+    },
+    {
+      "name": "Skip Count Ratchet (OMN-18776)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106685256059,
+      "started_at": "2026-09-22T09:13:32Z",
+      "completed_at": "2026-09-22T09:13:45Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685256059",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685256059"
+    },
+    {
+      "name": "Build Docker Image",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106685255952,
+      "started_at": "2026-09-22T09:13:32Z",
+      "completed_at": "2026-09-22T09:14:50Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685255952",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685255952"
+    },
+    {
+      "name": "Tests Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106685213671,
+      "started_at": "2026-09-22T09:13:24Z",
+      "completed_at": "2026-09-22T09:13:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685213671",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685213671"
+    },
+    {
+      "name": "Merge Test Coverage",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106685161238,
+      "started_at": "2026-09-22T09:13:15Z",
+      "completed_at": "2026-09-22T09:13:34Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685161238",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106685161238"
+    },
+    {
+      "name": "Hostile Review Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106683513507,
+      "started_at": "2026-09-22T09:07:50Z",
+      "completed_at": "2026-09-22T09:07:54Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384128/job/106683513507",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384128/job/106683513507"
+    },
+    {
+      "name": "Tests (Split 2/2)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106683473734,
+      "started_at": "2026-09-22T09:07:43Z",
+      "completed_at": "2026-09-22T09:13:10Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683473734",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683473734"
+    },
+    {
+      "name": "Tests (Split 1/2)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106683473727,
+      "started_at": "2026-09-22T09:07:43Z",
+      "completed_at": "2026-09-22T09:11:16Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683473727",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683473727"
+    },
+    {
+      "name": "Detect Changes",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106683307246,
+      "started_at": "2026-09-22T09:07:11Z",
+      "completed_at": "2026-09-22T09:07:39Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683307246",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683307246"
+    },
+    {
+      "name": "Quality Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106683270197,
+      "started_at": "2026-09-22T09:07:04Z",
+      "completed_at": "2026-09-22T09:07:07Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683270197",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683270197"
+    },
+    {
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106683075871,
+      "started_at": "2026-09-22T09:06:26Z",
+      "completed_at": "2026-09-22T09:06:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683075871",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106683075871"
+    },
+    {
+      "name": "Agent Framework Tests",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879660,
+      "started_at": "2026-09-22T09:05:48Z",
+      "completed_at": "2026-09-22T09:06:36Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879660",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879660"
+    },
+    {
+      "name": "Golden Chain Live",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879656,
+      "started_at": "2026-09-22T09:05:50Z",
+      "completed_at": "2026-09-22T09:06:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879656",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879656"
+    },
+    {
+      "name": "Golden Chain Integrity",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879502,
+      "started_at": "2026-09-22T09:05:49Z",
+      "completed_at": "2026-09-22T09:06:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879502",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879502"
+    },
+    {
+      "name": "Hooks System Tests",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879422,
+      "started_at": "2026-09-22T09:05:48Z",
+      "completed_at": "2026-09-22T09:13:20Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879422",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879422"
+    },
+    {
+      "name": "Registry Consistency",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879368,
+      "started_at": "2026-09-22T09:05:48Z",
+      "completed_at": "2026-09-22T09:06:33Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879368",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879368"
+    },
+    {
+      "name": "Pyright Type Checking",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879334,
+      "started_at": "2026-09-22T09:05:48Z",
+      "completed_at": "2026-09-22T09:06:15Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879334",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879334"
+    },
+    {
+      "name": "Python Security Scan",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682879262,
+      "started_at": "2026-09-22T09:05:48Z",
+      "completed_at": "2026-09-22T09:06:18Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879262",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682879262"
+    },
+    {
+      "name": "Env Var Registry (OMN-6263)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682877473,
+      "started_at": "2026-09-22T09:05:48Z",
+      "completed_at": "2026-09-22T09:06:05Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682877473",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682877473"
+    },
+    {
+      "name": "call-reject-skip-token / scan / reject-skip-gate-token",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682859616,
+      "started_at": "2026-09-22T09:05:44Z",
+      "completed_at": "2026-09-22T09:05:48Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384266/job/106682859616",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384266/job/106682859616"
+    },
+    {
+      "name": "Omni Standards Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682846529,
+      "started_at": "2026-09-22T09:05:42Z",
+      "completed_at": "2026-09-22T09:05:45Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682846529",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682846529"
+    },
+    {
+      "name": "verify / verify",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682816309,
+      "started_at": "2026-09-22T09:05:36Z",
+      "completed_at": "2026-09-22T09:05:40Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384257/job/106682816309",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384257/job/106682816309"
+    },
+    {
+      "name": "scan / reject-skip-gate-token",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682814466,
+      "started_at": "2026-09-22T09:05:36Z",
+      "completed_at": "2026-09-22T09:05:40Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383623/job/106682814466",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383623/job/106682814466"
+    },
+    {
+      "name": "call-reject-skip-token / occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682812691,
+      "started_at": "2026-09-22T09:05:35Z",
+      "completed_at": "2026-09-22T09:05:42Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384266/job/106682812691",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384266/job/106682812691"
+    },
+    {
+      "name": "pr-title / check-title",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682806386,
+      "started_at": "2026-09-22T09:05:34Z",
+      "completed_at": "2026-09-22T09:05:36Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384086/job/106682806386",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384086/job/106682806386"
+    },
+    {
+      "name": "call / validate-docs",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682806327,
+      "started_at": "2026-09-22T09:05:34Z",
+      "completed_at": "2026-09-22T09:05:55Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384003/job/106682806327",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384003/job/106682806327"
+    },
+    {
+      "name": "imperative-contract-guard / Imperative Contract Guard",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682804925,
+      "started_at": "2026-09-22T09:05:34Z",
+      "completed_at": "2026-09-22T09:06:02Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384323/job/106682804925",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384323/job/106682804925"
+    },
+    {
+      "name": "Agent YAML Compliance",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682800295,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800295",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800295"
+    },
+    {
+      "name": "Repository Structure Validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682800181,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800181",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800181"
+    },
+    {
+      "name": "Legacy Compatibility Check",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682800132,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800132",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800132"
+    },
+    {
+      "name": "PR Safety Mutation Surface Enforcement",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682800077,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:39Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800077",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800077"
+    },
+    {
+      "name": "Ecosystem Integration Validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682800074,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:39Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800074",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800074"
+    },
+    {
+      "name": "CI Naming Convention",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682800037,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:40Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800037",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682800037"
+    },
+    {
+      "name": "Enforce validator-requirements.yaml (OMN-13291)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682799184,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:05:51Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383424/job/106682799184",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383424/job/106682799184"
+    },
+    {
+      "name": "Canonical Inference Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682797765,
+      "started_at": "2026-09-22T09:05:33Z",
+      "completed_at": "2026-09-22T09:06:06Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383704/job/106682797765",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383704/job/106682797765"
+    },
+    {
+      "name": "required-check-skip-guard / check-skip-vectors",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682797614,
+      "started_at": "2026-09-22T09:05:34Z",
+      "completed_at": "2026-09-22T09:05:44Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383952/job/106682797614",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383952/job/106682797614"
+    },
+    {
+      "name": "Lane Identity Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682796781,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:05:59Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383508/job/106682796781",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383508/job/106682796781"
+    },
+    {
+      "name": "Hostile Reviewer (adversarial gate)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682796721,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:07:47Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384128/job/106682796721",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384128/job/106682796721"
+    },
+    {
+      "name": "contract-validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682795248,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:06:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384193/job/106682795248",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384193/job/106682795248"
+    },
+    {
+      "name": "Dep Provenance Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682794709,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:05:50Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383489/job/106682794709",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383489/job/106682794709"
+    },
+    {
+      "name": "validate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682794051,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:06:04Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383977/job/106682794051",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383977/job/106682794051"
+    },
+    {
+      "name": "Check architecture handshake",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682793985,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:05:39Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383775/job/106682793985",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383775/job/106682793985"
+    },
+    {
+      "name": "Stale TODO Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682792773,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:41Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383740/job/106682792773",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383740/job/106682792773"
+    },
+    {
+      "name": "ban-hardcoded-runner-ip",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682792085,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:40Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384540/job/106682792085",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384540/job/106682792085"
+    },
+    {
+      "name": "URL Authority Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682791969,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:06:09Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383835/job/106682791969",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383835/job/106682791969"
+    },
+    {
+      "name": "No Faked Boundary Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682791353,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:06:04Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384160/job/106682791353",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384160/job/106682791353"
+    },
+    {
+      "name": "concurrency-primitive-guard",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682789747,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:42Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383797/job/106682789747",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383797/job/106682789747"
+    },
+    {
+      "name": "Precommit Fail-Loud Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682787409,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:42Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383857/job/106682787409",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383857/job/106682787409"
+    },
+    {
+      "name": "deploy-gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682786011,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:49Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384068/job/106682786011",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384068/job/106682786011"
+    },
+    {
+      "name": "Hook Inventory Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682785431,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:43Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383844/job/106682785431",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383844/job/106682785431"
+    },
+    {
+      "name": "Arch: No polymorphic-agent in enforcement paths (OMN-9143)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784969,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784969",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784969"
+    },
+    {
+      "name": "AI-Slop Pattern Check (strict, PR diff)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784942,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:44Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784942",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784942"
+    },
+    {
+      "name": "Merge-Sweep Contract",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784889,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784889",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784889"
+    },
+    {
+      "name": "Contract Compliance",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784882,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:06:21Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784882",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784882"
+    },
+    {
+      "name": "Skill Monorepo-Ref Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784880,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:36Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784880",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784880"
+    },
+    {
+      "name": "Agent Contract Validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784873,
+      "started_at": "2026-09-22T09:06:07Z",
+      "completed_at": "2026-09-22T09:06:25Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784873",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784873"
+    },
+    {
+      "name": "Skill Contract Validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784867,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784867",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784867"
+    },
+    {
+      "name": "Contract Compliance Check",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784863,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:06:36Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784863",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784863"
+    },
+    {
+      "name": "Aislop Sweep",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784848,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:40Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784848",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784848"
+    },
+    {
+      "name": "DoD Evidence Check",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784818,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:39Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784818",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784818"
+    },
+    {
+      "name": "Skill Hygiene",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784765,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:36Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784765",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784765"
+    },
+    {
+      "name": "Version Pin Compliance",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784762,
+      "started_at": "2026-09-22T09:05:32Z",
+      "completed_at": "2026-09-22T09:05:45Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784762",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784762"
+    },
+    {
+      "name": "Cross-Repo Boundary Parity",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784735,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:06:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784735",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784735"
+    },
+    {
+      "name": "validate-pr-contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784679,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:48Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383615/job/106682784679",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383615/job/106682784679"
+    },
+    {
+      "name": "Arch: No localhost/default env fallbacks (OMN-10658)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784678,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784678",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784678"
+    },
+    {
+      "name": "Secret Detection",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784670,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:06:23Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784670",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784670"
+    },
+    {
+      "name": "Arch: ModelCostLedger run_id field + index (check 9)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784667,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784667",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784667"
+    },
+    {
+      "name": "Arch: No hardcoded internal IPs (check 12)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784663,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784663",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784663"
+    },
+    {
+      "name": "Database Schema Validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784630,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:56Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784630",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784630"
+    },
+    {
+      "name": "Kafka Import Guard",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784601,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:50Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784601",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784601"
+    },
+    {
+      "name": "Arch: ModelCostLedger confined to effects (check 5)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784586,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:36Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784586",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784586"
+    },
+    {
+      "name": "occ-companion-effect",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 106682784585,
+      "started_at": "2026-09-22T09:05:27Z",
+      "completed_at": "2026-09-22T09:05:17Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383184/job/106682784585",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383184/job/106682784585"
+    },
+    {
+      "name": "Architecture Invariants",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784579,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:57Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784579",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784579"
+    },
+    {
+      "name": "Arch: No direct adapter imports in business logic (check 13)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784526,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784526",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784526"
+    },
+    {
+      "name": "Arch: omnidash_readonly role provisioning + CI (check 7)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784522,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:57Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784522",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784522"
+    },
+    {
+      "name": "F5.1 No compact cmd topic",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784489,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:54Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784489",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784489"
+    },
+    {
+      "name": "Arch: No DB access in orchestrator/compute (checks 1 & 8)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784483,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:34Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784483",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784483"
+    },
+    {
+      "name": "Arch: No direct Kafka producer outside publisher (check 10)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784474,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784474",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784474"
+    },
+    {
+      "name": "ONEX Compliance",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784449,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784449",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784449"
+    },
+    {
+      "name": "Mode Metadata Integrity",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784444,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:06:03Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784444",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784444"
+    },
+    {
+      "name": "Arch: onex.* topic naming convention (check 6)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784433,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784433",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784433"
+    },
+    {
+      "name": "Arch: No datetime.utcnow() (check 11)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784410,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784410",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784410"
+    },
+    {
+      "name": "Arch: No LinearClient outside effects (check 3)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784375,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784375",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784375"
+    },
+    {
+      "name": "Arch: No direct EventBus instantiation (OMN-10725)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784314,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784314",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784314"
+    },
+    {
+      "name": "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784313,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784313",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784313"
+    },
+    {
+      "name": "Migration Freeze",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784300,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:33Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784300",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784300"
+    },
+    {
+      "name": "Arch: No repository adapter imports in orchestrator/compute (check 4)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784298,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:38Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784298",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784298"
+    },
+    {
+      "name": "Arch: No git/gh calls outside effects (check 2)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784211,
+      "started_at": "2026-09-22T09:05:30Z",
+      "completed_at": "2026-09-22T09:05:35Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784211",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784211"
+    },
+    {
+      "name": "zone-filter / Zone Filter (docs-only check)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682784019,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:45Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784019",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682784019"
+    },
+    {
+      "name": "Markdown Link Check",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783535,
+      "started_at": "2026-09-22T09:05:29Z",
+      "completed_at": "2026-09-22T09:05:41Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783535",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783535"
+    },
+    {
+      "name": "Canonical Handler-Shape Ratchet",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783495,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:06:07Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783495",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783495"
+    },
+    {
+      "name": "Enum Governance",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783472,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:06:00Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783472",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783472"
+    },
+    {
+      "name": "Architecture Handshake",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783466,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:05:41Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783466",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783466"
+    },
+    {
+      "name": "Exports Validation",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783423,
+      "started_at": "2026-09-22T09:05:29Z",
+      "completed_at": "2026-09-22T09:05:58Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783423",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783423"
+    },
+    {
+      "name": "Code Quality",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783343,
+      "started_at": "2026-09-22T09:05:31Z",
+      "completed_at": "2026-09-22T09:07:00Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783343",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682783343"
+    },
+    {
+      "name": "main-target-guard",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682783305,
+      "started_at": "2026-09-22T09:05:29Z",
+      "completed_at": "2026-09-22T09:05:33Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383849/job/106682783305",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383849/job/106682783305"
+    },
+    {
+      "name": "Hook Edge Lane Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682781154,
+      "started_at": "2026-09-22T09:05:29Z",
+      "completed_at": "2026-09-22T09:05:34Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383718/job/106682781154",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383718/job/106682781154"
+    },
+    {
+      "name": "non-dev-base-guard",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682777898,
+      "started_at": "2026-09-22T09:05:28Z",
+      "completed_at": "2026-09-22T09:05:32Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384014/job/106682777898",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384014/job/106682777898"
+    },
+    {
+      "name": "ONEX Change Control Schema Compatibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682777746,
+      "started_at": "2026-09-22T09:05:28Z",
+      "completed_at": "2026-09-22T09:06:15Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384138/job/106682777746",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384138/job/106682777746"
+    },
+    {
+      "name": "receipt-honesty",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682777733,
+      "started_at": "2026-09-22T09:05:29Z",
+      "completed_at": "2026-09-22T09:05:52Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383550/job/106682777733",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383550/job/106682777733"
+    },
+    {
+      "name": "occ-autobind",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 106682769278,
+      "started_at": "2026-09-22T09:05:24Z",
+      "completed_at": "2026-09-22T09:05:17Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383230/job/106682769278",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383230/job/106682769278"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682737354,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384540/job/106682737354",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384540/job/106682737354"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682737120,
+      "started_at": "2026-09-22T09:05:22Z",
+      "completed_at": "2026-09-22T09:05:33Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384257/job/106682737120",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384257/job/106682737120"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682737060,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384193/job/106682737060",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384193/job/106682737060"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736937,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384128/job/106682736937",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384128/job/106682736937"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736932,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:31Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384003/job/106682736932",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384003/job/106682736932"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736860,
+      "started_at": "2026-09-22T09:05:24Z",
+      "completed_at": "2026-09-22T09:05:32Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384266/job/106682736860",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384266/job/106682736860"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736835,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384160/job/106682736835",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384160/job/106682736835"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736801,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:31Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384323/job/106682736801",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384323/job/106682736801"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736791,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:27Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384068/job/106682736791",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384068/job/106682736791"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736635,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:31Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384086/job/106682736635",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384086/job/106682736635"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736613,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:26Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383849/job/106682736613",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383849/job/106682736613"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736514,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:25Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384138/job/106682736514",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384138/job/106682736514"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736470,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383977/job/106682736470",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383977/job/106682736470"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736077,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383835/job/106682736077",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383835/job/106682736077"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682736043,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:25Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384014/job/106682736043",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708384014/job/106682736043"
+    },
+    {
+      "name": "occ-companion-effect-manual-replay",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 106682736015,
+      "started_at": "2026-09-22T09:05:17Z",
+      "completed_at": "2026-09-22T09:05:17Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383184/job/106682736015",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383184/job/106682736015"
+    },
+    {
+      "name": "Runner Route (OMN-18031) / route",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735836,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:45Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735836",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735836"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735794,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383952/job/106682735794",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383952/job/106682735794"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735685,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:26Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735685",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735685"
+    },
+    {
+      "name": "no-noncanonical-lifecycle-classes",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735667,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:49Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735667",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735667"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735597,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:27Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383844/job/106682735597",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383844/job/106682735597"
+    },
+    {
+      "name": "OCC Companion Merged Gate (OMN-15214)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735538,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:26Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735538",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735538"
+    },
+    {
+      "name": "occ-autobind-manual-replay",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 106682735473,
+      "started_at": "2026-09-22T09:05:17Z",
+      "completed_at": "2026-09-22T09:05:17Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383230/job/106682735473",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383230/job/106682735473"
+    },
+    {
+      "name": "CI Summary",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735451,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:19:37Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735451",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383674/job/106682735451"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735379,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:27Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383857/job/106682735379",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383857/job/106682735379"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735369,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383775/job/106682735369",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383775/job/106682735369"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735092,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383704/job/106682735092",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383704/job/106682735092"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735077,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383740/job/106682735077",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383740/job/106682735077"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735031,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:26Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383718/job/106682735031",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383718/job/106682735031"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682735026,
+      "started_at": "2026-09-22T09:05:25Z",
+      "completed_at": "2026-09-22T09:05:32Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383623/job/106682735026",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383623/job/106682735026"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734983,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:26Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383615/job/106682734983",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383615/job/106682734983"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734954,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:28Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383797/job/106682734954",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383797/job/106682734954"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734853,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:25Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383550/job/106682734853",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383550/job/106682734853"
+    },
+    {
+      "name": "kb-doc-gate / kb-doc-gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734516,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:33Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383396/job/106682734516",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383396/job/106682734516"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734513,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:30Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682734513",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383646/job/106682734513"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734464,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:26Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383402/job/106682734464",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383402/job/106682734464"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734283,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383508/job/106682734283",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383508/job/106682734283"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734218,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383424/job/106682734218",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383424/job/106682734218"
+    },
+    {
+      "name": "occ-preflight / eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682734162,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:29Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383489/job/106682734162",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383489/job/106682734162"
+    },
+    {
+      "name": "secrets-baseline-wiring / secrets-baseline-wiring",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733990,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:25Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383275/job/106682733990",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383275/job/106682733990"
+    },
+    {
+      "name": "public-repo-hygiene / public-repo-hygiene",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733952,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:41Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383096/job/106682733952",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383096/job/106682733952"
+    },
+    {
+      "name": "branch-claim-check / branch-claim-check",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733937,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:42Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383274/job/106682733937",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383274/job/106682733937"
+    },
+    {
+      "name": "closes-ref-gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733836,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:27Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383062/job/106682733836",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383062/job/106682733836"
+    },
+    {
+      "name": "advisory-job-gate / advisory-job-gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733651,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:30Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383118/job/106682733651",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708383118/job/106682733651"
+    },
+    {
+      "name": "lint (shadow)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733140,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:05:43Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682733140",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682733140"
+    },
+    {
+      "name": "Git env scrub gate",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733089,
+      "started_at": "2026-09-22T09:05:19Z",
+      "completed_at": "2026-09-22T09:05:45Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382807/job/106682733089",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382807/job/106682733089"
+    },
+    {
+      "name": "typecheck (shadow)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682733059,
+      "started_at": "2026-09-22T09:05:20Z",
+      "completed_at": "2026-09-22T09:06:55Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682733059",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682733059"
+    },
+    {
+      "name": "tests+coverage (shadow)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682732981,
+      "started_at": "2026-09-22T09:05:21Z",
+      "completed_at": "2026-09-22T09:19:10Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682732981",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682732981"
+    },
+    {
+      "name": "security (shadow)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682732774,
+      "started_at": "2026-09-22T09:05:19Z",
+      "completed_at": "2026-09-22T09:06:01Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682732774",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382699/job/106682732774"
+    },
+    {
+      "name": "Public Skill Hygiene",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 106682732392,
+      "started_at": "2026-09-22T09:05:24Z",
+      "completed_at": "2026-09-22T09:05:53Z",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382771/job/106682732392",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/35708382771/job/106682732392"
+    }
+  ],
+  "workflow_runs": [
+    {
+      "id": 35709772869,
+      "name": "TODO Audit on Merge",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384160,
+      "name": "No Faked Boundary Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383977,
+      "name": "Runtime Profiles",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384003,
+      "name": "docs-validate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383952,
+      "name": "Required-Check Skip-Vector Guard",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384257,
+      "name": "Receipt Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384540,
+      "name": "Ban Hardcoded Runner IP",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384266,
+      "name": "Reject skip-gate bypass tokens",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384086,
+      "name": "PR Title Check",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384068,
+      "name": "Deploy Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384138,
+      "name": "ONEX Schema Compatibility",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384323,
+      "name": "Imperative Contract Guard",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384193,
+      "name": "Contract Validation",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384128,
+      "name": "Hostile Reviewer",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708384014,
+      "name": "Non-dev base guard",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383489,
+      "name": "Dep Provenance Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383704,
+      "name": "Canonical Inference Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383508,
+      "name": "Lane Identity Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383623,
+      "name": "Reject skip-gate bypass tokens",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383740,
+      "name": "Stale TODO Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383775,
+      "name": "Check Architecture Handshake",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708382807,
+      "name": "Git env scrub",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383646,
+      "name": "Omni* Ecosystem Standards Compliance",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383274,
+      "name": "Branch Claim Check",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383096,
+      "name": "Public Repo Hygiene",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383797,
+      "name": "Concurrency Primitive Guard",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383615,
+      "name": "Validate PR Contracts",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383857,
+      "name": "Precommit Fail-Loud Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383844,
+      "name": "Hook Inventory Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383424,
+      "name": "Validate Validator Requirements",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383550,
+      "name": "receipt-honesty",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708382771,
+      "name": "Public Skill Hygiene",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383835,
+      "name": "URL Authority Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383402,
+      "name": "OCC Preflight",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383062,
+      "name": "Closes Reference Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383184,
+      "name": "OCC Companion Effect Publisher",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 35708383230,
+      "name": "OCC Autobind Publisher",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 35708383275,
+      "name": "Secrets Baseline Wiring Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383118,
+      "name": "Advisory Job Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383718,
+      "name": "Hook Edge Lane Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383849,
+      "name": "Main target guard",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383396,
+      "name": "KB Doc Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708383674,
+      "name": "CI",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 35708382699,
+      "name": "product-readiness-shadow",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "in_run_job_names": [
+    "AI-Slop Pattern Check (strict, PR diff)",
+    "Agent Contract Validation",
+    "Agent Framework Tests",
+    "Aislop Sweep",
+    "Arch: ModelCostLedger confined to effects (check 5)",
+    "Arch: ModelCostLedger run_id field + index (check 9)",
+    "Arch: No DB access in orchestrator/compute (checks 1 & 8)",
+    "Arch: No LinearClient outside effects (check 3)",
+    "Arch: No datetime.utcnow() (check 11)",
+    "Arch: No direct EventBus instantiation (OMN-10725)",
+    "Arch: No direct Kafka producer outside publisher (check 10)",
+    "Arch: No direct adapter imports in business logic (check 13)",
+    "Arch: No git/gh calls outside effects (check 2)",
+    "Arch: No hardcoded internal IPs (check 12)",
+    "Arch: No localhost/default env fallbacks (OMN-10658)",
+    "Arch: No polymorphic-agent in enforcement paths (OMN-9143)",
+    "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)",
+    "Arch: No repository adapter imports in orchestrator/compute (check 4)",
+    "Arch: omnidash_readonly role provisioning + CI (check 7)",
+    "Arch: onex.* topic naming convention (check 6)",
+    "Architecture Handshake",
+    "Architecture Invariants",
+    "Build Docker Image",
+    "CI Summary",
+    "Canonical Handler-Shape Ratchet",
+    "Code Quality",
+    "Contract Compliance",
+    "Contract Compliance Check",
+    "Cross-Repo Boundary Parity",
+    "Database Schema Validation",
+    "Deploy to Production",
+    "Deploy to Staging",
+    "Detect Changes",
+    "DoD Evidence Check",
+    "Enum Governance",
+    "Env Var Registry (OMN-6263)",
+    "Exports Validation",
+    "F5.1 No compact cmd topic",
+    "Golden Chain Integrity",
+    "Golden Chain Live",
+    "Hooks System Tests",
+    "Kafka Import Guard",
+    "Markdown Link Check",
+    "Merge Test Coverage",
+    "Merge-Sweep Contract",
+    "Migration Freeze",
+    "Mode Metadata Integrity",
+    "OCC Companion Merged Gate (OMN-15214)",
+    "ONEX Compliance",
+    "Pyright Type Checking",
+    "Python Security Scan",
+    "Quality Gate",
+    "Registry Consistency",
+    "Runner Route (OMN-18031) / route",
+    "Secret Detection",
+    "Security Gate",
+    "Skill Contract Validation",
+    "Skill Hygiene",
+    "Skill Monorepo-Ref Gate",
+    "Skip Count Ratchet (OMN-18776)",
+    "Tests (Split 1/2)",
+    "Tests (Split 2/2)",
+    "Tests Gate",
+    "Version Pin Compliance",
+    "no-noncanonical-lifecycle-classes",
+    "occ-preflight / eligibility",
+    "zone-filter / Zone Filter (docs-only check)"
+  ]
+}

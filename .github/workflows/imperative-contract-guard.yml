@@ -35,4 +35,4 @@ jobs:
     # policy -- an immutable ref that no unreleased upstream commit can move
     # under us -- without the regression. Re-point it at @main once
     # onex_change_control cuts a release carrying OMN-14780.
-    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@939856e335ad7be4f4a231b86d4241e69f1c388b
+    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@31b95fbff6f60cbe9ad2be5bda7616e8bb5c40b8
