@@ -279,6 +279,9 @@ def gh_merge_stub_dir(tmp_path: Path) -> Path:
             set -euo pipefail
             args="$*"
             case "$args" in
+              *"--json autoMergeRequest"*)
+                echo "${STUB_ARMED:-false}"
+                ;;
               *"--auto --squash"*)
                 if [ "${STUB_SQUASH_RESULT:-success}" = "success" ]; then
                   echo "${STUB_SQUASH_OUTPUT:-auto-merge enabled}"
@@ -316,6 +319,7 @@ def _run_enable_auto_merge(
     bare_output: str = "",
     squash_result: str = "success",
     squash_output: str = "",
+    armed: str = "false",
 ) -> subprocess.CompletedProcess[str]:
     """Run the extracted ``Enable auto-merge`` Bash against the stub."""
     script = _extract_enable_auto_merge_step_script()
@@ -328,6 +332,7 @@ def _run_enable_auto_merge(
         "STUB_BARE_OUTPUT": bare_output,
         "STUB_SQUASH_RESULT": squash_result,
         "STUB_SQUASH_OUTPUT": squash_output,
+        "STUB_ARMED": armed,
     }
     return subprocess.run(
         ["bash", "-c", script],
@@ -343,6 +348,20 @@ class TestAutoMergeEnableStep:
     """Behavioral coverage for the ``Enable auto-merge`` step's retry logic
     (OMN-16501). Extracts the live Bash from the YAML so the tests are bound
     to the deployed logic, not a re-implementation of it."""
+
+    def test_already_armed_pr_is_not_armed_again(self, gh_merge_stub_dir: Path) -> None:
+        """OMN-19216: a ready flip racing a check_suite or review event must not
+        arm twice. Both merge attempts are scripted to fail, proving neither ran."""
+        result = _run_enable_auto_merge(
+            gh_merge_stub_dir=gh_merge_stub_dir,
+            armed="true",
+            bare_result="failure",
+            bare_output="must not be invoked",
+            squash_result="failure",
+            squash_output="must not be invoked",
+        )
+        assert result.returncode == 0, result.stderr
+        assert "already armed; not arming again" in result.stdout
 
     def test_bare_auto_success_does_not_retry(self, gh_merge_stub_dir: Path) -> None:
         """Queue-controlled regime (OMN-13214): bare --auto succeeding must
