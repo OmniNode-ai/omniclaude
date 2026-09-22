@@ -137,7 +137,7 @@ jobs:
       # the failure that took this organisation's deploy gates down on
       # 2026-09-15 when a force-push orphaned the commit they named.
       - name: Check out the routing node
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_infra
           ref: 341ac00cfac9b0f7e42498de265ace7006fdfa72
@@ -253,7 +253,7 @@ jobs:
 
       - name: Upload the decision record
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runner-route-decision-${{ github.run_id }}-${{ github.job }}
           path: .runner-route/runner-route-decision.json
