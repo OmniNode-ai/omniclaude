@@ -94,8 +94,65 @@ Fail-closed boundary, stated deliberately
   in a command that has nothing to do with git is not this guard's business,
   and refusing it would be a bug wearing a fail-closed costume.
 
+The dirty-path restore arm (OMN-18874), and why its scope is wider
+--------------------------------------------------------------------
+Everything above is about the ONE tree many lanes share. This arm is about a
+hazard every lane has in its OWN tree: a path-scoped restore --
+``git checkout [<ref>] -- <path>``, ``git checkout <ref> <path>``,
+``git restore [--source=<ref>] <path>`` -- returns the file to the
+REFERENCE, not to what is in the working tree. Over a path carrying
+uncommitted work it discards that work silently: exit 0, no output, and no
+reflog, because a working tree that was never committed has none. Operating
+Rule 17 names the trap and prescribes the RED-proof sequence that springs
+it whenever HEAD is still the base. Four lanes lost work that way, each
+after reading the rule: OMN-18566, the OMN-18863 lane, OMN-18992 and
+OMN-19237.
+
+So the arm refuses a path restore when any content it would overwrite -- the
+working-tree file, and the index entry when the restore writes the index --
+exists nowhere else: not in the restore's own source, and not in any ref
+declared in ``restore_reachable_refs`` (HEAD, the upstream, ``origin/dev``,
+``origin/main``). That comparison, rather than a bare "is it dirty", is what
+lets the committed-first Rule 17 sequence through: its closing
+``git checkout HEAD -- <path>`` runs over a path that differs from HEAD, but
+holds ``origin/dev``'s content, so restoring it loses nothing. Staged
+changes count as uncommitted -- a staged blob is reachable from no ref. A
+clean path, a path that does not exist yet, a deleted file brought back, and
+an untracked file the source does not name are never refused, and neither is
+the read the refusal prescribes, ``git show <rev>:<path> > <scratch file>``,
+which never writes the tree.
+
+Scope is every git root the guard can place under the fleet: the registry
+clone, any canonical clone or worktree beneath ``$OMNI_HOME``, anything under
+a declared worktrees root (``worktree_root_envs``), and any git WORKTREE at
+all (a ``.git`` file), matching the OMN-17334 stash guard so a thin hook
+environment cannot switch it off where lanes work. A plain clone elsewhere
+on the disk is left alone.
+
+Unlike the rest of this module, this arm has to run git: dirtiness lives in
+the index and the object store. Every probe runs with the location variables
+scrubbed, optional locks off, and a declared timeout, and it fails CLOSED --
+a probe that errors or times out, an unresolvable ``cd`` ahead of the
+restore, a path operand the shell would expand (variables, ``~``, brace
+expansion), ``--pathspec-from-file``, and a ``--git-dir``/``--work-tree``
+override -- flag or ``GIT_DIR``/``GIT_WORK_TREE`` assignment -- are all
+refused, because in each case whether the command destroys work cannot be
+determined. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
+refused on the same ground, since it may be a branch switch or a path
+restore; the refusal names ``git switch`` as the unambiguous verb. A
+conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
+working-tree file from the index stages. Probes run
+only for a restore shape in scope, so ordinary Bash traffic never pays for
+them.
+
 What this cannot do, stated rather than implied
 -------------------------------------------------
+The restore arm cannot tell a deliberate probe mutation from work: an
+uncommitted edit typed into a tracked file is refused however disposable the
+lane considers it, and the refusal points at the scratch-copy read that
+never needs a restore. A ``git show <rev>:<path> > <path>`` redirected over
+the dirty file itself is the same loss by other means and is not seen.
+
 It sees a command only at the Claude Code tool seam. A ``git reset`` typed
 directly at a terminal, or run by a script this guard never sees, reaches
 the shared tree unchallenged. And the hook loads at session start, so
@@ -109,6 +166,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -118,12 +176,14 @@ __all__ = [
     "GATE_BIT_NAME",
     "TICKET",
     "Decision",
+    "GitProbeError",
     "Policy",
     "PolicyError",
     "evaluate_bash_command",
     "load_policy",
     "main",
     "resolve_registry_root",
+    "resolve_worktree_roots",
 ]
 
 DEFAULT_POLICY_PATH: Final[Path] = (
@@ -173,6 +233,10 @@ class PolicyError(RuntimeError):
     """The policy file is missing, unreadable, or malformed."""
 
 
+class GitProbeError(RuntimeError):
+    """A git probe behind the restore arm failed or timed out."""
+
+
 @dataclass(frozen=True)
 class Policy:
     ticket: str
@@ -194,6 +258,14 @@ class Policy:
     protected_path_operands: tuple[str, ...]
     registry_root_envs: tuple[str, ...]
     registry_root_markers: tuple[str, ...]
+    restore_ticket: str
+    restore_rule: str
+    restore_subcommands: frozenset[str]
+    restore_reachable_refs: tuple[str, ...]
+    restore_max_dirty_paths: int
+    restore_safe_alternatives: str
+    git_probe_timeout_seconds: float
+    worktree_root_envs: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -221,6 +293,13 @@ def _str_list(raw: Any, key: str) -> list[str]:
     ):
         raise PolicyError(f"policy field {key!r} must be a non-empty list of strings")
     return value
+
+
+def _positive_number(raw: Any, key: str) -> float:
+    value = raw.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise PolicyError(f"policy field {key!r} must be a positive number")
+    return float(value)
 
 
 def load_policy(path: Path | None = None) -> Policy:
@@ -266,6 +345,14 @@ def load_policy(path: Path | None = None) -> Policy:
         protected_path_operands=tuple(_str_list(raw, "protected_path_operands")),
         registry_root_envs=tuple(_str_list(raw, "registry_root_envs")),
         registry_root_markers=tuple(_str_list(raw, "registry_root_markers")),
+        restore_ticket=_require_str(raw, "restore_ticket"),
+        restore_rule=_require_str(raw, "restore_rule"),
+        restore_subcommands=frozenset(_str_list(raw, "restore_subcommands")),
+        restore_reachable_refs=tuple(_str_list(raw, "restore_reachable_refs")),
+        restore_max_dirty_paths=int(_positive_number(raw, "restore_max_dirty_paths")),
+        restore_safe_alternatives=_require_str(raw, "restore_safe_alternatives"),
+        git_probe_timeout_seconds=_positive_number(raw, "git_probe_timeout_seconds"),
+        worktree_root_envs=tuple(_str_list(raw, "worktree_root_envs")),
     )
 
 
@@ -316,6 +403,9 @@ class _GitInvocation:
     target_arg: str | None  # the `-C <path>` value, if any
     subcommand: str
     args: tuple[str, ...]  # everything after the subcommand
+    #: global flags before the subcommand, `-C` excluded; values of the
+    #: separated two-token forms are folded in as `<flag>=<value>`.
+    global_flags: tuple[str, ...] = ()
 
 
 def _parse_git(tokens: list[str]) -> _GitInvocation | None:
@@ -325,6 +415,7 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         return None
     args = stripped[1:]
     target_arg: str | None = None
+    global_flags: list[str] = []
     idx = 0
     while idx < len(args):
         tok = args[idx]
@@ -334,9 +425,12 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
             idx += 2
             continue
         if tok in _GIT_VALUE_FLAGS:
+            value = args[idx + 1] if idx + 1 < len(args) else ""
+            global_flags.append(f"{tok}={value}")
             idx += 2
             continue
         if tok.startswith("-"):
+            global_flags.append(tok)
             idx += 1
             continue
         break
@@ -346,6 +440,7 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         target_arg=target_arg,
         subcommand=args[idx],
         args=tuple(args[idx + 1 :]),
+        global_flags=tuple(global_flags),
     )
 
 
@@ -931,6 +1026,621 @@ def _render_block_reason(
     )
 
 
+# ---------------------------------------------------------------------------
+# The dirty-path restore arm (OMN-18874)
+# ---------------------------------------------------------------------------
+
+#: Environment variables that would point a probe at a different repository
+#: than the one resolved from the command. Scrubbed from every probe.
+_GIT_LOCATION_ENV: Final[frozenset[str]] = frozenset(
+    {
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_PREFIX",
+    }
+)
+
+#: Global flags that make git write a different repository or tree than the
+#: one this guard resolves from `-C` and the cwd.
+_RELOCATING_GLOBAL_FLAGS: Final[frozenset[str]] = frozenset(
+    {"--git-dir", "--work-tree", "--namespace"}
+)
+
+#: `git checkout` options that make it a branch operation, not a restore.
+_CHECKOUT_BRANCH_FLAGS: Final[frozenset[str]] = frozenset({"--orphan", "--detach"})
+
+_PATHSPEC_FROM_FILE: Final[str] = "--pathspec-from-file"
+
+
+class _Indeterminate(Exception):
+    """Whether a restore would discard work cannot be determined."""
+
+
+@dataclass(frozen=True)
+class _RestoreShape:
+    source: str | None  # a tree-ish, or None when the source is the index
+    paths: tuple[str, ...]
+    writes_index: bool
+    writes_worktree: bool
+    #: overlay mode leaves a path the source does not carry untouched;
+    #: no-overlay removes it. `checkout` defaults to overlay, `restore` not.
+    overlay: bool
+
+
+def resolve_worktree_roots(
+    policy: Policy, environ: dict[str, str] | None = None
+) -> tuple[Path, ...]:
+    """Declared worktrees roots that resolve to a directory, in order.
+
+    A value that does not resolve to a directory is ignored rather than
+    trusted, as for the registry root.
+    """
+    env = os.environ if environ is None else environ
+    roots: list[Path] = []
+    for name in policy.worktree_root_envs:
+        raw = env.get(name)
+        if not raw:
+            continue
+        try:
+            candidate = Path(raw).resolve()
+        except OSError:
+            continue
+        if candidate.is_dir() and candidate not in roots:
+            roots.append(candidate)
+    return tuple(roots)
+
+
+def _restore_in_scope(
+    git_root: Path,
+    registry_root: Path | None,
+    worktree_roots: tuple[Path, ...],
+    policy: Policy,
+) -> bool:
+    """Is this git root one the fleet works in?
+
+    Anything under the registry root or a declared worktrees root, the
+    registry clone itself found by its markers, and any git WORKTREE at all
+    -- the OMN-17334 stash guard's scope, so a hook process with no
+    OMNI_HOME still guards the place lanes actually edit. A plain clone
+    elsewhere is out of scope.
+    """
+    for base in (registry_root, *worktree_roots):
+        if base is None:
+            continue
+        try:
+            git_root.relative_to(base)
+        except ValueError:
+            continue
+        return True
+    if _is_registry_root(git_root, registry_root, policy):
+        return True
+    try:
+        return (git_root / ".git").is_file()
+    except OSError:
+        # Unreadable: fail closed and treat it as a worktree.
+        return True
+
+
+def _run_git(
+    args: list[str], cwd: Path, timeout: float, stdin: bytes | None = None
+) -> subprocess.CompletedProcess[bytes]:
+    """Run one read-only git probe, or raise GitProbeError.
+
+    Location variables are scrubbed so the probe reads the repository the
+    command names, and GIT_OPTIONAL_LOCKS=0 keeps `git status` from taking
+    the index lock a peer's commit may be waiting on.
+    """
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_ENV}
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            env=env,
+            input=stdin,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitProbeError(
+            f"`git {args[0]}` did not answer within {timeout:g}s"
+        ) from exc
+    except OSError as exc:
+        raise GitProbeError(f"`git {args[0]}` could not be started ({exc})") from exc
+
+
+def _probe_failure(
+    result: subprocess.CompletedProcess[bytes], what: str
+) -> GitProbeError:
+    detail = result.stderr.decode("utf-8", "replace").strip()[:200]
+    return GitProbeError(f"`git {what}` exited {result.returncode}: {detail}")
+
+
+def _is_revision(token: str, cwd: Path, policy: Policy) -> bool:
+    """Does git read this checkout operand as a tree-ish rather than a path?"""
+    result = _run_git(
+        ["rev-parse", "--verify", "-q", "--end-of-options", f"{token}^{{tree}}"],
+        cwd,
+        policy.git_probe_timeout_seconds,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    raise _probe_failure(result, "rev-parse")
+
+
+def _checkout_shape(
+    args: list[str], policy: Policy, is_revision: Any
+) -> _RestoreShape | None:
+    """The restore a `git checkout` performs, or None when it is not one."""
+    if "--" in args:
+        split = args.index("--")
+        before, after, has_separator = args[:split], args[split + 1 :], True
+    else:
+        before, after, has_separator = args, [], False
+    operands: list[str] = []
+    overlay = True
+    idx = 0
+    while idx < len(before):
+        tok = before[idx]
+        if tok in policy.branch_creation_flags or tok in _CHECKOUT_BRANCH_FLAGS:
+            return None
+        if tok == "--no-overlay":
+            overlay = False
+        elif tok == "--overlay":
+            overlay = True
+        elif tok == "--conflict":
+            idx += 1
+        elif tok.startswith("-") and tok != "-":
+            pass
+        else:
+            operands.append(tok)
+        idx += 1
+    if has_separator:
+        if not after:
+            return None
+        source = operands[0] if operands else None
+        paths = tuple(after)
+    else:
+        if not operands or operands[0] == "-":
+            return None
+        if is_revision(operands[0]):
+            if len(operands) == 1:
+                # A branch switch. git refuses one that would overwrite
+                # local changes unless forced; it is not a path restore.
+                return None
+            source, paths = operands[0], tuple(operands[1:])
+        else:
+            source, paths = None, tuple(operands)
+    return _RestoreShape(
+        source=source,
+        paths=paths,
+        writes_index=source is not None,
+        writes_worktree=True,
+        overlay=overlay,
+    )
+
+
+def _restore_shape(args: list[str]) -> _RestoreShape | None:
+    """The restore a `git restore` performs, or None when it names no path."""
+    staged = worktree = overlay = False
+    source: str | None = None
+    paths: list[str] = []
+    after_separator = False
+    idx = 0
+    while idx < len(args):
+        tok = args[idx]
+        if after_separator:
+            paths.append(tok)
+        elif tok == "--":
+            after_separator = True
+        elif tok in ("-s", "--source"):
+            source = args[idx + 1] if idx + 1 < len(args) else None
+            idx += 1
+        elif tok.startswith("--source="):
+            source = tok.split("=", 1)[1]
+        elif tok == "--staged":
+            staged = True
+        elif tok == "--worktree":
+            worktree = True
+        elif tok == "--overlay":
+            overlay = True
+        elif tok == "--no-overlay":
+            overlay = False
+        elif tok == "--conflict":
+            idx += 1
+        elif tok.startswith("--"):
+            pass
+        elif tok.startswith("-") and len(tok) > 1:
+            cluster = tok[1:]
+            for pos, letter in enumerate(cluster):
+                if letter == "s":
+                    rest = cluster[pos + 1 :]
+                    if rest:
+                        source = rest
+                    else:
+                        source = args[idx + 1] if idx + 1 < len(args) else None
+                        idx += 1
+                    break
+                if letter == "S":
+                    staged = True
+                elif letter == "W":
+                    worktree = True
+        else:
+            paths.append(tok)
+        idx += 1
+    if not paths:
+        return None
+    if source is None and staged:
+        source = "HEAD"
+    return _RestoreShape(
+        source=source,
+        paths=tuple(paths),
+        writes_index=staged,
+        writes_worktree=worktree or not staged,
+        overlay=overlay,
+    )
+
+
+def _parse_restore(
+    invocation: _GitInvocation, policy: Policy, is_revision: Any
+) -> _RestoreShape | None:
+    args = list(invocation.args)
+    if any(
+        arg == _PATHSPEC_FROM_FILE or arg.startswith(f"{_PATHSPEC_FROM_FILE}=")
+        for arg in args
+    ):
+        raise _Indeterminate(
+            "it reads its paths from --pathspec-from-file, which this guard "
+            "does not open"
+        )
+    if invocation.subcommand == "checkout":
+        return _checkout_shape(args, policy, is_revision)
+    return _restore_shape(args)
+
+
+def _require_literal(shape: _RestoreShape) -> None:
+    for operand in (*shape.paths, *([shape.source] if shape.source else [])):
+        # `{a,b}` is brace expansion: git would be asked about a literal
+        # pathspec that matches nothing, while the shell hands the real
+        # command both files. Globs are left alone -- git's own pathspec
+        # globbing matches a superset of what the shell expands.
+        if (
+            "$" in operand
+            or "`" in operand
+            or operand.startswith("~")
+            or ("{" in operand and "}" in operand)
+        ):
+            raise _Indeterminate(
+                f"the operand {operand!r} is expanded by the shell, so what "
+                "it names cannot be read from the command"
+            )
+
+
+def _parse_porcelain(raw: bytes) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for entry in raw.decode("utf-8", "surrogateescape").split("\0"):
+        if len(entry) < 4:
+            continue
+        status, path = entry[:2], entry[3:]
+        if path not in seen:
+            seen.add(path)
+            entries.append((status, path))
+    return entries
+
+
+def _index_blobs(
+    git_root: Path, paths: list[str], timeout: float
+) -> tuple[dict[str, str], set[str]]:
+    result = _run_git(
+        ["--literal-pathspecs", "ls-files", "-s", "-z", "--", *paths],
+        git_root,
+        timeout,
+    )
+    if result.returncode != 0:
+        raise _probe_failure(result, "ls-files")
+    blobs: dict[str, str] = {}
+    conflicted: set[str] = set()
+    for entry in result.stdout.decode("utf-8", "surrogateescape").split("\0"):
+        if "\t" not in entry:
+            continue
+        meta, path = entry.split("\t", 1)
+        fields = meta.split()
+        if len(fields) != 3:
+            continue
+        if fields[2] == "0":
+            blobs[path] = fields[1]
+        else:
+            conflicted.add(path)
+    return blobs, conflicted
+
+
+def _tree_blobs(
+    git_root: Path, ref: str, paths: list[str], timeout: float
+) -> dict[str, str] | None:
+    """Blob ids the tree-ish carries for these paths, or None if it is absent."""
+    result = _run_git(
+        ["--literal-pathspecs", "ls-tree", "-r", "-z", ref, "--", *paths],
+        git_root,
+        timeout,
+    )
+    if result.returncode != 0:
+        return None
+    blobs: dict[str, str] = {}
+    for entry in result.stdout.decode("utf-8", "surrogateescape").split("\0"):
+        if "\t" not in entry:
+            continue
+        meta, path = entry.split("\t", 1)
+        fields = meta.split()
+        if len(fields) == 3:
+            blobs[path] = fields[2]
+    return blobs
+
+
+def _worktree_blobs(git_root: Path, paths: list[str], timeout: float) -> dict[str, str]:
+    """Blob ids the working-tree files WOULD have; nothing is written."""
+    present = [
+        p for p in paths if (git_root / p).is_file() or (git_root / p).is_symlink()
+    ]
+    if not present:
+        return {}
+    result = _run_git(
+        ["hash-object", "--stdin-paths"],
+        git_root,
+        timeout,
+        stdin=("\n".join(present) + "\n").encode("utf-8", "surrogateescape"),
+    )
+    if result.returncode != 0:
+        raise _probe_failure(result, "hash-object")
+    hashes = result.stdout.decode("ascii", "replace").split()
+    if len(hashes) != len(present):
+        raise GitProbeError(
+            f"`git hash-object` answered {len(hashes)} ids for {len(present)} paths"
+        )
+    return dict(zip(present, hashes, strict=True))
+
+
+def _paths_losing_work(
+    shape: _RestoreShape, target_dir: Path, git_root: Path, policy: Policy
+) -> list[tuple[str, list[str]]]:
+    """Each named path whose overwritten content exists nowhere else.
+
+    Content is safe when the restore's own source, or one of the declared
+    reachable refs, carries exactly that blob for that path -- then nothing
+    is lost, even over a path that differs from HEAD, which is the Rule 17
+    committed-first sequence.
+    """
+    timeout = policy.git_probe_timeout_seconds
+    status = _run_git(
+        [
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+            "--",
+            *shape.paths,
+        ],
+        target_dir,
+        timeout,
+    )
+    if status.returncode != 0:
+        raise _probe_failure(status, "status")
+    dirty = _parse_porcelain(status.stdout)
+    if not dirty:
+        return []
+    if len(dirty) > policy.restore_max_dirty_paths:
+        raise _Indeterminate(
+            f"{len(dirty)} matched paths carry changes, more than the "
+            f"{policy.restore_max_dirty_paths} this guard evaluates"
+        )
+    paths = [path for _, path in dirty]
+    if any("\n" in path for path in paths):
+        raise _Indeterminate("a matched path contains a newline")
+    index_blobs, conflicted = _index_blobs(git_root, paths, timeout)
+    worktree_blobs = _worktree_blobs(git_root, paths, timeout)
+    if shape.source is None:
+        source_blobs = index_blobs
+    else:
+        read = _tree_blobs(git_root, shape.source, paths, timeout)
+        if read is None:
+            raise _Indeterminate(
+                f"its source {shape.source!r} could not be read as a tree"
+            )
+        source_blobs = read
+    reachable_maps = [
+        blobs
+        for ref in policy.restore_reachable_refs
+        if (blobs := _tree_blobs(git_root, ref, paths, timeout)) is not None
+    ]
+
+    lost: list[tuple[str, list[str]]] = []
+    for _, path in dirty:
+        tracked = path in index_blobs or path in conflicted
+        in_source = path in source_blobs
+        conflict_rewrite = shape.source is None and path in conflicted
+        if not (in_source or conflict_rewrite or (tracked and not shape.overlay)):
+            # Overlay mode never touches a path its source does not carry.
+            continue
+        reachable = {blobs[path] for blobs in reachable_maps if path in blobs}
+        if in_source:
+            reachable.add(source_blobs[path])
+        kinds: list[str] = []
+        worktree_blob = worktree_blobs.get(path)
+        index_blob = index_blobs.get(path)
+        if shape.writes_worktree and worktree_blob and worktree_blob not in reachable:
+            if not tracked:
+                kinds.append("untracked file")
+            elif worktree_blob == index_blob:
+                kinds.append("staged change")
+            else:
+                kinds.append("unstaged edit")
+        if (
+            shape.writes_index
+            and index_blob
+            and index_blob not in reachable
+            and (shape.writes_worktree or index_blob != worktree_blob)
+            and "staged change" not in kinds
+        ):
+            kinds.append("staged change")
+        if kinds:
+            lost.append((path, kinds))
+    return lost
+
+
+def _render_restore_reason(
+    policy: Policy,
+    invocation: _GitInvocation,
+    git_root: Path,
+    lost: list[tuple[str, list[str]]],
+) -> str:
+    shown = "; ".join(f"{path} ({', '.join(kinds)})" for path, kinds in lost[:5])
+    if len(lost) > 5:
+        shown += f"; and {len(lost) - 5} more"
+    refs = ", ".join(policy.restore_reachable_refs)
+    return (
+        f"BLOCKED: `git {invocation.subcommand}` in {git_root} would discard "
+        f"uncommitted work ({policy.restore_ticket}, {policy.restore_rule}). "
+        "These paths hold content that exists nowhere else -- not in the "
+        f"restore's source and not in {refs}: {shown}. A path-scoped restore "
+        "returns the file to the reference, not to what is in your working "
+        "tree; it prints nothing, exits 0, and a working tree that was never "
+        "committed has no reflog to recover it from. Four lanes lost work "
+        "exactly this way (OMN-18566, OMN-18863, OMN-18992, OMN-19237). "
+        f"Instead: {policy.restore_safe_alternatives}. A restore over a clean "
+        f"path is never refused. To disable this guard: onex hooks disable "
+        f"{GATE_BIT_NAME}"
+    )
+
+
+def _render_restore_indeterminate(
+    policy: Policy, invocation: _GitInvocation, why: str
+) -> str:
+    return (
+        f"BLOCKED: `git {invocation.subcommand}` is a path-scoped restore, and "
+        "whether it would discard uncommitted work could not be determined: "
+        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). An "
+        "unverifiable restore is refused, never assumed safe, because the "
+        "loss it risks is silent and unrecoverable. Instead: "
+        f"{policy.restore_safe_alternatives}. Or name each path literally, "
+        "from a directory the guard can resolve (an absolute -C <path>, or a "
+        "literal cd), and a restore over a clean path passes. To disable this "
+        f"guard: onex hooks disable {GATE_BIT_NAME}"
+    )
+
+
+def _assigns_git_location(tokens: list[str]) -> bool:
+    """Does this segment set a git location variable for what it runs?
+
+    Covers `GIT_DIR=x git ...`, `env GIT_WORK_TREE=x git ...`, and a bare
+    `export GIT_DIR=x` or `GIT_DIR=x` segment that sets it for the rest of
+    the command. `_strip_wrappers` drops these tokens, and the probes scrub
+    the same variables, so without this the probe would read one repository
+    while the command wrote another.
+    """
+    for tok in tokens:
+        name = tok.split("=", 1)[0]
+        if _ASSIGNMENT.match(tok) and name in _GIT_LOCATION_ENV:
+            return True
+        if _ASSIGNMENT.match(tok) or os.path.basename(tok) in (*_WRAPPERS, "export"):
+            continue
+        break
+    return False
+
+
+def _restore_refusal(
+    invocation: _GitInvocation,
+    policy: Policy,
+    target_dir: Path,
+    target_known: bool,
+    registry_root: Path | None,
+    worktree_roots: tuple[Path, ...],
+    env_relocated: bool = False,
+) -> str | None:
+    """Why this path restore is refused, or None when it discards nothing."""
+    if invocation.subcommand not in policy.restore_subcommands:
+        return None
+    relocated = env_relocated or any(
+        flag.split("=", 1)[0] in _RELOCATING_GLOBAL_FLAGS
+        for flag in invocation.global_flags
+    )
+    git_root: Path | None = None
+    if target_known and not relocated:
+        git_root = _find_git_root(target_dir)
+        if git_root is None:
+            # Not a repository: git itself refuses the command.
+            return None
+        if not _restore_in_scope(git_root, registry_root, worktree_roots, policy):
+            return None
+
+    def is_revision(token: str) -> bool:
+        if git_root is None:
+            raise _Indeterminate(
+                f"whether `git checkout {token}` switches branches or restores "
+                "a path depends on a repository this guard could not resolve "
+                "(to switch branches, `git switch` is unambiguous and is not "
+                "evaluated by this arm)"
+            )
+        return _is_revision(token, target_dir, policy)
+
+    try:
+        shape = _parse_restore(invocation, policy, is_revision)
+        if shape is None:
+            return None
+        if relocated:
+            raise _Indeterminate(
+                "it carries --git-dir, --work-tree or --namespace, or sets "
+                "GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE, so the tree it "
+                "writes is not the one resolved from the command"
+            )
+        if git_root is None:
+            raise _Indeterminate(
+                "an earlier cd, or its -C operand, could not be resolved, so "
+                "neither can the tree it writes"
+            )
+        _require_literal(shape)
+        lost = _paths_losing_work(shape, target_dir, git_root, policy)
+    except _Indeterminate as exc:
+        return _render_restore_indeterminate(policy, invocation, str(exc))
+    except GitProbeError as exc:
+        return _render_restore_indeterminate(
+            policy, invocation, f"a git probe failed ({exc})"
+        )
+    if not lost:
+        return None
+    return _render_restore_reason(policy, invocation, git_root, lost)
+
+
+def _cd_operand_is_absolute(tokens: list[str], policy: Policy) -> bool:
+    """Does this `cd` land somewhere independent of the directory before it?"""
+    operands = [tok for tok in _strip_wrappers(tokens)[1:] if not tok.startswith("-")]
+    if not operands:
+        return True
+    return operands[0].startswith(("/", "~", "$"))
+
+
+def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
+    stripped = _strip_wrappers(tokens)
+    return bool(stripped) and (
+        os.path.basename(stripped[0]) in policy.directory_changing_programs
+    )
+
+
+def _target_is_literal(invocation: _GitInvocation) -> bool:
+    arg = invocation.target_arg
+    if arg is None:
+        return False
+    return Path(arg).is_absolute() and "$" not in arg and "`" not in arg
+
+
 def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
     """Does raw text name `git` and a refused verb as whole words?
 
@@ -947,7 +1657,11 @@ def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
 
 
 def evaluate_bash_command(
-    command: str, policy: Policy, cwd: Path, registry_root: Path | None
+    command: str,
+    policy: Policy,
+    cwd: Path,
+    registry_root: Path | None,
+    worktree_roots: tuple[Path, ...] = (),
 ) -> Decision:
     notes: list[str] = []
     segments = _segments(command)
@@ -974,16 +1688,45 @@ def evaluate_bash_command(
         )
 
     effective_cwd = cwd
+    # Whether effective_cwd is really where the shell will be. An
+    # unresolvable `cd` leaves effective_cwd where it was, which keeps every
+    # shared-tree refusal in force; the restore arm needs the real directory
+    # and fails closed when it is not known (OMN-18874).
+    cwd_known = True
+    # A location variable the hook itself inherits, or one exported earlier
+    # in this command, relocates every later git call.
+    exported_relocation = any(os.environ.get(name) for name in _GIT_LOCATION_ENV)
     for segment in segments:
-        moved_to = _resolve_cd_target(segment, policy, effective_cwd)
-        if moved_to is not None:
-            effective_cwd = moved_to
+        if _assigns_git_location(segment):
+            stripped_program = _strip_wrappers(segment)
+            if (
+                not stripped_program
+                or os.path.basename(stripped_program[0]) == "export"
+            ):
+                exported_relocation = True
+                continue
+        if _is_directory_change(segment, policy):
+            moved_to = _resolve_cd_target(segment, policy, effective_cwd)
+            if moved_to is None:
+                cwd_known = False
+            else:
+                cwd_known = cwd_known or _cd_operand_is_absolute(segment, policy)
+                effective_cwd = moved_to
             continue
         invocation = _parse_git(segment)
         if invocation is None:
             continue
         if invocation.subcommand not in policy.refused_subcommands:
             continue
+        if invocation.target_arg is None:
+            target_known = cwd_known
+        else:
+            target_known = _target_is_literal(invocation) or (
+                cwd_known
+                and "$" not in invocation.target_arg
+                and "`" not in invocation.target_arg
+                and not invocation.target_arg.startswith("~")
+            )
         try:
             target_dir = _resolve_target_dir(invocation, effective_cwd)
         except OSError as exc:
@@ -1000,11 +1743,23 @@ def evaluate_bash_command(
                 ),
             )
         git_root = _find_git_root(target_dir)
-        if git_root is None:
-            # Not inside any git repository this guard can identify -- git
-            # itself will refuse the command; nothing to gate here.
-            continue
-        if not _is_registry_root(git_root, registry_root, policy):
+        in_registry = git_root is not None and _is_registry_root(
+            git_root, registry_root, policy
+        )
+        if git_root is not None and in_registry:
+            detail = _refusal_detail(
+                invocation,
+                policy,
+                _read_current_branch(git_root),
+                target_dir=target_dir,
+                git_root=git_root,
+            )
+            if detail is not None:
+                return Decision(
+                    blocked=True,
+                    reason=_render_block_reason(policy, invocation, git_root, detail),
+                )
+        elif git_root is not None:
             protected = _protected_push_detail(
                 invocation, policy, git_root, registry_root
             )
@@ -1013,24 +1768,24 @@ def evaluate_bash_command(
                     blocked=True,
                     reason=_render_protected_push_reason(policy, git_root, protected),
                 )
+        # OMN-18874. Runs in every tree the fleet works in, the registry
+        # clone included, after that clone's own refusals have had their say.
+        restore = _restore_refusal(
+            invocation,
+            policy,
+            target_dir,
+            target_known,
+            registry_root,
+            worktree_roots,
+            env_relocated=exported_relocation or _assigns_git_location(segment),
+        )
+        if restore is not None:
+            return Decision(blocked=True, reason=restore)
+        if git_root is not None and not in_registry:
             notes.append(
                 f"`git {invocation.subcommand}` targets {git_root}, which is "
                 "not the shared registry clone"
             )
-            continue
-        detail = _refusal_detail(
-            invocation,
-            policy,
-            _read_current_branch(git_root),
-            target_dir=target_dir,
-            git_root=git_root,
-        )
-        if detail is None:
-            continue
-        return Decision(
-            blocked=True,
-            reason=_render_block_reason(policy, invocation, git_root, detail),
-        )
     return Decision(blocked=False, notes=tuple(notes))
 
 
@@ -1088,9 +1843,12 @@ def main(argv: list[str] | None = None) -> int:
     cwd_raw = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     cwd = Path(cwd_raw)
     registry_root = resolve_registry_root(policy)
+    worktree_roots = resolve_worktree_roots(policy)
 
     try:
-        decision = evaluate_bash_command(command, policy, cwd, registry_root)
+        decision = evaluate_bash_command(
+            command, policy, cwd, registry_root, worktree_roots
+        )
     except Exception as exc:  # noqa: BLE001 - fail-closed boundary, deliberate
         return _block(
             "BLOCKED: the OMN-18798 shared-tree git admission gate could not "

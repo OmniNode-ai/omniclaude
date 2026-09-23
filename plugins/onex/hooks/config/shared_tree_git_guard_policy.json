@@ -151,11 +151,42 @@
         "that reaches the same outcome without touching state a peer lane owns, so",
         "there is nothing a legitimate use needs that this guard blocks.",
         "",
-        "Deliberately NOT refused, and named rather than left silent: `git restore`",
-        "and `git restore --staged`, which can be as blanket as a checkout. They",
-        "are outside the verb set this ticket's brief enumerated, and adding a verb",
-        "nobody measured is how a guard starts refusing work it was never shown to",
-        "protect. Add it when a collision is measured, with the measurement."
+        "`git restore` was deliberately left out of the first revision, pending a",
+        "measured collision. Four were then measured, and it joined under the",
+        "restore arm below.",
+        "",
+        "THE RESTORE ARM (OMN-18874). A path-scoped restore -- `git checkout",
+        "[<ref>] -- <path>`, `git checkout <ref> <path>`, `git restore",
+        "[--source=<ref>] <path>` -- returns the file to the REFERENCE, not to what",
+        "is in the working tree. Over uncommitted work it discards it silently:",
+        "exit 0, no output, no reflog. Operating Rule 17 names the trap and its",
+        "RED-proof recipe springs it whenever HEAD is still the base. Measured four",
+        "times, every lane having read the rule: OMN-18566 (2026-09-17), the",
+        "OMN-18863 lane (2026-09-20), OMN-18992 (2026-09-21) and OMN-19237",
+        "(2026-09-23), rolling work ledger rows 5837 and 5839.",
+        "",
+        "restore_subcommands -- the verbs the arm evaluates. Both are also in",
+        "  refused_subcommands so they reach the evaluation loop at all; neither",
+        "  is refused outright.",
+        "",
+        "restore_reachable_refs -- a path's overwritten content is SAFE, and the",
+        "  restore allowed, when the restore's own source or one of these refs",
+        "  carries exactly that blob for that path. This is what lets the",
+        "  committed-first Rule 17 sequence through: its closing `git checkout",
+        "  HEAD -- <path>` runs over a path holding origin/dev's content, which is",
+        "  dirty against HEAD and lost nowhere. A ref that does not resolve is",
+        "  skipped, which can only make the arm stricter.",
+        "",
+        "Scope of the arm: every git root under the registry root or a declared",
+        "worktrees root (worktree_root_envs), the registry clone itself, and any",
+        "git WORKTREE anywhere -- the OMN-17334 stash guard's scope. A plain clone",
+        "elsewhere is left alone.",
+        "",
+        "It fails CLOSED. A git probe that errors or exceeds",
+        "git_probe_timeout_seconds, more dirty matches than restore_max_dirty_paths,",
+        "an unresolvable cd or -C, a shell-expanded operand, --pathspec-from-file,",
+        "and a --git-dir/--work-tree override are each refused, because whether the",
+        "command destroys work cannot then be known."
     ],
     "ticket": "OMN-18798",
     "rule": "Operating Rule 19",
@@ -167,7 +198,8 @@
         "rebase",
         "branch",
         "merge",
-        "push"
+        "push",
+        "restore"
     ],
     "unconditional_subcommands": [
         "reset",
@@ -253,7 +285,7 @@
         "docs/tracking/ROLLING_WORK_LEDGER.md",
         "docs/tracking/archive"
     ],
-    "safe_alternatives": "do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused only on the append-only ledger itself",
+    "safe_alternatives": "do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work",
     "registry_root_envs": [
         "OMNI_HOME",
         "ONEX_REGISTRY_ROOT"
@@ -261,5 +293,24 @@
     "registry_root_markers": [
         "docs/tracking/ROLLING_WORK_LEDGER.md",
         ".kb-doc-gate.yaml"
-    ]
+    ],
+    "restore_ticket": "OMN-18874",
+    "restore_rule": "Operating Rule 17",
+    "restore_subcommands": [
+        "checkout",
+        "restore"
+    ],
+    "restore_reachable_refs": [
+        "HEAD",
+        "@{upstream}",
+        "origin/dev",
+        "origin/main"
+    ],
+    "restore_max_dirty_paths": 200,
+    "git_probe_timeout_seconds": 10,
+    "worktree_root_envs": [
+        "ONEX_WORKTREES_ROOT",
+        "OMNI_WORKTREES_DIR"
+    ],
+    "restore_safe_alternatives": "(1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit"
 }

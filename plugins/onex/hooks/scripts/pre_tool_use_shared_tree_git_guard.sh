@@ -200,7 +200,7 @@ if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'git'; then
     _hook_status "PASS" "no git vocabulary" "0" 2>/dev/null || true
     exit 0
 fi
-if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'reset|checkout|switch|clean|rebase|branch|merge|push'; then
+if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'reset|checkout|switch|clean|rebase|branch|merge|push|restore'; then
     _hook_status "PASS" "no refused git verb" "0" 2>/dev/null || true
     exit 0
 fi

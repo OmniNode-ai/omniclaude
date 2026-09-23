@@ -493,10 +493,12 @@ def test_the_one_refusal_that_reaches_a_worktree_gives_usable_advice(
 ) -> None:
     """AC-4, stated honestly rather than as a blanket.
 
-    Exactly one class of refusal is meant to reach a worktree: a force push
-    to a shared branch. Its message must therefore NOT reuse the
-    shared-clone wording, which calls the directory the registry clone and
-    tells the reader to go to a worktree they are already in.
+    Two classes of refusal are meant to reach a worktree: a force push to a
+    shared branch, and (OMN-18874) a path restore over uncommitted work,
+    which tests/hooks/test_dirty_path_restore_guard.py holds to the same
+    wording rule. Neither message may reuse the shared-clone wording, which
+    calls the directory the registry clone and tells the reader to go to a
+    worktree they are already in.
     """
     decision = evaluate_bash_command(
         "git push --force origin main",
