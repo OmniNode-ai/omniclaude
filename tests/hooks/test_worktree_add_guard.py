@@ -258,6 +258,18 @@ class TestControls:
         )
         assert str(dest.resolve()) in _assert_refused(result)
 
+    def test_backslash_continuation_between_worktree_and_add_is_judged(
+        self, workspace: Path, sandbox_home: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "elsewhere"
+        result = _run_hook(
+            f"git worktree \\\n  add {outside} -b feat/x",
+            workspace=workspace,
+            sandbox_home=sandbox_home,
+            cwd=workspace,
+        )
+        assert str(outside.resolve()) in _assert_refused(result)
+
     def test_mention_in_a_commit_message_is_not_judged(
         self, workspace: Path, sandbox_home: Path
     ) -> None:
@@ -402,6 +414,9 @@ class TestArgumentParsing:
             'S="git worktree add {dest}"; bash -c "$S"',
             "env -C {workspace}/omnibase_infra git worktree add ../omni_worktrees/T/r",
             "git worktree add {dest} && bash scripts/check.sh",
+            "timeout 60 git worktree add {dest}",
+            "bash -o pipefail -c 'git worktree add {dest}'",
+            "git commit -m \"$(cat <<'EOF'\nfix: it doesn't misread git worktree add\nEOF\n)\"",
         ],
     )
     def test_admitted(self, workspace: Path, command: str) -> None:
@@ -444,6 +459,26 @@ class TestArgumentParsing:
             ("env -S 'git worktree add /tmp/x'", "Got: "),
             ("sudo git worktree add /tmp/x", "Got: "),
             ("echo 'git worktree add /tmp/x' | bash", "standard input"),
+            # The second review pass.
+            ("timeout 60 bash -c 'git worktree add /tmp/x'", "Got: "),
+            ("sudo bash -c 'git worktree add /tmp/x'", "Got: "),
+            ("nice -n 5 sh -c 'git worktree add /tmp/x'", "Got: "),
+            ("if true; then bash -c 'git worktree add /tmp/x'; fi", "Got: "),
+            ("{{ bash -c 'git worktree add /tmp/x'; }}", "Got: "),
+            ("! bash -c 'git worktree add /tmp/x'", "Got: "),
+            (
+                "if true; then cd {workspace}/omnibase_infra; fi; git worktree add wt2",
+                "resolves against",
+            ),
+            (
+                "{{ cd {workspace}/omnibase_infra; }}; git worktree add wt2",
+                "resolves against",
+            ),
+            ("X='br /tmp/x'; git worktree add -b $X", "split"),
+            ("echo /tmp/x | xargs git worktree add", "not on the command line"),
+            ("bash -c -- 'git worktree add /tmp/x'", "Got: "),
+            ("bash -c -e 'git worktree add /tmp/x'", "Got: "),
+            ("bash -s arg <<EOF\ngit worktree add /tmp/x\nEOF", "Got: "),
         ],
     )
     def test_refused(self, workspace: Path, command: str, expected: str) -> None:
@@ -463,6 +498,16 @@ class TestArgumentParsing:
         expected = (workspace / "omnibase_infra" / "omni_worktrees" / "X").resolve()
         assert str(expected) in reason
         assert "resolves against" in reason
+
+    def test_prefix_assignment_reaches_the_child_shell(self, workspace: Path) -> None:
+        decision = evaluate(
+            "WT=/tmp/x bash -c 'git worktree add \"$WT\"'",
+            cwd=workspace,
+            root=workspace / "omni_worktrees",
+            env={"WT": str(workspace / "omni_worktrees" / "T" / "r")},
+        )
+        assert decision.blocked
+        assert "/tmp/x" in decision.reason
 
     def test_unresolvable_root_refuses_only_a_real_add(self, workspace: Path) -> None:
         mention = evaluate(

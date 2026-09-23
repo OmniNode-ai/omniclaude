@@ -150,8 +150,9 @@ _block() {
 
 CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || true)
 # Cheap OVER-matching pre-filter: it decides nothing. Quoted text is kept,
-# because a `bash -c '...'` script is quoted and is judged too.
-if printf '%s' "$CMD" | grep -qE 'worktree[^[:alnum:]]+add'; then
+# because a `bash -c '...'` script is quoted and is judged too, and newlines
+# are flattened so a backslash continuation between the two words matches.
+if printf '%s' "$CMD" | tr '\n' ' ' | grep -qE 'worktree[^[:alnum:]]+add'; then
     # Resolve canonical worktree root. Order:
     #   1. ONEX_WORKTREES_ROOT (explicit override)
     #   2. OMNI_WORKTREES_DIR (legacy alias; mirrors Python bash_guard.py)

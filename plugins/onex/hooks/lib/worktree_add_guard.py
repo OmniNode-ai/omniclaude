@@ -40,7 +40,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -93,8 +93,16 @@ _ADD_LONG_FLAGS = frozenset(
 _ADD_LONG_VALUED = frozenset({"reason"})
 
 # Programs that run their operands as a command, and so are looked through.
-_WRAPPERS = frozenset({"command", "exec", "nohup", "time", "builtin", "nice"})
+_WRAPPERS = frozenset({"command", "exec", "nohup", "time", "builtin"})
+# Reserved words that can open a simple command without changing its argv.
+_RESERVED = frozenset({"if", "then", "elif", "else", "do", "while", "until", "{", "!"})
 _SHELLS = frozenset({"bash", "sh", "zsh", "dash"})
+# Shell options that take a separate value.
+_SHELL_VALUE_OPTIONS = frozenset({"-o", "+o", "-O", "+O", "--rcfile", "--init-file"})
+# Programs whose operands are text, never a command they run.
+_TEXT_ONLY = frozenset(
+    {"echo", "printf", "grep", "egrep", "rg", "man", "which", "type"}
+)
 _DECLARERS = frozenset({"export", "declare", "typeset", "local", "readonly"})
 _MAX_NESTING = 3
 
@@ -161,19 +169,26 @@ class _Unwrapped:
     words: list[Word]  # the command itself, wrappers and assignments removed
     chdirs: list[Word]  # `env -C <dir>` operands, in order
     split: Word | None  # an `env -S <string>` command string
+    assignments: list[tuple[str, Word]]  # `NAME=value` given to this command only
 
 
 def _unwrap(words: list[Word]) -> _Unwrapped:
-    """Drop leading assignments and wrapper programs such as ``env`` and ``nohup``."""
+    """Drop leading assignments, reserved words and wrappers such as ``env``."""
     result = list(words)
     chdirs: list[Word] = []
     split: Word | None = None
+    assignments: list[tuple[str, Word]] = []
     while result:
         head = result[0]
-        if head.assignment() is not None:
+        pair = head.assignment()
+        if pair is not None:
+            assignments.append(pair)
             result = result[1:]
             continue
         name = os.path.basename(head.text)
+        if head.text in _RESERVED:
+            result = result[1:]
+            continue
         if name in _WRAPPERS:
             result = result[1:]
             while result and result[0].text.startswith("-"):
@@ -184,6 +199,7 @@ def _unwrap(words: list[Word]) -> _Unwrapped:
         result = result[1:]
         while result:
             text = result[0].text
+            pair = result[0].assignment()
             if text in ("-C", "--chdir", "-S", "--split-string") and len(result) > 1:
                 if text in ("-C", "--chdir"):
                     chdirs.append(result[1])
@@ -191,7 +207,9 @@ def _unwrap(words: list[Word]) -> _Unwrapped:
                     split = result[1]
                 result = result[2:]
                 continue
-            if text.startswith("--chdir="):
+            if pair is not None:
+                assignments.append(pair)
+            elif text.startswith("--chdir="):
                 chdirs.append(_literal(text.partition("=")[2]))
             elif text.startswith("--split-string="):
                 split = _literal(text.partition("=")[2])
@@ -201,10 +219,10 @@ def _unwrap(words: list[Word]) -> _Unwrapped:
                 split = _literal(text[2:])
             elif text in ("-u", "--unset"):
                 result = result[1:]
-            elif not text.startswith("-") and result[0].assignment() is None:
+            elif not text.startswith("-"):
                 break
             result = result[1:]
-    return _Unwrapped(result, chdirs, split)
+    return _Unwrapped(result, chdirs, split, assignments)
 
 
 def _apply_assignments(
@@ -259,10 +277,11 @@ class _Invocation:
     directory: Path | None  # where git runs, after every `-C`
     unknown: str  # why `directory` is None, when it is
     add_args: list[Word]
+    via_wrapper: bool = False  # run by another program, which may append arguments
 
 
 def _git_worktree_add(
-    words: list[Word], state: _State, env: Mapping[str, str]
+    words: list[Word], state: _State, env: Mapping[str, str], *, via_wrapper: bool
 ) -> _Invocation | None:
     """The shape of one ``git ... worktree add`` command, or None if it is not one."""
     if not words or os.path.basename(words[0].text) != "git":
@@ -306,7 +325,7 @@ def _git_worktree_add(
         or args[idx + 1].text != "add"
     ):
         return None
-    return _Invocation(directory, unknown, list(args[idx + 2 :]))
+    return _Invocation(directory, unknown, list(args[idx + 2 :]), via_wrapper)
 
 
 def _long_option(name: str) -> str:
@@ -323,8 +342,24 @@ def _long_option(name: str) -> str:
     )
 
 
-def _destination(add_args: list[Word]) -> Word | None:
+def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word | None:
     """The ``<path>`` operand of ``git worktree add``, or None when git makes nothing."""
+    for word in add_args:
+        # An unquoted expansion is split into words by the shell, which moves
+        # every operand after it, so it must resolve to exactly one word.
+        if not word.splits:
+            continue
+        try:
+            value = expand_word(word, scope)
+        except UnresolvableWord as exc:
+            raise Refusal(
+                f"the unquoted argument `{word.text}` cannot be resolved: {exc}"
+            ) from exc
+        if not value.strip() or len(value.split()) != 1:
+            raise Refusal(
+                f"the unquoted argument `{word.text}` expands to `{value}`, which the "
+                "shell would split into a different number of words"
+            )
     positionals: list[Word] = []
     idx = 0
     options_done = False
@@ -370,8 +405,13 @@ def _judge_add(
     invocation: _Invocation, state: _State, env: Mapping[str, str], root: Path | None
 ) -> str | None:
     """The resolved destination when admitted; raises Refusal otherwise."""
-    target_word = _destination(invocation.add_args)
+    target_word = _destination(invocation.add_args, _Scope(env, state.variables))
     if target_word is None:
+        if invocation.via_wrapper:
+            raise Refusal(
+                "`git worktree add` is run by another program here and its path is "
+                "not on the command line, so the destination cannot be judged"
+            )
         return None
     try:
         raw = expand_word(target_word, _Scope(env, state.variables))
@@ -408,14 +448,13 @@ def _judge_add(
     return str(resolved)
 
 
-def _embedded_git(words: list[Word]) -> list[Word] | None:
-    """The ``git ... worktree add`` inside a command run by an unknown wrapper."""
-    texts = [w.text for w in words]
-    for idx, text in enumerate(texts):
-        if os.path.basename(text) != "git":
-            continue
-        rest = texts[idx + 1 :]
-        if any(rest[j : j + 2] == ["worktree", "add"] for j in range(len(rest))):
+def _embedded_command(words: list[Word]) -> list[Word] | None:
+    """The git, shell or ``eval`` an unknown wrapper (``sudo``, ``timeout``) runs."""
+    if os.path.basename(words[0].text) in _TEXT_ONLY:
+        return None
+    for idx in range(1, len(words)):
+        name = os.path.basename(words[idx].text)
+        if name == "git" or name in _SHELLS or name == "eval":
             return words[idx:]
     return None
 
@@ -436,9 +475,48 @@ def _nested(
     _walk(script, state, env, root, judged, depth + 1)
 
 
-def _child(state: _State) -> _State:
-    """The state a child shell starts in: this directory and these variables."""
-    return _State(cwd=state.cwd, variables=dict(state.variables), unknown=state.unknown)
+def _child(
+    state: _State,
+    env: Mapping[str, str],
+    assignments: Sequence[tuple[str, Word]] = (),
+) -> _State:
+    """The state a child starts in: this directory, these variables, and its own
+    ``NAME=value`` prefix assignments, which the shell expands in the parent first."""
+    child = _State(
+        cwd=state.cwd, variables=dict(state.variables), unknown=state.unknown
+    )
+    scope = _Scope(env, state.variables)
+    for name, value in assignments:
+        try:
+            child.variables[name] = expand_word(value, scope)
+        except UnresolvableWord:
+            child.variables[name] = None
+    return child
+
+
+def _shell_arguments(words: list[Word]) -> tuple[set[str], list[Word]]:
+    """The option letters a shell was given and its operands, read the way a shell does."""
+    letters: set[str] = set()
+    operands: list[Word] = []
+    idx = 1
+    while idx < len(words):
+        text = words[idx].text
+        if operands:
+            operands.append(words[idx])
+        elif text == "--" or text == "-":
+            operands.extend(words[idx + 1 :])
+            break
+        elif text in _SHELL_VALUE_OPTIONS:
+            idx += 1
+        elif text.startswith("--"):
+            pass
+        elif text[:1] in "-+" and len(text) > 1:
+            if text[0] == "-":
+                letters.update(text[1:])
+        else:
+            operands.append(words[idx])
+        idx += 1
+    return letters, operands
 
 
 def _run_shell(
@@ -450,22 +528,23 @@ def _run_shell(
     judged: list[str],
     depth: int,
 ) -> None:
-    """Judge the script a ``bash``/``sh``/``zsh`` command runs."""
+    """Judge the script a ``bash``/``sh``/``zsh`` command runs, in a child ``state``."""
     program = os.path.basename(words[0].text)
     scope = _Scope(env, state.variables)
-    for idx, word in enumerate(words[1:-1], start=1):
-        text = word.text
-        if text.startswith("-") and not text.startswith("--") and "c" in text[1:]:
-            try:
-                script = expand_word(words[idx + 1], scope)
-            except UnresolvableWord as exc:
-                raise Refusal(
-                    f"the `{program} -c` script `{words[idx + 1].text}` cannot be "
-                    f"resolved: {exc}"
-                ) from exc
-            _nested(script, _child(state), env, root, judged, depth)
-            return
-    if any(not w.text.startswith("-") for w in words[1:]):
+    letters, operands = _shell_arguments(words)
+    if "c" in letters:
+        if not operands:
+            return  # the shell exits with a usage error
+        try:
+            script = expand_word(operands[0], scope)
+        except UnresolvableWord as exc:
+            raise Refusal(
+                f"the `{program} -c` script `{operands[0].text}` cannot be "
+                f"resolved: {exc}"
+            ) from exc
+        _nested(script, state, env, root, judged, depth)
+        return
+    if operands and "s" not in letters:
         return  # runs a script file, which is not judged here
     if not heredocs:
         raise Refusal(
@@ -481,7 +560,7 @@ def _run_shell(
                     f"the here-document `{program}` runs cannot be resolved: {exc}"
                 ) from exc
             continue
-        _nested(body, _child(state), env, root, judged, depth)
+        _nested(body, state, env, root, judged, depth)
 
 
 def _run(
@@ -497,7 +576,6 @@ def _run(
     if not words or _apply_assignments(words, state, env):
         return
     unwrapped = _unwrap(words)
-    stripped = unwrapped.words
     scope = _Scope(env, state.variables)
     if unwrapped.split is not None:
         try:
@@ -506,12 +584,13 @@ def _run(
             raise Refusal(
                 f"an `env -S` command string cannot be resolved: {exc}"
             ) from exc
-        _nested(script, _child(state), env, root, judged, depth)
+        child = _child(state, env, unwrapped.assignments)
+        _nested(script, child, env, root, judged, depth)
         return
     local = state
     if unwrapped.chdirs:
         # `env -C` moves this command only, not the shell running it.
-        local = _child(state)
+        local = _child(state, env)
         for operand in unwrapped.chdirs:
             try:
                 local.cwd = _join(
@@ -523,26 +602,60 @@ def _run(
             except (UnresolvableWord, Refusal) as exc:
                 local.cwd = None
                 local.unknown = f"`env -C {operand.text}` cannot be resolved: {exc}"
-    if not stripped or _apply_cd(stripped, local, env):
+    if not unwrapped.words or _apply_cd(unwrapped.words, local, env):
         return
-    program = os.path.basename(stripped[0].text)
+    _dispatch(unwrapped, heredocs, local, env, root, judged, depth, via_wrapper=False)
+
+
+def _dispatch(
+    unwrapped: _Unwrapped,
+    heredocs: list[HereDoc],
+    state: _State,
+    env: Mapping[str, str],
+    root: Path | None,
+    judged: list[str],
+    depth: int,
+    *,
+    via_wrapper: bool,
+) -> None:
+    """Judge a git, shell or ``eval`` command, or look through an unknown wrapper."""
+    words = unwrapped.words
+    program = os.path.basename(words[0].text)
     if program in _SHELLS:
-        _run_shell(stripped, heredocs, local, env, root, judged, depth)
+        child = _child(state, env, unwrapped.assignments)
+        _run_shell(words, heredocs, child, env, root, judged, depth)
         return
     if program == "eval":
+        scope = _Scope(env, state.variables)
         try:
-            script = " ".join(expand_word(w, scope) for w in stripped[1:])
+            script = " ".join(expand_word(w, scope) for w in words[1:])
         except UnresolvableWord as exc:
             raise Refusal(f"an `eval` string cannot be resolved: {exc}") from exc
-        _nested(script, local, env, root, judged, depth)
+        target = (
+            _child(state, env, unwrapped.assignments)
+            if unwrapped.assignments
+            else state
+        )
+        _nested(script, target, env, root, judged, depth)
         return
-    git_words = stripped if program == "git" else _embedded_git(stripped)
-    if git_words is None:
+    if program != "git":
+        inner = _embedded_command(words)
+        if inner is not None and not via_wrapper:
+            _dispatch(
+                _Unwrapped(inner, [], None, []),
+                heredocs,
+                state,
+                env,
+                root,
+                judged,
+                depth,
+                via_wrapper=True,
+            )
         return
-    invocation = _git_worktree_add(git_words, local, env)
+    invocation = _git_worktree_add(words, state, env, via_wrapper=via_wrapper)
     if invocation is None:
         return
-    resolved = _judge_add(invocation, local, env, root)
+    resolved = _judge_add(invocation, state, env, root)
     if resolved is not None:
         judged.append(resolved)
 

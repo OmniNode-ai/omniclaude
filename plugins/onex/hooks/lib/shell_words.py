@@ -84,6 +84,14 @@ class Word:
         return "".join(part.text for part in self.parts)
 
     @property
+    def splits(self) -> bool:
+        """True when an unquoted expansion makes the shell word-split this word."""
+        return any(
+            part.quote == "none" and ("$" in part.text or "`" in part.text)
+            for part in self.parts
+        )
+
+    @property
     def is_plain(self) -> bool:
         """True when the word needs no expansion at all."""
         for part in self.parts:
@@ -163,15 +171,79 @@ class _Builder:
         return word
 
 
+def _heredoc_delimiter(command: str, i: int) -> tuple[str, bool, int]:
+    """The delimiter of the ``<<`` at ``i``, whether tabs are stripped, and the index past it."""
+    j = i + 2
+    strip_tabs = command[j : j + 1] == "-"
+    if strip_tabs:
+        j += 1
+    while j < len(command) and command[j] in " \t":
+        j += 1
+    out: list[str] = []
+    while j < len(command) and command[j] not in " \t\n;&|()<>":
+        ch = command[j]
+        if ch in "'\"":
+            end = command.find(ch, j + 1)
+            if end < 0:
+                raise ShellSyntaxError("unterminated here-document delimiter")
+            out.append(command[j + 1 : end])
+            j = end + 1
+            continue
+        if ch == "\\":
+            out.append(command[j + 1 : j + 2])
+            j += 2
+            continue
+        out.append(ch)
+        j += 1
+    return "".join(out), strip_tabs, j
+
+
+def _read_lines_to(
+    command: str, i: int, delimiter: str, strip_tabs: bool
+) -> tuple[list[str], int]:
+    """The body lines before the line holding ``delimiter`` alone, and the index past it."""
+    lines: list[str] = []
+    while i < len(command):
+        end = command.find("\n", i)
+        line = command[i:] if end < 0 else command[i:end]
+        i = len(command) if end < 0 else end + 1
+        if strip_tabs:
+            line = line.lstrip("\t")
+        if line == delimiter:
+            break
+        lines.append(line)
+    return lines, i
+
+
 def _scan_balanced(command: str, start: int, opener: str, closer: str) -> int:
-    """Index just past the ``closer`` matching the ``opener`` at ``start``."""
+    """Index just past the ``closer`` matching the ``opener`` at ``start``.
+
+    A here-document or a comment inside a ``$( ... )`` is skipped as text, so
+    an apostrophe in a commit message written through ``$(cat <<'EOF' ...)``
+    is not read as an unterminated quote.
+    """
     depth = 0
     i = start
     n = len(command)
+    pending: list[tuple[str, bool]] = []
     while i < n:
         ch = command[i]
         if ch == "\\":
             i += 2
+            continue
+        if ch == "\n":
+            i += 1
+            for delimiter, strip_tabs in pending:
+                i = _read_lines_to(command, i, delimiter, strip_tabs)[1]
+            pending.clear()
+            continue
+        if command.startswith("<<", i) and not command.startswith("<<<", i):
+            delimiter, strip_tabs, i = _heredoc_delimiter(command, i)
+            pending.append((delimiter, strip_tabs))
+            continue
+        if ch == "#" and (i == start + 1 or command[i - 1] in " \t\n;&|("):
+            end = command.find("\n", i)
+            i = n if end < 0 else end
             continue
         if ch == "'":
             end = command.find("'", i + 1)
@@ -266,17 +338,8 @@ def _scan_double(command: str, start: int) -> tuple[str, int]:
 def _read_heredoc_bodies(command: str, i: int, pending: list[HereDoc]) -> int:
     """Read the bodies of here-documents that start at ``i``; the index past them."""
     for heredoc in pending:
-        lines: list[str] = []
-        while i < len(command):
-            end = command.find("\n", i)
-            line = command[i:] if end < 0 else command[i:end]
-            i = len(command) if end < 0 else end + 1
-            if heredoc.strip_tabs:
-                line = line.lstrip("\t")
-            if line == heredoc.delimiter:
-                break
-            lines.append(line + "\n")
-        heredoc.body = "".join(lines)
+        lines, i = _read_lines_to(command, i, heredoc.delimiter, heredoc.strip_tabs)
+        heredoc.body = "".join(line + "\n" for line in lines)
     pending.clear()
     return i
 
