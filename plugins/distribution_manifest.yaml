@@ -715,8 +715,8 @@ components:
     and validate_full_market_skill_inventory now classifies it pure_skill with an
     empty findings list). Still hidden, for the same reason as weekly_review -- it
     is useless without an overlay, and the only overlay this environment ships is
-    parked as private content per the 2026-09-14 public-plugin ruling
-    (knowledge-base-internal marketplace-internal/skills/session_preflight/); the
+    parked as private content per the 2026-09-14 public-plugin ruling and ships
+    only from outside this repository; the
     committed base declares no checks and refuses (exit 2) rather than reporting a
     green preflight that checked nothing.
 - id: recall
