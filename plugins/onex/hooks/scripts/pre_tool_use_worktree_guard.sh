@@ -110,11 +110,20 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command for worktree-add canonical-root violations" >> "$LOG_FILE"
 
 # ---------------------------------------------------------------------------
-# Worktree path enforcement (OMN-7018, OMN-9896, OMN-9906)
+# Worktree path enforcement (OMN-7018, OMN-9896, OMN-9906, OMN-19229, OMN-19123)
 #
-# Phase 1: supports only common `git worktree add <path> [-b <branch>]` form.
-# Unsupported flag/order variants (--lock, --detach, flags before path) trigger
-# conservative block until argument parsing is hardened.
+# The decision is made by ../lib/worktree_add_guard.py, which reads the
+# command the way the shell and git do: it splits words with their quoting,
+# skips comments, here-document bodies and redirections, expands $NAME,
+# ${NAME} and ~ from this environment plus assignments earlier in the same
+# command, follows `cd` and every `git -C <dir>`, consumes the values of
+# -b/-B/--reason, honours `--`, and resolves a relative destination against
+# the directory git runs in. It refuses, fail-closed, a destination outside
+# the canonical root and one it cannot resolve (an unset variable, command
+# substitution, which it never executes, an unknown option). The token loop
+# it replaces took the first non-dash word after `add`, so the value of -b,
+# an unexpanded "$WT" or a `2>&1` was judged as the path, and it never saw
+# the `git -C <dir> worktree add` form at all.
 #
 # Configuration:
 #   ONEX_HOOKS_MASK   clear WORKTREE_GUARD bit -> this entire script is gated
@@ -130,28 +139,20 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command for worktree-add 
 #                         with an actionable error rather than silently picking
 #                         a wrong default (omni_home CLAUDE.md rule #8).
 # ---------------------------------------------------------------------------
-CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || true)
-# Strip single- and double-quoted strings before checking for git worktree add
-# to avoid false positives on commit messages, grep patterns, etc.
-CMD_UNQUOTED=$(echo "$CMD" | sed -E "s/\"([^\"\\\\]|\\\\.)*\"//g; s/'[^']*'//g")
-if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
-    # Extract the first non-flag argument after "add" as the path.
-    # Strip only backslash+newline continuations (not all backslashes) so
-    # multi-line commands parse cleanly without corrupting path characters.
-    # Use Python for the substitution — macOS sed doesn't support \n in patterns.
-    CMD_FLAT=$(printf '%s' "$CMD" \
-        | "$PYTHON_CMD" -c "import sys; print(sys.stdin.read().replace('\\\\\n', ' ').replace('\n', ' '))" \
-        2>/dev/null || printf '%s' "$CMD" | tr '\n' ' ')
-    WORKTREE_PATH=""
-    _in_add=false
-    for _token in $CMD_FLAT; do
-        if [[ "$_in_add" == "true" && "$_token" != -* && -n "$_token" ]]; then
-            WORKTREE_PATH="$_token"
-            break
-        fi
-        [[ "$_token" == "add" ]] && _in_add=true
-    done
+_block() {
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: $1: $2" >> "$LOG_FILE"
+    _hook_status "BLOCKED" "$1" "0"
+    hook_record_refusal "$1" "$2" 2>/dev/null || true
+    jq -n --arg reason "$2" '{"decision": "block", "reason": $reason}'
+    trap - EXIT
+    exit 2
+}
 
+CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || true)
+# Cheap OVER-matching pre-filter: it decides nothing. Quoted text is kept,
+# because a `bash -c '...'` script is quoted and is judged too, and newlines
+# are flattened so a backslash continuation between the two words matches.
+if printf '%s' "$CMD" | tr '\n' ' ' | grep -qE 'worktree[^[:alnum:]]+add'; then
     # Resolve canonical worktree root. Order:
     #   1. ONEX_WORKTREES_ROOT (explicit override)
     #   2. OMNI_WORKTREES_DIR (legacy alias; mirrors Python bash_guard.py)
@@ -163,40 +164,27 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
     elif [[ -n "${OMNI_HOME:-}" ]]; then
         CANONICAL_ROOT="${OMNI_HOME%/}/omni_worktrees"
     else
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: cannot resolve worktree root — OMNI_HOME unset and no ONEX_WORKTREES_ROOT override" >> "$LOG_FILE"
-        _hook_status "BLOCKED" "worktree root unresolvable (OMNI_HOME unset)" "0"
-        hook_record_refusal "worktree root unresolvable" "OMNI_HOME unset and no ONEX_WORKTREES_ROOT override" 2>/dev/null || true
-        jq -n --arg reason "BLOCKED: cannot resolve canonical worktree root. Set OMNI_HOME (preferred), set ONEX_WORKTREES_ROOT, or disable this guard by clearing the WORKTREE_GUARD bit: onex hooks disable WORKTREE_GUARD" \
-            '{"decision": "block", "reason": $reason}'
-        trap - EXIT
-        exit 2
+        CANONICAL_ROOT=""
     fi
 
-    if [[ -z "$WORKTREE_PATH" ]]; then
-        # Could not parse path — fail closed
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Could not parse worktree path from command" >> "$LOG_FILE"
-        _hook_status "BLOCKED" "worktree path unparseable" "0"
-        hook_record_refusal "worktree path unparseable" "could not parse the worktree path from the command" 2>/dev/null || true
-        jq -n --arg reason "BLOCKED: Could not parse worktree path from command. Use: git worktree add <path> [-b <branch>]. To disable this guard: onex hooks disable WORKTREE_GUARD" \
-            '{"decision": "block", "reason": $reason}'
-        trap - EXIT
-        exit 2
+    GUARD_PY="${HOOKS_DIR}/lib/worktree_add_guard.py"
+    if [[ ! -f "$GUARD_PY" ]]; then
+        _block "decision core missing" \
+            "BLOCKED: the worktree guard's decision core is missing at ${GUARD_PY}, so this \`git worktree add\` cannot be judged. Repair the plugin install, or disable the guard deliberately: onex hooks disable WORKTREE_GUARD"
     fi
-
-    NORMALIZED_ROOT="$("$PYTHON_CMD" -c 'import os, sys; print(os.path.abspath(os.path.normpath(sys.argv[1])))' "$CANONICAL_ROOT")"
-    NORMALIZED_WORKTREE="$("$PYTHON_CMD" -c 'import os, sys; base, path = sys.argv[1:3]; target = path if os.path.isabs(path) else os.path.join(base, path); print(os.path.abspath(os.path.normpath(target)))' "$HOOK_ORIGINAL_CWD" "$WORKTREE_PATH")"
-
-    if [[ "$NORMALIZED_WORKTREE" != "$NORMALIZED_ROOT"/* ]]; then
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Worktree path outside canonical root: $NORMALIZED_WORKTREE" >> "$LOG_FILE"
-        _hook_status "BLOCKED" "worktree path outside canonical root" "0"
-        hook_record_refusal "worktree path outside canonical root" "worktree must be created under the canonical root" 2>/dev/null || true
-        jq -n --arg reason "BLOCKED: Worktrees must be created under $NORMALIZED_ROOT. Got: $NORMALIZED_WORKTREE. To use a different root set ONEX_WORKTREES_ROOT, or to disable this guard: onex hooks disable WORKTREE_GUARD" \
-            '{"decision": "block", "reason": $reason}'
-        trap - EXIT
-        exit 2
+    _rc=0
+    GUARD_OUT=$(printf '%s' "$TOOL_INFO" \
+        | "$PYTHON_CMD" "$GUARD_PY" --root "$CANONICAL_ROOT" --cwd "$HOOK_ORIGINAL_CWD" \
+        2>>"$LOG_FILE") || _rc=$?
+    if [[ "$_rc" -eq 2 ]]; then
+        _reason=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)
+        _block "worktree add refused" \
+            "${_reason:-BLOCKED: the worktree guard refused this command but its reason could not be read. To disable this guard: onex hooks disable WORKTREE_GUARD}"
+    elif [[ "$_rc" -ne 0 ]]; then
+        _block "worktree guard failed" \
+            "BLOCKED: the worktree guard's decision core exited ${_rc}, so this \`git worktree add\` could not be judged; an unjudged worktree destination is refused. To disable this guard: onex hooks disable WORKTREE_GUARD"
     fi
-
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Worktree add ALLOWED (canonical root match)" >> "$LOG_FILE"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Worktree add ALLOWED: ${GUARD_OUT:-no destination created}" >> "$LOG_FILE"
 fi
 
 # ------------------------------------------------------------------
