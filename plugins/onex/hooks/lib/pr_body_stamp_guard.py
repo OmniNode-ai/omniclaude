@@ -477,9 +477,9 @@ _UNEXPANDED = re.compile(r"\$\(|`|\$\{|\$[A-Za-z_]")
 def _read_body_file(raw: str, scope: Scope) -> tuple[str | None, str | None]:
     """Return ``(text, unreadable_reason)`` for a ``--body-file`` argument.
 
-    The path is expanded the way the shell would (``~``, ``$NAME``,
-    ``${NAME}``) by the shared OMN-19229 helper, so ``--body-file "$B"`` reads
-    the file the shell hands ``gh`` instead of a file literally named ``$B``.
+    The path is expanded by the shared OMN-19229 helper from ``scope``, so
+    ``B=body.md; gh pr edit --body-file "$B"`` reads the file the shell hands
+    ``gh`` instead of a file literally named ``$B``.
     """
     if raw == "-":
         return None, (
@@ -489,7 +489,11 @@ def _read_body_file(raw: str, scope: Scope) -> tuple[str | None, str | None]:
     try:
         path = expand_word(unquoted(raw), scope)
     except UnresolvableWord as exc:
-        return None, f"the replacement body file {raw} cannot be resolved: {exc}"
+        return None, (
+            f"the replacement body file {raw} cannot be resolved: {exc}. Only a "
+            "variable assigned earlier in this same command is expanded here; "
+            "pass a literal path, or assign it in the command"
+        )
     try:
         return Path(path).read_text(encoding="utf-8"), None
     except (OSError, UnicodeDecodeError) as exc:
@@ -707,10 +711,14 @@ def parse_pr_body_edits(command: str, policy: Policy) -> list[PrBodyEdit]:
     """Every body-replacing pull-request edit in ``command``."""
     edits: list[PrBodyEdit] = []
     segments = _segments(command)
-    # A name the command sets any other way (`export`, `read`, `for`) is
-    # unresolvable: the environment only holds its value from before.
+    # Only what the command itself assigns is expanded, plus HOME for `~`.
+    # The hook's environment is not the command's: a variable it inherits may
+    # name a different file from the one gh uploads, and reading that file
+    # would judge the wrong body. A name the command sets any other way
+    # (`export`, `read`, `for`) is unresolvable too.
     assigned: dict[str, str | None] = {}
-    scope: Scope = ChainMap(assigned, shadow(os.environ, shadowed_names(segments)))  # type: ignore[arg-type]
+    trusted = {"HOME": os.environ["HOME"]} if os.environ.get("HOME") else {}
+    scope: Scope = ChainMap(assigned, shadow(trusted, shadowed_names(segments)))  # type: ignore[arg-type]
     for segment in segments:
         if all(_ASSIGNMENT.match(token) for token in segment):
             # `B=/tmp/body.md; gh pr edit --body-file "$B"`: the assignment

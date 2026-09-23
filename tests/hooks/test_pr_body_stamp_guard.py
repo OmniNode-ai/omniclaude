@@ -429,17 +429,29 @@ def test_parse_finds_an_edit_in_a_later_segment(policy: Policy) -> None:
     assert len(edits) == 1
 
 
-def test_body_file_variable_is_expanded_from_the_environment(
+def test_body_file_variable_from_the_hook_environment_is_not_trusted(
     policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OMN-19229 AC4: `--body-file "$B"` reads the file the shell hands gh."""
+    """The hook's environment may name a different file from the one gh
+    uploads, so a variable the command did not assign is not read."""
     body_file = tmp_path / "body.md"
     body_file.write_text("the new body\n", encoding="utf-8")
     monkeypatch.setenv("OMN19229_B", str(body_file))
     (edit,) = parse_pr_body_edits(
         'gh pr edit 42 -R OmniNode-ai/omniclaude --body-file "$OMN19229_B"', policy
     )
-    assert edit.new_body == "the new body\n", edit.unreadable_reason
+    assert edit.new_body is None
+    assert edit.unreadable_reason is not None
+    assert "assigned earlier in this same command" in edit.unreadable_reason
+
+
+def test_body_file_under_home_is_expanded(
+    policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "body.md").write_text("home body\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (edit,) = parse_pr_body_edits("gh pr edit 42 --body-file ~/body.md", policy)
+    assert edit.new_body == "home body\n", edit.unreadable_reason
 
 
 def test_body_file_variable_assigned_in_the_command_is_expanded(
