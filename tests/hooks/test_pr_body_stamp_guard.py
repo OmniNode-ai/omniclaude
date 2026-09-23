@@ -429,6 +429,46 @@ def test_parse_finds_an_edit_in_a_later_segment(policy: Policy) -> None:
     assert len(edits) == 1
 
 
+def test_body_file_variable_is_expanded_from_the_environment(
+    policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OMN-19229 AC4: `--body-file "$B"` reads the file the shell hands gh."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("the new body\n", encoding="utf-8")
+    monkeypatch.setenv("OMN19229_B", str(body_file))
+    (edit,) = parse_pr_body_edits(
+        'gh pr edit 42 -R OmniNode-ai/omniclaude --body-file "$OMN19229_B"', policy
+    )
+    assert edit.new_body == "the new body\n", edit.unreadable_reason
+
+
+def test_body_file_variable_assigned_in_the_command_is_expanded(
+    policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body_file = tmp_path / "body.md"
+    body_file.write_text("assigned body\n", encoding="utf-8")
+    monkeypatch.delenv("OMN19229_B", raising=False)
+    (edit,) = parse_pr_body_edits(
+        f'OMN19229_B={body_file}; gh pr edit 42 --body-file "$OMN19229_B"', policy
+    )
+    assert edit.new_body == "assigned body\n", edit.unreadable_reason
+    (edit,) = parse_pr_body_edits(
+        f'OMN19229_B={body_file}; gh pr edit 42 --body "$(cat "$OMN19229_B")"',
+        policy,
+    )
+    assert edit.new_body == "assigned body\n", edit.unreadable_reason
+
+
+def test_unset_body_file_variable_is_unreadable_not_guessed(
+    policy: Policy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OMN19229_B", raising=False)
+    (edit,) = parse_pr_body_edits('gh pr edit 42 --body-file "$OMN19229_B"', policy)
+    assert edit.new_body is None
+    assert edit.unreadable_reason is not None
+    assert "`$OMN19229_B` is unset" in edit.unreadable_reason
+
+
 # --------------------------------------------------------------------------
 # Policy
 # --------------------------------------------------------------------------

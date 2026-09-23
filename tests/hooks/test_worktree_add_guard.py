@@ -372,9 +372,13 @@ class TestExpansion:
         assert "never executed" in decision.reason
 
     def test_expand_helper_shared(self) -> None:
-        """OMN-19229 AC4 (this guard's half): the guard uses the shared helper."""
-        assert worktree_add_guard.expand_word is shell_words.expand_word
+        """OMN-19229 AC4: every guard that judges a path uses ONE helper."""
+        import pr_body_stamp_guard
+        import shared_tree_git_guard
+
         assert worktree_add_guard.tokenize is shell_words.tokenize
+        for guard in (worktree_add_guard, shared_tree_git_guard, pr_body_stamp_guard):
+            assert guard.expand_word is shell_words.expand_word, guard.__name__
 
 
 def _judge(command: str, workspace: Path, cwd: Path | None = None) -> str | None:

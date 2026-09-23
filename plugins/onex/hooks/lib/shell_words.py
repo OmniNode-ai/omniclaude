@@ -3,6 +3,10 @@
 # SPDX-License-Identifier: MIT
 r"""Shell word splitting and path expansion shared by PreToolUse guards (OMN-19229).
 
+Used by the worktree guard, the shared-tree git guard (``cd`` and ``git -C``
+targets) and the PR-body stamp guard (body-file paths), so the class of
+"a guard judged the raw text of a variable" is retired in one place.
+
 Why this exists
 ---------------
 A PreToolUse guard is handed the raw text of a Bash command and has to judge
@@ -535,6 +539,16 @@ def _expand_parameters(text: str, env: Mapping[str, str | None]) -> str:
         out.append(value)
         i += consumed
     return "".join(out)
+
+
+def unquoted(token: str) -> Word:
+    """A word from a token that ``shlex`` has already dequoted, read as unquoted.
+
+    Guards that split commands with ``shlex`` lose each part's quoting, so they
+    hand a token here to judge it the way the shell reads an unquoted word:
+    ``~`` and parameters expand, and a glob is refused.
+    """
+    return Word((WordPart(token, "none"),))
 
 
 def expand_word(word: Word, env: Mapping[str, str | None]) -> str:

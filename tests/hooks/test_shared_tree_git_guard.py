@@ -450,6 +450,60 @@ def test_unresolvable_cd_target_leaves_the_effective_directory_unchanged(
     assert not allowed.blocked, allowed.reason
 
 
+#: OMN-19229 AC4. `cd "$WT"` and `git -C "$WT"` are expanded from the hook's
+#: environment by the shared helper, so a lane that keeps its worktree path
+#: in a variable is judged where the shell will actually run git.
+def test_cd_to_a_variable_naming_a_worktree_is_followed(
+    registry: Path,
+    registry_worktree: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OMN19229_WT", str(registry_worktree))
+    for command in (
+        'cd "$OMN19229_WT" && git reset --hard origin/dev',
+        'cd "${OMN19229_WT}" && git rebase origin/dev',
+        'git -C "$OMN19229_WT" reset --hard origin/dev',
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry, registry_root=registry
+        )
+        assert not decision.blocked, (command, decision.reason)
+
+
+def test_cd_to_a_variable_naming_the_registry_is_refused(
+    registry: Path,
+    registry_worktree: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same expansion closes a hole: before it, an unread `cd "$R"` left
+    the effective directory at the worktree and the reset passed."""
+    monkeypatch.setenv("OMN19229_R", str(registry))
+    for command in (
+        'cd "$OMN19229_R" && git reset --hard origin/main',
+        'git -C "$OMN19229_R" reset --hard origin/main',
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry_worktree, registry_root=registry
+        )
+        assert decision.blocked, command
+
+
+def test_unset_variable_target_is_still_refused_in_the_registry(
+    registry: Path, policy: Policy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OMN19229_UNSET", raising=False)
+    for command in (
+        'cd "$OMN19229_UNSET" && git reset --hard origin/main',
+        'git -C "$OMN19229_UNSET" reset --hard origin/main',
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry, registry_root=registry
+        )
+        assert decision.blocked, command
+
+
 def test_bare_cd_does_not_silently_target_the_registry(
     registry: Path, policy: Policy
 ) -> None:

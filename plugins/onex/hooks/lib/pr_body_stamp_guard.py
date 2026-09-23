@@ -103,9 +103,20 @@ import re
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable
+from collections import ChainMap
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+_HOOKS_LIB = Path(__file__).parent
+if str(_HOOKS_LIB) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_LIB))
+
+from shell_words import UnresolvableWord, expand_word, unquoted  # noqa: E402
+
+#: Variables visible when a body-file path is expanded: this hook's
+#: environment, overlaid with plain assignments made earlier in the command.
+Scope = Mapping[str, "str | None"]
 
 __all__ = [
     "GATE_BIT_NAME",
@@ -457,20 +468,29 @@ _CAT_SUBSTITUTION = re.compile(
 _UNEXPANDED = re.compile(r"\$\(|`|\$\{|\$[A-Za-z_]")
 
 
-def _read_body_file(raw: str) -> tuple[str | None, str | None]:
-    """Return ``(text, unreadable_reason)`` for a ``--body-file`` argument."""
+def _read_body_file(raw: str, scope: Scope) -> tuple[str | None, str | None]:
+    """Return ``(text, unreadable_reason)`` for a ``--body-file`` argument.
+
+    The path is expanded the way the shell would (``~``, ``$NAME``,
+    ``${NAME}``) by the shared OMN-19229 helper, so ``--body-file "$B"`` reads
+    the file the shell hands ``gh`` instead of a file literally named ``$B``.
+    """
     if raw == "-":
         return None, (
             "the replacement body is read from standard input, which this "
             "guard structurally cannot see"
         )
     try:
-        return Path(raw).expanduser().read_text(encoding="utf-8"), None
+        path = expand_word(unquoted(raw), scope)
+    except UnresolvableWord as exc:
+        return None, f"the replacement body file {raw} cannot be resolved: {exc}"
+    try:
+        return Path(path).read_text(encoding="utf-8"), None
     except (OSError, UnicodeDecodeError) as exc:
         return None, f"the replacement body file {raw} could not be read: {exc}"
 
 
-def _resolve_body_argument(raw: str) -> tuple[str | None, str | None]:
+def _resolve_body_argument(raw: str, scope: Scope) -> tuple[str | None, str | None]:
     """Resolve a ``--body`` argument the shell has not expanded yet.
 
     Three outcomes, and the middle one is the reason this exists:
@@ -487,7 +507,7 @@ def _resolve_body_argument(raw: str) -> tuple[str | None, str | None]:
     """
     match = _CAT_SUBSTITUTION.match(raw.strip())
     if match is not None:
-        return _read_body_file(match.group("path").strip().strip("'\""))
+        return _read_body_file(match.group("path").strip().strip("'\""), scope)
     if _UNEXPANDED.search(raw):
         return None, (
             "the replacement body is an unexpanded shell substitution "
@@ -497,7 +517,9 @@ def _resolve_body_argument(raw: str) -> tuple[str | None, str | None]:
     return raw, None
 
 
-def _parse_gh_pr_edit(tokens: list[str], shape: _GhPrEditShape) -> PrBodyEdit | None:
+def _parse_gh_pr_edit(
+    tokens: list[str], shape: _GhPrEditShape, scope: Scope
+) -> PrBodyEdit | None:
     if list(tokens[: len(shape.subcommand)]) != list(shape.subcommand):
         return None
     rest = tokens[len(shape.subcommand) :]
@@ -528,7 +550,7 @@ def _parse_gh_pr_edit(tokens: list[str], shape: _GhPrEditShape) -> PrBodyEdit | 
             if raw_value is None:
                 unreadable = "the body flag was given no value"
             else:
-                new_body, unreadable = _resolve_body_argument(raw_value)
+                new_body, unreadable = _resolve_body_argument(raw_value, scope)
             index += 1
             continue
         if flag in shape.body_file_flags:
@@ -545,7 +567,7 @@ def _parse_gh_pr_edit(tokens: list[str], shape: _GhPrEditShape) -> PrBodyEdit | 
             if raw is None:
                 unreadable = "the body-file flag was given no value"
             else:
-                new_body, unreadable = _read_body_file(raw)
+                new_body, unreadable = _read_body_file(raw, scope)
             index += 1
             continue
         if flag in shape.repo_flags:
@@ -579,7 +601,7 @@ def _parse_gh_pr_edit(tokens: list[str], shape: _GhPrEditShape) -> PrBodyEdit | 
 
 
 def _parse_gh_api_patch(
-    tokens: list[str], shape: _GhApiPatchShape
+    tokens: list[str], shape: _GhApiPatchShape, scope: Scope
 ) -> PrBodyEdit | None:
     if list(tokens[: len(shape.subcommand)]) != list(shape.subcommand):
         return None
@@ -613,7 +635,7 @@ def _parse_gh_api_patch(
                 found_body = True
                 origin = token
                 if value.startswith("@"):
-                    new_body, unreadable = _read_body_file(value[1:])
+                    new_body, unreadable = _read_body_file(value[1:], scope)
                 else:
                     new_body = value
             index += 1
@@ -623,7 +645,7 @@ def _parse_gh_api_patch(
             found_body = True
             origin = token
             raw = rest[index]
-            text, unreadable = _read_body_file(raw)
+            text, unreadable = _read_body_file(raw, scope)
             if text is None:
                 new_body = None
             else:
@@ -678,15 +700,27 @@ def _parse_gh_api_patch(
 def parse_pr_body_edits(command: str, policy: Policy) -> list[PrBodyEdit]:
     """Every body-replacing pull-request edit in ``command``."""
     edits: list[PrBodyEdit] = []
+    assigned: dict[str, str | None] = {}
+    scope: Scope = ChainMap(assigned, os.environ)  # type: ignore[arg-type]
     for segment in _segments(command):
+        if all(_ASSIGNMENT.match(token) for token in segment):
+            # `B=/tmp/body.md; gh pr edit --body-file "$B"`: the assignment
+            # is what the later expansion reads.
+            for token in segment:
+                name, _, value = token.partition("=")
+                try:
+                    assigned[name] = expand_word(unquoted(value), scope)
+                except UnresolvableWord:
+                    assigned[name] = None
+            continue
         program, tokens = _program_of(segment)
         if program in policy.gh_pr_edit.programs:
-            edit = _parse_gh_pr_edit(tokens, policy.gh_pr_edit)
+            edit = _parse_gh_pr_edit(tokens, policy.gh_pr_edit, scope)
             if edit is not None:
                 edits.append(edit)
                 continue
         if program in policy.gh_api_patch.programs:
-            edit = _parse_gh_api_patch(tokens, policy.gh_api_patch)
+            edit = _parse_gh_api_patch(tokens, policy.gh_api_patch, scope)
             if edit is not None:
                 edits.append(edit)
     return edits

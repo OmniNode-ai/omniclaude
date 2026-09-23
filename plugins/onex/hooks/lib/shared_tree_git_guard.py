@@ -172,6 +172,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
+_HOOKS_LIB = Path(__file__).parent
+if str(_HOOKS_LIB) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_LIB))
+
+from shell_words import UnresolvableWord, expand_word, unquoted  # noqa: E402
+
 __all__ = [
     "GATE_BIT_NAME",
     "TICKET",
@@ -444,9 +450,22 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
     )
 
 
+def _expand_path(token: str) -> str | None:
+    """``token`` as the shell expands it from this environment, or None.
+
+    The shared OMN-19229 helper: ``~``, ``$NAME`` and ``${NAME}`` resolve; an
+    unset variable, a substitution or a glob is unresolvable, never guessed.
+    """
+    try:
+        return expand_word(unquoted(token), os.environ)
+    except UnresolvableWord:
+        return None
+
+
 def _resolve_target_dir(invocation: _GitInvocation, cwd: Path) -> Path:
     if invocation.target_arg:
-        candidate = Path(invocation.target_arg)
+        raw = _expand_path(invocation.target_arg) or invocation.target_arg
+        candidate = Path(raw)
         return candidate if candidate.is_absolute() else (cwd / candidate)
     return cwd
 
@@ -578,12 +597,12 @@ def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path
     refuses that lane and then advises it to move to the worktree it is
     already in, which is the whole of the reported defect.
 
-    Resolution is deliberately literal. `shlex` does not expand variables,
-    so `cd "$WT"` arrives as an unexpanded token; `$OMNI_HOME`, `$HOME` and
-    `~` are the three this guard can answer from its own environment, and
-    anything else returns None. `cd` with no operand goes HOME. A relative
-    operand resolves against the directory in force at that point, so a
-    chain composes.
+    `shlex` does not expand variables, so `cd "$WT"` arrives as an
+    unexpanded token. It is expanded from this guard's own environment by the
+    shared helper (OMN-19229): `~`, `$NAME` and `${NAME}` resolve, and an
+    unset variable, a substitution or a glob returns None. `cd` with no
+    operand goes HOME. A relative operand resolves against the directory in
+    force at that point, so a chain composes.
     """
     stripped = _strip_wrappers(tokens)
     if not stripped:
@@ -601,27 +620,14 @@ def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path
         # `cd -` returns to the PREVIOUS directory, which this guard does
         # not track. Unresolvable rather than guessed.
         return None
-    for name in ("OMNI_HOME", "ONEX_REGISTRY_ROOT", "HOME"):
-        value = os.environ.get(name)
-        if not value:
-            continue
-        for spelling in (f"${name}", "${" + name + "}"):
-            if target == spelling:
-                target = value
-            elif target.startswith(spelling + os.sep):
-                target = value + target[len(spelling) :]
-    if target.startswith("~"):
-        expanded = os.path.expanduser(target)
-        if expanded.startswith("~"):
-            return None
-        target = expanded
-    if "$" in target:
+    expanded = _expand_path(target)
+    if expanded is None:
         # An unexpanded variable this guard cannot answer. Returning None
         # leaves the effective directory where it was, which is exactly the
         # behaviour before this change: nothing in the shared tree stops
         # being refused, and nothing outside it starts being refused.
         return None
-    candidate = Path(target)
+    candidate = Path(expanded)
     if not candidate.is_absolute():
         candidate = current / candidate
     return Path(os.path.normpath(str(candidate)))
@@ -1624,7 +1630,8 @@ def _cd_operand_is_absolute(tokens: list[str], policy: Policy) -> bool:
     operands = [tok for tok in _strip_wrappers(tokens)[1:] if not tok.startswith("-")]
     if not operands:
         return True
-    return operands[0].startswith(("/", "~", "$"))
+    expanded = _expand_path(operands[0])
+    return expanded is not None and Path(expanded).is_absolute()
 
 
 def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
@@ -1634,11 +1641,13 @@ def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
     )
 
 
-def _target_is_literal(invocation: _GitInvocation) -> bool:
+def _target_is_absolute(invocation: _GitInvocation) -> bool:
+    """Is the `-C` target an absolute path once the shell has expanded it?"""
     arg = invocation.target_arg
     if arg is None:
         return False
-    return Path(arg).is_absolute() and "$" not in arg and "`" not in arg
+    expanded = _expand_path(arg)
+    return expanded is not None and Path(expanded).is_absolute()
 
 
 def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
@@ -1721,11 +1730,8 @@ def evaluate_bash_command(
         if invocation.target_arg is None:
             target_known = cwd_known
         else:
-            target_known = _target_is_literal(invocation) or (
-                cwd_known
-                and "$" not in invocation.target_arg
-                and "`" not in invocation.target_arg
-                and not invocation.target_arg.startswith("~")
+            target_known = _target_is_absolute(invocation) or (
+                cwd_known and _expand_path(invocation.target_arg) is not None
             )
         try:
             target_dir = _resolve_target_dir(invocation, effective_cwd)
