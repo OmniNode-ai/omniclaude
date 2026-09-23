@@ -16,9 +16,13 @@
 2. Run the session preflight at the given intent. A blocker stops the run.
 3. Read the board's published timestamp through the overlay's `board_locator`
    and record it as the **before** value.
+   A read that exits non-zero, produces zero bytes, or yields no timestamp is
+   a failure of the read: report it and stop. Never record an empty value as
+   the before value, because an empty before and an empty after compare equal.
 4. Run the overlay's `generator_command` from its `working_directory`. With
    `--dry-run`, stop here and report what would have run.
-5. Read the timestamp again and record it as the **after** value.
+5. Read the timestamp again and record it as the **after** value. The same
+   rule applies: an empty or failed read is a failure, never `advanced`.
 
 ## Present the result
 

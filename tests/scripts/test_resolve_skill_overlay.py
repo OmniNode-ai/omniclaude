@@ -247,6 +247,32 @@ def test_step_one_resolves_through_the_shared_resolver(
     assert old not in text, f"{skill}/{document} still resolves the selector only"
 
 
+# The two board skills compare what they read. A read that exited 0 with zero
+# bytes was compared as if it agreed, and the readback looked healthy while it
+# read nothing [OMN-19254]. Both documents of each skill must say an empty read
+# fails; the negative control is a skill that does not compare reads.
+_EMPTY_READ_RULE = re.compile(r"zero bytes", re.IGNORECASE)
+
+
+@pytest.mark.parametrize("skill", ["board_readback", "plans_board_refresh"])
+@pytest.mark.parametrize("document", ["SKILL.md", "prompt.md"])
+def test_an_empty_read_is_a_failure_in_the_board_skills(
+    skill: str, document: str
+) -> None:
+    text = (_SKILLS_ROOT / skill / document).read_text()
+    assert _EMPTY_READ_RULE.search(text), f"{skill}/{document} lets an empty read pass"
+
+
+def test_empty_read_rule_negative_control() -> None:
+    text = (_SKILLS_ROOT / "comment_sweep" / "prompt.md").read_text()
+    assert not _EMPTY_READ_RULE.search(text)
+
+
+def test_board_readback_reports_unread_as_its_own_verdict() -> None:
+    prompt = (_SKILLS_ROOT / "board_readback" / "prompt.md").read_text()
+    assert "`agrees`, `diverged` or `unread`" in prompt
+
+
 # ---------------------------------------------------------- weekly_review ---
 
 

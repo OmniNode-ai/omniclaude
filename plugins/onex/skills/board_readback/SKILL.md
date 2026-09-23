@@ -83,6 +83,9 @@ Two things make this contract fail, and both look like success from the outside:
 
 - a readback of a **cached** board, which proves the cache and nothing else;
 - a re-read done early in the run and quoted at the end, with writes in between.
+- an **empty** read: an input command that exits zero and prints nothing, quoted
+  as an empty block and compared as if it agreed. A read that exits non-zero or
+  produces zero bytes is `unread`, and an unread input fails the readback.
 
 So the re-read is the **last** action before landing, and its raw output — not a
 summary of it — goes into the landing surface. A reviewer must be able to
