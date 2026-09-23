@@ -504,6 +504,45 @@ def test_unset_variable_target_is_still_refused_in_the_registry(
         assert decision.blocked, command
 
 
+#: The review of the first AC4 revision: a variable the hook inherits is not
+#: the variable the command sees when the command changes it. Each of these
+#: was refused before AC4, was let through by that revision, and must stay
+#: refused.
+STALE_VARIABLE_STILL_REFUSED = [
+    # $PWD is the hook's directory, not the one after the `cd`.
+    'cd {registry} && git -C "$PWD" reset --hard origin/main',
+    'cd {registry} && cd "$OLDPWD" && cd {registry} && git reset --hard origin/main',
+    # The command assigns WT; the environment's WT is stale.
+    'OMN19229_WT={registry}; cd "$OMN19229_WT" && git reset --hard origin/main',
+    'export OMN19229_WT={registry}; git -C "$OMN19229_WT" reset --hard origin/main',
+    'read OMN19229_WT; cd "$OMN19229_WT" && git reset --hard origin/main',
+    # A glob is taken literally, as it always was.
+    "cd {registry}/sub* && git reset --hard origin/main",
+]
+
+
+@pytest.mark.parametrize("command", STALE_VARIABLE_STILL_REFUSED)
+def test_a_variable_the_command_changes_is_not_read_from_the_environment(
+    command: str,
+    registry: Path,
+    registry_worktree: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OMN19229_WT", str(registry_worktree))
+    monkeypatch.setenv("PWD", str(registry_worktree))
+    monkeypatch.setenv("OLDPWD", str(registry_worktree))
+    decision = evaluate_bash_command(
+        command.format(registry=registry),
+        policy,
+        cwd=registry
+        if command.startswith(("OMN19229", "export", "read"))
+        else registry_worktree,
+        registry_root=registry,
+    )
+    assert decision.blocked, command
+
+
 def test_bare_cd_does_not_silently_target_the_registry(
     registry: Path, policy: Policy
 ) -> None:

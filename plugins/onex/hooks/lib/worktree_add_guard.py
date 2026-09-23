@@ -55,6 +55,7 @@ from shell_words import (  # noqa: E402
     Word,
     WordPart,
     expand_word,
+    shadowed_names,
     tokenize,
 )
 
@@ -575,6 +576,24 @@ def _run(
     """Judge one simple command, updating ``state`` for assignments and ``cd``."""
     if not words or _apply_assignments(words, state, env):
         return
+    try:
+        _run_unwrapped(words, heredocs, state, env, root, judged, depth)
+    finally:
+        # `read X`, `for X in`, `unset X`, `export X=$(...)`: whatever this
+        # command left in X, the environment no longer describes it.
+        for name in shadowed_names([[w.text for w in words]]):
+            state.variables[name] = None
+
+
+def _run_unwrapped(
+    words: list[Word],
+    heredocs: list[HereDoc],
+    state: _State,
+    env: Mapping[str, str],
+    root: Path | None,
+    judged: list[str],
+    depth: int,
+) -> None:
     unwrapped = _unwrap(words)
     scope = _Scope(env, state.variables)
     if unwrapped.split is not None:

@@ -176,7 +176,19 @@ _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-from shell_words import UnresolvableWord, expand_word, unquoted  # noqa: E402
+from collections.abc import Mapping  # noqa: E402
+
+from shell_words import (  # noqa: E402
+    UnresolvableWord,
+    expand_word,
+    shadow,
+    shadowed_names,
+    unquoted,
+)
+
+#: What a path token may expand from: the hook's environment, with every
+#: name the command itself sets marked unresolvable.
+Scope = Mapping[str, "str | None"]
 
 __all__ = [
     "GATE_BIT_NAME",
@@ -450,21 +462,30 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
     )
 
 
-def _expand_path(token: str) -> str | None:
-    """``token`` as the shell expands it from this environment, or None.
+def _expand_path(token: str, scope: Scope) -> str | None:
+    """``token`` as the shell will see it, or None when that is unknown.
 
-    The shared OMN-19229 helper: ``~``, ``$NAME`` and ``${NAME}`` resolve; an
-    unset variable, a substitution or a glob is unresolvable, never guessed.
+    The shared OMN-19229 helper expands ``~``, ``$NAME`` and ``${NAME}``. An
+    unset variable, one the command itself sets, a shell-managed one such as
+    ``$PWD``, or a substitution is unknown, never guessed. A token whose only
+    obstacle is a glob is taken literally, as this guard always did, so a
+    refusal that held before still holds.
     """
     try:
-        return expand_word(unquoted(token), os.environ)
+        return expand_word(unquoted(token), scope)
     except UnresolvableWord:
-        return None
+        if "$" in token or "`" in token:
+            return None
+        literal = os.path.expanduser(token)
+        return None if literal.startswith("~") else literal
 
 
-def _resolve_target_dir(invocation: _GitInvocation, cwd: Path) -> Path:
+def _resolve_target_dir(
+    invocation: _GitInvocation, cwd: Path, scope: Scope | None = None
+) -> Path:
     if invocation.target_arg:
-        raw = _expand_path(invocation.target_arg) or invocation.target_arg
+        expanded = _expand_path(invocation.target_arg, scope or os.environ)
+        raw = expanded or invocation.target_arg
         candidate = Path(raw)
         return candidate if candidate.is_absolute() else (cwd / candidate)
     return cwd
@@ -587,7 +608,9 @@ def _read_current_branch(git_root: Path) -> str | None:
     return None
 
 
-def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path | None:
+def _resolve_cd_target(
+    tokens: list[str], policy: Policy, current: Path, scope: Scope
+) -> Path | None:
     """The directory a `cd` segment moves to, or None when unresolvable.
 
     OMN-18974. The harness resets a Bash call's working directory between
@@ -620,7 +643,7 @@ def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path
         # `cd -` returns to the PREVIOUS directory, which this guard does
         # not track. Unresolvable rather than guessed.
         return None
-    expanded = _expand_path(target)
+    expanded = _expand_path(target, scope)
     if expanded is None:
         # An unexpanded variable this guard cannot answer. Returning None
         # leaves the effective directory where it was, which is exactly the
@@ -1625,12 +1648,12 @@ def _restore_refusal(
     return _render_restore_reason(policy, invocation, git_root, lost)
 
 
-def _cd_operand_is_absolute(tokens: list[str], policy: Policy) -> bool:
+def _cd_operand_is_absolute(tokens: list[str], policy: Policy, scope: Scope) -> bool:
     """Does this `cd` land somewhere independent of the directory before it?"""
     operands = [tok for tok in _strip_wrappers(tokens)[1:] if not tok.startswith("-")]
     if not operands:
         return True
-    expanded = _expand_path(operands[0])
+    expanded = _expand_path(operands[0], scope)
     return expanded is not None and Path(expanded).is_absolute()
 
 
@@ -1641,12 +1664,12 @@ def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
     )
 
 
-def _target_is_absolute(invocation: _GitInvocation) -> bool:
+def _target_is_absolute(invocation: _GitInvocation, scope: Scope) -> bool:
     """Is the `-C` target an absolute path once the shell has expanded it?"""
     arg = invocation.target_arg
     if arg is None:
         return False
-    expanded = _expand_path(arg)
+    expanded = _expand_path(arg, scope)
     return expanded is not None and Path(expanded).is_absolute()
 
 
@@ -1696,6 +1719,7 @@ def evaluate_bash_command(
             notes=("untokenisable command naming no refused git verb",),
         )
 
+    scope = shadow(os.environ, shadowed_names(segments))
     effective_cwd = cwd
     # Whether effective_cwd is really where the shell will be. An
     # unresolvable `cd` leaves effective_cwd where it was, which keeps every
@@ -1715,11 +1739,11 @@ def evaluate_bash_command(
                 exported_relocation = True
                 continue
         if _is_directory_change(segment, policy):
-            moved_to = _resolve_cd_target(segment, policy, effective_cwd)
+            moved_to = _resolve_cd_target(segment, policy, effective_cwd, scope)
             if moved_to is None:
                 cwd_known = False
             else:
-                cwd_known = cwd_known or _cd_operand_is_absolute(segment, policy)
+                cwd_known = cwd_known or _cd_operand_is_absolute(segment, policy, scope)
                 effective_cwd = moved_to
             continue
         invocation = _parse_git(segment)
@@ -1730,11 +1754,11 @@ def evaluate_bash_command(
         if invocation.target_arg is None:
             target_known = cwd_known
         else:
-            target_known = _target_is_absolute(invocation) or (
-                cwd_known and _expand_path(invocation.target_arg) is not None
+            target_known = _target_is_absolute(invocation, scope) or (
+                cwd_known and _expand_path(invocation.target_arg, scope) is not None
             )
         try:
-            target_dir = _resolve_target_dir(invocation, effective_cwd)
+            target_dir = _resolve_target_dir(invocation, effective_cwd, scope)
         except OSError as exc:
             return Decision(
                 blocked=True,

@@ -112,7 +112,13 @@ _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-from shell_words import UnresolvableWord, expand_word, unquoted  # noqa: E402
+from shell_words import (  # noqa: E402
+    UnresolvableWord,
+    expand_word,
+    shadow,
+    shadowed_names,
+    unquoted,
+)
 
 #: Variables visible when a body-file path is expanded: this hook's
 #: environment, overlaid with plain assignments made earlier in the command.
@@ -700,9 +706,12 @@ def _parse_gh_api_patch(
 def parse_pr_body_edits(command: str, policy: Policy) -> list[PrBodyEdit]:
     """Every body-replacing pull-request edit in ``command``."""
     edits: list[PrBodyEdit] = []
+    segments = _segments(command)
+    # A name the command sets any other way (`export`, `read`, `for`) is
+    # unresolvable: the environment only holds its value from before.
     assigned: dict[str, str | None] = {}
-    scope: Scope = ChainMap(assigned, os.environ)  # type: ignore[arg-type]
-    for segment in _segments(command):
+    scope: Scope = ChainMap(assigned, shadow(os.environ, shadowed_names(segments)))  # type: ignore[arg-type]
+    for segment in segments:
         if all(_ASSIGNMENT.match(token) for token in segment):
             # `B=/tmp/body.md; gh pr edit --body-file "$B"`: the assignment
             # is what the later expansion reads.

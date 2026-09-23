@@ -387,7 +387,12 @@ def _judge(command: str, workspace: Path, cwd: Path | None = None) -> str | None
         command,
         cwd=cwd or workspace,
         root=workspace / "omni_worktrees",
-        env={"OMNI_HOME": str(workspace), "HOME": str(workspace / "home")},
+        env={
+            "OMNI_HOME": str(workspace),
+            "HOME": str(workspace / "home"),
+            "WT_ENV": str(workspace / "omni_worktrees" / "T" / "r"),
+            "PWD": str(workspace / "omni_worktrees" / "T"),
+        },
     )
     return decision.reason if decision.blocked else None
 
@@ -463,6 +468,13 @@ class TestArgumentParsing:
             ("env -S 'git worktree add /tmp/x'", "Got: "),
             ("sudo git worktree add /tmp/x", "Got: "),
             ("echo 'git worktree add /tmp/x' | bash", "standard input"),
+            # A variable the command changes, or the shell manages.
+            ('read WT_ENV; git worktree add "$WT_ENV"', "cannot resolve"),
+            (
+                'for WT_ENV in a b; do git worktree add "$WT_ENV"; done',
+                "cannot resolve",
+            ),
+            ('cd /tmp && git worktree add "$PWD/x"', "set by the shell"),
             # The second review pass.
             ("timeout 60 bash -c 'git worktree add /tmp/x'", "Got: "),
             ("sudo bash -c 'git worktree add /tmp/x'", "Got: "),
