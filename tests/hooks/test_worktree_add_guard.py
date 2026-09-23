@@ -51,7 +51,7 @@ from worktree_add_guard import evaluate  # noqa: E402
 def workspace(tmp_path: Path) -> Path:
     """A registry root with a worktrees root and two canonical clones."""
     home = tmp_path / "registry"
-    for name in ("omni_worktrees", "omnibase_infra", "omniclaude-internal"):
+    for name in ("omni_worktrees", "omnibase_infra", "second-clone"):
         (home / name).mkdir(parents=True)
     return home
 
@@ -171,14 +171,14 @@ class TestReplayedOccurrences:
         self, workspace: Path, sandbox_home: Path
     ) -> None:
         result = _run_hook(
-            "git -C $OMNI_HOME/omniclaude-internal worktree add "
-            "omni_worktrees/OMN-19236/omniclaude-internal -b feat/omn-19236 origin/dev",
+            "git -C $OMNI_HOME/second-clone worktree add "
+            "omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev",
             workspace=workspace,
             sandbox_home=sandbox_home,
             cwd=workspace,
         )
         reason = _assert_refused(result)
-        landed = workspace / "omniclaude-internal" / "omni_worktrees" / "OMN-19236"
+        landed = workspace / "second-clone" / "omni_worktrees" / "OMN-19236"
         assert str(landed.resolve()) in reason
 
     def test_help_with_a_redirection_creates_nothing(
