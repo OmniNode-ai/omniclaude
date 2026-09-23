@@ -40,84 +40,65 @@ A dispatch skill IS one CLI call. The procedure lives in the `onex delegate`
 entrypoint — payload construction, node dispatch, and result extraction are all
 internal. See `prompt.md` for the one command and how to present the typed result.
 
-## Prerequisite: install the `onex` CLI *with* the delegate subcommand
+## Prerequisite: install the `onex` tool
 
-Three packages, one environment (see `plugin-compat.yaml` → `onex_cli`, the pin's
-source of truth):
+This is step 1 of the public OmniClaude Quickstart
+(`guides/onex-plugin-quickstart.md` in the `OmniNode-ai/knowledge-base` repository),
+and the command is the same. Three packages, one environment (the pins are declared in
+`plugin-compat.yaml` → `onex_cli`):
 
 | Package | Provides |
 |---|---|
 | `omnibase-core >= 0.46.8` | the `onex` console script and the `onex.cli` entry-point loader |
 | `omnibase-infra >= 0.38.4` | the `delegate` subcommand, registered into the `onex.cli` group |
-| `omnimarket` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
-
-**`omnimarket` MUST be installed from git, not a PyPI version pin.** `onex
-delegate` runs a pre-flight drift guard
-(`omnibase_infra.cli.omnimarket_drift_guard`) before every REAL
-dispatch — `--help` below is answered before the guard ever runs. On a
-machine that has a canonical `omnimarket` clone checked out under the
-workspace root the guard reads (true for every OmniNode dev workspace, not
-for a customer) the guard REJECTS an `omnimarket` install that is not a
-git-VCS install matching that clone's checked-out commit exactly.
-`omnimarket>=0.4.7` (PyPI) carries no VCS provenance and fails this check by
-construction, every time — not intermittently (live-reproduced).
+| `omnimarket >= 0.4.205` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
 
 Install (this is the command to run):
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev' 'omnibase-core>=0.46.8'
-# or:
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev'
+uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'
 ```
 
-It names no directory, so there is nothing for it to resolve wrongly. It
-installs the `dev` branch tip, and it says so. It used to expand a
-workspace variable with a `.` fallback and run `git -C
-<that>/omnimarket rev-parse HEAD 2>/dev/null || echo dev`: on a machine where
-that variable was unset — every customer machine — the expansion became the
-**current working directory**, `rev-parse` failed there, and the `|| echo
-dev` swallowed the failure. You got an unpinned `dev` install from a command
-that read like a commit pin, with no error either way.
+All three come from PyPI. There is no source checkout to clone and no workspace variable to
+set. The version floors are the oldest releases supported; the command installs the newest
+published release of each. To update later: `uv tool upgrade omnibase-core`.
 
-Nothing is lost by pinning `dev` outright. A machine with no canonical clone
-never reaches the drift guard at all: it fails OPEN when it cannot determine
-a canonical commit to compare against, which is exactly the machine this
-command is for.
+If the install ends with a warning that `~/.local/bin` is not on your PATH, run
+`uv tool update-shell` once, then close the terminal window, open a new one, and start
+Claude Code again from that new window so it can find `onex`.
 
-**On an OmniNode workspace machine** the guard *does* bite, so pin to your
-own clone's commit instead. Export `OMNIBASE_PATH` to your workspace root
-first; the `:?` refuses loudly rather than falling back to the wrong
-directory if you have not:
+With `pipx` instead of `uv`:
 
 ```bash
-OMNIMARKET_REF="$(git -C "${OMNIBASE_PATH:?export OMNIBASE_PATH to your OmniNode workspace root}/omnimarket" rev-parse HEAD)" \
-  && uv tool install --with 'omnibase-infra>=0.38.4' \
-       --with "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@${OMNIMARKET_REF}" \
-       'omnibase-core>=0.46.8'
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.205'
 ```
 
-That ref is an exact match against the guard's own comparison basis, by
-construction. Note the guard itself still reads the older `OMNI_HOME`
-spelling of the same workspace root; export both to the same path until that
-rename reaches it.
+Then, once per machine, give it an identity and a model (quickstart steps 2 and 3):
 
-Verify: `onex delegate --help` must exit 0 **from any directory**.
+```bash
+onex local init
+read -rs KEY && printf '%s' "$KEY" | onex secret set llm.openrouter.api_key && unset KEY
+```
 
-`--help` alone is not proof the command works — click answers it before any
-dispatch. If `omnimarket` is missing entirely, `--help` still exits 0 and the
-first real invocation fails with `Error: Unknown node
-'node_delegate_skill_orchestrator'`, listing ~130 unrelated nodes as "known".
-If `omnimarket` is present but PyPI-installed (or stale) on a machine the
-drift guard covers, the first real invocation instead fails with
-`OmnimarketDriftError`. The node is found through the `onex.nodes`
-entry-point group over **installed distributions**, so once installed this
-way no workspace-root access of any kind is needed to dispatch.
+The second line registers your own OpenRouter key: it reads the key from what you paste,
+never from the command line or an environment variable, and shows nothing while you paste.
+Use `llm.glm.api_key` for GLM. To use a model server you run instead, declare it in
+`~/.omninode/delegation/bifrost_overrides.yaml` as the quickstart's step 3 option A shows.
+With neither, the first delegation refuses with `No local model is declared on this
+machine` before it reaches any model.
 
-Proven end-to-end: a scratch venv built from exactly this recipe passes
-`omnimarket_drift_guard.check_omnimarket_drift()` with zero drift and
-resolves `node_delegate_skill_orchestrator` from the installed
-distribution, not a workspace checkout
-(`plugins/onex-delegate/tests/test_install_works.py`).
+Verify: `onex --version` prints `onex version 0.47.x` or newer, from any directory.
+
+`onex delegate --help` answering is not proof the command works — click answers it before
+any dispatch. If `omnimarket` is missing entirely, `--help` still exits 0 and the first real
+invocation fails with `Error: Unknown node 'node_delegate_skill_orchestrator'`, listing ~130
+unrelated nodes as "known". The node is found through the `onex.nodes` entry-point group
+over **installed distributions**, so once installed this way the command works from any
+directory. The quickstart's step 4 (`onex delegate "say hello in one word"`) is the real test.
+
+The documented command is proven in CI: `plugins/onex-delegate/tests/test_install_works.py`
+installs exactly the `install_hint` from `plugin-compat.yaml` into a clean environment and
+resolves `node_delegate_skill_orchestrator` from the installed distribution.
 
 **Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever
 project the *current directory* belongs to, so the command only works inside a

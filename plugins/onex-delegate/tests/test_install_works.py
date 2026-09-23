@@ -43,13 +43,22 @@ resolves the backing node through the same code path the failure came from
 deterministic and offline — it does not dispatch, so it needs no model config,
 no bus, and no network beyond the install itself.
 
-Marked ``integration`` (network + a real resolver run), not ``unit``.
+Why the recipe is parsed, not rebuilt (OMN-19367)
+-------------------------------------------------
+The requirements installed below are parsed out of the published ``install_hint``
+string, so this test installs the command a customer copies, not a list rebuilt from
+the pins that could quietly disagree with it. A separate unit test holds the hint to
+PyPI version pins only, and another holds SKILL.md to the hint verbatim, so the skill,
+the manifests and this proof all name the same command as the public quickstart.
+
+The integration test is marked ``integration`` (network + a real resolver run).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess  # nosec B404 - fixed argv, never shell=True
 import sys
@@ -57,9 +66,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from packaging.requirements import Requirement
 
 PLUGIN_DIR = Path(__file__).parent.parent
 COMPAT_YAML = PLUGIN_DIR / "plugin-compat.yaml"
+SKILL_MD = PLUGIN_DIR / "skills" / "delegate" / "SKILL.md"
 
 #: Wall-clock ceiling for `uv venv` + `uv pip install` against the live index,
 #: cold (no warm cache in CI).
@@ -69,11 +80,6 @@ _RUN_TIMEOUT_SECONDS = 120
 #: The node `onex delegate` dispatches. Named here rather than derived so a
 #: rename shows up as a failing assertion instead of a silently vacuous probe.
 _BACKING_NODE = "node_delegate_skill_orchestrator"
-
-#: git remote `node_package` (omnimarket) installs from as of OMN-16528 — a
-#: PyPI version pin cannot satisfy the omnimarket_drift_guard (see below), so
-#: the declared requirement is a PEP 508 direct git reference, not `name>=ver`.
-_OMNIMARKET_GIT_URL = "https://github.com/OmniNode-ai/omnimarket.git"
 
 
 def _compat() -> dict:
@@ -87,62 +93,40 @@ def _uv() -> str:
     return resolved
 
 
-def _workspace_root() -> str | None:
-    """The OmniNode workspace root, or None when this is not a workspace machine.
+def _hint_requirements(hint: str) -> list[str]:
+    """The requirement strings a `uv tool install` hint installs, in order.
 
-    Single-argument ``environ.get`` on purpose (OMN-16855/OMN-16849): "unset"
-    must stay distinguishable from a value. The form this replaced —
-    a braced OMNI_HOME reference in the install hint — supplied ``.`` as its default and
-    so could not tell a customer machine apart from a workspace rooted at the
-    caller's cwd. That conflation is the whole defect.
+    Parsed with shell quoting rules, exactly as a terminal would split the line:
+    every `--with <req>` value, then the positional tool requirement.
     """
-    return os.environ.get("OMNIBASE_PATH")
-
-
-def _resolve_omnimarket_ref() -> str:
-    """Resolve the git ref this test installs `omnimarket` from (OMN-16528).
-
-    Mirrors the two documented install commands, and which one it mirrors is
-    decided by the same fact that decides which one a human should run:
-
-    * ``OMNIBASE_PATH`` set with a canonical clone under it — an OmniNode
-      workspace machine, where the drift guard bites — mirrors SKILL.md's
-      commit-pinned variant and yields the EXACT commit
-      ``omnimarket_drift_guard.canonical_local_omnimarket_commit`` will later
-      compare the installed venv against.
-    * otherwise — CI, and every customer machine — mirrors the published
-      ``install_hint``, which as of OMN-16855 pins the ``dev`` branch tip
-      outright rather than expanding a workspace variable that resolves to the
-      caller's cwd when unset.
-    """
-    omni_home = _workspace_root()
-    if omni_home:
-        clone = Path(omni_home) / "omnimarket"
-        if (clone / ".git").exists():
-            result = subprocess.run(  # nosec B603
-                ["git", "-C", str(clone), "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
+    argv = shlex.split(hint)
+    assert argv[:3] == ["uv", "tool", "install"], (
+        f"install_hint must be a `uv tool install` command, got {hint!r}"
+    )
+    requirements: list[str] = []
+    rest = argv[3:]
+    i = 0
+    while i < len(rest):
+        if rest[i] == "--with":
+            requirements.append(rest[i + 1])
+            i += 2
+        elif rest[i].startswith("-"):
+            raise AssertionError(
+                f"unexpected option {rest[i]!r} in install_hint {hint!r}"
             )
-            sha = result.stdout.strip()
-            if result.returncode == 0 and len(sha) == 40:
-                return sha
-    return "dev"
+        else:
+            requirements.append(rest[i])
+            i += 1
+    return requirements
 
 
 def _declared_requirements(cli: dict) -> list[str]:
-    """The exact requirement strings `install_hint` resolves to right now.
+    """The exact requirement strings the published `install_hint` installs.
 
     All three packages, because all three are load-bearing: the console script,
     the subcommand, and the node the subcommand dispatches (OMN-16191).
     """
-    return [
-        f"{cli['console_script_package']}>={cli['console_script_min_version']}",
-        f"{cli['package']}>={cli['min_version']}",
-        f"{cli['node_package']} @ git+{_OMNIMARKET_GIT_URL}@{_resolve_omnimarket_ref()}",
-    ]
+    return _hint_requirements(cli["install_hint"])
 
 
 @pytest.mark.integration
@@ -274,41 +258,6 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
         "than the installed package, so this proves nothing about a clean install"
     )
 
-    # OMN-16528: prove the CLI's own pre-flight drift guard accepts this
-    # exact install, not just that it installs and the node resolves. Only
-    # meaningful on a machine with OMNIBASE_PATH set and a canonical omnimarket
-    # clone checked out (true locally, not in CI) -- omnimarket_drift_guard
-    # fails OPEN when it cannot determine a canonical commit to compare
-    # against, so there would be nothing to prove there.
-    #
-    # The guard's own keyword is still spelled `omni_home` because the rename
-    # has not reached omnibase_infra yet (OMN-16852); the VALUE passed is this
-    # repo's renamed OMNIBASE_PATH, which is the same workspace root.
-    omni_home = _workspace_root()
-    if omni_home and (Path(omni_home) / "omnimarket" / ".git").exists():
-        guard_probe = (
-            "from omnibase_infra.cli.omnimarket_drift_guard import check_omnimarket_drift;"
-            f"check_omnimarket_drift(omni_home={omni_home!r});"
-            "print('NO_DRIFT')"
-        )
-        guard = subprocess.run(  # nosec B603
-            [str(venv / "bin" / "python"), "-c", guard_probe],
-            cwd=scratch,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=_RUN_TIMEOUT_SECONDS,
-        )
-        assert guard.returncode == 0 and "NO_DRIFT" in guard.stdout, (
-            "omnimarket_drift_guard.check_omnimarket_drift() rejected the "
-            f"install produced by the declared pins {requirements} — this is "
-            "the exact OMN-16528 defect: the documented install recipe must "
-            "satisfy `onex delegate`'s own pre-flight guard, not merely "
-            f"install and resolve the node.\nstdout:\n{guard.stdout}\n"
-            f"stderr:\n{guard.stderr}"
-        )
-
 
 @pytest.mark.unit
 def test_compat_declares_its_own_installability_honestly() -> None:
@@ -367,6 +316,53 @@ def test_skill_never_documents_a_cwd_dependent_invocation() -> None:
         "cwd-dependent (OMN-16041 F3). Document the bare `onex` installed via "
         "plugin-compat.yaml's install_hint."
     )
+
+
+@pytest.mark.unit
+def test_install_hint_is_the_pypi_recipe_the_pins_declare() -> None:
+    """The published hint installs PyPI releases at the declared floors, nothing else.
+
+    OMN-19367: the hint used to pin `omnimarket` to a git direct reference on an
+    unreleased branch, which contradicted the public quickstart. A direct
+    reference has a URL; a PyPI pin does not.
+    """
+    cli = _compat()
+    expected = {
+        cli["console_script_package"]: cli["console_script_min_version"],
+        cli["package"]: cli["min_version"],
+        cli["node_package"]: cli["node_package_min_version"],
+    }
+    parsed = [Requirement(r) for r in _hint_requirements(cli["install_hint"])]
+    assert {r.name for r in parsed} == set(expected), (
+        f"install_hint installs {[r.name for r in parsed]}, expected exactly "
+        f"{sorted(expected)}"
+    )
+    for req in parsed:
+        assert req.url is None, (
+            f"install_hint installs {req.name} from {req.url}; the customer recipe "
+            "installs PyPI releases only"
+        )
+        assert str(req.specifier) == f">={expected[req.name]}", (
+            f"install_hint pins {req.name}{req.specifier}, but plugin-compat.yaml "
+            f"declares the floor {expected[req.name]}"
+        )
+    pipx = cli["install_hint_pipx"]
+    for name, floor in expected.items():
+        assert f"'{name}>={floor}'" in pipx, (
+            f"install_hint_pipx does not install '{name}>={floor}': {pipx!r}"
+        )
+
+
+@pytest.mark.unit
+def test_skill_documents_the_install_hint_verbatim() -> None:
+    """SKILL.md tells the customer to run exactly the command this file proves."""
+    cli = _compat()
+    text = SKILL_MD.read_text()
+    for key in ("install_hint", "install_hint_pipx"):
+        assert cli[key] in text, (
+            f"skills/delegate/SKILL.md does not carry plugin-compat.yaml {key} "
+            f"verbatim ({cli[key]!r}); the skill and the proven recipe have drifted"
+        )
 
 
 @pytest.mark.unit

@@ -320,6 +320,23 @@ repos:
         files: '^(\.github/workflows/.*\.ya?ml|tests/workflows/test_reusable_workflow_inner_checkouts\.py)$'
         stages: [pre-commit]
 
+      # OMN-19367: the customer plugin (plugins/onex-delegate and both
+      # marketplace.json copies) must not tell a customer to use an internal-only
+      # parameter: the workspace-root variables, or a git install of unreleased
+      # source. The same module runs in CI through the Plugin Compat Gate
+      # workflow (`pytest plugins/onex-delegate/tests/`), so local and CI
+      # verdicts come from the same assertions. ~1s, no network.
+      - id: onex-delegate-customer-surface
+        name: Customer plugin names no internal-only parameter (OMN-19367)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          plugins/onex-delegate/tests/test_customer_surface_no_internal_params.py
+          -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: '^(plugins/onex-delegate/.*|plugins/\.claude-plugin/marketplace\.json|\.claude-plugin/marketplace\.json)$'
+        stages: [pre-commit]
+
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
       # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
       # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero
