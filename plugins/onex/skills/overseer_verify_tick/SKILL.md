@@ -44,7 +44,21 @@ read, and where stall findings are recorded are **overlay content**.
 
 ## Overlay
 
-Resolve `OVERSEER_VERIFY_TICK_OVERLAY_PATH`. Unset or unreadable is a hard stop.
+Resolve the overlay with the shared resolver, the same search order every
+overlay-configured skill uses:
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve_skill_overlay.py" overseer_verify_tick
+```
+
+| Order | Location | Kind |
+| -- | -- | -- |
+| 1 | `OVERSEER_VERIFY_TICK_OVERLAY_PATH` | explicit pointer — a miss is a hard stop, never a fall-through |
+| 2 | each root in `ONEX_SKILL_OVERLAY_ROOTS`, joined with `overseer_verify_tick/overlay.yaml` | discovered |
+
+It prints the resolved path, or exits non-zero naming every location it
+tried. **A non-zero exit is a hard stop**, not a fall back to a default —
+there is no default. Report its standard error and stop.
 
 | Field | What it holds |
 | -- | -- |

@@ -10,7 +10,10 @@
 | `--stall-threshold-minutes` | integer |
 | `--dry-run` | boolean, flag |
 
-1. Resolve `OVERSEER_VERIFY_TICK_OVERLAY_PATH`. Unset or unreadable is a hard stop.
+1. Resolve the overlay: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve_skill_overlay.py" overseer_verify_tick`.
+   It tries `OVERSEER_VERIFY_TICK_OVERLAY_PATH`, then each root in
+   `ONEX_SKILL_OVERLAY_ROOTS`. A non-zero exit is a hard stop: report its
+   standard error, which names every location tried, and stop.
 2. Run the session preflight at the given intent.
 3. Enumerate lanes with `lane_inventory_command`. Do not discard standard error.
 4. For each lane, read its last write through `last_write_locator` and compute

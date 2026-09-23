@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from omniclaude.skills.weekly_review.config_loader_weekly_review import (
     OVERLAY_PATH_ENV_VAR,
+    OVERLAY_ROOTS_ENV_VAR,
     WeeklyReviewRubricError,
     deep_merge_weekly_review_rubric,
     default_base_path,
@@ -30,6 +31,7 @@ from omniclaude.skills.weekly_review.model_weekly_review_rubric import (
 
 __all__ = [
     "OVERLAY_PATH_ENV_VAR",
+    "OVERLAY_ROOTS_ENV_VAR",
     "ModelIdentitySource",
     "ModelOutputFileKind",
     "ModelReviewCriterion",

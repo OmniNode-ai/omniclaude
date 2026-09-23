@@ -60,17 +60,26 @@ winning, and the merged mapping validates into one model.
   `omniclaude.skills.weekly_review`. It declares structure only.
 - **Overlay selector**: the `WEEKLY_REVIEW_OVERLAY_PATH` environment variable. It names a file. It
   never carries rubric content.
+- **Overlay roots**: when the selector is unset, each root in `ONEX_SKILL_OVERLAY_ROOTS` joined with
+  `weekly_review/overlay.yaml`, the same search order every overlay-configured skill uses. The
+  selector is explicit, so one naming a missing file is a hard stop rather than a fall-through.
 - **Loader**: `omniclaude.skills.weekly_review.load_weekly_review_rubric`.
 
-**Where the overlay comes from is the operator's answer, not this skill's.** No overlay ships here
-and none is discovered. The selector takes an absolute path to a file the reviewer already has, and
-an organization that keeps its rubric in a private repository points the selector into that clone.
-If you do not know which file to name, that is the question to ask before the run, not a gap to fill
-with a guess.
+**Where the overlay comes from is the operator's answer, not this skill's.** No overlay ships here.
+The selector takes an absolute path to a file the reviewer already has; an installation that sets
+`ONEX_SKILL_OVERLAY_ROOTS` for its other overlay-configured skills is searched too. If you do not
+know which file resolves, that is the question to ask before the run, not a gap to fill with a
+guess.
 
-**Fail-fast, first step, before anything else.** Resolve `WEEKLY_REVIEW_OVERLAY_PATH` and stop if it
-is unset, empty, or names a file that does not exist. Report the variable by name and stop. There is
-no default overlay and no fallback rubric: a bare base declares no role, no criterion, no identity
+**A resolved overlay does not switch the review on.** An overlay anchors its output directory and
+its role standards on `${VAR}` references (see step 6), and a review whose environment leaves them
+unset refuses, by name, at `resolve_rubric_document` before a single count is taken. Setting the
+overlay roots for the other skills therefore leaves this one refusing until the reviewing
+environment supplies those variables deliberately.
+
+**Fail-fast, first step, before anything else.** Resolve the overlay — `WEEKLY_REVIEW_OVERLAY_PATH`,
+then the overlay roots — and stop if neither resolves, or if the selector names a file that does not
+exist. Report the variables by name and stop. There is no default overlay and no fallback rubric: a bare base declares no role, no criterion, no identity
 source and no output location, and `assert_resolved` refuses it. A review scored against an empty
 rubric and written to an undeclared location is worse than no review.
 
@@ -228,4 +237,4 @@ by handing them a file written for someone else.
 - **Rubric contract**: `omniclaude.skills.weekly_review.ModelWeeklyReviewRubric`
 - **Loader**: `omniclaude.skills.weekly_review.load_weekly_review_rubric`
 - **Base rubric**: `weekly_review_base.yaml`, packaged beside the loader
-- **Overlay selector**: `WEEKLY_REVIEW_OVERLAY_PATH`
+- **Overlay selector**: `WEEKLY_REVIEW_OVERLAY_PATH`, then the roots in `ONEX_SKILL_OVERLAY_ROOTS`

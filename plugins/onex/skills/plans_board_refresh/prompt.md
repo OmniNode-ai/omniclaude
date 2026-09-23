@@ -9,8 +9,10 @@
 | `--intent` | string |
 | `--dry-run` | boolean, flag |
 
-1. Resolve `PLANS_BOARD_REFRESH_OVERLAY_PATH`. Unset or unreadable is a hard
-   stop: name the variable and stop. Do not guess a generator.
+1. Resolve the overlay: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve_skill_overlay.py" plans_board_refresh`.
+   It tries `PLANS_BOARD_REFRESH_OVERLAY_PATH`, then each root in
+   `ONEX_SKILL_OVERLAY_ROOTS`. A non-zero exit is a hard stop: report its
+   standard error, which names every location tried, and stop. Do not guess a generator.
 2. Run the session preflight at the given intent. A blocker stops the run.
 3. Read the board's published timestamp through the overlay's `board_locator`
    and record it as the **before** value.
