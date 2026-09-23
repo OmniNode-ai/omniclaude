@@ -517,7 +517,16 @@ expected_hooks:
       at 14:52:55Z on 2026-09-19), `git merge --abort`/`--quit`/`--continue`
       (refusing those would strand the tree mid-conflict), `git fetch`,
       `git pull --ff-only`, the Operating Rule 17 path-scoped restore recipe
-      (`git checkout <ref> -- <path>`), and every read. There is deliberately
+      (`git checkout <ref> -- <path>`) over a path with no uncommitted work,
+      and every read. A second arm (OMN-18874) reaches past the registry
+      clone to every canonical clone and worktree under $OMNI_HOME, and any
+      git worktree anywhere: it refuses a path-scoped `git checkout` or
+      `git restore` when content it would overwrite -- an unstaged edit, a
+      staged change, an untracked file the source carries -- exists in no
+      ref it can see, the loss four lanes suffered silently after reading
+      Rule 17. It runs read-only git probes to decide, fails closed when it
+      cannot, and names `git show <rev>:<path> > <scratch file>` and
+      commit-first as the alternatives. There is deliberately
       no consent-citation escape hatch: every refused verb has a sanctioned
       alternative reaching the same outcome without touching state a peer
       lane owns. Registered AFTER pre_tool_use_git_stash_guard.sh on the same
