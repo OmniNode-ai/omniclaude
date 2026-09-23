@@ -118,7 +118,26 @@ class Operator:
     text: str
 
 
-Token = Word | Operator
+class HereDoc:
+    """A here-document, placed where its ``<<`` operator was.
+
+    The body is filled in when the tokenizer reaches it, on the lines after the
+    command. ``expands`` is False when any part of the delimiter was quoted,
+    in which case the shell expands nothing inside the body.
+    """
+
+    def __init__(self, strip_tabs: bool) -> None:
+        self.strip_tabs = strip_tabs
+        self.delimiter = ""
+        self.expands = True
+        self.body = ""
+
+    def as_word(self) -> Word:
+        """The body as a word, quoted the way the shell reads it."""
+        return Word((WordPart(self.body, "double" if self.expands else "literal"),))
+
+
+Token = Word | Operator | HereDoc
 
 
 class _Builder:
@@ -220,9 +239,9 @@ def _scan_double(command: str, start: int) -> tuple[str, int]:
                 i += 2
                 continue
             if nxt in '$`"\\':
-                # An escaped `$` stays escaped: expansion must not see it as
-                # a parameter, so it is carried as a doubled backslash marker
-                # that expand_word turns back into a literal `$`.
+                # An escaped `$` or backtick keeps its backslash, so that
+                # expansion reads it as a literal character rather than as a
+                # parameter or a substitution; expand_word drops the backslash.
                 out.append("\\" + nxt if nxt in "$`" else nxt)
                 i += 2
                 continue
@@ -244,15 +263,20 @@ def _scan_double(command: str, start: int) -> tuple[str, int]:
     raise ShellSyntaxError("unterminated double quote")
 
 
-def _skip_heredoc_bodies(command: str, i: int, pending: list[tuple[str, bool]]) -> int:
-    """Skip the bodies of here-documents that start on the line after ``i``."""
-    for delimiter, strip_tabs in pending:
+def _read_heredoc_bodies(command: str, i: int, pending: list[HereDoc]) -> int:
+    """Read the bodies of here-documents that start at ``i``; the index past them."""
+    for heredoc in pending:
+        lines: list[str] = []
         while i < len(command):
             end = command.find("\n", i)
             line = command[i:] if end < 0 else command[i:end]
             i = len(command) if end < 0 else end + 1
-            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+            if heredoc.strip_tabs:
+                line = line.lstrip("\t")
+            if line == heredoc.delimiter:
                 break
+            lines.append(line + "\n")
+        heredoc.body = "".join(lines)
     pending.clear()
     return i
 
@@ -261,16 +285,18 @@ def tokenize(command: str) -> list[Token]:
     """Split ``command`` into words and command separators.
 
     Redirections are dropped together with their targets, so ``2>&1`` and
-    ``>/dev/null`` never reach a guard as arguments. Here-document bodies are
-    skipped, so text inside one is never read as a command. Comments are
-    dropped up to, but not including, the newline that ends them.
+    ``>/dev/null`` never reach a guard as arguments. A here-document becomes a
+    :class:`HereDoc` token in its command, so its body is never read as a
+    command line, yet a guard can still judge it when a shell runs it as a
+    script. Comments are dropped up to, but not including, the newline that
+    ends them.
     """
     tokens: list[Token] = []
     builder = _Builder()
-    pending_heredocs: list[tuple[str, bool]] = []
-    # After a redirection operator, the next word is its target and is
-    # dropped. The tuple carries (is_heredoc, strip_tabs).
-    drop_next: tuple[bool, bool] | None = None
+    pending_heredocs: list[HereDoc] = []
+    # After a redirection operator the next word is its target and is
+    # dropped; for `<<` it is the delimiter of this here-document.
+    drop_next: HereDoc | bool = False
     i = 0
     n = len(command)
 
@@ -279,11 +305,12 @@ def tokenize(command: str) -> list[Token]:
         word = builder.take()
         if word is None:
             return
-        if drop_next is not None:
-            is_heredoc, strip_tabs = drop_next
-            drop_next = None
-            if is_heredoc:
-                pending_heredocs.append((word.text, strip_tabs))
+        if isinstance(drop_next, HereDoc):
+            drop_next.delimiter = word.text
+            drop_next.expands = all(part.quote == "none" for part in word.parts)
+            pending_heredocs.append(drop_next)
+        if drop_next is not False:
+            drop_next = False
             return
         tokens.append(word)
 
@@ -308,7 +335,7 @@ def tokenize(command: str) -> list[Token]:
         if ch == "\n":
             finish_word()
             tokens.append(Operator("\n"))
-            i = _skip_heredoc_bodies(command, i + 1, pending_heredocs)
+            i = _read_heredoc_bodies(command, i + 1, pending_heredocs)
             continue
         if ch in "<>" or (ch == "&" and command[i + 1 : i + 2] == ">"):
             # An all-digit word glued to the operator is its file descriptor.
@@ -330,7 +357,11 @@ def tokenize(command: str) -> list[Token]:
                 # `>&-` closes a descriptor and has no target word.
                 i += 1
                 continue
-            drop_next = (op in ("<<", "<<-"), op == "<<-")
+            if op in ("<<", "<<-"):
+                drop_next = HereDoc(strip_tabs=op == "<<-")
+                tokens.append(drop_next)
+            else:
+                drop_next = True
             continue
         if ch in ";&|()":
             finish_word()
@@ -376,7 +407,7 @@ def split_commands(tokens: list[Token]) -> list[list[Word]]:
             if current:
                 commands.append(current)
             current = []
-        else:
+        elif isinstance(token, Word):
             current.append(token)
     if current:
         commands.append(current)

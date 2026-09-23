@@ -395,6 +395,13 @@ class TestArgumentParsing:
             'export WT={dest}; git worktree add "$WT"',
             "cat > f <<EOF\ngit worktree add /tmp/x\nEOF\ngit worktree add {dest}",
             "git status # git worktree add /tmp/x\ngit worktree add {dest}",
+            'BR=feat/x; git worktree add -b"$BR" {dest}',
+            'git worktree add --lock --reason="$HOME" {dest}',
+            "eval git worktree add {dest}",
+            "bash <<EOF\ngit worktree add {dest}\nEOF",
+            'S="git worktree add {dest}"; bash -c "$S"',
+            "env -C {workspace}/omnibase_infra git worktree add ../omni_worktrees/T/r",
+            "git worktree add {dest} && bash scripts/check.sh",
         ],
     )
     def test_admitted(self, workspace: Path, command: str) -> None:
@@ -421,6 +428,22 @@ class TestArgumentParsing:
             ("bash -c 'git worktree add /tmp/x'", "Got: "),
             ('git worktree add "${{WT:-/tmp}}"', "not resolved"),
             ("git status # comment\ngit worktree add /tmp/y", "Got: "),
+            # The review findings on the first revision of this change.
+            ("eval git worktree add /tmp/x", "Got: "),
+            ("bash <<EOF\ngit worktree add /tmp/x\nEOF", "Got: "),
+            ("sh <<'EOF'\ngit worktree add /tmp/x\nEOF", "Got: "),
+            ('S="git worktree add /tmp/x"; bash -c "$S"', "Got: "),
+            (
+                'bash -c "$UNSET_SCRIPT"  # runs git worktree add',
+                "`$UNSET_SCRIPT` is unset",
+            ),
+            (
+                "env -C {workspace}/omnibase_infra git worktree add omni_worktrees/T/r",
+                "resolves against",
+            ),
+            ("env -S 'git worktree add /tmp/x'", "Got: "),
+            ("sudo git worktree add /tmp/x", "Got: "),
+            ("echo 'git worktree add /tmp/x' | bash", "standard input"),
         ],
     )
     def test_refused(self, workspace: Path, command: str, expected: str) -> None:

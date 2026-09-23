@@ -49,10 +49,11 @@ if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
 from shell_words import (  # noqa: E402
-    Operator,
+    HereDoc,
     ShellSyntaxError,
     UnresolvableWord,
     Word,
+    WordPart,
     expand_word,
     tokenize,
 )
@@ -92,7 +93,7 @@ _ADD_LONG_FLAGS = frozenset(
 _ADD_LONG_VALUED = frozenset({"reason"})
 
 # Programs that run their operands as a command, and so are looked through.
-_WRAPPERS = frozenset({"command", "exec", "nohup", "time", "builtin"})
+_WRAPPERS = frozenset({"command", "exec", "nohup", "time", "builtin", "nice"})
 _SHELLS = frozenset({"bash", "sh", "zsh", "dash"})
 _DECLARERS = frozenset({"export", "declare", "typeset", "local", "readonly"})
 _MAX_NESTING = 3
@@ -151,9 +152,22 @@ def _join(base: Path | None, raw: str, what: str, unknown: str) -> Path:
     return Path(os.path.normpath(base / candidate))
 
 
-def _strip_prefix(words: list[Word]) -> list[Word]:
+def _literal(text: str) -> Word:
+    return Word((WordPart(text, "literal"),))
+
+
+@dataclass
+class _Unwrapped:
+    words: list[Word]  # the command itself, wrappers and assignments removed
+    chdirs: list[Word]  # `env -C <dir>` operands, in order
+    split: Word | None  # an `env -S <string>` command string
+
+
+def _unwrap(words: list[Word]) -> _Unwrapped:
     """Drop leading assignments and wrapper programs such as ``env`` and ``nohup``."""
     result = list(words)
+    chdirs: list[Word] = []
+    split: Word | None = None
     while result:
         head = result[0]
         if head.assignment() is not None:
@@ -165,20 +179,32 @@ def _strip_prefix(words: list[Word]) -> list[Word]:
             while result and result[0].text.startswith("-"):
                 result = result[1:]
             continue
-        if name == "env":
-            result = result[1:]
-            while result:
-                text = result[0].text
-                if text in ("-u", "--unset", "-C", "--chdir", "-S", "--split-string"):
-                    result = result[2:]
-                    continue
-                if text.startswith("-") or result[0].assignment() is not None:
-                    result = result[1:]
-                    continue
+        if name != "env":
+            break
+        result = result[1:]
+        while result:
+            text = result[0].text
+            if text in ("-C", "--chdir", "-S", "--split-string") and len(result) > 1:
+                if text in ("-C", "--chdir"):
+                    chdirs.append(result[1])
+                else:
+                    split = result[1]
+                result = result[2:]
+                continue
+            if text.startswith("--chdir="):
+                chdirs.append(_literal(text.partition("=")[2]))
+            elif text.startswith("--split-string="):
+                split = _literal(text.partition("=")[2])
+            elif text.startswith("-C") and len(text) > 2:
+                chdirs.append(_literal(text[2:]))
+            elif text.startswith("-S") and len(text) > 2:
+                split = _literal(text[2:])
+            elif text in ("-u", "--unset"):
+                result = result[1:]
+            elif not text.startswith("-") and result[0].assignment() is None:
                 break
-            continue
-        break
-    return result
+            result = result[1:]
+    return _Unwrapped(result, chdirs, split)
 
 
 def _apply_assignments(
@@ -306,7 +332,10 @@ def _destination(add_args: list[Word]) -> Word | None:
         word = add_args[idx]
         text = word.text
         idx += 1
-        if options_done or not word.is_plain or not text.startswith("-") or text == "-":
+        # An option is spelled with a leading dash, quoted or not; a word that
+        # only expands to one (`"$X"`) is an operand, and is judged as one.
+        first = word.parts[0].text if word.parts else ""
+        if options_done or not first.startswith("-") or text == "-":
             positionals.append(word)
             continue
         if text == "--":
@@ -379,8 +408,85 @@ def _judge_add(
     return str(resolved)
 
 
+def _embedded_git(words: list[Word]) -> list[Word] | None:
+    """The ``git ... worktree add`` inside a command run by an unknown wrapper."""
+    texts = [w.text for w in words]
+    for idx, text in enumerate(texts):
+        if os.path.basename(text) != "git":
+            continue
+        rest = texts[idx + 1 :]
+        if any(rest[j : j + 2] == ["worktree", "add"] for j in range(len(rest))):
+            return words[idx:]
+    return None
+
+
+def _nested(
+    script: str,
+    state: _State,
+    env: Mapping[str, str],
+    root: Path | None,
+    judged: list[str],
+    depth: int,
+) -> None:
+    """Judge a script another shell (or ``eval``) runs, in ``state``."""
+    if not _WORKTREE_ADD_TEXT.search(script):
+        return
+    if depth >= _MAX_NESTING:
+        raise Refusal("`worktree add` is nested too deeply in scripts to judge")
+    _walk(script, state, env, root, judged, depth + 1)
+
+
+def _child(state: _State) -> _State:
+    """The state a child shell starts in: this directory and these variables."""
+    return _State(cwd=state.cwd, variables=dict(state.variables), unknown=state.unknown)
+
+
+def _run_shell(
+    words: list[Word],
+    heredocs: list[HereDoc],
+    state: _State,
+    env: Mapping[str, str],
+    root: Path | None,
+    judged: list[str],
+    depth: int,
+) -> None:
+    """Judge the script a ``bash``/``sh``/``zsh`` command runs."""
+    program = os.path.basename(words[0].text)
+    scope = _Scope(env, state.variables)
+    for idx, word in enumerate(words[1:-1], start=1):
+        text = word.text
+        if text.startswith("-") and not text.startswith("--") and "c" in text[1:]:
+            try:
+                script = expand_word(words[idx + 1], scope)
+            except UnresolvableWord as exc:
+                raise Refusal(
+                    f"the `{program} -c` script `{words[idx + 1].text}` cannot be "
+                    f"resolved: {exc}"
+                ) from exc
+            _nested(script, _child(state), env, root, judged, depth)
+            return
+    if any(not w.text.startswith("-") for w in words[1:]):
+        return  # runs a script file, which is not judged here
+    if not heredocs:
+        raise Refusal(
+            f"`{program}` reads its script from standard input here, so a "
+            "`worktree add` it runs cannot be judged"
+        )
+    for heredoc in heredocs:
+        try:
+            body = expand_word(heredoc.as_word(), scope)
+        except UnresolvableWord as exc:
+            if _WORKTREE_ADD_TEXT.search(heredoc.body):
+                raise Refusal(
+                    f"the here-document `{program}` runs cannot be resolved: {exc}"
+                ) from exc
+            continue
+        _nested(body, _child(state), env, root, judged, depth)
+
+
 def _run(
     words: list[Word],
+    heredocs: list[HereDoc],
     state: _State,
     env: Mapping[str, str],
     root: Path | None,
@@ -390,16 +496,53 @@ def _run(
     """Judge one simple command, updating ``state`` for assignments and ``cd``."""
     if not words or _apply_assignments(words, state, env):
         return
-    stripped = _strip_prefix(words)
-    if _apply_cd(stripped, state, env):
+    unwrapped = _unwrap(words)
+    stripped = unwrapped.words
+    scope = _Scope(env, state.variables)
+    if unwrapped.split is not None:
+        try:
+            script = expand_word(unwrapped.split, scope)
+        except UnresolvableWord as exc:
+            raise Refusal(
+                f"an `env -S` command string cannot be resolved: {exc}"
+            ) from exc
+        _nested(script, _child(state), env, root, judged, depth)
         return
-    if stripped and os.path.basename(stripped[0].text) in _SHELLS:
-        _walk_shell_c(stripped, state, env, root, judged, depth)
+    local = state
+    if unwrapped.chdirs:
+        # `env -C` moves this command only, not the shell running it.
+        local = _child(state)
+        for operand in unwrapped.chdirs:
+            try:
+                local.cwd = _join(
+                    local.cwd,
+                    expand_word(operand, scope),
+                    "`env -C` directory",
+                    local.unknown,
+                )
+            except (UnresolvableWord, Refusal) as exc:
+                local.cwd = None
+                local.unknown = f"`env -C {operand.text}` cannot be resolved: {exc}"
+    if not stripped or _apply_cd(stripped, local, env):
         return
-    invocation = _git_worktree_add(stripped, state, env)
+    program = os.path.basename(stripped[0].text)
+    if program in _SHELLS:
+        _run_shell(stripped, heredocs, local, env, root, judged, depth)
+        return
+    if program == "eval":
+        try:
+            script = " ".join(expand_word(w, scope) for w in stripped[1:])
+        except UnresolvableWord as exc:
+            raise Refusal(f"an `eval` string cannot be resolved: {exc}") from exc
+        _nested(script, local, env, root, judged, depth)
+        return
+    git_words = stripped if program == "git" else _embedded_git(stripped)
+    if git_words is None:
+        return
+    invocation = _git_worktree_add(git_words, local, env)
     if invocation is None:
         return
-    resolved = _judge_add(invocation, state, env, root)
+    resolved = _judge_add(invocation, local, env, root)
     if resolved is not None:
         judged.append(resolved)
 
@@ -419,48 +562,22 @@ def _walk(
             f"this command names `worktree add` but cannot be split into "
             f"words ({exc}), so its destination cannot be judged"
         ) from exc
-    current: list[Word] = []
+    words: list[Word] = []
+    heredocs: list[HereDoc] = []
     for token in tokens:
-        if not isinstance(token, Operator):
-            current.append(token)
+        if isinstance(token, Word):
+            words.append(token)
             continue
-        _run(current, state, env, root, judged, depth)
-        current = []
+        if isinstance(token, HereDoc):
+            heredocs.append(token)
+            continue
+        _run(words, heredocs, state, env, root, judged, depth)
+        words, heredocs = [], []
         if token.text == "(":
             state.stack.append((state.cwd, state.unknown))
         elif token.text == ")" and state.stack:
             state.cwd, state.unknown = state.stack.pop()
-    _run(current, state, env, root, judged, depth)
-
-
-def _walk_shell_c(
-    words: list[Word],
-    state: _State,
-    env: Mapping[str, str],
-    root: Path | None,
-    judged: list[str],
-    depth: int,
-) -> None:
-    """Look inside ``bash -c '<script>'`` and its siblings."""
-    for idx, word in enumerate(words[1:-1], start=1):
-        text = word.text
-        if text.startswith("-") and not text.startswith("--") and "c" in text[1:]:
-            script_word = words[idx + 1]
-            break
-    else:
-        return
-    if not _WORKTREE_ADD_TEXT.search(script_word.text):
-        return
-    if depth >= _MAX_NESTING:
-        raise Refusal("`worktree add` is nested too deeply in `-c` scripts to judge")
-    try:
-        script = expand_word(script_word, _Scope(env, state.variables))
-    except UnresolvableWord as exc:
-        raise Refusal(
-            f"a `-c` script naming `worktree add` cannot be resolved: {exc}"
-        ) from exc
-    inner = _State(cwd=state.cwd, variables={}, unknown=state.unknown)
-    _walk(script, inner, env, root, judged, depth + 1)
+    _run(words, heredocs, state, env, root, judged, depth)
 
 
 def evaluate(
