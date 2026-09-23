@@ -263,7 +263,7 @@ EOF
     || fail "$branch_opt is $branch_after after branch -f, expected $target_sha"
 
   # --- record -----------------------------------------------------------------
-  row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | $lane | ${ticket:-$repo} | BRANCH-CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch_opt upstream $upstream; $branch_opt ${branch_before:0:7} -> ${branch_after:0:7} ($ahead ahead / $behind behind); unique commits preserved at $evidence (ahead-commits.log + per-commit patches); git branch -f $branch_opt $target_sha; checked-out branch '${checked_out:-<detached>}' and working tree untouched. No secrets printed."
+  row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | STATUS | lane=$lane | ticket=${ticket:-$repo} | event=BRANCH-CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch_opt upstream $upstream; $branch_opt ${branch_before:0:7} -> ${branch_after:0:7} ($ahead ahead / $behind behind); unique commits preserved at $evidence (ahead-commits.log + per-commit patches); git branch -f $branch_opt $target_sha; checked-out branch '${checked_out:-<detached>}' and working tree untouched. No secrets printed."
   append_ledger_row "$row"
 
   cat <<EOF
@@ -529,7 +529,7 @@ if (( detached )); then
 elif (( off_branch )); then
   detached_note=" returned clone from WRONG BRANCH '$current_branch' to '$branch' ($branch_source), $detached_ahead commit(s) reachable only from the old HEAD preserved as patches, branch '$current_branch' left intact;"
 fi
-row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | $lane | ${ticket:-$repo} | CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified HEAD==@{u} and clean tracked tree. No secrets printed."
+row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | STATUS | lane=$lane | ticket=${ticket:-$repo} | event=CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified HEAD==@{u} and clean tracked tree. No secrets printed."
 append_ledger_row "$row"
 
 cat <<EOF

@@ -278,7 +278,7 @@ def build_row(
         f"actor=hook | model=none | class=refusal | guard={guard} | "
         f"reason={reason} | lane_source={lane_source} | dedupe={key} | "
         f"suppressed_since_last_row={suppressed} | "
-        f'detail="{detail}" | '
+        f'detail="{detail}" | existing=OMN-18946 | cost=~1 lane-minute | '
         "This row exists because a hook refusal is otherwise terminal-only "
         "and unaggregated (OMN-18946)"
     )

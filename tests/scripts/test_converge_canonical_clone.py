@@ -246,7 +246,7 @@ def test_execute_converges_and_preserves(scratch: Scratch) -> None:
     rows = [line for line in ledger.splitlines() if "CONVERGED" in line]
     assert len(rows) == 1, ledger
     row = rows[0]
-    assert "| test-lane | OMN-16496 | CONVERGED |" in row
+    assert "| STATUS | lane=test-lane | ticket=OMN-16496 | event=CONVERGED |" in row
     assert scratch.old_head[:7] in row
     assert scratch.upstream_head[:7] in row
     assert str(evidence) in row
@@ -577,7 +577,9 @@ def test_branch_execute_converges_without_touching_worktree(
     rows = [line for line in ledger.splitlines() if "BRANCH-CONVERGED" in line]
     assert len(rows) == 1, ledger
     row = rows[0]
-    assert "| test-lane | OMN-16500 | BRANCH-CONVERGED |" in row
+    assert (
+        "| STATUS | lane=test-lane | ticket=OMN-16500 | event=BRANCH-CONVERGED |" in row
+    )
     assert local_main[:7] in row
     assert target[:7] in row
     assert "branch -f" in row
