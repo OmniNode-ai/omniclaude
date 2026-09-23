@@ -12,7 +12,10 @@
 | `--intent` | string |
 | `--dry-run` | boolean, flag |
 
-1. Resolve `LANE_DISPATCH_OVERLAY_PATH`. Unset or unreadable is a hard stop.
+1. Resolve the overlay: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve_skill_overlay.py" lane_dispatch`.
+   It tries `LANE_DISPATCH_OVERLAY_PATH`, then each root in
+   `ONEX_SKILL_OVERLAY_ROOTS`. A non-zero exit is a hard stop: report its
+   standard error, which names every location tried, and stop.
 2. Run the session preflight at the given intent. A blocker stops the dispatch.
 3. Resolve `--brief` inside `brief_directory`. Not found is a hard stop; do not
    dispatch the closest match.

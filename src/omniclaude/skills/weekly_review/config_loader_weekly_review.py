@@ -38,6 +38,7 @@ type YamlMapping = dict[str, YamlValue]
 __all__ = [
     "IDENTITY_KEYS",
     "OVERLAY_PATH_ENV_VAR",
+    "OVERLAY_ROOTS_ENV_VAR",
     "WeeklyReviewRubricError",
     "deep_merge_weekly_review_rubric",
     "default_base_path",
@@ -46,6 +47,15 @@ __all__ = [
 
 #: Selector, never a value. It names the overlay file to layer over the base.
 OVERLAY_PATH_ENV_VAR: Final[str] = "WEEKLY_REVIEW_OVERLAY_PATH"
+
+#: One or more overlay roots, separated by the platform path separator, each
+#: carrying ``weekly_review/overlay.yaml``. Searched after the selector, in the
+#: same order every overlay-configured skill uses (OMN-19235; the plugin's
+#: ``resolve_skill_overlay.py`` is that order, and a test pins the two together).
+OVERLAY_ROOTS_ENV_VAR: Final[str] = "ONEX_SKILL_OVERLAY_ROOTS"
+
+#: Where a root is joined to reach this skill's overlay.
+_OVERLAY_RELATIVE: Final[Path] = Path("weekly_review") / "overlay.yaml"
 
 #: The committed base, packaged beside this module so no path is ever guessed.
 _BASE_FILENAME: Final[str] = "weekly_review_base.yaml"
@@ -62,6 +72,17 @@ IDENTITY_KEYS: Final[Mapping[str, str]] = {
 
 class WeeklyReviewRubricError(RuntimeError):
     """Raised when the rubric cannot be loaded, merged or validated."""
+
+
+def _overlay_from_roots(env: Mapping[str, str]) -> Path | None:
+    """The first root that carries this skill's overlay, or ``None``."""
+    for part in env.get(OVERLAY_ROOTS_ENV_VAR, "").split(os.pathsep):
+        if not part.strip():
+            continue
+        candidate = Path(part).expanduser() / _OVERLAY_RELATIVE
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def default_base_path() -> Path:
@@ -175,9 +196,17 @@ def load_weekly_review_rubric(
     """Load the base rubric, layer the overlay over it, and validate the result.
 
     The overlay is chosen in this order: the explicit ``overlay_path``
-    argument, then the path named by the selector environment variable. With
-    neither, only the base is loaded, and ``require_resolved`` then makes that a
-    hard stop rather than a review scored against an empty rubric.
+    argument, then the path named by the selector environment variable, then the
+    first root in ``ONEX_SKILL_OVERLAY_ROOTS`` that carries
+    ``weekly_review/overlay.yaml``. The first two are explicit, so a miss there
+    is a hard stop rather than a fall-through. With none, only the base is
+    loaded, and ``require_resolved`` then makes that a hard stop rather than a
+    review scored against an empty rubric.
+
+    Resolving the overlay does not switch the review on: an overlay that anchors
+    its output directory and role standards on variables the environment leaves
+    unset still refuses, by name, at ``resolve_output_directory`` and
+    ``resolve_rubric_document``.
     """
     env = os.environ if environ is None else environ
     resolved_base = default_base_path() if base_path is None else base_path
@@ -188,6 +217,8 @@ def load_weekly_review_rubric(
         from_env = env.get(OVERLAY_PATH_ENV_VAR, "").strip()
         if from_env:
             selected_overlay = Path(from_env).expanduser()
+        else:
+            selected_overlay = _overlay_from_roots(env)
 
     if selected_overlay is not None:
         if not selected_overlay.is_file():

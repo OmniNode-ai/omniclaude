@@ -80,29 +80,28 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from resolve_skill_overlay import (
+    OVERLAY_FILENAME,
+    OverlayNotResolved,
+    selector_env,
+    user_overlay_root,
+)
+from resolve_skill_overlay import overlay_candidates as _shared_candidates
+from resolve_skill_overlay import resolve_overlay_path as _shared_resolve
 
 EXIT_OK = 0
 EXIT_BLOCKED = 1
 EXIT_CONFIG = 2
 
-OVERLAY_ENV = "SESSION_PREFLIGHT_OVERLAY_PATH"
-
-# OMN-18430. Every entry below names a LOCATION an installation provides, never
-# a check. The runner still declares no check content of its own.
-
-# A marketplace root, or several, separated by the platform path separator. This
-# is the entry the private skill marketplace fills in when it lands: one value
-# set once, and every split skill's overlay resolves.
-OVERLAY_ROOTS_ENV = "ONEX_SKILL_OVERLAY_ROOTS"
-
-# Where a root is joined to reach THIS skill's overlay.
-_OVERLAY_RELATIVE = Path("session_preflight") / "overlay.yaml"
-
-# The conventional per-user install location, the same shape every other tool
-# uses for per-user configuration. Not somebody's environment: a directory an
-# installation writes to, empty until it does.
-_USER_CONFIG_ENV = "XDG_CONFIG_HOME"
-_USER_CONFIG_RELATIVE = Path("onex") / "overlays"
+# OMN-18430, OMN-19235. The search order itself — ``--overlay``, this selector,
+# each root in ``ONEX_SKILL_OVERLAY_ROOTS``, the per-user directory — is shared
+# with every other overlay-configured skill in ``resolve_skill_overlay``, so the
+# preflight cannot resolve its overlay one way while its neighbours resolve the
+# same shape another. Every location it names is one an installation provides,
+# never a check.
+_SKILL = "session_preflight"
+OVERLAY_ENV = selector_env(_SKILL)
+_OVERLAY_RELATIVE = Path(_SKILL) / OVERLAY_FILENAME
 
 _INSTALL_HINT = "session_preflight.py --install-overlay <path to your overlay>"
 
@@ -171,37 +170,9 @@ def resolve_intent(explicit: str | None) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _user_config_root() -> Path:
-    """The per-user configuration directory, resolved the conventional way."""
-    raw = os.environ.get(_USER_CONFIG_ENV)
-    base = Path(raw) if raw else Path.home() / ".config"
-    return base / _USER_CONFIG_RELATIVE
-
-
-def _split_roots(raw: str | None) -> list[Path]:
-    return [Path(part) for part in (raw or "").split(os.pathsep) if part.strip()]
-
-
 def overlay_candidates(explicit: str | None) -> list[tuple[str, Path]]:
-    """Every location the overlay is searched for, in order, as (source, path).
-
-    The list is the whole resolution policy and is returned rather than walked
-    internally so the refusal can name every location that was tried. A reader
-    who has to fix this needs to know where the runner looked, not only that it
-    found nothing.
-    """
-    candidates: list[tuple[str, Path]] = []
-    if explicit:
-        candidates.append(("--overlay", Path(explicit)))
-    from_env = os.environ.get(OVERLAY_ENV)
-    if from_env:
-        candidates.append((OVERLAY_ENV, Path(from_env)))
-    for root in _split_roots(os.environ.get(OVERLAY_ROOTS_ENV)):
-        candidates.append((OVERLAY_ROOTS_ENV, root / _OVERLAY_RELATIVE))
-    candidates.append(
-        ("the per-user overlay directory", _user_config_root() / _OVERLAY_RELATIVE)
-    )
-    return candidates
+    """Every location the overlay is searched for, in order, as (source, path)."""
+    return _shared_candidates(_SKILL, explicit=explicit, user_fallback=True)
 
 
 def resolve_overlay_path(explicit: str | None = None) -> Path:
@@ -211,30 +182,20 @@ def resolve_overlay_path(explicit: str | None = None) -> Path:
     told to use one overlay and silently given another is the silent wrong
     answer this runner refuses in every other place it could occur.
     """
-    candidates = overlay_candidates(explicit)
-    explicit_sources = {"--overlay", OVERLAY_ENV}
-    for source, path in candidates:
-        if path.is_file():
-            return path
-        if source in explicit_sources:
-            raise ConfigError(f"{source} points at no readable file: {path}")
-
-    lines = [f"  - {source}: {path}" for source, path in candidates]
-    # An UNSET pointer is not a location that was tried, and saying it was would
-    # be a lie. It is still the thing a reader most needs named, so it is listed
-    # as what it is: available and unset.
-    for name in (OVERLAY_ENV, OVERLAY_ROOTS_ENV):
-        if not os.environ.get(name):
-            lines.append(f"  - {name}: not set")
-    tried = "\n".join(lines)
-    raise ConfigError(
-        "no preflight overlay resolved. The overlay declares this "
-        "environment's checks; this runner carries none, because a run against "
-        "an absent overlay would report a green preflight that checked "
-        "nothing. Locations tried, in order:\n"
-        f"{tried}\n"
-        f"Install yours with: {_INSTALL_HINT}"
-    )
+    try:
+        return _shared_resolve(_SKILL, explicit=explicit, user_fallback=True)
+    except OverlayNotResolved as exc:
+        if not exc.tried:
+            raise ConfigError(str(exc)) from exc
+        tried = "\n".join(exc.tried)
+        raise ConfigError(
+            "no preflight overlay resolved. The overlay declares this "
+            "environment's checks; this runner carries none, because a run against "
+            "an absent overlay would report a green preflight that checked "
+            "nothing. Locations tried, in order:\n"
+            f"{tried}\n"
+            f"Install yours with: {_INSTALL_HINT}"
+        ) from exc
 
 
 def install_overlay(source: str) -> Path:
@@ -251,7 +212,7 @@ def install_overlay(source: str) -> Path:
     content = origin.read_text()
     load_overlay(origin)
 
-    destination = _user_config_root() / _OVERLAY_RELATIVE
+    destination = user_overlay_root() / _OVERLAY_RELATIVE
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     # Write a temporary file in the destination's own directory and rename it
