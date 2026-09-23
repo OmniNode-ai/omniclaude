@@ -55,6 +55,20 @@ the rules block is **read from the overlay and injected into the dispatch as
 text**, every time. A dispatch that could not resolve the rules block is a hard
 stop, not a dispatch with the rules omitted.
 
+**Committed, never the working tree.** The rules block and the brief are read
+at a commit with the shared helper, never opened from disk:
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --path <rules_block_path>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --dir <brief_directory> --stem <brief>
+```
+
+A clone that several sessions share carries their uncommitted edits in its
+working tree, so reading from disk injects another session's unreviewed text
+into every lane this dispatch starts, and an untracked brief of the right name
+would be dispatched as if it were a real one. The helper refuses, exit `2`, on a
+missing or empty file, and names the commit it read on stderr.
+
 ## Overlay
 
 Resolve the overlay with the shared resolver, the same search order every
@@ -97,8 +111,9 @@ Each half is separately checkable and each fails silently on its own:
 - **Claim before first write.** The row is appended through `claim_command`, so
   the append is serialized against every other lane. Appended *after* the first
   write, it records a lane that was already unobservable to its peers.
-- **Rules resolved, not assumed.** Report the byte count and the source of the
-  injected block. A dispatch reporting zero bytes injected did not inject them.
+- **Rules resolved, not assumed.** Report the byte count, the path and the
+  commit of the injected block. A dispatch reporting zero bytes injected did
+  not inject them, and one that cannot name a commit read the working tree.
 - **Model named.** `--model` is required and is never inherited from the
   dispatching session. A lane whose model was inherited cannot be costed, and
   cheaper is not the same work.
@@ -114,6 +129,7 @@ observable — and it is the only form that survives somebody being in a hurry.
 ## What this skill does NOT do
 
 - Dispatch without an injected rules block
+- Inject a rules block or a brief read from the working tree
 - Infer a model, or let one be inherited
 - Message a lane after dispatch; a message resumes a stopped lane and it
   resumes spending

@@ -17,9 +17,18 @@
    `ONEX_SKILL_OVERLAY_ROOTS`. A non-zero exit is a hard stop: report its
    standard error, which names every location tried, and stop.
 2. Run the session preflight at the given intent. A blocker stops the dispatch.
-3. Resolve `--brief` inside `brief_directory`. Not found is a hard stop; do not
-   dispatch the closest match.
-4. Read `rules_block_path` in full. Zero bytes is a hard stop.
+3. Resolve `--brief` inside `brief_directory` **as committed**, never from the
+   working tree:
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --dir <brief_directory> --stem <brief>`,
+   where `<root>` is the directory `workspace_root_env` names. A non-zero exit
+   is a hard stop; do not dispatch the closest match, and never fall back to a
+   file on disk.
+4. Read `rules_block_path` **as committed**:
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --path <rules_block_path>`.
+   Its stdout is the block to inject, byte for byte; its stderr names the ref,
+   the commit and the byte count. A non-zero exit (missing, or zero bytes) is a
+   hard stop. Never read the file with an editor or `cat`: in a shared clone
+   the working-tree copy can carry another session's uncommitted edits.
 5. Check `--lane` against the live lane set. A name already in use is a hard
    stop — the identifier is what every later row cites.
 6. Append the claim row through `claim_command`, naming the lane, the ticket and
@@ -35,9 +44,9 @@ no claim and dispatch nothing.
 | Line | What it carries |
 |------|-----------------|
 | Claim | the surface and line the claim was appended at |
-| Rules | the byte count injected, and the source it was read from |
+| Rules | the byte count injected, and the path, ref and commit it was read at |
 | Model | the model the lane was given, verbatim |
-| Brief | the brief that resolved, by name |
+| Brief | the brief that resolved, by committed path and commit |
 | Lane | the lane identifier |
 
 A dispatch reporting zero bytes of rules, or no claim line, did not meet the
