@@ -17,14 +17,20 @@
 3. Read the board through `board_locator`.
 4. Re-read **every** input through `input_locators`, as the last action before
    landing. Record each read's raw output and the time it was taken.
+   **An empty read is a failure, never agreement.** A read that exits non-zero
+   or produces zero bytes of output is `unread`: report it with its exit code
+   and byte count, and stop. Quoting an empty block and comparing against it
+   is exactly the silent success this row exists to catch. The same holds for
+   the board read in step 3.
 5. Compare. With `--dry-run`, stop here and report the comparison.
 6. Quote the raw re-read into `landing_surface` and land the change.
 
 ## Present the result
 
-- **Verdict** — `agrees` or `diverged`, per input.
+- **Verdict** — `agrees`, `diverged` or `unread`, per input.
 - **Re-read time** — for each input, so the reader can check it is the last act.
 - **Raw output** — quoted, not summarised.
+- **Exit code and byte count** — for every read, so a zero is visible.
 
 `diverged` is not a reason to regenerate and land in the same run. Report it and
 stop: the refresh row owns regeneration, and running both in one pass hides

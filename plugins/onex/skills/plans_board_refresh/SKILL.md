@@ -88,6 +88,10 @@ failure this row exists for, so an unchanged timestamp is a **failure**, never a
 no-op. Report the two timestamps even when they differ — the reader is checking
 the delta, not taking a verdict.
 
+A timestamp read that exits non-zero or produces zero bytes is a failed read,
+not a timestamp. Two empty reads compare equal, and two failed reads compared
+as strings can look like anything, so either one fails the run.
+
 ## Mechanical replacement
 
 **none yet.** This row is prose because the refresh is invoked from memory
