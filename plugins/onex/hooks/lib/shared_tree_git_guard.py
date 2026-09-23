@@ -172,6 +172,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
+_HOOKS_LIB = Path(__file__).parent
+if str(_HOOKS_LIB) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_LIB))
+
+from collections.abc import Mapping  # noqa: E402
+
+from shell_words import (  # noqa: E402
+    UnresolvableWord,
+    expand_word,
+    shadow,
+    shadowed_names,
+    unquoted,
+)
+
+#: What a path token may expand from: the hook's environment, with every
+#: name the command itself sets marked unresolvable.
+Scope = Mapping[str, "str | None"]
+
 __all__ = [
     "GATE_BIT_NAME",
     "TICKET",
@@ -444,9 +462,31 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
     )
 
 
-def _resolve_target_dir(invocation: _GitInvocation, cwd: Path) -> Path:
+def _expand_path(token: str, scope: Scope) -> str | None:
+    """``token`` as the shell will see it, or None when that is unknown.
+
+    The shared OMN-19229 helper expands ``~``, ``$NAME`` and ``${NAME}``. An
+    unset variable, one the command itself sets, a shell-managed one such as
+    ``$PWD``, or a substitution is unknown, never guessed. A token whose only
+    obstacle is a glob is taken literally, as this guard always did, so a
+    refusal that held before still holds.
+    """
+    try:
+        return expand_word(unquoted(token), scope)
+    except UnresolvableWord:
+        if "$" in token or "`" in token:
+            return None
+        literal = os.path.expanduser(token)
+        return None if literal.startswith("~") else literal
+
+
+def _resolve_target_dir(
+    invocation: _GitInvocation, cwd: Path, scope: Scope | None = None
+) -> Path:
     if invocation.target_arg:
-        candidate = Path(invocation.target_arg)
+        expanded = _expand_path(invocation.target_arg, scope or os.environ)
+        raw = expanded or invocation.target_arg
+        candidate = Path(raw)
         return candidate if candidate.is_absolute() else (cwd / candidate)
     return cwd
 
@@ -568,7 +608,9 @@ def _read_current_branch(git_root: Path) -> str | None:
     return None
 
 
-def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path | None:
+def _resolve_cd_target(
+    tokens: list[str], policy: Policy, current: Path, scope: Scope
+) -> Path | None:
     """The directory a `cd` segment moves to, or None when unresolvable.
 
     OMN-18974. The harness resets a Bash call's working directory between
@@ -578,12 +620,12 @@ def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path
     refuses that lane and then advises it to move to the worktree it is
     already in, which is the whole of the reported defect.
 
-    Resolution is deliberately literal. `shlex` does not expand variables,
-    so `cd "$WT"` arrives as an unexpanded token; `$OMNI_HOME`, `$HOME` and
-    `~` are the three this guard can answer from its own environment, and
-    anything else returns None. `cd` with no operand goes HOME. A relative
-    operand resolves against the directory in force at that point, so a
-    chain composes.
+    `shlex` does not expand variables, so `cd "$WT"` arrives as an
+    unexpanded token. It is expanded from this guard's own environment by the
+    shared helper (OMN-19229): `~`, `$NAME` and `${NAME}` resolve, and an
+    unset variable, a substitution or a glob returns None. `cd` with no
+    operand goes HOME. A relative operand resolves against the directory in
+    force at that point, so a chain composes.
     """
     stripped = _strip_wrappers(tokens)
     if not stripped:
@@ -601,27 +643,14 @@ def _resolve_cd_target(tokens: list[str], policy: Policy, current: Path) -> Path
         # `cd -` returns to the PREVIOUS directory, which this guard does
         # not track. Unresolvable rather than guessed.
         return None
-    for name in ("OMNI_HOME", "ONEX_REGISTRY_ROOT", "HOME"):
-        value = os.environ.get(name)
-        if not value:
-            continue
-        for spelling in (f"${name}", "${" + name + "}"):
-            if target == spelling:
-                target = value
-            elif target.startswith(spelling + os.sep):
-                target = value + target[len(spelling) :]
-    if target.startswith("~"):
-        expanded = os.path.expanduser(target)
-        if expanded.startswith("~"):
-            return None
-        target = expanded
-    if "$" in target:
+    expanded = _expand_path(target, scope)
+    if expanded is None:
         # An unexpanded variable this guard cannot answer. Returning None
         # leaves the effective directory where it was, which is exactly the
         # behaviour before this change: nothing in the shared tree stops
         # being refused, and nothing outside it starts being refused.
         return None
-    candidate = Path(target)
+    candidate = Path(expanded)
     if not candidate.is_absolute():
         candidate = current / candidate
     return Path(os.path.normpath(str(candidate)))
@@ -1619,12 +1648,13 @@ def _restore_refusal(
     return _render_restore_reason(policy, invocation, git_root, lost)
 
 
-def _cd_operand_is_absolute(tokens: list[str], policy: Policy) -> bool:
+def _cd_operand_is_absolute(tokens: list[str], policy: Policy, scope: Scope) -> bool:
     """Does this `cd` land somewhere independent of the directory before it?"""
     operands = [tok for tok in _strip_wrappers(tokens)[1:] if not tok.startswith("-")]
     if not operands:
         return True
-    return operands[0].startswith(("/", "~", "$"))
+    expanded = _expand_path(operands[0], scope)
+    return expanded is not None and Path(expanded).is_absolute()
 
 
 def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
@@ -1634,11 +1664,13 @@ def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
     )
 
 
-def _target_is_literal(invocation: _GitInvocation) -> bool:
+def _target_is_absolute(invocation: _GitInvocation, scope: Scope) -> bool:
+    """Is the `-C` target an absolute path once the shell has expanded it?"""
     arg = invocation.target_arg
     if arg is None:
         return False
-    return Path(arg).is_absolute() and "$" not in arg and "`" not in arg
+    expanded = _expand_path(arg, scope)
+    return expanded is not None and Path(expanded).is_absolute()
 
 
 def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
@@ -1687,6 +1719,7 @@ def evaluate_bash_command(
             notes=("untokenisable command naming no refused git verb",),
         )
 
+    scope = shadow(os.environ, shadowed_names(segments))
     effective_cwd = cwd
     # Whether effective_cwd is really where the shell will be. An
     # unresolvable `cd` leaves effective_cwd where it was, which keeps every
@@ -1706,11 +1739,11 @@ def evaluate_bash_command(
                 exported_relocation = True
                 continue
         if _is_directory_change(segment, policy):
-            moved_to = _resolve_cd_target(segment, policy, effective_cwd)
+            moved_to = _resolve_cd_target(segment, policy, effective_cwd, scope)
             if moved_to is None:
                 cwd_known = False
             else:
-                cwd_known = cwd_known or _cd_operand_is_absolute(segment, policy)
+                cwd_known = cwd_known or _cd_operand_is_absolute(segment, policy, scope)
                 effective_cwd = moved_to
             continue
         invocation = _parse_git(segment)
@@ -1721,14 +1754,11 @@ def evaluate_bash_command(
         if invocation.target_arg is None:
             target_known = cwd_known
         else:
-            target_known = _target_is_literal(invocation) or (
-                cwd_known
-                and "$" not in invocation.target_arg
-                and "`" not in invocation.target_arg
-                and not invocation.target_arg.startswith("~")
+            target_known = _target_is_absolute(invocation, scope) or (
+                cwd_known and _expand_path(invocation.target_arg, scope) is not None
             )
         try:
-            target_dir = _resolve_target_dir(invocation, effective_cwd)
+            target_dir = _resolve_target_dir(invocation, effective_cwd, scope)
         except OSError as exc:
             return Decision(
                 blocked=True,

@@ -429,6 +429,82 @@ def test_parse_finds_an_edit_in_a_later_segment(policy: Policy) -> None:
     assert len(edits) == 1
 
 
+def test_body_file_variable_from_the_hook_environment_is_not_trusted(
+    policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hook's environment may name a different file from the one gh
+    uploads, so a variable the command did not assign is not read."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("the new body\n", encoding="utf-8")
+    monkeypatch.setenv("OMN19229_B", str(body_file))
+    (edit,) = parse_pr_body_edits(
+        'gh pr edit 42 -R OmniNode-ai/omniclaude --body-file "$OMN19229_B"', policy
+    )
+    assert edit.new_body is None
+    assert edit.unreadable_reason is not None
+    assert "assigned earlier in this same command" in edit.unreadable_reason
+
+
+def test_body_file_under_home_is_expanded(
+    policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "body.md").write_text("home body\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (edit,) = parse_pr_body_edits("gh pr edit 42 --body-file ~/body.md", policy)
+    assert edit.new_body == "home body\n", edit.unreadable_reason
+
+
+def test_body_file_variable_assigned_in_the_command_is_expanded(
+    policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body_file = tmp_path / "body.md"
+    body_file.write_text("assigned body\n", encoding="utf-8")
+    monkeypatch.delenv("OMN19229_B", raising=False)
+    (edit,) = parse_pr_body_edits(
+        f'OMN19229_B={body_file}; gh pr edit 42 --body-file "$OMN19229_B"', policy
+    )
+    assert edit.new_body == "assigned body\n", edit.unreadable_reason
+    (edit,) = parse_pr_body_edits(
+        f'OMN19229_B={body_file}; gh pr edit 42 --body "$(cat "$OMN19229_B")"',
+        policy,
+    )
+    assert edit.new_body == "assigned body\n", edit.unreadable_reason
+
+
+def test_unset_body_file_variable_is_unreadable_not_guessed(
+    policy: Policy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OMN19229_B", raising=False)
+    (edit,) = parse_pr_body_edits('gh pr edit 42 --body-file "$OMN19229_B"', policy)
+    assert edit.new_body is None
+    assert edit.unreadable_reason is not None
+    assert "`$OMN19229_B` is unset" in edit.unreadable_reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'export OMN19229_B={new}; gh pr edit 5 --body-file "$OMN19229_B"',
+        'read OMN19229_B; gh pr edit 5 --body-file "$OMN19229_B"',
+        'cd {tmp} && gh pr edit 5 --body-file "$PWD/new.md"',
+    ],
+)
+def test_a_variable_the_command_changes_is_not_read_from_the_environment(
+    command: str, policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The environment holds the value from BEFORE the command; reading it
+    would judge a file gh never uploads. Unreadable, as before AC4."""
+    stale = tmp_path / "stale.md"
+    stale.write_text(LIVE_BODY, encoding="utf-8")
+    new = tmp_path / "new.md"
+    new.write_text("dropped the stamp\n", encoding="utf-8")
+    monkeypatch.setenv("OMN19229_B", str(stale))
+    monkeypatch.setenv("PWD", str(tmp_path / "elsewhere"))
+    (edit,) = parse_pr_body_edits(command.format(new=new, tmp=tmp_path), policy)
+    assert edit.new_body is None, command
+    assert edit.unreadable_reason is not None
+
+
 # --------------------------------------------------------------------------
 # Policy
 # --------------------------------------------------------------------------

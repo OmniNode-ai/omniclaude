@@ -3,6 +3,10 @@
 # SPDX-License-Identifier: MIT
 r"""Shell word splitting and path expansion shared by PreToolUse guards (OMN-19229).
 
+Used by the worktree guard, the shared-tree git guard (``cd`` and ``git -C``
+targets) and the PR-body stamp guard (body-file paths), so the class of
+"a guard judged the raw text of a variable" is retired in one place.
+
 Why this exists
 ---------------
 A PreToolUse guard is handed the raw text of a Bash command and has to judge
@@ -42,7 +46,8 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
+from collections import ChainMap
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -53,6 +58,12 @@ _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _UNQUOTED_GLOB = re.compile(r"[*?\[]")
 _UNQUOTED_BRACE = re.compile(r"\{[^{}]*(?:,|\.\.)[^{}]*\}")
 _PARAMETER = re.compile(r"\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)")
+
+# Variables the shell itself changes while a command runs, so the value a
+# hook inherits says nothing about the value the command will see.
+_DYNAMIC = frozenset({"PWD", "OLDPWD", "RANDOM", "SECONDS", "LINENO", "BASHPID", "_"})
+# Builtins that set the variables named in their operands.
+_SETTERS = frozenset({"read", "unset", "mapfile", "readarray"})
 
 # Operators that end one simple command and start the next.
 SEPARATORS = frozenset({";", ";;", "&", "&&", "|", "||", "|&", "\n", "(", ")"})
@@ -522,19 +533,68 @@ def _expand_parameters(text: str, env: Mapping[str, str | None]) -> str:
                 )
             name = match.group(0)
             consumed = match.end() + 1
+        if name in _DYNAMIC:
+            raise UnresolvableWord(
+                f"`${name}` is set by the shell as the command runs, not by "
+                "this environment"
+            )
         if name not in env:
             raise UnresolvableWord(f"`${name}` is unset")
         value = env[name]
         if value is None:
             raise UnresolvableWord(
-                f"`${name}` is assigned in this command to a value the guard "
-                "cannot resolve"
+                f"`${name}` is set in this command to a value the guard cannot resolve"
             )
         if value == "":
             raise UnresolvableWord(f"`${name}` is set but empty")
         out.append(value)
         i += consumed
     return "".join(out)
+
+
+def unquoted(token: str) -> Word:
+    """A word from a token that ``shlex`` has already dequoted, read as unquoted.
+
+    Guards that split commands with ``shlex`` lose each part's quoting, so they
+    hand a token here to judge it the way the shell reads an unquoted word:
+    ``~`` and parameters expand, and a glob is refused.
+    """
+    return Word((WordPart(token, "none"),))
+
+
+def shadowed_names(commands: Iterable[Sequence[str]]) -> set[str]:
+    """Names a command assigns, reads, loops over or unsets.
+
+    The hook's environment holds the value such a variable had BEFORE the
+    command ran, which is not the value a later word will expand to. A guard
+    that cannot track the new value (``read``, ``for``, ``export X=$(...)``)
+    must treat the name as unresolvable rather than read the stale one.
+    """
+    names: set[str] = set()
+    for command in commands:
+        for token in command:
+            match = _ASSIGNMENT.match(token)
+            if match is not None:
+                names.add(token[: match.end() - 1])
+        words = [t for t in command if _ASSIGNMENT.match(t) is None]
+        if not words:
+            continue
+        head = os.path.basename(words[0])
+        if head == "for" and len(words) > 1:
+            names.add(words[1])
+        elif head in _SETTERS:
+            names.update(t for t in words[1:] if _NAME.fullmatch(t))
+        elif head == "printf" and "-v" in words[:-1]:
+            names.add(words[words.index("-v") + 1])
+        elif head == "getopts" and len(words) > 2:
+            names.add(words[2])
+    return {name for name in names if _NAME.fullmatch(name)}
+
+
+def shadow(env: Mapping[str, str], names: Iterable[str]) -> Mapping[str, str | None]:
+    """``env`` with ``names`` marked unresolvable (see :func:`shadowed_names`)."""
+    hidden: dict[str, str | None] = dict.fromkeys(names)
+    return ChainMap(hidden, dict(env))
 
 
 def expand_word(word: Word, env: Mapping[str, str | None]) -> str:
