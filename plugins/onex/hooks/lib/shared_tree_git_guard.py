@@ -133,9 +133,15 @@ Unlike the rest of this module, this arm has to run git: dirtiness lives in
 the index and the object store. Every probe runs with the location variables
 scrubbed, optional locks off, and a declared timeout, and it fails CLOSED --
 a probe that errors or times out, an unresolvable ``cd`` ahead of the
-restore, a path operand the shell would expand, ``--pathspec-from-file``,
-and a ``--git-dir``/``--work-tree`` override are all refused, because in
-each case whether the command destroys work cannot be determined. Probes run
+restore, a path operand the shell would expand (variables, ``~``, brace
+expansion), ``--pathspec-from-file``, and a ``--git-dir``/``--work-tree``
+override -- flag or ``GIT_DIR``/``GIT_WORK_TREE`` assignment -- are all
+refused, because in each case whether the command destroys work cannot be
+determined. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
+refused on the same ground, since it may be a branch switch or a path
+restore; the refusal names ``git switch`` as the unambiguous verb. A
+conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
+working-tree file from the index stages. Probes run
 only for a restore shape in scope, so ordinary Bash traffic never pays for
 them.
 
@@ -1302,7 +1308,16 @@ def _parse_restore(
 
 def _require_literal(shape: _RestoreShape) -> None:
     for operand in (*shape.paths, *([shape.source] if shape.source else [])):
-        if "$" in operand or "`" in operand or operand.startswith("~"):
+        # `{a,b}` is brace expansion: git would be asked about a literal
+        # pathspec that matches nothing, while the shell hands the real
+        # command both files. Globs are left alone -- git's own pathspec
+        # globbing matches a superset of what the shell expands.
+        if (
+            "$" in operand
+            or "`" in operand
+            or operand.startswith("~")
+            or ("{" in operand and "}" in operand)
+        ):
             raise _Indeterminate(
                 f"the operand {operand!r} is expanded by the shell, so what "
                 "it names cannot be read from the command"
@@ -1451,7 +1466,8 @@ def _paths_losing_work(
     for _, path in dirty:
         tracked = path in index_blobs or path in conflicted
         in_source = path in source_blobs
-        if not (in_source or (tracked and not shape.overlay)):
+        conflict_rewrite = shape.source is None and path in conflicted
+        if not (in_source or conflict_rewrite or (tracked and not shape.overlay)):
             # Overlay mode never touches a path its source does not carry.
             continue
         reachable = {blobs[path] for blobs in reachable_maps if path in blobs}
@@ -1521,6 +1537,25 @@ def _render_restore_indeterminate(
     )
 
 
+def _assigns_git_location(tokens: list[str]) -> bool:
+    """Does this segment set a git location variable for what it runs?
+
+    Covers `GIT_DIR=x git ...`, `env GIT_WORK_TREE=x git ...`, and a bare
+    `export GIT_DIR=x` or `GIT_DIR=x` segment that sets it for the rest of
+    the command. `_strip_wrappers` drops these tokens, and the probes scrub
+    the same variables, so without this the probe would read one repository
+    while the command wrote another.
+    """
+    for tok in tokens:
+        name = tok.split("=", 1)[0]
+        if _ASSIGNMENT.match(tok) and name in _GIT_LOCATION_ENV:
+            return True
+        if _ASSIGNMENT.match(tok) or os.path.basename(tok) in (*_WRAPPERS, "export"):
+            continue
+        break
+    return False
+
+
 def _restore_refusal(
     invocation: _GitInvocation,
     policy: Policy,
@@ -1528,11 +1563,12 @@ def _restore_refusal(
     target_known: bool,
     registry_root: Path | None,
     worktree_roots: tuple[Path, ...],
+    env_relocated: bool = False,
 ) -> str | None:
     """Why this path restore is refused, or None when it discards nothing."""
     if invocation.subcommand not in policy.restore_subcommands:
         return None
-    relocated = any(
+    relocated = env_relocated or any(
         flag.split("=", 1)[0] in _RELOCATING_GLOBAL_FLAGS
         for flag in invocation.global_flags
     )
@@ -1548,8 +1584,10 @@ def _restore_refusal(
     def is_revision(token: str) -> bool:
         if git_root is None:
             raise _Indeterminate(
-                "whether its first operand is a ref or a path depends on a "
-                "repository this guard could not resolve"
+                f"whether `git checkout {token}` switches branches or restores "
+                "a path depends on a repository this guard could not resolve "
+                "(to switch branches, `git switch` is unambiguous and is not "
+                "evaluated by this arm)"
             )
         return _is_revision(token, target_dir, policy)
 
@@ -1559,8 +1597,9 @@ def _restore_refusal(
             return None
         if relocated:
             raise _Indeterminate(
-                "it carries --git-dir, --work-tree or --namespace, so the tree "
-                "it writes is not the one resolved from the command"
+                "it carries --git-dir, --work-tree or --namespace, or sets "
+                "GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE, so the tree it "
+                "writes is not the one resolved from the command"
             )
         if git_root is None:
             raise _Indeterminate(
@@ -1654,7 +1693,18 @@ def evaluate_bash_command(
     # shared-tree refusal in force; the restore arm needs the real directory
     # and fails closed when it is not known (OMN-18874).
     cwd_known = True
+    # A location variable the hook itself inherits, or one exported earlier
+    # in this command, relocates every later git call.
+    exported_relocation = any(os.environ.get(name) for name in _GIT_LOCATION_ENV)
     for segment in segments:
+        if _assigns_git_location(segment):
+            stripped_program = _strip_wrappers(segment)
+            if (
+                not stripped_program
+                or os.path.basename(stripped_program[0]) == "export"
+            ):
+                exported_relocation = True
+                continue
         if _is_directory_change(segment, policy):
             moved_to = _resolve_cd_target(segment, policy, effective_cwd)
             if moved_to is None:
@@ -1727,6 +1777,7 @@ def evaluate_bash_command(
             target_known,
             registry_root,
             worktree_roots,
+            env_relocated=exported_relocation or _assigns_git_location(segment),
         )
         if restore is not None:
             return Decision(blocked=True, reason=restore)

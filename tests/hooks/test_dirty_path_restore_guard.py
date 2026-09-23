@@ -721,6 +721,14 @@ def test_non_restore_shapes_pass_over_dirty_work(
         # A different repository or work tree than the one resolved.
         "git --work-tree=/elsewhere checkout HEAD -- src/guard.py",
         "git --git-dir=/elsewhere/.git restore src/guard.py",
+        # The same relocation spelled as environment, which _strip_wrappers
+        # drops and the probes scrub (review finding, OMN-18874).
+        "GIT_DIR=/elsewhere/.git git checkout HEAD -- src/guard.py",
+        "env GIT_WORK_TREE=/elsewhere git restore src/guard.py",
+        "export GIT_WORK_TREE=/elsewhere; git checkout HEAD -- src/guard.py",
+        # Brace expansion: git would be asked about a literal `{a,b}` that
+        # matches nothing while the shell hands the command both files.
+        "git checkout HEAD -- src/{guard,other}.py",
     ],
 )
 def test_an_indeterminate_restore_is_refused(
@@ -730,6 +738,98 @@ def test_an_indeterminate_restore_is_refused(
     assert decision.blocked, command
     assert RESTORE_TICKET in decision.reason
     assert "could not" in decision.reason or "cannot" in decision.reason
+
+
+def test_brace_expansion_cannot_launder_a_dirty_path(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """Review finding: `{a,b}` read as clean while the shell expands it.
+
+    Replayed for real, so the assertion is on the bytes left on disk.
+    """
+    target = worktree / "src" / "guard.py"
+    target.write_text(IMPL_TEXT)
+    decisions = _replay(
+        ["git checkout HEAD -- src/{guard,other}.py"], policy, worktree, fleet_root
+    )
+    assert decisions[0].blocked
+    assert target.read_text() == IMPL_TEXT
+
+
+def test_an_env_relocated_restore_from_a_clean_tree_is_refused(
+    worktree: Path, canonical: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """Review finding: the probe read the clean cwd, git wrote the dirty tree."""
+    (canonical / "src" / "guard.py").write_text(IMPL_TEXT)
+    command = (
+        f"GIT_DIR={canonical}/.git GIT_WORK_TREE={canonical} "
+        "git checkout HEAD -- src/guard.py"
+    )
+    decision = _evaluate(command, policy, worktree, fleet_root)
+    assert decision.blocked
+    assert (canonical / "src" / "guard.py").read_text() == IMPL_TEXT
+
+
+def _make_conflict(worktree: Path) -> Path:
+    """A real both-modified conflict on src/guard.py, hand-resolved."""
+    target = worktree / "src" / "guard.py"
+    _git("-C", str(worktree), "checkout", "-q", "-b", "side")
+    target.write_text("def guard():\n    return 'side'\n")
+    _commit_all(worktree, "side")
+    _git("-C", str(worktree), "checkout", "-q", "lane/omn-1")
+    target.write_text("def guard():\n    return 'lane'\n")
+    _commit_all(worktree, "lane")
+    subprocess.run(
+        ["git", "-C", str(worktree), "merge", "-q", "side"],
+        capture_output=True,
+        check=False,
+        env=scrub_git_location_env(os.environ),
+    )
+    status = _git("-C", str(worktree), "status", "--porcelain", "--", "src/guard.py")
+    assert status.startswith("UU"), status
+    target.write_text("def guard():\n    return 'hand resolution'\n")
+    return target
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git checkout --theirs -- src/guard.py",
+        "git checkout --ours -- src/guard.py",
+        "git checkout -m -- src/guard.py",
+        "git restore --theirs src/guard.py",
+    ],
+)
+def test_a_hand_resolved_conflict_is_not_overwritten(
+    command: str, worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """Review finding: an index-sourced checkout skipped conflicted paths.
+
+    A conflicted path has no stage-0 entry, so it was never "in the source"
+    and overlay mode passed it -- while `--ours`, `--theirs` and `-m` each
+    rewrite the working-tree file and discard the resolution.
+    """
+    target = _make_conflict(worktree)
+    decisions = _replay([command], policy, worktree, fleet_root)
+    assert decisions[0].blocked, command
+    assert "hand resolution" in target.read_text()
+
+
+def test_an_unresolved_branch_checkout_names_git_switch(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """Fail closed, stated: with the directory unknown, a bare `git checkout X`
+    may be a branch switch or a path restore, and the refusal says so and
+    names the unambiguous verb instead of calling it a restore outright.
+    """
+    decision = _evaluate('cd "$REPO" && git checkout dev', policy, worktree, fleet_root)
+    assert decision.blocked
+    assert "switches branches or restores" in decision.reason
+    assert "git switch" in decision.reason
+    literal = _evaluate(
+        f"cd {worktree} && git checkout dev", policy, worktree, fleet_root
+    )
+    assert not literal.blocked, literal.reason
 
 
 def test_a_failing_git_probe_is_refused(
