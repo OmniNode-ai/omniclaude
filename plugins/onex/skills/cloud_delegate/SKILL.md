@@ -48,14 +48,14 @@ See `prompt.md` for the one command and how to present the result.
 
 | | `/onex:delegate` | `/onex:cloud_delegate` |
 |---|---|---|
-| Runs on | a local LLM, in-process or over the local bus | the OmniNode platform |
-| Transport | event bus / in-process | HTTPS to the gateway |
-| Credential | none | a dashboard-minted `onxk_` API key |
-| Needs | a local workspace, a canonical `omnimarket` clone, broker access | nothing but the key and a base URL |
-| Receipt | typed result on stdout | a signed receipt saved to disk |
+| Runs on | a model you choose: your own model server, or a provider on your own key, called from your machine | the OmniNode platform |
+| Transport | from your machine to that model (in-process, or over a local bus) | HTTPS to the gateway |
+| Credential | none, or your own provider key registered with `onex secret set` | a dashboard-minted `onxk_` API key |
+| Needs | the `onex` tool and a declared model or registered provider key | nothing but the key and a base URL |
+| Receipt | typed result on stdout, plus `receipt.json` under `.onex_state/runs/<run id>/` | a signed receipt saved to disk |
 
-The two are siblings, not modes of one command. `delegate` is the internal
-dev-workstation path; `cloud_delegate` is the tenant path a customer uses.
+The two are siblings, not modes of one command. `delegate` sends the work
+from your machine to a model you chose; `cloud_delegate` sends it to the OmniNode platform.
 
 ## Prerequisite: install the CLI, then log in
 
