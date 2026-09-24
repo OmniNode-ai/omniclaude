@@ -960,6 +960,18 @@ class TestNoVerifyPolicyModesUnit(TestNoVerifyPolicyModes):
 class TestWorktreeAddAdvisory(unittest.TestCase):
     """Raw git worktree add surfaces advisory distinguishing bypass from managed path."""
 
+    def setUp(self) -> None:
+        # The root has no machine-path default (OMN-19396): with OMNI_HOME unset,
+        # as on CI, it is empty and every worktree add is refused. These tests
+        # are about the advisory on an ADMITTED add, so name a root explicitly.
+        patcher = patch.object(
+            bash_guard,
+            "CANONICAL_WORKTREE_ROOT",
+            "/registry-fixture/registry/omni_worktrees",
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _run(self, command: str) -> tuple[str, int]:
         hook_input = {
             "tool_name": "Bash",
