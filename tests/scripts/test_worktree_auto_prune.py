@@ -87,6 +87,25 @@ class TestParseLedgerClaims:
         assert has_terminal is True
         assert open_claims == ()
 
+    def test_terminal_with_an_lct1_claim_token_closes_the_tokens_line(
+        self, tmp_path: Path
+    ) -> None:
+        """[OMN-19409] The token's appended_at ends in HH:MM:SSZ. Read as a
+        path:line citation, the minutes (here 33) become the line number and
+        the real claim on line 2 stays open forever."""
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "2026-08-01T09:00:00Z | CLAIM | lane=lane-z | ticket=OMN-9999 | unrelated\n"
+            "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
+            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a"
+            " | closes-CLAIM=LCT1-4250486-2-50796cfe849e-2026-08-01T10:33:04Z"
+            " | ticket=OMN-1234 | landed\n",
+            encoding="utf-8",
+        )
+        claims = mod.parse_ledger_claims(ledger)
+        assert claims["OMN-1234"][1] == ()
+        assert len(claims["OMN-9999"][1]) == 1, "only the cited line closes"
+
     def test_peer_lanes_terminal_does_not_clear_a_different_lanes_claim(
         self, tmp_path: Path
     ) -> None:

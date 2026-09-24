@@ -522,9 +522,14 @@ def count_attributed_stashes(subjects: Sequence[str], branch: str | None) -> int
 
 
 _LANE_RE = re.compile(r"\blane=([^\s|]+)")
-# Both spellings are live in the real ledger: `closes-CLAIM=<path>:<line>` and
-# the equally-real `closes=CLAIM <path>:<line>` (no dash before CLAIM). Either
-# way, only the trailing `:<line>` numeral is load-bearing here.
+# Three spellings are live in the real ledger: `closes-CLAIM=<path>:<line>`,
+# the equally-real `closes=CLAIM <path>:<line>` (no dash before CLAIM), and the
+# ledger_lock claim token `closes-CLAIM=LCT1-<offset>-<line>-<digest>-<appended_at>`
+# (OMN-16400). The token is tried first: its appended_at ends in `HH:MM:SSZ`, so
+# the path:line pattern alone reads the token's MINUTES as the line number and
+# closes the wrong row or none. Measured 2026-09-24 (OMN-19409): 160 of the 520
+# claims this parser held open had been closed by an LCT1 TERMINAL.
+_CLOSES_CLAIM_LCT1_RE = re.compile(r"closes[-=]CLAIM[=\s]+LCT1-\d+-(\d+)-[0-9a-f]{12}-")
 _CLOSES_CLAIM_RE = re.compile(r"closes[-=]CLAIM[=\s]+\S*?:(\d+)")
 
 
@@ -608,7 +613,9 @@ def parse_ledger_claims(
                 has_terminal_ever[ticket] = True
 
         if is_terminal:
-            closes_match = _CLOSES_CLAIM_RE.search(line)
+            closes_match = _CLOSES_CLAIM_LCT1_RE.search(
+                line
+            ) or _CLOSES_CLAIM_RE.search(line)
             if closes_match:
                 cited_line = int(closes_match.group(1))
                 open_claims.pop(cited_line, None)
