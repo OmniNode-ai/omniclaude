@@ -313,3 +313,62 @@ def test_the_probe_this_permission_exists_for_still_fails_closed(
         audit_mod._required_contexts("omniclaude", "dev")
 
     assert "403" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# The self-test's own control (OMN-18016, fourth rollout defect)
+# ---------------------------------------------------------------------------
+#
+# The self-test used to probe a live repository (`omnibot`) for the absence of
+# the gate workflow file. That repository's rollout state is not this audit's
+# to hold still: once `omnibot` legitimately adopted the gate, the self-test
+# read "the control is stale" and the whole audit failed on its positive
+# control, every day, 2026-09-20 through 2026-09-24 — never reaching the real
+# sweep. A live repository can always be gated later; a synthetic fixture path
+# nobody will ever create for real cannot.
+
+
+def test_self_test_passes_against_the_synthetic_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive control must fire without depending on any real repo's
+    current, mutable hygiene-rollout state.
+    """
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _stub({}, _Proc(1, "", "gh: Not Found (HTTP 404)")),
+        raising=True,
+    )
+    audit_mod.self_test()  # must not raise
+
+
+def test_self_test_still_fails_closed_if_its_own_sentinel_ever_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Positive control for the self-test's own staleness check: if the
+    sentinel path is ever satisfied, the self-test must say so rather than
+    silently reporting OK — the same discipline that caught the omnibot
+    staleness in the first place.
+    """
+    monkeypatch.setattr(
+        subprocess, "run", _stub({}, _Proc(0, "some-file.yml")), raising=True
+    )
+    with pytest.raises(audit_mod.AuditError, match="stale"):
+        audit_mod.self_test()
+
+
+def test_self_test_never_targets_a_live_repositorys_rollout_state() -> None:
+    """Pins the fix itself: the self-test's probe path must be a synthetic
+    fixture, never the real gate workflow path on a real repo. Checking the
+    real ``GATE_WORKFLOW`` path on any repo is exactly the construction that
+    went stale once already.
+    """
+    import inspect
+
+    source = inspect.getsource(audit_mod.self_test)
+    assert "GATE_WORKFLOW" not in source, (
+        "self_test() must not probe the real gate-workflow path on any repo — "
+        "that is what went stale when omnibot adopted the gate. Use a "
+        "synthetic sentinel path instead."
+    )
