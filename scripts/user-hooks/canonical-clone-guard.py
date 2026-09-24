@@ -51,6 +51,15 @@ It deliberately ALLOWS (per omni_home/CLAUDE.md "What you CAN do directly"):
   - Edit/Write to omni_home's own top-level files (docs, CLAUDE.md, ...),
   - anything under $OMNI_HOME/omni_worktrees/ and anything outside $OMNI_HOME.
 
+Registry roots (OMN-19388): the canonical clones are the direct children of
+$OMNI_HOME AND of every entry of ONEX_REGISTRY_ROOTS, a colon-separated list of
+absolute directories -- the same setting the canonical-clone git hooks read.
+It exists because the registry is moving to a second root while OMNI_HOME still
+names the first. A malformed entry (empty, relative, not a directory) is never
+guessed around: every decision that would have judged a path against the roots
+is DENIED naming the value, until the setting is fixed (rule 8). Commands the
+guard does not judge -- non-git Bash -- stay allowed, so the fix is reachable.
+
 Path resolution expands `$VAR` / `${VAR}` / `${VAR:-default}` / `~` in `cd`,
 `pushd` and `git -C` arguments using the hook's environment plus `VAR=value`
 assignments seen earlier in the same command. A path that is still not
@@ -303,6 +312,47 @@ def _resolve_shell_path(raw: str, base: str | None, env: dict[str, str]) -> str 
             return None
         expanded = os.path.join(base, expanded)
     return os.path.normpath(os.path.abspath(expanded))
+
+
+class RegistryRootsError(ValueError):
+    """ONEX_REGISTRY_ROOTS holds an entry the guard cannot use as a root."""
+
+
+def _registry_roots(omni_home: str, env: dict[str, str]) -> list[str]:
+    """$OMNI_HOME plus every ONEX_REGISTRY_ROOTS entry, de-duplicated.
+
+    Raises RegistryRootsError for an empty, relative or missing entry: a
+    declared root the guard cannot read must never shrink the guarded set
+    silently.
+    """
+    roots = [os.path.normpath(os.path.abspath(omni_home))]
+    declared = env.get("ONEX_REGISTRY_ROOTS")
+    if declared is None:
+        return roots
+    for entry in declared.split(":"):
+        if not entry or not Path(entry).is_absolute():
+            raise RegistryRootsError(
+                f"ONEX_REGISTRY_ROOTS={declared!r} holds the entry {entry!r}, "
+                "which is not an absolute path"
+            )
+        if not Path(entry).is_dir():
+            raise RegistryRootsError(
+                f"ONEX_REGISTRY_ROOTS={declared!r} holds the entry {entry!r}, "
+                "which is not an existing directory"
+            )
+        root = os.path.normpath(entry)
+        if root not in roots:
+            roots.append(root)
+    return roots
+
+
+def _canonical_clone_in_roots(abspath: str, roots: list[str]) -> tuple[str, str] | None:
+    """``(root, repo)`` of the canonical clone holding *abspath*, else None."""
+    for root in roots:
+        repo = _path_in_canonical_clone(abspath, root)
+        if repo:
+            return root, repo
+    return None
 
 
 def _path_in_canonical_clone(abspath: str, omni_home: str) -> str | None:
@@ -1041,12 +1091,34 @@ def main() -> None:
     cwd = data.get("cwd") or os.getcwd()
     env = dict(os.environ)
 
+    roots: list[str] = []
+    roots_error = ""
+    try:
+        roots = _registry_roots(omni_home, env)
+    except RegistryRootsError as exc:
+        roots_error = (
+            f"BLOCKED: {exc}. The canonical-clone guard cannot tell which "
+            "directories hold canonical clones, so it refuses what it would "
+            "have judged rather than guard a smaller set than was declared. "
+            "Fix ONEX_REGISTRY_ROOTS (a colon-separated list of absolute "
+            "registry-root directories) in the environment Claude Code starts "
+            "with, or unset it."
+        )
+
+    def locate(path: str) -> tuple[str, str] | None:
+        if roots_error:
+            _log(f"DENY malformed ONEX_REGISTRY_ROOTS while judging {path}")
+            _deny(roots_error)
+        return _canonical_clone_in_roots(path, roots)
+
     worktree_hint = (
         "Create a worktree first:\n"
         '  git -C "$OMNI_HOME/<repo>" worktree add '
         '"$OMNI_HOME/omni_worktrees/<ticket>/<repo>" -b <branch>\n'
-        "then do all edits/commits there. omni_home/<repo> is a canonical clone "
-        "that must stay on main (omni_home/CLAUDE.md rule #9)."
+        "then do all edits/commits there (a clone in another registry root "
+        "named by ONEX_REGISTRY_ROOTS: git -C <root>/<repo> worktree add, same "
+        "destination). <root>/<repo> is a canonical clone that must stay on "
+        "main (omni_home/CLAUDE.md rule #9)."
     )
     converge_hint = (
         "To converge a DIRTY canonical clone back to its upstream, use the ONE "
@@ -1067,13 +1139,14 @@ def main() -> None:
         if abspath is None:
             _log(f"UNRESOLVED {tool_name} target {target!r}; allowing")
             _allow()
-        repo = _path_in_canonical_clone(abspath, omni_home)
-        if repo:
+        found = locate(abspath)
+        if found:
+            root, repo = found
             _log(f"DENY {tool_name} -> {abspath} (canonical clone: {repo})")
             _deny(
                 f"BLOCKED: '{abspath}' is inside the canonical clone "
-                f"'{repo}' under omni_home. Never edit canonical clones directly.\n\n"
-                + worktree_hint
+                f"'{repo}' under the registry root {root}. Never edit canonical "
+                "clones directly.\n\n" + worktree_hint
             )
         _allow()
 
@@ -1109,8 +1182,9 @@ def main() -> None:
                         f"UNRESOLVED location for '{label}'; not matched against canonical clones"
                     )
                     continue
-                repo = _path_in_canonical_clone(path, omni_home)
-                if repo:
+                found = locate(path)
+                if found:
+                    _root, repo = found
                     _log(f"DENY Bash '{label}' in {path} (canonical clone: {repo})")
                     _deny(
                         f"BLOCKED: '{label}' targets the canonical clone "
