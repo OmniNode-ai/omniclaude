@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# THROWAWAY. Scratch caller for the A2 lab step (OMN-19393). Not part of any
+# plan task; deleted with its branch after the proof run.
+name: Scratch HMC Caller (throwaway)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  call-guard:
+    uses: ./.github/workflows/hardcoded-model-config-reusable.yml
+    with:
+      core_ref: b7de11ac1d9adbe5fafbf49d4711917018f3f409
