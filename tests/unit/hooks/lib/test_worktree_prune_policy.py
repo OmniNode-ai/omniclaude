@@ -585,3 +585,71 @@ class TestClassifyPartialMutationDebris:
         decision = classify_partial_mutation_debris(_debris_facts())
         with pytest.raises(ValidationError):
             decision.remediation = EnumDebrisRemediation.TRIAGE  # type: ignore[misc]
+
+
+# =============================================================================
+# The open-pull-request fence for unattended removal [OMN-19399]
+# =============================================================================
+
+
+class TestUnmergedPrFence:
+    """An unattended removal may not take a worktree whose branch is in review.
+
+    The standing consent for the morning prune (OPERATOR-CONSENT row stamped
+    2026-09-24T13:50:25Z) puts "any worktree whose branch has an OPEN pull
+    request" OUT OF SCOPE. Limb (c) alone would remove such a worktree once its
+    HEAD is on origin, which is exactly the state of a lane waiting on review.
+    The fence is opt-in (`hold_open_pr`), so the interactive predicate the
+    2026-09-14 ruling defines is unchanged, and it fails CLOSED: an open-PR
+    listing that did not resolve (`open_pr=None`) holds the row too.
+    """
+
+    def _pushed_at_head(self, **overrides: object) -> ModelWorktreePruneFacts:
+        head = "c" * 40
+        base: dict[str, object] = {
+            "commits_ahead": 2,
+            "unmerged_ahead_commits": ("abc1234",),
+            "tree_diff_vs_base_empty": False,
+            "pr_state": EnumBranchPrState.NOT_MERGED,
+            "head_oid": head,
+            "origin_head_oid": head,
+        }
+        base.update(overrides)
+        return _facts(**base)
+
+    def test_unfenced_pushed_at_head_row_with_open_pr_is_still_prunable(
+        self,
+    ) -> None:
+        """Positive control: without the fence the row IS removed today."""
+        decision = classify_worktree_prune(self._pushed_at_head(open_pr=True))
+        assert decision.disposition is EnumPruneDisposition.PRUNE
+
+    def test_fence_holds_a_row_whose_branch_has_an_open_pr(self) -> None:
+        decision = classify_worktree_prune(
+            self._pushed_at_head(open_pr=True), hold_open_pr=True
+        )
+        assert decision.disposition is EnumPruneDisposition.TRIAGE
+        assert EnumPruneBlockReason.OPEN_PR_FENCE in decision.block_reasons
+        assert decision.branch_content_preserved is False
+
+    def test_fence_holds_when_the_open_pr_listing_did_not_resolve(self) -> None:
+        decision = classify_worktree_prune(_facts(open_pr=None), hold_open_pr=True)
+        assert decision.disposition is EnumPruneDisposition.TRIAGE
+        assert EnumPruneBlockReason.OPEN_PR_FENCE in decision.block_reasons
+
+    def test_fence_releases_a_row_proven_to_have_no_open_pr(self) -> None:
+        decision = classify_worktree_prune(
+            self._pushed_at_head(pr_state=EnumBranchPrState.NONE, open_pr=False),
+            hold_open_pr=True,
+        )
+        assert decision.disposition is EnumPruneDisposition.PRUNE
+        assert decision.block_reasons == ()
+
+    def test_fence_is_a_safety_reason_reported_with_the_others(self) -> None:
+        safe, reasons, evidence = is_prune_safe(
+            _facts(open_pr=True, dirty_files=("a.py",)), hold_open_pr=True
+        )
+        assert safe is False
+        assert evidence == ""
+        assert EnumPruneBlockReason.DIRTY_TREE in reasons
+        assert EnumPruneBlockReason.OPEN_PR_FENCE in reasons

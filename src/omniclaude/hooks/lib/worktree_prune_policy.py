@@ -178,6 +178,17 @@ class EnumPruneBlockReason(StrEnum):
     this reason is ``TIMED_OUT``, never ``TRIAGE``, and carries the load reading.
     """
 
+    OPEN_PR_FENCE = "open_pr_fence"
+    """The caller asked for the open-pull-request fence and the branch has an
+    OPEN pull request, or the open-PR listing did not resolve [OMN-19399].
+
+    Opt-in via ``hold_open_pr``. The unattended morning prune runs under a
+    standing consent that puts "any worktree whose branch has an OPEN pull
+    request" out of scope, and limb (c) alone would otherwise remove a
+    pushed-at-HEAD worktree that a lane is holding for review. An unresolved
+    listing holds too: an empty answer is not evidence that no review is open.
+    """
+
     PARTIAL_MUTATION_DEBRIS = "partial_mutation_debris"
     """The worktree's ``.git`` link is gone but its directory was not fully
     removed [OMN-16951]. Plain ``git worktree remove`` can never succeed here —
@@ -355,6 +366,16 @@ class ModelWorktreePruneFacts(BaseModel):
         ...,
         description="This worktree's HEAD commit, or None when it could not be read",
     )
+    open_pr: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the branch has an OPEN pull request, from a listing of "
+            "open pull requests only [OMN-19399]. False only when that listing "
+            "resolved and does not name the branch; None when it was not "
+            "collected or did not resolve. Read only by the opt-in open-PR "
+            "fence, which treats None as held."
+        ),
+    )
     attributed_stash_count: int = Field(
         ..., ge=0, description="Stash entries whose subject names this branch"
     )
@@ -472,6 +493,8 @@ def is_prune_eligible(
 
 def is_prune_safe(
     facts: ModelWorktreePruneFacts,
+    *,
+    hold_open_pr: bool = False,
 ) -> tuple[bool, tuple[EnumPruneBlockReason, ...], str]:
     """Decide whether removing this worktree loses no work.
 
@@ -486,6 +509,9 @@ def is_prune_safe(
 
     Args:
         facts: Observed facts for one worktree.
+        hold_open_pr: Apply the open-pull-request fence [OMN-19399]: a branch
+            with an OPEN pull request, or whose open-PR listing did not
+            resolve, is refused whatever limb would otherwise clear it.
 
     Returns:
         ``(safe, block_reasons, evidence)``. ``evidence`` states why removal
@@ -512,6 +538,9 @@ def is_prune_safe(
 
     if facts.attributed_stash_count > 0:
         reasons.append(EnumPruneBlockReason.UNPUSHED_STASH)
+
+    if hold_open_pr and facts.open_pr is not False:
+        reasons.append(EnumPruneBlockReason.OPEN_PR_FENCE)
 
     merged_pr_covers_head = (
         facts.pr_state is EnumBranchPrState.MERGED
@@ -575,6 +604,8 @@ def is_prune_safe(
 
 def classify_worktree_prune(
     facts: ModelWorktreePruneFacts,
+    *,
+    hold_open_pr: bool = False,
 ) -> ModelWorktreePruneDecision:
     """Adjudicate one worktree: eligibility fires, safety gates, both reported.
 
@@ -585,13 +616,17 @@ def classify_worktree_prune(
 
     Args:
         facts: Observed facts for one worktree.
+        hold_open_pr: Apply the opt-in open-pull-request fence; see
+            :func:`is_prune_safe`.
 
     Returns:
         A frozen decision carrying the disposition, every block reason from both
         halves, and the evidence behind each.
     """
     eligible, eligibility_reasons, eligibility_evidence = is_prune_eligible(facts)
-    safe, safety_reasons, safety_evidence = is_prune_safe(facts)
+    safe, safety_reasons, safety_evidence = is_prune_safe(
+        facts, hold_open_pr=hold_open_pr
+    )
 
     reasons = (*eligibility_reasons, *safety_reasons)
 
