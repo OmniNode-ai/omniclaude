@@ -91,6 +91,14 @@ jobs:
           # that landed before it existed.
           persist-credentials: false
 
+      # `uvx` is not preinstalled on the self-hosted omnibase-ci runner (the
+      # A2 lab-proof run hit this live: "uvx: command not found", exit 127,
+      # on both the clean and planted scratch branches). Every other
+      # workflow in this repo that shells out to `uvx`/`uv` installs it
+      # first via astral-sh/setup-uv; this step is that same, ordinary step.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Run the hardcoded-model-config guard
         env:
           CORE_REF: ${{ inputs.core_ref }}
