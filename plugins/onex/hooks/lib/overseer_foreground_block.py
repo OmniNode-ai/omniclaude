@@ -65,13 +65,18 @@ def _omni_home_roots() -> list[Path]:
         roots.append(Path(omni_home).resolve())
     # Also cover the canonical worktrees root so foreground edits to active
     # worktrees are blocked while an overseer contract drives.
-    worktrees_root = Path(
+    # No machine-path default (rule 8): derive from OMNI_HOME or skip.
+    configured = (
         os.environ.get("ONEX_WORKTREES_ROOT")
         or os.environ.get("OMNI_WORKTREES_DIR")
-        or str(Path.home() / "Code" / "omni_worktrees")
+        or (
+            str(Path(os.environ["OMNI_HOME"]) / "omni_worktrees")
+            if os.environ.get("OMNI_HOME")
+            else ""
+        )
     )
-    if worktrees_root.exists():
-        roots.append(worktrees_root.resolve())
+    if configured and Path(configured).exists():
+        roots.append(Path(configured).resolve())
     return roots
 
 

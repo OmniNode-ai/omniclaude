@@ -442,11 +442,17 @@ CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # =============================================================================
 
 
-_DEFAULT_WORKTREE_ROOT = str(Path.home() / "Code" / "omni_worktrees")
+# No machine-path default (rule 8): the root is named by the environment or
+# derived from OMNI_HOME, and is empty when neither is set, which the
+# worktree-add check below refuses rather than guessing a location.
 CANONICAL_WORKTREE_ROOT = (
     os.environ.get("ONEX_WORKTREES_ROOT")
     or os.environ.get("OMNI_WORKTREES_DIR")
-    or _DEFAULT_WORKTREE_ROOT
+    or (
+        str(Path(os.environ["OMNI_HOME"]) / "omni_worktrees")
+        if os.environ.get("OMNI_HOME")
+        else ""
+    )
 ).rstrip("/")  # strip trailing slash to prevent prefix-check false negatives
 
 
@@ -554,6 +560,12 @@ def _check_worktree_path(command: str) -> str | None:
         return (
             "BLOCKED: Could not parse worktree path from command. "
             "Use: git worktree add <path> [-b <branch>]"
+        )
+
+    if not CANONICAL_WORKTREE_ROOT:
+        return (
+            "BLOCKED: cannot resolve the canonical worktree root. Set OMNI_HOME "
+            "(preferred) or ONEX_WORKTREES_ROOT"
         )
 
     if not worktree_path.startswith(f"{CANONICAL_WORKTREE_ROOT}/"):

@@ -3,9 +3,11 @@
 #
 # Dedicated, minimally-scoped extraction (OMN-14330) of the OMN-7018
 # canonical-worktree-root enforcement from pre_tool_use_bash_guard.sh /
-# bash_guard.py. This script intercepts ONLY `git worktree add` Bash
-# invocations and blocks any that target a path outside the canonical
-# $OMNI_HOME/omni_worktrees/<ticket>/<repo>/ root. It does not perform any
+# bash_guard.py. This script intercepts `git worktree add` Bash
+# invocations and blocks any that target a path outside the sanctioned
+# roots ($OMNI_HOME/omni_worktrees, plus omnibase_internal/omni_worktrees
+# beside the registry root once it exists), and a `mkdir` or `git clone` that would
+# populate a stray omni_worktrees directory. It does not perform any
 # of bash_guard.py's other checks (destructive-command HARD_BLOCK,
 # `--no-verify` enforcement, `gh pr merge` method-mismatch blocking,
 # required-review-count blocking, SOFT_ALERT, CONTEXT_ADVISORY) — those
@@ -152,7 +154,19 @@ CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || t
 # Cheap OVER-matching pre-filter: it decides nothing. Quoted text is kept,
 # because a `bash -c '...'` script is quoted and is judged too, and newlines
 # are flattened so a backslash continuation between the two words matches.
-if printf '%s' "$CMD" | tr '\n' ' ' | grep -qE 'worktree[^[:alnum:]]+add'; then
+# A `mkdir` or `git clone` that names an omni_worktrees directory is judged
+# too, for one thing only: populating a stray worktree root (the sibling
+# omni_worktrees beside the registry root was filled that way twice, by
+# `git clone` and `mkdir -p`, which the guard never saw).
+_FLAT_CMD=$(printf '%s' "$CMD" | tr '\n' ' ')
+_JUDGE=0
+if printf '%s' "$_FLAT_CMD" | grep -qE 'worktree[^[:alnum:]]+add'; then
+    _JUDGE=1
+elif printf '%s' "$_FLAT_CMD" | grep -qE 'omni_worktrees' \
+    && printf '%s' "$_FLAT_CMD" | grep -qE '(^|[^[:alnum:]_-])(mkdir|clone)([^[:alnum:]_-]|$)'; then
+    _JUDGE=1
+fi
+if [[ "$_JUDGE" -eq 1 ]]; then
     # Resolve canonical worktree root. Order:
     #   1. ONEX_WORKTREES_ROOT (explicit override)
     #   2. OMNI_WORKTREES_DIR (legacy alias; mirrors Python bash_guard.py)
@@ -166,6 +180,16 @@ if printf '%s' "$CMD" | tr '\n' ' ' | grep -qE 'worktree[^[:alnum:]]+add'; then
     else
         CANONICAL_ROOT=""
     fi
+    # A second sanctioned root, once it exists: omni_worktrees inside the
+    # omnibase_internal registry clone beside the registry root (operator ruling
+    # 2026-09-24). Derived from OMNI_HOME only; never a default path.
+    ALSO_ROOT=""
+    if [[ -n "${OMNI_HOME:-}" ]]; then
+        _internal_root="$(dirname "${OMNI_HOME%/}")/omnibase_internal/omni_worktrees"
+        if [[ -d "$_internal_root" ]]; then
+            ALSO_ROOT="$_internal_root"
+        fi
+    fi
 
     GUARD_PY="${HOOKS_DIR}/lib/worktree_add_guard.py"
     if [[ ! -f "$GUARD_PY" ]]; then
@@ -174,7 +198,8 @@ if printf '%s' "$CMD" | tr '\n' ' ' | grep -qE 'worktree[^[:alnum:]]+add'; then
     fi
     _rc=0
     GUARD_OUT=$(printf '%s' "$TOOL_INFO" \
-        | "$PYTHON_CMD" "$GUARD_PY" --root "$CANONICAL_ROOT" --cwd "$HOOK_ORIGINAL_CWD" \
+        | "$PYTHON_CMD" "$GUARD_PY" --root "$CANONICAL_ROOT" --also-root "$ALSO_ROOT" \
+            --cwd "$HOOK_ORIGINAL_CWD" \
         2>>"$LOG_FILE") || _rc=$?
     if [[ "$_rc" -eq 2 ]]; then
         _reason=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)

@@ -73,7 +73,7 @@ CONVENTIONS="## ONEX Conventions (injected by SubagentStart)
 
 ### Workflow
 - All output written to disk (never chat-only)
-- Worktrees only in /Volumes/PRO-G40/Code/omni_worktrees/ # local-path-ok: worktree convention documentation
+- Worktrees only in \$OMNI_HOME/omni_worktrees/<ticket>/<repo>/; never redefine OMNI_HOME, and never use the sibling omni_worktrees beside the registry root (a stray root)
 - Evidence written to .onex_state/evidence/ for verification
 - Always create Linear tickets before starting work
 - Always push and create PRs — never leave work uncommitted

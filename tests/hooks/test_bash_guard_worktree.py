@@ -44,6 +44,43 @@ def _bash_input(command: str) -> dict[str, Any]:
     return {"tool_name": "Bash", "tool_input": {"command": command}}
 
 
+@pytest.fixture(autouse=True)
+def _canonical_root(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the root: the module no longer falls back to a machine path."""
+    root = tmp_path / "registry" / "omni_worktrees"
+    monkeypatch.setattr(bash_guard, "CANONICAL_WORKTREE_ROOT", str(root))
+
+
+@pytest.mark.unit
+class TestNoMachinePathDefault:
+    def test_unresolvable_root_blocks_instead_of_guessing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(bash_guard, "CANONICAL_WORKTREE_ROOT", "")
+        reason = bash_guard._check_worktree_path(
+            "git worktree add /anywhere/OMN-1/repo -b feat"
+        )
+        assert reason is not None
+        assert "OMNI_HOME" in reason
+
+    def test_root_is_derived_from_the_registry_env(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import importlib
+
+        for key in ("ONEX_WORKTREES_ROOT", "OMNI_WORKTREES_DIR"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path / "reg"))
+        module = importlib.reload(bash_guard)
+        try:
+            expected = str(tmp_path / "reg" / "omni_worktrees")
+            derived = module.CANONICAL_WORKTREE_ROOT
+            assert derived == expected
+        finally:
+            monkeypatch.undo()
+            importlib.reload(bash_guard)
+
+
 @pytest.mark.unit
 class TestWorktreePathEnforcement:
     """Worktree path enforcement in bash_guard._check_worktree_path."""
