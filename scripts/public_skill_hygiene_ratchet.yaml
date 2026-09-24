@@ -18,7 +18,7 @@
 
 tree_surface_budgets:
   host-nick: 104  # public-skill-ok: detection-class name, not prose
-  machine-path: 66  # public-skill-ok: detection-class name, not prose
+  machine-path: 63  # public-skill-ok: detection-class name, not prose
   memory-cite: 38  # public-skill-ok: detection-class name, not prose
   omni_home-prose: 442  # public-skill-ok: detection-class name, not prose
   operator-email: 31  # public-skill-ok: detection-class name, not prose
