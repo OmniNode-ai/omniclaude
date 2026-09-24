@@ -761,6 +761,64 @@ def collect_branch_pr_states(
     return states
 
 
+def collect_open_pr_branches(canonical: Path) -> frozenset[str] | None:
+    """Every branch name with an OPEN pull request in one repository [OMN-19399].
+
+    Feeds the opt-in open-PR fence, so it answers a narrower question than
+    :func:`collect_branch_pr_states` and answers it on its own: that map lets a
+    MERGED entry overwrite an OPEN one for a reused branch name, and it treats a
+    failure of the open listing as absence whenever the merged listing
+    succeeded. Neither is acceptable for a fence.
+
+    Returns ``None`` — never an empty set — when the listing failed, did not
+    parse, or came back AT its limit (it may have dropped the branch). The fence
+    reads ``None`` as held.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--limit",
+                str(GH_OPEN_PR_LIMIT),
+                "--json",
+                "headRefName",
+            ],
+            cwd=str(canonical),
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(
+            f"  gh open: {canonical.name}: {type(exc).__name__}: {exc}", file=sys.stderr
+        )
+        return None
+    if proc.returncode != 0:
+        print(
+            f"  gh open: {canonical.name}: exit {proc.returncode}: "
+            f"{proc.stderr.strip()[:200]}",
+            file=sys.stderr,
+        )
+        return None
+    try:
+        rows = json.loads(proc.stdout or "[]")
+    except ValueError as exc:
+        print(f"  gh open: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr)
+        return None
+    if not isinstance(rows, list) or len(rows) >= GH_OPEN_PR_LIMIT:
+        return None
+    return frozenset(
+        str(row["headRefName"])
+        for row in rows
+        if isinstance(row, dict) and row.get("headRefName")
+    )
+
+
 # ---------------------------------------------------------------------------
 # tracker (Linear) — reported context only since the 2026-09-14 ruling
 # ---------------------------------------------------------------------------
@@ -850,8 +908,13 @@ def collect_facts(
     stash_cache: dict[Path, list[str]],
     pr_state_cache: dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]]
     | None = None,
+    open_pr_cache: dict[Path, frozenset[str] | None] | None = None,
 ) -> ModelWorktreePruneFacts:
-    """Observe one worktree. Pure observation — no judgement, no mutation."""
+    """Observe one worktree. Pure observation — no judgement, no mutation.
+
+    ``open_pr_cache`` is passed only when the open-PR fence is on
+    [OMN-19399]; without it ``open_pr`` stays ``None``.
+    """
     rel = worktree.relative_to(root)
     ticket_dir = rel.parts[0]
     ticket = extract_ticket_id(ticket_dir)
@@ -981,6 +1044,14 @@ def collect_facts(
             # stays UNKNOWN and limb (b) is simply unavailable.
             pr_state, pr_head_oid = repo_map.get(branch, (EnumBranchPrState.NONE, None))
 
+    open_pr: bool | None = None
+    if branch is not None and canonical is not None and open_pr_cache is not None:
+        if canonical not in open_pr_cache:
+            open_pr_cache[canonical] = collect_open_pr_branches(canonical)
+        open_branches = open_pr_cache[canonical]
+        if open_branches is not None:
+            open_pr = branch in open_branches
+
     return ModelWorktreePruneFacts(
         path=str(worktree),
         ticket=ticket,
@@ -1002,6 +1073,7 @@ def collect_facts(
         pr_head_oid=pr_head_oid,
         origin_head_oid=origin_head_oid,
         head_oid=head_oid,
+        open_pr=open_pr,
         attributed_stash_count=count_attributed_stashes(stashes, branch),
         unreadable_probes=tuple(unreadable_probes),
         timed_out_probes=tuple(timed_out_probes),
@@ -2653,6 +2725,17 @@ def build_parser() -> argparse.ArgumentParser:
             "unmeasured, never as zero."
         ),
     )
+    parser.add_argument(
+        "--hold-open-pr",
+        action="store_true",
+        help=(
+            "Refuse to remove any worktree whose branch has an OPEN pull "
+            "request, or whose open-PR listing did not resolve (block reason "
+            "open_pr_fence) [OMN-19399]. Passed by the unattended morning "
+            "prune, whose standing consent puts open-PR branches out of scope. "
+            "Only ever removes fewer worktrees."
+        ),
+    )
     parser.add_argument("--report-md", help="Write the markdown report to this path")
     parser.add_argument("--report-json", help="Write the JSON report to this path")
     parser.add_argument(
@@ -2785,6 +2868,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     pr_state_cache: (
         dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]] | None
     ) = None if args.no_pr_state else {}
+    # The open-PR fence [OMN-19399]: collected only when asked for, so a run
+    # without the flag makes no extra `gh` call.
+    open_pr_cache: dict[Path, frozenset[str] | None] | None = (
+        {} if args.hold_open_pr else None
+    )
 
     if not args.no_fetch:
         canonicals = {
@@ -2857,8 +2945,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             base_ref_cache,
             stash_cache,
             pr_state_cache,
+            open_pr_cache,
         )
-        decisions.append(classify_worktree_prune(worktree_facts))
+        decisions.append(
+            classify_worktree_prune(worktree_facts, hold_open_pr=args.hold_open_pr)
+        )
         if args.rescue_only:
             rescue_decisions.append(
                 classify_rescue_only(
@@ -2974,6 +3065,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     revalidation_refusals: list[ModelWorktreePruneDecision] = []
     removed_orphan_dirs: list[str] = []
     if args.execute:
+        # A pull request can open during a scan that runs for tens of minutes,
+        # so the fence re-reads the open listing once, fresh, for the removal
+        # pass rather than trusting the classification-time answer [OMN-19399].
+        revalidation_open_pr_cache: dict[Path, frozenset[str] | None] | None = (
+            {} if args.hold_open_pr else None
+        )
         for decision in prunable:
             # RE-VERIFY LIVE, immediately before the removal. The classification
             # pass over a registry-scale root runs for tens of minutes while peer
@@ -2991,7 +3088,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     base_ref_cache,
                     stash_cache,
                     pr_state_cache,
-                )
+                    revalidation_open_pr_cache,
+                ),
+                hold_open_pr=args.hold_open_pr,
             )
             if fresh.disposition is not EnumPruneDisposition.PRUNE:
                 revalidation_refusals.append(fresh)
