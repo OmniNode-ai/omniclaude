@@ -189,6 +189,19 @@ switch_provider() {
             rm -f "$temp_file"
             exit 1
         fi
+        # api_key_env names the env var to read, indirectly (${!api_key_env}
+        # below). It comes from the user's own config file, so before that
+        # indirect expansion runs it must be a bare shell identifier -- never
+        # whatever string happens to be in the file. This is a validation
+        # gate, not a defense against arbitrary code execution (bash
+        # indirect expansion cannot itself run a command): a malformed value
+        # would otherwise surface as an opaque "bad substitution" error deep
+        # inside the expansion instead of a named refusal here.
+        if ! [[ "$api_key_env" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo -e "${RED}Error: api_key_env '${api_key_env}' for provider '${provider}' is not a valid environment-variable name in ${CONFIG_FILE}${NC}"
+            rm -f "$temp_file"
+            exit 1
+        fi
         api_key="${!api_key_env:-}"
         if [ -z "$api_key" ]; then
             echo -e "${RED}Error: environment variable ${api_key_env} is not set (required for provider '${provider}')${NC}"

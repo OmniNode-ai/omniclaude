@@ -171,6 +171,42 @@ else
   fail "unknown provider name should be refused and named. exit=$code_unknown output=$out_unknown"
 fi
 
+# ---------------------------------------------------------------------------
+# 5. A provider entry whose api_key_env is not a bare shell identifier is
+#    refused by name before the indirect expansion (${!api_key_env}) runs,
+#    rather than surfacing as an opaque "bad substitution" or being trusted
+#    as-is (ai-reviewer finding on the original E4 PR: api_key_env comes
+#    straight from the user's own JSON file).
+# ---------------------------------------------------------------------------
+HOME_BAD_KEY_ENV="${SCRATCH_ROOT}/home-bad-key-env"
+new_scratch_home "$HOME_BAD_KEY_ENV"
+mkdir -p "${HOME_BAD_KEY_ENV}/.omninode/config"
+cat > "${HOME_BAD_KEY_ENV}/.omninode/config/claude-providers.json" <<'JSON'
+{
+  "providers": {
+    "evil": {
+      "name": "evil",
+      "base_url": "https://example.invalid",
+      "api_key_env": "FOO; touch /tmp/toggle-claude-provider-test-pwned",
+      "models": {"haiku": "h", "sonnet": "s", "opus": "o"}
+    }
+  }
+}
+JSON
+
+PWNED_MARKER="/tmp/toggle-claude-provider-test-pwned"
+rm -f "$PWNED_MARKER"
+out_bad_key_env="$(HOME="$HOME_BAD_KEY_ENV" "$SUT" evil 2>&1)"
+code_bad_key_env=$?
+if [ "$code_bad_key_env" -ne 0 ] \
+  && echo "$out_bad_key_env" | grep -q "not a valid environment-variable name" \
+  && [ ! -e "$PWNED_MARKER" ]; then
+  pass "api_key_env with shell metacharacters is refused by name, nothing executed"
+else
+  fail "api_key_env with shell metacharacters should be refused and nothing executed. exit=$code_bad_key_env pwned_marker_exists=$([ -e "$PWNED_MARKER" ] && echo yes || echo no) output=$out_bad_key_env"
+fi
+rm -f "$PWNED_MARKER"
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "ALL PASSED"
