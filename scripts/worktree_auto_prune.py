@@ -529,9 +529,7 @@ _LANE_RE = re.compile(r"\blane=([^\s|]+)")
 # the path:line pattern alone reads the token's MINUTES as the line number and
 # closes the wrong row or none. Measured 2026-09-24 (OMN-19409): 160 of the 520
 # claims this parser held open had been closed by an LCT1 TERMINAL.
-_CLOSES_CLAIM_TOKEN_RE = re.compile(
-    r"closes[-=]CLAIM[=\s]+LCT1-\d+-(\d+)-[0-9a-f]{12}-"
-)
+_CLOSES_CLAIM_LCT1_RE = re.compile(r"closes[-=]CLAIM[=\s]+LCT1-\d+-(\d+)-[0-9a-f]{12}-")
 _CLOSES_CLAIM_RE = re.compile(r"closes[-=]CLAIM[=\s]+\S*?:(\d+)")
 
 
@@ -615,7 +613,7 @@ def parse_ledger_claims(
                 has_terminal_ever[ticket] = True
 
         if is_terminal:
-            closes_match = _CLOSES_CLAIM_TOKEN_RE.search(
+            closes_match = _CLOSES_CLAIM_LCT1_RE.search(
                 line
             ) or _CLOSES_CLAIM_RE.search(line)
             if closes_match:
