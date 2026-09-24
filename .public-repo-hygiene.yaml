@@ -40,7 +40,6 @@ allowed_top_level:
   - "app"
   - "architecture-handshakes"
   - "CHANGELOG.md"
-  - "claude-providers.json"
   - "CLAUDE.md"
   - "config"
   - "conftest.py"

@@ -1,0 +1,120 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Hardcoded model-config guard (reusable). OMN-19393, plan task A2, epic
+# OMN-19183.
+#
+# Runs the omnibase_core guard (check-hardcoded-model-config-compute,
+# OMN-19252) against the CALLER repo's whole tracked tree, ratcheted against
+# that repo's own committed baseline
+# (config/hardcoded_model_config_baseline.yaml). Consumed by each repository
+# through `uses:`, the same pattern as public-repo-hygiene-reusable.yml and
+# deploy-gate-reusable.yml:
+#
+#   jobs:
+#     hardcoded-model-config:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/hardcoded-model-config-reusable.yml@<immutable-sha>
+#       with:
+#         core_ref: <40-hex omnibase_core commit>
+#
+# `core_ref` is REQUIRED and not resolved from a moving ref: every caller pins
+# the exact omnibase_core commit its guard module is installed from, the same
+# discipline the caller's own `.pre-commit-config.yaml` `rev:` line pins for
+# the local pre-commit hook (plan task A3.x, so the CI copy and the local hook
+# can never diverge). `uvx --from git+https://...@<core_ref>` installs the
+# package straight from that commit over git, so there is no SECOND,
+# independently-driftable checkout of omnibase_core to pin -- unlike
+# public-repo-hygiene-reusable.yml, this workflow does not sparse-checkout a
+# validator script from another repo at all.
+#
+# Surfaced check context in the caller: `hardcoded-model-config /
+# hardcoded-model-config` (caller job id / this job's name).
+#
+# NO SKIP, NO BYPASS: the guard step below carries no `continue-on-error` and
+# no `if:` that could skip it. There is no workflow_call input that disables,
+# skips or overrides the run. A finding, a stale baseline entry or a grown
+# baseline entry (when `--base` runs) is exit 1, full stop -- the module
+# itself has no suppression marker (see its own module docstring).
+
+name: Hardcoded Model Config Guard (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      core_ref:
+        description: >-
+          omnibase_core commit sha the guard module is installed from -- 40
+          hex characters, no default. Pin it to the same commit the caller
+          repo's .pre-commit-config.yaml `rev:` line pins for the local
+          check-hardcoded-model-config-compute hook.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  hardcoded-model-config:
+    name: hardcoded-model-config
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public FORK PRs default to ubuntu-latest
+    # OMN-18205: the untrusted test is the FORK test, and only the fork test
+    # (see public-repo-hygiene-reusable.yml's identical comment for why a
+    # same-repo dev-base PR is not sent to the public runner class).
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    steps:
+      - name: Validate core_ref is a 40-hex commit sha
+        env:
+          CORE_REF: ${{ inputs.core_ref }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${CORE_REF}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::core_ref must be exactly 40 hex characters (a full" \
+                 "git commit sha of OmniNode-ai/omnibase_core), got:" \
+                 "'${CORE_REF}' (length ${#CORE_REF})"
+            exit 1
+          fi
+
+      - name: Checkout caller repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # The scanned surface is the CALLER's whole tracked tree
+          # (`git ls-files` under `--all`), the same whole-tree invariant
+          # public-repo-hygiene-reusable.yml uses and for the same reason: a
+          # gate that only inspects the diff reports green over everything
+          # that landed before it existed.
+          persist-credentials: false
+
+      # `uvx` is not preinstalled on the self-hosted omnibase-ci runner (the
+      # A2 lab-proof run hit this live: "uvx: command not found", exit 127,
+      # on both the clean and planted scratch branches). Every other
+      # workflow in this repo that shells out to `uvx`/`uv` installs it
+      # first via astral-sh/setup-uv; this step is that same, ordinary step.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run the hardcoded-model-config guard
+        env:
+          CORE_REF: ${{ inputs.core_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          args=(--all --baseline config/hardcoded_model_config_baseline.yaml)
+          # Shrink-only ratchet: on a pull request, also refuse a baseline
+          # that carries an entry the PR's base branch tip did not (plan task
+          # A2, "entries only leave"). The module itself (--base) reads the
+          # baseline file's text at that ref; it does not need a merge base,
+          # only the base branch's own copy of the file to compare against.
+          if [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
+            args+=(--base "${PR_BASE_SHA}")
+          fi
+          uvx --from "git+https://github.com/OmniNode-ai/omnibase_core@${CORE_REF}" \
+            python -m omnibase_core.validation.hardcoded_model_config.runtime_hardcoded_model_config \
+            "${args[@]}"
