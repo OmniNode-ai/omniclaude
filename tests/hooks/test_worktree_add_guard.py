@@ -581,3 +581,148 @@ class TestShellWords:
         name, value = pair
         assert name == "WT"
         assert shell_words.expand_word(value, {"H": "/h"}) == "/h/x"
+
+
+@pytest.mark.unit
+class TestStrayWorktreeRoot:
+    """The sibling ``omni_worktrees`` beside the registry root is a stray root.
+
+    Operator ruling 2026-09-24: it is never used. It was populated twice by
+    commands the guard never judged -- ``mkdir -p`` and ``git clone`` into it,
+    after a lane redefined OMNI_HOME as the registry's parent -- and a second
+    sanctioned root, ``omnibase_internal/omni_worktrees`` beside the registry,
+    now exists. Each replay below is the historical command with only the
+    workspace path substituted.
+    """
+
+    @staticmethod
+    def _stray(workspace: Path) -> Path:
+        return workspace.parent / "omni_worktrees"
+
+    def test_redefined_registry_env_mkdir_into_the_stray_root_is_refused(
+        self, workspace: Path, sandbox_home: Path
+    ) -> None:
+        parent = workspace.parent
+        result = _run_hook(
+            f"set -e; OMNI_HOME={parent}; WT=$OMNI_HOME/omni_worktrees/OMN-18479; "
+            "mkdir -p $WT",
+            workspace=workspace,
+            sandbox_home=sandbox_home,
+            cwd=workspace,
+        )
+        reason = _assert_refused(result)
+        assert str(self._stray(workspace).resolve()) in reason
+        assert "stray worktree root" in reason
+
+    def test_mkdir_of_a_literal_stray_path_is_refused(
+        self, workspace: Path, sandbox_home: Path
+    ) -> None:
+        stray = self._stray(workspace) / "OMN-19042"
+        result = _run_hook(
+            f"mkdir -p {stray}",
+            workspace=workspace,
+            sandbox_home=sandbox_home,
+            cwd=workspace,
+        )
+        assert "stray worktree root" in _assert_refused(result)
+
+    def test_clone_after_cd_into_the_stray_root_is_refused(
+        self, workspace: Path, sandbox_home: Path
+    ) -> None:
+        stray = self._stray(workspace) / "OMN-18479"
+        result = _run_hook(
+            f"cd {stray} && git clone git@github.com:OmniNode-ai/RSD.git RSD",
+            workspace=workspace,
+            sandbox_home=sandbox_home,
+            cwd=workspace,
+        )
+        reason = _assert_refused(result)
+        assert str((stray / "RSD").resolve()) in reason
+
+    def test_clone_without_a_directory_derives_it_from_the_url(
+        self, workspace: Path
+    ) -> None:
+        stray = self._stray(workspace) / "T"
+        reason = _judge(
+            f"cd {stray} && git clone --depth 1 https://github.com/o/RSD.git",
+            workspace,
+        )
+        assert reason is not None
+        assert str((stray / "RSD").resolve()) in reason
+
+    def test_worktree_add_into_the_stray_root_names_it(self, workspace: Path) -> None:
+        stray = self._stray(workspace) / "OMN-18479" / "omnibase_infra"
+        reason = _judge(
+            f"git -C {workspace}/omnibase_infra worktree add {stray} -b x origin/dev",
+            workspace,
+        )
+        assert reason is not None
+        assert "stray worktree root" in reason
+
+    def test_nested_stray_root_inside_a_clone_is_refused(self, workspace: Path) -> None:
+        reason = _judge(
+            f"mkdir -p {workspace}/omnibase_infra/omni_worktrees/OMN-1", workspace
+        )
+        assert reason is not None
+        assert "stray worktree root" in reason
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "mkdir -p $OMNI_HOME/omni_worktrees/OMN-1",
+            "mkdir -p {workspace}/omni_worktrees/OMN-1/repo",
+            "mkdir {workspace}/omni_worktrees",
+            "cd {workspace}/omni_worktrees/OMN-1 && git clone git@github.com:o/RSD.git",
+            "git clone https://github.com/o/r.git {workspace}/omni_worktrees/T/r",
+            "git clone https://github.com/o/r.git /tmp/scratch-clone",
+            "mkdir -p /tmp/lane-scratch && ls $OMNI_HOME/omni_worktrees",
+            'mkdir -p "$UNSET_SCRATCH/notes"',
+            "ls {stray}",
+            "git -C {workspace}/omnibase_infra worktree list | grep omni_worktrees",
+        ],
+    )
+    def test_positive_controls_are_admitted(
+        self, workspace: Path, command: str
+    ) -> None:
+        text = command.format(workspace=workspace, stray=self._stray(workspace))
+        assert _judge(text, workspace) is None
+
+    def test_unresolvable_destination_naming_a_worktrees_dir_is_refused(
+        self, workspace: Path
+    ) -> None:
+        reason = _judge('mkdir -p "$UNSET_BASE/omni_worktrees/OMN-1"', workspace)
+        assert reason is not None
+        assert "cannot be resolved" in reason
+
+    def test_second_sanctioned_root_admits_once_it_exists(
+        self, workspace: Path, sandbox_home: Path
+    ) -> None:
+        internal = workspace.parent / "omnibase_internal" / "omni_worktrees"
+        dest = internal / "OMN-1" / "omnibase_infra"
+        command = f"git -C {workspace}/omnibase_infra worktree add {dest} -b x"
+        # Control: before the root exists, it is not sanctioned.
+        reason = _assert_refused(
+            _run_hook(
+                command, workspace=workspace, sandbox_home=sandbox_home, cwd=workspace
+            )
+        )
+        assert str(workspace / "omni_worktrees") in reason
+        internal.mkdir(parents=True)
+        _assert_allowed(
+            _run_hook(
+                command, workspace=workspace, sandbox_home=sandbox_home, cwd=workspace
+            )
+        )
+
+    def test_second_root_is_listed_in_the_refusal(self, workspace: Path) -> None:
+        internal = workspace.parent / "omnibase_internal" / "omni_worktrees"
+        internal.mkdir(parents=True)
+        decision = evaluate(
+            "git worktree add /tmp/elsewhere/x",
+            cwd=workspace,
+            root=workspace / "omni_worktrees",
+            env={},
+            extra_roots=[internal],
+        )
+        assert decision.blocked
+        assert str(internal.resolve()) in decision.reason

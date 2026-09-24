@@ -171,3 +171,33 @@ class TestFlagParsing:
         contract, phase = ofb._parse_flag(flag)
         assert contract == "<unknown>"
         assert phase == "<unknown>"
+
+
+@pytest.mark.unit
+class TestWorktreesRootHasNoMachineDefault:
+    """The worktrees root comes from the environment, never from a home-relative guess."""
+
+    def test_unset_environment_adds_no_worktrees_root(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for key in (
+            "ONEX_WORKTREES_ROOT",
+            "OMNI_WORKTREES_DIR",
+            "OMNI_HOME",
+            "ONEX_REGISTRY_ROOT",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        # A HOME that holds the stray sibling layout must not be picked up.
+        (tmp_path / "Code" / "omni_worktrees").mkdir(parents=True)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        assert ofb._omni_home_roots() == []
+
+    def test_root_derives_from_the_registry_env(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for key in ("ONEX_WORKTREES_ROOT", "OMNI_WORKTREES_DIR", "ONEX_REGISTRY_ROOT"):
+            monkeypatch.delenv(key, raising=False)
+        root = tmp_path / "reg" / "omni_worktrees"
+        root.mkdir(parents=True)
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path / "reg"))
+        assert ofb._omni_home_roots() == [root.resolve()]

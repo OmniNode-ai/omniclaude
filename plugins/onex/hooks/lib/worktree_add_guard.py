@@ -31,6 +31,16 @@ judged, so the lane can see what the shell would have handed git.
 
 A command with no real ``worktree add`` in it -- the words inside a commit
 message, a here-document or a comment -- is not judged at all.
+
+Sanctioned roots and stray roots
+--------------------------------
+The canonical root is ``--root``; ``--also-root`` adds further sanctioned
+roots (the hook passes ``omnibase_internal/omni_worktrees`` beside the
+registry root once that directory exists). A ``mkdir`` or ``git clone`` is
+judged for one thing only: creating a path under a directory named
+``omni_worktrees`` that is not a sanctioned root. That is how the stray
+sibling root beside the registry was populated, by commands this guard did
+not look at (a lane had redefined OMNI_HOME as the registry's parent).
 """
 
 from __future__ import annotations
@@ -108,10 +118,61 @@ _DECLARERS = frozenset({"export", "declare", "typeset", "local", "readonly"})
 _MAX_NESTING = 3
 
 _WORKTREE_ADD_TEXT = re.compile(r"worktree\W+add\b")
+# The directory name every worktree root carries. A `mkdir` or `git clone`
+# whose destination sits under a directory of this name that is not a
+# sanctioned root is a stray root being populated (the sibling
+# `omni_worktrees` beside the registry root, 2026-09-16 and 2026-09-21).
+_WORKTREES_DIRNAME = "omni_worktrees"
+_STRAY_ROOT_TEXT = re.compile(re.escape(_WORKTREES_DIRNAME) + r"(?![A-Za-z0-9_])")
+
+# `mkdir` options that take a separate value.
+_MKDIR_VALUED = frozenset({"-m", "--mode", "--context"})
+# `git clone` options that take a separate value (git-clone(1), git 2.50).
+_CLONE_VALUED = frozenset(
+    {
+        "-o",
+        "--origin",
+        "-b",
+        "--branch",
+        "-u",
+        "--upload-pack",
+        "--reference",
+        "--reference-if-able",
+        "--separate-git-dir",
+        "--depth",
+        "--shallow-since",
+        "--shallow-exclude",
+        "-c",
+        "--config",
+        "--template",
+        "-j",
+        "--jobs",
+        "--filter",
+        "--server-option",
+        "--bundle-uri",
+        "--ref-format",
+        "--revision",
+    }
+)
 
 
 class Refusal(Exception):
     """The command must be refused; the message is the reason."""
+
+
+@dataclass(frozen=True)
+class _Roots:
+    """The sanctioned worktree roots: the canonical one first, then any others."""
+
+    primary: Path | None
+    extra: tuple[Path, ...] = ()
+
+    def sanctioned(self) -> tuple[Path, ...]:
+        roots = (self.primary, *self.extra) if self.primary else self.extra
+        return tuple(Path(os.path.realpath(r)) for r in roots)
+
+    def describe(self) -> str:
+        return " or ".join(str(r) for r in self.sanctioned())
 
 
 @dataclass(frozen=True)
@@ -282,9 +343,17 @@ class _Invocation:
 
 
 def _git_worktree_add(
-    words: list[Word], state: _State, env: Mapping[str, str], *, via_wrapper: bool
+    words: list[Word],
+    state: _State,
+    env: Mapping[str, str],
+    root: _Roots,
+    *,
+    via_wrapper: bool,
 ) -> _Invocation | None:
-    """The shape of one ``git ... worktree add`` command, or None if it is not one."""
+    """The shape of one ``git ... worktree add`` command, or None if it is not one.
+
+    A ``git ... clone`` is judged here too, for a stray worktree root only.
+    """
     if not words or os.path.basename(words[0].text) != "git":
         return None
     scope = _Scope(env, state.variables)
@@ -320,6 +389,9 @@ def _git_worktree_add(
             idx += 1
             continue
         break
+    if idx < len(args) and args[idx].text == "clone":
+        _judge_clone(directory, unknown, list(args[idx + 1 :]), state, env, root)
+        return None
     if (
         idx + 1 >= len(args)
         or args[idx].text != "worktree"
@@ -403,7 +475,7 @@ def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word 
 
 
 def _judge_add(
-    invocation: _Invocation, state: _State, env: Mapping[str, str], root: Path | None
+    invocation: _Invocation, state: _State, env: Mapping[str, str], root: _Roots
 ) -> str | None:
     """The resolved destination when admitted; raises Refusal otherwise."""
     target_word = _destination(invocation.add_args, _Scope(env, state.variables))
@@ -425,15 +497,14 @@ def _judge_add(
             f"the worktree path `{target_word.text}` expands to `{raw}`, which "
             "git would read as an option"
         )
-    if root is None:
+    if root.primary is None:
         raise Refusal(
             "cannot resolve the canonical worktree root. Set OMNI_HOME "
             "(preferred) or ONEX_WORKTREES_ROOT"
         )
     target = _join(invocation.directory, raw, "worktree path", invocation.unknown)
     resolved = Path(os.path.realpath(target))
-    real_root = Path(os.path.realpath(root))
-    if real_root not in resolved.parents:
+    if not any(real_root in resolved.parents for real_root in root.sanctioned()):
         how = ""
         if not Path(raw).is_absolute():
             how = (
@@ -443,10 +514,148 @@ def _judge_add(
         elif raw != target_word.text:
             how = f" (`{target_word.text}` expands to `{raw}`)"
         raise Refusal(
-            f"Worktrees must be created under {real_root}. Got: {resolved}{how}. "
-            "To use a different root set ONEX_WORKTREES_ROOT"
+            f"Worktrees must be created under {root.describe()}. Got: {resolved}{how}."
+            f"{_stray_note(resolved, root)} To use a different root set ONEX_WORKTREES_ROOT"
         )
     return str(resolved)
+
+
+def _stray_root_of(resolved: Path, root: _Roots) -> Path | None:
+    """The unsanctioned ``omni_worktrees`` directory ``resolved`` sits under, if any."""
+    sanctioned = root.sanctioned()
+    for candidate in (resolved, *resolved.parents):
+        if candidate.name != _WORKTREES_DIRNAME:
+            continue
+        if any(candidate == r or r in candidate.parents for r in sanctioned):
+            return None
+        if any(candidate in r.parents for r in sanctioned):
+            continue
+        return candidate
+    return None
+
+
+def _stray_note(resolved: Path, root: _Roots) -> str:
+    stray = _stray_root_of(resolved, root)
+    if stray is None:
+        return ""
+    return (
+        f" {stray} is a stray worktree root, not a sanctioned one; nothing is "
+        "ever created there. Build the path from $OMNI_HOME, never from "
+        "memory or from a redefined OMNI_HOME."
+    )
+
+
+def _judge_stray_creation(
+    verb: str,
+    target_word: Word | None,
+    derived: str | None,
+    directory: Path | None,
+    unknown: str,
+    scope: Mapping[str, str | None],
+    root: _Roots,
+) -> None:
+    """Refuse a ``mkdir``/``git clone`` that creates a path under a stray worktree root.
+
+    These verbs are judged only for that one thing: anywhere else they are
+    ordinary. A destination that cannot be resolved is refused only when its
+    own text names a worktrees directory, so an unrelated ``mkdir "$X"`` is
+    never blocked by this guard.
+    """
+    if not root.sanctioned():
+        return
+    names_root = target_word is not None and bool(
+        _STRAY_ROOT_TEXT.search(target_word.text)
+    )
+    try:
+        raw = expand_word(target_word, scope) if target_word is not None else derived
+        if raw is None:
+            return
+        target = _join(directory, raw, f"`{verb}` destination", unknown)
+    except (UnresolvableWord, Refusal) as exc:
+        if names_root:
+            raise Refusal(
+                f"the `{verb}` destination `{target_word.text if target_word else raw}` "
+                f"names a worktrees directory but cannot be resolved: {exc}"
+            ) from exc
+        return
+    resolved = Path(os.path.realpath(target))
+    stray = _stray_root_of(resolved, root)
+    if stray is None:
+        return
+    raise Refusal(
+        f"`{verb}` would create {resolved}, under {stray}, which is not a "
+        f"sanctioned worktree root ({root.describe()}).{_stray_note(resolved, root)}"
+    )
+
+
+def _judge_mkdir(
+    words: list[Word], state: _State, env: Mapping[str, str], root: _Roots
+) -> None:
+    scope = _Scope(env, state.variables)
+    idx = 1
+    options_done = False
+    while idx < len(words):
+        word = words[idx]
+        text = word.text
+        idx += 1
+        if not options_done and text == "--":
+            options_done = True
+            continue
+        if not options_done and text.startswith("-") and text != "-":
+            if text in _MKDIR_VALUED:
+                idx += 1
+            continue
+        _judge_stray_creation(
+            "mkdir", word, None, state.cwd, state.unknown, scope, root
+        )
+
+
+def _clone_default_name(url: str) -> str | None:
+    """The directory name ``git clone <url>`` creates when given none."""
+    name = url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    if name.endswith(".git"):
+        name = name[: -len(".git")]
+    return name or None
+
+
+def _judge_clone(
+    directory: Path | None,
+    unknown: str,
+    args: list[Word],
+    state: _State,
+    env: Mapping[str, str],
+    root: _Roots,
+) -> None:
+    scope = _Scope(env, state.variables)
+    positionals: list[Word] = []
+    idx = 0
+    options_done = False
+    while idx < len(args):
+        word = args[idx]
+        text = word.text
+        idx += 1
+        if not options_done and text == "--":
+            options_done = True
+            continue
+        if not options_done and text.startswith("-") and text != "-":
+            if text in _CLONE_VALUED:
+                idx += 1
+            continue
+        positionals.append(word)
+    if not positionals:
+        return
+    if len(positionals) >= 2:
+        _judge_stray_creation(
+            "git clone", positionals[1], None, directory, unknown, scope, root
+        )
+        return
+    try:
+        url = expand_word(positionals[0], scope)
+    except UnresolvableWord:
+        return
+    _judge_stray_creation(
+        "git clone", None, _clone_default_name(url), directory, unknown, scope, root
+    )
 
 
 def _embedded_command(words: list[Word]) -> list[Word] | None:
@@ -464,12 +673,12 @@ def _nested(
     script: str,
     state: _State,
     env: Mapping[str, str],
-    root: Path | None,
+    root: _Roots,
     judged: list[str],
     depth: int,
 ) -> None:
     """Judge a script another shell (or ``eval``) runs, in ``state``."""
-    if not _WORKTREE_ADD_TEXT.search(script):
+    if not _judged_text(script):
         return
     if depth >= _MAX_NESTING:
         raise Refusal("`worktree add` is nested too deeply in scripts to judge")
@@ -525,7 +734,7 @@ def _run_shell(
     heredocs: list[HereDoc],
     state: _State,
     env: Mapping[str, str],
-    root: Path | None,
+    root: _Roots,
     judged: list[str],
     depth: int,
 ) -> None:
@@ -556,7 +765,7 @@ def _run_shell(
         try:
             body = expand_word(heredoc.as_word(), scope)
         except UnresolvableWord as exc:
-            if _WORKTREE_ADD_TEXT.search(heredoc.body):
+            if _judged_text(heredoc.body):
                 raise Refusal(
                     f"the here-document `{program}` runs cannot be resolved: {exc}"
                 ) from exc
@@ -569,7 +778,7 @@ def _run(
     heredocs: list[HereDoc],
     state: _State,
     env: Mapping[str, str],
-    root: Path | None,
+    root: _Roots,
     judged: list[str],
     depth: int,
 ) -> None:
@@ -590,7 +799,7 @@ def _run_unwrapped(
     heredocs: list[HereDoc],
     state: _State,
     env: Mapping[str, str],
-    root: Path | None,
+    root: _Roots,
     judged: list[str],
     depth: int,
 ) -> None:
@@ -631,7 +840,7 @@ def _dispatch(
     heredocs: list[HereDoc],
     state: _State,
     env: Mapping[str, str],
-    root: Path | None,
+    root: _Roots,
     judged: list[str],
     depth: int,
     *,
@@ -657,6 +866,9 @@ def _dispatch(
         )
         _nested(script, target, env, root, judged, depth)
         return
+    if program == "mkdir":
+        _judge_mkdir(words, state, env, root)
+        return
     if program != "git":
         inner = _embedded_command(words)
         if inner is not None and not via_wrapper:
@@ -671,7 +883,7 @@ def _dispatch(
                 via_wrapper=True,
             )
         return
-    invocation = _git_worktree_add(words, state, env, via_wrapper=via_wrapper)
+    invocation = _git_worktree_add(words, state, env, root, via_wrapper=via_wrapper)
     if invocation is None:
         return
     resolved = _judge_add(invocation, state, env, root)
@@ -683,13 +895,15 @@ def _walk(
     command: str,
     state: _State,
     env: Mapping[str, str],
-    root: Path | None,
+    root: _Roots,
     judged: list[str],
     depth: int,
 ) -> None:
     try:
         tokens = tokenize(command)
     except ShellSyntaxError as exc:
+        if not _WORKTREE_ADD_TEXT.search(command):
+            return  # only a worktrees path is named; nothing here adds a worktree
         raise Refusal(
             f"this command names `worktree add` but cannot be split into "
             f"words ({exc}), so its destination cannot be judged"
@@ -712,16 +926,28 @@ def _walk(
     _run(words, heredocs, state, env, root, judged, depth)
 
 
+def _judged_text(command: str) -> bool:
+    """True when ``command`` could create a worktree or populate a worktrees root."""
+    return bool(_WORKTREE_ADD_TEXT.search(command) or _STRAY_ROOT_TEXT.search(command))
+
+
 def evaluate(
-    command: str, *, cwd: Path | None, root: Path | None, env: Mapping[str, str]
+    command: str,
+    *,
+    cwd: Path | None,
+    root: Path | None,
+    env: Mapping[str, str],
+    extra_roots: Sequence[Path] = (),
 ) -> Decision:
-    """Judge every ``git worktree add`` destination in ``command``."""
-    if not _WORKTREE_ADD_TEXT.search(command):
+    """Judge every ``git worktree add`` destination in ``command``, and every
+    ``mkdir``/``git clone`` that would populate a stray worktree root."""
+    if not _judged_text(command):
         return Decision(blocked=False)
     judged: list[str] = []
     state = _State(cwd=cwd, variables={}, unknown="the hook was given no cwd")
+    roots = _Roots(root, tuple(extra_roots))
     try:
-        _walk(command, state, env, root, judged, depth=0)
+        _walk(command, state, env, roots, judged, depth=0)
     except Refusal as exc:
         return Decision(blocked=True, reason=f"BLOCKED: {exc}. {DISABLE_HINT}")
     return Decision(blocked=False, judged=tuple(judged))
@@ -731,6 +957,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="OMN-19229 worktree add guard")
     parser.add_argument(
         "--root", required=True, help="canonical worktree root; empty when unresolvable"
+    )
+    parser.add_argument(
+        "--also-root",
+        action="append",
+        default=[],
+        help="a further sanctioned worktree root; repeatable, empty values ignored",
     )
     parser.add_argument("--cwd", default=None, help="used when the payload has none")
     args = parser.parse_args(argv)
@@ -755,7 +987,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         root = Path(args.root) if args.root else None
-        decision = evaluate(command, cwd=cwd, root=root, env=os.environ)
+        extra = [Path(r) for r in args.also_root if r]
+        decision = evaluate(
+            command, cwd=cwd, root=root, env=os.environ, extra_roots=extra
+        )
     except Exception as exc:  # noqa: BLE001 - fail-closed boundary, deliberate
         return block(
             f"BLOCKED: the worktree guard could not evaluate this command ({exc}); "
