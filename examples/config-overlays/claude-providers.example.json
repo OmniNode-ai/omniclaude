@@ -1,0 +1,86 @@
+{
+  "_description": "Example claude-providers.json for scripts/toggle-claude-provider.sh. Copy this file to ~/.omninode/config/claude-providers.json and edit it -- the script never reads this example directly (OMN-19393, plan task E4). Each provider's api_key_env names the environment variable the script reads for that provider's key; a null base_url means 'unset the override and use Anthropic directly'.",
+  "providers": {
+    "anthropic": {
+      "name": "Anthropic Claude",
+      "description": "Official Anthropic Claude models",
+      "base_url": null,
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "models": {
+        "haiku": "claude-3-5-haiku-20241022",
+        "sonnet": "claude-3-5-sonnet-20241022",
+        "opus": "claude-3-opus-20240229"
+      }
+    },
+    "zai": {
+      "name": "Z.ai GLM Models",
+      "description": "Z.ai GLM models with high concurrency limits",
+      "base_url": "https://api.z.ai/api/anthropic",
+      "api_key_env": "ZAI_API_KEY",
+      "models": {
+        "haiku": "glm-4.5-air",
+        "sonnet": "glm-4.5",
+        "opus": "glm-4.6"
+      }
+    },
+    "together": {
+      "name": "Together AI",
+      "description": "Together AI hosted open-source models",
+      "base_url": "https://api.together.xyz/api/anthropic",
+      "api_key_env": "TOGETHER_API_KEY",
+      "models": {
+        "haiku": "meta-llama/Llama-3.1-8B-Instruct-Turbo",
+        "sonnet": "meta-llama/Llama-3.1-70B-Instruct-Turbo",
+        "opus": "meta-llama/Llama-3.1-405B-Instruct-Turbo"
+      }
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "description": "OpenRouter model marketplace",
+      "base_url": "https://openrouter.ai/api/v1/anthropic",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "models": {
+        "haiku": "anthropic/claude-3.5-haiku",
+        "sonnet": "anthropic/claude-3.5-sonnet",
+        "opus": "anthropic/claude-3-opus"
+      }
+    },
+    "gemini-pro": {
+      "name": "Google Gemini Pro",
+      "description": "Google's Gemini Pro models via the Anthropic-compatible API",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/anthropic",
+      "api_key_env": "GEMINI_API_KEY",
+      "models": {
+        "haiku": "gemini-1.5-flash",
+        "sonnet": "gemini-1.5-pro",
+        "opus": "gemini-1.5-pro"
+      }
+    },
+    "gemini-flash": {
+      "name": "Google Gemini Flash",
+      "description": "Google's Gemini Flash models optimized for speed",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/anthropic",
+      "api_key_env": "GEMINI_API_KEY",
+      "models": {
+        "haiku": "gemini-1.5-flash",
+        "sonnet": "gemini-1.5-flash",
+        "opus": "gemini-1.5-pro"
+      }
+    },
+    "gemini-2.5-flash": {
+      "name": "Google Gemini 2.5 Flash",
+      "description": "Google's latest Gemini 2.5 Flash models with enhanced capabilities",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/anthropic",
+      "api_key_env": "GEMINI_API_KEY",
+      "models": {
+        "haiku": "gemini-2.5-flash",
+        "sonnet": "gemini-2.5-flash",
+        "opus": "gemini-2.5-pro"
+      }
+    }
+  },
+  "settings": {
+    "default_provider": "anthropic",
+    "backup_suffix": ".backup"
+  }
+}
