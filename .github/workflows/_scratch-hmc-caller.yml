@@ -6,7 +6,9 @@
 name: Scratch HMC Caller (throwaway)
 
 on:
-  workflow_dispatch: {}
+  push:
+    branches:
+      - scratch/omn-19393-hmc-lab-planted
 
 permissions:
   contents: read
