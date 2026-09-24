@@ -256,14 +256,30 @@ def audit(check_required: bool) -> list[Finding]:
 def self_test() -> None:
     """Positive control. A zero-finding run is only meaningful if the audit can
     be shown to produce a finding at all.
+
+    This used to probe a live repository (``omnibot``) for the absence of the
+    gate workflow file. That repository's rollout state is not this audit's
+    to hold still -- once ``omnibot`` legitimately adopted the gate, the
+    self-test read "the control is stale" and failed the audit on its
+    positive control, every day, 2026-09-20 through 2026-09-24, before the
+    real sweep ever ran (OMN-18016).
+
+    The fix is a synthetic fixture instead of a live repo: a path under an
+    existing, always-accessible repository that no real hygiene-rollout
+    change will ever create, because its name says what it is. A repo can be
+    gated later; this sentinel cannot organically start existing.
     """
-    probe = "omnibot"
-    if _file_exists(probe, GATE_WORKFLOW, "main"):
+    probe_repo = "omniclaude"
+    probe_path = ".github/workflows/__omn18016-self-test-sentinel-do-not-create__.yml"
+    if _file_exists(probe_repo, probe_path, "dev"):
         raise AuditError(
-            f"self-test control is stale: {probe} now carries {GATE_WORKFLOW}, so "
-            "it no longer proves the detector fires. Pick another control."
+            f"self-test control is stale: {probe_repo}@{probe_path} exists, so "
+            "it no longer proves the detector fires. Pick another sentinel path."
         )
-    print(f"self-test OK: the gate-missing detector fires against {probe}")
+    print(
+        "self-test OK: the gate-missing detector fires against a synthetic "
+        f"sentinel path in {probe_repo}"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
