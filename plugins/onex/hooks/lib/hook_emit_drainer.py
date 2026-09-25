@@ -117,6 +117,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import hook_emit_bus  # noqa: E402
 import hook_emit_health as health  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 
@@ -322,6 +323,7 @@ class _Emitter:
     def __init__(self) -> None:
         self._handler: Any | None = None
         self._request_cls: Any | None = None
+        self._bus: hook_emit_bus.PersistentBus | None = None
 
     def _load(self) -> bool:
         if self._handler is not None:
@@ -337,7 +339,14 @@ class _Emitter:
         except Exception as exc:  # noqa: BLE001 -- degrade, do not crash the daemon
             logger.error("emit handler import failed: %s", exc)
             return False
-        self._handler = HandlerEventEmitEffect()
+        try:
+            adapter = self._build_persistent_adapter(HandlerEventEmitEffect)
+        except Exception as exc:  # noqa: BLE001 -- the next publish retries the load
+            # Same failure the handler would raise from handle() when the Kafka
+            # target is not configured; the record stays journalled.
+            logger.error("emit publish adapter could not be built: %s", exc)
+            return False
+        self._handler = HandlerEventEmitEffect(publish_adapter=adapter)
         self._request_cls = ModelEmitRequest
         logger.info(
             "emit handler loaded in %.1fs (paid once for this process, "
@@ -345,6 +354,57 @@ class _Emitter:
             time.perf_counter() - t0,
         )
         return True
+
+    def _build_persistent_adapter(self, handler_cls: Any) -> Any | None:
+        """A publisher whose Kafka bus is started once per process (OMN-19518).
+
+        Without an injected adapter the handler builds a ``KafkaEventPublisher``
+        per ``handle()`` call, and that publisher starts and closes a bus per
+        record: 2,584 SCRAM logins for 1,274 events in one measured hour. The
+        publisher's own ``bus_factory`` seam takes a factory; this one always
+        returns the same :class:`hook_emit_bus.PersistentBus`, which owns one
+        real bus and discards it on any failure.
+
+        ``None`` keeps the handler's own contract-declared spool-only opt-out
+        working: with no adapter injected, the handler resolves it exactly as
+        before and publishes nothing.
+        """
+        if handler_cls._spool_only_opt_out():
+            return None
+        from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
+        from omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect import (
+            KafkaEventPublisher,
+        )
+
+        bootstrap = ModelKafkaEventBusConfig().apply_environment_overrides()
+        bootstrap_servers = bootstrap.bootstrap_servers
+
+        def _real_bus() -> Any:
+            # The sanctioned constructor, resolved at call time so the bus
+            # picks up the lane apply_declared_lane() put in the environment.
+            # The transport is explicit: the drainer publishes to the declared
+            # Kafka lane or not at all, never to an in-memory bus.
+            from omnibase_infra.backends.auto_configure import (
+                BUS_KAFKA,
+                select_event_bus,
+            )
+
+            return select_event_bus(
+                bus_type=BUS_KAFKA, kafka_bootstrap_servers=bootstrap_servers
+            )
+
+        self._bus = hook_emit_bus.PersistentBus(_real_bus)
+        bus = self._bus
+        return KafkaEventPublisher(bootstrap_servers, bus_factory=lambda: bus)
+
+    def close(self) -> None:
+        """Close the persistent bus. Called once, when the drainer exits."""
+        if self._bus is None:
+            return
+        try:
+            self._bus.shutdown_blocking()
+        except Exception as exc:  # noqa: BLE001 -- shutdown must not raise
+            logger.warning("closing the persistent emit bus failed: %s", exc)
 
     def publish(self, record: journal.JournalRecord) -> bool:
         """Publish one journalled event. Returns True only on a confirmed ack."""
@@ -766,11 +826,18 @@ def run(
 
     try:
         while True:
+            cycle_started = time.perf_counter()
             published, failed = drain_once(
                 journal_dir, emitter, failure_counts=failure_counts
             )
             if published:
-                logger.info("published %d event(s)", published)
+                # The cycle time makes the publish rate readable from this log
+                # alone (OMN-19518 measured before/after events per second).
+                logger.info(
+                    "published %d event(s) in %.2fs",
+                    published,
+                    time.perf_counter() - cycle_started,
+                )
                 published_total += published
                 last_publish_at = time.time()
             _record_cycle()
@@ -788,6 +855,7 @@ def run(
             else:
                 time.sleep(poll_seconds if published else idle_poll_seconds)
     finally:
+        emitter.close()
         lock.release()
 
 
