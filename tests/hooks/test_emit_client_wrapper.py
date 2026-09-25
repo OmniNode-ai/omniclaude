@@ -117,6 +117,7 @@ class TestModuleImport:
             "work.obligation.satisfied",  # OMN-13902 - Work obligation lifecycle registry sync
             "work.obligation.superseded",  # OMN-13902 - Work obligation lifecycle registry sync
             "work.obligation.transferred",  # OMN-13902 - Work obligation lifecycle registry sync
+            "content.captured",  # OMN-19551 - Full prompt/tool/reply content capture
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
