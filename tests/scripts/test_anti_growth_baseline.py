@@ -65,6 +65,11 @@ def _git(repo: Path, *args: str) -> None:
             "violations:\n  - old\nopen_repairs:\n  - repair\n",
             "violations:\n  - old\nopen_repairs:\n  - repair\n  - new\n",
         ),
+        (
+            "yaml-counted-list-map:suites",
+            "suites:\n  unit:\n    max_skips: 1\n    node_ids: [old]\n",
+            "suites:\n  unit:\n    max_skips: 2\n    node_ids: [old, new]\n",
+        ),
         ("line-set", "old\n", "old\nnew\n"),
         ("number", "4\n", "5\n"),
     ],
@@ -97,6 +102,11 @@ def test_growth_is_rejected(parser: str, base_text: str, head_text: str) -> None
             "yaml-list-tree",
             "violations:\n  - old\nopen_repairs:\n  - fixed\n",
             "violations:\n  - old\nopen_repairs: []\n",
+        ),
+        (
+            "yaml-counted-list-map:suites",
+            "suites:\n  unit:\n    max_skips: 2\n    node_ids: [old, fixed]\n",
+            "suites:\n  unit:\n    max_skips: 1\n    node_ids: [old]\n",
         ),
         ("line-set", "old\nfixed\n", "old\n"),
         ("number", "5\n", "4\n"),
@@ -139,6 +149,7 @@ def test_positive_control_is_parser_specific() -> None:
         "yaml-count-map:baseline",
         "json-list:findings",
         "yaml-list-tree",
+        "yaml-counted-list-map:suites",
         "line-set",
         "number",
     )

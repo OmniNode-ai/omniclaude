@@ -12,6 +12,7 @@ Parser identifiers:
 
 * ``yaml-list:<key.path>`` / ``json-list:<key.path>``
 * ``yaml-count-map:<key.path>`` / ``json-count-map:<key.path>``
+* ``yaml-counted-list-map:<key.path>`` (per-entry ``max_skips`` + ``node_ids``)
 * ``yaml-list-tree`` (all list members, namespaced by their mapping path)
 * ``line-set`` (blank and comment-only lines are ignored)
 * ``number``
@@ -50,7 +51,15 @@ class ParsedBaseline(NamedTuple):
     entry_count: int
 
 
-_KEYED_KINDS = frozenset({"yaml-list", "json-list", "yaml-count-map", "json-count-map"})
+_KEYED_KINDS = frozenset(
+    {
+        "yaml-list",
+        "json-list",
+        "yaml-count-map",
+        "json-count-map",
+        "yaml-counted-list-map",
+    }
+)
 _SIMPLE_KINDS = frozenset({"line-set", "number", "yaml-list-tree"})
 _GIT_LOCATION_VARS = frozenset(
     {
@@ -159,6 +168,40 @@ def parse_baseline_text(text: str, parser: str) -> ParsedBaseline:
             raise BaselineParseError(msg)
         canonical_entries = frozenset(_canonical_entry(item) for item in selected)
         return ParsedBaseline(spec.kind, canonical_entries, len(selected))
+
+    if spec.kind == "yaml-counted-list-map":
+        if not isinstance(selected, dict):
+            msg = f"{'.'.join(spec.key_path)!r} must resolve to a mapping"
+            raise BaselineParseError(msg)
+        counted_entries: dict[str, int] = {}
+        for key, value in selected.items():
+            if not isinstance(key, str) or not isinstance(value, dict):
+                raise BaselineParseError(
+                    "counted-list maps require string keys and mapping values"
+                )
+            max_skips = value.get("max_skips")
+            if (
+                not isinstance(max_skips, int)
+                or isinstance(max_skips, bool)
+                or max_skips < 0
+            ):
+                raise BaselineParseError(
+                    f"counted-list entry {key!r} requires non-negative integer max_skips"
+                )
+            counted_entries[f"{key}.max_skips"] = max_skips
+            node_ids = value.get("node_ids", [])
+            if not isinstance(node_ids, list):
+                raise BaselineParseError(
+                    f"counted-list entry {key!r} node_ids must be a list"
+                )
+            canonical_ids = [_canonical_entry(item) for item in node_ids]
+            if len(canonical_ids) != len(set(canonical_ids)):
+                raise BaselineParseError(
+                    f"counted-list entry {key!r} contains duplicate node_ids"
+                )
+            for node_id in canonical_ids:
+                counted_entries[f"{key}.node_ids={node_id}"] = 1
+        return ParsedBaseline(spec.kind, counted_entries, len(counted_entries))
 
     if not isinstance(selected, dict):
         msg = f"{'.'.join(spec.key_path)!r} must resolve to a count mapping"
