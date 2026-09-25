@@ -352,10 +352,31 @@ def test_passthrough_skips_a_second_shim_copy(
     assert _calls(env) == [["pr", "checks", "1"]]
 
 
+def _coreutils_dir_without_gh(tmp_path: Path) -> Path:
+    """A PATH entry carrying symlinks to the external tools the shim itself
+    shells out to (``head``, ``grep``, ...) before it can decide there is no
+    real ``gh`` -- but never a symlink to a real ``gh``.
+
+    ``/usr/bin:/bin`` is not safe for that: GitHub-hosted Ubuntu runners ship
+    ``gh`` preinstalled there (unlike a developer Mac, where it lives under
+    Homebrew's prefix), so pointing PATH at those system dirs let the real
+    binary answer this "no real gh" test on CI while it stayed loud locally.
+    """
+    safe = tmp_path / "safe-bin"
+    safe.mkdir()
+    for tool in ("head", "grep"):
+        found = shutil.which(tool)
+        assert found, f"{tool} not found on PATH; needed by the shim itself"
+        (safe / tool).symlink_to(found)
+    return safe
+
+
 @pytest.mark.unit
-def test_passthrough_no_real_gh_is_a_loud_127(env: dict[str, str]) -> None:
+def test_passthrough_no_real_gh_is_a_loud_127(
+    env: dict[str, str], tmp_path: Path
+) -> None:
     e = dict(env)
-    e["PATH"] = f"{SHIM.parent}:/usr/bin:/bin"
+    e["PATH"] = f"{SHIM.parent}:{_coreutils_dir_without_gh(tmp_path)}"
     r = subprocess.run(
         ["gh", "--version"],
         cwd=env["REPO"],
