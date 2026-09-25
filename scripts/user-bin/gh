@@ -1,0 +1,167 @@
+#!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ONEX_GH_USER_SHIM (OMN-19479) -- a `gh` shim installed ahead of the real
+# binary on this host's PATH (scripts/user-bin/install-gh-shim.sh).
+#
+# Why: the Claude Code harness looks up the current branch's PR link with
+# `gh pr view [<branch>] --json url` every few seconds per session, and every
+# lookup spends the operator's shared GitHub quota (2026-09-24 plan M4: at
+# least 355 GraphQL requests an hour from two sessions). This shim answers
+# exactly two read shapes from a 600 s per-(repository, branch) cache and
+# hands every other command to the real `gh` unchanged:
+#
+#   gh pr view [<branch>] --json url
+#   gh pr view [<branch>] --json number,url,state
+#
+# Nothing else is cached. A PR mutation that can change those answers
+# (create, ready, close, reopen, merge) purges the cache before it runs.
+# A cached "no pull requests found" answer is kept like a positive one; any
+# other failure (network, quota, auth) is never cached.
+#
+# This file must stay bash 3.2 compatible: /bin/bash on macOS is 3.2.
+
+ONEX_GH_SHIM_TTL="${ONEX_GH_SHIM_TTL:-600}"
+
+# --- find the real gh: walk PATH past this file and any other shim copy -----
+self="${BASH_SOURCE[0]}"
+real=""
+# PATH is split by parameter expansion, not `read <<< "$PATH"`: under Homebrew
+# bash 5.3.9 a here-string read of this host's 1.6 kB PATH hung twice at
+# 2026-09-25T14:52Z (load average 72) and did not reproduce at 15:05Z. The
+# shim must never be able to hang a gh call, and this form has no temp file.
+_rest="$PATH:"
+while [ -n "$_rest" ]; do
+  _d="${_rest%%:*}"
+  _rest="${_rest#*:}"
+  [ -n "$_d" ] || continue
+  _c="$_d/gh"
+  [ -f "$_c" ] && [ -x "$_c" ] || continue
+  [ "$_c" -ef "$self" ] && continue
+  # Another copy of this shim (a second install, or the source tree on PATH)
+  # would recurse forever; skip anything carrying the marker.
+  if head -c 512 "$_c" 2>/dev/null | grep -q 'ONEX_GH_USER_SHIM'; then
+    continue
+  fi
+  real="$_c"
+  break
+done
+if [ -z "$real" ]; then
+  echo "gh shim (OMN-19479): no real gh found on PATH after $self" >&2
+  exit 127
+fi
+
+_cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
+
+# --- is this one of the two cacheable read shapes? ---------------------------
+# Returns 0 and sets _branch_arg and _fields when it is.
+_cacheable() {
+  [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || return 1
+  _branch_arg=""
+  _fields=""
+  case "$#" in
+    4) [ "$3" = "--json" ] || return 1; _fields="$4" ;;
+    5)
+      case "$3" in -*|"") return 1 ;; esac
+      [ "$4" = "--json" ] || return 1
+      _branch_arg="$3"; _fields="$5" ;;
+    *) return 1 ;;
+  esac
+  case "$_fields" in url|number,url,state) return 0 ;; esac
+  return 1
+}
+
+_sha() {
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | cut -c1-40
+  else
+    printf '%s' "$1" | sha256sum | cut -c1-40
+  fi
+}
+
+# owner/repo of the working directory's origin remote, or "" outside a clone.
+_origin_repo() {
+  local url
+  url="$(git config --get remote.origin.url 2>/dev/null)"
+  url="${url%.git}"
+  url="${url##*:}"
+  case "$url" in */*/*) url="${url#"${url%/*/*}"/}" ;; esac
+  printf '%s' "$url"
+}
+
+# A PR mutation can change the cached answers for its repository: drop that
+# repository's entries before it runs (every entry when the repository is
+# unknown). Entries are named <repo hash>.<key>, so lookups in other
+# repositories stay cached.
+if [ "${1:-}" = "pr" ]; then
+  case "${2:-}" in
+    create|ready|close|reopen|merge)
+      _mut_repo=""
+      _prev=""
+      for _a in "$@"; do
+        case "$_prev" in -R|--repo) _mut_repo="$_a" ;; esac
+        case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
+        _prev="$_a"
+      done
+      [ -n "$_mut_repo" ] || _mut_repo="$(_origin_repo)"
+      if [ -n "$_mut_repo" ]; then
+        rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
+      else
+        rm -f "$_cache_root"/* 2>/dev/null
+      fi
+      ;;
+  esac
+fi
+
+if _cacheable "$@"; then
+  _top="$(git rev-parse --show-toplevel 2>/dev/null)"
+  _branch="$_branch_arg"
+  if [ -z "$_branch" ] && [ -n "$_top" ]; then
+    _branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)"
+  fi
+  if [ -n "$_top" ] && [ -n "$_branch" ]; then
+    _repo_id="$(_origin_repo)"
+    [ -n "$_repo_id" ] || _repo_id="$_top"
+    _key="$(_sha "$_repo_id" | cut -c1-16).$(_sha "$_top|$_branch|$_fields")"
+    _entry="$_cache_root/$_key"
+    _now="$(date +%s)"
+    if [ -f "$_entry.meta" ]; then
+      read -r _rc _at < "$_entry.meta"
+      case "$_rc$_at" in
+        *[!0-9]*|"") ;;
+        *)
+          if [ $((_now - _at)) -lt "$ONEX_GH_SHIM_TTL" ]; then
+            cat "$_entry.out" 2>/dev/null
+            cat "$_entry.err" >&2 2>/dev/null
+            exit "$_rc"
+          fi
+          ;;
+      esac
+    fi
+    mkdir -p "$_cache_root" 2>/dev/null
+    _tmp="$_entry.tmp.$$"
+    "$real" "$@" > "$_tmp.out" 2> "$_tmp.err"
+    _rc=$?
+    cat "$_tmp.out"
+    cat "$_tmp.err" >&2
+    _keep=0
+    if [ "$_rc" -eq 0 ]; then
+      _keep=1
+    elif grep -qi 'no pull requests found' "$_tmp.err" 2>/dev/null; then
+      _keep=1
+    fi
+    if [ "$_keep" -eq 1 ]; then
+      # .meta is written last and read first, so a reader never sees a
+      # half-written entry as fresh.
+      mv -f "$_tmp.out" "$_entry.out" 2>/dev/null
+      mv -f "$_tmp.err" "$_entry.err" 2>/dev/null
+      printf '%s %s\n' "$_rc" "$_now" > "$_tmp.meta" 2>/dev/null \
+        && mv -f "$_tmp.meta" "$_entry.meta" 2>/dev/null
+    fi
+    rm -f "$_tmp.out" "$_tmp.err" "$_tmp.meta" 2>/dev/null
+    exit "$_rc"
+  fi
+fi
+
+exec "$real" "$@"
