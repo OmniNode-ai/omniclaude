@@ -660,14 +660,23 @@ def sync_clone(clone: Path) -> CloneResult:
         before = run_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").out
         result.before = before or None
 
-        fetch = run_git(
-            clone,
-            "fetch",
-            "--quiet",
-            remote,
-            f"+refs/heads/{upstream_branch}:{tracking_ref}",
-            timeout=FETCH_TIMEOUT_SECONDS,
-        )
+        # One retry: a concurrent fetch by another process (the reconcile tick,
+        # a lane, pull-all) holding the same tracking ref fails this one with
+        # "cannot lock ref", which is a race and not a fault. Observed on
+        # 2026-09-25 (omnibase_infra, the 15:29Z timer run, host load 60).
+        fetch = GitResult(1, "", "not attempted")
+        for attempt in range(2):
+            fetch = run_git(
+                clone,
+                "fetch",
+                "--quiet",
+                remote,
+                f"+refs/heads/{upstream_branch}:{tracking_ref}",
+                timeout=FETCH_TIMEOUT_SECONDS,
+            )
+            if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
+                break
+            time.sleep(2)
         if fetch.code != 0:
             return fail(f"fetch {remote} {upstream_branch} failed: {_tail(fetch.err)}")
 
