@@ -1284,6 +1284,41 @@ expected_hooks:
       focused registration test; the runtime proof belongs to the later relay
       activation wave.
 
+  - script: "pre_tool_use_actor_line_guard.sh"
+    event: "PreToolUse"
+    matcher: "^mcp__linear-server__(save_comment|save_diff_comment)$"
+    order: 14
+    ticket: "OMN-13856"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses an agent-posted Linear comment or diff-review comment whose
+      body does not open with a well-formed actor line, "actor: <lane or
+      agent> (<model>)". Ruling: docs/tracking/ROLLING_WORK_LEDGER.md:4344
+      item (4), from the sealed-review audit (ledger:4259) finding 35
+      comments posted on the operator's own Linear credential by
+      unattributed Codex subagents. Shape check only, not a truth check --
+      same posture as the rule-18 OPERATOR-CONSENT ledger-row guard.
+    enforcement: true
+    lite_mode_exit: true
+    mask:
+      gate_call: null
+      bit_defined: false
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "mcp__linear-server__save_comment"
+        tool_input:
+          issueId: "OMN-99999"
+          body: "Landed the fix, no state change beyond the ticket."
+      env: {}
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "missing_actor_line"
+        stdout_absent: []
+
   - script: "post-tool-use-quality.sh"
     event: "PostToolUse"
     matcher: "Skill"
