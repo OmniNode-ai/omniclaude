@@ -29,13 +29,27 @@ done
 
 [ -f "$SRC" ] || { echo "install-gh-shim: shim source missing: $SRC" >&2; exit 1; }
 
+# Not `head | grep -q` under pipefail: grep -q can exit before head finishes,
+# and head's SIGPIPE status would then read as "not a shim".
+is_shim() {
+  local h
+  h="$(head -c 512 "$1" 2>/dev/null | LC_ALL=C tr -d '\000')"
+  case "$h" in *ONEX_GH_USER_SHIM*) return 0 ;; esac
+  return 1
+}
+
 # Position of BIN_DIR and of the first directory holding a real (non-shim) gh.
 bin_pos=-1
 real_pos=-1
 real_path=""
 i=0
-IFS=':' read -r -a dirs <<< "$PATH"
-for d in "${dirs[@]}"; do
+# Split by parameter expansion, not `read <<< "$PATH"`: under Homebrew bash
+# 5.3.9 that read hung this installer twice at 2026-09-25T14:52Z (load average
+# 72); it did not reproduce at 15:05Z. This form needs no here-string at all.
+rest="$PATH:"
+while [ -n "$rest" ]; do
+  d="${rest%%:*}"
+  rest="${rest#*:}"
   i=$((i + 1))
   [ -n "$d" ] || continue
   if [ "$bin_pos" -lt 0 ] && [ "$d" -ef "$BIN_DIR" ]; then
@@ -43,7 +57,7 @@ for d in "${dirs[@]}"; do
   fi
   c="$d/gh"
   if [ "$real_pos" -lt 0 ] && [ -f "$c" ] && [ -x "$c" ] \
-     && ! head -c 512 "$c" | grep -q 'ONEX_GH_USER_SHIM'; then
+     && ! is_shim "$c"; then
     real_pos=$i
     real_path="$c"
   fi
@@ -63,7 +77,7 @@ if [ "$bin_pos" -gt "$real_pos" ]; then
 fi
 
 DEST="$BIN_DIR/gh"
-if [ -e "$DEST" ] && ! head -c 512 "$DEST" | grep -q 'ONEX_GH_USER_SHIM'; then
+if [ -e "$DEST" ] && ! is_shim "$DEST"; then
   echo "install-gh-shim: REFUSED: $DEST exists and is not the gh shim; not overwriting it" >&2
   exit 3
 fi

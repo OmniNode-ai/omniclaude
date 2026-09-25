@@ -27,8 +27,14 @@ ONEX_GH_SHIM_TTL="${ONEX_GH_SHIM_TTL:-600}"
 # --- find the real gh: walk PATH past this file and any other shim copy -----
 self="${BASH_SOURCE[0]}"
 real=""
-IFS=':' read -r -a _path_dirs <<< "$PATH"
-for _d in "${_path_dirs[@]}"; do
+# PATH is split by parameter expansion, not `read <<< "$PATH"`: under Homebrew
+# bash 5.3.9 a here-string read of this host's 1.6 kB PATH hung twice at
+# 2026-09-25T14:52Z (load average 72) and did not reproduce at 15:05Z. The
+# shim must never be able to hang a gh call, and this form has no temp file.
+_rest="$PATH:"
+while [ -n "$_rest" ]; do
+  _d="${_rest%%:*}"
+  _rest="${_rest#*:}"
   [ -n "$_d" ] || continue
   _c="$_d/gh"
   [ -f "$_c" ] && [ -x "$_c" ] || continue

@@ -480,3 +480,44 @@ def test_lock_default_ttl_is_900s() -> None:
     text = STATUSLINE.read_text()
     assert 'PR_TTL="${ONEX_STATUSLINE_PR_TTL:-900}"' in text
     assert "-le 300" not in text
+
+
+@pytest.mark.unit
+def test_passthrough_and_installer_survive_a_long_path(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """A long PATH resolves the real gh and installs, split without a here-string.
+
+    Under Homebrew bash 5.3.9 a ``read <<< "$PATH"`` of this host's 1.6 kB PATH hung
+    twice at 2026-09-25T14:52Z (load average 72) and did not reproduce later, so
+    this is a functional check of the replacement, not a reproduction of the hang.
+    """
+    filler = ":".join(str(tmp_path / f"missing-dir-{i:03d}") for i in range(60))
+    bin_dir = tmp_path / "userbin"
+    bin_dir.mkdir()
+    long_path = f"{bin_dir}:{SHIM.parent}:{tmp_path / 'realbin'}:{filler}:/usr/bin:/bin"
+    assert len(long_path) > 2000
+    e = dict(env)
+    e["PATH"] = long_path
+    # The bash the operator's shell finds (Homebrew 5.3 on this Mac), not the test PATH's /bin/bash.
+    host_bash = shutil.which("bash") or "bash"
+    r = subprocess.run(
+        [host_bash, str(INSTALLER), "--bin-dir", str(bin_dir), "--check"],
+        env=e,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert r.returncode == 0, r.stderr
+    r = subprocess.run(
+        ["gh", "pr", "checks", "3"],
+        cwd=env["REPO"],
+        env=e,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert r.returncode == 0
+    assert _calls(env) == [["pr", "checks", "3"]]
