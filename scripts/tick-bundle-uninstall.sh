@@ -4,7 +4,7 @@
 
 # tick-bundle-uninstall.sh — idempotent launchd uninstaller for the OMN-9036 tick bundle.
 #
-# Unloads and removes the 9 tick plists under ~/Library/LaunchAgents.
+# Unloads and removes the 12 tick plists under ~/Library/LaunchAgents.
 #
 # Usage:
 #   bash omniclaude/scripts/tick-bundle-uninstall.sh
@@ -38,6 +38,7 @@ TICKS=(
   "ai.omninode.201-baseline"
   "ai.omninode.cron-closeout"
   "ai.omninode.nightly-merge-sweep"
+  "ai.omninode.transcript-s3-archive"
 )
 
 UID_GUI="$(id -u)"
