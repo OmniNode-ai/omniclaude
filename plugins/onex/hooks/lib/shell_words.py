@@ -156,7 +156,27 @@ class HereDoc:
         return Word((WordPart(self.body, "double" if self.expands else "literal"),))
 
 
-Token = Word | Operator | HereDoc
+class Redirect:
+    """A redirection, emitted only by ``tokenize(..., keep_redirects=True)``.
+
+    ``op`` is the operator without its descriptor digits (``>``, ``>>``,
+    ``<``, ``<<<``, ``&>``, ``>|``, ``>&``); ``fd`` is the digits glued before
+    it (``"2"`` in ``2>err.log``) or ``None``; ``target`` is the word after it,
+    or ``None`` when the operator takes none (``>&-``). A here-document is a
+    :class:`HereDoc`, never a ``Redirect``.
+
+    Most guards want redirections dropped, which is the default. A guard that
+    has to know which file a command writes (OMN-19542: a body file written by
+    an earlier segment of the same command) asks for them.
+    """
+
+    def __init__(self, op: str, fd: str | None) -> None:
+        self.op = op
+        self.fd = fd
+        self.target: Word | None = None
+
+
+Token = Word | Operator | HereDoc | Redirect
 
 
 class _Builder:
@@ -355,11 +375,14 @@ def _read_heredoc_bodies(command: str, i: int, pending: list[HereDoc]) -> int:
     return i
 
 
-def tokenize(command: str) -> list[Token]:
+def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
     """Split ``command`` into words and command separators.
 
     Redirections are dropped together with their targets, so ``2>&1`` and
-    ``>/dev/null`` never reach a guard as arguments. A here-document becomes a
+    ``>/dev/null`` never reach a guard as arguments. With ``keep_redirects``
+    each one is emitted as a :class:`Redirect` token in its command instead,
+    for a guard that must know which file a command writes; its target is
+    still never a :class:`Word`. A here-document becomes a
     :class:`HereDoc` token in its command, so its body is never read as a
     command line, yet a guard can still judge it when a shell runs it as a
     script. Comments are dropped up to, but not including, the newline that
@@ -370,7 +393,7 @@ def tokenize(command: str) -> list[Token]:
     pending_heredocs: list[HereDoc] = []
     # After a redirection operator the next word is its target and is
     # dropped; for `<<` it is the delimiter of this here-document.
-    drop_next: HereDoc | bool = False
+    drop_next: HereDoc | Redirect | bool = False
     i = 0
     n = len(command)
 
@@ -379,6 +402,8 @@ def tokenize(command: str) -> list[Token]:
         word = builder.take()
         if word is None:
             return
+        if isinstance(drop_next, Redirect):
+            drop_next.target = word
         if isinstance(drop_next, HereDoc):
             drop_next.delimiter = word.text
             drop_next.expands = all(part.quote == "none" for part in word.parts)
@@ -413,10 +438,12 @@ def tokenize(command: str) -> list[Token]:
             continue
         if ch in "<>" or (ch == "&" and command[i + 1 : i + 2] == ">"):
             # An all-digit word glued to the operator is its file descriptor.
+            fd: str | None = None
             if builder.started and all(
                 part.quote == "none" and part.text.isdigit() for part in builder.parts
             ):
-                builder.take()
+                taken = builder.take()
+                fd = taken.text if taken is not None else None
             finish_word()
             j = i + 1 if ch == "&" else i
             while j < n and command[j] in "<>":
@@ -430,9 +457,14 @@ def tokenize(command: str) -> list[Token]:
             if j < n and command[j] == "-" and op.endswith("&"):
                 # `>&-` closes a descriptor and has no target word.
                 i += 1
+                if keep_redirects:
+                    tokens.append(Redirect(op, fd))
                 continue
             if op in ("<<", "<<-"):
                 drop_next = HereDoc(strip_tabs=op == "<<-")
+                tokens.append(drop_next)
+            elif keep_redirects:
+                drop_next = Redirect(op, fd)
                 tokens.append(drop_next)
             else:
                 drop_next = True

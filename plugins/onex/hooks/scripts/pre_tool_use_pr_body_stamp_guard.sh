@@ -173,8 +173,10 @@ TOOL_INFO=$(cat)
 # Cheap OVER-matching pre-filter. It decides nothing: anything it lets through
 # is decided by pr_body_stamp_guard.py, which tokenises the command. Every
 # body-replacing shape spells one of these, and a read never does -- `gh pr
-# view --json body` and `--jq .body` carry none of them.
-if ! printf '%s' "$TOOL_INFO" | grep -Eq -- '--body|body-file|body='; then
+# view --json body` and `--jq .body` carry none of them. `--input` is here
+# because a REST PATCH whose JSON payload carries the body spells no other
+# (OMN-19542: before it was added, that shape never reached the decision core).
+if ! printf '%s' "$TOOL_INFO" | grep -Eq -- '--body|body-file|body=|--input'; then
     _hook_status "PASS" "no pull-request body-replacement vocabulary" "0" 2>/dev/null || true
     exit 0
 fi
