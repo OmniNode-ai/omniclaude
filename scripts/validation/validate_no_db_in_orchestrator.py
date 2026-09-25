@@ -21,6 +21,8 @@ import ast
 import sys
 from pathlib import Path
 
+from _path_scope import selected_python_files
+
 # -----------------------------------------------------------------------
 # Patterns that are forbidden in orchestrator / compute modules
 # -----------------------------------------------------------------------
@@ -165,7 +167,7 @@ def check_file(filepath: Path) -> list[str]:
     return visitor.violations
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Entry point; returns 0 on success, 1 on violations."""
     # Find root: walk up until we find src/ or pyproject.toml
     root = Path(__file__).resolve()
@@ -181,7 +183,11 @@ def main() -> int:
 
     all_violations: list[str] = []
 
-    for py_file in sorted(src_root.rglob("*.py")):
+    for py_file in selected_python_files(
+        argv if argv is not None else sys.argv[1:],
+        roots=[src_root],
+        rule_file=Path(__file__),
+    ):
         if not is_orchestrator_or_compute(py_file):
             continue
         violations = check_file(py_file)
