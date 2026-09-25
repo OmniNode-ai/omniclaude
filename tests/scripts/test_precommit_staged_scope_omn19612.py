@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -145,3 +146,23 @@ def test_cloud_bus_guard_catches_supplied_violation(tmp_path: Path) -> None:
         ).returncode
         == 1
     )
+
+
+def test_kafka_broker_hook_has_whole_tree_ci_backstop() -> None:
+    config = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    hook = re.search(
+        r"(?ms)^      - id: no-hardcoded-kafka-broker\n(?P<body>.*?)(?=^      - id:|\Z)",
+        config,
+    )
+    assert hook is not None
+
+    entry = re.search(r"(?m)^        entry:\s*(?P<entry>.+)$", hook["body"])
+    assert entry is not None
+    scripts = re.findall(r"(?:[\w.-]+/)+[\w.-]+\.(?:py|sh)", entry["entry"])
+    script_path = "scripts/validation/validate_no_hardcoded_kafka_broker.py"
+    assert script_path in scripts
+    workflows = "\n".join(
+        workflow.read_text(encoding="utf-8")
+        for workflow in (REPO_ROOT / ".github" / "workflows").glob("*.yml")
+    )
+    assert script_path in workflows

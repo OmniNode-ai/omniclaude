@@ -192,6 +192,7 @@ jobs:
           uv run python scripts/validation/validate_no_internal_ips.py
           uv run python scripts/validation/validate_kafka_env_fallbacks.py
           bash scripts/check_no_cloud_bus_wrapper.sh
+          uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
 
       # OMN-17176: invoke the console script the repo's own pre-commit hooks
       # depend on. When #2076 bumped omnibase-core to 0.47.1 against a stale
