@@ -24,6 +24,15 @@ permissions:
 jobs:
   anti-growth-baseline:
     name: anti-growth-baseline
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public FORK PRs default to ubuntu-latest
+    # OMN-18205: the untrusted test is the FORK test, and only the fork test.
+    # A genuine fork pull request resolves to OMNI_PUBLIC_PR_RUNS_ON_JSON,
+    # which is the sanctioned boundary this same expression uses in
+    # advisory-job-gate-reusable.yml, kb-doc-gate-reusable.yml and
+    # public-repo-hygiene-reusable.yml — kept identical here rather than
+    # reinvented, so a caller sees one runner-selection contract across every
+    # omniclaude reusable gate instead of a fork-PR carve-out that behaves
+    # differently workflow to workflow.
     runs-on: >-
       ${{
         (github.event_name == 'pull_request' &&
@@ -48,7 +57,7 @@ jobs:
             }}
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
 
