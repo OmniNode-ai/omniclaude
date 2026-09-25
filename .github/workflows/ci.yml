@@ -3928,6 +3928,36 @@ jobs:
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
             src/omniclaude
 
+  precommit-suite:
+    name: Pre-commit Suite (OMN-19612)
+    # Required through the CI Summary completeness roster. Keep this job
+    # unconditional so every staged-scoped local hook retains a whole-tree CI
+    # counterpart.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          save-cache: false
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: precommit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Run the whole-tree pre-commit suite
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
   occ-companion-merged:
     name: OCC Companion Merged Gate (OMN-15214)
     # OMN-15221/OMN-15224 (port of the OMN-15214 canary, omnibase_infra #2486): makes the
