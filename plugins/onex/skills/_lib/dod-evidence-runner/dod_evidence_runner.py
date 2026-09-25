@@ -12,12 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
-import sys
 import time
-import uuid
-from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -480,11 +476,8 @@ def write_evidence_receipt(
     run_result: EvidenceRunResult,
     working_dir: str | None = None,
     output_dir: str | None = None,
-    *,
-    policy_mode: str = "advisory",
-    emit: bool = True,
 ) -> Path:
-    """Write an evidence receipt JSON file and emit a dod.verify.completed event.
+    """Write an evidence receipt JSON file.
 
     Args:
         ticket_id: The ticket identifier (e.g., "<TICKET>").
@@ -498,11 +491,6 @@ def write_evidence_receipt(
             ``$OMNI_HOME/onex_change_control/evidence/<ticket_id>`` via the
             ``resolve_evidence_root`` core resolver (<TICKET>), else
             ``<working_dir>/.evidence/<ticket_id>`` when ``OMNI_HOME`` is unset.
-        policy_mode: DoD enforcement policy (advisory/soft/hard). Forwarded
-            to the emitted event. Defaults to "advisory".
-        emit: Whether to emit a dod.verify.completed Kafka event after writing
-            the receipt. Defaults to True. Set to False in tests or offline
-            scenarios where the emit daemon is unavailable.
 
     Returns:
         Path to the written receipt file.
@@ -572,120 +560,7 @@ def write_evidence_receipt(
 
     receipt_path = Path(output_dir) / "dod_report.json"
     receipt_path.write_text(json.dumps(receipt_data, indent=2, default=str))
-
-    # Emit Kafka event after writing the local receipt. Non-blocking: emission
-    # failures do not affect the receipt file or the return value.
-    if emit:
-        try:
-            emit_dod_verify_completed(ticket_id, run_result, policy_mode=policy_mode)
-        except Exception as e:
-            logger.warning("Emission error in write_evidence_receipt (ignored): %s", e)
-
+    # No event is emitted here. The verification verdict on the bus is
+    # omnimarket node_dod_verify's terminal; this runner's own flat telemetry
+    # event had no consumer anywhere and was retired.
     return receipt_path
-
-
-def _get_emit_event() -> Callable[..., bool] | None:
-    """Lazily import emit_event from the emit client wrapper.
-
-    The emit client wrapper lives in the hooks/lib directory. Since the
-    evidence runner is a standalone library under skills/_lib/, we need
-    to locate the wrapper via known relative paths or PYTHONPATH.
-
-    Returns:
-        The emit_event callable, or None if import fails.
-    """
-    try:
-        # Try direct import first (works when PYTHONPATH includes hooks/lib)
-        from emit_client_wrapper import emit_event
-
-        return emit_event
-    except ImportError:
-        pass
-
-    # Fallback: resolve via known directory structure
-    # dod_evidence_runner.py -> skills/_lib/dod-evidence-runner/
-    # emit_client_wrapper.py -> hooks/lib/
-    try:
-        runner_dir = Path(__file__).resolve().parent
-        hooks_lib = runner_dir.parent.parent.parent / "hooks" / "lib"
-        if hooks_lib.is_dir():
-            hooks_lib_str = str(hooks_lib)
-            sys.path.insert(0, hooks_lib_str)
-            try:
-                from emit_client_wrapper import emit_event
-
-                return emit_event
-            finally:
-                try:
-                    sys.path.remove(hooks_lib_str)
-                except ValueError:
-                    pass
-    except Exception as e:
-        logger.debug("Failed to import emit_client_wrapper: %s", e)
-
-    return None
-
-
-def emit_dod_verify_completed(
-    ticket_id: str,
-    run_result: EvidenceRunResult,
-    *,
-    policy_mode: str = "advisory",
-    run_id: str | None = None,
-    session_id: str | None = None,
-    correlation_id: str | None = None,
-) -> bool:
-    """Emit a dod.verify.completed event to Kafka.
-
-    Non-blocking and failure-tolerant. Returns True on success, False on
-    failure. Local JSON receipt writing is NOT affected by emission failures.
-
-    Args:
-        ticket_id: Linear ticket identifier (e.g. "<TICKET>").
-        run_result: The EvidenceRunResult from run_dod_evidence().
-        policy_mode: DoD enforcement policy (advisory/soft/hard).
-        run_id: Unique run identifier. Generated if not provided.
-        session_id: Claude Code session ID. Read from env if not provided.
-        correlation_id: Correlation ID. Read from env if not provided.
-
-    Returns:
-        True if event was successfully emitted, False otherwise.
-    """
-    emit_event = _get_emit_event()
-    if emit_event is None:
-        logger.debug("emit_event not available, skipping dod.verify.completed emission")
-        return False
-
-    if run_id is None:
-        run_id = str(uuid.uuid4())
-    if session_id is None:
-        from plugins.onex.hooks.lib.session_id import (
-            resolve_session_id,  # noqa: PLC0415
-        )
-
-        session_id = resolve_session_id(default="")
-    if correlation_id is None:
-        correlation_id = os.environ.get("OMNICLAUDE_CORRELATION_ID", "")
-
-    overall_pass = run_result.failed == 0
-
-    payload: dict[str, object] = {
-        "ticket_id": ticket_id,
-        "run_id": run_id,
-        "session_id": session_id,
-        "correlation_id": correlation_id,
-        "total_checks": run_result.total,
-        "passed_checks": run_result.verified,
-        "failed_checks": run_result.failed,
-        "skipped_checks": run_result.skipped,
-        "overall_pass": overall_pass,
-        "policy_mode": policy_mode,
-        "evidence_items": [asdict(d) for d in run_result.details],
-        "timestamp": datetime.now(tz=UTC).isoformat(),
-    }
-
-    try:
-        return bool(emit_event("dod.verify.completed", payload))
-    except Exception as e:
-        logger.warning("Failed to emit dod.verify.completed: %s", e)
-        return False

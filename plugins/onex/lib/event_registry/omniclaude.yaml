@@ -428,14 +428,6 @@ events:
   # =========================================================================
   # DoD Telemetry
   # =========================================================================
-  dod.verify.completed:
-    fan_out:
-      - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
-        tier: duty_critical
-        description: "DoD evidence verification run result"
-    partition_key_field: session_id
-    required_fields: [session_id, ticket_id]
-
   dod.guard.fired:
     fan_out:
       - topic: "onex.evt.omniclaude.dod-guard-fired.v1"
