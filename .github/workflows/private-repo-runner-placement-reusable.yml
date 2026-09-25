@@ -79,6 +79,16 @@ jobs:
       - name: Checkout the caller repository
         uses: actions/checkout@v7
 
+      # OMN-18431: EVERY BRANCH THAT RUNS WORKFLOWS IS JUDGED, NOT ONLY THIS
+      # CHECKOUT. A push reads the pushed branch's own workflow files and a pull
+      # request reads its base branch's, so a branch the caller file never
+      # reached was never judged at all: a stale `main` carried thirteen hosted
+      # jobs while this gate reported its repository green from `dev`. The gate
+      # reads the other branches from refs/remotes/origin/*, one commit deep,
+      # and refuses when they are absent -- a checkout alone holds one tree.
+      - name: Fetch every branch tip
+        run: git fetch --no-tags --depth=1 origin '+refs/heads/*:refs/remotes/origin/*'
+
       - name: Checkout the validator at this workflow`s own SHA
         uses: actions/checkout@v7
         with:
@@ -111,9 +121,17 @@ jobs:
           # with the job token and the gate refuses by name if it needed an
           # answer from one.
           GH_TOKEN_VARIABLES: ${{ secrets.ACTIONS_VARIABLES_TOKEN }}
+          # The branch whose tree is checked out: a pull request's BASE (the
+          # merge checkout supersedes its old tip) or, on a push, the pushed
+          # branch. Passed through env, never interpolated into the script.
+          EVENT_BRANCH: ${{ github.base_ref || github.ref_name }}
         run: |
           set -euo pipefail
           args=(--repo-root . --repo "${GITHUB_REPOSITORY}")
+          # Not an input: enumeration is how the gate sees a branch its caller
+          # file never reached, and an input that could turn it off would be a
+          # bypass by another name.
+          args+=(--every-workflow-branch --event-branch "${EVENT_BRANCH}")
           if [ "${{ inputs.report_reusable_calls }}" = "true" ]; then
             args+=(--report-reusable-calls)
           fi

@@ -64,13 +64,21 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
     previously a blanket merge-check bypass, so a ticket carrying it flipped Done
     with its linked product PR still OPEN (the OMN-14582 false-Done). The label
     can no longer waive an open cited/linked PR — that path BLOCKS at step 3.
-4. Durable evidence path B — OCC receipt on ``origin/dev``: a schema-valid
-   ``status == PASS`` ``node_dod_verify`` receipt bound to the ticket under
-   ``drift/dod_receipts/<TICKET>/`` on ``origin/dev`` of the local
-   onex_change_control clone → ALLOW.
-5. Otherwise → BLOCK. A Done-flip with no merged-PR citation and no PASS receipt
-   is refused; if the evidence cannot be resolved at all, the guard STILL BLOCKS
-   (never fail-open on a fake-Done — design requirement 4).
+4. Durable evidence path B — the no-PR bar (OMN-13856), reached only when the
+   ticket cites no PR at all. Read off ``origin/dev`` of the local
+   onex_change_control clone: the ticket's contract ``contracts/<TICKET>.yaml``
+   binds EVERY labelled acceptance criterion of the ticket through ``binds_ac``,
+   and for each criterion a binding item has a PASS receipt under
+   ``drift/dod_receipts/<TICKET>/`` that names the subject (ticket, item, a
+   declared check type), the environment (``target_identity`` or
+   ``working_dir``) and a read time (``run_timestamp``) inside the freshness
+   window, attested by a verifier other than its runner, with a non-empty
+   ``probe_stdout`` → ALLOW. This is the evidence closer's per-criterion bar;
+   see ``no_pr_bound_evidence``. Until OMN-13856 ANY PASS receipt for the
+   ticket passed here, whatever it proved and however old it was.
+5. Otherwise → BLOCK. A Done-flip with no merged-PR citation and no bound
+   evidence is refused; if the evidence cannot be resolved at all, the guard
+   STILL BLOCKS (never fail-open on a fake-Done — design requirement 4).
 
 Why ``origin/dev`` git-backed (freshness + determinism) — OMN-13857 findings:
     Two paths that LOOK authoritative are broken for a Done-flip gate:
@@ -104,6 +112,7 @@ import subprocess  # noqa: S404 - fixed-argv git invocations, no shell
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +129,11 @@ from linear_done_verify import (
     parse_deploy_readback_marker,
     verify,
     verify_implementing,
+)
+from no_pr_bound_evidence import (
+    BoundEvidenceVerdict,
+    evaluate_bound_evidence,
+    load_ticket_occ_evidence,
 )
 
 _LINEAR_TOOLS = frozenset(
@@ -275,79 +289,6 @@ def parse_receipt_fields(text: str) -> dict[str, str]:
     return fields
 
 
-def _receipt_is_pass_bound(fields: dict[str, str], ticket_id: str) -> bool:
-    """Return True if a parsed receipt is a real PASS bound to ``ticket_id``.
-
-    Requires ``status == PASS``, a matching ``ticket_id``, and a real check
-    binding (``evidence_item_id`` + ``check_type`` present). The check-binding
-    requirement is the git-backed equivalent of the "at least one real verified
-    check" rule — it refuses a vacuous/empty receipt as durable evidence.
-    """
-    return (
-        fields.get("status", "").strip().upper() == "PASS"
-        and fields.get("ticket_id", "").strip() == ticket_id
-        and bool(fields.get("evidence_item_id", "").strip())
-        and bool(fields.get("check_type", "").strip())
-    )
-
-
-def occ_receipt_pass_on_dev(
-    occ_repo: Path,
-    ticket_id: str,
-    *,
-    ref: str = _OCC_REF,
-    fetch: bool = True,
-) -> bool:
-    """Return True iff a PASS receipt bound to ``ticket_id`` exists on ``ref``.
-
-    Reads the durable receipt directly off the ``origin/dev`` ref of the local
-    onex_change_control clone (``git ls-tree`` + ``git show``), after a targeted
-    ``git fetch origin dev`` so a just-merged receipt is visible even when the
-    clone's working tree is stale. Fail-closed: returns ``False`` on missing
-    clone, unreadable ref, no receipt, malformed receipt, non-PASS, or a receipt
-    not bound to the ticket + a real check.
-
-    The fetch is best-effort — if it fails (offline / transient), the last-known
-    ``origin/dev`` ref is still read rather than hard-failing; the guard never
-    fails OPEN, only reads a possibly-older ref.
-    """
-    if not occ_repo.is_dir():
-        return False
-
-    if fetch:
-        # Best-effort refresh of the dev ref. Ignore the result — a failed fetch
-        # falls through to reading the existing origin/dev ref.
-        _run_git(
-            ["fetch", "--quiet", "origin", "dev"],
-            cwd=occ_repo,
-            timeout=_GIT_FETCH_TIMEOUT_SECONDS,
-        )
-
-    receipt_dir = f"{_RECEIPT_DIR_PREFIX}/{ticket_id}"
-    listing = _run_git(
-        ["ls-tree", "-r", "--name-only", ref, "--", receipt_dir],
-        cwd=occ_repo,
-        timeout=_GIT_READ_TIMEOUT_SECONDS,
-    )
-    if listing is None or listing.returncode != 0 or not listing.stdout.strip():
-        return False
-
-    for rel_path in listing.stdout.splitlines():
-        rel_path = rel_path.strip()
-        if not rel_path.endswith(".yaml"):
-            continue
-        shown = _run_git(
-            ["show", f"{ref}:{rel_path}"],
-            cwd=occ_repo,
-            timeout=_GIT_READ_TIMEOUT_SECONDS,
-        )
-        if shown is None or shown.returncode != 0:
-            continue
-        if _receipt_is_pass_bound(parse_receipt_fields(shown.stdout), ticket_id):
-            return True
-    return False
-
-
 # ---------------------------------------------------------------------------
 # Attachment/citation supersession awareness (OMN-15712).
 #
@@ -362,7 +303,7 @@ def occ_receipt_pass_on_dev(
 # hard-blocked on that stale PR's live state.
 #
 # This reads the SAME git-backed ``origin/dev`` OCC receipt surface used by
-# path B (``occ_receipt_pass_on_dev``) — no new I/O boundary — and answers,
+# the path-B receipt directory — no new I/O boundary — and answers,
 # per blocking PR number, whether the ticket's own receipt set ever cited it
 # and, if so, whether every citation was later marked superseded. It is
 # deliberately scoped to tickets that HAVE at least one OCC receipt: with
@@ -512,22 +453,29 @@ def _default_linear_fetcher(ticket_id: str) -> dict[str, Any] | None:
 def decide(
     call: dict[str, Any],
     *,
-    occ_probe: Callable[[str], bool] | None = None,
+    occ_probe: Callable[[str, str], BoundEvidenceVerdict] | None = None,
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
     receipt_lister: Callable[[str], list[dict[str, str]]] | None = None,
+    now: datetime | None = None,
 ) -> Decision:
     """Return the guard decision for a PreToolUse tool call.
 
     All I/O boundaries are injectable so unit tests stay hermetic:
-      * ``occ_probe(ticket_id) -> bool`` — is a PASS OCC receipt on ``origin/dev``?
-        defaults to :func:`occ_receipt_pass_on_dev` bound to the resolved OCC clone.
+      * ``occ_probe(ticket_id, description) -> BoundEvidenceVerdict`` — does
+        ``origin/dev`` of the OCC clone bind every acceptance criterion to a
+        fresh, attested receipt? Defaults to
+        :func:`no_pr_bound_evidence.evaluate_bound_evidence` over
+        :func:`no_pr_bound_evidence.load_ticket_occ_evidence` for the resolved
+        OCC clone.
       * ``pr_fetcher(PRRef) -> PRStatus`` — GitHub PR state (default: ``gh``).
       * ``linear_fetcher(ticket_id) -> issue|{}|None`` — live Linear read.
       * ``receipt_lister(ticket_id) -> list[fields]`` — every OCC receipt's
         parsed fields for the ticket (OMN-15712 supersession/citation check);
         defaults to :func:`list_ticket_receipt_fields` bound to the resolved
         OCC clone.
+      * ``now`` — the clock a no-PR receipt's read time is judged against
+        (OMN-13856); defaults to the current UTC time.
     """
     tool_name = call.get("tool_name", "")
     if tool_name not in _LINEAR_TOOLS:
@@ -626,7 +574,11 @@ def decide(
     # regardless of the label; the exemption is honored only below, when NO
     # product PR is cited.
     pr_result = verify(
-        description, labels, default_repo=default_repo, fetcher=pr_fetcher
+        description,
+        labels,
+        default_repo=default_repo,
+        fetcher=pr_fetcher,
+        ticket_id=ticket_id or None,
     )
     if not pr_result.allowed:
         # A cited PR is open / unmerged / unresolvable — the classic OMN-8375
@@ -709,7 +661,11 @@ def decide(
             "an issue id. Pass 'id' in the save_issue call.",
         )
 
-    # (4) durable evidence path B — PASS OCC receipt on origin/dev (git-backed).
+    # (4) durable evidence path B — the no-PR bar (OMN-13856): every labelled
+    # acceptance criterion bound in the OCC contract to a fresh, attested
+    # receipt, read off origin/dev. Reached only when no PR is cited: every
+    # cited PR was decided above. A self-written description line is not
+    # evidence here; only the change-control record is.
     probe = occ_probe
     if probe is None:
         omni_home = resolve_omni_home()
@@ -723,19 +679,27 @@ def decide(
                 "implementing PR in the ticket description.",
             )
         repo = occ_repo_path(omni_home)
-        probe = lambda tid: occ_receipt_pass_on_dev(repo, tid)  # noqa: E731
+        clock = now or datetime.now(UTC)
+        probe = lambda tid, desc: evaluate_bound_evidence(  # noqa: E731
+            tid, desc, load_ticket_occ_evidence(repo, tid), clock
+        )
 
-    if probe(ticket_id):
-        return Decision(True, "durable_evidence:occ_receipt_on_dev")
+    verdict = probe(ticket_id, description)
+    if verdict.passed:
+        return Decision(True, "durable_evidence:occ_bound_receipts")
 
     return Decision(
         False,
         f"no_durable_evidence for {ticket_id}: no merged-PR citation in the "
-        f"description, and no PASS node_dod_verify receipt bound to the ticket is "
-        f"tracked under {_RECEIPT_DIR_PREFIX}/{ticket_id}/ on {_OCC_REF} of the "
-        "local onex_change_control clone. Fail-closed (no fake Done). Cite the "
-        "merged implementing PR in the ticket description, land a durable OCC "
-        "receipt, or apply an explicit close-if-done exemption for a legitimate "
+        f"description, and the no-PR bar is not met on {_OCC_REF} of the local "
+        f"onex_change_control clone: {verdict.detail}. Fail-closed (no fake "
+        "Done). Cite the merged implementing PR in the ticket description; or "
+        f"land contracts/{ticket_id}.yaml binding every labelled acceptance "
+        "criterion via `binds_ac`, each with a PASS receipt under "
+        f"{_RECEIPT_DIR_PREFIX}/{ticket_id}/ naming the ticket, the item, the "
+        "environment (target_identity or working_dir) and a run_timestamp "
+        "inside the freshness window, attested by a verifier other than its "
+        "runner; or apply an explicit close-if-done exemption for a legitimate "
         "no-PR close.",
     )
 

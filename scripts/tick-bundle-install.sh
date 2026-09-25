@@ -4,7 +4,7 @@
 
 # tick-bundle-install.sh — idempotent launchd installer for the OMN-9036 tick bundle.
 #
-# Installs 12 plists under ~/Library/LaunchAgents:
+# Installs 13 plists under ~/Library/LaunchAgents:
 #   ai.omninode.merge-sweep           (5m)
 #   ai.omninode.dispatch-engine       (10m)
 #   ai.omninode.unstick-queue         (10m) [OMN-9065]
@@ -17,6 +17,7 @@
 #   ai.omninode.cron-closeout         (30m) [OMN-7842]
 #   ai.omninode.nightly-merge-sweep   (2:00 AM daily) [OMN-7842]
 #   ai.omninode.transcript-s3-archive (4:30 AM daily) [OMN-19513]
+#   ai.omninode.canonical-clone-sync  (3m)  [OMN-19607]
 #
 # Source templates under scripts/launchd/ contain __OMNI_HOME__ / __HOME__ placeholders;
 # this script expands them at install time so the deployed plists are absolute-path correct
@@ -28,6 +29,11 @@
 # Usage:
 #   bash omniclaude/scripts/tick-bundle-install.sh
 #   bash omniclaude/scripts/tick-bundle-install.sh --dry-run
+#   bash omniclaude/scripts/tick-bundle-install.sh --only ai.omninode.canonical-clone-sync
+#
+# --only <label> (repeatable) installs just the named ticks. A host that wants
+# one agent must not be handed the whole bundle as a side effect; a label that
+# is not in TICKS is refused rather than ignored.
 
 set -euo pipefail
 
@@ -37,12 +43,16 @@ OMNI_HOME_RESOLVED="${OMNI_HOME:-$(cd "${OMNICLAUDE_ROOT}/.." && pwd)}"
 LAUNCHD_SRC="${SCRIPT_DIR}/launchd"
 LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
 DRY_RUN=false
+ONLY=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
+    --only)
+      [[ $# -ge 2 ]] || { echo "ERROR: --only requires a label" >&2; exit 1; }
+      ONLY+=("$2"); shift 2 ;;
     --help|-h)
-      echo "Usage: $0 [--dry-run]"
+      echo "Usage: $0 [--dry-run] [--only <label>]..."
       exit 0
       ;;
     *) echo "ERROR: Unknown argument: $1" >&2; exit 1 ;;
@@ -62,7 +72,19 @@ TICKS=(
   "ai.omninode.cron-closeout"
   "ai.omninode.nightly-merge-sweep"
   "ai.omninode.transcript-s3-archive"
+  "ai.omninode.canonical-clone-sync"
 )
+
+if [[ ${#ONLY[@]} -gt 0 ]]; then
+  for wanted in "${ONLY[@]}"; do
+    known=false
+    for label in "${TICKS[@]}"; do
+      [[ "${label}" == "${wanted}" ]] && known=true
+    done
+    [[ "${known}" == "true" ]] || { echo "ERROR: --only ${wanted}: not a tick in this bundle" >&2; exit 1; }
+  done
+  TICKS=("${ONLY[@]}")
+fi
 
 echo "=== tick-bundle-install [OMN-9036] ==="
 echo "OMNI_HOME:      ${OMNI_HOME_RESOLVED}"

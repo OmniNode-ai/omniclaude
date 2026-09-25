@@ -39,6 +39,7 @@ TICKS=(
   "ai.omninode.cron-closeout"
   "ai.omninode.nightly-merge-sweep"
   "ai.omninode.transcript-s3-archive"
+  "ai.omninode.canonical-clone-sync"
 )
 
 UID_GUI="$(id -u)"

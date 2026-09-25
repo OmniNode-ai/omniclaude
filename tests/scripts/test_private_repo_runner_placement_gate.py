@@ -1304,3 +1304,279 @@ def test_an_unreadable_branch_list_assumes_the_comparison_can_match(
     refs._readable = False
     assert refs.names() is None
     assert refs.could_match({"dev"}) is True
+
+
+# --- OMN-18431: every branch that runs workflows is judged, not only the one
+# the gate happens to be checked out on.
+#
+# THE MISS THIS CLOSES. The gate judged exactly one tree: the checkout of the
+# event that fired it. Its caller file lived on the default branch only, and a
+# push to (or a pull request into) any OTHER branch reads that branch's own
+# workflow files -- so a branch that never received the caller was never
+# judged at all. One private repository's stale `main` carried eight hosted
+# jobs in `ci.yml` (and five more elsewhere) while the gate reported the
+# repository green from `dev`; every job on `main` was refused before it
+# started, and no pull request into `main` could pass its required checks.
+# The fixture below is that `main`'s trigger-and-placement skeleton.
+
+STALE_MAIN_CI = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "private_repo_runner_placement"
+    / "stale_main_ci.yml"
+).read_text(encoding="utf-8")
+
+FLEET_CI = (
+    "name: CI\non:\n  push:\n    branches: [dev, 'hotfix/**']\n"
+    "  pull_request:\n    branches: [main, dev, 'hotfix/**']\n"
+    "jobs:\n  gates:\n    runs-on: [self-hosted, omnibase-ci]\n"
+    "    steps:\n      - run: true\n"
+)
+
+STALE_MAIN_HOSTED_JOBS = (
+    "gates",
+    "design-guards",
+    "ci-summary",
+    "build-and-push",
+    "notify-infra",
+    "deploy",
+    "lighthouse",
+    "playwright-e2e",
+)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    import subprocess
+
+    from omnibase_core.validators.no_unguarded_git_subprocess import (
+        scrub_git_location_env,
+    )
+
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **scrub_git_location_env(os.environ),
+            "GIT_AUTHOR_NAME": "fixture",
+            "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+            "GIT_COMMITTER_NAME": "fixture",
+            "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "HOME": str(cwd),
+        },
+    ).stdout
+
+
+def _origin_with_branches(
+    tmp_path: Path, default: str, trees: dict[str, dict[str, str] | None]
+) -> Path:
+    """A bare origin whose branches carry the given workflow trees.
+
+    `trees` maps a branch name to {workflow file name: YAML text}, or to None
+    for a branch with no `.github/workflows` at all. The origin's HEAD names
+    `default`, which is how the gate learns the default branch.
+    """
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", "-q", str(origin))
+    author = tmp_path / "author"
+    _git(tmp_path, "init", "-q", str(author))
+    _git(author, "remote", "add", "origin", str(origin))
+    for branch, files in trees.items():
+        _git(author, "checkout", "-q", "--orphan", branch)
+        _git(author, "rm", "-rfq", "--ignore-unmatch", ".")
+        (author / "README").write_text(branch, encoding="utf-8")
+        for name, body in (files or {}).items():
+            path = author / ".github" / "workflows" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+        _git(author, "add", "-A")
+        _git(author, "commit", "-qm", f"{branch} tree")
+        _git(author, "push", "-q", "origin", f"HEAD:refs/heads/{branch}")
+    _git(origin, "symbolic-ref", "HEAD", f"refs/heads/{default}")
+    return origin
+
+
+def _checkout(tmp_path: Path, origin: Path, branch: str) -> Path:
+    """The gate's own view: a clone of the event branch, every head fetched."""
+    work = tmp_path / "checkout"
+    _git(tmp_path, "clone", "-q", "--branch", branch, str(origin), str(work))
+    _git(work, "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*")
+    return work
+
+
+def _run_every_branch(
+    module,
+    root: Path,
+    tmp_path: Path,
+    event_branch: str,
+    branches: list[str],
+) -> int:
+    vars_file = tmp_path / "vars.json"
+    vars_file.write_text(json.dumps(dict(SEAM_VARIABLES)), encoding="utf-8")
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--assume-visibility",
+        "private",
+        "--variables-json",
+        str(vars_file),
+        "--branches-json",
+        json.dumps(branches),
+        "--every-workflow-branch",
+        "--event-branch",
+        event_branch,
+    ]
+    return _fixture_call(lambda: module.main(argv))
+
+
+def test_positive_control_a_stale_main_fails_the_gate_run_from_dev(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The miss itself: judged from `dev`, the stale `main` must go red.
+
+    Every hosted job of that `main` is named, against the branch it lives on,
+    so the finding says where to make the change.
+    """
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": STALE_MAIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "main"]) == 1
+    err = capsys.readouterr().err
+    for job in STALE_MAIN_HOSTED_JOBS:
+        assert f"main:ci.yml::{job}\n" in err, job
+
+
+def test_the_same_tree_passes_when_only_the_checkout_is_judged(
+    tmp_path: Path,
+) -> None:
+    """Why the miss happened: the single-tree reading never sees `main`.
+
+    Kept as a test rather than a comment so that the difference between the
+    two readings stays measured: if this ever fails, the default reading has
+    started enumerating branches and the flag above is no longer the switch.
+    """
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": STALE_MAIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert _run(module, work, dict(SEAM_VARIABLES), tmp_path, ["dev", "main"]) == 0
+
+
+def test_every_branch_passes_once_main_is_on_the_fleet(tmp_path: Path) -> None:
+    """The negative control: a gate that fails this is refusing the fix."""
+    module = _module()
+    fixed_main = STALE_MAIN_CI.replace(
+        "runs-on: ubuntu-latest", "runs-on: [self-hosted, omnibase-ci]"
+    )
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": fixed_main}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "main"]) == 0
+
+
+def test_the_event_branch_is_judged_from_the_checkout_not_its_old_tip(
+    tmp_path: Path,
+) -> None:
+    """A pull request INTO the stale branch that fixes it must be able to pass.
+
+    The checkout is the merge of the fix onto `main`, and it supersedes
+    `origin/main`. Judging the old tip as well would fail the one change that
+    repairs it.
+    """
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": STALE_MAIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "main")
+    fixed = STALE_MAIN_CI.replace(
+        "runs-on: ubuntu-latest", "runs-on: [self-hosted, omnibase-ci]"
+    )
+    (work / ".github" / "workflows" / "ci.yml").write_text(fixed, encoding="utf-8")
+    assert _run_every_branch(module, work, tmp_path, "main", ["dev", "main"]) == 0
+
+
+def test_a_branch_named_by_a_push_filter_glob_is_judged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`hotfix/**` in a trigger filter makes every `hotfix/` branch run CI.
+
+    A dormant branch of that shape is refused the moment somebody pushes to
+    it, so it is judged now, not then.
+    """
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {
+            "dev": {"ci.yml": FLEET_CI},
+            "hotfix/old": {"ci.yml": STALE_MAIN_CI},
+        },
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "hotfix/old"]) == 1
+    assert "hotfix/old:ci.yml::gates\n" in capsys.readouterr().err
+
+
+def test_a_feature_branch_no_filter_names_is_not_enumerated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Only a match-all filter reaches `feature/x`; its own PR judges it.
+
+    Enumerating every branch a match-all pattern admits would make every
+    abandoned feature branch in the repository a red on every other pull
+    request -- a gate people learn to scroll past.
+    """
+    module = _module()
+    everything = FLEET_CI.replace("branches: [dev, 'hotfix/**']", "branches: ['**']")
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": everything}, "feature/x": {"ci.yml": STALE_MAIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "feature/x"]) == 0
+    assert "feature/x" not in capsys.readouterr().err
+
+
+def test_a_branch_with_no_workflows_is_reported_and_passes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No workflow directory on a branch means nothing runs there."""
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path, "dev", {"dev": {"ci.yml": FLEET_CI}, "main": None}
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "main"]) == 0
+    assert "main" in capsys.readouterr().out
+
+
+def test_no_fetched_branches_fails_closed(tmp_path: Path) -> None:
+    """A checkout that never fetched the other heads has judged nothing."""
+    module = _module()
+    root = _tree(
+        tmp_path,
+        "ci.yml",
+        "name: CI\non:\n  pull_request: {}\njobs:\n"
+        "  build:\n    runs-on: [self-hosted, omnibase-ci]\n"
+        "    steps:\n      - run: true\n",
+    )
+    _git(root, "init", "-q")
+    assert _run_every_branch(module, root, tmp_path, "dev", ["dev"]) == 2
