@@ -104,10 +104,13 @@ Which credential (OMN-18120)
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import logging
+import logging.handlers
 import os
 import signal
+import stat
 import sys
 import time
 from dataclasses import replace
@@ -859,6 +862,96 @@ def run(
         lock.release()
 
 
+#: Log bound and retention for the drainer's own log (OMN-19519). The bound is
+#: the OMN-8429 hook-log default, so every hook log in the tree shares one
+#: number; with three backups the drainer log never exceeds about 200 MB.
+DEFAULT_LOG_MAX_MB = 50
+DEFAULT_LOG_BACKUPS = 3
+
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+class _StdioFollowingRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """A size-rotated log file that also carries this process's fd 1 and fd 2.
+
+    WHY. launchd opens StandardErrorPath once and hands the process that file
+    as fd 2. Renaming it from outside changes nothing: the drainer keeps
+    writing into the renamed inode. So the drainer rotates its own log, and
+    at every (re)open points fd 1 and fd 2 at the fresh file, so an uncaught
+    exception or a stray write from a library lands beside the log lines
+    rather than in a backup that is about to be deleted.
+    """
+
+    def __init__(
+        self, filename: Path, *, max_bytes: int, backups: int, follow_stdio: bool
+    ) -> None:
+        self._follow_stdio = follow_stdio
+        super().__init__(
+            filename, maxBytes=max_bytes, backupCount=backups, encoding="utf-8"
+        )
+
+    def _open(self) -> Any:
+        stream = super()._open()
+        if self._follow_stdio:
+            for handle in (sys.stdout, sys.stderr):
+                try:
+                    handle.flush()
+                except (OSError, ValueError):
+                    pass
+            os.dup2(stream.fileno(), 1)
+            os.dup2(stream.fileno(), 2)
+        return stream
+
+
+def _regular_file_behind_fd(fd: int) -> Path | None:
+    """The path of the regular file open on ``fd``, or ``None`` (tty, pipe, ...)."""
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+    except OSError:
+        return None
+    get_path = getattr(fcntl, "F_GETPATH", None)
+    if get_path is not None:  # macOS, where launchd runs the drainer
+        try:
+            raw = fcntl.fcntl(fd, get_path, b"\0" * 1024)
+        except OSError:
+            return None
+        return Path(raw.split(b"\0", 1)[0].decode())
+    try:
+        return Path(f"/proc/self/fd/{fd}").readlink()
+    except OSError:
+        return None
+
+
+def configure_logging(
+    level: str, *, log_file: Path | None, max_bytes: int, backups: int
+) -> Path | None:
+    """Configure the drainer's logging. Returns the rotated log path, or ``None``.
+
+    With ``log_file`` given, that file is rotated. Otherwise, when stderr is a
+    regular file (launchd's StandardErrorPath), that file is rotated and this
+    process's stdio follows it across rollovers. A terminal or a pipe on
+    stderr gets plain stderr logging, as before.
+    """
+    resolved_level = getattr(logging, level.upper(), logging.INFO)
+    stderr_file = _regular_file_behind_fd(2)
+    target = log_file if log_file is not None else stderr_file
+    if target is None:
+        logging.basicConfig(level=resolved_level, format=_LOG_FORMAT)
+        return None
+    follow = stderr_file is not None and os.path.realpath(
+        stderr_file
+    ) == os.path.realpath(target)
+    handler = _StdioFollowingRotatingFileHandler(
+        target, max_bytes=max_bytes, backups=backups, follow_stdio=follow
+    )
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(resolved_level)
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--journal-dir", default=None)
@@ -873,11 +966,33 @@ def main(argv: list[str] | None = None) -> int:
         help="Drain one batch and exit (used by tests and manual flushes).",
     )
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help=(
+            "Log to this file with size rotation. Default: when stderr is a "
+            "regular file (the launchd StandardErrorPath), rotate that file."
+        ),
+    )
+    parser.add_argument(
+        "--log-max-mb",
+        type=int,
+        default=DEFAULT_LOG_MAX_MB,
+        help="Rotate the log when it reaches this many MB (OMN-19519).",
+    )
+    parser.add_argument(
+        "--log-backups",
+        type=int,
+        default=DEFAULT_LOG_BACKUPS,
+        help="Rotated log files kept; older ones are deleted (OMN-19519).",
+    )
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    configure_logging(
+        args.log_level,
+        log_file=Path(args.log_file) if args.log_file else None,
+        max_bytes=max(1, args.log_max_mb) * 1024 * 1024,
+        backups=max(1, args.log_backups),
     )
 
     journal_dir = (
