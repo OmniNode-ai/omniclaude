@@ -80,10 +80,37 @@ _sha() {
   fi
 }
 
-# A PR mutation can change the cached answers: drop them all before it runs.
+# owner/repo of the working directory's origin remote, or "" outside a clone.
+_origin_repo() {
+  local url
+  url="$(git config --get remote.origin.url 2>/dev/null)"
+  url="${url%.git}"
+  url="${url##*:}"
+  case "$url" in */*/*) url="${url#"${url%/*/*}"/}" ;; esac
+  printf '%s' "$url"
+}
+
+# A PR mutation can change the cached answers for its repository: drop that
+# repository's entries before it runs (every entry when the repository is
+# unknown). Entries are named <repo hash>.<key>, so lookups in other
+# repositories stay cached.
 if [ "${1:-}" = "pr" ]; then
   case "${2:-}" in
-    create|ready|close|reopen|merge) rm -f "$_cache_root"/* 2>/dev/null ;;
+    create|ready|close|reopen|merge)
+      _mut_repo=""
+      _prev=""
+      for _a in "$@"; do
+        case "$_prev" in -R|--repo) _mut_repo="$_a" ;; esac
+        case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
+        _prev="$_a"
+      done
+      [ -n "$_mut_repo" ] || _mut_repo="$(_origin_repo)"
+      if [ -n "$_mut_repo" ]; then
+        rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
+      else
+        rm -f "$_cache_root"/* 2>/dev/null
+      fi
+      ;;
   esac
 fi
 
@@ -94,7 +121,9 @@ if _cacheable "$@"; then
     _branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)"
   fi
   if [ -n "$_top" ] && [ -n "$_branch" ]; then
-    _key="$(_sha "$_top|$_branch|$_fields")"
+    _repo_id="$(_origin_repo)"
+    [ -n "$_repo_id" ] || _repo_id="$_top"
+    _key="$(_sha "$_repo_id" | cut -c1-16).$(_sha "$_top|$_branch|$_fields")"
     _entry="$_cache_root/$_key"
     _now="$(date +%s)"
     if [ -f "$_entry.meta" ]; then

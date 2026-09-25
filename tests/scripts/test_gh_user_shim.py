@@ -224,6 +224,51 @@ def test_cache_is_purged_by_a_pr_mutation(env: dict[str, str], verb: str) -> Non
 
 
 @pytest.mark.unit
+def test_cache_purge_is_scoped_to_the_mutated_repository(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    def clone(name: str, remote: str) -> Path:
+        d = tmp_path / name
+        d.mkdir()
+        for cmd in (
+            ["git", "init", "-q", "-b", "main"],
+            ["git", "remote", "add", "origin", remote],
+            [
+                "git",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "i",
+            ],
+        ):
+            subprocess.run(cmd, cwd=d, env=env, check=True)
+        return d
+
+    a = clone("a", "git@github.com:OmniNode-ai/repo_a.git")
+    b = clone("b", "https://github.com/OmniNode-ai/repo_b.git")
+
+    def gh(cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["gh", *args], cwd=cwd, env=env, capture_output=True, check=False
+        )
+
+    gh(a, "pr", "view", "--json", "url")
+    gh(b, "pr", "create", "--fill")  # another repository: the repo_a entry survives
+    gh(a, "pr", "view", "--json", "url")
+    assert len(_calls(env)) == 2
+    gh(
+        b, "pr", "merge", "1", "-R", "OmniNode-ai/repo_a"
+    )  # names repo_a: its entries are purged
+    gh(a, "pr", "view", "--json", "url")
+    assert len(_calls(env)) == 4
+
+
+@pytest.mark.unit
 def test_cache_outside_a_git_repo_passes_through(
     env: dict[str, str], tmp_path: Path
 ) -> None:
