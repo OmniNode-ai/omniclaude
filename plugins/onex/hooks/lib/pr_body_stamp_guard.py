@@ -58,6 +58,17 @@ Fail-open / fail-closed boundary, stated deliberately
     body, or a live read that FAILED -- is BLOCKED. A live read that failed is
     evidence of nothing, and must never be converted into evidence that there
     was no stamp (the workspace CLAUDE.md rule 16).
+  * OMN-19542: "cannot be evaluated" now means it. The command is split by the
+    shared shell tokenizer, so a here-document body is data rather than
+    shell, and a body file the same command writes is judged on the text the
+    command writes, never on the file the disk held when the hook ran. A body
+    that is only known once the command has run -- a file rewritten by an
+    interpreter, a script or ``sed -i``, an expanding here-document with a
+    command substitution, a write to a path that cannot be resolved -- is
+    refused with the workaround named: prepare the file in one Bash call, run
+    the edit in the next. A command that cannot be split into words at all is
+    refused only when its text names ``gh`` then ``pr edit`` or ``api``; text
+    without them cannot hold an edit this parser would recognise.
   * Reads are never gated, and they are not allowlisted either: every shape
     names only body-REPLACING flags, so ``gh pr view --json body``, ``gh pr
     list``, a bare ``gh api`` read, ``gh pr comment --body`` and ``gh pr edit
@@ -100,11 +111,10 @@ import argparse
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 from collections import ChainMap
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,16 +123,21 @@ if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
 from shell_words import (  # noqa: E402
+    HereDoc,
+    Operator,
+    QuoteKind,
+    Redirect,
+    ShellSyntaxError,
     UnresolvableWord,
+    Word,
+    WordPart,
+    _scan_backtick,
+    _scan_balanced,
     expand_word,
     shadow,
     shadowed_names,
-    unquoted,
+    tokenize,
 )
-
-#: Variables visible when a body-file path is expanded: this hook's
-#: environment, overlaid with plain assignments made earlier in the command.
-Scope = Mapping[str, "str | None"]
 
 __all__ = [
     "GATE_BIT_NAME",
@@ -146,10 +161,6 @@ GATE_BIT_NAME = "BRANCH_PROTECTION_GUARD"
 _DEFAULT_POLICY = (
     Path(__file__).resolve().parents[1] / "config" / ("pr_body_stamp_policy.json")
 )
-
-#: Shell segment separators. A body-replacing edit in ANY segment is judged --
-#: `git status && gh pr edit ...` is still an edit.
-_SEPARATORS = frozenset({";", "&&", "||", "|", "&", "\n"})
 
 #: Wrapper programs stripped before the program is read, so `env -u X gh ...`
 #: and `sudo gh ...` cannot hide the shape.
@@ -407,132 +418,690 @@ def stamp_lines(body: str, policy: Policy) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Command parsing
+# Command parsing (OMN-19542)
 # ---------------------------------------------------------------------------
+#
+# The command is split by the shared shell tokenizer (``shell_words``), which
+# knows what ``shlex`` does not: a here-document body is data, not shell. That
+# alone retires the class that produced 15 of this guard's 22 logged refusals
+# (the rolling work ledger, row 3319): an apostrophe in a quoted here-document body made
+# the whole command "untokenisable", so a command that only CREATED a pull
+# request was refused as an unverifiable edit.
+#
+# The command is then walked in order, keeping a small model of the files it
+# writes. A body file is judged on the text the command itself puts there when
+# that text is determined by the command (a here-document, printf, echo, cat,
+# tee, cp, or the live body fetched with a read), and never on whatever the
+# disk held when the hook ran. Anything else that may have written the file --
+# an interpreter, a script, sed -i, a write to a path that cannot be resolved,
+# a program that names the file -- makes the body UNKNOWN, and an unknown body
+# is refused with the workaround named: run the step that prepares the file as
+# its own Bash call first. Nothing is ever executed to find out.
 
 
-def _segments(command: str) -> list[list[str]]:
-    """Split ``command`` into shell segments, as token lists.
+class _Unknown(Exception):
+    """The text a construct produces cannot be determined before it runs."""
 
-    ``shlex`` in POSIX mode resolves quoting for us, so a separator inside a
-    quoted string is a token of that string rather than a segment boundary, and
-    a quoted ``gh`` never becomes the program of a segment.
-    """
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
+
+#: Programs that run code which can write any file, whatever their arguments
+#: say. One of these earlier in the command makes every body file unknown.
+_INTERPRETERS = re.compile(
+    r"^(?:python[0-9.]*|pypy[0-9.]*|node|nodejs|deno|bun|ruby|perl|php|"
+    r"bash|sh|zsh|dash|ksh|fish|uv|uvx|npx|npm|pnpm|yarn|make|osascript|"
+    r"eval|source|\.|exec)$"
+)
+
+#: Programs that write no file other than through a redirection, which the
+#: model handles itself. Naming a body file as an argument of one of these is a
+#: read. Every other program that names the file may have rewritten it.
+_NO_FILE_WRITES = frozenset(
+    {
+        "cat", "grep", "egrep", "fgrep", "rg", "head", "tail", "wc", "diff",
+        "cmp", "ls", "stat", "file", "test", "[", "[[", "echo", "printf",
+        "true", "false", ":", "sleep", "date", "pwd", "cd", "which", "type",
+        "jq", "sort", "uniq", "cut", "tr", "basename", "dirname", "realpath",
+        "readlink", "git", "gh", "export", "unset", "local", "declare",
+        "shasum", "md5", "sha256sum", "nl", "column", "fold", "mkdir",
+        "wait", "exit", "return", "read", "for", "case", "esac", "done",
+        "fi", "}", "tee", "cp",
+    }
+)  # fmt: skip
+
+#: Words that open a compound command. The program is the word after them.
+_KEYWORDS = frozenset({"if", "then", "else", "elif", "do", "while", "until", "!", "{"})
+
+_DEV_FILES = frozenset({"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"})
+
+#: Redirections that write standard output, with and without appending.
+_WRITE_OPS = frozenset({">", ">|", ">>", "&>", "&>>", ">&"})
+
+#: ``gh api`` field flags that read ``@file``; ``-f`` sends its value verbatim.
+_TYPED_FIELD_FLAGS = frozenset({"-F", "--field"})
+
+#: The one sentence every "cannot be determined" refusal ends with.
+_WORKAROUND = (
+    "Run the step that prepares the body as its own Bash call first, then run "
+    "the edit as its own Bash call with --body-file <path>; the guard then "
+    "reads the finished file"
+)
+
+
+@dataclass
+class _Cmd:
+    words: list[Word]
+    heredocs: list[HereDoc]
+    redirects: list[Redirect]
+    piped_from: _Cmd | None
+    in_subshell: bool
+
+
+@dataclass
+class _File:
+    text: str | None
+    reason: str | None
+    written_at: int
+
+
+@dataclass
+class _Taint:
+    at: int
+    who: str
+    #: Text of the command, searched for the body file's path; ``None`` when
+    #: the writer can reach any file.
+    mentions: str | None
+
+
+def _commands(command: str) -> list[_Cmd]:
     try:
-        tokens = list(lexer)
-    except ValueError as exc:  # unbalanced quote, unterminated escape
+        tokens = tokenize(command, keep_redirects=True)
+    except ShellSyntaxError as exc:
         raise _Untokenisable(str(exc)) from exc
+    out: list[_Cmd] = []
+    depth = 0
+    current = _Cmd([], [], [], None, False)
+    piped: _Cmd | None = None
 
-    out: list[list[str]] = [[]]
+    def close(next_piped: bool) -> None:
+        nonlocal current, piped
+        if current.words or current.heredocs or current.redirects:
+            out.append(current)
+            piped = current if next_piped else None
+        else:
+            piped = None
+        current = _Cmd([], [], [], piped, depth > 0)
+
     for token in tokens:
-        if token in _SEPARATORS:
-            out.append([])
-            continue
-        out[-1].append(token)
-    return [segment for segment in out if segment]
+        if isinstance(token, Operator):
+            if token.text == "(":
+                close(False)
+                depth += 1
+                current.in_subshell = True
+            elif token.text == ")":
+                close(False)
+                depth = max(0, depth - 1)
+                current.in_subshell = depth > 0
+            else:
+                close(token.text in ("|", "|&"))
+        elif isinstance(token, HereDoc):
+            current.heredocs.append(token)
+        elif isinstance(token, Redirect):
+            current.redirects.append(token)
+        else:
+            current.words.append(token)
+    close(False)
+    return out
 
 
-def _program_of(segment: list[str]) -> tuple[str, list[str]]:
-    """Return the program basename and the remaining tokens."""
+def _program_of(words: list[Word]) -> tuple[str, list[Word]]:
+    """Return the program basename and the words after it."""
     index = 0
-    while index < len(segment):
-        token = segment[index]
-        if _ASSIGNMENT.match(token):
+    while index < len(words):
+        text = words[index].text
+        if words[index].assignment() is not None or text in _KEYWORDS:
             index += 1
             continue
-        basename = os.path.basename(token)
+        basename = os.path.basename(text)
         if basename in _WRAPPERS:
             index += 1
-            while index < len(segment) and (
-                segment[index].startswith("-") or _ASSIGNMENT.match(segment[index])
+            while index < len(words) and (
+                words[index].text.startswith("-")
+                or words[index].assignment() is not None
             ):
-                if segment[index] in {"-u", "-C", "-S"} and index + 1 < len(segment):
+                if words[index].text in {"-u", "-C", "-S"} and index + 1 < len(words):
                     index += 1
                 index += 1
             continue
-        return basename, segment[index + 1 :]
+        return basename, words[index + 1 :]
     return "", []
 
 
-#: ``--body "$(cat path)"`` and its backtick spelling. A lane composing a body
-#: in a file and handing it to ``--body`` through a substitution is the most
-#: common real spelling of this command, and the shell has not expanded it by
-#: the time the guard sees it. Reading the named file is what keeps the guard
-#: from refusing a legitimate edit it simply could not see -- the plan's
-#: constraint 5, a guard whose false refusals outnumber its true ones is one
-#: that gets routed around.
-_CAT_SUBSTITUTION = re.compile(
-    r"""^(?:\$\((?:\s*cat\s+)|`(?:\s*cat\s+))(?P<path>[^)`]+?)\s*(?:\)|`)$"""
+def _split_inline(word: Word) -> Word | None:
+    """The value of ``--flag=value``, keeping the quoting of every part."""
+    for index, part in enumerate(word.parts):
+        if part.quote == "none" and "=" in part.text:
+            _, _, rest = part.text.partition("=")
+            head = (WordPart(rest, "none"),) if rest else ()
+            return Word(head + word.parts[index + 1 :])
+        if part.quote != "none":
+            return None
+    return None
+
+
+class _Model:
+    """The files a command writes, followed in order, and how to read them."""
+
+    def __init__(
+        self,
+        scope: ChainMap[str, str | None],
+        cwd: str | None,
+        live_body: LiveBodyReader | None,
+    ) -> None:
+        self.scope = scope
+        self.cwd = cwd
+        self.live_body = live_body
+        self.files: dict[str, _File] = {}
+        self.taints: list[_Taint] = []
+        self.at = 0
+
+    # -- words ---------------------------------------------------------------
+
+    def expand(self, word: Word) -> str:
+        """The value the shell gives ``word``; command substitutions whose
+        output the model can compute are substituted. Raises ``_Unknown``."""
+        out: list[str] = []
+        for index, part in enumerate(word.parts):
+            if part.quote == "literal":
+                out.append(part.text)
+                continue
+            out.append(self._expand_text(part.text, part.quote, index == 0))
+        return "".join(out)
+
+    def _expand_text(self, text: str, quote: QuoteKind, first: bool) -> str:
+        out: list[str] = []
+        plain_start = 0
+        i = 0
+        n = len(text)
+
+        def flush(end: int) -> None:
+            chunk = text[plain_start:end]
+            if not chunk:
+                return
+            at_start = first and plain_start == 0
+            parts: tuple[WordPart, ...] = (WordPart(chunk, quote),)
+            if not at_start:
+                parts = (WordPart("", "literal"),) + parts
+            try:
+                out.append(expand_word(Word(parts), self.scope))
+            except UnresolvableWord as exc:
+                raise _Unknown(str(exc)) from exc
+
+        while i < n:
+            ch = text[i]
+            if ch == "\\":
+                i += 2
+                continue
+            if text.startswith("$((", i):
+                raise _Unknown("arithmetic expansion is not evaluated by the guard")
+            if text.startswith("$(", i) or ch == "`":
+                if quote == "none":
+                    raise _Unknown(
+                        "an unquoted command substitution is split into words by "
+                        "the shell"
+                    )
+                flush(i)
+                try:
+                    if ch == "`":
+                        end = _scan_backtick(text, i)
+                        inner = text[i + 1 : end - 1]
+                    else:
+                        end = _scan_balanced(text, i + 1, "(", ")")
+                        inner = text[i + 2 : end - 1]
+                except ShellSyntaxError as exc:
+                    raise _Unknown(str(exc)) from exc
+                out.append(self._substitute(inner))
+                i = end
+                plain_start = i
+                continue
+            i += 1
+        flush(n)
+        return "".join(out)
+
+    def _substitute(self, inner: str) -> str:
+        try:
+            commands = _commands(inner)
+        except _Untokenisable as exc:
+            raise _Unknown(f"a command substitution cannot be read ({exc})") from exc
+        if len(commands) != 1:
+            raise _Unknown(
+                "a command substitution runs more than one command, and the guard "
+                "computes the output of one"
+            )
+        # The shell strips trailing newlines here; they are kept, because they
+        # cannot change which lines a body carries.
+        return self.stdout(commands[0])
+
+    def path(self, word: Word) -> str:
+        try:
+            raw = expand_word(word, self.scope)
+        except UnresolvableWord as exc:
+            raise _Unknown(
+                f"the path {word.text} cannot be resolved: {exc}. Only a variable "
+                "assigned earlier in this same command is expanded here; pass a "
+                "literal path, or assign it in the command"
+            ) from exc
+        if raw in _DEV_FILES or Path(raw).is_absolute():
+            return os.path.normpath(raw)
+        if self.cwd is None:
+            raise _Unknown(
+                f"the relative path {raw} follows a directory change the guard "
+                "cannot resolve; pass an absolute path"
+            )
+        return os.path.normpath(os.path.join(self.cwd, raw))
+
+    # -- files ---------------------------------------------------------------
+
+    def read(self, word: Word, what: str = "the replacement body file") -> str:
+        path = self.path(word)
+        entry = self.files.get(path)
+        since = entry.written_at if entry is not None else -1
+        for taint in self.taints:
+            if taint.at <= since:
+                continue
+            if (
+                taint.mentions is None
+                or path in taint.mentions
+                or (os.path.basename(path) in taint.mentions)
+            ):
+                raise _Unknown(
+                    f"{what} {word.text} may be rewritten earlier in this same "
+                    f"command by {taint.who}, whose effect the guard cannot "
+                    "compute before the command runs"
+                )
+        if entry is not None:
+            if entry.text is None:
+                raise _Unknown(
+                    f"{what} {word.text} is written earlier in this same command "
+                    f"by {entry.reason}, whose output the guard cannot compute "
+                    "before the command runs"
+                )
+            return entry.text
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise _Unknown(f"{what} {word.text} could not be read: {exc}") from exc
+
+    def write(self, path: str, text: str | None, reason: str | None) -> None:
+        if path in _DEV_FILES:
+            return
+        self.files[path] = _File(text, reason, self.at)
+
+    # -- output of one command ------------------------------------------------
+
+    def stdin(self, cmd: _Cmd) -> str:
+        for redirect in reversed(cmd.redirects):
+            if redirect.op == "<<<" and redirect.target is not None:
+                return self.expand(redirect.target) + "\n"
+            if redirect.op == "<" and redirect.fd in (None, "0") and redirect.target:
+                return self.read(redirect.target, "the file on standard input")
+        if cmd.heredocs:
+            doc = cmd.heredocs[-1]
+            if not doc.expands:
+                return doc.body
+            try:
+                return self._expand_text(doc.body, "double", False)
+            except _Unknown as exc:
+                raise _Unknown(
+                    f"the here-document {doc.delimiter} expands text the guard "
+                    f"cannot resolve ({exc}); quote its delimiter, as <<'"
+                    f"{doc.delimiter}', or write the body with the editor tool"
+                ) from exc
+        if cmd.piped_from is not None:
+            return self.stdout(cmd.piped_from)
+        raise _Unknown(
+            "the replacement body is read from standard input, and nothing in "
+            "this command that the guard can read supplies it"
+        )
+
+    def stdout(self, cmd: _Cmd) -> str:
+        program, args = _program_of(cmd.words)
+        if program == "cat":
+            if any(a.text.startswith("-") and a.text != "-" for a in args):
+                raise _Unknown("`cat` with options is not modelled")
+            if not args or [a.text for a in args] == ["-"]:
+                return self.stdin(cmd)
+            return "".join(
+                self.stdin(cmd) if a.text == "-" else self.read(a, "the file")
+                for a in args
+            )
+        if program == "tee":
+            return self.stdin(cmd)
+        if program == "echo":
+            newline = "\n"
+            if args and args[0].text == "-n":
+                newline = ""
+                args = args[1:]
+            values = [self.expand(a) for a in args]
+            if any("\\" in v for v in values) or (
+                args and args[0].text.startswith("-")
+            ):
+                raise _Unknown("`echo` with escapes or options differs between shells")
+            return " ".join(values) + newline
+        if program == "printf":
+            if not args or args[0].text.startswith("-"):
+                raise _Unknown("`printf` with options is not modelled")
+            return _printf(self.expand(args[0]), [self.expand(a) for a in args[1:]])
+        if program == "gh":
+            selector, repo = _live_read_target(args, self)
+            if selector is not None and self.live_body is not None:
+                body = self.live_body(
+                    PrBodyEdit(
+                        selector=selector,
+                        repo=repo,
+                        new_body=None,
+                        unreadable_reason=None,
+                        origin="read",
+                    )
+                )
+                if body is None:
+                    raise _Unknown(
+                        f"the live description of {repo}#{selector} could not "
+                        "be read, and this command writes it to the body file"
+                    )
+                return body if body.endswith("\n") else body + "\n"
+        raise _Unknown(
+            f"the output of `{program or 'a compound command'}` cannot be "
+            "computed without running it"
+        )
+
+    # -- effects of one command -----------------------------------------------
+
+    def apply(self, cmd: _Cmd) -> None:
+        """Record what ``cmd`` does to files and to the working directory."""
+        self.at += 1
+        program, args = _program_of(cmd.words)
+        who = f"`{program}`" if program else "a compound command"
+
+        if cmd.words and all(w.assignment() is not None for w in cmd.words):
+            for word in cmd.words:
+                name, value = word.assignment()  # type: ignore[misc]
+                try:
+                    self.scope.maps[0][name] = self.expand(value)
+                except _Unknown:
+                    self.scope.maps[0][name] = None
+            return
+
+        if program in ("cd", "pushd", "popd"):
+            target = args[0] if args else None
+            if program != "cd" or cmd.in_subshell:
+                self.cwd = None
+            elif target is None:
+                self.cwd = self.scope.get("HOME")
+            else:
+                try:
+                    self.cwd = self.path(target)
+                except _Unknown:
+                    self.cwd = None
+
+        for redirect in cmd.redirects:
+            if redirect.op not in _WRITE_OPS or redirect.target is None:
+                continue
+            if redirect.op == ">&" and (
+                redirect.target.text.isdigit() or redirect.target.text == "-"
+            ):
+                continue
+            try:
+                path = self.path(redirect.target)
+            except _Unknown as exc:
+                self.taints.append(
+                    _Taint(
+                        self.at,
+                        f"{who} writing to {redirect.target.text} ({exc})",
+                        None,
+                    )
+                )
+                continue
+            if path in _DEV_FILES:
+                continue
+            if redirect.fd not in (None, "1") or redirect.op in ("&>", "&>>", ">&"):
+                self.write(path, None, f"{who} (its error stream)")
+                continue
+            appending = redirect.op == ">>"
+            try:
+                text = self.stdout(cmd)
+                if appending:
+                    base = self._current(path)
+                    text = base + text
+            except _Unknown as exc:
+                self.write(path, None, f"{who} ({exc})")
+                continue
+            self.write(path, text, None)
+
+        if program == "tee":
+            appending = bool(args) and args[0].text == "-a"
+            targets = args[1:] if appending else args
+            piped: str | None
+            try:
+                piped = self.stdin(cmd)
+            except _Unknown:
+                piped = None
+            for target in targets:
+                try:
+                    path = self.path(target)
+                except _Unknown as exc:
+                    self.taints.append(_Taint(self.at, f"`tee` ({exc})", None))
+                    continue
+                if piped is not None and appending:
+                    try:
+                        self.write(path, self._current(path) + piped, None)
+                    except _Unknown:
+                        self.write(path, None, "`tee -a`")
+                else:
+                    self.write(path, piped, None if piped is not None else "`tee`")
+            return
+
+        if (
+            program == "cp"
+            and len(args) == 2
+            and not any(a.text.startswith("-") for a in args)
+        ):
+            try:
+                dest = self.path(args[1])
+            except _Unknown as exc:
+                self.taints.append(_Taint(self.at, f"`cp` ({exc})", None))
+                return
+            try:
+                self.write(dest, self.read(args[0], "the copied file"), None)
+            except _Unknown:
+                self.write(dest, None, "`cp`")
+            return
+
+        if not program:
+            return
+        runs_a_script = "/" in next(
+            (w.text for w in cmd.words if w.assignment() is None), ""
+        )
+        if _INTERPRETERS.match(program) or runs_a_script:
+            self.taints.append(_Taint(self.at, who, None))
+            return
+        if program not in _NO_FILE_WRITES:
+            self.taints.append(_Taint(self.at, who, self._mention_text(cmd)))
+
+    def _mention_text(self, cmd: _Cmd) -> str:
+        """Every word of ``cmd``, as written and as expanded, and its
+        here-document bodies: where a program would name the file it writes."""
+        parts: list[str] = []
+        for word in cmd.words:
+            parts.append(word.text)
+            try:
+                parts.append(self.expand(word))
+            except _Unknown:
+                pass
+        parts += [doc.body for doc in cmd.heredocs]
+        return "\n".join(parts)
+
+    def _current(self, path: str) -> str:
+        entry = self.files.get(path)
+        if entry is not None:
+            if entry.text is None:
+                raise _Unknown(entry.reason or "unknown")
+            return entry.text
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ""
+        except (OSError, UnicodeDecodeError) as exc:
+            raise _Unknown(str(exc)) from exc
+
+
+def _live_read_target(args: list[Word], model: _Model) -> tuple[str | None, str | None]:
+    """``(selector, repo)`` when ``args`` print one pull request's live body.
+
+    Recognised: ``gh pr view [<n>] [-R <repo>] --json body --jq|-q .body`` and
+    ``gh api repos/<o>/<r>/pulls/<n> --jq .body`` with no method or fields.
+    """
+    texts = [a.text for a in args]
+
+    def value_after(*flags: str) -> str | None:
+        for index, text in enumerate(texts):
+            for flag in flags:
+                if text == flag and index + 1 < len(texts):
+                    try:
+                        return model.expand(args[index + 1])
+                    except _Unknown:
+                        return None
+                if text.startswith(flag + "="):
+                    return text.partition("=")[2]
+        return None
+
+    if value_after("--jq", "-q") != ".body":
+        return None, None
+    if texts[:2] == ["pr", "view"]:
+        if value_after("--json") != "body":
+            return None, None
+        selector: str | None = None
+        index = 2
+        while index < len(texts):
+            text = texts[index]
+            if text in _VIEW_VALUE_FLAGS:
+                index += 2
+                continue
+            if not text.startswith("-") and selector is None:
+                try:
+                    selector = model.expand(args[index])
+                except _Unknown:
+                    return None, None
+            index += 1
+        return selector, value_after("--repo", "-R")
+    if texts[:1] == ["api"]:
+        if any(
+            t in ("-X", "--method", "-f", "-F", "--field", "--raw-field", "--input")
+            for t in texts
+        ):
+            return None, None
+        endpoint = texts[1] if len(texts) > 1 else ""
+        match = re.match(r"^/?repos/([^/$]+)/([^/$]+)/pulls/(\d+)$", endpoint)
+        if match is None:
+            return None, None
+        return match.group(3), f"{match.group(1)}/{match.group(2)}"
+    return None, None
+
+
+#: ``gh pr view`` flags that take a value, so the value is never the selector.
+_VIEW_VALUE_FLAGS = frozenset(
+    {"--repo", "-R", "--json", "--jq", "-q", "--template", "-t"}
 )
 
-#: Any OTHER unexpanded shell construct in the replacement body. The guard
-#: cannot resolve it, so it does not know what the new body says -- and must
-#: not report that as a dropped line, which would be a specific accusation it
-#: has no evidence for.
-_UNEXPANDED = re.compile(r"\$\(|`|\$\{|\$[A-Za-z_]")
+_PRINTF_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", '"': '"', "'": "'",
+                   "a": "\a", "b": "\b", "f": "\f", "v": "\v"}  # fmt: skip
 
 
-def _read_body_file(raw: str, scope: Scope) -> tuple[str | None, str | None]:
-    """Return ``(text, unreadable_reason)`` for a ``--body-file`` argument.
+def _printf_escapes(text: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        if text[i] == "\\" and i + 1 < len(text):
+            nxt = text[i + 1]
+            if nxt not in _PRINTF_ESCAPES:
+                raise _Unknown(f"printf escape \\{nxt} is not modelled")
+            out.append(_PRINTF_ESCAPES[nxt])
+            i += 2
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
 
-    The path is expanded by the shared OMN-19229 helper from ``scope``, so
-    ``B=body.md; gh pr edit --body-file "$B"`` reads the file the shell hands
-    ``gh`` instead of a file literally named ``$B``.
-    """
-    if raw == "-":
-        return None, (
-            "the replacement body is read from standard input, which this "
-            "guard structurally cannot see"
-        )
+
+def _printf(fmt: str, args: list[str]) -> str:
+    """``printf`` for the ``%s``, ``%b`` and ``%%`` directives, which is what a
+    body is assembled with. Any other directive is unknown, not guessed."""
+    out: list[str] = []
+    remaining = list(args)
+    while True:
+        consumed = False
+        i = 0
+        while i < len(fmt):
+            ch = fmt[i]
+            if ch == "\\":
+                out.append(_printf_escapes(fmt[i : i + 2]))
+                i += 2
+                continue
+            if ch == "%":
+                directive = fmt[i + 1 : i + 2]
+                if directive == "%":
+                    out.append("%")
+                elif directive in ("s", "b"):
+                    value = remaining.pop(0) if remaining else ""
+                    consumed = True
+                    out.append(_printf_escapes(value) if directive == "b" else value)
+                else:
+                    raise _Unknown(f"printf directive %{directive} is not modelled")
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        if not remaining or not consumed:
+            return "".join(out)
+
+
+def _resolve_body_word(word: Word, model: _Model) -> tuple[str | None, str | None]:
     try:
-        path = expand_word(unquoted(raw), scope)
-    except UnresolvableWord as exc:
+        return model.expand(word), None
+    except _Unknown as exc:
         return None, (
-            f"the replacement body file {raw} cannot be resolved: {exc}. Only a "
-            "variable assigned earlier in this same command is expanded here; "
-            "pass a literal path, or assign it in the command"
+            f"the replacement body {word.text[:80]!r} cannot be read here ({exc}). "
+            "Pass the body with --body-file <path> instead, which this guard can "
+            f"read. {_WORKAROUND}"
         )
+
+
+def _read_body_file(
+    word: Word, cmd: _Cmd, model: _Model
+) -> tuple[str | None, str | None]:
     try:
-        return Path(path).read_text(encoding="utf-8"), None
-    except (OSError, UnicodeDecodeError) as exc:
-        return None, f"the replacement body file {raw} could not be read: {exc}"
+        if word.text == "-":
+            return model.stdin(cmd), None
+        return model.read(word), None
+    except _Unknown as exc:
+        return None, f"{exc}. {_WORKAROUND}"
 
 
-def _resolve_body_argument(raw: str, scope: Scope) -> tuple[str | None, str | None]:
-    """Resolve a ``--body`` argument the shell has not expanded yet.
-
-    Three outcomes, and the middle one is the reason this exists:
-
-    * plain text -> itself;
-    * ``$(cat path)`` / ``` `cat path` ``` -> the file's contents, because that
-      is how a lane that composed the body in a file actually spells this
-      command, and refusing it would be a false accusation against the most
-      common legitimate shape; and
-    * any other unexpanded construct -> UNREADABLE, not "dropped". The guard
-      cannot see what the body says, and reporting a dropped line it has no
-      evidence for would send the author hunting for a line they did not
-      remove.
-    """
-    match = _CAT_SUBSTITUTION.match(raw.strip())
-    if match is not None:
-        return _read_body_file(match.group("path").strip().strip("'\""), scope)
-    if _UNEXPANDED.search(raw):
-        return None, (
-            "the replacement body is an unexpanded shell substitution "
-            f"({raw[:80]!r}), so its text cannot be read here. Pass the body "
-            "with --body-file <path> instead, which this guard can read"
-        )
-    return raw, None
+def _flag_value(rest: list[Word], index: int) -> tuple[Word | None, int]:
+    """The value of the flag at ``index`` (inline or next word), and the next index."""
+    word = rest[index]
+    if "=" in word.text and word.text.startswith("-"):
+        return _split_inline(word), index + 1
+    if index + 1 < len(rest):
+        return rest[index + 1], index + 2
+    return None, index + 1
 
 
 def _parse_gh_pr_edit(
-    tokens: list[str], shape: _GhPrEditShape, scope: Scope
+    words: list[Word], shape: _GhPrEditShape, cmd: _Cmd, model: _Model
 ) -> PrBodyEdit | None:
-    if list(tokens[: len(shape.subcommand)]) != list(shape.subcommand):
+    texts = [w.text for w in words]
+    if texts[: len(shape.subcommand)] != list(shape.subcommand):
         return None
-    rest = tokens[len(shape.subcommand) :]
+    rest = words[len(shape.subcommand) :]
 
     selector: str | None = None
     repo: str | None = None
@@ -543,60 +1112,37 @@ def _parse_gh_pr_edit(
 
     index = 0
     while index < len(rest):
-        token = rest[index]
-        flag, _, inline = token.partition("=")
-        has_inline = "=" in token
+        text = rest[index].text
+        flag = text.partition("=")[0]
         if flag in shape.body_flags:
-            found_body = True
-            origin = "--body"
-            raw_value: str | None
-            if has_inline:
-                raw_value = inline
-            elif index + 1 < len(rest):
-                index += 1
-                raw_value = rest[index]
+            found_body, origin = True, "--body"
+            value, index = _flag_value(rest, index)
+            if value is None:
+                new_body, unreadable = None, "the body flag was given no value"
             else:
-                raw_value = None
-            if raw_value is None:
-                unreadable = "the body flag was given no value"
-            else:
-                new_body, unreadable = _resolve_body_argument(raw_value, scope)
-            index += 1
+                new_body, unreadable = _resolve_body_word(value, model)
             continue
         if flag in shape.body_file_flags:
-            found_body = True
-            origin = "--body-file"
-            raw: str | None
-            if has_inline:
-                raw = inline
-            elif index + 1 < len(rest):
-                index += 1
-                raw = rest[index]
+            found_body, origin = True, "--body-file"
+            value, index = _flag_value(rest, index)
+            if value is None:
+                new_body, unreadable = None, "the body-file flag was given no value"
             else:
-                raw = None
-            if raw is None:
-                unreadable = "the body-file flag was given no value"
-            else:
-                new_body, unreadable = _read_body_file(raw, scope)
-            index += 1
+                new_body, unreadable = _read_body_file(value, cmd, model)
             continue
         if flag in shape.repo_flags:
-            if has_inline:
-                repo = inline
-            elif index + 1 < len(rest):
-                index += 1
-                repo = rest[index]
-            index += 1
+            value, index = _flag_value(rest, index)
+            if value is not None:
+                repo = _best_effort(value, model)
             continue
-        if token.startswith("-"):
+        if text.startswith("-"):
             # An unknown flag may or may not take a value. Skipping only the
-            # flag is safe: a value that looks like a positional is not used as
-            # a selector unless nothing better was found, and the live read
-            # simply fails, which is a refusal rather than a wrong verdict.
+            # flag is safe: the live read of a wrong selector fails, which is a
+            # refusal rather than a wrong verdict.
             index += 1
             continue
         if selector is None:
-            selector = token
+            selector = _best_effort(rest[index], model)
         index += 1
 
     if not found_body:
@@ -610,12 +1156,20 @@ def _parse_gh_pr_edit(
     )
 
 
+def _best_effort(word: Word, model: _Model) -> str:
+    try:
+        return model.expand(word)
+    except _Unknown:
+        return word.text
+
+
 def _parse_gh_api_patch(
-    tokens: list[str], shape: _GhApiPatchShape, scope: Scope
+    words: list[Word], shape: _GhApiPatchShape, cmd: _Cmd, model: _Model
 ) -> PrBodyEdit | None:
-    if list(tokens[: len(shape.subcommand)]) != list(shape.subcommand):
+    texts = [w.text for w in words]
+    if texts[: len(shape.subcommand)] != list(shape.subcommand):
         return None
-    rest = tokens[len(shape.subcommand) :]
+    rest = words[len(shape.subcommand) :]
 
     method = "GET"
     endpoint: str | None = None
@@ -626,41 +1180,34 @@ def _parse_gh_api_patch(
 
     index = 0
     while index < len(rest):
-        token = rest[index]
-        flag, _, inline = token.partition("=")
-        has_inline = "=" in token
-        if token in shape.method_flags and index + 1 < len(rest):
-            index += 1
-            method = rest[index].upper()
-            index += 1
+        text = rest[index].text
+        flag, _, inline = text.partition("=")
+        if text in shape.method_flags and index + 1 < len(rest):
+            method = rest[index + 1].text.upper()
+            index += 2
             continue
-        if flag in shape.method_flags and has_inline:
+        if flag in shape.method_flags and "=" in text:
             method = inline.upper()
             index += 1
             continue
-        if token in shape.field_flags and index + 1 < len(rest):
-            index += 1
-            field, sep, value = rest[index].partition("=")
-            if sep and field == shape.body_field:
-                found_body = True
-                origin = token
-                if value.startswith("@"):
-                    new_body, unreadable = _read_body_file(value[1:], scope)
+        if text in shape.field_flags and index + 1 < len(rest):
+            assignment = rest[index + 1].assignment()
+            if assignment is not None and assignment[0] == shape.body_field:
+                found_body, origin = True, text
+                value = assignment[1]
+                if text in _TYPED_FIELD_FLAGS and value.text.startswith("@"):
+                    new_body, unreadable = _read_body_file(_drop_at(value), cmd, model)
                 else:
-                    new_body = value
-            index += 1
+                    new_body, unreadable = _resolve_body_word(value, model)
+            index += 2
             continue
-        if token in shape.input_flags and index + 1 < len(rest):
-            index += 1
-            found_body = True
-            origin = token
-            raw = rest[index]
-            text, unreadable = _read_body_file(raw, scope)
-            if text is None:
-                new_body = None
-            else:
+        if text in shape.input_flags and index + 1 < len(rest):
+            found_body, origin = True, text
+            payload, unreadable = _read_body_file(rest[index + 1], cmd, model)
+            new_body = None
+            if payload is not None:
                 try:
-                    parsed = json.loads(text)
+                    parsed = json.loads(payload)
                 except json.JSONDecodeError as exc:
                     unreadable = f"the --input payload is not readable JSON: {exc}"
                 else:
@@ -671,17 +1218,16 @@ def _parse_gh_api_patch(
                         else:
                             unreadable = "the --input payload's body is not a string"
                     else:
-                        # No body field at all: this PATCH replaces something
-                        # else, so it is not a body-replacing edit.
+                        # No body field: this PATCH replaces something else.
                         found_body = False
                         unreadable = None
-            index += 1
+            index += 2
             continue
-        if token.startswith("-"):
+        if text.startswith("-"):
             index += 1
             continue
         if endpoint is None:
-            endpoint = token
+            endpoint = _best_effort(rest[index], model)
         index += 1
 
     if method not in shape.methods or not found_body:
@@ -707,10 +1253,50 @@ def _parse_gh_api_patch(
     )
 
 
-def parse_pr_body_edits(command: str, policy: Policy) -> list[PrBodyEdit]:
-    """Every body-replacing pull-request edit in ``command``."""
-    edits: list[PrBodyEdit] = []
-    segments = _segments(command)
+def _drop_at(value: Word) -> Word:
+    first = value.parts[0]
+    return Word((WordPart(first.text[1:], first.quote),) + value.parts[1:])
+
+
+#: The raw-text test used only when the command cannot be split into words:
+#: could any segment of it be a body-replacing edit? The parser only ever
+#: recognises a program literally named ``gh``, so text without ``gh`` followed
+#: by ``pr edit`` or ``api`` cannot hide one.
+_EDIT_TEXT = re.compile(r"\bgh\b[\s\S]*?\b(?:pr\s+edit|api)\b")
+
+
+def _is_edit(program: str, words: list[Word], policy: Policy) -> bool:
+    texts = [w.text for w in words]
+    if program in policy.gh_pr_edit.programs and (
+        texts[: len(policy.gh_pr_edit.subcommand)] == list(policy.gh_pr_edit.subcommand)
+    ):
+        return True
+    return program in policy.gh_api_patch.programs and (
+        texts[: len(policy.gh_api_patch.subcommand)]
+        == list(policy.gh_api_patch.subcommand)
+    )
+
+
+def parse_pr_body_edits(
+    command: str,
+    policy: Policy,
+    *,
+    cwd: str | None = None,
+    live_body: LiveBodyReader | None = None,
+) -> list[PrBodyEdit]:
+    """Every body-replacing pull-request edit in ``command``.
+
+    ``cwd`` is the session's working directory, against which a relative body
+    file resolves (default: this process's). ``live_body`` lets the model
+    compute a file the command fills with a pull request's live description;
+    without it such a file is unknown.
+    """
+    commands = _commands(command)
+    candidates = {
+        id(cmd) for cmd in commands if _is_edit(*_program_of(cmd.words), policy)
+    }
+    if not candidates:
+        return []
     # Only what the command itself assigns is expanded, plus HOME for `~`.
     # The hook's environment is not the command's: a variable it inherits may
     # name a different file from the one gh uploads, and reading that file
@@ -718,28 +1304,24 @@ def parse_pr_body_edits(command: str, policy: Policy) -> list[PrBodyEdit]:
     # (`export`, `read`, `for`) is unresolvable too.
     assigned: dict[str, str | None] = {}
     trusted = {"HOME": os.environ["HOME"]} if os.environ.get("HOME") else {}
-    scope: Scope = ChainMap(assigned, shadow(trusted, shadowed_names(segments)))  # type: ignore[arg-type]
-    for segment in segments:
-        if all(_ASSIGNMENT.match(token) for token in segment):
-            # `B=/tmp/body.md; gh pr edit --body-file "$B"`: the assignment
-            # is what the later expansion reads.
-            for token in segment:
-                name, _, value = token.partition("=")
-                try:
-                    assigned[name] = expand_word(unquoted(value), scope)
-                except UnresolvableWord:
-                    assigned[name] = None
-            continue
-        program, tokens = _program_of(segment)
-        if program in policy.gh_pr_edit.programs:
-            edit = _parse_gh_pr_edit(tokens, policy.gh_pr_edit, scope)
-            if edit is not None:
-                edits.append(edit)
-                continue
-        if program in policy.gh_api_patch.programs:
-            edit = _parse_gh_api_patch(tokens, policy.gh_api_patch, scope)
-            if edit is not None:
-                edits.append(edit)
+    shadowed = shadowed_names([[w.text for w in cmd.words] for cmd in commands])
+    scope: ChainMap[str, str | None] = ChainMap(
+        assigned, dict(shadow(trusted, shadowed))
+    )
+    model = _Model(scope, cwd if cwd is not None else os.getcwd(), live_body)
+
+    edits: list[PrBodyEdit] = []
+    for cmd in commands:
+        program, words = _program_of(cmd.words)
+        edit: PrBodyEdit | None = None
+        if id(cmd) in candidates:
+            if program in policy.gh_pr_edit.programs:
+                edit = _parse_gh_pr_edit(words, policy.gh_pr_edit, cmd, model)
+            if edit is None and program in policy.gh_api_patch.programs:
+                edit = _parse_gh_api_patch(words, policy.gh_api_patch, cmd, model)
+        if edit is not None:
+            edits.append(edit)
+        model.apply(cmd)
     return edits
 
 
@@ -791,7 +1373,10 @@ def gh_live_body_reader(cwd: str | None = None, timeout: int = 45) -> LiveBodyRe
 
 
 def check_bash_command(
-    command: object, policy: Policy, live_body: LiveBodyReader
+    command: object,
+    policy: Policy,
+    live_body: LiveBodyReader,
+    cwd: str | None = None,
 ) -> list[Finding]:
     """Findings for one Bash command. Empty means admit."""
     if command is None or not isinstance(command, str):
@@ -806,15 +1391,21 @@ def check_bash_command(
         ]
 
     try:
-        edits = parse_pr_body_edits(command, policy)
+        edits = parse_pr_body_edits(command, policy, cwd=cwd, live_body=live_body)
     except _Untokenisable as exc:
+        if not _EDIT_TEXT.search(command):
+            # Text that never names `gh` then `pr edit` or `api` cannot hold a
+            # body-replacing edit: the parser recognises no other spelling.
+            return []
         return [
             Finding(
                 kind="untokenisable",
                 detail=(
-                    "this command names a body-replacing pull-request edit and "
-                    f"cannot be tokenised ({exc}), so whether it drops a "
-                    "change-control evidence line cannot be decided"
+                    "this command names a pull-request edit and cannot be split "
+                    f"into shell words ({exc}), so the replacement body it sends "
+                    "cannot be read. Write the body to a file with the editor "
+                    "tool, then run the edit as its own Bash call with "
+                    "--body-file <path>"
                 ),
             )
         ]
@@ -958,7 +1549,9 @@ def main(argv: list[str] | None = None) -> int:
     cwd = payload.get("cwd")
     reader = gh_live_body_reader(cwd if isinstance(cwd, str) else None)
 
-    findings = check_bash_command(command, policy, reader)
+    findings = check_bash_command(
+        command, policy, reader, cwd if isinstance(cwd, str) else None
+    )
     if findings:
         return _block(render_block_reason(findings))
     return 0
