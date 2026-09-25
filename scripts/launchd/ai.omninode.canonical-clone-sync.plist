@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.canonical-clone-sync.plist — launchd catch-all that keeps every
+  canonical clone current (OMN-19607).
+
+  Runs canonical-clone-sync-tick.sh every 180 seconds. That fetches the
+  checked-out tracking branch of every canonical clone under OMNI_HOME and each
+  registry root (read from OMNI_HOME/scripts/git-hooks/registry-roots, so this
+  environment needs only OMNI_HOME), and fast-forwards the clean ones. A dirty,
+  diverged, detached, bare or lane-branch clone is logged as a refusal and left
+  untouched. The PostToolUse hook post_tool_use_merge_clone_sync.sh covers the
+  merges this Mac makes; this agent covers the rest (auto-merge completions,
+  other people). No GitHub API quota is spent: git fetch is the git transport.
+
+  launchd never starts a second instance of a job that is still running, so a
+  slow fetch cannot pile runs up. ProcessType is deliberately left at the
+  default: measured 2026-09-25 on the operator Mac, ProcessType Background
+  throttled the fetches so hard that one pass over 58 clones took 200 s and the
+  knowledge-base-internal fetch hit the engine's 120 s timeout, against 15 s for
+  the same pass run interactively.
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by
+  tick-bundle-install.sh.
+
+  Install only this agent:
+    bash omniclaude/scripts/tick-bundle-install.sh --only ai.omninode.canonical-clone-sync
+
+  Uninstall:
+    launchctl bootout gui/$(id -u)/ai.omninode.canonical-clone-sync
+    rm ~/Library/LaunchAgents/ai.omninode.canonical-clone-sync.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.canonical-clone-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/canonical-clone-sync-tick.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>180</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/canonical-clone-sync-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/canonical-clone-sync-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+    <key>ONEX_STATE_DIR</key>
+    <string>__OMNI_HOME__/.onex_state</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+</dict>
+</plist>

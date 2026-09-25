@@ -53,13 +53,16 @@ for tmpl in "${LAUNCHD_SRC}"/*.plist; do
       -e "s|__HOME__|${HOME_RESOLVED}|g" \
       "${tmpl}"
   )"
+  # awk reads its whole input (no early exit): under pipefail an early exit
+  # SIGPIPEs the echo, and the 141 either aborts the script under set -e or
+  # reads a Disabled=true template as enabled.
   if echo "${rendered}" | awk '
     /<key>Disabled<\/key>/ {
-      if ($0 ~ /<true\/>/) { found=1; exit }
+      if ($0 ~ /<true\/>/) { found=1 }
       pending=1
       next
     }
-    pending && /<true\/>/ { found=1; exit }
+    pending && /<true\/>/ { found=1 }
     pending && /<false\/>/ { pending=0; next }
     END { exit(found ? 0 : 1) }
   '; then
@@ -67,7 +70,7 @@ for tmpl in "${LAUNCHD_SRC}"/*.plist; do
   fi
   prog="$(
     echo "${rendered}" \
-      | awk '/<key>ProgramArguments<\/key>/{flag=1; next} flag && /<string>/{gsub(/.*<string>|<\/string>.*/, ""); print; exit}'
+      | awk '/<key>ProgramArguments<\/key>/{flag=1; next} flag && /<string>/ && !done{gsub(/.*<string>|<\/string>.*/, ""); print; done=1}'
   )"
   [ -n "${prog}" ] || fail "[${label}] could not extract ProgramArguments[0]"
   # The rendered path may include argv tail (e.g. "--build-only"); take field 1.
