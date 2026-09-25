@@ -236,6 +236,12 @@ _SESSION_START_WORKSPACE_SYNC_COMMAND = (
 _WORKSPACE_RECONCILE_TICK_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workspace_reconcile_tick.sh"
 )
+# OMN-19607: after a pull-request merge, a detached git-only fast-forward of the
+# matching canonical clones. Registered right after the reconcile tick.
+_MERGE_CLONE_SYNC_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_merge_clone_sync.sh"
+)
+_MERGE_CLONE_SYNC_MATCHER = "^(Bash|mcp__github__merge_pull_request)$"
 _SESSION_START_HOOK_PARITY_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_hook_parity.sh"
 )
@@ -392,10 +398,11 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"Skill. Found: {matchers!r}"
     )
 
-    # Exactly seven PostToolUse commands are wired: the secret-redaction guard
+    # Exactly eight PostToolUse commands are wired: the secret-redaction guard
     # (Bash only, OMN-16277), the catch-all bus-mirror hook (.*, OMN-16162 S1),
-    # the workspace-reconcile tick (.*, OMN-17190), the local capture group, and
-    # the Skill quality capture hook.
+    # the workspace-reconcile tick (.*, OMN-17190), the merge clone-sync hook
+    # (Bash and the GitHub MCP merge tool, OMN-19607), the local capture group,
+    # and the Skill quality capture hook.
     post_tool_use_commands = [
         hook.get("command", "")
         for group in hooks["PostToolUse"]
@@ -405,6 +412,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND,
         _POST_TOOL_USE_BUS_MIRROR_COMMAND,
         _WORKSPACE_RECONCILE_TICK_COMMAND,
+        _MERGE_CLONE_SYNC_COMMAND,
         _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND,
         _POST_TOOL_USE_CHANGESET_GUARD_COMMAND,
         _POST_TOOL_USE_OUTPUT_CAPTURE_METADATA_COMMAND,
@@ -412,17 +420,26 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     ], (
         "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
         "(OMN-16277 carve-out), the bus-mirror hook (OMN-16162 S1 carve-out), the "
-        "workspace-reconcile tick (OMN-17190 carve-out), the OMN-17207 "
+        "workspace-reconcile tick (OMN-17190 carve-out), the merge clone-sync "
+        "hook (OMN-19607 carve-out), the OMN-17207 "
         "local-only capture hooks, and the Skill quality capture hook, and nothing "
         f"else. Found: {post_tool_use_commands!r}"
     )
     post_tool_use_matchers = [
         group.get("matcher", "") for group in hooks["PostToolUse"]
     ]
-    assert post_tool_use_matchers == ["Bash", ".*", ".*", "Bash", "Skill"], (
+    assert post_tool_use_matchers == [
+        "Bash",
+        ".*",
+        ".*",
+        _MERGE_CLONE_SYNC_MATCHER,
+        "Bash",
+        "Skill",
+    ], (
         "PostToolUse secret-redaction guard must match Bash only; the bus-mirror "
         "hook and the workspace-reconcile tick must each match every tool (.*) in "
-        "their own entry; the OMN-17207 local-capture group must match Bash "
+        "their own entry; the merge clone-sync hook must match Bash and the "
+        "GitHub MCP merge tool only; the OMN-17207 local-capture group must match Bash "
         "only; and the Skill quality capture hook must match Skill. "
         f"Found: {post_tool_use_matchers!r}"
     )
