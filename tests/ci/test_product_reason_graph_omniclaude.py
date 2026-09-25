@@ -258,6 +258,41 @@ def test_map_checkruns_folds_leaves_into_subchecks() -> None:
 
 
 @pytest.mark.unit
+def test_map_checkruns_matches_renamed_hooks_shard_names() -> None:
+    """Falsifier: a renamed hooks shard name is not matched by
+
+    ``_subcheck_for_check_name``/``CHECK_PREFIX_TO_SUBCHECK``. OMN-19681
+    sharded the omniclaude ``Hooks System Tests`` job into a 2-way matrix, so
+    its real check-run names are now ``"Hooks System Tests (1/2)"`` /
+    ``"Hooks System Tests (2/2)"`` instead of the bare ``"Hooks System
+    Tests"`` the exact-match dict still carries. Before the fix neither the
+    stale exact entry nor the pre-existing ``"Tests (Split"`` prefix entry
+    matches either shard name, so both silently drop out of the `tests`
+    subcheck fold (leaves it ABSENT) and this test fails.
+    """
+    check_runs = [
+        {"name": "Detect Changes", "conclusion": "success"},
+        {"name": "Code Quality", "conclusion": "success"},
+        {"name": "Pyright Type Checking", "conclusion": "success"},
+        {"name": "Hooks System Tests (1/2)", "conclusion": "success"},
+        {"name": "Hooks System Tests (2/2)", "conclusion": "success"},
+        {"name": "Merge Test Coverage", "conclusion": "success"},
+        {"name": "Python Security Scan", "conclusion": "success"},
+        {"name": "Secret Detection", "conclusion": "success"},
+    ]
+    facts = map_checkruns_to_facts(check_runs)
+    assert facts["tests"] == "success", (
+        "a renamed hooks shard (e.g. 'Hooks System Tests (1/2)') is not "
+        f"matched into the tests subcheck: facts={facts!r}"
+    )
+    graph = build_reason_graph({"head_sha": _HEAD, "subchecks": facts})
+    assert graph["root"] is None, (
+        "an all-green run with renamed hooks shards must have no root cause "
+        f"(root=None); got {graph['root']!r}"
+    )
+
+
+@pytest.mark.unit
 def test_map_checkruns_seeded_security_failure_via_leaf() -> None:
     # A failing security leaf folds the whole `security` subcheck to failure and,
     # through the graph, surfaces as PRODUCT_FAILED(security) — from LEAF checks
