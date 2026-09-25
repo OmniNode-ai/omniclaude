@@ -29,8 +29,8 @@ the evidence root the guard reads so the round-trip stays exact and is
 independent of the installed omnibase_core version.
 
 These tests shell the real guard script and call the real writer. They do NOT
-require Kafka, Postgres, or any external services (writer is called with
-``emit=False``; the guard runs with ``KAFKA_BOOTSTRAP_SERVERS`` unset).
+require Kafka, Postgres, or any external services (the writer emits nothing,
+OMN-19153; the guard runs with ``KAFKA_BOOTSTRAP_SERVERS`` unset).
 
 DoD evidence for OMN-13323 is carried by the OCC contract
 ``onex_change_control/contracts/OMN-13323.yaml`` and its paired ``dod_report``
@@ -206,7 +206,6 @@ class TestRoundTrip:
             run_result=run_result,
             working_dir=str(working_dir),
             output_dir=None,  # exercise the resolver — the /dod-verify default
-            emit=False,
         )
 
         # Writer landed the receipt exactly where the guard looks.
@@ -245,7 +244,6 @@ class TestRoundTrip:
             run_result=run_result,
             working_dir=str(working_dir),
             output_dir=None,
-            emit=False,
         )
         assert written.exists()
 

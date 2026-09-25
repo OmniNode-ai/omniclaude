@@ -60,14 +60,16 @@ event_bus:
     topic: "onex.cmd.omniclaude.dod-verify.v1"
     consumer_group: "omniclaude.skill.dod_verify"
   publish:
-    success_topic: "onex.evt.omniclaude.dod-verify-completed.v1"
+    # OMN-19153: the skill's real completion event is omnimarket's
+    # node_dod_verify terminal; this namespace's spelling was retired.
+    success_topic: "onex.evt.omnimarket.dod-verify-completed.v1"
     failure_topic: "onex.evt.omniclaude.dod-verify-failed.v1"
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
     - "onex.cmd.omniclaude.dod-verify.v1"
   publish_topics:
-    - "onex.evt.omniclaude.dod-verify-completed.v1"
+    - "onex.evt.omnimarket.dod-verify-completed.v1"
     - "onex.evt.omniclaude.dod-verify-failed.v1"
 
 # Capabilities

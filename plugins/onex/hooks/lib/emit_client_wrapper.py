@@ -138,7 +138,6 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "response.stopped",  # STOP-HOOK-FIX - Stop hook after each assistant turn completion
         "pr.validation.rollup",  # OMN-3930 - PR validation rollup with VTS at pipeline completion
         "correlation.trace.span",  # OMN-5047 - Correlation trace span for omnidash /trace page
-        "dod.verify.completed",  # OMN-5198 - DoD evidence verification run completed
         "dod.guard.fired",  # OMN-5198 - DoD completion guard hook interception
         "dod.sweep.completed",  # OMN-6276 - DoD batch sweep completed
         "audit.dispatch.validated",  # OMN-5235 - Task dispatch validated (before stack mutation)

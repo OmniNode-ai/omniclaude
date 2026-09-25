@@ -1109,20 +1109,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # DoD Telemetry Events (OMN-5197)
     # =========================================================================
-    # Consumed by omnidash /dod dashboard via dod_verify_runs and
-    # dod_guard_events tables.
-    "dod.verify.completed": EventRegistration(
-        event_type="dod.verify.completed",
-        fan_out=[
-            FanOutRule(
-                topic_base=TopicBase.DOD_VERIFY_COMPLETED,
-                transform=None,  # Passthrough — no sensitive data in verification metadata
-                description="DoD evidence verification run result for omnidash /dod dashboard",
-            ),
-        ],
-        partition_key_field="session_id",
-        required_fields=["session_id", "ticket_id"],
-    ),
+    # The verification-completed event is omnimarket's, published by
+    # node_dod_verify and stored by node_projection_dod_verdict (OMN-19153).
     "dod.guard.fired": EventRegistration(
         event_type="dod.guard.fired",
         fan_out=[

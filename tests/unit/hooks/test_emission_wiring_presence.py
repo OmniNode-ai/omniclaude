@@ -476,7 +476,6 @@ class TestEmissionRegistryCoverage:
             "skill.started",
             "skill.completed",
             "pr.validation.rollup",
-            "dod.verify.completed",
             "dod.guard.fired",
             "audit.dispatch.validated",
             "audit.scope.violation",
