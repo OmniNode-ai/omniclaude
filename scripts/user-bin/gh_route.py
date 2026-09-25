@@ -82,9 +82,9 @@ from urllib.parse import parse_qs, urlsplit
 
 ORG = "OmniNode-ai"
 FLAG_ENV = "ONEX_GH_READ_ROUTING"
-TOKEN_CMD_ENV = "GH_READ_TOKEN_CMD"  # noqa: S105 -- an env var name, not a secret
+MINT_CMD_ENV = "GH_READ_TOKEN_CMD"
 CACHE_SUBDIR = "omni"
-TOKEN_CACHE_NAME = "gh-read-token.json"  # noqa: S105 -- a file name, not a secret
+CACHE_FILE_NAME = "gh-read-token.json"
 USAGE_LOG_NAME = "gh-route.jsonl"
 SHIM_MARKER = b"ONEX_GH_USER_SHIM"
 TOKEN_MAX_AGE_S = 50 * 60
@@ -95,7 +95,7 @@ IDENTITY_APP = "app"
 IDENTITY_OPERATOR = "operator"
 IDENTITY_FALLBACK = "operator-fallback"
 
-_INSTALLATION_TOKEN = re.compile(r"ghs_[A-Za-z0-9_]{20,255}")
+_INSTALLATION_SHAPE = re.compile(r"ghs_[A-Za-z0-9_]{20,255}")
 _GITHUB_URL = re.compile(r"^https?://(?:www\.)?github\.com/([^/\s]+)/([^/\s#?]+)")
 _OWNER_REPO = re.compile(r"^([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9._-]+)$")
 _SEARCH_SCOPE = re.compile(r"\b(?:org|user|repo):([A-Za-z0-9-]+)", re.IGNORECASE)
@@ -429,7 +429,7 @@ def _read_cached(path: Path) -> str | None:
     except (OSError, ValueError, KeyError, TypeError):
         return None
     age = _now() - minted_at
-    if not isinstance(token, str) or not _INSTALLATION_TOKEN.fullmatch(token):
+    if not isinstance(token, str) or not _INSTALLATION_SHAPE.fullmatch(token):
         return None
     if age < -60 or age >= TOKEN_MAX_AGE_S:
         return None
@@ -472,13 +472,13 @@ def cache_base(env: Mapping[str, str]) -> Path | None:
 
 def acquire_read_token(env: Mapping[str, str]) -> TokenResult:
     """The cached read token, or a freshly minted one, or the reason there is none."""
-    cmd = env.get(TOKEN_CMD_ENV, "").strip()
+    cmd = env.get(MINT_CMD_ENV, "").strip()
     if not cmd:
         return TokenResult(None, "token-cmd-unset")
     base = cache_base(env)
     if base is None:
         return TokenResult(None, "cache-home-unresolvable")
-    cache = base / CACHE_SUBDIR / TOKEN_CACHE_NAME
+    cache = base / CACHE_SUBDIR / CACHE_FILE_NAME
     cached = _read_cached(cache)
     if cached:
         return TokenResult(cached, "cache-hit")
@@ -503,11 +503,11 @@ def acquire_read_token(env: Mapping[str, str]) -> TokenResult:
             return TokenResult(None, f"token-cmd-error-{type(exc).__name__}")
         if proc.returncode != 0:
             return TokenResult(None, f"token-cmd-exit-{proc.returncode}")
-        token = proc.stdout.decode("utf-8", "replace").strip()
-        if not _INSTALLATION_TOKEN.fullmatch(token):
+        minted = proc.stdout.decode("utf-8", "replace").strip()
+        if not _INSTALLATION_SHAPE.fullmatch(minted):
             return TokenResult(None, "token-not-installation-token")
-        _write_cached(cache, token)
-        return TokenResult(token, "minted")
+        _write_cached(cache, minted)
+        return TokenResult(minted, "minted")
 
 
 # --------------------------------------------------------------------------- #

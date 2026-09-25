@@ -122,7 +122,7 @@ def env(tmp_path: Path, fake_gh: Path, token_cmd: Path) -> dict[str, str]:
         "GH_TOKEN": OPERATOR_TOKEN,
         "GH_REPO": "OmniNode-ai/omniclaude",
         gr.FLAG_ENV: "1",
-        gr.TOKEN_CMD_ENV: str(token_cmd),
+        gr.MINT_CMD_ENV: str(token_cmd),
         "FAKE_GH_LOG": str(tmp_path / "gh.log"),
         "FAKE_MINT_COUNT": str(tmp_path / "mint.count"),
     }
@@ -324,7 +324,7 @@ def _assert_fallback(
 def test_fallback_when_token_cmd_unset(
     fake_gh: Path, env: dict[str, str], records: list[object]
 ) -> None:
-    env.pop(gr.TOKEN_CMD_ENV)
+    env.pop(gr.MINT_CMD_ENV)
     assert _run(READ_ARGV, fake_gh, env, records) == 0
     _assert_fallback(env, records, "token-cmd-unset")
 
@@ -340,7 +340,7 @@ def test_fallback_when_token_cmd_fails(
 def test_fallback_when_token_cmd_missing(
     tmp_path: Path, fake_gh: Path, env: dict[str, str], records: list[object]
 ) -> None:
-    env[gr.TOKEN_CMD_ENV] = str(tmp_path / "no-such-mint")
+    env[gr.MINT_CMD_ENV] = str(tmp_path / "no-such-mint")
     assert _run(READ_ARGV, fake_gh, env, records) == 0
     _assert_fallback(env, records, "token-cmd-not-found")
 
@@ -362,7 +362,7 @@ def test_fallback_when_token_cmd_times_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     slow = _write_exe(tmp_path / "slow-mint", "import time\ntime.sleep(5)\n")
-    env[gr.TOKEN_CMD_ENV] = str(slow)
+    env[gr.MINT_CMD_ENV] = str(slow)
     monkeypatch.setattr(gr, "TOKEN_CMD_TIMEOUT_S", 0.3)
     assert _run(READ_ARGV, fake_gh, env, records) == 0
     _assert_fallback(env, records, "token-cmd-timeout")
@@ -385,7 +385,7 @@ def test_cache_uses_home_dot_cache_when_xdg_unset(
     env.pop("XDG_CACHE_HOME")
     assert _run(READ_ARGV, fake_gh, env, records) == 0
     assert _calls(env)[0]["gh_token"] == APP_TOKEN
-    cached = tmp_path / ".cache" / gr.CACHE_SUBDIR / gr.TOKEN_CACHE_NAME
+    cached = tmp_path / ".cache" / gr.CACHE_SUBDIR / gr.CACHE_FILE_NAME
     assert stat.S_IMODE(cached.stat().st_mode) == 0o600
 
 
@@ -435,7 +435,7 @@ def test_fallback_routing_disabled_is_a_pure_pass_through(
 
 
 def _cache_file(env: dict[str, str]) -> Path:
-    return Path(env["XDG_CACHE_HOME"]) / gr.CACHE_SUBDIR / gr.TOKEN_CACHE_NAME
+    return Path(env["XDG_CACHE_HOME"]) / gr.CACHE_SUBDIR / gr.CACHE_FILE_NAME
 
 
 def test_cache_file_is_mode_0600_and_reused(
