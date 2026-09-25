@@ -62,6 +62,11 @@ event_bus:
   publish:
     # OMN-19153: the skill's real completion event is omnimarket's
     # node_dod_verify terminal; this namespace's spelling was retired.
+    # This contract's publish_topics is what declares the topic. It needs no
+    # entry in src/omniclaude/hooks/topic_allowlist.yaml: that file is a CI
+    # governance list for TopicBase members that no contract declares
+    # (tests/unit/test_topic_governance.py), not a publish-time filter, and
+    # node_skill_*_orchestrator contracts are outside its scan.
     success_topic: "onex.evt.omnimarket.dod-verify-completed.v1"
     failure_topic: "onex.evt.omniclaude.dod-verify-failed.v1"
 
