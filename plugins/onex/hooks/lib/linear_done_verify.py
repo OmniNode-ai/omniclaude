@@ -31,6 +31,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from typing import Any
 
 # States that require merged-PR proof before the transition is allowed.
@@ -124,6 +125,26 @@ _SUPERSESSION_PHRASE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# OMN-13856 (the OMN-14642 refusal): a bare ``#N`` inside a CLOSED PR's own
+# closing note. On GitHub a bare number in a PR comment means a PR in the same
+# repository, so it resolves to the closed PR's repo. The lookbehind keeps the
+# ``#N`` of an ``owner/repo#N`` citation from matching twice.
+_NOTE_BARE_REF_RE = re.compile(r"(?<![\w/])#(\d+)\b")
+
+# OMN-13856 (the OMN-13907 refusal): a no-PR housekeeping ticket whose DoD is a
+# live-state readback (worktrees removed, a lane stopped, a record deleted) has
+# no PR to cite and no node_dod_verify contract to receipt. The marker is the
+# sanctioned carrier for that readback. Like the deploy-readback marker it must
+# carry evidence: a dated readback no older than the window below, and the
+# probe that produced it, quoted in backticks. It is honoured only on a ticket
+# that cites no PR at all; see done_flip_guard.decide.
+_COMMIT_SHA_RE = re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b")
+
+LIVE_STATE_MARKER_KEYS = frozenset({"live-state-proven", "live_state_proven"})
+LIVE_STATE_MAX_AGE_DAYS = 7
+_ISO_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+_BACKTICK_PROBE_RE = re.compile(r"`[^`\n]*\S[^`\n]*`")
+
 # Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
 # deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
 # satisfies nor blocks a *product* ticket's Done — it is a receipt companion,
@@ -174,6 +195,10 @@ class PRRef:
     # the refusal so the drafter is told which citation to make explicit rather
     # than that the reference is simply unresolvable.
     anchor_candidates: tuple[str, ...] = ()
+    # OMN-13856: a commit SHA named on the same line as an otherwise unanchored
+    # bare `PR #N` ("activating commit `8a4fe66b` (PR #257)"). Populated only
+    # when the ref has no repository; see _resolve_commit_anchored_refs.
+    commit_anchor: str = ""
 
 
 @dataclass
@@ -188,6 +213,15 @@ class PRStatus:
     # or unreadable citation. Empty means no proven supersession, which is
     # what every caller constructing a status directly gets.
     superseded_by: str = ""
+    # OMN-13856: the PR title, and, for a CLOSED-unmerged PR only, the PR body
+    # and its conversation comments, all read by REST in :func:`fetch_pr_status`.
+    # A closing note is where a lane records "superseded by #N" when it closes
+    # a PR in favour of a recut; :func:`_apply_declared_supersessions` reads it.
+    title: str = ""
+    closing_notes: tuple[str, ...] = ()
+    # OMN-13856: the merge commit of a MERGED PR, read by REST. Used only to
+    # match a commit-anchored bare reference; see _resolve_commit_anchored_refs.
+    merge_commit_sha: str = ""
 
     @property
     def is_blocking(self) -> bool:
@@ -294,9 +328,63 @@ def parse_pr_refs(
             # the `default_repo` guess `bare` marks (OMN-15782).
             bare=resolved is None or resolved == default_repo,
             anchor_candidates=candidates,
+            commit_anchor=(
+                _line_commit_anchor(text, num_match.start())
+                if resolved is None and not candidates
+                else ""
+            ),
         )
 
     return list(refs.values())
+
+
+def _line_commit_anchor(text: str, match_start: int) -> str:
+    """Return the one commit SHA named on the line of a match, or "" (OMN-13856).
+
+    A SHA is 7-40 lowercase hex characters containing at least one digit (so
+    hex-spelled words such as "defaced" never qualify). A line naming two
+    different SHAs is ambiguous and yields "". Pure function.
+    """
+    line_start = text.rfind("\n", 0, match_start) + 1
+    line_end = text.find("\n", match_start)
+    line = text[line_start : line_end if line_end != -1 else len(text)]
+    shas = {m.group(0).lower() for m in _COMMIT_SHA_RE.finditer(line)}
+    return next(iter(shas)) if len(shas) == 1 else ""
+
+
+def _resolve_commit_anchored_refs(refs: list[PRRef], fetcher: Any) -> list[PRStatus]:
+    """Fetch every ref, resolving commit-anchored bare refs first (OMN-13856).
+
+    The OMN-14642 refusal: the ticket's incident narrative reads "Activating
+    commit: `8a4fe66b` (PR #257, ...)". Nothing anchored #257 to a repository,
+    so the guard refused it as an unverifiable citation, although the line
+    names the very commit the PR merged as. Here such a ref is looked up as
+    PR #N in each repository the ticket's OTHER citations name, and it resolves
+    to the one candidate whose MERGED merge commit starts with that SHA. This
+    is a verified anchor, not a waiver: the ref is then reported as that merged
+    PR. No match, more than one match, or no candidate repository at all
+    leaves the ref unresolved, and it refuses exactly as before.
+    """
+    candidate_repos = sorted(
+        {r.repo for r in refs if r.repo is not None and not r.commit_anchor}
+    )
+    statuses: list[PRStatus] = []
+    for ref in refs:
+        if ref.repo is None and ref.commit_anchor and candidate_repos:
+            matches = []
+            for repo in candidate_repos:
+                probe = fetcher(PRRef(number=ref.number, repo=repo))
+                if (
+                    not probe.error
+                    and probe.state == "MERGED"
+                    and probe.merge_commit_sha.lower().startswith(ref.commit_anchor)
+                ):
+                    matches.append(probe)
+            if len(matches) == 1:
+                statuses.append(matches[0])
+                continue
+        statuses.append(fetcher(ref))
+    return statuses
 
 
 def _inline_repo_anchor(
@@ -457,7 +545,7 @@ def probe_occ_membership(number: int, timeout: float = 15.0) -> bool:
     Production prober for :func:`is_weak_signal_ref` (OMN-15782) — resolves
     the spelling-dependent gap for *bare* refs whose repo did not already
     resolve directly to a weak-signal repo (see ``PRRef.bare``). One extra
-    ``gh pr view`` call per unresolved bare ref; explicitly-qualified refs
+    REST ``gh api`` call per unresolved bare ref; explicitly-qualified refs
     never reach this (repo already known, no probe needed). Any error (gh
     unavailable, timeout, PR not found) is treated as "not a member" —
     fail-closed toward "not weak" so this can never *waive* a genuine
@@ -465,18 +553,9 @@ def probe_occ_membership(number: int, timeout: float = 15.0) -> bool:
     """
     occ_repo = next(iter(_WEAK_SIGNAL_REPOS))
     repo = f"{DEFAULT_OWNER}/{occ_repo}"
-    cmd = ["gh", "pr", "view", str(number), "--repo", repo, "--json", "number"]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
-    return proc.returncode == 0
+    # REST, not GraphQL (OMN-13856): see _gh_api_json.
+    data, error = _gh_api_json(f"repos/{repo}/pulls/{number}", timeout)
+    return error is None and isinstance(data, dict)
 
 
 def is_exempt(description: str, labels: list[str] | None) -> bool:
@@ -518,8 +597,45 @@ def is_cancel_state(state_value: str) -> bool:
     return state_value.strip().lower() in CANCEL_STATES
 
 
+def _gh_api_json(path: str, timeout: float) -> tuple[Any, str | None]:
+    """Run ``gh api <path>`` (REST) and return ``(parsed_json, error)``.
+
+    OMN-13856 (the OMN-14652 refusal): PR state used to be read through
+    ``gh pr view``, which is GraphQL. GraphQL and REST are separate quota
+    buckets, and on 2026-09-25 GraphQL was exhausted while REST had thousands of
+    calls left, so two merged PRs came back as errors and a verified-done ticket
+    was refused. REST answers every field this guard needs. A failure is
+    returned as an error string, never as a state, so callers still fail closed.
+    """
+    cmd = ["gh", "api", path]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"Timeout querying {path}"
+    except FileNotFoundError:
+        return None, "gh CLI not available in PATH"
+    if proc.returncode != 0:
+        return None, f"gh api {path} failed: {proc.stderr.strip()}"
+    try:
+        return json.loads(proc.stdout), None
+    except json.JSONDecodeError as exc:
+        return None, f"Could not parse gh output: {exc}"
+
+
 def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
-    """Query GitHub for PR state via `gh pr view`."""
+    """Query GitHub for PR state by REST (``gh api repos/<repo>/pulls/<N>``).
+
+    A CLOSED-unmerged PR also carries its body and conversation comments as
+    ``closing_notes``, so a "superseded by" note can be checked. A failure to
+    read the comments leaves only the body, which can keep a citation
+    blocking but never clears one.
+    """
     repo = ref.repo
     if not repo:
         return PRStatus(
@@ -541,61 +657,47 @@ def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
             ),
         )
 
-    cmd = [
-        "gh",
-        "pr",
-        "view",
-        str(ref.number),
-        "--repo",
-        repo,
-        "--json",
-        "state,mergeStateStatus,url",
-    ]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
+    data, error = _gh_api_json(f"repos/{repo}/pulls/{ref.number}", timeout)
+    if error is not None or not isinstance(data, dict):
         return PRStatus(
             ref=ref,
             state="UNKNOWN",
             merge_state="UNKNOWN",
-            error=f"Timeout querying {repo}#{ref.number}",
-        )
-    except FileNotFoundError:
-        return PRStatus(
-            ref=ref,
-            state="UNKNOWN",
-            merge_state="UNKNOWN",
-            error="gh CLI not available in PATH",
+            error=f"PR state read failed for {repo}#{ref.number}: "
+            + (error or "unexpected response shape"),
         )
 
-    if proc.returncode != 0:
-        return PRStatus(
-            ref=ref,
-            state="UNKNOWN",
-            merge_state="UNKNOWN",
-            error=f"gh pr view failed for {repo}#{ref.number}: {proc.stderr.strip()}",
-        )
+    raw_state = str(data.get("state", "")).lower()
+    if data.get("merged") is True:
+        state = "MERGED"
+    elif raw_state == "open":
+        state = "OPEN"
+    elif raw_state == "closed":
+        state = "CLOSED"
+    else:
+        state = "UNKNOWN"
 
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
-        return PRStatus(
-            ref=ref,
-            state="UNKNOWN",
-            merge_state="UNKNOWN",
-            error=f"Could not parse gh output: {exc}",
+    closing_notes: tuple[str, ...] = ()
+    if state == "CLOSED":
+        notes = [str(data.get("body") or "")]
+        comments, comments_error = _gh_api_json(
+            f"repos/{repo}/issues/{ref.number}/comments?per_page=100", timeout
         )
+        if comments_error is None and isinstance(comments, list):
+            notes.extend(
+                str(c.get("body") or "") for c in comments if isinstance(c, dict)
+            )
+        closing_notes = tuple(n for n in notes if n)
 
     return PRStatus(
         ref=ref,
-        state=str(data.get("state", "UNKNOWN")).upper(),
-        merge_state=str(data.get("mergeStateStatus", "UNKNOWN")).upper(),
+        state=state,
+        merge_state=str(data.get("mergeable_state") or "UNKNOWN").upper(),
+        title=str(data.get("title") or ""),
+        closing_notes=closing_notes,
+        merge_commit_sha=str(data.get("merge_commit_sha") or "")
+        if state == "MERGED"
+        else "",
     )
 
 
@@ -622,10 +724,46 @@ def classify_blocking(status: PRStatus) -> bool:
     return False
 
 
+def parse_note_successor(note: str, closed_repo: str) -> PRRef | None:
+    """Return the successor a CLOSED PR's own note names, or None (OMN-13856).
+
+    Reads the first line of ``note`` carrying a supersession phrase, and takes
+    the first PR reference to the right of the phrase: a pull URL, an
+    ``owner/repo#N`` citation, or a bare ``#N`` (which GitHub resolves to the
+    closed PR's own repository). A line naming no reference ("superseded by
+    later work") names nothing to verify and yields None. Pure function.
+    """
+    for line in note.splitlines():
+        phrase = _SUPERSESSION_PHRASE_RE.search(line)
+        if phrase is None:
+            continue
+        right = line[phrase.end() :]
+        found: list[tuple[int, PRRef]] = []
+        for m in _PR_URL_RE.finditer(right):
+            found.append(
+                (
+                    m.start(),
+                    PRRef(number=int(m.group(3)), repo=f"{m.group(1)}/{m.group(2)}"),
+                )
+            )
+        for m in _PR_OWNER_REPO_HASH_RE.finditer(right):
+            found.append((m.start(), PRRef(number=int(m.group(2)), repo=m.group(1))))
+        for m in _NOTE_BARE_REF_RE.finditer(right):
+            found.append((m.start(), PRRef(number=int(m.group(1)), repo=closed_repo)))
+        if found:
+            return min(found, key=lambda item: item[0])[1]
+    return None
+
+
+def _names_ticket(title: str, ticket_id: str) -> bool:
+    return bool(re.search(rf"\b{re.escape(ticket_id)}\b", title, re.IGNORECASE))
+
+
 def _apply_declared_supersessions(
     statuses: list[PRStatus],
     declarations: dict[tuple[str | None, int], SupersessionDeclaration],
     fetcher: Any,
+    ticket_id: str | None = None,
 ) -> None:
     """Record a PROVEN supersession on each eligible status, in place.
 
@@ -636,21 +774,43 @@ def _apply_declared_supersessions(
     citation, and only a MERGED verdict counts — an open, closed or unreadable
     successor leaves the citation blocking, as does one that resolves to no
     repository.
+
+    OMN-13856 adds a second source for the declaration: the closed PR's OWN
+    closing note (its body or a conversation comment), which is where a lane
+    records the recut when it closes a PR in favour of another. It is weaker
+    than a ticket declaration, because it is not written on the ticket, so it
+    carries one more condition: the MERGED successor must name ``ticket_id`` in
+    its title, which is what binds the successor's work to THIS ticket rather
+    than to whatever the note happens to point at. With no ``ticket_id`` the
+    note is not read at all. The declaration still reads in one direction only
+    ("<this closed PR> superseded by <successor>"), since it is the closed PR's
+    own note; a successor vouching for itself is never read.
     """
     by_key = {(s.ref.repo, s.ref.number): s for s in statuses}
     for status in statuses:
         if status.error or status.state != "CLOSED" or status.ref.repo is None:
             continue
         declaration = declarations.get((status.ref.repo, status.ref.number))
-        if declaration is None or declaration.successor is None:
+        from_note = False
+        successor: PRRef | None = None
+        if declaration is not None:
+            successor = declaration.successor
+        elif ticket_id:
+            for note in status.closing_notes:
+                successor = parse_note_successor(note, status.ref.repo)
+                if successor is not None:
+                    from_note = True
+                    break
+        if successor is None:
             continue
-        successor = declaration.successor
         successor_status = by_key.get((successor.repo, successor.number))
         if successor_status is None:
             # The successor need not itself be a cited product PR — it is
             # commonly named only on the declaration line — so probe it.
             successor_status = fetcher(successor)
         if successor_status.error or successor_status.state != "MERGED":
+            continue
+        if from_note and not _names_ticket(successor_status.title, ticket_id or ""):
             continue
         status.superseded_by = f"{successor.repo}#{successor.number}"
 
@@ -666,7 +826,9 @@ def _closed_unmerged_remedy(
             f"closed without merging, so merging it is not possible. If the "
             f"work landed elsewhere, declare that on one line of the ticket "
             f"description — `{citation} superseded by OmniNode-ai/<repo>#<N>` "
-            f"— and that successor must itself be merged. If nothing replaced "
+            f"— or in a comment on the closed PR (`Superseded by #<N>`, whose "
+            f"title must carry this ticket's id); either way that successor "
+            f"must itself be merged. If nothing replaced "
             f"it, this is abandoned work and the citation belongs off the "
             f"ticket."
         )
@@ -691,6 +853,7 @@ def verify(
     default_repo: str | None = None,
     fetcher: Any = fetch_pr_status,
     prober: Callable[[int], bool] | None = None,
+    ticket_id: str | None = None,
 ) -> VerificationResult:
     """Run the full verification against a ticket description.
 
@@ -709,6 +872,15 @@ def verify(
     weak the same as the fully-qualified spelling. Defaults to ``None`` (no
     live lookup) for test/pure-function callers; :func:`main` passes the real
     :func:`probe_occ_membership` on the live path.
+
+    ``ticket_id`` (OMN-13856) enables supersession read from a closed PR's own
+    closing note; see :func:`_apply_declared_supersessions`. Without it only a
+    ticket-declared supersession counts.
+
+    OMN-13856 (the OMN-14642 refusal): a bare ``PR #N`` with no other anchor
+    is resolved through the commit SHA its own line names, when it names one;
+    see :func:`_resolve_commit_anchored_refs`. Otherwise it still refuses, the
+    OMN-15025 / OMN-18747 fail-closed shape.
     """
     # Product PR references only — weak-signal (onex_change_control) refs are
     # filtered out so an OCC evidence companion never gates a product Done.
@@ -719,11 +891,13 @@ def verify(
     ]
 
     if refs:
-        statuses = [fetcher(ref) for ref in refs]
+        statuses = _resolve_commit_anchored_refs(refs, fetcher)
         declarations = parse_supersession_declarations(
             description, default_repo=default_repo
         )
-        _apply_declared_supersessions(statuses, declarations, fetcher)
+        _apply_declared_supersessions(
+            statuses, declarations, fetcher, ticket_id=ticket_id
+        )
         blocking = [s for s in statuses if classify_blocking(s)]
         if not blocking:
             return VerificationResult(
@@ -964,6 +1138,48 @@ def parse_deploy_readback_marker(description: str) -> str | None:
     return None
 
 
+def parse_live_state_marker(description: str, now: datetime) -> str | None:
+    """Return the evidence of a valid ``live-state-proven:`` marker, or None.
+
+    OMN-13856 (the OMN-13907 refusal). Recognises a body line of the form::
+
+        live-state-proven: 2026-09-25 `ls $OMNI_HOME/omni_worktrees/X` -> absent
+
+    and accepts it only when its value carries BOTH a readback date
+    (``YYYY-MM-DD``) that is not in the future and no more than
+    ``LIVE_STATE_MAX_AGE_DAYS`` old relative to ``now`` (UTC), AND the probe
+    that produced the readback quoted in backticks. A marker with no date, no
+    probe, a stale date or a future date is not evidence and returns None. The
+    first date on the line is the readback date. Pure function: it checks the
+    shape and freshness of the attestation, not its truth, the same limit the
+    deploy-readback marker has.
+    """
+    today = now.astimezone(UTC).date()
+    for line in description.splitlines():
+        stripped = line.strip().lstrip("-*# ").strip()
+        if ":" not in stripped:
+            continue
+        key, _, value = stripped.partition(":")
+        if key.strip().lower() not in LIVE_STATE_MARKER_KEYS:
+            continue
+        value = value.strip()
+        date_match = _ISO_DATE_RE.search(value)
+        if date_match is None or _BACKTICK_PROBE_RE.search(value) is None:
+            continue
+        try:
+            readback = date(
+                int(date_match.group(1)),
+                int(date_match.group(2)),
+                int(date_match.group(3)),
+            )
+        except ValueError:
+            continue
+        age_days = (today - readback).days
+        if 0 <= age_days <= LIVE_STATE_MAX_AGE_DAYS:
+            return value
+    return None
+
+
 def _load_stdin_tool_call() -> dict[str, Any]:
     try:
         parsed = json.loads(sys.stdin.read() or "{}")
@@ -1126,7 +1342,11 @@ def main() -> int:
     # bare `#N` reference to a genuine OCC PR classifies weak the same as
     # `owner/repo#N` — see is_weak_signal_ref()/probe_occ_membership().
     result = verify(
-        description, labels, default_repo=default_repo, prober=probe_occ_membership
+        description,
+        labels,
+        default_repo=default_repo,
+        prober=probe_occ_membership,
+        ticket_id=ticket_id or None,
     )
     if result.allowed:
         return 0

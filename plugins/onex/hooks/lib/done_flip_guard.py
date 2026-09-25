@@ -64,6 +64,11 @@ Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
     previously a blanket merge-check bypass, so a ticket carrying it flipped Done
     with its linked product PR still OPEN (the OMN-14582 false-Done). The label
     can no longer waive an open cited/linked PR — that path BLOCKS at step 3.
+3b. Durable evidence path D — live-state readback (OMN-13856): a ticket that
+    cites NO PR at all, whose description carries a
+    ``live-state-proven: <YYYY-MM-DD> `<probe>` -> <result>`` line dated within
+    the last 7 days → ALLOW. For housekeeping tickets whose DoD is a live state
+    (the OMN-13907 refusal). Never reached when any PR is cited.
 4. Durable evidence path B — OCC receipt on ``origin/dev``: a schema-valid
    ``status == PASS`` ``node_dod_verify`` receipt bound to the ticket under
    ``drift/dod_receipts/<TICKET>/`` on ``origin/dev`` of the local
@@ -104,6 +109,7 @@ import subprocess  # noqa: S404 - fixed-argv git invocations, no shell
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -118,6 +124,7 @@ from linear_done_verify import (
     is_done_state,
     is_exempt,
     parse_deploy_readback_marker,
+    parse_live_state_marker,
     verify,
     verify_implementing,
 )
@@ -516,6 +523,7 @@ def decide(
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
     receipt_lister: Callable[[str], list[dict[str, str]]] | None = None,
+    now: datetime | None = None,
 ) -> Decision:
     """Return the guard decision for a PreToolUse tool call.
 
@@ -528,6 +536,8 @@ def decide(
         parsed fields for the ticket (OMN-15712 supersession/citation check);
         defaults to :func:`list_ticket_receipt_fields` bound to the resolved
         OCC clone.
+      * ``now`` — the clock the live-state marker's freshness is judged
+        against (OMN-13856); defaults to the current UTC time.
     """
     tool_name = call.get("tool_name", "")
     if tool_name not in _LINEAR_TOOLS:
@@ -626,7 +636,11 @@ def decide(
     # regardless of the label; the exemption is honored only below, when NO
     # product PR is cited.
     pr_result = verify(
-        description, labels, default_repo=default_repo, fetcher=pr_fetcher
+        description,
+        labels,
+        default_repo=default_repo,
+        fetcher=pr_fetcher,
+        ticket_id=ticket_id or None,
     )
     if not pr_result.allowed:
         # A cited PR is open / unmerged / unresolvable — the classic OMN-8375
@@ -709,6 +723,19 @@ def decide(
             "an issue id. Pass 'id' in the save_issue call.",
         )
 
+    # (3b) durable evidence path D — live-state readback marker (OMN-13856, the
+    # OMN-13907 refusal). A housekeeping ticket whose DoD is a live state
+    # (worktrees removed, a record deleted) has no PR to cite and no DoD
+    # contract to receipt, and was refused only for that. The marker must carry
+    # a fresh dated readback and the probe that produced it (see
+    # parse_live_state_marker), and it is honoured ONLY here, where the ticket
+    # cites no PR at all: any cited PR already decided above, so the marker can
+    # never waive an open, closed-abandoned or unverifiable citation.
+    if pr_result.reason == "no_pr_references" and (
+        parse_live_state_marker(description, now or datetime.now(UTC)) is not None
+    ):
+        return Decision(True, "durable_evidence:live_state_proven")
+
     # (4) durable evidence path B — PASS OCC receipt on origin/dev (git-backed).
     probe = occ_probe
     if probe is None:
@@ -735,8 +762,10 @@ def decide(
         f"tracked under {_RECEIPT_DIR_PREFIX}/{ticket_id}/ on {_OCC_REF} of the "
         "local onex_change_control clone. Fail-closed (no fake Done). Cite the "
         "merged implementing PR in the ticket description, land a durable OCC "
-        "receipt, or apply an explicit close-if-done exemption for a legitimate "
-        "no-PR close.",
+        "receipt, record a no-PR live-state readback as a description line "
+        "`live-state-proven: <YYYY-MM-DD> `<probe>` -> <result>` (dated within "
+        "the last 7 days), or apply an explicit close-if-done exemption for a "
+        "legitimate no-PR close.",
     )
 
 
