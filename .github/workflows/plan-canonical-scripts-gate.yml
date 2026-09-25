@@ -21,6 +21,7 @@ on:
       - '.onex_ratchets/plan_canonical_scripts_allowlist.yaml'
       - 'scripts/lint_plan_canonical_scripts.py'
       - '.github/workflows/plan-canonical-scripts-gate.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
@@ -29,6 +30,11 @@ on:
       - '.onex_ratchets/plan_canonical_scripts_allowlist.yaml'
       - 'scripts/lint_plan_canonical_scripts.py'
       - '.github/workflows/plan-canonical-scripts-gate.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

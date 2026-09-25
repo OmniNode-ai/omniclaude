@@ -40,6 +40,12 @@ on:
       - '.github/workflows/plugin-compat-gate.yml'
   workflow_dispatch:
 
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+
 env:
   PYTHON_VERSION: '3.12'
   UV_CONCURRENT_DOWNLOADS: '1'
