@@ -22,6 +22,7 @@ the workflow cannot silently regress the gate semantics.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 import yaml
@@ -200,13 +201,19 @@ def test_review_step_invokes_cli_review_with_model(
         "models succeed, so a single-model invocation is DEGRADED by "
         "construction on every run (OMN-18473)"
     )
-    for model_key in ("--model deepseek-r1", "--model qwen3-review-b"):
-        assert model_key in combined, (
-            f"review job must pass {model_key} -- both fleet-standard keys are "
-            "named because deepseek-r1 and qwen3-review are two keys for one "
-            "backend (OMN-16481), so a count-only assertion would accept a "
-            "pair that reviews with a single model twice"
-        )
+    # Only real flags: a key followed by a line continuation, never the word
+    # after "--model" in a comment inside the run block.
+    models = re.findall(r"--model\s+([A-Za-z0-9_.-]+)\s*\\\n", combined)
+    assert models == ["qwen3-review", "gpt-oss-review"], (
+        "review job must pass exactly the two DIFFERENT lab models, "
+        f"qwen3-review and gpt-oss-review, each on its own lab host; found {models}. "
+        "deepseek-r1, qwen3-review and qwen3-review-b were three keys for one "
+        "backend (OMN-16481), so the old pair reviewed with a single model "
+        "twice, and a cloud reviewer would send a private diff off the lab "
+        "(OMN-17492)"
+    )
+    for not_a_voter in ("deepseek-r1", "qwen3-review-b", "glm-review"):
+        assert not_a_voter not in models
     assert "--pr" in combined and "--repo" in combined, (
         "review job must pass --pr and --repo to cli_review"
     )
@@ -592,7 +599,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     mentioning it. These fixtures exercise the four cases that matter, and
     each zero has its positive control beside it.
     """
-    two_models = ["deepseek-r1", "qwen3-review-b"]
+    two_models = ["qwen3-review", "gpt-oss-review"]
 
     # One model raised a finding, the other did not: reported, not blocking.
     below = _run_verdict_snippet(
