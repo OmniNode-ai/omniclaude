@@ -21,6 +21,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +54,7 @@ def _load_guard() -> Any:
 
 
 guard = _load_guard()
-
+import no_pr_bound_evidence as nbe  # noqa: E402  (sibling import needs sys.path)
 
 # --------------------------------------------------------------------------- #
 # Stub factories
@@ -90,17 +91,17 @@ def _never_called_fetcher(_ref: Any):
     )
 
 
-def _no_receipt_probe(_ticket_id: str) -> bool:
-    """No PASS OCC receipt on origin/dev (incident / unresolved)."""
-    return False
+def _no_receipt_probe(_ticket_id: str, _description: str) -> Any:
+    """The no-PR bar is not met on origin/dev (incident / unresolved)."""
+    return nbe.BoundEvidenceVerdict(False, "no OCC contract on origin/dev")
 
 
-def _receipt_probe(_ticket_id: str) -> bool:
-    """A PASS OCC receipt on origin/dev exists for the ticket."""
-    return True
+def _receipt_probe(_ticket_id: str, _description: str) -> Any:
+    """origin/dev binds every criterion to a fresh, attested receipt."""
+    return nbe.BoundEvidenceVerdict(True, "bound: AC1<-dod-001")
 
 
-def _never_called_probe(_ticket_id: str) -> bool:
+def _never_called_probe(_ticket_id: str, _description: str) -> Any:
     raise AssertionError("OCC probe must not be invoked on this path")
 
 
@@ -348,7 +349,7 @@ def test_legit_occ_receipt_is_allowed() -> None:
     }
     d = guard.decide(call, occ_probe=_receipt_probe, linear_fetcher=_no_linear)
     assert d.allowed
-    assert d.reason == "durable_evidence:occ_receipt_on_dev"
+    assert d.reason == "durable_evidence:occ_bound_receipts"
 
 
 # --------------------------------------------------------------------------- #
@@ -685,24 +686,6 @@ def test_parse_receipt_fields_flat_scalars() -> None:
     assert "should not be parsed" not in " ".join(fields.values())
 
 
-def test_receipt_is_pass_bound() -> None:
-    assert guard._receipt_is_pass_bound(
-        guard.parse_receipt_fields(_PASS_RECEIPT), "OMN-9999"
-    )
-    # Wrong ticket
-    assert not guard._receipt_is_pass_bound(
-        guard.parse_receipt_fields(_PASS_RECEIPT), "OMN-0000"
-    )
-    # FAIL status
-    assert not guard._receipt_is_pass_bound(
-        guard.parse_receipt_fields(_FAIL_RECEIPT), "OMN-9999"
-    )
-    # PASS but no check binding (vacuous)
-    assert not guard._receipt_is_pass_bound(
-        guard.parse_receipt_fields(_VACUOUS_RECEIPT), "OMN-9999"
-    )
-
-
 # --------------------------------------------------------------------------- #
 # Git-backed OCC probe — freshness against origin/dev (real local temp repo)
 # --------------------------------------------------------------------------- #
@@ -722,9 +705,13 @@ def _git(cwd: Path, *args: str) -> None:
 
 
 def _make_occ_clone_with_dev_receipt(
-    tmp_path: Path, ticket_id: str, receipt_text: str
+    tmp_path: Path, ticket_id: str, receipt_text: str, contract_text: str = ""
 ) -> Path:
-    """Build a clone whose origin/dev carries a receipt absent from its worktree."""
+    """Build a clone whose origin/dev carries a receipt absent from its worktree.
+
+    ``contract_text``, when given, is committed as ``contracts/<ticket>.yaml``
+    beside the receipt, and is likewise removed from the working tree.
+    """
     origin = tmp_path / "origin.git"
     subprocess.run(
         ["git", "init", "--bare", str(origin)],
@@ -745,66 +732,117 @@ def _make_occ_clone_with_dev_receipt(
     rp = clone / "drift" / "dod_receipts" / ticket_id / "dod-001"
     rp.mkdir(parents=True)
     (rp / "command.yaml").write_text(receipt_text, encoding="utf-8")
+    if contract_text:
+        (clone / "contracts").mkdir()
+        (clone / "contracts" / f"{ticket_id}.yaml").write_text(
+            contract_text, encoding="utf-8"
+        )
     _git(clone, "add", "-A")
     _git(clone, "commit", "-m", "add receipt on dev")
     _git(clone, "push", "origin", "dev")
     # Move the WORKING TREE off dev so the receipt is not present locally on-tree.
     _git(clone, "checkout", "-b", "other")
-    _git(clone, "rm", "-r", "drift")
+    _git(clone, "rm", "-r", "drift", *(["contracts"] if contract_text else []))
     _git(clone, "commit", "-m", "remove receipt from working tree")
     return clone
 
 
-def test_occ_probe_reads_origin_dev_not_working_tree(tmp_path: Path) -> None:
-    """FRESHNESS: receipt on origin/dev but absent from the working tree → True.
+_BOUND_CONTRACT = """\
+schema_version: 1.0.0
+ticket_id: OMN-9999
+dod_evidence:
+  - id: dod-001
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "test -z \\"$(git worktree list --porcelain | grep dirty)\\""
+"""
+
+_BOUND_RECEIPT = """\
+schema_version: "1.0.0"
+ticket_id: OMN-9999
+evidence_item_id: dod-001
+check_type: command
+status: PASS
+run_timestamp: "2026-09-25T14:00:00Z"
+runner: lane-a
+verifier: lane-b
+target_identity: host:operator-mac
+probe_stdout: |
+  0 dirty worktrees
+commit_sha: "abc1234"
+"""
+
+_BOUND_DESCRIPTION = "## Acceptance criteria\n\n- AC1: no dirty worktree remains\n"
+_BOUND_NOW = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
+
+
+def test_occ_evidence_reads_origin_dev_not_working_tree(tmp_path: Path) -> None:
+    """FRESHNESS: contract and receipt on origin/dev, absent from the tree.
 
     This is the whole reason the guard reads the ref instead of the tree — a
     just-merged OCC receipt must be visible even when the local clone is behind.
     """
-    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
-    # Sanity: the receipt is NOT in the checked-out working tree.
+    clone = _make_occ_clone_with_dev_receipt(
+        tmp_path, "OMN-9999", _BOUND_RECEIPT, _BOUND_CONTRACT
+    )
     assert not (clone / "drift" / "dod_receipts" / "OMN-9999").exists()
-    # But it IS resolvable on origin/dev.
-    assert guard.occ_receipt_pass_on_dev(clone, "OMN-9999", fetch=True) is True
+    assert not (clone / "contracts").exists()
+    evidence = nbe.load_ticket_occ_evidence(clone, "OMN-9999", fetch=True)
+    assert evidence.contract is not None
+    assert evidence.contract["ticket_id"] == "OMN-9999"
+    assert len(evidence.receipts) == 1
+    # Full YAML parse: the block scalar the flat parser drops is read here.
+    assert evidence.receipts[0]["probe_stdout"].strip() == "0 dirty worktrees"
 
 
-def test_occ_probe_missing_ticket_is_false(tmp_path: Path) -> None:
-    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
-    assert guard.occ_receipt_pass_on_dev(clone, "OMN-0000", fetch=True) is False
+def test_occ_evidence_missing_contract_is_none(tmp_path: Path) -> None:
+    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _BOUND_RECEIPT)
+    evidence = nbe.load_ticket_occ_evidence(clone, "OMN-9999", fetch=True)
+    assert evidence.contract is None
 
 
-def test_occ_probe_fail_receipt_is_false(tmp_path: Path) -> None:
-    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _FAIL_RECEIPT)
-    assert guard.occ_receipt_pass_on_dev(clone, "OMN-9999", fetch=True) is False
+def test_occ_evidence_missing_clone_is_none(tmp_path: Path) -> None:
+    evidence = nbe.load_ticket_occ_evidence(tmp_path / "nope", "OMN-9999", fetch=False)
+    assert evidence.contract is None
+    assert evidence.receipts == []
 
 
-def test_occ_probe_vacuous_receipt_is_false(tmp_path: Path) -> None:
-    """A PASS receipt with no check binding is not durable evidence."""
-    clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _VACUOUS_RECEIPT)
-    assert guard.occ_receipt_pass_on_dev(clone, "OMN-9999", fetch=True) is False
-
-
-def test_occ_probe_missing_clone_is_false(tmp_path: Path) -> None:
-    assert (
-        guard.occ_receipt_pass_on_dev(tmp_path / "nope", "OMN-9999", fetch=False)
-        is False
+def _bound_probe(clone: Path) -> Any:
+    return lambda tid, desc: nbe.evaluate_bound_evidence(
+        tid, desc, nbe.load_ticket_occ_evidence(clone, tid, fetch=True), _BOUND_NOW
     )
 
 
-def test_occ_probe_end_to_end_allows_via_decide(tmp_path: Path) -> None:
-    """decide() ALLOWS when the injected probe resolves a real origin/dev receipt."""
+def test_occ_bound_evidence_end_to_end_allows_via_decide(tmp_path: Path) -> None:
+    """decide() ALLOWS a no-PR ticket whose origin/dev binds its criterion."""
+    clone = _make_occ_clone_with_dev_receipt(
+        tmp_path, "OMN-9999", _BOUND_RECEIPT, _BOUND_CONTRACT
+    )
+    call = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": {
+            "id": "OMN-9999",
+            "state": "Done",
+            "description": _BOUND_DESCRIPTION,
+        },
+    }
+    d = guard.decide(call, occ_probe=_bound_probe(clone), linear_fetcher=_no_linear)
+    assert d.allowed, d.reason
+    assert d.reason == "durable_evidence:occ_bound_receipts"
+
+
+def test_occ_bare_pass_receipt_no_longer_closes_a_no_pr_ticket(tmp_path: Path) -> None:
+    """The pre-OMN-13856 path B: one PASS receipt and nothing else. Refused now."""
     clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
     call = {
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {"id": "OMN-9999", "state": "Done", "description": ""},
     }
-    d = guard.decide(
-        call,
-        occ_probe=lambda tid: guard.occ_receipt_pass_on_dev(clone, tid, fetch=True),
-        linear_fetcher=_no_linear,
-    )
-    assert d.allowed
-    assert d.reason == "durable_evidence:occ_receipt_on_dev"
+    d = guard.decide(call, occ_probe=_bound_probe(clone), linear_fetcher=_no_linear)
+    assert not d.allowed
+    assert "no_durable_evidence" in d.reason
+    assert "no OCC contract" in d.reason
 
 
 # --------------------------------------------------------------------------- #
@@ -1065,7 +1103,7 @@ def test_no_occ_receipts_at_all_is_unaffected_by_citation_filter() -> None:
 def test_list_ticket_receipt_fields_reads_origin_dev(tmp_path: Path) -> None:
     """Real git-backed reader: parses every receipt YAML under the ticket's
     drift/dod_receipts/ dir on origin/dev, mirroring the freshness guarantee
-    already proven for occ_receipt_pass_on_dev."""
+    already proven for load_ticket_occ_evidence."""
     clone = _make_occ_clone_with_dev_receipt(tmp_path, "OMN-9999", _PASS_RECEIPT)
     fields = guard.list_ticket_receipt_fields(clone, "OMN-9999", fetch=True)
     assert len(fields) == 1
