@@ -118,6 +118,14 @@ class Registry:
                 "OMNI_HOME": str(self.home),
                 "ONEX_STATE_DIR": str(self.state),
                 "ONEX_REGISTRY_ROOTS": "",
+                # Force full mode so the hook's behaviour does not depend on
+                # the invoking process's cwd or an inherited OMNICLAUDE_MODE
+                # (mode.sh auto-detects from $PWD and falls back to "lite"
+                # off a bare CI checkout, whose cwd sits outside every
+                # canonical-registry directory; these tests assert on the
+                # hook actually running, so mode must be pinned, not
+                # inherited).
+                "OMNICLAUDE_MODE": "full",
                 **extra,
             }
         )
