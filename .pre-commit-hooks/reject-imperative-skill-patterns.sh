@@ -230,6 +230,12 @@ fi
 # "fake_path:real_path" pairs used by self-test to simulate allowlist checks
 # without creating real staged index entries.
 # ──────────────────────────────────────────────────────────────────────────────
+# OMN-19623: a bare here-string feeding a while-read loop can deadlock under
+# macOS pipe pressure because bash 5.1+ writes the body before starting its
+# reader. A regular file avoids that pipe-backed path entirely.
+tmp_violations="$(mktemp "${TMPDIR:-/tmp}/reject_imperative_skill_patterns.XXXXXX")"
+trap 'rm -f "$tmp_violations"' EXIT
+
 FOUND_VIOLATION=0
 
 for arg in "$@"; do
@@ -275,9 +281,10 @@ for arg in "$@"; do
 
         if [[ -n "$violations" ]]; then
             echo "ERROR: $file — imperative pattern detected: $label" >&2
+            printf '%s\n' "$violations" > "$tmp_violations"
             while IFS= read -r line; do
                 echo "  $line" >&2
-            done <<< "$violations"
+            done < "$tmp_violations"
             echo "  Fix: move this logic into an omnimarket node and dispatch via onex run-node." >&2
             echo "  Escape: append '# imperative-ok' to suppress a specific line (exceptional use only)." >&2
             echo "  Ticket: $TICKET_REF" >&2

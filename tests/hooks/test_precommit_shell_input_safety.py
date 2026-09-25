@@ -47,11 +47,19 @@ def test_registered_hooks_do_not_feed_read_loops_from_heredocs() -> None:
 
 def test_affected_hooks_read_their_loops_from_real_files() -> None:
     """Require the positive temp-file shape, not only removal of old syntax."""
-    expected_redirects = {
-        IMPERATIVE_SKILL_GUARD: 'done < "$tmp_violations"',
-        HOOK_EVENT_GUARD: 'done < "$tmp_offenders"',
+    expected_snippets = {
+        IMPERATIVE_SKILL_GUARD: (
+            'tmp_violations="$(mktemp ',
+            "trap 'rm -f \"$tmp_violations\"' EXIT",
+            'done < "$tmp_violations"',
+        ),
+        HOOK_EVENT_GUARD: (
+            'tmp_offenders="$(mktemp ',
+            'trap \'rm -f "$tmp_candidates" "$tmp_offenders"\' EXIT',
+            'done < "$tmp_offenders"',
+        ),
     }
-    for script, redirect in expected_redirects.items():
+    for script, snippets in expected_snippets.items():
         content = script.read_text(encoding="utf-8")
-        assert "mktemp" in content
-        assert redirect in content
+        for snippet in snippets:
+            assert snippet in content
