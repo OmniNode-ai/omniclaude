@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+exec uv run --no-project --with 'PyYAML==6.0.2' \
+  python "${script_dir}/anti_growth_baseline.py" "$@"

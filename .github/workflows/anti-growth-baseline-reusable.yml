@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Shared shrink-only baseline gate (OMN-19677). Callers pin this workflow and
+# the exported pre-commit hook to the same immutable omniclaude commit.
+
+name: Anti-growth baseline (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      baseline-path:
+        description: Repository-relative path to the committed debt baseline
+        required: true
+        type: string
+      parser:
+        description: Parser identifier accepted by anti_growth_baseline.py
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  anti-growth-baseline:
+    name: anti-growth-baseline
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout caller head with full ancestry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: >-
+            ${{
+              github.event_name == 'pull_request'
+              && github.event.pull_request.head.sha
+              || github.event_name == 'merge_group'
+              && github.event.merge_group.head_sha
+              || github.sha
+            }}
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install parser dependency
+        run: python -m pip install --disable-pip-version-check --quiet 'PyYAML==6.0.2'
+
+      - name: Fetch the canonical gate at this workflow pin
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ github.job_workflow_sha }}
+          path: .omniclaude-anti-growth-baseline
+          persist-credentials: false
+          sparse-checkout: scripts/anti_growth_baseline.py
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve merge-base authority and enforce shrink-only baseline
+        env:
+          BASELINE_PATH: ${{ inputs.baseline-path }}
+          BASELINE_PARSER: ${{ inputs.parser }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SCRIPT_PATH: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-anti-growth-baseline/scripts/anti_growth_baseline.py'
+                || 'scripts/anti_growth_baseline.py' }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$SCRIPT_PATH" ]; then
+            echo "::error::canonical anti-growth gate is missing at $SCRIPT_PATH"
+            exit 1
+          fi
+
+          case "$EVENT_NAME" in
+            pull_request) base_ref="$PR_BASE_SHA" ;;
+            merge_group) base_ref="$MERGE_GROUP_BASE_SHA" ;;
+            push) base_ref="$PUSH_BEFORE_SHA" ;;
+            *) base_ref="origin/${DEFAULT_BRANCH}" ;;
+          esac
+          if [[ "$base_ref" =~ ^0+$ ]] || [ -z "$base_ref" ]; then
+            base_ref="origin/${DEFAULT_BRANCH}"
+          fi
+          git fetch --no-tags origin "$base_ref"
+          python "$SCRIPT_PATH" \
+            --repo-root . \
+            --base-ref "$base_ref" \
+            --baseline "$BASELINE_PATH" \
+            --parser "$BASELINE_PARSER"
