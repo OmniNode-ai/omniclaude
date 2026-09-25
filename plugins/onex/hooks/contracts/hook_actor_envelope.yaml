@@ -66,12 +66,17 @@ fields:
 
   turn_id:
     type: string
-    produced_by: [codex]
-    null_for_actors: [claude]
-    reason: >-
-      Claude Code's hook input carries no turn identifier at any event. Codex
-      sends one on UserPromptSubmit and PostToolUse, and none on SessionStart
-      or SessionEnd, so the field is null on those two for Codex as well.
+    produced_by: [claude, codex]
+    description: >-
+      Codex sends a turn identifier on UserPromptSubmit and PostToolUse, and
+      it is carried verbatim. Claude Code's hook input carries none at any
+      event, so the appender mints `<session_id>:turn-<n>` (OMN-19517,
+      hooks/lib/hook_turn_id.py): each UserPromptSubmit opens turn n+1 for its
+      session and each PostToolUse carries the current turn. Before that the
+      Claude value was null, and the capture redaction hashed every null to one
+      digest shared by all sessions. Neither host sends a turn on SessionStart
+      or SessionEnd, and neither is a turn, so the field is null on those two
+      events for both actors.
 
   working_directory:
     type: string
@@ -171,6 +176,9 @@ golden_path:
     journal record carrying actor=codex and the Codex session_id as correlation id
   - A Codex UserPromptSubmit and PostToolUse carry the host's turn_id; the two
     session events carry null, because Codex sends none on them
+  - A Claude UserPromptSubmit opens a minted turn for its session and the
+    PostToolUse records after it carry that turn; no two sessions share a turn
+    id, and the session events carry null (OMN-19517)
   - A Codex PostToolUse records duration_ms and interrupted as null, never as a
     measured 0/false the host never reported
   - A Claude-shaped payload with no declaration still yields actor=claude, and
@@ -188,6 +196,12 @@ dod_evidence:
       turn_id carry, explicit nulls, the no-sniffing guard, the Claude regression,
       and the cross-actor shared-field diff against this contract.
     command: uv run pytest tests/unit/hooks/test_codex_hook_actor_envelope.py -v
+  - kind: tests
+    description: >-
+      The Claude turn id suite (OMN-19517): a prompt opens a turn, tool calls
+      carry it, sessions never share one, concurrent prompts never collide,
+      the host id wins and session events stay null.
+    command: uv run pytest tests/unit/hooks/test_hook_turn_id.py -v
   - kind: tests
     description: >-
       The four pre-existing bus-mirror suites, unchanged, proving the Claude side
