@@ -56,6 +56,16 @@ ticket: OMN-17209
 # capture_shape_only value replaced by {type, length} -- no content, no hash,
 #                    so not even a lookup handle for a short value
 # never_capture      field is dropped from the payload entirely
+# capture_scrubbed   (OMN-19550) value crosses, but every span that matches a
+#                    secret pattern below is replaced IN PLACE by scrub_marker,
+#                    and the record's state becomes `secret_detected`. The
+#                    full-content topic needs this: hashing a whole 60 KB tool
+#                    result because one line held a token would throw away the
+#                    content the operator ruled must be captured. Class still
+#                    beats field: an always-hashed output class forces a
+#                    scrubbed content field to capture_hashed, exactly as it
+#                    forces a verbatim one. A scrubbed field is also held to its
+#                    topic's content_policy size bound (see the topic entry).
 
 # FAIL-CLOSED DEFAULT. Any field on a governed topic that is not named below.
 # A new tool, or a field a future ticket adds, cannot leak by being forgotten.
@@ -147,20 +157,74 @@ content_fields:
 # three controls here, and is listed last for that reason: the incident record
 # says every one of these was written after the leak it would have caught.
 secret_patterns:
+  # ORDER IS LOAD-BEARING for the capture_scrubbed class (OMN-19550), which
+  # replaces each matched SPAN in list order: a whole PEM block is removed
+  # before any narrower pattern can match a fragment of its body, and a whole
+  # header line before the bearer pattern could leave its scheme behind. For
+  # the whole-field classes order does not matter: any hit is a hit.
+  - name: pem_private_key_block
+    # OMN-19550: widened from the BEGIN line alone to the whole block, so a
+    # span replacement removes the key body and not just its first line. A
+    # block cut off by truncation or a chunk edge has no END line, so the
+    # second alternative takes everything after BEGIN. Search behaviour for
+    # the whole-field classes is unchanged: the match still starts at BEGIN.
+    pattern: '-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*)'
+  - name: authorization_header
+    # OMN-19550: "never auth headers" (RULING 2026-09-25T11:23:30Z). Inline
+    # (curl -H "Authorization: ...") as well as at the start of a line; the
+    # value runs to the end of the line or a closing quote.
+    pattern: '(?i)\b(?:proxy-)?authorization\s*:\s*[^\r\n"'']+'
+  - name: credential_header
+    pattern: '(?i)\b(?:x-api-key|api-key|x-auth-token|x-amz-security-token|set-cookie|cookie)\s*:\s*[^\r\n"'']+'
   - name: url_authority_credentials
-    pattern: '[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:[^/\s@]+@'
-  - name: labelled_secret_assignment
-    pattern: '(?i)\b(pass(word|wd)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|requirepass|client[_-]?secret|auth)\b\s*[:=]\s*\S+'
-  - name: camel_case_secret_key
-    pattern: '"(?:[a-z]+)?(?:Secret|Token|Password|ApiKey|AccessKey|PrivateKey)"\s*:\s*"[^"]+"'
-  - name: aws_access_key_id
-    pattern: '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
+    # OMN-19550: the quantifiers are BOUNDED. The unbounded form
+    # ('[a-zA-Z][a-zA-Z0-9+.-]*://...') is quadratic on a long alphanumeric run
+    # with no '://' in it: 1.2 s on 40,000 characters, measured 2026-09-25, so
+    # about 50 minutes on one 2 MiB tool result. It was harmless while every
+    # governed field was a short name or id; full content made it a stall.
+    # A URI scheme is at most a few characters, and a userinfo field longer
+    # than 256 is not one this pattern needs to find.
+    pattern: '[a-zA-Z][a-zA-Z0-9+.-]{0,31}://[^/\s:@]{1,256}:[^/\s@]{1,256}@'
   - name: bearer_token
     pattern: '(?i)\bbearer\s+[A-Za-z0-9._~+/-]{16,}'
-  - name: pem_private_key_block
-    pattern: '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  - name: github_token
+    pattern: '\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})'
+  - name: provider_secret_key
+    # Anthropic (sk-ant-...), OpenAI (sk-proj-..., sk-...) and every other
+    # "sk-" secret key shape.
+    pattern: '\bsk-[A-Za-z0-9_-]{20,}'
+  - name: slack_token
+    pattern: '\bxox[abposr]-[A-Za-z0-9-]{10,}'
+  - name: linear_api_key
+    # OMN-19078: a bare Linear key was the one the PostToolUse guard missed.
+    pattern: '\blin_(?:api|oauth)_[A-Za-z0-9]{32,}'
+  - name: google_api_key
+    pattern: '\bAIza[0-9A-Za-z_-]{35}'
+  - name: stripe_key
+    pattern: '\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}'
   - name: jwt
     pattern: '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b'
+  - name: aws_access_key_id
+    pattern: '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
+  - name: json_secret_key
+    # OMN-19550: a JSON object key NAMING a credential, with a string value.
+    # labelled_secret_assignment cannot see this shape, because the closing
+    # quote sits between the key word and the colon. Tool inputs cross the
+    # content topic as JSON, so this is the shape they arrive in.
+    # Bounded for the same reason as url_authority_credentials: a JSON key is
+    # not 64 characters long, and an unbounded run is a backtracking hazard.
+    pattern: '(?i)"[A-Za-z0-9_.-]{0,64}(?:pass(?:word|wd)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credentials?)[A-Za-z0-9_.-]{0,64}"\s*:\s*"[^"]*"'
+  - name: camel_case_secret_key
+    pattern: '"(?:[a-z]{1,64})?(?:Secret|Token|Password|ApiKey|AccessKey|PrivateKey)"\s*:\s*"[^"]+"'
+  - name: labelled_secret_assignment
+    pattern: '(?i)\b(pass(word|wd)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|requirepass|client[_-]?secret|auth)\b\s*[:=]\s*\S+'
+
+# The text a capture_scrubbed field carries in place of each matched span.
+# `{name}` is the pattern's name, so a reader can count what was removed and
+# by which rule without ever seeing the value. It must match no pattern above,
+# so scrubbing is idempotent: a second pass over scrubbed text changes nothing
+# (asserted by test, because the fan-out re-applies the contract per chunk).
+scrub_marker: "[REDACTED:{name}]"
 
 # ---------------------------------------------------------------------------
 # Governed topics
@@ -410,6 +474,85 @@ topics:
       stderr: never_capture
       output: never_capture
       content: never_capture
+
+  "onex.cmd.omniintelligence.content-captured.v1":
+    ticket: OMN-19550
+    reason: >
+      Full-content capture, ruled by the operator on 2026-09-25 (RULING row
+      2026-09-25T11:23:30Z): the complete prompt, tool input, tool result and
+      assistant reply, so full context joins to deterministic outcomes as
+      labelled training and eval data. One record carries one content item,
+      or one chunk of it. The two content fields are capture_scrubbed:
+      credential-shaped spans are replaced in place and everything else
+      crosses. The identifiers are verbatim so the record joins to
+      work_events on session_id, turn_id and correlation_id. It is a cmd
+      topic on purpose: omniclaude's privacy split puts previews and metrics
+      on onex.evt.omniclaude.* (broad access) and full prompts and file
+      contents only on the restricted onex.cmd.omniintelligence.* family.
+      It is also LOCAL: the cloud relay forwards an explicit topic allowlist
+      (omnibase_infra node_bus_forwarder_effect/contract.yaml) that does not
+      name it, and the ruling puts prod and cloud clusters out of scope until
+      MSK capture is ruled.
+    fields:
+      session_id: capture_verbatim
+      turn_id: capture_verbatim
+      correlation_id: capture_verbatim
+      causation_id: capture_verbatim
+      emitted_at: capture_verbatim
+      entity_id: capture_verbatim
+      schema_version: capture_verbatim
+      hook_source: capture_verbatim
+      actor: capture_verbatim
+      # prompt | tool_input | tool_response | assistant_reply
+      content_kind: capture_verbatim
+      tool_name: capture_verbatim
+      tool_use_id: capture_verbatim
+      # The size policy's bookkeeping: which chunk this is, of how many, the
+      # sha256 of the chunks concatenated (so a reader can verify a
+      # reassembly), the full length before the cap, and whether the cap cut
+      # it. Counts and a digest -- no content.
+      chunk_index: capture_verbatim
+      chunk_count: capture_verbatim
+      content_sha256: capture_verbatim
+      original_chars: capture_verbatim
+      truncated: capture_verbatim
+      # {pattern name: count} from the producer's pass over the WHOLE content
+      # before it was chunked. Carried because the fan-out re-applies this
+      # contract per chunk and restamps the state, which would otherwise lose
+      # the fact that a producer-side span was removed. Names and counts only.
+      producer_redaction: capture_verbatim
+      lane: capture_verbatim
+      lane_source: capture_verbatim
+      lane_ticket: capture_verbatim
+      workspace_path: capture_verbatim
+      hook_fired_at: capture_verbatim
+      # The content. Both are also listed in content_fields above, so an
+      # always-hashed output class (a kubectl secret read, an SSM call, an
+      # environment dump, a .env read) still hashes them whole.
+      content: capture_scrubbed
+      # For a tool item, the command (Bash) or path (Read, Grep) the output
+      # classes match on. Scrubbed, because a command can carry a credential
+      # (curl -H "Authorization: ...").
+      command: capture_scrubbed
+      # Named so that a producer that ever attaches them cannot publish them,
+      # whatever their content (RULING: "never auth headers or tokens").
+      headers: never_capture
+      authorization: never_capture
+    content_policy:
+      # Per record, per capture_scrubbed field, enforced at the fan-out: a
+      # longer value is cut to this length and `truncated_field` is set true,
+      # so an oversize record cannot reach the broker (Redpanda's default
+      # message cap is 1 MiB, and 65,536 characters stay under it even at
+      # six bytes per JSON-escaped character).
+      chunk_chars: 65536
+      # Per content item, enforced by the producer before chunking: content
+      # beyond this is not published. The record says so (`truncated_field`
+      # true, `original_field` the full length), and the full text remains in
+      # the local session transcript, which the archive lanes keep
+      # (RULING rows 2026-09-25T11:20:55Z and 2026-09-25T11:28:54Z). 32 chunks.
+      max_content_chars: 2097152
+      truncated_field: truncated
+      original_field: original_chars
 
 # ---------------------------------------------------------------------------
 # Mandatory redaction state (OMN-17209 scope 4)

@@ -63,6 +63,12 @@ class TopicBase(StrEnum):
     CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
     # Tool content topic for pattern learning (OMN-1702)
     TOOL_CONTENT = "onex.cmd.omniintelligence.tool-content.v1"
+    # OMN-19551: full session content (prompt, tool input, tool result,
+    # assistant reply), scrubbed by the capture-redaction contract. A cmd
+    # topic because full prompts and file contents go only on the restricted
+    # onex.cmd.omniintelligence.* family; local, not on the cloud relay
+    # allowlist.
+    CONTENT_CAPTURED = "onex.cmd.omniintelligence.content-captured.v1"
     # Session outcome: CMD target for intelligence feedback loop (OMN-1735)
     SESSION_OUTCOME_CMD = "onex.cmd.omniintelligence.session-outcome.v1"
     # Session outcome: EVT target for dashboards / monitoring

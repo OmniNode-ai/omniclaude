@@ -51,6 +51,78 @@ def _str_or_none(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def append_event(
+    *,
+    event_type: str,
+    payload: dict[str, Any],
+    correlation_id: str | None,
+    cwd: str | None,
+    actor: str | None,
+    host_turn_id: str | None,
+    agent_id: str | None,
+    transcript_path: str | None,
+    session_id: str | None,
+    journal_dir: str | None,
+    max_records: int = journal.DEFAULT_MAX_RECORDS,
+) -> str | None:
+    """Stamp lane, actor and turn onto ``payload`` and journal it.
+
+    Returns the turn id stamped on the record, so a caller journalling a
+    second record for the same hook call (OMN-19551's content record) can
+    carry the SAME turn instead of racing a second allocation.
+
+    Raises whatever the journal raises; :func:`main` is the fail-open boundary.
+    """
+    target = Path(journal_dir) if journal_dir else journal.default_journal_dir()
+    # Lane attribution is merged here rather than in the shell hook so the
+    # registry read costs nothing on the foreground path: this process is
+    # already forked and disowned by the time it runs. Caller-supplied
+    # lane keys are never trusted -- the registry is the authority, so an
+    # existing key is overwritten rather than preserved.
+    payload.update(
+        lane_attribution.attribution_fields(
+            cwd,
+            transcript_path=transcript_path,
+            session_id=session_id,
+            agent_id=agent_id,
+        )
+    )
+    # The actor is stamped here, after the caller's payload, for the same
+    # reason lane attribution is: a caller-supplied key is never trusted.
+    # The registration that the host resolved is the authority.
+    payload["actor"] = hook_actor.resolve_actor(actor)
+    # OMN-19517: a host-supplied turn id (Codex) is kept verbatim. Claude
+    # Code sends none, and a null here reached the bus as sha256("null"),
+    # one digest shared by every session, so the appender mints a turn per
+    # session prompt instead. Session start and end stay null.
+    turn_id = hook_turn_id.resolve_turn_id(
+        hook_turn_id.turn_dir_for(target),
+        event_type=event_type,
+        # Never the correlation id: the scripts pass "unknown" there when
+        # the input has no session, and a turn keyed on that would be
+        # shared by every such session -- the defect again.
+        session_id=session_id or _str_or_none(payload.get("session_id")),
+        host_turn_id=host_turn_id,
+    )
+    payload["turn_id"] = turn_id
+    outcome = journal.append(
+        target,
+        event_type=event_type,
+        payload=payload,
+        correlation_id=correlation_id,
+        max_records=max_records,
+    )
+    if outcome.dropped_count:
+        # Backpressure is worth a line in the hook log: it means the
+        # drainer is not keeping up (or is not running at all).
+        print(
+            f"hook_emit_append: journal over bound; dropped "
+            f"{outcome.dropped_count} oldest record(s)",
+            file=sys.stderr,
+        )
+    return turn_id
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--event-type", required=True)
@@ -124,57 +196,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        target = (
-            Path(args.journal_dir)
-            if args.journal_dir
-            else journal.default_journal_dir()
-        )
-        payload = _parse_payload(args.payload)
-        # Lane attribution is merged here rather than in the shell hook so the
-        # registry read costs nothing on the foreground path: this process is
-        # already forked and disowned by the time it runs. Caller-supplied
-        # lane keys are never trusted -- the registry is the authority, so an
-        # existing key is overwritten rather than preserved.
-        payload.update(
-            lane_attribution.attribution_fields(
-                args.cwd,
-                transcript_path=args.transcript_path,
-                session_id=args.session_id,
-                agent_id=args.agent_id,
-            )
-        )
-        # The actor is stamped here, after the caller's payload, for the same
-        # reason lane attribution is: a caller-supplied key is never trusted.
-        # The registration that the host resolved is the authority.
-        payload["actor"] = hook_actor.resolve_actor(args.actor)
-        # OMN-19517: a host-supplied turn id (Codex) is kept verbatim. Claude
-        # Code sends none, and a null here reached the bus as sha256("null"),
-        # one digest shared by every session, so the appender mints a turn per
-        # session prompt instead. Session start and end stay null.
-        payload["turn_id"] = hook_turn_id.resolve_turn_id(
-            hook_turn_id.turn_dir_for(target),
+        append_event(
             event_type=args.event_type,
-            # Never the correlation id: the scripts pass "unknown" there when
-            # the input has no session, and a turn keyed on that would be
-            # shared by every such session -- the defect again.
-            session_id=args.session_id or _str_or_none(payload.get("session_id")),
-            host_turn_id=args.turn_id,
-        )
-        outcome = journal.append(
-            target,
-            event_type=args.event_type,
-            payload=payload,
+            payload=_parse_payload(args.payload),
             correlation_id=args.correlation_id,
+            cwd=args.cwd,
+            actor=args.actor,
+            host_turn_id=args.turn_id,
+            agent_id=args.agent_id,
+            transcript_path=args.transcript_path,
+            session_id=args.session_id,
+            journal_dir=args.journal_dir,
             max_records=args.max_records,
         )
-        if outcome.dropped_count:
-            # Backpressure is worth a line in the hook log: it means the
-            # drainer is not keeping up (or is not running at all).
-            print(
-                f"hook_emit_append: journal over bound; dropped "
-                f"{outcome.dropped_count} oldest record(s)",
-                file=sys.stderr,
-            )
     except Exception as exc:  # noqa: BLE001 -- outermost fail-open boundary
         print(f"hook_emit_append: unexpected error: {exc}", file=sys.stderr)
     return 0

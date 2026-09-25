@@ -221,6 +221,9 @@ _SESSION_END_BUS_MIRROR_COMMAND = (
 _USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_submit_bus_mirror.sh"
 )
+_STOP_CONTENT_CAPTURE_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop_content_capture.sh"
+)
 _POST_TOOL_USE_BUS_MIRROR_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_bus_mirror.sh"
 )
@@ -280,20 +283,24 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     data = json.loads(_HOOKS_JSON.read_text())
     hooks = data.get("hooks", {})
 
-    # Exactly six event classes are registered: PreToolUse, PostToolUse,
-    # SubagentStop, SessionStart, SessionEnd, UserPromptSubmit.
+    # Exactly seven event classes are registered: PreToolUse, PostToolUse,
+    # SubagentStop, Stop, SessionStart, SessionEnd, UserPromptSubmit. Stop was
+    # added by OMN-19551 on an explicit operator decision: the ledger RULING
+    # row 2026-09-25T11:23:30Z approves full-content capture through hooks,
+    # and the assistant reply is only reachable at Stop.
     assert set(hooks.keys()) == {
         "PreToolUse",
         "PostToolUse",
         "SubagentStop",
+        "Stop",
         "SessionStart",
         "SessionEnd",
         "UserPromptSubmit",
     }, (
         "hooks.json must register ONLY PreToolUse, PostToolUse, SubagentStop, "
-        "SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
+        "Stop, SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
         "OMN-14330/OMN-15062/OMN-15213/OMN-16277/OMN-16162/OMN-16471/"
-        "OMN-16478/OMN-16485 carve-outs "
+        "OMN-16478/OMN-16485/OMN-19551 carve-outs "
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
@@ -503,6 +510,18 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert user_prompt_submit_commands == [_USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND], (
         "hooks.json UserPromptSubmit must register EXACTLY the bus-mirror hook "
         f"(OMN-16162 S1 carve-out). Found: {user_prompt_submit_commands!r}"
+    )
+
+    # Exactly one Stop command: the content-capture observer (OMN-19551). The
+    # triaged Stop-shaped gates (OMN-18531) stay unregistered.
+    stop_commands = [
+        hook.get("command", "")
+        for group in hooks["Stop"]
+        for hook in group.get("hooks", [])
+    ]
+    assert stop_commands == [_STOP_CONTENT_CAPTURE_COMMAND], (
+        "hooks.json Stop must register EXACTLY the content-capture observer "
+        f"(OMN-19551). Found: {stop_commands!r}"
     )
 
 

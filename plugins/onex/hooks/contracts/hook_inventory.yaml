@@ -886,7 +886,9 @@ expected_hooks:
     owner: "omniclaude hooks lane"
     purpose: >
       Direct-dispatches a tool-executed event (tool name, timing, interrupted
-      flag only) to the local bus. Backgrounded and fail-open.
+      flag only) to the local bus, then journals the full tool input and result
+      as content.captured records scrubbed by the capture-redaction contract
+      (OMN-19551). Backgrounded and fail-open.
     enforcement: false
     lite_mode_exit: true
     mask:
@@ -900,6 +902,31 @@ expected_hooks:
       the surface it is meant to protect. It is an observer, so A17's
       "every enforcement mechanism" does not reach it; its behaviour is
       covered by tests/hooks/test_hook_edge_lane.py.
+
+  - script: "stop_content_capture.sh"
+    event: "Stop"
+    matcher: null
+    order: 0
+    ticket: "OMN-19551"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Journals the assistant reply of the turn that just ended as a
+      content.captured record, scrubbed by the capture-redaction contract
+      (full-content capture, operator ruling 2026-09-25). Backgrounded,
+      silent and fail-open. The first registration in a Stop group; the
+      triaged Stop gates below (OMN-18531) are unaffected by it.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "STOP_CONTENT_CAPTURE"
+      bit_defined: false
+    canary: null
+    no_canary_reason: >
+      An observer, not an enforcement mechanism: it refuses nothing. Running
+      it journals a record that the drainer publishes to the declared lane,
+      so a canary would write synthetic content onto the surface it would be
+      checking. Its behaviour is covered by
+      tests/unit/hooks/test_hook_content_capture_omn19551.py.
 
   - script: "workspace_reconcile_tick.sh"
     event: "PostToolUse"
@@ -1251,7 +1278,10 @@ expected_hooks:
     owner: "omniclaude hooks lane"
     purpose: >
       Direct-dispatches a prompt-submitted event (length only, never the
-      prompt text) to the local bus. Backgrounded and fail-open.
+      prompt text) to the local bus, then journals the prompt text as a
+      separate content.captured record scrubbed by the capture-redaction
+      contract, on the restricted cmd family (OMN-19551). Backgrounded and
+      fail-open.
     enforcement: false
     lite_mode_exit: true
     mask:
