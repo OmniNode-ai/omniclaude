@@ -35,12 +35,17 @@ export AWS_PROFILE="${AWS_PROFILE:-default}"
 echo "=== transcript-s3-archive-sync $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 
 # Discover the archive bucket by its declared prefix (OMN-18189) rather than
-# reconstructing its account-id-bearing name.
+# reconstructing its account-id-bearing name. Built with a plain read loop, not
+# `mapfile` (bash 4+ only) -- launchd's restricted PATH can resolve `env bash`
+# to macOS's system /bin/bash (3.2) ahead of a newer one on PATH.
 BUCKET_PREFIX="omninode-claude-session-archive-"
-mapfile -t MATCHING_BUCKETS < <(
+MATCHING_BUCKETS=()
+while IFS= read -r bucket_name; do
+  [[ -n "${bucket_name}" ]] && MATCHING_BUCKETS+=("${bucket_name}")
+done < <(
   aws s3api list-buckets \
     --query "Buckets[?starts_with(Name, '${BUCKET_PREFIX}')].Name" \
-    --output text | tr '\t' '\n' | sed '/^$/d'
+    --output text | tr '\t' '\n'
 )
 
 if [[ ${#MATCHING_BUCKETS[@]} -eq 0 ]]; then
