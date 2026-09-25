@@ -31,7 +31,6 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
 from typing import Any
 
 # States that require merged-PR proof before the transition is allowed.
@@ -131,19 +130,10 @@ _SUPERSESSION_PHRASE_RE = re.compile(
 # ``#N`` of an ``owner/repo#N`` citation from matching twice.
 _NOTE_BARE_REF_RE = re.compile(r"(?<![\w/])#(\d+)\b")
 
-# OMN-13856 (the OMN-13907 refusal): a no-PR housekeeping ticket whose DoD is a
-# live-state readback (worktrees removed, a lane stopped, a record deleted) has
-# no PR to cite and no node_dod_verify contract to receipt. The marker is the
-# sanctioned carrier for that readback. Like the deploy-readback marker it must
-# carry evidence: a dated readback no older than the window below, and the
-# probe that produced it, quoted in backticks. It is honoured only on a ticket
-# that cites no PR at all; see done_flip_guard.decide.
+# OMN-13856 (the OMN-14642 refusal): a commit SHA on the same line as an
+# unanchored bare `PR #N`; see _line_commit_anchor. At least one digit, so a
+# hex-spelled word such as "defaced" never qualifies.
 _COMMIT_SHA_RE = re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b")
-
-LIVE_STATE_MARKER_KEYS = frozenset({"live-state-proven", "live_state_proven"})
-LIVE_STATE_MAX_AGE_DAYS = 7
-_ISO_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
-_BACKTICK_PROBE_RE = re.compile(r"`[^`\n]*\S[^`\n]*`")
 
 # Evidence-companion repos whose PRs are WEAK close-signals (OMN-14641,
 # deliverable 3). An ``onex_change_control`` OCC / evidence-companion PR neither
@@ -1135,48 +1125,6 @@ def parse_deploy_readback_marker(description: str) -> str | None:
         key, _, value = stripped.partition(":")
         if key.strip().lower() in DEPLOY_READBACK_MARKER_KEYS and value.strip():
             return value.strip()
-    return None
-
-
-def parse_live_state_marker(description: str, now: datetime) -> str | None:
-    """Return the evidence of a valid ``live-state-proven:`` marker, or None.
-
-    OMN-13856 (the OMN-13907 refusal). Recognises a body line of the form::
-
-        live-state-proven: 2026-09-25 `ls $OMNI_HOME/omni_worktrees/X` -> absent
-
-    and accepts it only when its value carries BOTH a readback date
-    (``YYYY-MM-DD``) that is not in the future and no more than
-    ``LIVE_STATE_MAX_AGE_DAYS`` old relative to ``now`` (UTC), AND the probe
-    that produced the readback quoted in backticks. A marker with no date, no
-    probe, a stale date or a future date is not evidence and returns None. The
-    first date on the line is the readback date. Pure function: it checks the
-    shape and freshness of the attestation, not its truth, the same limit the
-    deploy-readback marker has.
-    """
-    today = now.astimezone(UTC).date()
-    for line in description.splitlines():
-        stripped = line.strip().lstrip("-*# ").strip()
-        if ":" not in stripped:
-            continue
-        key, _, value = stripped.partition(":")
-        if key.strip().lower() not in LIVE_STATE_MARKER_KEYS:
-            continue
-        value = value.strip()
-        date_match = _ISO_DATE_RE.search(value)
-        if date_match is None or _BACKTICK_PROBE_RE.search(value) is None:
-            continue
-        try:
-            readback = date(
-                int(date_match.group(1)),
-                int(date_match.group(2)),
-                int(date_match.group(3)),
-            )
-        except ValueError:
-            continue
-        age_days = (today - readback).days
-        if 0 <= age_days <= LIVE_STATE_MAX_AGE_DAYS:
-            return value
     return None
 
 
