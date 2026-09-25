@@ -7,7 +7,12 @@
 #
 # Invokes omniintelligence.review_pairing.cli_review (node-based path via
 # HandlerLlmCliSubprocess / adapter_codex_reviewer) with
-# --model deepseek-r1 --model qwen3-review-b.
+# --model qwen3-review --model gpt-oss-review: two DIFFERENT lab models
+# (OMN-17492, operator rulings 2026-09-25), Qwen3.8-27B and gpt-oss-120b,
+# each on its own lab host. Private diffs go only to lab models, never to a
+# third-party cloud reviewer. Both hosts are always on (operator,
+# 2026-09-25), so there is no single-model pass: a lost reviewer is a
+# degraded quorum, which fails closed.
 # Codex is excluded from the initial pilot — add --model codex once non-interactive
 # OAuth auth is confirmed on the omnibase-ci runner (OMN-8524).
 #
@@ -30,6 +35,10 @@
 # at the cost of a strictly stricter gate. That is the same trade omnibase_infra
 # and omnimarket already run under.
 #
+# SUPERSEDED BY OMN-17492 (2026-09-25), kept as the record of why the pair
+# changed: the paragraph below describes the old deepseek-r1 + qwen3-review-b
+# pair, which was one model reviewing twice. gpt-oss-review is the second,
+# independent local model it was waiting for, so no cloud credential is needed.
 # WHY qwen3-review-b AND NOT qwen3-review. deepseek-r1 and qwen3-review are two
 # registry keys for ONE backend: both resolve to the same lab endpoint with the
 # same api_model_id (Qwen3.6-35B-A3B) since the 4090 RMA — that is OMN-16481,
@@ -62,7 +71,9 @@
 #   passed      — no critical/error findings → exit 0
 #
 # THIS JOB IS LAB-TOUCHING AND ITS RUNNER CARVE-OUT IS LOAD-BEARING (OMN-18415).
-# The reviewer calls DeepSeek-R1 on the lab host, which is LAN-only, and it
+# The reviewer calls two models on lab hosts, which are LAN-only (the
+# fleet's LLM_ENDPOINT_CIDR_ALLOWLIST covers both hosts on all 60 runners,
+# read 2026-09-25T19:08Z), and it
 # needs two variables the omnibase-ci fleet carries and a GitHub-hosted runner
 # does not: the local-LLM HMAC signing key (fail-closed) and
 # LLM_ENDPOINT_CIDR_ALLOWLIST, the transport's trust boundary, which it refuses
@@ -384,8 +395,8 @@ jobs:
             REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
-              --model deepseek-r1 \
-              --model qwen3-review-b \
+              --model qwen3-review \
+              --model gpt-oss-review \
               2>"$ATTEMPT_ERR")
             REVIEW_EXIT=$?
             set -e
