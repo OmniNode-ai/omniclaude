@@ -286,7 +286,7 @@ def _run_review_script(
 FAKE_SIGNING_VALUE = "placeholder-not-a-real-value-0123456789"
 
 FAILING_STUB = f"""#!/usr/bin/env bash
-echo "Review failed for model 'deepseek-r1': [ONEX_CORE_041_INVALID_CONFIGURATION] Environment variable {SIGNING_KEY_VAR} is not set." >&2
+echo "Review failed for model 'qwen3-review': [ONEX_CORE_041_INVALID_CONFIGURATION] Environment variable {SIGNING_KEY_VAR} is not set." >&2
 echo "{FAKE_SIGNING_VALUE}" >&2
 echo "ERROR: All models failed. Review could not be performed." >&2
 exit 1
@@ -325,10 +325,10 @@ exit 1
 # than agreement requires, is DEGRADED QUORUM -- no verdict at all -- and the
 # gate fails closed on it (see DEGRADED_QUORUM_STUB).
 PASSING_STUB = """#!/usr/bin/env bash
-echo "Model 'deepseek-r1' succeeded in 233.5s (0 finding(s))." >&2
-echo "Model 'qwen3-review-b' succeeded in 41.2s (0 finding(s))." >&2
+echo "Model 'qwen3-review' succeeded in 233.5s (0 finding(s))." >&2
+echo "Model 'gpt-oss-review' succeeded in 41.2s (0 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1", "qwen3-review-b"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -342,10 +342,10 @@ exit 0
 # Both models raise the same finding, so it reaches quorum and blocks
 # (OMN-18479). One model raising it alone is a warning and does not.
 BLOCKING_STUB = """#!/usr/bin/env bash
-echo "Model 'deepseek-r1' succeeded in 6.2s (1 finding(s))." >&2
-echo "Model 'qwen3-review-b' succeeded in 8.1s (1 finding(s))." >&2
+echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
+echo "Model 'gpt-oss-review' succeeded in 8.1s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1", "qwen3-review-b"], "total_findings": 2, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "qwen3-review-b", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "gpt-oss-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -353,10 +353,10 @@ exit 0
 # A finding whose every mapped key is absent. The renderer must still say
 # something, because an empty row is indistinguishable from no finding.
 UNMAPPABLE_STUB = """#!/usr/bin/env bash
-echo "Model 'deepseek-r1' succeeded in 1.0s (1 finding(s))." >&2
-echo "Model 'qwen3-review-b' succeeded in 1.4s (1 finding(s))." >&2
+echo "Model 'qwen3-review' succeeded in 1.0s (1 finding(s))." >&2
+echo "Model 'gpt-oss-review' succeeded in 1.4s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1", "qwen3-review-b"], "total_findings": 2, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "qwen3-review-b", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "gpt-oss-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -365,11 +365,11 @@ exit 0
 # and the gate fails closed (OMN-18479). Before that ticket this exact payload
 # produced a blocking verdict from a single opinion.
 DEGRADED_QUORUM_STUB = """#!/usr/bin/env bash
-echo "Model 'deepseek-r1' succeeded in 6.2s (1 finding(s))." >&2
-echo "Model 'qwen3-review-b' FAILED in 0.4s (0 finding(s))." >&2
+echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
+echo "Model 'gpt-oss-review' FAILED in 0.4s (0 finding(s))." >&2
 echo "ERROR: DEGRADED QUORUM \u2014 1 model(s) succeeded, 2 required for agreement." >&2
 cat <<'JSON'
-{"models_succeeded": ["deepseek-r1"], "total_findings": 1, "results": [{"success": true, "model": "deepseek-r1", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12}]}], "quorum": {"verdict": "degraded_quorum", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 1, "blocking_findings": [], "warning_findings": [{"agreement_count": 1}]}}
+{"models_succeeded": ["qwen3-review"], "total_findings": 1, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12}]}], "quorum": {"verdict": "degraded_quorum", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 1, "blocking_findings": [], "warning_findings": [{"agreement_count": 1}]}}
 JSON
 exit 2
 """
@@ -564,12 +564,12 @@ def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert outputs["verdict"] == "passed"
-    assert outputs["models_succeeded"] == "deepseek-r1,qwen3-review-b"
+    assert outputs["models_succeeded"] == "qwen3-review,gpt-oss-review"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["verdict"] == "passed"
-    assert payload["models_succeeded"] == ["deepseek-r1", "qwen3-review-b"]
-    assert "Model 'deepseek-r1' succeeded" in payload["stderr"]
-    assert "Model 'deepseek-r1' succeeded" in result.stdout
+    assert payload["models_succeeded"] == ["qwen3-review", "gpt-oss-review"]
+    assert "Model 'qwen3-review' succeeded" in payload["stderr"]
+    assert "Model 'qwen3-review' succeeded" in result.stdout
 
 
 def test_both_attempts_are_logged_separately(tmp_path: Path) -> None:
