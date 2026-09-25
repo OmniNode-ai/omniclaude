@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "ticket_id": "OMN-19516",
+  "evidence_item_id": "dod-occ-evidence-source",
+  "check_type": "command",
+  "check_value": ".onex_change_control_evidence/contracts/OMN-19516.yaml",
+  "status": "PASS",
+  "run_timestamp": "2026-09-25T03:12:11.113036Z",
+  "commit_sha": "1a7544fadf46004c3881600e4b85df6b11edb72d",
+  "runner": "github-actions-dod-evidence-check",
+  "verifier": "occ-dod-evidence-materializer",
+  "probe_command": "validate central OCC DoD receipts for OMN-19516 at 8ed18171e20dd7c7069574307a2e1e3c07b807ba",
+  "probe_stdout": "{\n  \"contract_path\": \".onex_change_control_evidence/contracts/OMN-19516.yaml\",\n  \"contract_evidence_ids\": [\n    \"dod-OmniNode-ai-omniclaude-pr-2333\",\n    \"dod-OmniNode-ai-omniclaude-pr-2333-ci\",\n    \"dod-occ-diff-derived-behavior-proof-pr-2333\",\n    \"occ-self-bind-pr-11186\"\n  ],\n  \"disclosed_skip_ids\": [],\n  \"occ_commit_sha\": \"8ed18171e20dd7c7069574307a2e1e3c07b807ba\",\n  \"receipt_count\": 4,\n  \"receipt_paths\": [\n    \".onex_change_control_evidence/drift/dod_receipts/OMN-19516/dod-OmniNode-ai-omniclaude-pr-2333/command.yaml\",\n    \".onex_change_control_evidence/drift/dod_receipts/OMN-19516/dod-OmniNode-ai-omniclaude-pr-2333-ci/command.yaml\",\n    \".onex_change_control_evidence/drift/dod_receipts/OMN-19516/dod-occ-diff-derived-behavior-proof-pr-2333/test_passes.yaml\",\n    \".onex_change_control_evidence/drift/dod_receipts/OMN-19516/occ-self-bind-pr-11186/command.yaml\"\n  ]\n}",
+  "actual_output": "PASS: 4 central OCC DoD receipt file(s) for OMN-19516 are present and status=PASS.",
+  "exit_code": 0,
+  "branch": null,
+  "working_dir": null,
+  "evidence_source_commit": "8ed18171e20dd7c7069574307a2e1e3c07b807ba"
+}
