@@ -453,7 +453,9 @@ def test_report_resolves_session_calls_to_the_running_subagent(tmp_path: Path) -
     )
     (wf / "agent-bbb.meta.json").write_text(json.dumps({"description": "red-fix-1"}))
 
-    def tool_pair(agent: str, uid: str, start: datetime, end: datetime) -> str:
+    def tool_pair(
+        agent: str, uid: str, start: datetime, end: datetime, command: str = "x"
+    ) -> str:
         use = {
             "timestamp": start.isoformat().replace("+00:00", "Z"),
             "message": {
@@ -462,7 +464,7 @@ def test_report_resolves_session_calls_to_the_running_subagent(tmp_path: Path) -
                         "type": "tool_use",
                         "id": uid,
                         "name": "Bash",
-                        "input": {"command": "x"},
+                        "input": {"command": command},
                     }
                 ]
             },
@@ -512,3 +514,17 @@ def test_report_resolves_session_calls_to_the_running_subagent(tmp_path: Path) -
     # 5 s: only aaa running; 25 s: both running, stays on the session; 60 s: only bbb
     assert by_lane == {"pr-lander-83c": 1, "session:s1": 1, "red-fix-1": 1}
     assert rep["unattributed_calls"] == 0
+
+    # Overlap broken by the command: only bbb's running command can reach gh.
+    (wf / "agent-bbb.jsonl").write_text(
+        tool_pair(
+            "bbb",
+            "t2",
+            base + timedelta(seconds=20),
+            base + timedelta(seconds=90),
+            command="bash ci_state.sh OmniNode-ai/omnimarket 12 /tmp/x",
+        )
+    )
+    rep = mod.build_report(recs, base, base + timedelta(hours=1), proj)
+    by_lane = {r["lane"]: r["calls"] for r in rep["lanes"]}
+    assert by_lane == {"pr-lander-83c": 1, "red-fix-1": 2}

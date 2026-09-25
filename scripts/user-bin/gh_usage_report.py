@@ -122,6 +122,13 @@ class Interval(NamedTuple):
     start: datetime
     end: datetime
     agent: str
+    command: str
+
+
+# A Bash command that can reach gh: gh itself, or a skill script that shells out to it.
+GH_CALLER = re.compile(
+    r"\bgh\b|pr_snapshot|ci_state|drain_map|pause_check|runtime_class|plugin_bump_check|base_compare"
+)
 
 
 class SessionIndex:
@@ -162,7 +169,7 @@ def index_session(session_dir: Path, since: datetime) -> SessionIndex:
         except OSError:
             continue
         agent = transcript.stem[len("agent-") :]
-        starts: dict[str, datetime] = {}
+        starts: dict[str, tuple[datetime, str]] = {}
         with transcript.open(errors="replace") as fh:
             for line in fh:
                 if '"tool_use"' not in line and '"tool_result"' not in line:
@@ -179,22 +186,27 @@ def index_session(session_dir: Path, since: datetime) -> SessionIndex:
                     if not isinstance(part, dict):
                         continue
                     if part.get("type") == "tool_use" and part.get("name") == "Bash":
-                        starts[str(part.get("id"))] = ts
+                        command = str((part.get("input") or {}).get("command", ""))
+                        starts[str(part.get("id"))] = (ts, command)
                     elif part.get("type") == "tool_result":
                         begun = starts.pop(str(part.get("tool_use_id")), None)
                         if begun is not None:
-                            idx.intervals.append(Interval(begun, ts, agent))
+                            idx.intervals.append(
+                                Interval(begun[0], ts, agent, begun[1])
+                            )
         # A tool call still running when the transcript was read.
-        for begun in starts.values():
-            idx.intervals.append(Interval(begun, datetime.now(UTC), agent))
+        for begun_at, command in starts.values():
+            idx.intervals.append(Interval(begun_at, datetime.now(UTC), agent, command))
     return idx
 
 
 def resolve_agent(idx: SessionIndex, ts: datetime) -> str | None:
     slack = timedelta(seconds=2)
-    agents = {
-        iv.agent for iv in idx.intervals if iv.start - slack <= ts <= iv.end + slack
-    }
+    running = [iv for iv in idx.intervals if iv.start - slack <= ts <= iv.end + slack]
+    agents = {iv.agent for iv in running}
+    if len(agents) > 1:
+        # Several sub-agents had a Bash call running: keep those whose command can reach gh.
+        agents = {iv.agent for iv in running if GH_CALLER.search(iv.command)}
     if len(agents) == 1:
         agent = agents.pop()
         return idx.labels.get(agent, f"agent:{agent}")
