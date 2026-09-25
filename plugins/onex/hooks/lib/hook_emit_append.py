@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hook_actor  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 import hook_lane_attribution as lane_attribution  # noqa: E402
+import hook_turn_id  # noqa: E402
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
@@ -44,6 +45,10 @@ def _parse_payload(raw: str) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _str_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,10 +80,10 @@ def main(argv: list[str] | None = None) -> int:
         "--turn-id",
         default=None,
         help=(
-            "The host's per-turn identifier, when it supplies one. Codex does; "
-            "Claude Code's hook input carries no turn identifier, so the field "
-            "is null there rather than absent, and the envelope contract "
-            "records why."
+            "The host's per-turn identifier, when it supplies one. Codex does "
+            "and it is kept verbatim. Claude Code's hook input carries none, "
+            "so the appender mints one per session prompt (OMN-19517, "
+            "hook_turn_id); session start and end records carry null."
         ),
     )
     parser.add_argument(
@@ -142,8 +147,19 @@ def main(argv: list[str] | None = None) -> int:
         # reason lane attribution is: a caller-supplied key is never trusted.
         # The registration that the host resolved is the authority.
         payload["actor"] = hook_actor.resolve_actor(args.actor)
-        turn_id = (args.turn_id or "").strip()
-        payload["turn_id"] = turn_id or None
+        # OMN-19517: a host-supplied turn id (Codex) is kept verbatim. Claude
+        # Code sends none, and a null here reached the bus as sha256("null"),
+        # one digest shared by every session, so the appender mints a turn per
+        # session prompt instead. Session start and end stay null.
+        payload["turn_id"] = hook_turn_id.resolve_turn_id(
+            hook_turn_id.turn_dir_for(target),
+            event_type=args.event_type,
+            # Never the correlation id: the scripts pass "unknown" there when
+            # the input has no session, and a turn keyed on that would be
+            # shared by every such session -- the defect again.
+            session_id=args.session_id or _str_or_none(payload.get("session_id")),
+            host_turn_id=args.turn_id,
+        )
         outcome = journal.append(
             target,
             event_type=args.event_type,

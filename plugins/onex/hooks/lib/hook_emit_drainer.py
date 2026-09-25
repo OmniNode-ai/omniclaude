@@ -104,10 +104,13 @@ Which credential (OMN-18120)
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import logging
+import logging.handlers
 import os
 import signal
+import stat
 import sys
 import time
 from dataclasses import replace
@@ -117,6 +120,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import hook_emit_bus  # noqa: E402
 import hook_emit_health as health  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 
@@ -322,6 +326,7 @@ class _Emitter:
     def __init__(self) -> None:
         self._handler: Any | None = None
         self._request_cls: Any | None = None
+        self._bus: hook_emit_bus.PersistentBus | None = None
 
     def _load(self) -> bool:
         if self._handler is not None:
@@ -337,7 +342,14 @@ class _Emitter:
         except Exception as exc:  # noqa: BLE001 -- degrade, do not crash the daemon
             logger.error("emit handler import failed: %s", exc)
             return False
-        self._handler = HandlerEventEmitEffect()
+        try:
+            adapter = self._build_persistent_adapter(HandlerEventEmitEffect)
+        except Exception as exc:  # noqa: BLE001 -- the next publish retries the load
+            # Same failure the handler would raise from handle() when the Kafka
+            # target is not configured; the record stays journalled.
+            logger.error("emit publish adapter could not be built: %s", exc)
+            return False
+        self._handler = HandlerEventEmitEffect(publish_adapter=adapter)
         self._request_cls = ModelEmitRequest
         logger.info(
             "emit handler loaded in %.1fs (paid once for this process, "
@@ -345,6 +357,57 @@ class _Emitter:
             time.perf_counter() - t0,
         )
         return True
+
+    def _build_persistent_adapter(self, handler_cls: Any) -> Any | None:
+        """A publisher whose Kafka bus is started once per process (OMN-19518).
+
+        Without an injected adapter the handler builds a ``KafkaEventPublisher``
+        per ``handle()`` call, and that publisher starts and closes a bus per
+        record: 2,584 SCRAM logins for 1,274 events in one measured hour. The
+        publisher's own ``bus_factory`` seam takes a factory; this one always
+        returns the same :class:`hook_emit_bus.PersistentBus`, which owns one
+        real bus and discards it on any failure.
+
+        ``None`` keeps the handler's own contract-declared spool-only opt-out
+        working: with no adapter injected, the handler resolves it exactly as
+        before and publishes nothing.
+        """
+        if handler_cls._spool_only_opt_out():
+            return None
+        from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
+        from omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect import (
+            KafkaEventPublisher,
+        )
+
+        bootstrap = ModelKafkaEventBusConfig().apply_environment_overrides()
+        bootstrap_servers = bootstrap.bootstrap_servers
+
+        def _real_bus() -> Any:
+            # The sanctioned constructor, resolved at call time so the bus
+            # picks up the lane apply_declared_lane() put in the environment.
+            # The transport is explicit: the drainer publishes to the declared
+            # Kafka lane or not at all, never to an in-memory bus.
+            from omnibase_infra.backends.auto_configure import (
+                BUS_KAFKA,
+                select_event_bus,
+            )
+
+            return select_event_bus(
+                bus_type=BUS_KAFKA, kafka_bootstrap_servers=bootstrap_servers
+            )
+
+        self._bus = hook_emit_bus.PersistentBus(_real_bus)
+        bus = self._bus
+        return KafkaEventPublisher(bootstrap_servers, bus_factory=lambda: bus)
+
+    def close(self) -> None:
+        """Close the persistent bus. Called once, when the drainer exits."""
+        if self._bus is None:
+            return
+        try:
+            self._bus.shutdown_blocking()
+        except Exception as exc:  # noqa: BLE001 -- shutdown must not raise
+            logger.warning("closing the persistent emit bus failed: %s", exc)
 
     def publish(self, record: journal.JournalRecord) -> bool:
         """Publish one journalled event. Returns True only on a confirmed ack."""
@@ -766,11 +829,18 @@ def run(
 
     try:
         while True:
+            cycle_started = time.perf_counter()
             published, failed = drain_once(
                 journal_dir, emitter, failure_counts=failure_counts
             )
             if published:
-                logger.info("published %d event(s)", published)
+                # The cycle time makes the publish rate readable from this log
+                # alone (OMN-19518 measured before/after events per second).
+                logger.info(
+                    "published %d event(s) in %.2fs",
+                    published,
+                    time.perf_counter() - cycle_started,
+                )
                 published_total += published
                 last_publish_at = time.time()
             _record_cycle()
@@ -788,7 +858,98 @@ def run(
             else:
                 time.sleep(poll_seconds if published else idle_poll_seconds)
     finally:
+        emitter.close()
         lock.release()
+
+
+#: Log bound and retention for the drainer's own log (OMN-19519). The bound is
+#: the OMN-8429 hook-log default, so every hook log in the tree shares one
+#: number; with three backups the drainer log never exceeds about 200 MB.
+DEFAULT_LOG_MAX_MB = 50
+DEFAULT_LOG_BACKUPS = 3
+
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+class _StdioFollowingRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """A size-rotated log file that also carries this process's fd 1 and fd 2.
+
+    WHY. launchd opens StandardErrorPath once and hands the process that file
+    as fd 2. Renaming it from outside changes nothing: the drainer keeps
+    writing into the renamed inode. So the drainer rotates its own log, and
+    at every (re)open points fd 1 and fd 2 at the fresh file, so an uncaught
+    exception or a stray write from a library lands beside the log lines
+    rather than in a backup that is about to be deleted.
+    """
+
+    def __init__(
+        self, filename: Path, *, max_bytes: int, backups: int, follow_stdio: bool
+    ) -> None:
+        self._follow_stdio = follow_stdio
+        super().__init__(
+            filename, maxBytes=max_bytes, backupCount=backups, encoding="utf-8"
+        )
+
+    def _open(self) -> Any:
+        stream = super()._open()
+        if self._follow_stdio:
+            for handle in (sys.stdout, sys.stderr):
+                try:
+                    handle.flush()
+                except (OSError, ValueError):
+                    pass
+            os.dup2(stream.fileno(), 1)
+            os.dup2(stream.fileno(), 2)
+        return stream
+
+
+def _regular_file_behind_fd(fd: int) -> Path | None:
+    """The path of the regular file open on ``fd``, or ``None`` (tty, pipe, ...)."""
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+    except OSError:
+        return None
+    get_path = getattr(fcntl, "F_GETPATH", None)
+    if get_path is not None:  # macOS, where launchd runs the drainer
+        try:
+            raw = fcntl.fcntl(fd, get_path, b"\0" * 1024)
+        except OSError:
+            return None
+        return Path(raw.split(b"\0", 1)[0].decode())
+    try:
+        return Path(f"/proc/self/fd/{fd}").readlink()
+    except OSError:
+        return None
+
+
+def configure_logging(
+    level: str, *, log_file: Path | None, max_bytes: int, backups: int
+) -> Path | None:
+    """Configure the drainer's logging. Returns the rotated log path, or ``None``.
+
+    With ``log_file`` given, that file is rotated. Otherwise, when stderr is a
+    regular file (launchd's StandardErrorPath), that file is rotated and this
+    process's stdio follows it across rollovers. A terminal or a pipe on
+    stderr gets plain stderr logging, as before.
+    """
+    resolved_level = getattr(logging, level.upper(), logging.INFO)
+    stderr_file = _regular_file_behind_fd(2)
+    target = log_file if log_file is not None else stderr_file
+    if target is None:
+        logging.basicConfig(level=resolved_level, format=_LOG_FORMAT)
+        return None
+    follow = stderr_file is not None and os.path.realpath(
+        stderr_file
+    ) == os.path.realpath(target)
+    handler = _StdioFollowingRotatingFileHandler(
+        target, max_bytes=max_bytes, backups=backups, follow_stdio=follow
+    )
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(resolved_level)
+    return target
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -805,11 +966,33 @@ def main(argv: list[str] | None = None) -> int:
         help="Drain one batch and exit (used by tests and manual flushes).",
     )
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help=(
+            "Log to this file with size rotation. Default: when stderr is a "
+            "regular file (the launchd StandardErrorPath), rotate that file."
+        ),
+    )
+    parser.add_argument(
+        "--log-max-mb",
+        type=int,
+        default=DEFAULT_LOG_MAX_MB,
+        help="Rotate the log when it reaches this many MB (OMN-19519).",
+    )
+    parser.add_argument(
+        "--log-backups",
+        type=int,
+        default=DEFAULT_LOG_BACKUPS,
+        help="Rotated log files kept; older ones are deleted (OMN-19519).",
+    )
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    configure_logging(
+        args.log_level,
+        log_file=Path(args.log_file) if args.log_file else None,
+        max_bytes=max(1, args.log_max_mb) * 1024 * 1024,
+        backups=max(1, args.log_backups),
     )
 
     journal_dir = (

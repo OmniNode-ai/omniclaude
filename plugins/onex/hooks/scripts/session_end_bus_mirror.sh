@@ -67,6 +67,11 @@ fi
 # shellcheck source=onex-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-session-end-bus-mirror.log"
+# OMN-19519: this log is appended on every event it mirrors and had no
+# rotation; the helper from onex-paths.sh bounds it (sampled, never fails).
+if declare -F onex_maybe_rotate_log >/dev/null 2>&1; then
+    onex_maybe_rotate_log "$LOG_FILE"
+fi
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 
 # Detect project root (same convention as session-end.sh).

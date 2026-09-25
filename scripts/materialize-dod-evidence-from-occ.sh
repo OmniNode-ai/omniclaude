@@ -82,8 +82,72 @@ if not receipt_paths:
     print(f"ERROR: no OCC DoD receipt files found under {receipt_root}", file=sys.stderr)
     sys.exit(1)
 
+def disclosed_skip_supersession_ids(text: str) -> set[str]:
+    """Ids of honest disclosed-skip supersession items (OMN-19516).
+
+    Mirrors onex_change_control contract_compliance_check
+    ``_disclosed_skip_supersession_ids`` (OMN-15664 AC4): an item is a
+    disclosed skip only when ALL three hold -- ``status: "skipped"``, no
+    ``checks`` key, and ``evidence_artifact: "supersedes_dod_evidence:<id>"``
+    naming an id declared EARLIER in dod_evidence. Such an item is an
+    auditable statement that no executable check can exist, so it has no
+    receipt by construction. Any item missing one condition is not returned
+    and still needs a receipt (fail closed).
+    """
+    blocks: list[tuple[str, list[str]]] = []
+    item_indent: str | None = None
+    in_section = False
+    for line in text.splitlines():
+        if line.startswith("dod_evidence:"):
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        if line and not line.startswith((" ", "-")):
+            break
+        start = re.match(r"^(\s*)-\s+id:\s*[\"']?([^\"'\s]+)", line)
+        if start and (item_indent is None or start.group(1) == item_indent):
+            item_indent = start.group(1)
+            blocks.append((start.group(2), []))
+            continue
+        if blocks:
+            blocks[-1][1].append(line)
+
+    if item_indent is None:
+        return set()
+    field = re.escape(item_indent + "  ")
+    status_re = re.compile(rf"^{field}status:\s*[\"']?([^\"'\s#]+)[\"']?\s*(#.*)?$")
+    checks_re = re.compile(rf"^{field}checks:")
+    marker_re = re.compile(
+        rf"^{field}evidence_artifact:\s*[\"']?supersedes_dod_evidence:"
+        rf"([^\"'\s]+)[\"']?\s*$"
+    )
+
+    seen: set[str] = set()
+    disclosed: set[str] = set()
+    for item_id, body in blocks:
+        status = next(
+            (m.group(1) for m in map(status_re.match, body) if m is not None), None
+        )
+        target = next(
+            (m.group(1) for m in map(marker_re.match, body) if m is not None), None
+        )
+        has_checks = any(checks_re.match(line) for line in body)
+        if (
+            status == "skipped"
+            and not has_checks
+            and target is not None
+            and target in seen
+        ):
+            disclosed.add(item_id)
+        seen.add(item_id)
+    return disclosed
+
+
+disclosed_skip_ids = disclosed_skip_supersession_ids(contract_text)
+
 receipt_ids = {path.parent.name for path in receipt_paths}
-missing_ids = sorted(set(contract_ids) - receipt_ids)
+missing_ids = sorted(set(contract_ids) - receipt_ids - disclosed_skip_ids)
 if missing_ids:
     print(
         "ERROR: OCC DoD receipt files missing for contract ids: "
@@ -151,6 +215,7 @@ occ_sha = git_output(["rev-parse", "HEAD"], cwd=occ_root) or None
 summary = {
     "contract_path": str(contract_path),
     "contract_evidence_ids": contract_ids,
+    "disclosed_skip_ids": sorted(disclosed_skip_ids),
     "occ_commit_sha": occ_sha,
     "receipt_count": len(receipt_paths),
     "receipt_paths": [str(path) for path in receipt_paths],
