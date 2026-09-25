@@ -60,6 +60,11 @@ def _git(repo: Path, *args: str) -> None:
             '{"findings": [{"id": "old"}]}',
             '{"findings": [{"id": "old"}, {"id": "new"}]}',
         ),
+        (
+            "yaml-list-tree",
+            "violations:\n  - old\nopen_repairs:\n  - repair\n",
+            "violations:\n  - old\nopen_repairs:\n  - repair\n  - new\n",
+        ),
         ("line-set", "old\n", "old\nnew\n"),
         ("number", "4\n", "5\n"),
     ],
@@ -87,6 +92,11 @@ def test_growth_is_rejected(parser: str, base_text: str, head_text: str) -> None
             "json-list:findings",
             '{"findings": [{"id": "old"}, {"id": "fixed"}]}',
             '{"findings": [{"id": "old"}]}',
+        ),
+        (
+            "yaml-list-tree",
+            "violations:\n  - old\nopen_repairs:\n  - fixed\n",
+            "violations:\n  - old\nopen_repairs: []\n",
         ),
         ("line-set", "old\nfixed\n", "old\n"),
         ("number", "5\n", "4\n"),
@@ -128,6 +138,7 @@ def test_positive_control_is_parser_specific() -> None:
         "yaml-list:violations",
         "yaml-count-map:baseline",
         "json-list:findings",
+        "yaml-list-tree",
         "line-set",
         "number",
     )

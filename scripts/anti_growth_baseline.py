@@ -12,6 +12,7 @@ Parser identifiers:
 
 * ``yaml-list:<key.path>`` / ``json-list:<key.path>``
 * ``yaml-count-map:<key.path>`` / ``json-count-map:<key.path>``
+* ``yaml-list-tree`` (all list members, namespaced by their mapping path)
 * ``line-set`` (blank and comment-only lines are ignored)
 * ``number``
 
@@ -50,7 +51,7 @@ class ParsedBaseline(NamedTuple):
 
 
 _KEYED_KINDS = frozenset({"yaml-list", "json-list", "yaml-count-map", "json-count-map"})
-_SIMPLE_KINDS = frozenset({"line-set", "number"})
+_SIMPLE_KINDS = frozenset({"line-set", "number", "yaml-list-tree"})
 _GIT_LOCATION_VARS = frozenset(
     {
         "GIT_DIR",
@@ -113,6 +114,19 @@ def _load_structured(text: str, kind: str) -> Any:
         raise BaselineParseError(msg) from exc
 
 
+def _flatten_list_tree(value: Any, path: tuple[str, ...] = ()) -> list[str]:
+    entries: list[str] = []
+    if isinstance(value, list):
+        namespace = ".".join(path) or "<root>"
+        entries.extend(f"{namespace}={_canonical_entry(item)}" for item in value)
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                raise BaselineParseError("yaml-list-tree requires string mapping keys")
+            entries.extend(_flatten_list_tree(child, (*path, key)))
+    return entries
+
+
 def parse_baseline_text(text: str, parser: str) -> ParsedBaseline:
     """Parse baseline text into the comparison model selected by ``parser``."""
     spec = parse_parser_spec(parser)
@@ -133,6 +147,10 @@ def parse_baseline_text(text: str, parser: str) -> ParsedBaseline:
             if line.strip() and not line.lstrip().startswith("#")
         ]
         return ParsedBaseline(spec.kind, frozenset(line_entries), len(line_entries))
+
+    if spec.kind == "yaml-list-tree":
+        tree_entries = _flatten_list_tree(_load_structured(text, spec.kind))
+        return ParsedBaseline(spec.kind, frozenset(tree_entries), len(tree_entries))
 
     selected = _resolve_key_path(_load_structured(text, spec.kind), spec.key_path)
     if spec.kind.endswith("-list"):
@@ -217,7 +235,7 @@ def run_positive_control(parser: str) -> list[str]:
     if spec.kind == "number":
         base = ParsedBaseline(spec.kind, 1, 1)
         grown = ParsedBaseline(spec.kind, 2, 2)
-    elif spec.kind.endswith("-list") or spec.kind == "line-set":
+    elif spec.kind.endswith("-list") or spec.kind in {"line-set", "yaml-list-tree"}:
         base = ParsedBaseline(spec.kind, frozenset({"old"}), 1)
         grown = ParsedBaseline(spec.kind, frozenset({"old", "new"}), 2)
     else:
