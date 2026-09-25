@@ -35,7 +35,6 @@ from omniclaude.hooks.schemas import (
 )
 from omniclaude.shared.models.model_dod_events import (
     ModelDodGuardFiredEvent,
-    ModelDodVerifyCompletedEvent,
 )
 
 pytestmark = pytest.mark.unit
@@ -239,33 +238,6 @@ class TestDodGuardFiredCorrelationRequired:
                 policy_mode="advisory",
                 receipt_age_seconds=None,
                 receipt_pass=None,
-                timestamp="2026-03-28T12:00:00Z",
-            )
-        assert "correlation_id" in str(exc_info.value)
-
-
-# =============================================================================
-# ModelDodVerifyCompletedEvent — correlation_id already required (str type)
-# =============================================================================
-
-
-class TestDodVerifyCompletedCorrelation:
-    """ModelDodVerifyCompletedEvent already had required correlation_id: str."""
-
-    def test_correlation_id_is_required(self) -> None:
-        with pytest.raises(ValidationError) as exc_info:
-            ModelDodVerifyCompletedEvent(
-                ticket_id="OMN-1234",
-                run_id="run-001",
-                session_id="sess-001",
-                # Missing correlation_id
-                total_checks=5,
-                passed_checks=4,
-                failed_checks=1,
-                skipped_checks=0,
-                overall_pass=False,
-                policy_mode="advisory",
-                evidence_items=[],
                 timestamp="2026-03-28T12:00:00Z",
             )
         assert "correlation_id" in str(exc_info.value)

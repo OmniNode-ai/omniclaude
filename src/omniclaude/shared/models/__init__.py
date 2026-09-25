@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Shared skill node models — request, result, contract, completion event, PR events, and DoD events."""
 
-from .model_dod_events import ModelDodGuardFiredEvent, ModelDodVerifyCompletedEvent
+from .model_dod_events import ModelDodGuardFiredEvent
 from .model_merge_gate_result import ModelGateCheckResult, ModelMergeGateResult
 from .model_pr_changeset import (
     CHANGESET_UUID_NAMESPACE,
@@ -20,7 +20,6 @@ __all__ = [
     "CHANGESET_UUID_NAMESPACE",
     "ModelContractChange",
     "ModelDodGuardFiredEvent",
-    "ModelDodVerifyCompletedEvent",
     "ModelGateCheckResult",
     "ModelMergeGateResult",
     "ModelPRChangeSet",

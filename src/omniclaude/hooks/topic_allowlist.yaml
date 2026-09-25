@@ -508,14 +508,6 @@ allowed_extras:
       allowlisted; will be governed via contract in a future phase.
     ticket: OMN-6276
 
-  - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
-    lifecycle: telemetry
-    reason: >
-      DoD verification completed event emitted after a full DoD verification
-      pass completes with results. Telemetry for DoD enforcement observability.
-      No dedicated node contract; contract governance to follow.
-    ticket: OMN-5197
-
   # ---------------------------------------------------------------------------
   # Context integrity audit topics (OMN-5230)
   # Emitted by audit hooks for dispatch validation, scope enforcement,

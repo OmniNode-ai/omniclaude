@@ -19,6 +19,15 @@ TARGETS = [
     "plugins/onex/hooks/scripts/codex_cost_wrapper.py",
 ]
 
+# OMN-19153 retired the dod-evidence-runner's own telemetry emit, which was its
+# only session-id consumer, so it reads no session id at all now. It stays in
+# TARGETS for the legacy-read ban and drops out of the resolver-import check.
+RESOLVER_TARGETS = [
+    t
+    for t in TARGETS
+    if t != "plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py"
+]
+
 
 @pytest.mark.parametrize("rel_path", TARGETS)
 def test_no_direct_legacy_env_reads(rel_path: str) -> None:
@@ -29,7 +38,7 @@ def test_no_direct_legacy_env_reads(rel_path: str) -> None:
     assert not forbidden.search(text), f"Legacy read remains in {rel_path}"
 
 
-@pytest.mark.parametrize("rel_path", TARGETS)
+@pytest.mark.parametrize("rel_path", RESOLVER_TARGETS)
 def test_uses_resolver(rel_path: str) -> None:
     text = (REPO_ROOT / rel_path).read_text()
     assert "resolve_session_id" in text, f"{rel_path} must import resolver"

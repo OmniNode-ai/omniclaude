@@ -65,7 +65,6 @@ class TestModuleImport:
             "routing.feedback",
             "notification.blocked",
             "notification.completed",
-            "dod.verify.completed",  # OMN-5198
             "dod.guard.fired",  # OMN-5198
         }
         assert core_types.issubset(SUPPORTED_EVENT_TYPES)
