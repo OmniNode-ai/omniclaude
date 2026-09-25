@@ -10,14 +10,16 @@ issues an agent Bash call. It must NOT leak into this guard.
 
 These tests pin both halves from the guard's side:
 
-* the exact edits the writer now performs -- foreign line replaced, duplicate
-  collapsed, duplicate demoted into a fence -- are still REFUSED when an agent
+* the exact edits the writer now performs -- foreign line replaced, stale own
+  line moved forward, duplicate collapsed, duplicate demoted into a fence --
+  are still REFUSED when an agent
   issues them by hand, over every body-replacing shape the guard parses;
 * the one agent action the rebind path needs, re-requesting the writer through
   the autobind manual-replay dispatch, names no body edit and is admitted.
 
 The fixture bodies are the live shapes that stranded omnibase_core#1762,
-omniclaude#2338, omnimemory#533 and omnibase_infra#4104 on 2026-09-25. Their
+omnibase_core#1768, omniclaude#2338, omnimemory#533 and omnibase_infra#4104 on
+2026-09-25. Their
 stamp values are FIXTURES and bind nothing.
 """
 
@@ -59,6 +61,19 @@ FOREIGN_LIVE = (
 #: What the writer now writes for it: the PR's own proven companion.
 FOREIGN_REBOUND = (
     f"Bumps omnibase-core to 0.47.23.\n\nEvidence-Ticket: OMN-18595\n{_stamp(11213)}\n"
+)
+
+#: omnibase_core#1768: the PR's own companion, superseded by a later one.
+STALE_LIVE = (
+    "Cascade bumps carry no foreign stamp.\n\n"
+    "Evidence-Ticket: OMN-18202\n"
+    f"{_stamp(11231)}\n"
+)
+#: What the writer now writes for it: the later proven companion.
+STALE_FORWARD = (
+    "Cascade bumps carry no foreign stamp.\n\n"
+    "Evidence-Ticket: OMN-18202\n"
+    f"{_stamp(11234)}\n"
 )
 
 #: omnibase_core#1762: two lines, which the receipt gate refuses outright.
@@ -119,6 +134,14 @@ def _edit_shapes(repo: str, number: int, body_file: Path) -> list[str]:
         ),
         pytest.param(
             "OmniNode-ai/omnibase_core",
+            1768,
+            STALE_LIVE,
+            STALE_FORWARD,
+            _stamp(11231),
+            id="stale-own-line-moved-forward",
+        ),
+        pytest.param(
+            "OmniNode-ai/omnibase_core",
             1762,
             DUPLICATE_LIVE,
             DUPLICATE_COLLAPSED,
@@ -164,6 +187,8 @@ def test_the_writers_output_is_the_one_line_body_the_gate_wants(
     """
     assert stamp_lines(FOREIGN_LIVE, policy) == [_stamp(11192)]
     assert stamp_lines(FOREIGN_REBOUND, policy) == [_stamp(11213)]
+    assert stamp_lines(STALE_LIVE, policy) == [_stamp(11231)]
+    assert stamp_lines(STALE_FORWARD, policy) == [_stamp(11234)]
     assert len(stamp_lines(DUPLICATE_LIVE, policy)) == 2
     assert stamp_lines(DUPLICATE_COLLAPSED, policy) == [_stamp(11171)]
     assert stamp_lines(DUPLICATE_FENCED, policy) == [_stamp(11171)]
