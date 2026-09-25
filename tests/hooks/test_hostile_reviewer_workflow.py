@@ -632,7 +632,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     degraded = _run_verdict_snippet(
         workflow,
         {
-            "models_succeeded": ["deepseek-r1"],
+            "models_succeeded": ["qwen3-review"],
             "total_findings": 1,
             "results": [],
             "quorum": {

@@ -345,7 +345,7 @@ BLOCKING_STUB = """#!/usr/bin/env bash
 echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
 echo "Model 'gpt-oss-review' succeeded in 8.1s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "qwen3-review-b", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "gpt-oss-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -356,7 +356,7 @@ UNMAPPABLE_STUB = """#!/usr/bin/env bash
 echo "Model 'qwen3-review' succeeded in 1.0s (1 finding(s))." >&2
 echo "Model 'gpt-oss-review' succeeded in 1.4s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "qwen3-review-b", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "gpt-oss-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
 JSON
 exit 0
 """
