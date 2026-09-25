@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# The TRIGGER and PLACEMENT skeleton of a private repository's `ci.yml` on
+# its non-default `main` branch, at the commit whose every job was refused by
+# GitHub before it started, because each one asked for a hosted runner
+# (OMN-18635). The caller of the placement gate lived only on the default
+# branch, so the gate never judged this tree (OMN-18431).
+#
+# Kept verbatim: the `on:` block, and every job's id, name, runs-on, needs
+# and if. Reduced: steps, env and secrets, which decide nothing about
+# placement and carry internal names.
+name: CI
+on:
+  push:
+    branches:
+    - main
+    - hotfix/**
+  pull_request:
+    branches:
+    - main
+    - dev
+    - hotfix/**
+  merge_group: null
+  workflow_dispatch: null
+jobs:
+  gates:
+    name: CI hard gates
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  design-guards:
+    name: Design guardrails (warning)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - run: true
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [gates, playwright-e2e]
+    if: always()
+    steps:
+      - run: true
+  build-and-push:
+    name: Build and push to ECR
+    runs-on: ubuntu-latest
+    needs: gates
+    steps:
+      - run: true
+  notify-infra:
+    name: Notify omninode_infra (repository_dispatch)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - run: true
+  deploy:
+    name: Deploy to onex-dev
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - run: true
+  lighthouse:
+    name: Lighthouse CI (warning gate)
+    runs-on: ubuntu-latest
+    needs: gates
+    continue-on-error: true
+    steps:
+      - run: true
+  playwright-e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: gates
+    steps:
+      - run: true
