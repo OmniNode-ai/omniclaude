@@ -29,9 +29,9 @@
 # Surfaced check context in the caller:
 #   `runner-label-exists / runner-label-exists`
 #
-# ONE pin, not two: the script is checked out at `github.job_workflow_sha`, so
-# the caller's `uses:` SHA is the single source of truth for both the workflow
-# and the validator. Pin to an omniclaude commit on `dev`.
+# ONE pin, not two: the script is checked out at validated `job.workflow_sha`,
+# so the caller's `uses:` SHA is the single source of truth for both the
+# workflow and the validator. Pin to an omniclaude commit on `dev`.
 
 name: Runner Label Exists (reusable)
 
@@ -74,13 +74,46 @@ jobs:
       - name: Checkout the caller repository
         uses: actions/checkout@v7
 
+      - name: Resolve the gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::workflow SHA is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+          echo "runner-label-exists pin: $WORKFLOW_SHA"
+
       - name: Checkout the validator at this workflow's own SHA
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ steps.pin.outputs.sha }}
           path: .runner-label-exists-gate
           persist-credentials: false
+
+      - name: Assert the runner-label-exists checkout is at the pin
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .runner-label-exists-gate rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched runner-label-exists commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::runner-label-exists checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "runner-label-exists checked out at $checked_out_sha"
 
       - name: Set up Python
         uses: actions/setup-python@v7

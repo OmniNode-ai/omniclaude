@@ -71,11 +71,11 @@ on:
         default: record
       resolver_ref:
         description: >-
-          Optional override for the omniclaude ref the resolution is fetched
-          from. Leave unset in normal use: the default is
-          github.job_workflow_sha, already the exact SHA the caller pinned, so
-          the caller's `uses:` is the single source of truth for the workflow
-          and the script it runs.
+          Optional full 40-hex omniclaude commit SHA the resolution is fetched
+          from. Leave unset in normal use: the default is job.workflow_sha, the
+          exact SHA the caller pinned, so the caller's `uses:` is the single
+          source of truth for the workflow and the script it runs. Branch names
+          are refused.
         type: string
         required: false
       store_repo_name:
@@ -168,18 +168,54 @@ jobs:
       # GITHUB_WORKSPACE holds the CALLER's tree, so pull the two modules into a
       # side path -- mirrors public-repo-hygiene-reusable.yml and
       # kb-doc-gate-reusable.yml.
+      - name: Resolve the gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          REF_OVERRIDE: ${{ inputs.resolver_ref }}
+        run: |
+          set -euo pipefail
+          resolved_pin="${REF_OVERRIDE:-$WORKFLOW_SHA}"
+          if [[ ! "$resolved_pin" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::branch-claim pin is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$resolved_pin" >> "$GITHUB_OUTPUT"
+          echo "branch-claim pin: $resolved_pin"
+
       - name: Fetch the resolution (omniclaude canonical source)
         if: github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
-          ref: ${{ inputs.resolver_ref || github.job_workflow_sha }}
+          ref: ${{ steps.pin.outputs.sha }}
           path: .omniclaude-branch-claim
           persist-credentials: false
           sparse-checkout: |
             scripts/branch_claim.py
             scripts/lane_identity.py
           sparse-checkout-cone-mode: false
+
+      - name: Assert the branch-claim checkout is at the pin
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .omniclaude-branch-claim rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched branch-claim commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::branch-claim checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "branch-claim checked out at $checked_out_sha"
 
       # Resolve the private store repository from the organization variable, and
       # REFUSE if it is unset. An empty name would make the checkout below

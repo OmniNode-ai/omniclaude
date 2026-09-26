@@ -34,7 +34,7 @@
 # Surfaced check context in the caller: `public-repo-hygiene / public-repo-hygiene`
 # (caller job id / this job's name).
 #
-# ONE pin, not two: the validator checkout defaults to `github.job_workflow_sha`
+# ONE pin, not two: the validator checkout uses validated `job.workflow_sha`
 # -- the SHA this reusable workflow was resolved at -- so the caller's `uses:`
 # SHA is the single source of truth for both the workflow and the script. Pin
 # to an omniclaude commit on `dev`; `main` is release-synced and does not carry
@@ -64,9 +64,10 @@ on:
         default: report
       validator_ref:
         description: >-
-          Optional override for the omniclaude ref used to fetch the validator
+          Optional full 40-hex omniclaude commit SHA used to fetch the validator
           for external caller repos. Leave unset in normal use: the default is
-          github.job_workflow_sha, already the exact SHA the caller pinned.
+          job.workflow_sha, the exact SHA the caller pinned. Branch names are
+          refused.
         type: string
         required: false
       vocabulary_repo_name:
@@ -132,17 +133,53 @@ jobs:
       # The validator lives in omniclaude. When called from another repo,
       # GITHUB_WORKSPACE holds the CALLER's tree, so pull just the script into
       # a side path -- mirrors kb-doc-gate-reusable.yml.
+      - name: Resolve the gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          REF_OVERRIDE: ${{ inputs.validator_ref }}
+        run: |
+          set -euo pipefail
+          resolved_pin="${REF_OVERRIDE:-$WORKFLOW_SHA}"
+          if [[ ! "$resolved_pin" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::public-repo-hygiene pin is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$resolved_pin" >> "$GITHUB_OUTPUT"
+          echo "public-repo-hygiene pin: $resolved_pin"
+
       - name: Fetch hygiene validator (omniclaude canonical source)
         if: github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
-          ref: ${{ inputs.validator_ref || github.job_workflow_sha }}
+          ref: ${{ steps.pin.outputs.sha }}
           path: .omniclaude-public-repo-hygiene
           persist-credentials: false
           sparse-checkout: |
             scripts/public_repo_hygiene_gate.py
           sparse-checkout-cone-mode: false
+
+      - name: Assert the hygiene checkout is at the pin
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .omniclaude-public-repo-hygiene rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched hygiene commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::hygiene checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "hygiene checked out at $checked_out_sha"
 
       # The vocabulary is PRIVATE on purpose (OMN-18015). Reading it needs an
       # installation token; the workflow GITHUB_TOKEN cannot reach another
