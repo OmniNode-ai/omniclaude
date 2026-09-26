@@ -26,6 +26,28 @@
 
 set -uo pipefail
 
+# OMN-19537: a SessionEnd capture returns before the preamble, not after it.
+# A headless session gives its SessionEnd hooks about 1.5 s and then kills a
+# hook still running; the preamble below (repo guard, .env and common.sh
+# sourcing, the lane gate) can take longer than that on a loaded host, which
+# is how session_end_bus_mirror.sh lost session-ended events. For SessionEnd
+# only, stdin is handed to a detached copy of this script, which runs every
+# gate unchanged. Other hooks keep the preamble in the foreground so the
+# capture reads the turn that is current when the hook fires.
+if [[ -z "${_ONEX_CAPTURE_DETACHED:-}" ]]; then
+    _ONEX_CAPTURE_INPUT="$(cat)"
+    if [[ "$_ONEX_CAPTURE_INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"SessionEnd\" ]]; then
+        (
+            printf '%s' "$_ONEX_CAPTURE_INPUT" \
+                | _ONEX_CAPTURE_DETACHED=1 "${BASH:-bash}" "${BASH_SOURCE[0]}" "$@"
+        ) >/dev/null 2>&1 </dev/null &
+        disown 2>/dev/null || true
+        exit 0
+    fi
+    # Every other hook continues in this process with its stdin restored.
+    exec < <(printf '%s' "$_ONEX_CAPTURE_INPUT")
+fi
+
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"

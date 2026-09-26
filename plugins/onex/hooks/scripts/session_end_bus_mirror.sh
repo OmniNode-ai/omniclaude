@@ -20,6 +20,29 @@
 
 set -uo pipefail
 
+# OMN-19537: return before the preamble, not after it. A headless session
+# gives its SessionEnd hooks about 1.5 s, then cancels a hook that is still
+# running and kills its process group (measured on Claude Code 2.1.283,
+# 2026-09-26). This hook's preamble -- the repo guard, the .env and common.sh
+# sourcing, the lane gate -- takes 0.5-0.8 s on an idle Mac and longer under
+# the load a scheduled tick runs in, so on a busy host it was cancelled before
+# it reached the backgrounded append and the session-ended event was lost with
+# only a "Hook cancelled" line in the run log. A disowned child of a hook that
+# has already returned survives the session's exit, so the hook now reads
+# stdin, hands it to a detached copy of itself and returns at once. The copy
+# runs every gate unchanged.
+if [[ -z "${_ONEX_SESSION_END_DETACHED:-}" ]]; then
+    _ONEX_DETACH_INPUT="$(cat)"
+    (
+        printf '%s' "$_ONEX_DETACH_INPUT" \
+            | _ONEX_SESSION_END_DETACHED=1 "${BASH:-bash}" "${BASH_SOURCE[0]}" "$@"
+    # The copy's descriptors are detached from the caller: an inherited
+    # stdout or stderr pipe would hold the harness until the copy finished.
+    ) >/dev/null 2>&1 </dev/null &
+    disown 2>/dev/null || true
+    exit 0
+fi
+
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
