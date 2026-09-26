@@ -1,0 +1,21 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "mcp_server": {
+    "name": "fixture-server",
+    "version": "1"
+  },
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "tool_input": {
+    "command": "printf fixture",
+    "timeout": 30
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

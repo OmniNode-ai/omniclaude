@@ -1,0 +1,14 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "UserPromptSubmit",
+  "permission_mode": "default",
+  "prompt": "fixture prompt containing sk-ant-FAKE0000000000000000000000000000",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "session_title": "private session title",
+  "source": "user",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "7826502f-151e-52ca-8b9a-1e2a7b4d5df8",
+    "event_id": "82474c1f-b923-5be9-960e-747bbf20ec86",
+    "field": "message",
+    "hook_event_name": "Elicitation",
+    "length": 27,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "a4c17af9eabc071c5c66c8bb4cc55a1f00844f5d14de8ef27edfbf4c28a1caa4",
+    "value": "private elicitation message"
+  }
+]

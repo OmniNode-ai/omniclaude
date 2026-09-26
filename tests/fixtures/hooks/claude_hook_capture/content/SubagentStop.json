@@ -1,0 +1,28 @@
+[
+  {
+    "agent_id": "agent-fixture-1",
+    "content_record_id": "55d442aa-3c40-5f52-a6b5-8a26223030cb",
+    "event_id": "ba01f453-6278-5fde-81f6-a063960b8dbc",
+    "field": "agent_transcript_path",
+    "hook_event_name": "SubagentStop",
+    "length": 33,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "7cfa070b4c1efdec45f4fc9d39cd995ed86a679be0c73f0406ee49c06b4243df",
+    "value": "/restricted/agent-fixture-1.jsonl"
+  },
+  {
+    "agent_id": "agent-fixture-1",
+    "content_record_id": "03ae0d0b-cd0f-5909-a8be-3c4100de012f",
+    "event_id": "ba01f453-6278-5fde-81f6-a063960b8dbc",
+    "field": "last_assistant_message",
+    "hook_event_name": "SubagentStop",
+    "length": 23,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "be0af8bf30efdc4a3d35c6d682899b94d68a3ea2518249f414277109917f8dfc",
+    "value": "private subagent answer"
+  }
+]

@@ -1,0 +1,51 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "8f479a4b-c217-5b8e-a38d-70ecf27234a2",
+      "field": "old_cwd",
+      "length": 15,
+      "sha256": "af660145d7e252b12f6730ae89170f71cde00eee2d156ac5319065c466448bca"
+    },
+    {
+      "content_record_id": "546900a4-34dd-550c-969c-763ea4b17aaa",
+      "field": "new_cwd",
+      "length": 15,
+      "sha256": "5621147e22c0ba6c22f34b903d778f9d1a7ce281e014b84e68be2058877a50ed"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:29Z",
+  "event_id": "38c7041b-5c57-593d-8531-69171d72bfaa",
+  "hook_event_name": "CwdChanged",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "hook_event_name": "CwdChanged",
+    "new_cwd_ref": {
+      "content_record_id": "546900a4-34dd-550c-969c-763ea4b17aaa",
+      "field": "new_cwd",
+      "length": 15,
+      "sha256": "5621147e22c0ba6c22f34b903d778f9d1a7ce281e014b84e68be2058877a50ed"
+    },
+    "old_cwd_ref": {
+      "content_record_id": "8f479a4b-c217-5b8e-a38d-70ecf27234a2",
+      "field": "old_cwd",
+      "length": 15,
+      "sha256": "af660145d7e252b12f6730ae89170f71cde00eee2d156ac5319065c466448bca"
+    }
+  },
+  "schema_version": "1.0.0"
+}

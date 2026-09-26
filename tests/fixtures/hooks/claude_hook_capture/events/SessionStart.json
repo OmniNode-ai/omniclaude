@@ -1,0 +1,31 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [],
+  "emitted_at": "2026-09-26T12:00:07Z",
+  "event_id": "364d0f06-ae69-5426-9cdb-211f6dc6d318",
+  "hook_event_name": "SessionStart",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "context_tokens": 4096,
+    "hook_event_name": "SessionStart",
+    "model": "claude-opus-4-1",
+    "prompt_cache_likely_expired": false,
+    "seconds_since_last_response": 12.5,
+    "source": "startup"
+  },
+  "schema_version": "1.0.0"
+}

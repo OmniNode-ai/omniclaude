@@ -1,0 +1,42 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "1056b63a-c33f-521e-82dd-6356f1ab91cb",
+      "field": "last_assistant_message",
+      "length": 26,
+      "sha256": "25c7f5eb83d3f83720e3840e69fac7cc1aee97d86058d5bab985399e07c8d520"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:09Z",
+  "event_id": "df92440f-1a4f-5572-a7e4-cac524f31e89",
+  "hook_event_name": "Stop",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "background_task_count": 1,
+    "hook_event_name": "Stop",
+    "last_assistant_message_ref": {
+      "content_record_id": "1056b63a-c33f-521e-82dd-6356f1ab91cb",
+      "field": "last_assistant_message",
+      "length": 26,
+      "sha256": "25c7f5eb83d3f83720e3840e69fac7cc1aee97d86058d5bab985399e07c8d520"
+    },
+    "session_cron_count": 2,
+    "stop_hook_active": true
+  },
+  "schema_version": "1.0.0"
+}

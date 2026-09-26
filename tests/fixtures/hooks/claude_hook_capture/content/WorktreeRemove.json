@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "035f8b9b-91cf-5ded-9900-36a8e5d8edf3",
+    "event_id": "e7e31045-1bab-5efe-8295-d73231eecce3",
+    "field": "worktree_path",
+    "hook_event_name": "WorktreeRemove",
+    "length": 29,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "54b19b170c2bf0c43283197b2f45031b469241512247470fc7517b6d8034efe7",
+    "value": "/restricted/worktrees/private"
+  }
+]

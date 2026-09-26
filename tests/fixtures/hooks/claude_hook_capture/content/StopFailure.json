@@ -1,0 +1,28 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "0c089bea-b8e0-51c8-ba64-36270a555c54",
+    "event_id": "c4bda824-3359-5162-8055-d796cdaa8675",
+    "field": "error_details",
+    "hook_event_name": "StopFailure",
+    "length": 26,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "f00316117c52ec74086aa5703cf98119fc91ece3afe538408c2c55f57f80ebb9",
+    "value": "private stop error details"
+  },
+  {
+    "agent_id": null,
+    "content_record_id": "49c05148-2941-5e10-a1ed-51fdc2e09cad",
+    "event_id": "c4bda824-3359-5162-8055-d796cdaa8675",
+    "field": "last_assistant_message",
+    "hook_event_name": "StopFailure",
+    "length": 28,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "de5ca7f63b7beb496d79e07972511eaa908f49562494d2596dcfa43038573dbc",
+    "value": "private final assistant text"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "6087be50-80f5-50a7-b242-f5fcbf9b977f",
+    "event_id": "a8ab1bde-fdac-5371-aeb9-7cb40e2f0d7d",
+    "field": "tool_input",
+    "hook_event_name": "PreToolUse",
+    "length": 41,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "833d79ffb6a168f98c361eb614e79e4be7bbf0701edcfa5c02d7ecb54ab865d9",
+    "value": "{\"command\":\"printf fixture\",\"timeout\":30}"
+  }
+]

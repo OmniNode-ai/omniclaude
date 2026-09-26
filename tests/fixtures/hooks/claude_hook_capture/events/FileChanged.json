@@ -1,0 +1,40 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "ed49d709-cb69-5136-b55b-2805890fd6a4",
+      "field": "file_path",
+      "length": 22,
+      "sha256": "faf8b4f003afeadd1d7592328e5b33aa9ce5174b667dcd42e195c1d55dbe6093"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:30Z",
+  "event_id": "ca7c4032-24be-5e14-a464-5a647255978b",
+  "hook_event_name": "FileChanged",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "event": "change",
+    "file_path_ref": {
+      "content_record_id": "ed49d709-cb69-5136-b55b-2805890fd6a4",
+      "field": "file_path",
+      "length": 22,
+      "sha256": "faf8b4f003afeadd1d7592328e5b33aa9ce5174b667dcd42e195c1d55dbe6093"
+    },
+    "hook_event_name": "FileChanged"
+  },
+  "schema_version": "1.0.0"
+}

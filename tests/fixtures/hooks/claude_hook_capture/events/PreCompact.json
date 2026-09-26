@@ -1,0 +1,40 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "db3d1e17-5bd1-5f39-a0e0-34bcb028187a",
+      "field": "custom_instructions",
+      "length": 31,
+      "sha256": "830b8f95a58ca23f1fc6a03c7923128cb6d672f4d1544c94b02e5ea633dc9fd5"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:13Z",
+  "event_id": "92ff40ac-a540-5e3f-a41b-fa5bb5c1bc38",
+  "hook_event_name": "PreCompact",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "custom_instructions_ref": {
+      "content_record_id": "db3d1e17-5bd1-5f39-a0e0-34bcb028187a",
+      "field": "custom_instructions",
+      "length": 31,
+      "sha256": "830b8f95a58ca23f1fc6a03c7923128cb6d672f4d1544c94b02e5ea633dc9fd5"
+    },
+    "hook_event_name": "PreCompact",
+    "trigger": "manual"
+  },
+  "schema_version": "1.0.0"
+}

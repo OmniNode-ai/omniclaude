@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "463fcb81-b4fb-5997-af0c-88a6463ac70e",
+    "event_id": "cedc3dba-10eb-5b83-97b0-52cb08834999",
+    "field": "compact_summary",
+    "hook_event_name": "PostCompact",
+    "length": 23,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "d9a5b651e3a6436253f52f0f8ccdf0f0adbf439324674a1da0d770af94770a49",
+    "value": "private compact summary"
+  }
+]

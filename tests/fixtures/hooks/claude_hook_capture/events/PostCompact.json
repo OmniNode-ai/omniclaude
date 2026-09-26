@@ -1,0 +1,40 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "463fcb81-b4fb-5997-af0c-88a6463ac70e",
+      "field": "compact_summary",
+      "length": 23,
+      "sha256": "d9a5b651e3a6436253f52f0f8ccdf0f0adbf439324674a1da0d770af94770a49"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:14Z",
+  "event_id": "cedc3dba-10eb-5b83-97b0-52cb08834999",
+  "hook_event_name": "PostCompact",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "compact_summary_ref": {
+      "content_record_id": "463fcb81-b4fb-5997-af0c-88a6463ac70e",
+      "field": "compact_summary",
+      "length": 23,
+      "sha256": "d9a5b651e3a6436253f52f0f8ccdf0f0adbf439324674a1da0d770af94770a49"
+    },
+    "hook_event_name": "PostCompact",
+    "trigger": "manual"
+  },
+  "schema_version": "1.0.0"
+}

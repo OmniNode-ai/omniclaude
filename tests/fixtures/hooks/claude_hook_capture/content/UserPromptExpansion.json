@@ -1,0 +1,28 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "9c524bc3-dcfe-5baa-a8f6-0b2180dd9805",
+    "event_id": "6acf8f96-e4e4-5ac6-8a9a-c97fa6ccbaeb",
+    "field": "command_args",
+    "hook_event_name": "UserPromptExpansion",
+    "length": 25,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "dfeed4d2d012968ac0f69f32f16c2e747cb83d46d52464b23f9d31c16b0adbff",
+    "value": "private command arguments"
+  },
+  {
+    "agent_id": null,
+    "content_record_id": "e752eca4-a7fe-58d5-8935-63c383ea745f",
+    "event_id": "6acf8f96-e4e4-5ac6-8a9a-c97fa6ccbaeb",
+    "field": "prompt",
+    "hook_event_name": "UserPromptExpansion",
+    "length": 23,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "8345f9e839fd721a68b5447770ecd0919cf71177d6b5083b358dd6af69174905",
+    "value": "private expanded prompt"
+  }
+]

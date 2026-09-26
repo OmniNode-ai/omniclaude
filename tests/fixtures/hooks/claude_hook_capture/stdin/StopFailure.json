@@ -1,0 +1,14 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "error": "max_turns",
+  "error_details": "private stop error details",
+  "hook_event_name": "StopFailure",
+  "last_assistant_message": "private final assistant text",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

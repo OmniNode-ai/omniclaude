@@ -1,0 +1,52 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "0c089bea-b8e0-51c8-ba64-36270a555c54",
+      "field": "error_details",
+      "length": 26,
+      "sha256": "f00316117c52ec74086aa5703cf98119fc91ece3afe538408c2c55f57f80ebb9"
+    },
+    {
+      "content_record_id": "49c05148-2941-5e10-a1ed-51fdc2e09cad",
+      "field": "last_assistant_message",
+      "length": 28,
+      "sha256": "de5ca7f63b7beb496d79e07972511eaa908f49562494d2596dcfa43038573dbc"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:10Z",
+  "event_id": "c4bda824-3359-5162-8055-d796cdaa8675",
+  "hook_event_name": "StopFailure",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "error": "max_turns",
+    "error_details_ref": {
+      "content_record_id": "0c089bea-b8e0-51c8-ba64-36270a555c54",
+      "field": "error_details",
+      "length": 26,
+      "sha256": "f00316117c52ec74086aa5703cf98119fc91ece3afe538408c2c55f57f80ebb9"
+    },
+    "hook_event_name": "StopFailure",
+    "last_assistant_message_ref": {
+      "content_record_id": "49c05148-2941-5e10-a1ed-51fdc2e09cad",
+      "field": "last_assistant_message",
+      "length": 28,
+      "sha256": "de5ca7f63b7beb496d79e07972511eaa908f49562494d2596dcfa43038573dbc"
+    }
+  },
+  "schema_version": "1.0.0"
+}

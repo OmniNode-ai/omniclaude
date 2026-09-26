@@ -1,0 +1,54 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "9c524bc3-dcfe-5baa-a8f6-0b2180dd9805",
+      "field": "command_args",
+      "length": 25,
+      "sha256": "dfeed4d2d012968ac0f69f32f16c2e747cb83d46d52464b23f9d31c16b0adbff"
+    },
+    {
+      "content_record_id": "e752eca4-a7fe-58d5-8935-63c383ea745f",
+      "field": "prompt",
+      "length": 23,
+      "sha256": "8345f9e839fd721a68b5447770ecd0919cf71177d6b5083b358dd6af69174905"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:06Z",
+  "event_id": "6acf8f96-e4e4-5ac6-8a9a-c97fa6ccbaeb",
+  "hook_event_name": "UserPromptExpansion",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "command_args_ref": {
+      "content_record_id": "9c524bc3-dcfe-5baa-a8f6-0b2180dd9805",
+      "field": "command_args",
+      "length": 25,
+      "sha256": "dfeed4d2d012968ac0f69f32f16c2e747cb83d46d52464b23f9d31c16b0adbff"
+    },
+    "command_name": "review",
+    "command_source": "project",
+    "expansion_type": "slash_command",
+    "hook_event_name": "UserPromptExpansion",
+    "prompt_ref": {
+      "content_record_id": "e752eca4-a7fe-58d5-8935-63c383ea745f",
+      "field": "prompt",
+      "length": 23,
+      "sha256": "8345f9e839fd721a68b5447770ecd0919cf71177d6b5083b358dd6af69174905"
+    }
+  },
+  "schema_version": "1.0.0"
+}

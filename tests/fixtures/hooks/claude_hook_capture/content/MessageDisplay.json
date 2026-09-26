@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "ffa92838-4989-5c88-bcf9-3cefb71f19ff",
+    "event_id": "8e576251-b0af-5e46-a97a-bc35391d4aad",
+    "field": "delta",
+    "hook_event_name": "MessageDisplay",
+    "length": 22,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "050ae6d1261fcecb86f75b298b162597d095bb204dd415dd41eca0a197742c7a",
+    "value": "private streamed delta"
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "elicitation_id": "elicit-fixture-1",
+  "hook_event_name": "Elicitation",
+  "mcp_server_name": "fixture-server",
+  "message": "private elicitation message",
+  "mode": "form",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "requested_schema": {
+    "account": {
+      "type": "string"
+    },
+    "region": {}
+  },
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

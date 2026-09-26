@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-19513
+#
+# Wire schema contract for the complete Claude Code hook capture envelope.
+topic: "onex.evt.omniclaude.hook-event.v1"  # onex-topic-sot
+schema_version: "1.0.0"
+ticket: "OMN-19513"
+description: >
+  One discriminated metadata envelope for all 33 Claude Code 2.1.283 hook
+  events. Full content is represented only by deterministic references.
+
+producer:
+  repo: "omniclaude"
+  file: "plugins/onex/hooks"
+  function: "to be wired by a build task"
+
+consumer:
+  repo: "omnimarket"
+  file: "node_projection_claude_hook_events"
+  model: "to be built"
+
+partition_key:
+  field: "lineage.session_id"
+  type: "string"
+  rationale: "Preserves per-session order across all hook types for the lineage fold."
+
+required_fields:
+  - {name: event_id, type: uuid, description: "Deterministic event identity."}
+  - {name: schema_version, type: literal, value: "1.0.0"}
+  - {name: hook_event_name, type: EnumClaudeHookEventName}
+  - {name: emitted_at, type: datetime, description: "Explicit timezone-aware timestamp."}
+  - {name: actor, type: literal, value: claude}
+  - {name: lineage, type: ModelHookLineage}
+  - {name: payload, type: ModelHookPayload, discriminator: hook_event_name}
+  - {name: content_refs, type: "tuple[ModelHookContentRef, ...]"}
+
+optional_fields:
+  - name: claude_code_version
+    type: string
+    nullable: true
+    description: "Producer-observed Claude Code version."
+
+content_topic:
+  name: "onex.cmd.omniintelligence.content-captured.v1"  # onex-topic-sot
+  reference_only: true
+  record_model: ModelHookContentRecord
+
+compatibility:
+  supersedes_legacy_topics: false
+  legacy_topics_untouched:
+    - "onex.evt.omniclaude.session-started.v1"  # onex-topic-sot
+    - "onex.evt.omniclaude.prompt-submitted.v1"  # onex-topic-sot
+    - "onex.evt.omniclaude.tool-executed.v1"  # onex-topic-sot
+    - "onex.evt.omniclaude.session-ended.v1"  # onex-topic-sot

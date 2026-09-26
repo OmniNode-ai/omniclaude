@@ -1,0 +1,46 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "6087be50-80f5-50a7-b242-f5fcbf9b977f",
+      "field": "tool_input",
+      "length": 41,
+      "sha256": "833d79ffb6a168f98c361eb614e79e4be7bbf0701edcfa5c02d7ecb54ab865d9"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:00Z",
+  "event_id": "a8ab1bde-fdac-5371-aeb9-7cb40e2f0d7d",
+  "hook_event_name": "PreToolUse",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": "toolu-fixture-1",
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "mcp_server": "fixture-server",
+    "tool_call_key": "870a7922-d77c-5b69-90f4-2f200c62295b",
+    "tool_input_keys": [
+      "command",
+      "timeout"
+    ],
+    "tool_input_ref": {
+      "content_record_id": "6087be50-80f5-50a7-b242-f5fcbf9b977f",
+      "field": "tool_input",
+      "length": 41,
+      "sha256": "833d79ffb6a168f98c361eb614e79e4be7bbf0701edcfa5c02d7ecb54ab865d9"
+    },
+    "tool_name": "Bash"
+  },
+  "schema_version": "1.0.0"
+}

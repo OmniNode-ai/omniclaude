@@ -1,0 +1,28 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [],
+  "emitted_at": "2026-09-26T12:00:11Z",
+  "event_id": "d6e63d49-8f35-5352-8069-588706f1771b",
+  "hook_event_name": "SubagentStart",
+  "lineage": {
+    "agent_id": "agent-fixture-1",
+    "agent_type": "Explore",
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": true,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "agent_id": "agent-fixture-1",
+    "agent_type": "Explore",
+    "hook_event_name": "SubagentStart"
+  },
+  "schema_version": "1.0.0"
+}

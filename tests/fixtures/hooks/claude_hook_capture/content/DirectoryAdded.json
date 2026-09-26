@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "300f077c-5fd6-5b9b-b055-5eaf19f119c0",
+    "event_id": "e346b2da-9cbd-5577-9777-70caf5c9fadb",
+    "field": "directory",
+    "hook_event_name": "DirectoryAdded",
+    "length": 25,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "9dc066f318853dbc3757c002728afe8dc771216f61b225db13ddf9b877424a41",
+    "value": "/restricted/new-directory"
+  }
+]

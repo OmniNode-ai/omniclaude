@@ -1,0 +1,40 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "fb1c371f-7771-5d35-a91b-9c570652a452",
+      "field": "file_path",
+      "length": 25,
+      "sha256": "954d0c90bd4822083ef04e1054d7359e9f632cd7ab6b5ed39513722afe1a861c"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:25Z",
+  "event_id": "4fc4afe7-b8a1-5771-b5ab-817596dc91f4",
+  "hook_event_name": "ConfigChange",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "file_path_ref": {
+      "content_record_id": "fb1c371f-7771-5d35-a91b-9c570652a452",
+      "field": "file_path",
+      "length": 25,
+      "sha256": "954d0c90bd4822083ef04e1054d7359e9f632cd7ab6b5ed39513722afe1a861c"
+    },
+    "hook_event_name": "ConfigChange",
+    "source": "user_settings"
+  },
+  "schema_version": "1.0.0"
+}

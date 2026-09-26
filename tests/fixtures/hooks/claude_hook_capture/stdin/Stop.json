@@ -1,0 +1,26 @@
+{
+  "background_tasks": [
+    {
+      "id": "background-1"
+    }
+  ],
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "Stop",
+  "last_assistant_message": "private assistant response",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_crons": [
+    {
+      "id": "cron-1"
+    },
+    {
+      "id": "cron-2"
+    }
+  ],
+  "session_id": "session-fixture-1",
+  "stop_hook_active": true,
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

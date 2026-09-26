@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "f84d615a-3f8f-5bec-9448-3263519c27e1",
+    "event_id": "64881551-6c84-58dc-878c-1fdf5bba10be",
+    "field": "error",
+    "hook_event_name": "PostToolUseFailure",
+    "length": 28,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "de78ed71d2cfd78e257553829a808b167713b0ce1969b9ebf27cf18bbe94dbae",
+    "value": "private command failure text"
+  }
+]

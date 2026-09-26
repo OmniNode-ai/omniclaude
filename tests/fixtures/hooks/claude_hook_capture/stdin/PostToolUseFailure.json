@@ -1,0 +1,19 @@
+{
+  "cwd": "/workspace/fixture",
+  "duration_ms": 9,
+  "effort": {
+    "level": "high"
+  },
+  "error": "private command failure text",
+  "hook_event_name": "PostToolUseFailure",
+  "is_interrupt": false,
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "tool_input": {
+    "command": "exit 1"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu-fixture-failure",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

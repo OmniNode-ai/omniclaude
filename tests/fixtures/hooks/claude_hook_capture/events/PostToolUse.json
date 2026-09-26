@@ -1,0 +1,42 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "912e2098-0c60-5f32-baf5-cbdf5c6e3402",
+      "field": "tool_response",
+      "length": 69,
+      "sha256": "895a5474e547da0519d0bd580b7301099f6c0b0bea13648e5f6ef933a3dbe4f6"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:01Z",
+  "event_id": "2cb370b7-9641-5c76-92e5-ae4125f52f12",
+  "hook_event_name": "PostToolUse",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": "870a7922-d77c-5b69-90f4-2f200c62295b",
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": "toolu-fixture-1",
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "duration_ms": 125,
+    "hook_event_name": "PostToolUse",
+    "interrupted": false,
+    "tool_name": "Bash",
+    "tool_response_ref": {
+      "content_record_id": "912e2098-0c60-5f32-baf5-cbdf5c6e3402",
+      "field": "tool_response",
+      "length": 69,
+      "sha256": "895a5474e547da0519d0bd580b7301099f6c0b0bea13648e5f6ef933a3dbe4f6"
+    }
+  },
+  "schema_version": "1.0.0"
+}

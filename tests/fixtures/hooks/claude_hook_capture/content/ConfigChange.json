@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "fb1c371f-7771-5d35-a91b-9c570652a452",
+    "event_id": "4fc4afe7-b8a1-5771-b5ab-817596dc91f4",
+    "field": "file_path",
+    "hook_event_name": "ConfigChange",
+    "length": 25,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "954d0c90bd4822083ef04e1054d7359e9f632cd7ab6b5ed39513722afe1a861c",
+    "value": "/restricted/settings.json"
+  }
+]
