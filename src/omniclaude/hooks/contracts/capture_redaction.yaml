@@ -475,6 +475,10 @@ topics:
       correlation_id: capture_verbatim
       causation_id: capture_verbatim
       entity_id: capture_verbatim
+      # hook_fired_at is the drainer's stamp of when the hook fired (a
+      # timestamp), added to every journalled record; declared here as it is
+      # on the sibling hook topics, so it is not hashed by the default.
+      hook_fired_at: capture_verbatim
 
   "onex.evt.omniclaude.prompt-submitted.v1":
     ticket: OMN-16979
