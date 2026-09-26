@@ -3130,7 +3130,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     claim_fence_days=args.rescue_only_claim_fence_days,
                 )
             )
-        if deadline is not None and time.monotonic() >= deadline:
+        if decisions[-1].disposition is EnumPruneDisposition.TIMED_OUT and (
+            deadline is not None and time.monotonic() >= deadline
+        ):
             # Say which tree spent the budget: a silent stretch between two
             # progress lines is what read as a hang on 2026-09-26 [OMN-19399].
             print(
