@@ -144,6 +144,15 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-19612: GitHub rejects expressions whose contexts are unavailable
+      # at their workflow/job key; catch that before the workflow reaches CI.
+      - id: workflow-expression-contexts
+        name: Workflow expressions use only contexts GitHub allows there (OMN-19612)
+        entry: python3 scripts/ci/check_workflow_expression_contexts.py
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+        pass_filenames: true
+
       # OMN-13025 (A-3): Reject docs/evidence/** with UI/e2e claims but no Playwright artifact.
       # Root cause: 2026-06-11 19:27Z evidence doc claimed "UI POST → full chain live" when
       # only curl was run (PROCESS_FAILURE_RETRO.md §3.A — top-10 failure #1).
@@ -504,8 +513,9 @@ repos:
         name: reject direct adapter imports in business logic
         entry: python3 scripts/validation/validate_no_direct_adapter_in_business_logic.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       # OMN-10658 / OMN-10734: block localhost/default fallbacks in src/ and scripts/
@@ -514,8 +524,8 @@ repos:
         name: No localhost/default env fallbacks (OMN-10658)
         entry: python3 scripts/validate_no_env_fallbacks.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        files: ^(src|scripts)/.*\.(py|sh|bash)$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       # OMN-10723: block silent inprocess fallback patterns in skill code.
@@ -524,8 +534,8 @@ repos:
         name: No silent inprocess fallback in skills (OMN-10723)
         entry: bash plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback.sh
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        files: ^(plugins/onex/skills/.*\.py|plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback\.sh|\.pre-commit-config\.yaml)$
         stages: [pre-commit]
 
       # OMN-10725: block direct EventBus instantiation outside DI bootstrap —
@@ -534,8 +544,9 @@ repos:
         name: No direct EventBus instantiation (must use DI/select_event_bus)
         entry: python3 scripts/validation/validate_no_direct_bus_instantiation.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       # OMN-10725: block raw sqlite3.connect() outside adapter definitions —
@@ -544,8 +555,9 @@ repos:
         name: No raw sqlite3.connect in handler/skill code (must use adapter)
         entry: python3 scripts/validation/validate_no_raw_sqlite3.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: clean-output-directory
@@ -722,64 +734,72 @@ repos:
         name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
         entry: python3 scripts/validation/validate_no_db_in_orchestrator.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-no-git-outside-effects
         name: "Arch: No git/gh calls outside effects (check 2)"
         entry: python3 scripts/validation/validate_no_git_outside_effects.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-no-linear-outside-effects
         name: "Arch: No LinearClient outside effects (check 3)"
         entry: python3 scripts/validation/validate_no_linear_outside_effects.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-no-repo-adapter-in-orchestrator
         name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
         entry: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-cost-ledger-isolation
         name: "Arch: ModelCostLedger confined to effects (check 5)"
         entry: python3 scripts/validation/validate_cost_ledger_isolation.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-cost-ledger-structure
         name: "Arch: ModelCostLedger run_id field + index (check 9)"
         entry: python3 scripts/validation/validate_cost_ledger_structure.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-no-direct-kafka-producer
         name: "Arch: No direct Kafka producer outside publisher (check 10)"
         entry: python3 scripts/validation/validate_no_direct_kafka_producer.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-no-utcnow
         name: "Arch: No datetime.utcnow() usage (check 11)"
         entry: python3 scripts/validation/validate_no_utcnow.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: arch-no-hardcoded-ip
@@ -793,8 +813,8 @@ repos:
         # stdlib-only -- out of scope for this canary; track separately.)
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_ip.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        files: ^(src|tests|scripts)/.*\.(py|ya?ml)$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: check-env-var-registry
@@ -930,16 +950,10 @@ repos:
       - id: no-internal-ips
         name: Block hardcoded internal IPs
         language: system
-        entry: >
-          bash -c 'grep -rInE
-          --include="*.py" --include="*.sh" --include="*.yml"
-          --include="*.yaml" --include="*.toml" --include="*.md"
-          --exclude-dir=.venv --exclude-dir=node_modules
-          "(192\.168\.|10\.(0|1|2)\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)"
-          src/ tests/ docs/ .github/ plugins/ 2>/dev/null
-          | grep -v "onex-allow-internal-ip"
-          && echo "ERROR: hardcoded internal IP found (add # onex-allow-internal-ip to suppress)" && exit 1 || exit 0'
-        pass_filenames: false
+        entry: python3 scripts/validation/validate_no_internal_ips.py
+        pass_filenames: true
+        types_or: [python, shell, yaml, toml, markdown]
+        files: ^(src/|tests/|docs/|\.github/|plugins/|scripts/validation/validate_no_internal_ips\.py$|\.pre-commit-config\.yaml$)
         stages: [pre-commit]
       # OMN-13047 / Retro D-1: Concurrency-primitive clause.
       # Flags staged non-test Python additions that introduce seek_to_end /
@@ -957,45 +971,11 @@ repos:
       # Detects os.getenv("KAFKA_*", non-empty) and private-IP Kafka broker ports
       - id: kafka-no-hardcoded-fallback
         name: Reject hardcoded Kafka broker address fallbacks
-        entry: >
-          bash -c
-          'FAILED=0;
-          MATCHES=$(grep -rn --include="*.py"
-          --exclude-dir=.venv
-          --exclude-dir=__pycache__
-          --exclude-dir=.claude
-          --exclude-dir=scripts
-          -E "os\.getenv\([[:space:]]*[\"'"'"']KAFKA_[^\"'"'"']+[\"'"'"'][[:space:]]*,[[:space:]]*[\"'"'"'][^\"'"'"']+[\"'"'"']"
-          . 2>/dev/null |
-          grep -v "kafka-fallback-ok" |
-          grep -v "noqa");
-          if [ -n "$MATCHES" ]; then
-          echo "ERROR: Hardcoded Kafka bootstrap fallback detected:";
-          echo "$MATCHES";
-          echo "";
-          echo "FIX: Remove the fallback value or add # kafka-fallback-ok";
-          FAILED=1;
-          fi;
-          IP_MATCHES=$(grep -rn --include="*.py"
-          --exclude-dir=.venv
-          --exclude-dir=__pycache__
-          --exclude-dir=.claude
-          -E "192\.168\.[0-9]+\.[0-9]+:[0-9]{4,5}"
-          . 2>/dev/null |
-          grep -v "kafka-fallback-ok" |
-          grep -v "noqa" |
-          grep -v "onex-allow-internal-ip");
-          if [ -n "$IP_MATCHES" ]; then
-          echo "ERROR: Hardcoded private-IP Kafka broker address in Python file:";
-          echo "$IP_MATCHES";
-          echo "";
-          echo "FIX: Use KAFKA_BOOTSTRAP_SERVERS env var or add # kafka-fallback-ok";
-          FAILED=1;
-          fi;
-          exit $FAILED'
+        entry: python3 scripts/validation/validate_kafka_env_fallbacks.py
         language: system
-        pass_filenames: false
+        pass_filenames: true
         types: [python]
+        files: ^(src/|tests/|plugins/|shared_lib/|hooks/|scripts/validation/validate_kafka_env_fallbacks\.py$|\.pre-commit-config\.yaml$)
         stages: [pre-commit]
       # OMN-7436: Detect hardcoded numeric fallback values in dashboard code
       # Catches ternary fallbacks (? 0.87 : 0.82) and hardcoded score assignments.
@@ -1178,8 +1158,9 @@ repos:
         name: Block hardcoded Kafka broker URL fallbacks
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_kafka_broker.py
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        types_or: [python, yaml]
+        files: ^(src|plugins|shared_lib|hooks|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       # OMN-17204: the hook edge's bus lane is declared, not derived from the
@@ -1232,8 +1213,10 @@ repos:
         name: Block cloud bus references
         entry: bash scripts/check_no_cloud_bus_wrapper.sh
         language: system
-        pass_filenames: false
-        always_run: true
+        pass_filenames: true
+        require_serial: true
+        types_or: [python, shell, yaml, toml, javascript, ts]
+        files: ^(src/|tests/|plugins/|shared_lib/|hooks/|scripts/|\.github/|\.pre-commit-config\.yaml$)
         stages: [pre-commit]
 
       - id: no-env-file

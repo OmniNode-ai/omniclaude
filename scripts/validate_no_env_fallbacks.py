@@ -191,7 +191,7 @@ def scan_shell_file(path: Path) -> list[tuple[int, str]]:
 
 
 def _should_skip(path: Path, repo_root: Path) -> bool:
-    rel = path.relative_to(repo_root)
+    rel = path.relative_to(repo_root) if path.is_relative_to(repo_root) else path
     if any(part in SKIP_DIRS for part in rel.parts):
         return True
     if path.name in SKIP_FILES:
@@ -230,7 +230,9 @@ def run_on_files(files: list[Path], repo_root: Path) -> list[tuple[str, int, str
             continue
         if _should_skip(path, repo_root):
             continue
-        rel = str(path.relative_to(repo_root))
+        rel = str(
+            path.relative_to(repo_root) if path.is_relative_to(repo_root) else path
+        )
         if path.suffix == ".py":
             file_viols = scan_python_file(path)
         elif path.suffix in (".sh", ".bash"):
@@ -242,13 +244,19 @@ def run_on_files(files: list[Path], repo_root: Path) -> list[tuple[str, int, str
     return all_violations
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parent.parent
+    raw_paths = argv if argv is not None else sys.argv[1:]
+    selected = [Path(raw) for raw in raw_paths]
+    full_scan = not selected or any(
+        path.resolve() == Path(__file__).resolve()
+        or path.name == ".pre-commit-config.yaml"
+        for path in selected
+    )
 
-    if len(sys.argv) > 1:
+    if not full_scan:
         # pre-commit pass_filenames mode: scan only the files passed as args
-        files = [Path(f) for f in sys.argv[1:]]
-        violations = run_on_files(files, repo_root)
+        violations = run_on_files(selected, repo_root)
     else:
         # standalone mode: scan all of src/ and scripts/
         scan_roots = [repo_root / "src", repo_root / "scripts"]

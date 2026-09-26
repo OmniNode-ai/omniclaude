@@ -36,7 +36,7 @@ _ALLOWED_PATHS: frozenset[str] = frozenset(
 _SUPPRESS_MARKER = "onex-allow-internal-ip"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     scan_dirs = [Path("src"), Path("tests"), Path("scripts")]
     existing_dirs = [d for d in scan_dirs if d.exists()]
     if not existing_dirs:
@@ -46,15 +46,28 @@ def main() -> int:
         return 1
 
     violations: list[str] = []
-    for scan_dir in existing_dirs:
-        for ext in ("*.py", "*.yaml", "*.yml"):
-            for path in scan_dir.rglob(ext):
-                rel = str(path)
-                if rel in _ALLOWED_PATHS:
-                    continue
-                for i, line in enumerate(path.read_text().splitlines(), 1):
-                    if _IP_PATTERN.search(line) and _SUPPRESS_MARKER not in line:
-                        violations.append(f"  {rel}:{i}: {line.strip()}")
+    raw_paths = argv if argv is not None else sys.argv[1:]
+    selected = [Path(raw) for raw in raw_paths]
+    if not selected or any(
+        path.resolve() == Path(__file__).resolve()
+        or path.name == ".pre-commit-config.yaml"
+        for path in selected
+    ):
+        selected = existing_dirs
+    files: set[Path] = set()
+    for path in selected:
+        if path.is_file() and path.suffix in {".py", ".yaml", ".yml"}:
+            files.add(path)
+        elif path.is_dir():
+            for ext in ("*.py", "*.yaml", "*.yml"):
+                files.update(path.rglob(ext))
+    for path in sorted(files):
+        rel = str(path)
+        if rel in _ALLOWED_PATHS:
+            continue
+        for i, line in enumerate(path.read_text().splitlines(), 1):
+            if _IP_PATTERN.search(line) and _SUPPRESS_MARKER not in line:
+                violations.append(f"  {rel}:{i}: {line.strip()}")
 
     if violations:
         print(f"ERROR: {len(violations)} hardcoded internal IP(s) found:")  # noqa: T201
@@ -72,4 +85,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

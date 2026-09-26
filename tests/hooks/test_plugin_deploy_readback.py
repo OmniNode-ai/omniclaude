@@ -83,8 +83,11 @@ def _git(cwd: pathlib.Path, *args: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        # Scrub first, then add the overrides: the scrub also strips every
+        # GIT_CONFIG* key, and this fixture needs GIT_CONFIG_GLOBAL/SYSTEM
+        # pointed at devnull so the operator's own git config cannot leak in.
         env={
-            **scrub_git_location_env(os.environ),
+            **scrub_git_location_env(),
             "GIT_AUTHOR_NAME": "readback-test",
             "GIT_AUTHOR_EMAIL": "readback@test.invalid",
             "GIT_COMMITTER_NAME": "readback-test",

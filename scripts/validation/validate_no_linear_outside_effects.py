@@ -15,6 +15,8 @@ import ast
 import sys
 from pathlib import Path
 
+from _path_scope import selected_python_files
+
 # Symbols that indicate direct Linear API usage
 FORBIDDEN_SYMBOLS: tuple[str, ...] = (
     "LinearClient",
@@ -88,7 +90,7 @@ def check_file(filepath: Path) -> list[str]:
     return visitor.violations
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve()
     for _ in range(10):
         if (root / "pyproject.toml").exists() or (root / "src").exists():
@@ -102,7 +104,11 @@ def main() -> int:
 
     all_violations: list[str] = []
 
-    for py_file in sorted(src_root.rglob("*.py")):
+    for py_file in selected_python_files(
+        argv if argv is not None else sys.argv[1:],
+        roots=[src_root],
+        rule_file=Path(__file__),
+    ):
         if is_effect_file(py_file):
             continue
         violations = check_file(py_file)
