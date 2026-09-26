@@ -15,12 +15,18 @@ on:
       - 'plugins/onex/skills/**/*.md'
       - 'scripts/lint_skill_mcp_refs.py'
       - '.github/workflows/skill-mcp-ref-lint.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
       - 'plugins/onex/skills/**/*.md'
       - 'scripts/lint_skill_mcp_refs.py'
       - '.github/workflows/skill-mcp-ref-lint.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   occ-preflight:

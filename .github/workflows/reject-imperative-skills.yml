@@ -25,12 +25,18 @@ on:
     paths:
       - 'plugins/onex/skills/**/SKILL.md'
       - '.pre-commit-hooks/reject-imperative-skill-patterns.sh'
+
       - '.github/workflows/reject-imperative-skills.yml'
   push:
     branches: [main]
     paths:
       - 'plugins/onex/skills/**/SKILL.md'
       - '.pre-commit-hooks/reject-imperative-skill-patterns.sh'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

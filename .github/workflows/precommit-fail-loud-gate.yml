@@ -32,6 +32,7 @@ on:
       - 'scripts/validation/validate_precommit_fail_loud.py'
       - 'scripts/validation/validate_precommit_pin_parity.py'
       - '.github/workflows/precommit-fail-loud-gate.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
@@ -40,6 +41,11 @@ on:
       - 'scripts/validation/validate_precommit_fail_loud.py'
       - 'scripts/validation/validate_precommit_pin_parity.py'
       - '.github/workflows/precommit-fail-loud-gate.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
