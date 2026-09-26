@@ -286,13 +286,13 @@ def _git_run_with_load_retry(
     return result
 
 
-def _git(cwd: Path, *args: str, deadline: float | None = None) -> tuple[int, str]:
+def _git(cwd: Path, *args: str) -> tuple[int, str]:
     """Run a git command, returning ``(returncode, stripped stdout)``.
 
     A timeout is reported as a non-zero exit code here; call sites that must
     tell a timeout apart from a refusal use :func:`_git_run` directly.
     """
-    result = _git_run(cwd, *args, deadline=deadline)
+    result = _git_run(cwd, *args)
     return (1 if result.timed_out else result.exit_code), result.stdout
 
 
