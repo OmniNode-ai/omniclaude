@@ -74,6 +74,25 @@ allowed_extras:
     reason: Tool content CMD (file contents, access-restricted); predates contract governance (OMN-1702).
     ticket: OMN-3294
 
+  - topic: "onex.cmd.omniintelligence.content-captured.v1"
+    lifecycle: internal_control
+    reason: >
+      Full content capture CMD (redacted prompt, tool input, tool result and
+      assistant reply; access-restricted). Produced by the hook journal, which
+      has no node contract; the topic and its contract are owned by omnimarket
+      (OMN-19550).
+    ticket: OMN-19551
+
+  - topic: "onex.evt.omniclaude.hook-event.v1"
+    lifecycle: observability
+    reason: >
+      All-hooks capture metadata, one event per Claude Code hook call with its
+      subagent lineage (content by reference only). Produced by the hook
+      journal, which has no node contract; the event shape, coverage and
+      projection are declared in hooks/contracts/contract_hook_claude_capture.yaml
+      and the emit route by omnimarket's daemon registry (OMN-19513).
+    ticket: OMN-19513
+
   - topic: "onex.cmd.omnibase-infra.delegation-inference-request.v1"
     lifecycle: internal_control
     reason: >

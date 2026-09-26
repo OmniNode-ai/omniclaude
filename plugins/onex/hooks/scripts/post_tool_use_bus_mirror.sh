@@ -21,9 +21,12 @@
 # process.
 #
 # Privacy invariant (CLAUDE.md "Kafka Topics & Event Schemas"): only
-# preview-safe data goes to onex.evt.* topics -- tool_input/tool_response
-# CONTENT is never included, only the tool name and coarse outcome/timing
-# metadata.
+# preview-safe data goes to onex.evt.* topics -- the tool-executed record
+# built here carries no tool_input/tool_response content, only the tool name
+# and coarse outcome/timing metadata. Full content is a SEPARATE record
+# (OMN-19551): hook_content_capture.py, run after the metadata append, puts the
+# tool input and result on the restricted onex.cmd.omniintelligence.* family,
+# scrubbed by the capture-redaction contract.
 #
 # Fail-open per the OMN-13244 baseline's own reasoning: a dead bus, a
 # missing Python binary, or malformed stdin must never break or slow the
@@ -175,16 +178,28 @@ else
     [[ "$INTERRUPTED" == "true" ]] || INTERRUPTED="false"
 fi
 
+# OMN-19513: the harness's tool-call id and the id of the agent that made the
+# call. A subagent shares its parent's session_id, so without agent_id a
+# subagent's tool rows were indistinguishable from the main thread's, and
+# without tool_use_id a row could not be joined to the hook-event lineage
+# (parent tool_use_id, spawn depth) that claude_hook_capture.sh publishes.
+# Both are opaque harness ids; an absent one is an explicit null.
+TOOL_USE_ID=$(echo "$INPUT" | jq -r '.tool_use_id // ""' 2>/dev/null) || TOOL_USE_ID=""
+
 PAYLOAD=$(jq -nc \
     --arg session_id "$SESSION_ID" \
     --arg working_directory "$WORKING_DIRECTORY" \
     --arg tool_name "$TOOL_NAME" \
+    --arg tool_use_id "$TOOL_USE_ID" \
+    --arg agent_id "$AGENT_ID" \
     --argjson duration_ms "$DURATION_MS" \
     --argjson interrupted "$INTERRUPTED" \
     '{
         session_id: $session_id,
         working_directory: $working_directory,
         tool_name: $tool_name,
+        tool_use_id: (if $tool_use_id == "" then null else $tool_use_id end),
+        agent_id: (if $agent_id == "" then null else $agent_id end),
         duration_ms: $duration_ms,
         interrupted: $interrupted,
         hook_source: "post_tool_use"
@@ -214,7 +229,30 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
             >>"$LOG_FILE" 2>&1
-    ) &
+        # OMN-19551: full-content capture, AFTER the metadata append above and
+        # in the same backgrounded subshell, so the content record reads the
+        # turn that append just stamped. The hook input goes on stdin, never on
+        # argv (a tool result can be megabytes). The module redacts through the
+        # capture-redaction contract before anything is journalled, and it
+        # journals nothing when the local drainer cannot publish the event
+        # type or OMNICLAUDE_CONTENT_CAPTURE is off.
+        _CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
+        if [[ -f "$_CONTENT_CAPTURE_PY" ]]; then
+            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+                --kind tool \
+                --correlation-id "${SESSION_ID:-unknown}" \
+                --agent-id "$AGENT_ID" \
+                --transcript-path "$TRANSCRIPT_PATH" \
+                --session-id "$SESSION_ID" \
+                --cwd "$CWD" \
+                --actor "$HOOK_ACTOR_ARG" \
+                --turn-id "$TURN_ID" \
+                >>"$LOG_FILE" 2>&1
+        fi
+    # The whole subshell's descriptors go to the log. With two commands in it,
+    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
+    # would hold the hook's caller until both finished (OMN-19551).
+    ) >>"$LOG_FILE" 2>&1 </dev/null &
     disown 2>/dev/null || true
 fi
 

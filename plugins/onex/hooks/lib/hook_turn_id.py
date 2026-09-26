@@ -55,7 +55,10 @@ TURN_DIRNAME = "hook_turns"
 STALE_AFTER_SECONDS = 30 * 24 * 3600
 
 _OPENS_A_TURN = frozenset({"prompt.submitted"})
-_INSIDE_A_TURN = frozenset({"tool.executed"})
+# OMN-19551: a content record inside a turn (the Stop hook's assistant reply)
+# belongs to the turn its prompt opened. The prompt and tool content records
+# pass the metadata record's turn in explicitly, so they never reach this.
+_INSIDE_A_TURN = frozenset({"tool.executed", "content.captured"})
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 
@@ -131,6 +134,19 @@ def prune_stale(turn_dir: Path, *, now: float | None = None) -> int:
         except OSError:
             continue
     return removed
+
+
+def peek_turn_id(turn_dir: Path, session_id: str | None) -> str | None:
+    """The session's current turn id, read without opening a new turn.
+
+    OMN-19513: the all-hooks capture stamps every in-turn hook event with the
+    turn the prompt mirror opened. It must never allocate one itself, or two
+    writers would race the counter. ``None`` when there is no session.
+    """
+    session = (session_id or "").strip()
+    if not session:
+        return None
+    return _format(session, _current_turn(turn_dir, session))
 
 
 def resolve_turn_id(

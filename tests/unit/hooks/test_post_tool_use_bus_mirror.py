@@ -53,17 +53,32 @@ _STDIN_PAYLOAD = json.dumps(
             "interrupted": False,
         },
         "duration_ms": 42,
+        "tool_use_id": "toolu_01FAKEmirror",
     }
 )
 
 _SLOW_STUB = """#!/bin/bash
-printf '%s\\n' "$@" > "{marker}"
+# OMN-19551: the mirror now makes two calls in one background subshell --
+# the metadata append, then content capture with the hook input on stdin.
+# Each is recorded separately so the metadata contract stays checkable.
+case "$1" in
+  *hook_content_capture.py) out="{marker}.content"; cat > "{marker}.stdin" ;;
+  *) out="{marker}" ;;
+esac
+printf '%s\\n' "$@" > "$out"
 sleep {sleep_seconds}
 exit 0
 """
 
 _FAST_STUB = """#!/bin/bash
-printf '%s\\n' "$@" > "{marker}"
+# OMN-19551: the mirror now makes two calls in one background subshell --
+# the metadata append, then content capture with the hook input on stdin.
+# Each is recorded separately so the metadata contract stays checkable.
+case "$1" in
+  *hook_content_capture.py) out="{marker}.content"; cat > "{marker}.stdin" ;;
+  *) out="{marker}" ;;
+esac
+printf '%s\\n' "$@" > "$out"
 exit 0
 """
 
@@ -185,6 +200,9 @@ def test_post_tool_use_bus_mirror_invokes_direct_dispatch_with_correct_args(
     assert payload["tool_name"] == "Bash"
     assert payload["duration_ms"] == 42
     assert payload["interrupted"] is False
+    # OMN-19513: the tool call's id and the (main-thread, so null) agent id.
+    assert payload["tool_use_id"] == "toolu_01FAKEmirror"
+    assert payload["agent_id"] is None
     # The critical privacy assertion: no tool_input/tool_response content leaks.
     assert "tool_input" not in payload
     assert "tool_response" not in payload
@@ -267,3 +285,40 @@ def test_post_tool_use_bus_mirror_exits_zero_when_python_missing(
         "Hook must exit 0 (advisory) when no Python interpreter resolves, not "
         f"hard-fail (exit {result.returncode}).\nstderr: {result.stderr}"
     )
+
+
+@pytest.mark.unit
+def test_content_capture_runs_after_the_metadata_append_with_the_hook_input(
+    tmp_path: Path,
+) -> None:
+    """OMN-19551: the second call gets --kind tool and the raw hook input on stdin."""
+    marker = tmp_path / "invocation-argv.txt"
+    stub = tmp_path / "fake_python.sh"
+    _write_stub(stub, marker, sleep_seconds=0)
+    env = _base_env(tmp_path, plugin_python_bin=str(stub))
+
+    result = subprocess.run(
+        ["bash", str(_SCRIPT)],
+        input=_STDIN_PAYLOAD,
+        capture_output=True,
+        text=True,
+        cwd=_REPO_ROOT,
+        check=False,
+        timeout=15,
+        env=env,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+    content_marker = marker.with_name(marker.name + ".content")
+    deadline = time.monotonic() + 3.0
+    while not content_marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    argv_lines = content_marker.read_text().splitlines()
+    assert argv_lines[0].endswith("hook_content_capture.py")
+    assert argv_lines[argv_lines.index("--kind") + 1] == "tool"
+    assert argv_lines[argv_lines.index("--session-id") + 1] == "test-session-16162-s1"
+    stdin_seen = marker.with_name(marker.name + ".stdin").read_text()
+    assert json.loads(stdin_seen) == json.loads(_STDIN_PAYLOAD)
+    # The metadata call still ran, and still carries no content.
+    assert marker.exists()
