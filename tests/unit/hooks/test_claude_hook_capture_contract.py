@@ -36,7 +36,7 @@ FIXTURE_ROOT = REPO_ROOT / "tests/fixtures/hooks/claude_hook_capture"
 CONTRACT_PATH = (
     REPO_ROOT / "src/omniclaude/hooks/contracts/contract_hook_claude_capture.yaml"
 )
-FAKE_SECRET = "sk-ant-FAKE0000000000000000000000000000"  # noqa: S105  # pragma: allowlist secret
+FAKE_SECRET = "sk-ant-FAKE0000000000000000000000000000"  # noqa: S105  # pragma: allowlist secret  # secret-ok: planted fake fixture value
 GENERATOR_PATH = REPO_ROOT / "scripts/generate_claude_hook_capture_fixtures.py"
 
 

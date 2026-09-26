@@ -31,11 +31,12 @@ type JsonValue = (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = REPO_ROOT / "tests/fixtures/hooks/claude_hook_capture"
 FIXED_TIME = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
-FAKE_SECRET = "sk-ant-FAKE0000000000000000000000000000"  # noqa: S105  # pragma: allowlist secret
+FAKE_SECRET = "sk-ant-FAKE0000000000000000000000000000"  # noqa: S105  # pragma: allowlist secret  # secret-ok: planted fake fixture value
 CONTRACT_PATH = (
     REPO_ROOT / "src/omniclaude/hooks/contracts/contract_hook_claude_capture.yaml"
 )
-_MOCK_SECRET_PATTERN = re.compile(r"sk-ant-[A-Za-z0-9_-]{8,}")
+# secret-ok: the next line is a detection regex, not a secret
+_MOCK_SECRET_PATTERN = re.compile(r"sk-ant-[A-Za-z0-9_-]{8,}")  # secret-ok: regex
 
 
 def _source_topic() -> str:

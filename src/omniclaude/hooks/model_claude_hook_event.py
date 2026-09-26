@@ -76,20 +76,16 @@ class EnumClaudeHookEventName(StrEnum):
     MESSAGE_DISPLAY = "MessageDisplay"
 
 
-class _FrozenModel(BaseModel):
-    """Bus-crossing event schema: frozen, additive-tolerant (repo invariant)."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
-
-
-class _StrictModel(BaseModel):
-    """Local input parser or result holder: frozen, and rejects unknown keys."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
+# Bus-crossing event schemas: frozen and additive-tolerant (repo invariant).
+_EVENT_MODEL_CONFIG = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+# Local input parsers and result holders: frozen, and reject unknown keys.
+_STRICT_MODEL_CONFIG = ConfigDict(frozen=True, extra="forbid")
 
 
-class ModelContentScrubResult(_StrictModel):
+class ModelContentScrubResult(BaseModel):
     """Output of the producer's span scrub over one serialised content value."""
+
+    model_config = _STRICT_MODEL_CONFIG
 
     value: str
     redaction_state: Literal["clean", "secret_detected"]
@@ -109,14 +105,18 @@ class ModelContentScrubResult(_StrictModel):
 ContentScrubber = Callable[[str], ModelContentScrubResult]
 
 
-class ModelHookContentRef(_FrozenModel):
+class ModelHookContentRef(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     field: str = Field(min_length=1)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     length: int = Field(ge=0)
     content_record_id: UUID
 
 
-class ModelHookContentRecord(_FrozenModel):
+class ModelHookContentRecord(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     content_record_id: UUID
     event_id: UUID
     session_id: str = Field(min_length=1)
@@ -130,7 +130,7 @@ class ModelHookContentRecord(_FrozenModel):
     value: str
 
 
-class ModelSubagentSidecar(_StrictModel):
+class ModelSubagentSidecar(BaseModel):
     """Parsed harness sidecar; ``workflow_run_id`` comes from its path."""
 
     model_config = ConfigDict(
@@ -182,7 +182,9 @@ class ModelSubagentSidecar(_StrictModel):
         return self
 
 
-class ModelHookLineage(_FrozenModel):
+class ModelHookLineage(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     session_id: str = Field(min_length=1)
     agent_id: str | None
     agent_type: str | None
@@ -203,7 +205,9 @@ class ModelHookLineage(_FrozenModel):
         return self
 
 
-class ModelPreToolUsePayload(_FrozenModel):
+class ModelPreToolUsePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PreToolUse"]
     tool_name: str
     mcp_server: str | None
@@ -212,7 +216,9 @@ class ModelPreToolUsePayload(_FrozenModel):
     tool_input_keys: tuple[str, ...]
 
 
-class ModelPostToolUsePayload(_FrozenModel):
+class ModelPostToolUsePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PostToolUse"]
     tool_name: str
     duration_ms: int | float | None
@@ -220,7 +226,9 @@ class ModelPostToolUsePayload(_FrozenModel):
     tool_response_ref: ModelHookContentRef
 
 
-class ModelPostToolUseFailurePayload(_FrozenModel):
+class ModelPostToolUseFailurePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PostToolUseFailure"]
     tool_name: str
     duration_ms: int | float | None
@@ -228,20 +236,26 @@ class ModelPostToolUseFailurePayload(_FrozenModel):
     error_ref: ModelHookContentRef
 
 
-class ModelPostToolBatchPayload(_FrozenModel):
+class ModelPostToolBatchPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PostToolBatch"]
     tool_use_ids: tuple[str, ...]
     tool_names: tuple[str, ...]
 
 
-class ModelNotificationPayload(_FrozenModel):
+class ModelNotificationPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["Notification"]
     notification_type: str
     title_ref: ModelHookContentRef | None
     message_ref: ModelHookContentRef
 
 
-class ModelUserPromptSubmitPayload(_FrozenModel):
+class ModelUserPromptSubmitPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["UserPromptSubmit"]
     prompt_length: int = Field(ge=0)
     prompt_ref: ModelHookContentRef
@@ -252,7 +266,9 @@ class ModelUserPromptSubmitPayload(_FrozenModel):
     session_title_ref: ModelHookContentRef | None
 
 
-class ModelUserPromptExpansionPayload(_FrozenModel):
+class ModelUserPromptExpansionPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["UserPromptExpansion"]
     expansion_type: Literal["slash_command", "mcp_prompt"]
     command_name: str
@@ -261,7 +277,9 @@ class ModelUserPromptExpansionPayload(_FrozenModel):
     prompt_ref: ModelHookContentRef
 
 
-class ModelSessionStartPayload(_FrozenModel):
+class ModelSessionStartPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["SessionStart"]
     source: Literal["startup", "resume", "clear", "compact", "fork"]
     model: str | None
@@ -270,12 +288,16 @@ class ModelSessionStartPayload(_FrozenModel):
     prompt_cache_likely_expired: bool | None
 
 
-class ModelSessionEndPayload(_FrozenModel):
+class ModelSessionEndPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["SessionEnd"]
     reason: Literal["clear", "resume", "logout", "prompt_input_exit", "other"]
 
 
-class ModelStopPayload(_FrozenModel):
+class ModelStopPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["Stop"]
     stop_hook_active: bool
     last_assistant_message_ref: ModelHookContentRef | None
@@ -283,20 +305,26 @@ class ModelStopPayload(_FrozenModel):
     session_cron_count: int | None = Field(ge=0)
 
 
-class ModelStopFailurePayload(_FrozenModel):
+class ModelStopFailurePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["StopFailure"]
     error: str
     error_details_ref: ModelHookContentRef | None
     last_assistant_message_ref: ModelHookContentRef | None
 
 
-class ModelSubagentStartPayload(_FrozenModel):
+class ModelSubagentStartPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["SubagentStart"]
     agent_id: str
     agent_type: str
 
 
-class ModelSubagentStopPayload(_FrozenModel):
+class ModelSubagentStopPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["SubagentStop"]
     stop_hook_active: bool
     agent_id: str
@@ -305,50 +333,68 @@ class ModelSubagentStopPayload(_FrozenModel):
     last_assistant_message_ref: ModelHookContentRef | None
 
 
-class ModelPreCompactPayload(_FrozenModel):
+class ModelPreCompactPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PreCompact"]
     trigger: Literal["manual", "auto"]
     custom_instructions_ref: ModelHookContentRef | None
 
 
-class ModelPostCompactPayload(_FrozenModel):
+class ModelPostCompactPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PostCompact"]
     trigger: Literal["manual", "auto"]
     compact_summary_ref: ModelHookContentRef
 
 
-class ModelPreModelSwitchPayload(_FrozenModel):
+class ModelPreModelSwitchPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PreModelSwitch"]
 
 
-class ModelPostModelSwitchPayload(_FrozenModel):
+class ModelPostModelSwitchPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PostModelSwitch"]
 
 
-class ModelPermissionRequestPayload(_FrozenModel):
+class ModelPermissionRequestPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PermissionRequest"]
     tool_name: str
     suggestion_count: int | None = Field(ge=0)
 
 
-class ModelPermissionDeniedPayload(_FrozenModel):
+class ModelPermissionDeniedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["PermissionDenied"]
     tool_name: str
     reason_ref: ModelHookContentRef
 
 
-class ModelSetupPayload(_FrozenModel):
+class ModelSetupPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["Setup"]
     trigger: Literal["init", "maintenance"]
 
 
-class ModelTeammateIdlePayload(_FrozenModel):
+class ModelTeammateIdlePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["TeammateIdle"]
     teammate_name: str
     team_name: str
 
 
-class ModelTaskCreatedPayload(_FrozenModel):
+class ModelTaskCreatedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["TaskCreated"]
     task_id: str
     teammate_name: str | None
@@ -357,7 +403,9 @@ class ModelTaskCreatedPayload(_FrozenModel):
     task_description_ref: ModelHookContentRef | None
 
 
-class ModelTaskCompletedPayload(_FrozenModel):
+class ModelTaskCompletedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["TaskCompleted"]
     task_id: str
     teammate_name: str | None
@@ -366,7 +414,9 @@ class ModelTaskCompletedPayload(_FrozenModel):
     task_description_ref: ModelHookContentRef | None
 
 
-class ModelElicitationPayload(_FrozenModel):
+class ModelElicitationPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["Elicitation"]
     mcp_server_name: str
     mode: Literal["form", "url"] | None
@@ -375,7 +425,9 @@ class ModelElicitationPayload(_FrozenModel):
     requested_schema_keys: tuple[str, ...]
 
 
-class ModelElicitationResultPayload(_FrozenModel):
+class ModelElicitationResultPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["ElicitationResult"]
     mcp_server_name: str
     mode: Literal["form", "url"] | None
@@ -384,23 +436,31 @@ class ModelElicitationResultPayload(_FrozenModel):
     content_ref: ModelHookContentRef | None
 
 
-class ModelConfigChangePayload(_FrozenModel):
+class ModelConfigChangePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["ConfigChange"]
     source: str
     file_path_ref: ModelHookContentRef | None
 
 
-class ModelWorktreeCreatePayload(_FrozenModel):
+class ModelWorktreeCreatePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["WorktreeCreate"]
     name_ref: ModelHookContentRef
 
 
-class ModelWorktreeRemovePayload(_FrozenModel):
+class ModelWorktreeRemovePayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["WorktreeRemove"]
     worktree_path_ref: ModelHookContentRef
 
 
-class ModelInstructionsLoadedPayload(_FrozenModel):
+class ModelInstructionsLoadedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["InstructionsLoaded"]
     memory_type: str
     load_reason: str
@@ -408,25 +468,33 @@ class ModelInstructionsLoadedPayload(_FrozenModel):
     glob_count: int | None = Field(ge=0)
 
 
-class ModelCwdChangedPayload(_FrozenModel):
+class ModelCwdChangedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["CwdChanged"]
     old_cwd_ref: ModelHookContentRef
     new_cwd_ref: ModelHookContentRef
 
 
-class ModelFileChangedPayload(_FrozenModel):
+class ModelFileChangedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["FileChanged"]
     event: Literal["change", "add", "unlink"]
     file_path_ref: ModelHookContentRef
 
 
-class ModelDirectoryAddedPayload(_FrozenModel):
+class ModelDirectoryAddedPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["DirectoryAdded"]
     source: Literal["slash_command", "register_repo_root"]
     directory_ref: ModelHookContentRef
 
 
-class ModelMessageDisplayPayload(_FrozenModel):
+class ModelMessageDisplayPayload(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     hook_event_name: Literal["MessageDisplay"]
     turn_id: str
     message_id: str
@@ -475,7 +543,7 @@ ModelHookPayload = Annotated[
 HOOK_PAYLOAD_ADAPTER: TypeAdapter[ModelHookPayload] = TypeAdapter(ModelHookPayload)
 
 
-def _validated_payload[PayloadModelT: _FrozenModel](
+def _validated_payload[PayloadModelT: BaseModel](
     model_type: type[PayloadModelT], **values: object
 ) -> PayloadModelT:
     """Validate runtime strings while retaining the concrete return type."""
@@ -483,7 +551,9 @@ def _validated_payload[PayloadModelT: _FrozenModel](
     return model_type.model_validate(values)
 
 
-class ModelClaudeHookEvent(_FrozenModel):
+class ModelClaudeHookEvent(BaseModel):
+    model_config = _EVENT_MODEL_CONFIG
+
     event_id: UUID
     schema_version: Literal["1.0.0"]
     hook_event_name: EnumClaudeHookEventName
@@ -518,7 +588,9 @@ class ModelClaudeHookEvent(_FrozenModel):
         return self
 
 
-class ModelHookCaptureResult(_StrictModel):
+class ModelHookCaptureResult(BaseModel):
+    model_config = _STRICT_MODEL_CONFIG
+
     event: ModelClaudeHookEvent
     content_records: tuple[ModelHookContentRecord, ...]
 
@@ -780,7 +852,8 @@ def _payload_from_stdin(
             hook_event_name=name,
             source=_string(stdin, "source", name),
             model=_optional_string(stdin, "model"),
-            context_tokens=_optional_int(stdin, "context_tokens"),
+            # secret-ok: context_tokens is a token COUNT, not a credential
+            context_tokens=_optional_int(stdin, "context_tokens"),  # secret-ok: count
             seconds_since_last_response=_optional_number(
                 stdin, "seconds_since_last_response"
             ),
