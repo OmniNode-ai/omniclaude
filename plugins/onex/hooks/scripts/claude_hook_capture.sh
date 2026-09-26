@@ -74,6 +74,25 @@ if [[ -f "$_MODE_SH" ]]; then
 fi
 unset _MODE_SH
 
+# Session intent (OMN-18368's resolver), the same predicate
+# session_start_bus_mirror.sh applies: a session opened as quiet (to
+# re-authenticate, check connectivity, or do one thing that is not this
+# workspace's process) is not captured, and tick is, because a scheduled
+# session is this workspace's process and its hooks are part of that run's
+# record. This hook prints nothing, so the consultation gates the work, not
+# output.
+_INTENT_SH="${_SCRIPT_DIR}/../../lib/intent.sh"
+if [[ -f "$_INTENT_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$_INTENT_SH" 2>/dev/null || true
+    if declare -F omniclaude_session_intent_is_quiet >/dev/null 2>&1 \
+        && omniclaude_session_intent_is_quiet; then
+        cat >/dev/null 2>/dev/null || true
+        exit 0
+    fi
+fi
+unset _INTENT_SH
+
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"

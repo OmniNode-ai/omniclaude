@@ -83,6 +83,16 @@ allowed_extras:
       (OMN-19550).
     ticket: OMN-19551
 
+  - topic: "onex.evt.omniclaude.hook-event.v1"
+    lifecycle: observability
+    reason: >
+      All-hooks capture metadata, one event per Claude Code hook call with its
+      subagent lineage (content by reference only). Produced by the hook
+      journal, which has no node contract; the event shape, coverage and
+      projection are declared in hooks/contracts/contract_hook_claude_capture.yaml
+      and the emit route by omnimarket's daemon registry (OMN-19513).
+    ticket: OMN-19513
+
   - topic: "onex.cmd.omnibase-infra.delegation-inference-request.v1"
     lifecycle: internal_control
     reason: >
