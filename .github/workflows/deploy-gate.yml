@@ -94,6 +94,7 @@ jobs:
             --pr-body "$pr_body" \
             --resolve-occ-ref \
             --default-occ-ref dev \
+            --repository "${GITHUB_REPOSITORY}" \
             --github-output "$GITHUB_OUTPUT"
 
       - name: Checkout onex_change_control contracts
@@ -113,6 +114,7 @@ jobs:
         uses: ./.github/actions/deploy-gate
         with:
           pr-number: ${{ steps.pr-number.outputs.pr_number }}
+          pr-head-sha: ${{ github.event.pull_request.head.sha }}
           github-token: ${{ github.token }}
           contracts-dir: _occ/contracts
           # OMN-14505: composite actions cannot read `vars` directly, so the

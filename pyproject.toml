@@ -14,9 +14,9 @@ dependencies = [
     # OMN-13873: pin from PyPI (not a git tag) for the dep-provenance gate.
     # omniclaude.shared.models.model_skill_result intentionally falls back to
     # the local legacy model when newer core releases move the export path.
-    "omnibase-core>=0.46.5,<0.47.0",
+    "omnibase-core>=0.47.0,<0.48.0",
     "omnibase-spi>=0.23.1,<0.24.0",
-    "omnibase-infra>=0.38.3,<0.39.0",
+    "omnibase-infra>=0.38.14,<0.39.0",
     "omnimarket>=0.4.0",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
@@ -243,9 +243,9 @@ build-backend = "hatchling.build"
 [tool.uv]
 # Override transitive pins so our direct pins win.
 override-dependencies = [
-    "omnibase-core>=0.46.5,<0.47.0",
+    "omnibase-core>=0.47.0,<0.48.0",
     "omnibase-spi>=0.23.1,<0.24.0",
-    "omnibase-infra>=0.38.3,<0.39.0",
+    "omnibase-infra>=0.38.14,<0.39.0",
     "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
     # OMN-15968: omninode-intelligence's own pin (v0.4.0) otherwise conflicts
     # with our direct omnimarket rev below -- force our rev to win transitively.
@@ -256,14 +256,11 @@ override-dependencies = [
 # Release v0.25.1: pin to paired release PR heads until tags are published.
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
 # gate passes; the version constraint above governs core resolution.
-# OMN-15968: bumped from v0.38.3 -- omnimarket's dev tip (pinned above, for
-# node_event_emit_effect) transitively imports omnibase_infra.event_bus.kafka_auth
-# (OMN-12986 MSK IAM auth), added after v0.38.3 with no newer tag yet cut.
-# OMN-15604 (cascade-leg recovery): v0.38.9 is now tagged and a strict
-# descendant of the a6d52de2 commit this was pinned to (kafka_auth.py still
-# present) -- moved to the tag now that one exists, inside the
-# override-dependencies range below -- no range change.
-omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", rev = "v0.38.9" }  # pragma: allowlist secret
+# OMN-18156: temporary trusted immutable source pin for the typed package-only
+# contract. Remove it when a released Core version exports the binding model.
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" }  # raw-override-ok: OMN-18156
+# OMN-17176: resolve omnibase-infra from PyPI. The old v0.38.9 git pin was
+# stale and conflicts with Core 0.47.x's packaged CLI entrypoint registration.
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
