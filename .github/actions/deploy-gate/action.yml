@@ -17,6 +17,10 @@ inputs:
   github-token:
     description: GitHub token for gh CLI access
     required: true
+  pr-head-sha:
+    description: Immutable pull-request head SHA from the triggering event.
+    required: false
+    default: ""
   contracts-dir:
     description: >
       Path to directory containing OMN-XXXX.yaml ticket contracts.
@@ -48,17 +52,15 @@ runs:
       with:
         version: "0.8.3"
 
-    - name: Install pyyaml
-      shell: bash
-      run: python -m pip install pyyaml
-
     - name: Run deploy gate
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         PR_NUMBER: ${{ inputs.pr-number }}
+        PR_HEAD_SHA: ${{ inputs.pr-head-sha }}
         CONTRACTS_DIR: ${{ inputs.contracts-dir }}
         ACTION_PATH: ${{ github.action_path }}
+        REPOSITORY: ${{ github.repository }}
         # OMN-14505 rollout knob. "report" (the default) computes the falsifiability
         # verdict and logs a ::warning:: for every cited ticket whose deploy evidence
         # is vacuous, but the gate's EXIT STATUS stays on the legacy substring rule —
@@ -81,7 +83,13 @@ runs:
           changed_files="$(git diff --name-only "origin/${base_ref}" HEAD | tr '\n' ' ')"
         fi
 
-        python "$ACTION_PATH/validate_pr_deploy_required.py" \
+        uv run --no-project \
+          --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" \
+          --with pyyaml \
+          python "$ACTION_PATH/validate_pr_deploy_required.py" \
           --changed-files "$changed_files" \
           --pr-body "$(gh pr view "$PR_NUMBER" --json body -q '.body')" \
-          --contracts-dir "$CONTRACTS_DIR"
+          --contracts-dir "$CONTRACTS_DIR" \
+          --repository "$REPOSITORY" \
+          --pr-number "$PR_NUMBER" \
+          --event-head-sha "$PR_HEAD_SHA"

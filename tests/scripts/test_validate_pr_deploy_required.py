@@ -353,3 +353,197 @@ class TestResolveOccEvidenceSource:
         )
         assert not result.passed
         assert "not valid" in result.message
+
+
+@pytest.mark.unit
+def test_core_code_only_contract_never_falls_back_to_legacy_deploy_evidence(
+    tmp_path: Path,
+) -> None:
+    """A malformed Core package binding cannot pass through generic evidence."""
+
+    (tmp_path / "OMN-18156.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "ticket_id": "OMN-18156",
+                "title": "Package-only binding",
+                "proof_class": "code-only",
+                "dod_evidence": [
+                    {
+                        "id": "real-deploy-probe",
+                        "checks": [
+                            {
+                                "check_value": (
+                                    "docker exec runtime python -c 'print(1)'"
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+
+    result = validate_pr_deploy_gate(
+        changed_files=["src/omnibase_core/runtime/dispatch_state.py"],
+        pr_body="Evidence-Source: OCC#9999\nEvidence-Ticket: OMN-18156\n",
+        contracts_dir=tmp_path,
+        repository="OmniNode-ai/omnibase_core",
+        pr_number=1674,
+        event_head_sha="a" * 40,
+    )
+
+    assert not result.passed
+    assert "trusted package-only model" in result.message
+
+
+def _write_code_only_contract_without_binding(contracts_dir: Path) -> None:
+    """Write a raw code-only contract that a trusted model must reject."""
+
+    (contracts_dir / "OMN-18156.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "ticket_id": "OMN-18156",
+                "title": "Package-only binding",
+                "proof_class": "code-only",
+                "dod_evidence": [
+                    {
+                        "id": "legacy-real-deploy-probe",
+                        "checks": [
+                            {
+                                "check_value": (
+                                    "docker exec runtime python -c 'print(1)'"
+                                )
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+
+
+@pytest.mark.unit
+def test_core_code_only_no_runtime_cannot_skip_unvalidated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The public validator must check Core code-only binding before no-runtime skip."""
+
+    _write_code_only_contract_without_binding(tmp_path)
+
+    def _legacy_evidence_must_not_run(*_args: object, **_kwargs: object) -> bool:
+        raise AssertionError("Core code-only validation must not use legacy evidence")
+
+    monkeypatch.setattr(validator, "has_deploy_evidence", _legacy_evidence_must_not_run)
+
+    exit_code = validator.main(
+        [
+            "--changed-files",
+            "src/omnibase_core/models/model_ticket_contract.py",
+            "--pr-body",
+            "Evidence-Source: OCC#9999\nEvidence-Ticket: OMN-18156\n",
+            "--contracts-dir",
+            str(tmp_path),
+            "--repository",
+            "OmniNode-ai/omnibase_core",
+            "--pr-number",
+            "1674",
+            "--event-head-sha",
+            "a" * 40,
+        ]
+    )
+
+    assert exit_code == 1
+    assert "trusted package-only model" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_core_missing_exact_metadata_cannot_fall_back_to_legacy_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Core PRs reject generic ticket prose before legacy deploy evidence is scanned."""
+
+    _write_code_only_contract_without_binding(tmp_path)
+
+    def _legacy_evidence_must_not_run(*_args: object, **_kwargs: object) -> bool:
+        raise AssertionError("Core metadata failure must not scan legacy evidence")
+
+    monkeypatch.setattr(validator, "has_deploy_evidence", _legacy_evidence_must_not_run)
+
+    exit_code = validator.main(
+        [
+            "--changed-files",
+            "src/omnibase_core/runtime/dispatch_state.py",
+            "--pr-body",
+            "Closes OMN-18156\n",
+            "--contracts-dir",
+            str(tmp_path),
+            "--repository",
+            "OmniNode-ai/omnibase_core",
+        ]
+    )
+
+    assert exit_code == 1
+    assert (
+        "requires both Evidence-Source and Evidence-Ticket" in capsys.readouterr().out
+    )
+
+
+@pytest.mark.unit
+def test_core_resolver_public_entrypoint_requires_metadata_before_no_runtime_skip(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The workflow resolver must request an OCC checkout for valid Core metadata."""
+
+    exit_code = validator.main(
+        [
+            "--changed-files",
+            "src/omnibase_core/models/model_ticket_contract.py",
+            "--pr-body",
+            "Closes OMN-18156\n",
+            "--repository",
+            "OmniNode-ai/omnibase_core",
+            "--resolve-occ-ref",
+        ]
+    )
+
+    assert exit_code == 1
+    assert (
+        "requires both Evidence-Source and Evidence-Ticket" in capsys.readouterr().out
+    )
+
+
+@pytest.mark.unit
+def test_core_resolver_public_entrypoint_checks_out_occ_for_model_only_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exact Core metadata must request its OCC contract even without runtime paths."""
+
+    def _open_occ_pr(_args: list[str]) -> dict[str, object]:
+        return {"state": "OPEN", "headRefOid": "b" * 40, "mergeCommit": None}
+
+    monkeypatch.setattr(validator, "_run_gh_json", _open_occ_pr)
+    output_path = tmp_path / "github-output"
+
+    exit_code = validator.main(
+        [
+            "--changed-files",
+            "src/omnibase_core/models/model_ticket_contract.py",
+            "--pr-body",
+            "Evidence-Source: OCC#9999\nEvidence-Ticket: OMN-18156\n",
+            "--repository",
+            "OmniNode-ai/omnibase_core",
+            "--resolve-occ-ref",
+            "--github-output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 0
+    output = output_path.read_text(encoding="utf-8")
+    assert f"occ_ref={'b' * 40}" in output
+    assert "occ_source_kind=open-pr" in output
+    assert "deploy_gate_required=true" in output
+    assert "evidence_ticket=OMN-18156" in output
+    assert "resolved to OCC ref" in capsys.readouterr().out

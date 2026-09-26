@@ -799,12 +799,27 @@ def resolve_occ_evidence_source(
     changed_files: list[str],
     pr_body: str,
     default_occ_ref: str = DEFAULT_OCC_REF,
+    *,
+    repository: str | None = None,
 ) -> OccEvidenceResolution:
     """Resolve deploy-gate OCC checkout ref from PR Evidence-* metadata."""
     runtime_hits = find_runtime_paths(changed_files)
     metadata = parse_evidence_metadata(pr_body)
 
-    if not runtime_hits:
+    if repository == "OmniNode-ai/omnibase_core" and (
+        metadata.source is None or metadata.ticket is None
+    ):
+        return OccEvidenceResolution(
+            passed=False,
+            deploy_gate_required=True,
+            source_kind="invalid",
+            message=(
+                "DEPLOY GATE FAILED: Core package-only or deployment evidence requires "
+                "both Evidence-Source and Evidence-Ticket: OMN-XXXX."
+            ),
+        )
+
+    if not runtime_hits and repository != "OmniNode-ai/omnibase_core":
         return OccEvidenceResolution(
             passed=True,
             occ_ref=default_occ_ref,
@@ -1004,22 +1019,127 @@ def has_deploy_evidence(contract_path: Path, ticket_id: str | None = None) -> bo
     return False
 
 
+def _validate_core_package_only_contract(
+    *,
+    metadata: EvidenceMetadata,
+    contracts_dir: Path,
+    repository: str | None,
+    pr_number: int | None,
+    event_head_sha: str | None,
+) -> DeployGateResult | None:
+    """Apply the anchored typed package-only policy for a cited Core contract."""
+
+    if (
+        repository != "OmniNode-ai/omnibase_core"
+        or metadata.source is None
+        or metadata.ticket is None
+    ):
+        return None
+    contract_path = contracts_dir / f"{metadata.ticket}.yaml"
+    try:
+        import yaml
+
+        raw_contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        return DeployGateResult(
+            passed=False,
+            message=(
+                "DEPLOY GATE FAILED: unable to read authoritative Core Evidence-Ticket "
+                f"contract {metadata.ticket}: {exc}"
+            ),
+        )
+    if (
+        not isinstance(raw_contract, dict)
+        or raw_contract.get("proof_class") != "code-only"
+    ):
+        return None
+    if pr_number is None or event_head_sha is None:
+        return DeployGateResult(
+            passed=False,
+            message=(
+                "DEPLOY GATE FAILED: Core code-only contract requires immutable PR number "
+                "and head identity."
+            ),
+        )
+    try:
+        from omnibase_core.models.ticket import (
+            ModelPackageOnlyManifestEntry,
+            ModelTicketContract,
+            compute_package_only_manifest_sha256,
+        )
+        from package_only_deploy_gate import validate_core_package_only_binding
+
+        contract = ModelTicketContract.model_validate(raw_contract)
+    except (ImportError, TypeError, ValueError) as exc:
+        return DeployGateResult(
+            passed=False,
+            message=(
+                "DEPLOY GATE FAILED: Core code-only contract is not valid under the "
+                f"trusted package-only model: {exc}"
+            ),
+        )
+
+    result = validate_core_package_only_binding(
+        evidence_ticket=metadata.ticket,
+        contract=contract,
+        repository=repository,
+        pr_number=pr_number,
+        event_head_sha=event_head_sha,
+        api_get=lambda endpoint: _run_gh_json(["api", endpoint]),
+        manifest_entry_model=ModelPackageOnlyManifestEntry,
+        manifest_hasher=compute_package_only_manifest_sha256,
+    )
+    return DeployGateResult(
+        passed=result.accepted,
+        message=("DEPLOY GATE PASSED: " if result.accepted else "DEPLOY GATE FAILED: ")
+        + result.message,
+    )
+
+
 def validate_pr_deploy_gate(
     changed_files: list[str],
     pr_body: str,
     contracts_dir: Path,
+    *,
+    repository: str | None = None,
+    pr_number: int | None = None,
+    event_head_sha: str | None = None,
 ) -> DeployGateResult:
     """Check runtime-change PRs for deploy evidence in cited ticket contracts."""
     runtime_hits = find_runtime_paths(changed_files)
+    metadata = parse_evidence_metadata(pr_body)
+
+    if repository == "OmniNode-ai/omnibase_core" and (
+        metadata.source is None or metadata.ticket is None
+    ):
+        return DeployGateResult(
+            passed=False,
+            runtime_paths_hit=runtime_hits,
+            message=(
+                "DEPLOY GATE FAILED: Core package-only or deployment evidence requires "
+                "both Evidence-Source and Evidence-Ticket: OMN-XXXX."
+            ),
+        )
 
     if not runtime_hits:
+        package_only_result = _validate_core_package_only_contract(
+            metadata=metadata,
+            contracts_dir=contracts_dir,
+            repository=repository,
+            pr_number=pr_number,
+            event_head_sha=event_head_sha,
+        )
+        if package_only_result is not None:
+            package_only_result.tickets_checked = (
+                [metadata.ticket] if metadata.ticket else []
+            )
+            return package_only_result
         return DeployGateResult(
             passed=True,
             skipped=True,
             message="No runtime paths touched — deploy gate skipped.",
         )
 
-    metadata = parse_evidence_metadata(pr_body)
     if metadata.source and not metadata.ticket:
         return DeployGateResult(
             passed=False,
@@ -1030,6 +1150,20 @@ def validate_pr_deploy_gate(
                 "can validate the contract at the pinned OCC source."
             ),
         )
+
+    package_only_result = _validate_core_package_only_contract(
+        metadata=metadata,
+        contracts_dir=contracts_dir,
+        repository=repository,
+        pr_number=pr_number,
+        event_head_sha=event_head_sha,
+    )
+    if package_only_result is not None:
+        package_only_result.runtime_paths_hit = runtime_hits
+        package_only_result.tickets_checked = (
+            [metadata.ticket] if metadata.ticket else []
+        )
+        return package_only_result
 
     # Extract cited ticket IDs from PR body
     if metadata.source and metadata.ticket:
@@ -1126,6 +1260,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Full PR description text",
     )
     parser.add_argument(
+        "--repository",
+        default="",
+        help="Repository owner/name for immutable Core package-only validation.",
+    )
+    parser.add_argument(
+        "--pr-number",
+        type=int,
+        default=0,
+        help="Pull request number for immutable Core package-only validation.",
+    )
+    parser.add_argument(
+        "--event-head-sha",
+        default="",
+        help="Immutable pull request head SHA from the triggering event.",
+    )
+    parser.add_argument(
         "--contracts-dir",
         default="contracts",
         help="Directory containing OMN-XXXX.yaml ticket contracts (default: contracts/)",
@@ -1158,6 +1308,7 @@ def main(argv: list[str] | None = None) -> int:
             changed_files=changed,
             pr_body=args.pr_body,
             default_occ_ref=args.default_occ_ref,
+            repository=args.repository or None,
         )
         if args.github_output:
             with Path(args.github_output).open("a", encoding="utf-8") as fh:
@@ -1179,6 +1330,9 @@ def main(argv: list[str] | None = None) -> int:
         changed_files=changed,
         pr_body=args.pr_body,
         contracts_dir=contracts_dir,
+        repository=args.repository or None,
+        pr_number=args.pr_number or None,
+        event_head_sha=args.event_head_sha or None,
     )
 
     if result.passed:

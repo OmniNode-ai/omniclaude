@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" },
     { name = "omnibase-infra", specifier = ">=0.38.14,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
@@ -1646,8 +1646,8 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.47.8"
-source = { registry = "https://pypi.org/simple" }
+version = "0.47.10"
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c#27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1662,10 +1662,6 @@ dependencies = [
     { name = "ruamel-yaml" },
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/11/21b0e41e9149e89349186e02682fe7e4c7e20624ff0311a2b28715b9bdab/omnibase_core-0.47.8.tar.gz", hash = "sha256:ea61e707212956065dbffd945bc551e11e3e130850175ea1c0c9bc728e82663e", size = 9477067, upload-time = "2026-09-10T11:04:38.197Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/b9/ba87797ef7e1daa3a0d3a03d957e79b84d84f758843ddef9f49a071e0493/omnibase_core-0.47.8-py3-none-any.whl", hash = "sha256:fad2fb45a3d8dd12864867ea256d3ccdf441d72893e0bb5fccfe4040d46a98b4", size = 6850843, upload-time = "2026-09-10T11:04:35.892Z" },
 ]
 
 [[package]]
@@ -1871,7 +1867,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?rev=27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" },
     { name = "omnibase-infra", specifier = ">=0.38.14,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0bd86dbfc3ec80dfd4a0fa9e2103c2ee41ff827f" },
