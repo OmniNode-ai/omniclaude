@@ -70,9 +70,9 @@ ANTHROPIC_FAKE = "sk-" + "ant-" + "FAKE" + "0" * 28
 @pytest.fixture(autouse=True)
 def _capture_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
-    # The shipped lane contract holds hook.event back until its produce grant
-    # lands (test_the_shipped_lane_contract_holds_hook_event_back below); every
-    # other test exercises the producer as it runs once that entry is deleted.
+    # The shipped lane contract no longer holds hook.event back (its produce
+    # grant landed; test_the_shipped_lane_contract_activates_hook_event below).
+    # Pinning the gate here keeps these tests independent of that file.
     monkeypatch.setattr(capture_mod, "lane_grant_pending", lambda: False)
 
 
@@ -487,14 +487,15 @@ def test_the_redaction_mirror_passes_the_lineage_and_hashes_the_undeclared(
 # ---------------------------------------------------------------------------
 
 
-def test_the_shipped_lane_contract_holds_hook_event_back(
-    jdir: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_shipped_lane_contract_activates_hook_event(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The dev-lane produce grant for onex.evt.omniclaude.hook-event.v1 exists
+    # (WRITE plus DESCRIBE, literal, for the existing lane principal), so the
+    # shipped contract no longer holds hook.event back. The drainer-status gate
+    # still applies; every other test in this module exercises the journal path.
     monkeypatch.undo()
-    monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
-    assert capture_mod.lane_grant_pending() is True
-    assert capture_mod.capture(_stdin("Stop"), journal_dir=jdir) == 0
-    assert _events(jdir) == []
+    assert capture_mod.lane_grant_pending() is False
 
 
 def test_deleting_the_pending_entry_is_what_activates_the_capture(

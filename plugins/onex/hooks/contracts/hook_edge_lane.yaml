@@ -461,8 +461,13 @@ governed_event_classes:
 # grant: the grant lands under its own operator consent row (the 3770 shape:
 # literal WRITE plus DESCRIBE on the one topic, for the existing principal),
 # then a one-line PR deletes the entry.
-produce_grant_pending:
-  - "hook.event"
+#
+# hook.event activated 2026-09-26: the dev-lane grant (literal WRITE plus
+# DESCRIBE on onex.evt.omniclaude.hook-event.v1 for the existing lane
+# principal) was applied and read back at 15:41Z, with a produce from this
+# edge's own credential resolver landing on the topic and a produce to an
+# ungranted scratch topic refused. The list stays, empty, for the next class.
+produce_grant_pending: []
 
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).
