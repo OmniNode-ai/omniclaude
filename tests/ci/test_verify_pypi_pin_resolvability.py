@@ -66,12 +66,22 @@ def test_find_single_wheel_ignores_sdist_and_returns_the_wheel(
     assert find_single_wheel(tmp_path) == wheel
 
 
-@pytest.mark.parametrize("timeout_on", ["venv", "install"])
-def test_verify_pin_resolvability_returns_controlled_timeout_failure(
+@pytest.mark.parametrize(
+    ("timeout_on", "step"), [("venv", "uv venv"), ("install", "uv pip install")]
+)
+def test_verify_pin_resolvability_raises_a_typed_timeout_keeping_partial_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     timeout_on: str,
+    step: str,
 ) -> None:
+    """A timeout is a throughput fault, not a broken pin (OMN-16047).
+
+    The script is vendored byte-for-byte from omnibase_infra since OMN-19655, so
+    this repo now carries that repo's timeout contract: a typed
+    ``PinResolveTimeoutError`` that keeps whatever ``uv`` had already written,
+    which ``main`` reports as a THROUGHPUT failure rather than as a bad pin.
+    """
     wheel = tmp_path / "pkg-1.0-py3-none-any.whl"
     wheel.write_bytes(b"wheel")
     monkeypatch.setattr(
@@ -95,12 +105,12 @@ def test_verify_pin_resolvability_returns_controlled_timeout_failure(
 
     monkeypatch.setattr(verify_pypi_pin_resolvability.subprocess, "run", fake_run)
 
-    ok, log = verify_pin_resolvability(wheel)
+    with pytest.raises(verify_pypi_pin_resolvability.PinResolveTimeoutError) as caught:
+        verify_pin_resolvability(wheel)
 
-    assert ok is False
-    assert "timed out after 300 seconds" in log
-    assert "partial output" in log
-    assert "timeout stderr" in log
+    assert caught.value.step == step
+    assert "partial output" in caught.value.partial_output
+    assert "timeout stderr" in caught.value.partial_output
 
 
 # ---------------------------------------------------------------------------

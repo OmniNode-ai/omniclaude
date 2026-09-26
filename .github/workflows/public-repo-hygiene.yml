@@ -25,6 +25,12 @@ on:
   pull_request:
     branches: [dev]
 
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+
 jobs:
   public-repo-hygiene:
     uses: ./.github/workflows/public-repo-hygiene-reusable.yml

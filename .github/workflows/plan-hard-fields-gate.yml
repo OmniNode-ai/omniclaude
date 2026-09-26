@@ -25,6 +25,7 @@ on:
       - 'docs/tracking/**/*.md'
       - 'scripts/lint_plan_hard_fields.py'
       - '.github/workflows/plan-hard-fields-gate.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
@@ -32,6 +33,11 @@ on:
       - 'docs/tracking/**/*.md'
       - 'scripts/lint_plan_hard_fields.py'
       - '.github/workflows/plan-hard-fields-gate.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -26,7 +26,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
+from types import ModuleType
 
 
 def _resolve_session_id_fn() -> object:
@@ -42,7 +44,7 @@ def _resolve_session_id_fn() -> object:
     return resolve_session_id
 
 
-def _import_lib() -> tuple[object, object]:
+def _import_lib() -> tuple[ModuleType, ModuleType]:
     """Import the registry and ownership-guard modules, adding repo root if needed."""
     try:
         from plugins.onex.hooks.lib import pr_claim_registry, pr_ownership_guard
@@ -74,7 +76,12 @@ def _cmd_list(registry: object) -> int:
     return 0
 
 
-def _cmd_claim(registry: object, guard: object, args: argparse.Namespace) -> int:
+def _cmd_claim(
+    registry: object,
+    guard: object,
+    is_active: Callable[[dict[str, object]], bool],
+    args: argparse.Namespace,
+) -> int:
     lane_id = args.lane or guard.resolve_lane_id()  # type: ignore[attr-defined]
     if not lane_id:
         print(
@@ -99,10 +106,18 @@ def _cmd_claim(registry: object, guard: object, args: argparse.Namespace) -> int
     )
     if not acquired:
         existing = registry.get_claim(args.pr_key)  # type: ignore[attr-defined]
-        owner = (existing or {}).get("lane_id") or "<unknown lane>"
+        if existing is not None and is_active(existing):
+            owner = existing.get("lane_id") or "<unknown lane>"
+            print(
+                f"Refused: {args.pr_key} is already actively claimed by lane {owner}.\n"
+                "Coordinate with that lane rather than taking the claim.",
+                file=sys.stderr,
+            )
+            return 1
         print(
-            f"Refused: {args.pr_key} is already actively claimed by lane {owner}.\n"
-            "Coordinate with that lane rather than taking the claim.",
+            f"Refused: could not write or reap the claim for {args.pr_key}; "
+            "no active claim holder could be confirmed. Inspect the claims "
+            "directory and retry.",
             file=sys.stderr,
         )
         return 1
@@ -156,7 +171,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list":
         return _cmd_list(registry)
     if args.command == "claim":
-        return _cmd_claim(registry, pr_ownership_guard, args)
+        return _cmd_claim(
+            registry, pr_ownership_guard, pr_claim_registry.is_active, args
+        )
     return _cmd_release(registry, args)
 
 

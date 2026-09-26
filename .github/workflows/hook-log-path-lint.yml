@@ -12,10 +12,16 @@ on:
     branches: [main, 'hotfix/**']
     paths:
       - 'plugins/onex/hooks/scripts/**'
+
   pull_request:
     branches: [main, dev]
     paths:
       - 'plugins/onex/hooks/scripts/**'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   occ-preflight:
