@@ -29,8 +29,8 @@
 #
 # Surfaced check context in the caller: `doctrine-claim-gate / doctrine-claim-gate`.
 #
-# ONE pin, not two: the checker checkout defaults to `github.job_workflow_sha`,
-# the SHA this reusable workflow was resolved at, so the `uses:` SHA above is the
+# ONE pin, not two: the checker checkout uses validated `job.workflow_sha`, the
+# SHA this reusable workflow was resolved at, so the `uses:` SHA above is the
 # single source of truth for both the workflow and the script. Pin to an
 # omniclaude commit on `dev` that carries scripts/doctrine_claim_gate.py.
 #
@@ -56,10 +56,10 @@ on:
         type: string
         default: CLAUDE.md
       checker_ref:
-        description: >
-          Override the omniclaude ref the checker is read from. Defaults to the
-          SHA this reusable workflow was resolved at, so the caller's `uses:`
-          pin governs both.
+        description: >-
+          Optional full 40-hex omniclaude commit SHA the checker is read from.
+          The default is job.workflow_sha, so the caller's `uses:` pin governs
+          both. Branch names are refused.
         required: false
         type: string
         default: ""
@@ -85,12 +85,47 @@ jobs:
       - name: Check out the calling repository
         uses: actions/checkout@v7
 
+      - name: Resolve the gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          REF_OVERRIDE: ${{ inputs.checker_ref }}
+        run: |
+          set -euo pipefail
+          resolved_pin="${REF_OVERRIDE:-$WORKFLOW_SHA}"
+          if [[ ! "$resolved_pin" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::doctrine-claim pin is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$resolved_pin" >> "$GITHUB_OUTPUT"
+          echo "doctrine-claim pin: $resolved_pin"
+
       - name: Check out the checker at the pinned omniclaude ref
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: ${{ inputs.checker_ref || github.job_workflow_sha }}
+          ref: ${{ steps.pin.outputs.sha }}
           path: .omniclaude-checker
+
+      - name: Assert the doctrine-claim checkout is at the pin
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .omniclaude-checker rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched doctrine-claim commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::doctrine-claim checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "doctrine-claim checked out at $checked_out_sha"
 
       - name: Set up Python
         uses: actions/setup-python@v7

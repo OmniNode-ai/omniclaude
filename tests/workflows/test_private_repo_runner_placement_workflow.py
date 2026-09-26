@@ -68,10 +68,12 @@ def test_the_validator_is_checked_out_at_this_workflows_own_sha() -> None:
         and step["uses"].startswith("actions/checkout")
     ]
     refs = [step.get("with", {}).get("ref") for step in checkouts]
-    assert "${{ github.job_workflow_sha }}" in refs, (
+    assert "${{ steps.pin.outputs.sha }}" in refs, (
         "pinning the validator to github.sha or to @main each broke a "
         "cross-repo gate in production, both times silently"
     )
+    pin_step = next(step for step in steps if step.get("id") == "pin")
+    assert pin_step.get("env", {}).get("WORKFLOW_SHA") == "${{ job.workflow_sha }}"
 
 
 def test_the_hook_and_the_workflow_run_the_same_validator() -> None:
