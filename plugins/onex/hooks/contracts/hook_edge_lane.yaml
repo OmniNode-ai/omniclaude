@@ -440,6 +440,29 @@ governed_event_classes:
   - "team.task.progress"
   - "tool.output.captured"
   - "validator.catch"
+  # OMN-19513: the all-hooks capture metadata class, one lineage-carrying
+  # event per Claude Code hook call, emitted by hooks/lib/hook_claude_capture.py
+  # to onex.evt.omniclaude.hook-event.v1. Declared AND held back: see
+  # produce_grant_pending below.
+  - "hook.event"
+
+# ---------------------------------------------------------------------------
+# Declared classes whose topic has NO produce grant on the lane yet (OMN-19513)
+# ---------------------------------------------------------------------------
+# "Grant first, call site second" above, made mechanical for a class that is
+# added before its grant. A producer that consults this list journals none of
+# these classes, so a new class cannot reach the journal head of an edge that
+# cannot publish it -- the mechanism behind the four measured outages above.
+# Measured for hook.event on 2026-09-26: with the topic created on the dev lane
+# and no grant, the drainer refused every hook.event with "Topic ... is not
+# authorized for this client" and held 36 records behind the first.
+#
+# Removing a class from this list is the activation step, and it follows the
+# grant: the grant lands under its own operator consent row (the 3770 shape:
+# literal WRITE plus DESCRIBE on the one topic, for the existing principal),
+# then a one-line PR deletes the entry.
+produce_grant_pending:
+  - "hook.event"
 
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).

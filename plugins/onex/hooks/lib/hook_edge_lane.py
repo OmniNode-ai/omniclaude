@@ -201,6 +201,10 @@ class HookEdgeLaneContract:
     governed_topics: tuple[str, ...]
     governed_event_classes: tuple[str, ...]
     non_authoritative_surfaces: tuple[str, ...]
+    # OMN-19513: declared classes whose topic has no produce grant on the lane
+    # yet. A producer that consults this journals none of them: an ungranted
+    # topic at the journal head stops the drain for every record behind it.
+    produce_grant_pending: tuple[str, ...] = ()
 
     @property
     def bootstrap_servers(self) -> str:
@@ -760,6 +764,22 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
             "taken out of the resolution path"
         )
 
+    # OMN-19513: grant first, call site second, made mechanical. Optional; a
+    # class listed here must also be declared, or the pending list could hold
+    # back a class the edge does not even claim to produce.
+    pending_raw = raw.get("produce_grant_pending") or []
+    if not isinstance(pending_raw, list):
+        raise HookEdgeLaneError(
+            f"{where}: produce_grant_pending must be a list of event classes"
+        )
+    pending = tuple(str(name) for name in pending_raw)
+    undeclared = sorted(set(pending) - {str(name) for name in classes})
+    if undeclared:
+        raise HookEdgeLaneError(
+            f"{where}: produce_grant_pending names {undeclared}, which "
+            "governed_event_classes does not declare"
+        )
+
     return HookEdgeLaneContract(
         path=path,
         lane=lane,
@@ -772,6 +792,7 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
         governed_topics=tuple(str(name) for name in governed),
         governed_event_classes=tuple(str(name) for name in classes),
         non_authoritative_surfaces=tuple(str(s) for s in demoted),
+        produce_grant_pending=pending,
     )
 
 

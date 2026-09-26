@@ -70,6 +70,10 @@ ANTHROPIC_FAKE = "sk-" + "ant-" + "FAKE" + "0" * 28
 @pytest.fixture(autouse=True)
 def _capture_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
+    # The shipped lane contract holds hook.event back until its produce grant
+    # lands (test_the_shipped_lane_contract_holds_hook_event_back below); every
+    # other test exercises the producer as it runs once that entry is deleted.
+    monkeypatch.setattr(capture_mod, "lane_grant_pending", lambda: False)
 
 
 @pytest.fixture
@@ -476,3 +480,34 @@ def test_the_redaction_mirror_passes_the_lineage_and_hashes_the_undeclared(
     assert out["payload"]["tool_name"] == payload["payload"]["tool_name"]
     assert str(out["payload"]["surprise"]).startswith("sha256:")
     assert out["redaction_state"] == "redacted"
+
+
+# ---------------------------------------------------------------------------
+# grant first, call site second: the lane contract holds the class back
+# ---------------------------------------------------------------------------
+
+
+def test_the_shipped_lane_contract_holds_hook_event_back(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.undo()
+    monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
+    assert capture_mod.lane_grant_pending() is True
+    assert capture_mod.capture(_stdin("Stop"), journal_dir=jdir) == 0
+    assert _events(jdir) == []
+
+
+def test_deleting_the_pending_entry_is_what_activates_the_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.undo()
+    shipped = (
+        _REPO_ROOT / "plugins" / "onex" / "hooks" / "contracts" / "hook_edge_lane.yaml"
+    )
+    raw = yaml.safe_load(shipped.read_text(encoding="utf-8"))
+    raw["produce_grant_pending"] = []
+    cleared = tmp_path / "hook_edge_lane.yaml"
+    cleared.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    assert capture_mod.lane_grant_pending(cleared) is False
+    unreadable = tmp_path / "missing.yaml"
+    assert capture_mod.lane_grant_pending(unreadable) is True

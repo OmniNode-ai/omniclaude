@@ -46,6 +46,11 @@ Nothing is journalled, and the hook log says why, when:
    resolver has no span scrub. No hash on the bus may come from unscrubbed
    text.
 4. The hook is one this module must never observe: see ``NEVER_REGISTERED``.
+5. The hook-edge lane contract still lists ``hook.event`` under
+   ``produce_grant_pending``: the lane has no produce grant for its topic, and
+   an ungranted topic at the journal head stops the drain for every record
+   behind it (measured four times; see the contract). Deleting that entry is
+   the activation step, after the grant.
 
 Why the contract is loaded by file path
 ---------------------------------------
@@ -75,6 +80,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import hook_content_capture as content_capture  # noqa: E402
+import hook_edge_lane  # noqa: E402
 import hook_emit_append as appender  # noqa: E402
 import hook_emit_health as health  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
@@ -146,6 +152,26 @@ def drainer_can_publish(status_path: Path) -> bool:
     if status is None or status.publishable_event_types is None:
         return False
     return HOOK_EVENT_TYPE in status.publishable_event_types
+
+
+def lane_grant_pending(contract_path: Path | None = None) -> bool:
+    """True when the lane contract holds ``hook.event`` back from the journal.
+
+    The hook-edge lane contract lists declared classes whose topic has no
+    produce grant yet (``produce_grant_pending``). An ungranted topic at the
+    journal head stops the drain for every record behind it, so the grant
+    comes first and this call site second. An unreadable contract reads as
+    pending: fail closed.
+    """
+    path = contract_path or (
+        Path(__file__).resolve().parent.parent / "contracts" / "hook_edge_lane.yaml"
+    )
+    try:
+        lane = hook_edge_lane.load_contract(path)
+    except Exception as exc:  # noqa: BLE001 -- unreadable means not cleared
+        _log(f"the hook-edge lane contract did not load: {type(exc).__name__}")
+        return True
+    return HOOK_EVENT_TYPE in lane.produce_grant_pending
 
 
 def _contract_candidates() -> list[Path]:
@@ -369,6 +395,12 @@ def capture(
         return 0
     if not capture_enabled_by_operator():
         return 0
+    if lane_grant_pending():
+        _log(
+            f"skipped {hook_name}: the hook-edge lane contract lists "
+            f"{HOOK_EVENT_TYPE} under produce_grant_pending (no produce grant yet)"
+        )
+        return 0
     if not drainer_can_publish(content_capture.status_path_for(journal_dir)):
         _log(
             f"skipped {hook_name}: the local drainer does not list "
@@ -401,7 +433,9 @@ def capture(
         return 0
     lineage = payload["lineage"]
     appender.append_event(
-        event_type=HOOK_EVENT_TYPE,
+        # The literal, not the constant: validate_hook_edge_lane.py finds the
+        # classes this edge emits by scanning call sites for it.
+        event_type="hook.event",
         payload=payload,
         correlation_id=lineage["session_id"],
         cwd=cwd or _str(hook_input.get("cwd")),
