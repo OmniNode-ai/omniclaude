@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -194,3 +198,114 @@ def test_no_workflow_call_inputs_beyond_baseline_and_parser() -> None:
     workflow_call = on_block["workflow_call"]
     assert isinstance(workflow_call, dict)
     assert set(workflow_call["inputs"]) == {"baseline-path", "parser"}
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=scrub_git_location_env(os.environ),
+    ).stdout.strip()
+
+
+@pytest.mark.parametrize(
+    ("event_name", "push_before"),
+    [
+        ("push", "0" * 40),
+        ("workflow_dispatch", ""),
+    ],
+)
+def test_default_branch_fallback_fetches_by_remote_branch_name(
+    tmp_path: Path, event_name: str, push_before: str
+) -> None:
+    """A first push or a base-less event compares against the default branch.
+
+    Regression: the step used to run ``git fetch origin origin/dev``, asking
+    the remote for a ref literally named ``origin/dev`` (exit 128 on
+    omnimarket run 36209381911). This executes the real step script against a
+    local origin and a stub gate that records the base ref it was given.
+    """
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    _git(origin, "init", "-q", "-b", "dev")
+    _git(origin, "config", "user.email", "t@example.invalid")
+    _git(origin, "config", "user.name", "t")
+    (origin / "baseline.txt").write_text("a\n", encoding="utf-8")
+    _git(origin, "add", "baseline.txt")
+    _git(origin, "commit", "-q", "-m", "base")
+    dev_sha = _git(origin, "rev-parse", "HEAD")
+
+    caller = tmp_path / "caller"
+    _git(tmp_path, "clone", "-q", "--no-checkout", str(origin), str(caller))
+    _git(caller, "update-ref", "-d", "refs/remotes/origin/dev")
+
+    stub = tmp_path / "gate.py"
+    record = tmp_path / "base-ref.txt"
+    stub.write_text(
+        "import subprocess, sys\n"
+        "base = sys.argv[sys.argv.index('--base-ref') + 1]\n"
+        "sha = subprocess.run(['git', 'rev-parse', base], check=True,\n"
+        "    capture_output=True, text=True).stdout.strip()\n"
+        f"open({str(record)!r}, 'w').write(base + ' ' + sha)\n",
+        encoding="utf-8",
+    )
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "python").symlink_to(sys.executable)
+
+    script = str(
+        _step_by_name("Resolve merge-base authority and enforce shrink-only baseline")[
+            "run"
+        ]
+    )
+    env = {
+        **scrub_git_location_env(os.environ),
+        "PATH": f"{shim}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "BASELINE_PATH": "baseline.txt",
+        "BASELINE_PARSER": "line-set",
+        "EVENT_NAME": event_name,
+        "PR_BASE_SHA": "",
+        "MERGE_GROUP_BASE_SHA": "",
+        "PUSH_BEFORE_SHA": push_before,
+        "DEFAULT_BRANCH": "dev",
+        "GATE_PIN": "",
+        "IS_SELF": "true",
+        "SCRIPT_PATH": str(stub),
+    }
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=caller,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert record.read_text(encoding="utf-8") == f"origin/dev {dev_sha}"
+
+
+def test_default_branch_fallback_fails_closed_without_a_default_branch(
+    tmp_path: Path,
+) -> None:
+    script = str(
+        _step_by_name("Resolve merge-base authority and enforce shrink-only baseline")[
+            "run"
+        ]
+    )
+    stub = tmp_path / "gate.py"
+    stub.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    result = _run_bash(
+        script,
+        {
+            "EVENT_NAME": "workflow_dispatch",
+            "PUSH_BEFORE_SHA": "",
+            "DEFAULT_BRANCH": "",
+            "IS_SELF": "true",
+            "SCRIPT_PATH": str(stub),
+        },
+    )
+    assert result.returncode == 1
+    assert "THE GATE DID NOT RUN" in result.stdout

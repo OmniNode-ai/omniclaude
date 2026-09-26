@@ -147,12 +147,25 @@ jobs:
             pull_request) base_ref="$PR_BASE_SHA" ;;
             merge_group) base_ref="$MERGE_GROUP_BASE_SHA" ;;
             push) base_ref="$PUSH_BEFORE_SHA" ;;
-            *) base_ref="origin/${DEFAULT_BRANCH}" ;;
+            *) base_ref="" ;;
           esac
+          # A branch's first push carries an all-zero `before`, and events with
+          # no base (workflow_dispatch, schedule) carry none: compare against
+          # the default branch. That fallback must fetch the branch by its
+          # remote name -- `git fetch origin origin/dev` asks the remote for a
+          # ref called `origin/dev`, which does not exist (exit 128, measured
+          # on omnimarket run 36209381911).
           if [[ "$base_ref" =~ ^0+$ ]] || [ -z "$base_ref" ]; then
+            if [ -z "$DEFAULT_BRANCH" ]; then
+              echo "::error::no base commit and no default branch to compare against. THE GATE DID NOT RUN."
+              exit 1
+            fi
+            git fetch --no-tags origin \
+              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
             base_ref="origin/${DEFAULT_BRANCH}"
+          else
+            git fetch --no-tags origin "$base_ref"
           fi
-          git fetch --no-tags origin "$base_ref"
           python "$SCRIPT_PATH" \
             --repo-root . \
             --base-ref "$base_ref" \
