@@ -21,9 +21,12 @@
 # process.
 #
 # Privacy invariant (CLAUDE.md "Kafka Topics & Event Schemas"): only
-# preview-safe data goes to onex.evt.* topics -- tool_input/tool_response
-# CONTENT is never included, only the tool name and coarse outcome/timing
-# metadata.
+# preview-safe data goes to onex.evt.* topics -- the tool-executed record
+# built here carries no tool_input/tool_response content, only the tool name
+# and coarse outcome/timing metadata. Full content is a SEPARATE record
+# (OMN-19551): hook_content_capture.py, run after the metadata append, puts the
+# tool input and result on the restricted onex.cmd.omniintelligence.* family,
+# scrubbed by the capture-redaction contract.
 #
 # Fail-open per the OMN-13244 baseline's own reasoning: a dead bus, a
 # missing Python binary, or malformed stdin must never break or slow the
@@ -214,7 +217,30 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
             >>"$LOG_FILE" 2>&1
-    ) &
+        # OMN-19551: full-content capture, AFTER the metadata append above and
+        # in the same backgrounded subshell, so the content record reads the
+        # turn that append just stamped. The hook input goes on stdin, never on
+        # argv (a tool result can be megabytes). The module redacts through the
+        # capture-redaction contract before anything is journalled, and it
+        # journals nothing when the local drainer cannot publish the event
+        # type or OMNICLAUDE_CONTENT_CAPTURE is off.
+        _CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
+        if [[ -f "$_CONTENT_CAPTURE_PY" ]]; then
+            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+                --kind tool \
+                --correlation-id "${SESSION_ID:-unknown}" \
+                --agent-id "$AGENT_ID" \
+                --transcript-path "$TRANSCRIPT_PATH" \
+                --session-id "$SESSION_ID" \
+                --cwd "$CWD" \
+                --actor "$HOOK_ACTOR_ARG" \
+                --turn-id "$TURN_ID" \
+                >>"$LOG_FILE" 2>&1
+        fi
+    # The whole subshell's descriptors go to the log. With two commands in it,
+    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
+    # would hold the hook's caller until both finished (OMN-19551).
+    ) >>"$LOG_FILE" 2>&1 </dev/null &
     disown 2>/dev/null || true
 fi
 

@@ -185,6 +185,16 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop_content_capture.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
