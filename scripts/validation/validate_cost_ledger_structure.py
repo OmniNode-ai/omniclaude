@@ -22,6 +22,8 @@ import ast
 import sys
 from pathlib import Path
 
+from _path_scope import selected_python_files
+
 
 class CostLedgerStructureVisitor(ast.NodeVisitor):
     """
@@ -163,7 +165,7 @@ def _file_contains_ledger_class(tree: ast.AST) -> bool:
     return False
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve()
     for _ in range(10):
         if (root / "pyproject.toml").exists() or (root / "src").exists():
@@ -178,7 +180,11 @@ def main() -> int:
     found_any = False
     all_violations: list[str] = []
 
-    for py_file in sorted(src_root.rglob("*.py")):
+    for py_file in selected_python_files(
+        argv if argv is not None else sys.argv[1:],
+        roots=[src_root],
+        rule_file=Path(__file__),
+    ):
         found, violations = check_file(py_file)
         if found:
             found_any = True

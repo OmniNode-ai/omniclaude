@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "3d839840-7c15-5901-91ee-9a55db9da91c",
+    "event_id": "a79ea0a3-dbb4-585d-8644-db8fb49dedca",
+    "field": "reason",
+    "hook_event_name": "PermissionDenied",
+    "length": 21,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "e8e1e6844d55e8a7fafa1b688a12f82710740fc1a0cbe690e2883a2f012db9c5",
+    "value": "private denial reason"
+  }
+]

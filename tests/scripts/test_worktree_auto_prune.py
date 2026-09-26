@@ -52,6 +52,15 @@ def _load_module() -> ModuleType:
 mod = _load_module()
 
 
+@pytest.fixture(autouse=True)
+def _scratch_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every removal saves under ``$OMNI_HOME/.onex_state`` first (OMN-19539).
+
+    Point it at a scratch registry so no test writes into the real one.
+    """
+    monkeypatch.setenv("OMNI_HOME", str(tmp_path / "scratch_registry"))
+
+
 # =============================================================================
 # Ledger claim-awareness
 # =============================================================================

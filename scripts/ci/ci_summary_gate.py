@@ -64,6 +64,7 @@ GATE_JOBS: tuple[str, ...] = (
     "Security Gate",
     "Contract Compliance Check",
     "Contract Compliance",
+    "Pre-commit Suite (OMN-19612)",
     "no-noncanonical-lifecycle-classes",  # OMN-14350 non-canonical lifecycle-class ratchet
     "OCC Companion Merged Gate (OMN-15214)",  # occ-companion-merged — cited OCC evidence must be MERGED before product merge (OMN-15221/OMN-15224 port)
     # OMN-18031: the per-run runner-routing decision. THIS LINE IS HALF THE
@@ -111,6 +112,7 @@ GATE_JOBS: tuple[str, ...] = (
 STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
     {
         "no-noncanonical-lifecycle-classes",
+        "Pre-commit Suite (OMN-19612)",
         "OCC Companion Merged Gate (OMN-15214)",
         # OMN-18031: see the GATE_JOBS entry above. GATE_JOBS membership alone
         # accepts `skipped`; this job is unconditional, so a skip means the

@@ -1,0 +1,40 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "300f077c-5fd6-5b9b-b055-5eaf19f119c0",
+      "field": "directory",
+      "length": 25,
+      "sha256": "9dc066f318853dbc3757c002728afe8dc771216f61b225db13ddf9b877424a41"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:31Z",
+  "event_id": "e346b2da-9cbd-5577-9777-70caf5c9fadb",
+  "hook_event_name": "DirectoryAdded",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "directory_ref": {
+      "content_record_id": "300f077c-5fd6-5b9b-b055-5eaf19f119c0",
+      "field": "directory",
+      "length": 25,
+      "sha256": "9dc066f318853dbc3757c002728afe8dc771216f61b225db13ddf9b877424a41"
+    },
+    "hook_event_name": "DirectoryAdded",
+    "source": "slash_command"
+  },
+  "schema_version": "1.0.0"
+}

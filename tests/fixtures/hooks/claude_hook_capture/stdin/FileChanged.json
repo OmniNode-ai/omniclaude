@@ -1,0 +1,13 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "event": "change",
+  "file_path": "/restricted/private.py",
+  "hook_event_name": "FileChanged",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

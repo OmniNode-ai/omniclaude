@@ -1,0 +1,20 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "file_path": "/restricted/CLAUDE.md",
+  "globs": [
+    "**/*.md",
+    "docs/**"
+  ],
+  "hook_event_name": "InstructionsLoaded",
+  "load_reason": "session_start",
+  "memory_type": "project",
+  "parent_file_path": "/restricted/parent.md",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl",
+  "trigger_file_path": "/restricted/trigger.md"
+}

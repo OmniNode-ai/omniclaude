@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "3e661112-b796-5008-854a-e4d66e39d287",
+    "event_id": "d291a58b-61c9-535c-a4e7-fc6948178395",
+    "field": "content",
+    "hook_event_name": "ElicitationResult",
+    "length": 55,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "76e1e0f4b3fb5aed403903a9ca4e8c697005802de4d77ee84d0f9a39e2899861",
+    "value": "{\"account\":\"private account\",\"region\":\"private region\"}"
+  }
+]

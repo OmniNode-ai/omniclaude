@@ -97,3 +97,31 @@ def test_the_hook_inspects_the_whole_tree_not_the_diff() -> None:
     hook = next(h for h in hooks if h["id"] == "private-repo-runner-placement")
     assert hook.get("always_run") is True
     assert hook.get("pass_filenames") is False
+
+
+def test_the_gate_judges_every_branch_that_runs_workflows() -> None:
+    """OMN-18431: a branch the caller file never reached was never judged.
+
+    The reusable must fetch every head and pass the enumeration flag with the
+    event's own branch, unconditionally. An input that could turn it off would
+    be a bypass by another name, so it is asserted to be a fixed argument.
+    """
+    body = WORKFLOW.read_text(encoding="utf-8")
+    steps = _document()["jobs"]["private-repo-runner-placement"]["steps"]
+    runs = "\n".join(str(step.get("run", "")) for step in steps)
+    assert "+refs/heads/*:refs/remotes/origin/*" in runs, (
+        "the gate reads other branches from refs/remotes/origin/*; without "
+        "fetching every head it refuses, and a checkout alone holds one tree"
+    )
+    assert "--every-workflow-branch" in runs
+    assert "--event-branch" in runs
+    assert "github.base_ref || github.ref_name" in body, (
+        "the event's own branch is the pull request's BASE (whose tree the "
+        "merge checkout supersedes) or, on a push, the pushed branch"
+    )
+    inputs = (
+        (_document().get(True) or _document().get("on"))["workflow_call"] or {}
+    ).get("inputs") or {}
+    assert not any("branch" in name.lower() for name in inputs), (
+        "branch enumeration is not optional"
+    )

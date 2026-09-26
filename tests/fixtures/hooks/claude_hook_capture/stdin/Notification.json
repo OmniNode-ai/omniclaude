@@ -1,0 +1,14 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "Notification",
+  "message": "private notification message",
+  "notification_type": "permission_prompt",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "title": "private notification title",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

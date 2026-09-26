@@ -1,0 +1,23 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PermissionRequest",
+  "mcp_server": {
+    "name": "fixture-server"
+  },
+  "permission_mode": "default",
+  "permission_suggestions": [
+    {
+      "type": "allow_once"
+    }
+  ],
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "tool_input": {
+    "command": "private command"
+  },
+  "tool_name": "Bash",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

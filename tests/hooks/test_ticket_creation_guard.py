@@ -342,40 +342,45 @@ def test_the_shipped_vocabulary_pins_the_revision_it_was_read_from() -> None:
 
 
 def test_the_shipped_criterion_ids_are_the_prd_release_criteria() -> None:
-    """C1..C28, contiguous, with no gap and nothing outside the table.
+    """C1..C29, contiguous, with no gap and nothing outside the table.
 
     Offline half of the drift check: it pins the SHAPE of the set on every
     runner, including the ones with no clone of the PRD's repository.
 
-    Was C1..C27 until 2026-09-13. The PRD grew a C28 row and the pin lagged it,
-    so a ticket binding to a commitment the document does make was refused --
-    found by the origin/main half of this check and repaired under OMN-18331
-    rather than carried forward as a red test nobody owns.
+    Was C1..C27 until 2026-09-13, then C1..C28 until 2026-09-25. Each time the
+    PRD grew a row and the pin lagged it, so a ticket binding to a commitment
+    the document does make was refused -- found by the origin/main half of
+    this check and repaired (OMN-18331, then this ticket) rather than carried
+    forward as a red test nobody owns.
     """
-    expected = {f"C{n}" for n in range(1, 29)}
+    expected = {f"C{n}" for n in range(1, 30)}
     assert set(POLICY.criterion_ids) == expected, (
         "the shipped criterion ids are not the PRD's section 6 table "
-        f"(C1..C28); difference: {set(POLICY.criterion_ids) ^ expected}"
+        f"(C1..C29); difference: {set(POLICY.criterion_ids) ^ expected}"
     )
 
 
 def test_the_shipped_invariant_ids_are_the_prd_coverage_block() -> None:
     """43 ids, and the ones the PRD declines to carry are not among them.
 
-    42 until 2026-09-13, when the coverage block gained INV-115; see the
-    criterion-id check above for why the bump landed under OMN-18331.
+    42 until 2026-09-13, when the coverage block gained INV-115. On
+    2026-09-25 INV-117 (Claude as a delegation target, deferred) superseded
+    and replaced INV-048 (Claude never a delegation target) one-for-one, so
+    the count holds at 43; see the criterion-id check above for the same
+    repair pattern.
     """
     assert len(POLICY.invariant_ids) == 43, (
         f"expected the PRD's 43-entry invariant-coverage block, got "
         f"{len(POLICY.invariant_ids)} ids"
     )
-    for carried in ("INV-012", "INV-103", "INV-109", "INV-113", "INV-115"):
+    for carried in ("INV-012", "INV-103", "INV-109", "INV-113", "INV-115", "INV-117"):
         assert carried in POLICY.invariant_ids
     for not_carried, why in (
         ("INV-108", "process-scoped; section 9.2 says it is carried elsewhere"),
         ("INV-032", "deploy scope, cited by reference only"),
         ("INV-071", "deploy scope, cited by reference only"),
         ("INV-086", "security scope, cited by reference only"),
+        ("INV-048", "superseded by INV-117 (operator correction 2026-09-24)"),
     ):
         assert not_carried not in POLICY.invariant_ids, (
             f"{not_carried} must not be bindable: {why}"
@@ -400,7 +405,7 @@ def test_a_prd_invariant_id_binds() -> None:
 @pytest.mark.parametrize(
     ("line", "why"),
     [
-        ("Gate: C29", "one past the end of the PRD table"),
+        ("Gate: C30", "one past the end of the PRD table"),
         ("Gate: C0", "the table starts at C1"),
         ("Gate: INV-108", "mentioned by the PRD but deliberately not carried"),
         ("Gate: INV-032", "cited by reference from a scope the PRD does not claim"),

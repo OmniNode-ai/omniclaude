@@ -1,0 +1,28 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "8f479a4b-c217-5b8e-a38d-70ecf27234a2",
+    "event_id": "38c7041b-5c57-593d-8531-69171d72bfaa",
+    "field": "old_cwd",
+    "hook_event_name": "CwdChanged",
+    "length": 15,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "af660145d7e252b12f6730ae89170f71cde00eee2d156ac5319065c466448bca",
+    "value": "/restricted/old"
+  },
+  {
+    "agent_id": null,
+    "content_record_id": "546900a4-34dd-550c-969c-763ea4b17aaa",
+    "event_id": "38c7041b-5c57-593d-8531-69171d72bfaa",
+    "field": "new_cwd",
+    "hook_event_name": "CwdChanged",
+    "length": 15,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "5621147e22c0ba6c22f34b903d778f9d1a7ce281e014b84e68be2058877a50ed",
+    "value": "/restricted/new"
+  }
+]

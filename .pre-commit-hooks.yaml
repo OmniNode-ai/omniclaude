@@ -177,6 +177,20 @@
   files: ^\.github/workflows/.*\.ya?ml$
   stages: [pre-commit, pre-merge-commit]
 
+- id: anti-growth-baseline
+  name: Debt baseline can only shrink (OMN-19677)
+  description: >
+    Compares a committed debt baseline with the same path at the Git merge
+    base. Rejects a larger numeric value, a new list/set member, a new count-map
+    key, or an increased per-key count. The hook runs a parser-specific
+    synthetic growth control before the real comparison and fails closed when
+    the merge base or baseline cannot be read. Pass --baseline and --parser in
+    the consuming repository's hook args.
+  language: script
+  entry: scripts/anti_growth_baseline_hook
+  pass_filenames: false
+  stages: [pre-commit, pre-merge-commit]
+
 - id: doctrine-claim-gate
   name: Doctrine-claim gate — a claim of "unenforced" must match its ticket (OMN-18529)
   description: >

@@ -1,0 +1,42 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "ed0056a7-6892-5e30-b7d1-d6337760e5b0",
+      "field": "file_path",
+      "length": 21,
+      "sha256": "646efb8c7a3eec329240f7bbabf3d919f0a7019388a57fa46b75727ba4ecfddb"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:28Z",
+  "event_id": "247866b1-0ffb-5201-a21d-9e4b009b9718",
+  "hook_event_name": "InstructionsLoaded",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "file_path_ref": {
+      "content_record_id": "ed0056a7-6892-5e30-b7d1-d6337760e5b0",
+      "field": "file_path",
+      "length": 21,
+      "sha256": "646efb8c7a3eec329240f7bbabf3d919f0a7019388a57fa46b75727ba4ecfddb"
+    },
+    "glob_count": 2,
+    "hook_event_name": "InstructionsLoaded",
+    "load_reason": "session_start",
+    "memory_type": "project"
+  },
+  "schema_version": "1.0.0"
+}

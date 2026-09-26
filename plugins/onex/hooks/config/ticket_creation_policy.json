@@ -256,9 +256,9 @@
   "prd_source": {
     "repo": "OmniNode-ai/knowledge-base-internal",
     "path": "beta/requirements/2026-09-04-beta-prd.md",
-    "commit": "91d8d8371637aef209e793472b7e9ba6eddce93f",
-    "blob": "eb4e8639b5b24051af652c3d1ed78e84fd76d85c",
-    "read_on": "2026-09-13",
+    "commit": "c0f12e9e8bf4c80f2c00b1c9e773427b597cd9c9",
+    "blob": "52fd9fe7834bd61e4f358ab2b66e7d6f79b6f37d",
+    "read_on": "2026-09-25",
     "criterion_ids_from": "the section 6 release-criteria table rows",
     "invariant_ids_from": "the invariant-coverage HTML-comment block in the front matter"
   },
@@ -266,17 +266,17 @@
     "C1", "C2", "C3", "C4", "C5", "C6", "C7",
     "C8", "C9", "C10", "C11", "C12", "C13", "C14",
     "C15", "C16", "C17", "C18", "C19", "C20", "C21",
-    "C22", "C23", "C24", "C25", "C26", "C27", "C28"
+    "C22", "C23", "C24", "C25", "C26", "C27", "C28", "C29"
   ],
   "invariant_ids": [
     "INV-012", "INV-020", "INV-029", "INV-033", "INV-037", "INV-039",
-    "INV-043", "INV-044", "INV-045", "INV-046", "INV-047", "INV-048",
+    "INV-043", "INV-044", "INV-045", "INV-046", "INV-047",
     "INV-049", "INV-050", "INV-051", "INV-052", "INV-053", "INV-060",
     "INV-063", "INV-064", "INV-065", "INV-066", "INV-068", "INV-069",
     "INV-070", "INV-080", "INV-081", "INV-082", "INV-097", "INV-098",
     "INV-101", "INV-102", "INV-103", "INV-104", "INV-105", "INV-106",
     "INV-107", "INV-109", "INV-110", "INV-111", "INV-112", "INV-113",
-    "INV-115"
+    "INV-115", "INV-117"
   ],
   "in_progress_state_names": [
     "in progress",

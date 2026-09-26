@@ -1,0 +1,16 @@
+{
+  "cwd": "/workspace/fixture",
+  "delta": "private streamed delta",
+  "effort": {
+    "level": "high"
+  },
+  "final": false,
+  "hook_event_name": "MessageDisplay",
+  "index": 0,
+  "message_id": "message-fixture-1",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl",
+  "turn_id": "turn-message-1"
+}

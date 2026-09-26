@@ -1,0 +1,112 @@
+---
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# PYPI DEPENDENCY-PIN RESOLVABILITY, BEFORE MERGE. OMN-19655.
+#
+# WHY THIS EXISTS
+#   The release workflow already refuses to publish a wheel whose declared
+#   dependencies cannot be installed from the published PyPI index
+#   (scripts/ci/verify_pypi_pin_resolvability.py, OMN-14070 / OMN-18034). That
+#   step runs AFTER the merge, so it detects and never enforces (CLAUDE.md rule
+#   5). Twice in two days a pull request raised omnimarket's omnibase-core floor
+#   to a version no published omnibase-infra pinned (omnimarket#2819 on
+#   2026-09-24, omnimarket#2896 on 2026-09-25), merged green, and then failed
+#   every release on merge until an upstream release caught up.
+#
+#   This job runs the SAME script on the pull request's own wheel, so the
+#   verdict before merge is the verdict the release job would reach after it.
+#   There is one implementation; this file is only a caller.
+#
+# WHEN IT JUDGES
+#   On a pull request it judges when the change touches pyproject.toml, uv.lock,
+#   the script or this file, and reports "not applicable" (success) otherwise:
+#   a change that moves no declared dependency cannot change what resolves. The
+#   nightly schedule judges dev unconditionally, because the index moves under
+#   an unchanged pyproject.toml (a yank, or a sibling's new exact pin).
+#
+#   NO `paths:` FILTER AND NO JOB-LEVEL `if:`, deliberately, so this context is
+#   minted on every pull request and can be made required without wedging the
+#   pull requests it does not apply to.
+
+name: PyPI Pin Resolvability
+
+on:
+  pull_request:
+  merge_group:
+  schedule:
+    # 06:23 UTC daily, off the hour and before the 07:11 release train.
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # advisory-ok: OMN-19655 blocks today through the CI Summary layer-5 default-deny sweep (a red check-run in neither registry fails CI Summary); the L4 entry needs the branch-protection row first, an operator change
+  pin-resolvability:
+    name: pypi-pin-resolvability
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci;
+    # public forks default to ubuntu-latest. The untrusted test is the FORK
+    # test and only the fork test (OMN-18205). Read live from the routing
+    # seam; this workflow never writes a routing variable.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # The pull_request checkout is the synthetic merge commit; its first
+          # parent is the base branch tip, so HEAD^1..HEAD is exactly the change
+          # this pull request makes to the base as it stands now.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Decide whether the declared dependencies can have changed
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "applies=true" >>"${GITHUB_OUTPUT}"
+            echo "event ${EVENT_NAME}: judging unconditionally"
+            exit 0
+          fi
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          printf 'changed files:\n%s\n' "${changed}"
+          if printf '%s\n' "${changed}" | grep -Eq \
+            '^(pyproject\.toml|uv\.lock|scripts/ci/verify_pypi_pin_resolvability\.py|\.github/workflows/pin-resolvability-gate\.yml)$'; then
+            echo "applies=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "applies=false" >>"${GITHUB_OUTPUT}"
+            echo "::notice title=PyPI pin resolvability::not applicable: this change touches no declared dependency"
+          fi
+
+      - name: Install uv
+        if: steps.scope.outputs.applies == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+
+      - name: Build the wheel this change would release
+        if: steps.scope.outputs.applies == 'true'
+        run: uv build --wheel --out-dir "${RUNNER_TEMP}/pin-resolvability-dist"
+
+      - name: Verify PyPI dependency-pin resolvability (OMN-14070, OMN-19655)
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          # Same budget the release job's step uses (OMN-16047): a timeout is a
+          # throughput fault, reported as such, never as a broken pin.
+          PYPI_PIN_RESOLVE_TIMEOUT_SECONDS: '900'
+        run: python3 scripts/ci/verify_pypi_pin_resolvability.py "${RUNNER_TEMP}/pin-resolvability-dist"

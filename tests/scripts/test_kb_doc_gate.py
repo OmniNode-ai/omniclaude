@@ -23,6 +23,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "kb_doc_gate.py"
 
@@ -264,6 +267,7 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=True,
+        env=scrub_git_location_env(),
     )
 
 
@@ -505,6 +509,7 @@ def _begin_merge(repo: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=scrub_git_location_env(),
     )
 
 

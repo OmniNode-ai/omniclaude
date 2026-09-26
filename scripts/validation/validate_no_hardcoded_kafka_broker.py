@@ -140,6 +140,7 @@ class BrokerFallbackVisitor(ast.NodeVisitor):
             if default_node is not None and self._is_broker_literal(default_node):
                 if not has_suppress_marker(self.source_lines, node.lineno):
                     assert isinstance(default_node, ast.Constant)
+                    assert isinstance(default_node.value, str)
                     self.violations.append(
                         f"{self.filepath}:{node.lineno}: "
                         f"hardcoded Kafka broker URL as getenv fallback: "
@@ -160,6 +161,7 @@ class BrokerFallbackVisitor(ast.NodeVisitor):
                 ):
                     if not has_suppress_marker(self.source_lines, node.lineno):
                         assert isinstance(node.value, ast.Constant)
+                        assert isinstance(node.value.value, str)
                         self.violations.append(
                             f"{self.filepath}:{node.lineno}: "
                             f"hardcoded Kafka broker URL assigned to "
@@ -176,6 +178,7 @@ class BrokerFallbackVisitor(ast.NodeVisitor):
             if isinstance(target, ast.Name) and BROKER_VAR_PATTERN.search(target.id):
                 if not has_suppress_marker(self.source_lines, node.lineno):
                     assert isinstance(node.value, ast.Constant)
+                    assert isinstance(node.value.value, str)
                     self.violations.append(
                         f"{self.filepath}:{node.lineno}: "
                         f"hardcoded Kafka broker URL assigned to "
@@ -222,7 +225,7 @@ def find_repo_root(start: Path) -> Path:
     return start.resolve()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     repo_root = find_repo_root(Path(__file__))
 
     # Scan src/ and plugins/ (omniclaude-specific paths)
@@ -236,11 +239,27 @@ def main() -> int:
         print("WARNING: No scannable directories found; skipping")
         return 0
 
+    raw_paths = argv if argv is not None else sys.argv[1:]
+    selected = [Path(raw) for raw in raw_paths]
+    if not selected or any(
+        path.resolve() == Path(__file__).resolve()
+        or path.name == ".pre-commit-config.yaml"
+        for path in selected
+    ):
+        python_files = [
+            path for scan_root in scan_roots for path in collect_python_files(scan_root)
+        ]
+    else:
+        python_files = [
+            path
+            for path in selected
+            if path.is_file() and path.suffix == ".py" and not is_excluded_path(path)
+        ]
+
     all_violations: list[str] = []
-    for scan_root in scan_roots:
-        for py_file in collect_python_files(scan_root):
-            violations = check_python_file(py_file)
-            all_violations.extend(violations)
+    for py_file in sorted(set(python_files)):
+        violations = check_python_file(py_file)
+        all_violations.extend(violations)
 
     if not all_violations:
         print("OK: No hardcoded Kafka broker URL fallbacks found")
@@ -271,4 +290,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,28 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "94f83b1c-ca9d-5f2f-865f-5d8da038d679",
+    "event_id": "1e27e457-4b8e-5f7c-8192-c6457a3e2c93",
+    "field": "title",
+    "hook_event_name": "Notification",
+    "length": 26,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "c07ecaccdee760f3850cd2fcd290159fa16738aedc8bcef69211504f55587e7d",
+    "value": "private notification title"
+  },
+  {
+    "agent_id": null,
+    "content_record_id": "ea9776b8-dee4-5a7f-84bb-401da01eb6b4",
+    "event_id": "1e27e457-4b8e-5f7c-8192-c6457a3e2c93",
+    "field": "message",
+    "hook_event_name": "Notification",
+    "length": 28,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "a540603da8d458cf0f7ed30db40d64156418c7724a83b705eda0f607346d3f6b",
+    "value": "private notification message"
+  }
+]

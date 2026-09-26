@@ -209,6 +209,9 @@ _LANE_OPEN_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_open
 _SKILL_STARTED_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_skill_started.sh"
 )
+_ACTOR_LINE_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_actor_line_guard.sh"
+)
 _SUBAGENT_STOP_LANE_TERMINATION_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_lane_termination_guard.sh"
 )
@@ -239,6 +242,12 @@ _SESSION_START_WORKSPACE_SYNC_COMMAND = (
 _WORKSPACE_RECONCILE_TICK_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workspace_reconcile_tick.sh"
 )
+# OMN-19607: after a pull-request merge, a detached git-only fast-forward of the
+# matching canonical clones. Registered right after the reconcile tick.
+_MERGE_CLONE_SYNC_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_merge_clone_sync.sh"
+)
+_MERGE_CLONE_SYNC_MATCHER = "^(Bash|mcp__github__merge_pull_request)$"
 _SESSION_START_HOOK_PARITY_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start_hook_parity.sh"
 )
@@ -304,13 +313,17 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly eleven PreToolUse commands are wired: Done-flip guard,
+    # Exactly fifteen PreToolUse commands are wired: Done-flip guard,
     # ticket-creation admission gate (OMN-17942), worktree guard, PR
     # lane-ownership guard (OMN-16485), credential-rotation admission gate
     # (OMN-17957), pull-request body stamp-preservation gate (OMN-18335),
     # background-agent model guard (OMN-17499), lane-open recorder,
-    # lane-liveness guard, the overseer foreground-block guard, then the
-    # Skill-started capture hook.
+    # lane-liveness guard, the overseer foreground-block guard, the
+    # Skill-started capture hook, then the Linear comment actor-line guard
+    # (OMN-13856 ruling item 4) last, on its own
+    # mcp__linear-server__(save_comment|save_diff_comment) matcher -- it
+    # never contends with the Done-flip/ticket-creation pair, which only
+    # ever see save_issue/update_issue.
     #
     # The stamp gate's position is behaviour too: it is registered LAST on
     # the Bash matcher, after the credential-rotation gate. Neither inspects
@@ -358,6 +371,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _LANE_LIVENESS_GUARD_COMMAND,
         _OVERSEER_FOREGROUND_BLOCK_COMMAND,
         _SKILL_STARTED_COMMAND,
+        _ACTOR_LINE_GUARD_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the ticket-creation admission gate, the worktree canonical-root "
@@ -366,8 +380,8 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "admission gate, the pull-request body "
         "stamp-preservation gate, the prose-sink command-substitution gate, "
         "the background-agent model guard, the lane-dispatch recorder, the "
-        "lane-liveness guard, the overseer foreground-block guard, and the "
-        "Skill-started capture hook, and "
+        "lane-liveness guard, the overseer foreground-block guard, the "
+        "Skill-started capture hook, and the Linear comment actor-line guard, and "
         "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17957 + "
         "OMN-17334 + OMN-18798 + OMN-18335 + OMN-18750 + OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
@@ -387,6 +401,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "^SendMessage$",
         "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$",
         "Skill",
+        "^mcp__linear-server__(save_comment|save_diff_comment)$",
     ], (
         f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
         f"guard must match Bash, the background-agent model guard must match "
@@ -395,14 +410,16 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"dispatch tools, "
         f"the lane-liveness guard must match SendMessage, the overseer "
         f"foreground-block guard must match exactly the BLOCK_TOOLS set in "
-        f"overseer_foreground_block.py, and Skill-started capture must match "
-        f"Skill. Found: {matchers!r}"
+        f"overseer_foreground_block.py, Skill-started capture must match "
+        f"Skill, and the actor-line guard must match Linear "
+        f"save_comment/save_diff_comment. Found: {matchers!r}"
     )
 
-    # Exactly seven PostToolUse commands are wired: the secret-redaction guard
+    # Exactly eight PostToolUse commands are wired: the secret-redaction guard
     # (Bash only, OMN-16277), the catch-all bus-mirror hook (.*, OMN-16162 S1),
-    # the workspace-reconcile tick (.*, OMN-17190), the local capture group, and
-    # the Skill quality capture hook.
+    # the workspace-reconcile tick (.*, OMN-17190), the merge clone-sync hook
+    # (Bash and the GitHub MCP merge tool, OMN-19607), the local capture group,
+    # and the Skill quality capture hook.
     post_tool_use_commands = [
         hook.get("command", "")
         for group in hooks["PostToolUse"]
@@ -412,6 +429,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND,
         _POST_TOOL_USE_BUS_MIRROR_COMMAND,
         _WORKSPACE_RECONCILE_TICK_COMMAND,
+        _MERGE_CLONE_SYNC_COMMAND,
         _POST_TOOL_USE_AUTO_CHECKPOINT_COMMAND,
         _POST_TOOL_USE_CHANGESET_GUARD_COMMAND,
         _POST_TOOL_USE_OUTPUT_CAPTURE_METADATA_COMMAND,
@@ -419,17 +437,26 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     ], (
         "hooks.json PostToolUse must register EXACTLY the secret-redaction guard "
         "(OMN-16277 carve-out), the bus-mirror hook (OMN-16162 S1 carve-out), the "
-        "workspace-reconcile tick (OMN-17190 carve-out), the OMN-17207 "
+        "workspace-reconcile tick (OMN-17190 carve-out), the merge clone-sync "
+        "hook (OMN-19607 carve-out), the OMN-17207 "
         "local-only capture hooks, and the Skill quality capture hook, and nothing "
         f"else. Found: {post_tool_use_commands!r}"
     )
     post_tool_use_matchers = [
         group.get("matcher", "") for group in hooks["PostToolUse"]
     ]
-    assert post_tool_use_matchers == ["Bash", ".*", ".*", "Bash", "Skill"], (
+    assert post_tool_use_matchers == [
+        "Bash",
+        ".*",
+        ".*",
+        _MERGE_CLONE_SYNC_MATCHER,
+        "Bash",
+        "Skill",
+    ], (
         "PostToolUse secret-redaction guard must match Bash only; the bus-mirror "
         "hook and the workspace-reconcile tick must each match every tool (.*) in "
-        "their own entry; the OMN-17207 local-capture group must match Bash "
+        "their own entry; the merge clone-sync hook must match Bash and the "
+        "GitHub MCP merge tool only; the OMN-17207 local-capture group must match Bash "
         "only; and the Skill quality capture hook must match Skill. "
         f"Found: {post_tool_use_matchers!r}"
     )

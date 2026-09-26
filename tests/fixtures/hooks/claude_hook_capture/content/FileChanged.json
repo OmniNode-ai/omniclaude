@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "ed49d709-cb69-5136-b55b-2805890fd6a4",
+    "event_id": "ca7c4032-24be-5e14-a464-5a647255978b",
+    "field": "file_path",
+    "hook_event_name": "FileChanged",
+    "length": 22,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "faf8b4f003afeadd1d7592328e5b33aa9ce5174b667dcd42e195c1d55dbe6093",
+    "value": "/restricted/private.py"
+  }
+]

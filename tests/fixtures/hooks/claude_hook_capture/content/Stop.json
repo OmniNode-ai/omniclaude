@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "1056b63a-c33f-521e-82dd-6356f1ab91cb",
+    "event_id": "df92440f-1a4f-5572-a7e4-cac524f31e89",
+    "field": "last_assistant_message",
+    "hook_event_name": "Stop",
+    "length": 26,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "25c7f5eb83d3f83720e3840e69fac7cc1aee97d86058d5bab985399e07c8d520",
+    "value": "private assistant response"
+  }
+]

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -224,6 +225,34 @@ class TestWorktreeManagerGet:
 
 
 class TestWorktreeManagerDelete:
+    @pytest.fixture(autouse=True)
+    def _snapshot_ok(self) -> Iterator[MagicMock]:
+        """The git-argv tests below are about removal; the save is stubbed to succeed."""
+        with patch("worktree_manager._snapshot_before_removal") as snapshot:
+            self.snapshot = snapshot
+            yield snapshot
+
+    @patch("worktree_manager.subprocess.run")
+    def test_delete_saves_before_it_removes(self, mock_run: MagicMock) -> None:
+        order: list[str] = []
+        self.snapshot.side_effect = lambda path: order.append(f"snapshot {path}")
+        mock_run.side_effect = lambda argv, **_: (
+            order.append(" ".join(argv)) or _make_process()
+        )
+
+        WorktreeManager(repo_path="/repo").delete(path="/tmp/wt-feat", prune=False)
+
+        assert order == ["snapshot /tmp/wt-feat", "git worktree remove /tmp/wt-feat"]
+
+    @patch("worktree_manager.subprocess.run")
+    def test_a_failed_snapshot_removes_nothing(self, mock_run: MagicMock) -> None:
+        self.snapshot.side_effect = WorktreeError("pre-removal snapshot failed")
+
+        with pytest.raises(WorktreeError, match="snapshot failed"):
+            WorktreeManager(repo_path="/repo").delete(path="/tmp/wt-feat")
+
+        mock_run.assert_not_called()
+
     @patch("worktree_manager.subprocess.run")
     def test_delete_calls_remove_and_prune(self, mock_run: MagicMock) -> None:
         mock_run.return_value = _make_process()
@@ -483,3 +512,14 @@ class TestWorktreeManagerPrecommitInstall(_unittest.TestCase):
 @pytest.mark.unit
 class TestWorktreeManagerPrecommitInstallUnit(TestWorktreeManagerPrecommitInstall):
     """Re-expose under pytest.mark.unit."""
+
+
+class TestWorktreeManagerDeleteRealSnapshot:
+    def test_real_helper_refuses_without_omni_home_and_git_is_never_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("OMNI_HOME", raising=False)
+        with patch("worktree_manager._run_git") as run_git:
+            with pytest.raises(WorktreeError, match="snapshot failed"):
+                WorktreeManager(repo_path=str(tmp_path)).delete(path=str(tmp_path))
+        run_git.assert_not_called()

@@ -1,0 +1,44 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "ffa92838-4989-5c88-bcf9-3cefb71f19ff",
+      "field": "delta",
+      "length": 22,
+      "sha256": "050ae6d1261fcecb86f75b298b162597d095bb204dd415dd41eca0a197742c7a"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:32Z",
+  "event_id": "8e576251-b0af-5e46-a97a-bc35391d4aad",
+  "hook_event_name": "MessageDisplay",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-message-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "delta_length": 22,
+    "delta_ref": {
+      "content_record_id": "ffa92838-4989-5c88-bcf9-3cefb71f19ff",
+      "field": "delta",
+      "length": 22,
+      "sha256": "050ae6d1261fcecb86f75b298b162597d095bb204dd415dd41eca0a197742c7a"
+    },
+    "final": false,
+    "hook_event_name": "MessageDisplay",
+    "index": 0,
+    "message_id": "message-fixture-1",
+    "turn_id": "turn-message-1"
+  },
+  "schema_version": "1.0.0"
+}

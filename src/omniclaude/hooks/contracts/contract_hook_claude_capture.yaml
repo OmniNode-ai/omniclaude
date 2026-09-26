@@ -1,0 +1,498 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-19513
+
+name: claude_hook_capture
+contract_version: "1.0.0"
+claude_code_version_measured: "2.1.283"
+status: seam_first
+description: >
+  Instrumentation contract for capturing every Claude Code hook event with
+  deterministic lineage metadata. This contract adds a lineage-carrying capture
+  alongside the four legacy topics and supersedes nothing.
+
+topics:
+  metadata:
+    name: "onex.evt.omniclaude.hook-event.v1"  # onex-topic-sot
+    model: ModelClaudeHookEvent
+    schema_version: "1.0.0"
+    partition_key: session_id
+    rationale: >
+      One topic covers all hook types. Adding a hook type therefore requires one
+      model and one fixture instead of a topic, registry entry, ACL, and writer
+      subscription. Partitioning by session_id preserves per-session order across
+      every hook type, which the lineage fold requires.
+  restricted_content:
+    name: "onex.cmd.omniintelligence.content-captured.v1"  # onex-topic-sot
+    ownership: "omnimarket#2905 and omniclaude#2343"
+    note: >
+      Referenced by name only in this PR. Full prompt, tool input, tool response,
+      assistant message, compact summary, display delta, errors, notifications,
+      elicitation content, and paths are restricted content records, never metadata.
+  legacy_coexistence:
+    topics:
+      - "onex.evt.omniclaude.session-started.v1"  # onex-topic-sot
+      - "onex.evt.omniclaude.prompt-submitted.v1"  # onex-topic-sot
+      - "onex.evt.omniclaude.tool-executed.v1"  # onex-topic-sot
+      - "onex.evt.omniclaude.session-ended.v1"  # onex-topic-sot
+    note: "The new capture coexists with these topics and supersedes none of them."
+
+identity:
+  namespace_uuid: "9449178f-fb63-5b0d-b17d-379aafbcfe67"
+  correlation_id: "uuid5(NAMESPACE, session_id)"
+  event_id: >
+    uuid5(NAMESPACE, canonical JSON of [session_id, agent_id or "",
+    hook_event_name, tool_use_id or "", prompt_id or "", emitted_at isoformat])
+  tool_call_key: "uuid5(NAMESPACE, session_id + '|' + tool_use_id)"
+  causation: >
+    tool_call_key is carried by PreToolUse payloads and is the causation_id for
+    PostToolUse, PostToolUseFailure, PermissionDenied, and PermissionRequest when
+    Claude Code supplies a tool_use_id. This joins tool-call pairs without relying
+    on the PreToolUse emission timestamp. Claude Code 2.1.283 does not include
+    tool_use_id in PermissionRequest stdin, so that event's causation_id is null
+    until the upstream schema supplies one; the mapper does not invent an ID.
+  content_record_id: "uuid5(NAMESPACE, str(event_id) + '|' + field_name)"
+  content_hash: "sha256 over the emitted string or canonical JSON string"
+
+lineage:
+  fields:
+    session_id: {type: string, required: true, non_blank: true}
+    agent_id: {type: string, nullable: true, meaning: "null means main thread"}
+    agent_type: {type: string, nullable: true}
+    is_subagent: {type: boolean, invariant: "equals (agent_id is not null)"}
+    parent_tool_use_id: {type: string, nullable: true, source: "sidecar.toolUseId"}
+    workflow_run_id: {type: string, nullable: true, source: "sidecar path caller"}
+    spawn_depth: {type: integer, nullable: true, source: "sidecar.spawnDepth"}
+    tool_use_id: {type: string, nullable: true}
+    prompt_id: {type: string, nullable: true}
+    turn_id: {type: string, nullable: true}
+    correlation_id: {type: uuid, required: true}
+    causation_id: {type: uuid, nullable: true}
+  parent_agent_id: >
+    Deliberately absent from the event. The ordered projection fold derives it
+    from the PreToolUse carrying parent_tool_use_id.
+  sidecar: >
+    SubagentStart has no spawning tool_use_id. ModelSubagentSidecar accepts the
+    harness keys agentType, description, model, requestNonInteractive,
+    requestShape, spawnDepth, and exactly one of toolUseId or workflowPhase.
+    workflow_run_id is supplied by the caller from the workflow sidecar path.
+
+content_reference:
+  fields: [field, sha256, length, content_record_id]
+  event_rule: >
+    The envelope content_refs tuple lists each content reference used by the
+    typed payload exactly once. The metadata topic contains references only.
+  record_model: ModelHookContentRecord
+  content_value_rule: >
+    String values remain strings; non-string arbitrary JSON is serialized as
+    canonical JSON. Content records are destined only for the restricted family.
+  scrub_rule: >
+    map_hook_stdin takes a REQUIRED content_scrubber with no default. The
+    producer MUST pass the production span scrub of the restricted content
+    family (the capture_redaction.yaml secret_patterns set). Each serialized
+    value is scrubbed FIRST; sha256 and length are computed over the scrubbed
+    value, so no hash on the metadata topic is ever derived from a secret.
+    redaction_state (clean | secret_detected) and matched_pattern_names travel
+    on the content record. The generator's mock_content_scrubber is a fixture
+    stand-in with one pattern, not a production control.
+
+# In the coverage table, content_fields name the class each field takes on the
+# RESTRICTED content family. capture_verbatim there means verbatim WITH the
+# secret-pattern scrub on top (capture_redaction.yaml: verbatim is not exempt
+# from scrubbing); it never means unscrubbed. Nothing in content_fields ever
+# reaches the metadata topic, which carries only the content reference.
+coverage:
+  - hook: PreToolUse
+    registered_today: true
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [tool_name, mcp_server, tool_call_key, tool_input_keys]
+    content_fields: {tool_input: capture_verbatim}
+  - hook: PostToolUse
+    registered_today: true
+    reaches_bus_today: true
+    legacy_without_lineage: true
+    build_priority: P0
+    metadata_fields: [tool_name, duration_ms, interrupted]
+    content_fields: {tool_response: capture_verbatim}
+  - hook: PostToolUseFailure
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [tool_name, duration_ms, is_interrupt]
+    content_fields: {error: capture_verbatim}
+  - hook: PostToolBatch
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [tool_use_ids, tool_names]
+    content_fields: {}
+  - hook: Notification
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [notification_type]
+    content_fields: {title: capture_verbatim, message: capture_verbatim}
+  - hook: UserPromptSubmit
+    registered_today: true
+    reaches_bus_today: true
+    legacy_without_lineage: true
+    build_priority: P0
+    metadata_fields: [prompt_length, source]
+    content_fields: {prompt: capture_verbatim, session_title: capture_verbatim}
+  - hook: UserPromptExpansion
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [expansion_type, command_name, command_source]
+    content_fields: {command_args: capture_verbatim, prompt: capture_verbatim}
+  - hook: SessionStart
+    registered_today: true
+    reaches_bus_today: true
+    legacy_without_lineage: true
+    build_priority: P0
+    metadata_fields: [source, model, context_tokens, seconds_since_last_response, prompt_cache_likely_expired]
+    content_fields: {}
+  - hook: SessionEnd
+    registered_today: true
+    reaches_bus_today: true
+    legacy_without_lineage: true
+    build_priority: P0
+    metadata_fields: [reason]
+    content_fields: {}
+  - hook: Stop
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [stop_hook_active, background_task_count, session_cron_count]
+    content_fields: {last_assistant_message: capture_verbatim}
+  - hook: StopFailure
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [error]
+    content_fields: {error_details: capture_verbatim, last_assistant_message: capture_verbatim}
+  - hook: SubagentStart
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [agent_id, agent_type]
+    content_fields: {}
+  - hook: SubagentStop
+    registered_today: true
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [stop_hook_active, agent_id, agent_type]
+    content_fields: {agent_transcript_path: capture_verbatim, last_assistant_message: capture_verbatim}
+  - hook: PreCompact
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [trigger]
+    content_fields: {custom_instructions: capture_verbatim}
+  - hook: PostCompact
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [trigger]
+    content_fields: {compact_summary: capture_verbatim}
+  - hook: PreModelSwitch
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: []
+    content_fields: {}
+  - hook: PostModelSwitch
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: []
+    content_fields: {}
+  - hook: PermissionRequest
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [tool_name, suggestion_count]
+    content_fields: {}
+  - hook: PermissionDenied
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    metadata_fields: [tool_name]
+    content_fields: {reason: capture_verbatim}
+  - hook: Setup
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [trigger]
+    content_fields: {}
+  - hook: TeammateIdle
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [teammate_name, team_name]
+    content_fields: {}
+  - hook: TaskCreated
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [task_id, teammate_name, team_name]
+    content_fields: {task_subject: capture_verbatim, task_description: capture_verbatim}
+  - hook: TaskCompleted
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [task_id, teammate_name, team_name]
+    content_fields: {task_subject: capture_verbatim, task_description: capture_verbatim}
+  - hook: Elicitation
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [mcp_server_name, mode, elicitation_id, requested_schema_keys]
+    content_fields: {message: capture_verbatim}
+  - hook: ElicitationResult
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [mcp_server_name, mode, elicitation_id, action]
+    content_fields: {content: capture_verbatim}
+  - hook: ConfigChange
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [source]
+    content_fields: {file_path: capture_verbatim}
+  - hook: WorktreeCreate
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: []
+    content_fields: {name: capture_verbatim}
+  - hook: WorktreeRemove
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: []
+    content_fields: {worktree_path: capture_verbatim}
+  - hook: InstructionsLoaded
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: [memory_type, load_reason, glob_count]
+    content_fields: {file_path: capture_verbatim}
+  - hook: CwdChanged
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P1
+    metadata_fields: []
+    content_fields: {old_cwd: capture_verbatim, new_cwd: capture_verbatim}
+  - hook: FileChanged
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [event]
+    content_fields: {file_path: capture_verbatim}
+  - hook: DirectoryAdded
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    metadata_fields: [source]
+    content_fields: {directory: capture_verbatim}
+  - hook: MessageDisplay
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P2
+    high_volume: true
+    volume_note: "Fires once per streamed display flush; delta is content-only."
+    metadata_fields: [turn_id, message_id, index, final, delta_length]
+    content_fields: {delta: capture_verbatim}
+
+redaction:
+  class_names: [capture_verbatim, capture_hashed, capture_shape_only, never_capture]
+  topic: "onex.evt.omniclaude.hook-event.v1"  # onex-topic-sot
+  default_field_class: capture_hashed
+  rationale: >
+    Every declared verbatim field is an identifier, enum, name, count, boolean,
+    timestamp, deterministic digest, or content-record UUID. Arbitrary values are
+    represented only by refs. Any future undeclared metadata field fails safe to a
+    canonical-JSON sha256 digest.
+  fields:
+    event_id: capture_verbatim
+    schema_version: capture_verbatim
+    hook_event_name: capture_verbatim
+    emitted_at: capture_verbatim
+    actor: capture_verbatim
+    claude_code_version: capture_verbatim
+    lineage.session_id: capture_verbatim
+    lineage.agent_id: capture_verbatim
+    lineage.agent_type: capture_verbatim
+    lineage.is_subagent: capture_verbatim
+    lineage.parent_tool_use_id: capture_verbatim
+    lineage.workflow_run_id: capture_verbatim
+    lineage.spawn_depth: capture_verbatim
+    lineage.tool_use_id: capture_verbatim
+    lineage.prompt_id: capture_verbatim
+    lineage.turn_id: capture_verbatim
+    lineage.correlation_id: capture_verbatim
+    lineage.causation_id: capture_verbatim
+    payload.hook_event_name: capture_verbatim
+    payload.tool_name: capture_verbatim
+    payload.mcp_server: capture_verbatim
+    payload.tool_call_key: capture_verbatim
+    payload.tool_input_keys: capture_verbatim
+    payload.tool_use_ids: capture_verbatim
+    payload.tool_names: capture_verbatim
+    payload.duration_ms: capture_verbatim
+    payload.interrupted: capture_verbatim
+    payload.is_interrupt: capture_verbatim
+    payload.notification_type: capture_verbatim
+    payload.prompt_length: capture_verbatim
+    payload.source: capture_verbatim
+    payload.expansion_type: capture_verbatim
+    payload.command_name: capture_verbatim
+    payload.command_source: capture_verbatim
+    payload.model: capture_verbatim
+    payload.context_tokens: capture_verbatim
+    payload.seconds_since_last_response: capture_verbatim
+    payload.prompt_cache_likely_expired: capture_verbatim
+    payload.reason: capture_verbatim
+    payload.stop_hook_active: capture_verbatim
+    payload.background_task_count: capture_verbatim
+    payload.session_cron_count: capture_verbatim
+    payload.error: capture_verbatim
+    payload.agent_id: capture_verbatim
+    payload.agent_type: capture_verbatim
+    payload.trigger: capture_verbatim
+    payload.suggestion_count: capture_verbatim
+    payload.teammate_name: capture_verbatim
+    payload.team_name: capture_verbatim
+    payload.task_id: capture_verbatim
+    payload.mcp_server_name: capture_verbatim
+    payload.mode: capture_verbatim
+    payload.elicitation_id: capture_verbatim
+    payload.requested_schema_keys: capture_verbatim
+    payload.action: capture_verbatim
+    payload.memory_type: capture_verbatim
+    payload.load_reason: capture_verbatim
+    payload.glob_count: capture_verbatim
+    payload.event: capture_verbatim
+    payload.turn_id: capture_verbatim
+    payload.message_id: capture_verbatim
+    payload.index: capture_verbatim
+    payload.final: capture_verbatim
+    payload.delta_length: capture_verbatim
+    payload.tool_input_ref: capture_verbatim
+    payload.tool_response_ref: capture_verbatim
+    payload.error_ref: capture_verbatim
+    payload.title_ref: capture_verbatim
+    payload.message_ref: capture_verbatim
+    payload.prompt_ref: capture_verbatim
+    payload.session_title_ref: capture_verbatim
+    payload.command_args_ref: capture_verbatim
+    payload.last_assistant_message_ref: capture_verbatim
+    payload.error_details_ref: capture_verbatim
+    payload.agent_transcript_ref: capture_verbatim
+    payload.custom_instructions_ref: capture_verbatim
+    payload.compact_summary_ref: capture_verbatim
+    payload.reason_ref: capture_verbatim
+    payload.task_subject_ref: capture_verbatim
+    payload.task_description_ref: capture_verbatim
+    payload.content_ref: capture_verbatim
+    payload.file_path_ref: capture_verbatim
+    payload.name_ref: capture_verbatim
+    payload.worktree_path_ref: capture_verbatim
+    payload.old_cwd_ref: capture_verbatim
+    payload.new_cwd_ref: capture_verbatim
+    payload.directory_ref: capture_verbatim
+    payload.delta_ref: capture_verbatim
+    content_refs: capture_verbatim
+
+projection:
+  source_topic: "onex.evt.omniclaude.hook-event.v1"  # onex-topic-sot
+  implementation_note: >
+    The omnimarket builder must implement a pure fold plus an effect-class writer
+    as two classes. No SQL or writer implementation belongs in this contract PR.
+  event_table:
+    name: omninode_internal.claude_hook_events
+    primary_key: [event_id]
+    columns:
+      - {name: event_id, type: uuid, nullable: false}
+      - {name: session_id, type: text, nullable: false}
+      - {name: agent_id, type: text, nullable: true}
+      - {name: is_subagent, type: boolean, nullable: false}
+      - {name: agent_type, type: text, nullable: true}
+      - {name: parent_tool_use_id, type: text, nullable: true}
+      - {name: parent_agent_id, type: text, nullable: true, derived: true}
+      - {name: workflow_run_id, type: text, nullable: true}
+      - {name: spawn_depth, type: integer, nullable: true}
+      - {name: hook_event_name, type: text, nullable: false}
+      - {name: tool_use_id, type: text, nullable: true}
+      - {name: tool_name, type: text, nullable: true}
+      - {name: prompt_id, type: text, nullable: true}
+      - {name: turn_id, type: text, nullable: true}
+      - {name: correlation_id, type: uuid, nullable: false}
+      - {name: causation_id, type: uuid, nullable: true}
+      - {name: emitted_at, type: timestamptz, nullable: false}
+      - {name: payload, type: jsonb, nullable: false, content: "metadata only"}
+      - {name: content_ref_ids, type: "text[]", nullable: false}
+      - {name: source_topic, type: text, nullable: false}
+      - {name: ingested_at, type: timestamptz, nullable: false}
+  lineage_table:
+    name: omninode_internal.claude_agent_spans
+    primary_key: [session_id, agent_id]
+    columns:
+      - {name: session_id, type: text, nullable: false}
+      - {name: agent_id, type: text, nullable: false}
+      - {name: agent_type, type: text, nullable: true}
+      - {name: parent_tool_use_id, type: text, nullable: true}
+      - {name: parent_agent_id, type: text, nullable: true}
+      - {name: workflow_run_id, type: text, nullable: true}
+      - {name: spawn_depth, type: integer, nullable: true}
+      - {name: started_at, type: timestamptz, nullable: false}
+      - {name: stopped_at, type: timestamptz, nullable: true}
+      - {name: tool_call_count, type: integer, nullable: false}
+      - {name: parent_resolution, type: text, nullable: false, values: [main_thread, resolved, workflow, unknown]}
+  fold_rules:
+    parent_agent_id: >
+      Find the PreToolUse in the same session whose tool_use_id equals the
+      event's parent_tool_use_id; use that event's agent_id.
+    parent_resolution: >
+      main_thread when that PreToolUse was found and carried no agent_id;
+      resolved when it carried an agent_id (a nested subagent); workflow when
+      the sidecar was a Workflow sidecar (workflow_run_id set, no toolUseId);
+      unknown when the sidecar was unreadable at emit time (parent_tool_use_id
+      and workflow_run_id both null) or the parent PreToolUse was never seen.
+      unknown is NOT main_thread: a null parent_agent_id alone cannot tell the
+      two apart, which is why this column exists.
+    open_span: >
+      Open on SubagentStart, or on the first event carrying that agent_id when
+      SubagentStart was missed.
+    close_span: "Close on SubagentStop."
+    tool_call_count: >
+      Count PostToolUse plus PostToolUseFailure events carrying that agent_id.
+
+known_gaps:
+  - >
+    Claude Code 2.1.283 PermissionRequest stdin carries no tool_use_id, so its
+    causation_id is null.
+  - >
+    SubagentStart carries no spawning tool_use_id. Parent linkage depends on the
+    harness sidecar being readable at emit time; when it is not,
+    parent_tool_use_id is null and the span's parent_resolution is unknown.
+  - >
+    Subagents share their parent's session_id (measured on the lab: this lane's
+    own tool rows land under its orchestrator's session id), so agent_id is the
+    ONLY discriminator between a subagent's events and the main thread's.
+
+seams:
+  model_module: src/omniclaude/hooks/model_claude_hook_event.py
+  fixture_directory: tests/fixtures/hooks/claude_hook_capture
+  generator: scripts/generate_claude_hook_capture_fixtures.py
+  check_command: "uv run python scripts/generate_claude_hook_capture_fixtures.py --check"
+  producer: "omniclaude plugins/onex/hooks; to be wired by a build task"
+  projection_consumer: "omnimarket node_projection_claude_hook_events; to be built"
+
+timestamp_policy:
+  explicit_injection: true
+  timezone_required: true
+  default_factory_forbidden: true

@@ -46,9 +46,12 @@ HOOK_DIRS=(
 # Also include top-level *.sh in plugins/onex/hooks/
 HOOK_TOP_SH="${REPO_ROOT}/plugins/onex/hooks"
 
-# Gather candidates into a temp file so this works on bash 3.x (no mapfile)
-tmp_candidates="$(mktemp)"
-trap 'rm -f "$tmp_candidates"' EXIT
+# Gather loop inputs into temp files so this works on bash 3.x (no mapfile)
+# and avoids bash 5.1+'s pipe-backed here-string deadlock under macOS pipe
+# pressure (OMN-19623).
+tmp_candidates="$(mktemp "${TMPDIR:-/tmp}/check_hook_event_names_candidates.XXXXXX")"
+tmp_offenders="$(mktemp "${TMPDIR:-/tmp}/check_hook_event_names_offenders.XXXXXX")"
+trap 'rm -f "$tmp_candidates" "$tmp_offenders"' EXIT
 
 {
   for d in "${HOOK_DIRS[@]}"; do
@@ -134,10 +137,11 @@ while IFS= read -r file; do
     echo "ERROR: hookSpecificOutput emitted without hookEventName (OMN-9072):" >&2
     found_offender=1
   fi
+  printf '%s\n' "$offenders" > "$tmp_offenders"
   while IFS= read -r lineno; do
     [[ -z "$lineno" ]] && continue
     echo "  - ${file#"${REPO_ROOT}/"}:${lineno}" >&2
-  done <<< "$offenders"
+  done < "$tmp_offenders"
 done < "$tmp_candidates"
 
 if [[ "$found_offender" -eq 1 ]]; then

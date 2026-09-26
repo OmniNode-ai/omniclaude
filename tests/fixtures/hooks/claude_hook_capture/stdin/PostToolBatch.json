@@ -1,0 +1,28 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PostToolBatch",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "tool_calls": [
+    {
+      "tool_input": {
+        "file_path": "/private/a"
+      },
+      "tool_name": "Read",
+      "tool_response": "private response",
+      "tool_use_id": "toolu-batch-1"
+    },
+    {
+      "tool_input": {
+        "pattern": "needle"
+      },
+      "tool_name": "Grep",
+      "tool_use_id": "toolu-batch-2"
+    }
+  ],
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

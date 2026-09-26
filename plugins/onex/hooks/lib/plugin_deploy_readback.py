@@ -69,7 +69,8 @@ are shell scripts and docs, where a bare ``python3`` is easy to reach for.
 Exit codes: 0 = readback produced, no alarm-level tripwire; 3 = alarm-level
 tripwire (or any tripwire under ``--strict``); 1 = the load path could not be
 resolved at all, which is itself the loudest possible answer, or the
-interpreter is below the supported floor.
+interpreter is below the supported floor. 2 = no ``--plugin-id`` was given and
+the enabled onex plugin could not be resolved (none or several enabled).
 
 Refs: OMN-15274, OMN-15244, OMN-15273, OMN-15213, OMN-15062.
 See also: ``omni_home/docs/reference/hook-load-path-and-deploy-readback.md``.
@@ -106,6 +107,7 @@ __all__ = [
     "read_hooks_config",
     "read_registry_entries",
     "render_text",
+    "resolve_enabled_onex_plugin_id",
     "resolve_load_path",
 ]
 
@@ -467,6 +469,49 @@ def _load_json(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected a JSON object, got {type(data).__name__}")
     return data
+
+
+def resolve_enabled_onex_plugin_id(
+    claude_home: pathlib.Path,
+    project_dir: pathlib.Path | None = None,
+) -> tuple[str | None, str]:
+    """Resolve the enabled onex plugin so the CLI never reads back a disabled tree."""
+    project_dir = project_dir or pathlib.Path.cwd()
+    settings_paths = (
+        ("user", claude_home / "settings.json"),
+        ("project", project_dir / ".claude" / "settings.json"),
+        ("project-local", project_dir / ".claude" / "settings.local.json"),
+    )
+
+    enabled_plugins: dict[str, bool] = {}
+    for _, settings_path in settings_paths:
+        try:
+            settings = _load_json(settings_path)
+        except (OSError, ValueError):
+            continue
+        scope_enabled = settings.get("enabledPlugins")
+        if isinstance(scope_enabled, dict):
+            enabled_plugins.update(scope_enabled)
+
+    enabled_onex_ids = sorted(
+        plugin_id
+        for plugin_id, enabled in enabled_plugins.items()
+        if plugin_id.split("@", 1)[0] == "onex" and enabled is True
+    )
+    if len(enabled_onex_ids) == 1:
+        plugin_id = enabled_onex_ids[0]
+        return plugin_id, f"{plugin_id} resolved from enabledPlugins"
+    if not enabled_onex_ids:
+        scopes = ", ".join(name for name, _ in settings_paths)
+        return (
+            None,
+            f"no onex plugin id is enabled in enabledPlugins; checked {scopes} scopes",
+        )
+    return (
+        None,
+        "multiple onex plugin ids are enabled in enabledPlugins: "
+        + ", ".join(enabled_onex_ids),
+    )
 
 
 def read_registry_entries(claude_home: pathlib.Path) -> tuple[ModelRegistryEntry, ...]:
@@ -1156,8 +1201,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--plugin-id",
-        default=DEFAULT_PLUGIN_ID,
-        help=f"plugin identity to read back (default: {DEFAULT_PLUGIN_ID})",
+        default=None,
+        help=(
+            "plugin identity to read back (default: the single onex plugin enabled "
+            "in Claude settings enabledPlugins; refuses to guess if none or several "
+            "are enabled)"
+        ),
     )
     parser.add_argument(
         "--claude-home",
@@ -1182,6 +1231,17 @@ def main(argv: list[str] | None = None) -> int:
         or os.environ.get("CLAUDE_CONFIG_DIR")
         or (pathlib.Path.home() / ".claude")
     ).expanduser()
+
+    if args.plugin_id is None:
+        plugin_id, detail = resolve_enabled_onex_plugin_id(claude_home)
+        if plugin_id is None:
+            print(f"plugin_deploy_readback: {detail}", file=sys.stderr)
+            return 2
+        args.plugin_id = plugin_id
+        print(
+            f"plugin_deploy_readback: resolved plugin id {plugin_id} ({detail})",
+            file=sys.stderr,
+        )
 
     rb = build_readback(
         claude_home=claude_home, plugin_id=args.plugin_id, fetch=not args.no_fetch

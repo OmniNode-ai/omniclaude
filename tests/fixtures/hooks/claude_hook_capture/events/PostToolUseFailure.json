@@ -1,0 +1,42 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "f84d615a-3f8f-5bec-9448-3263519c27e1",
+      "field": "error",
+      "length": 28,
+      "sha256": "de78ed71d2cfd78e257553829a808b167713b0ce1969b9ebf27cf18bbe94dbae"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:02Z",
+  "event_id": "64881551-6c84-58dc-878c-1fdf5bba10be",
+  "hook_event_name": "PostToolUseFailure",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": "4c7209ac-ddba-5675-b306-f13230d27287",
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": "toolu-fixture-failure",
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "duration_ms": 9,
+    "error_ref": {
+      "content_record_id": "f84d615a-3f8f-5bec-9448-3263519c27e1",
+      "field": "error",
+      "length": 28,
+      "sha256": "de78ed71d2cfd78e257553829a808b167713b0ce1969b9ebf27cf18bbe94dbae"
+    },
+    "hook_event_name": "PostToolUseFailure",
+    "is_interrupt": false,
+    "tool_name": "Bash"
+  },
+  "schema_version": "1.0.0"
+}

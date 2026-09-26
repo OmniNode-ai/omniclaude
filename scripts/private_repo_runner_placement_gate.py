@@ -145,7 +145,10 @@ import os
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 from dataclasses import dataclass, replace
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -1586,6 +1589,263 @@ def scan(
     return findings
 
 
+# THE TRIGGERS WHOSE `branches:` FILTER NAMES A BRANCH THAT RUNS WORKFLOWS.
+# A push reads the pushed branch's own tree; a pull request reads its BASE
+# branch's tree merged with the head. `merge_group` is left out: its ref is a
+# temporary queue branch, never a branch somebody keeps.
+BRANCH_FILTER_TRIGGERS = ("push", "pull_request", "pull_request_target")
+
+# Branches that run workflows whatever the filters say, when they exist: the
+# default branch, and the two long-lived branches of the release model.
+ALWAYS_JUDGED = ("main", "dev")
+
+
+def _run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", "-C", str(repo_root), *args],
+        check=False,
+        capture_output=True,
+        timeout=120,
+    )
+
+
+def _filter_regex(pattern: str) -> re.Pattern[str]:
+    """GitHub's branch-filter glob as a regular expression.
+
+    `**` matches any characters including `/`; `*` matches any characters but
+    `/`; `?` and `+` quantify the preceding character; `[...]` is a class.
+    Everything else is literal.
+    """
+    out: list[str] = []
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if pattern.startswith("**", index):
+            out.append(".*")
+            index += 2
+            continue
+        if char == "*":
+            out.append("[^/]*")
+        elif char in "?+":
+            out.append(char)
+        elif char == "[":
+            end = pattern.find("]", index)
+            if end == -1:
+                out.append(re.escape(char))
+            else:
+                out.append(pattern[index : end + 1])
+                index = end
+        else:
+            out.append(re.escape(char))
+        index += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def _is_match_all(pattern: str) -> bool:
+    """A pattern that admits every branch (or every branch without a `/`)."""
+    return pattern.strip() in {"*", "**"}
+
+
+def _named_by_filters(document: dict[str, Any], branch: str) -> bool:
+    """Does an explicit, non-match-all `branches:` filter admit `branch`?
+
+    A filter is read in order, and the LAST pattern that matches decides, so a
+    `!` pattern after a positive one excludes. A trigger with no filter, a
+    `branches-ignore:` filter, or a match-all pattern admits every branch --
+    that reaches feature branches, which are judged by their own pull request,
+    so it names nothing here.
+    """
+    # `True` is the YAML 1.1 reading of the bare token `on`, as in
+    # `declared_contexts`.
+    triggers: dict[Any, Any] = document
+    raw: Any = triggers.get("on", triggers.get(True))
+    if not isinstance(raw, dict):
+        return False
+    for trigger in BRANCH_FILTER_TRIGGERS:
+        config = raw.get(trigger)
+        if not isinstance(config, dict):
+            continue
+        patterns = config.get("branches")
+        if isinstance(patterns, str):
+            patterns = [patterns]
+        if not isinstance(patterns, list):
+            continue
+        admitted = False
+        explicit = False
+        for pattern in (str(entry) for entry in patterns):
+            negated = pattern.startswith("!")
+            body = pattern[1:] if negated else pattern
+            if _filter_regex(body).match(branch):
+                admitted = not negated
+                explicit = not negated and not _is_match_all(body)
+        if admitted and explicit:
+            return True
+    return False
+
+
+def _remote_branches(repo_root: Path) -> list[str]:
+    result = _run_git(
+        repo_root,
+        "for-each-ref",
+        "--format=%(refname:strip=3)",
+        "refs/remotes/origin/",
+    )
+    names = [
+        line.strip()
+        for line in result.stdout.decode("utf-8", "replace").splitlines()
+        if line.strip() and line.strip() != "HEAD"
+    ]
+    if result.returncode != 0 or not names:
+        raise GateError(
+            f"no branch of the repository is fetched into {repo_root} "
+            f"(refs/remotes/origin/* is empty: "
+            f"{result.stderr.decode('utf-8', 'replace').strip()[:200]}). Every "
+            "branch that runs workflows must be judged, and a checkout that "
+            "holds one tree can judge only that one. Fetch every head first "
+            "(git fetch origin '+refs/heads/*:refs/remotes/origin/*'). "
+            "THE GATE DID NOT RUN."
+        )
+    return sorted(names)
+
+
+def _default_branch(repo_root: Path) -> str:
+    result = _run_git(repo_root, "ls-remote", "--symref", "origin", "HEAD")
+    for line in result.stdout.decode("utf-8", "replace").splitlines():
+        match = re.match(r"^ref:\s+refs/heads/(\S+)\s+HEAD$", line.strip())
+        if match:
+            return match.group(1)
+    raise GateError(
+        "could not read the repository's default branch from its origin "
+        f"({result.stderr.decode('utf-8', 'replace').strip()[:200]}). The "
+        "default branch always runs workflows, so a gate that cannot name it "
+        "cannot claim to have judged it. THE GATE DID NOT RUN."
+    )
+
+
+def _workflow_texts(repo_root: Path, branch: str) -> dict[str, str] | None:
+    """{file name: YAML text} of a branch's `.github/workflows`, or None."""
+    ref = f"refs/remotes/origin/{branch}"
+    result = _run_git(
+        repo_root, "archive", "--format=tar", ref, "--", ".github/workflows"
+    )
+    if result.returncode != 0:
+        listing = _run_git(repo_root, "ls-tree", "--name-only", ref, ".github/")
+        if listing.returncode == 0 and b"workflows" not in listing.stdout:
+            return None
+        raise GateError(
+            f"could not read .github/workflows at {ref} "
+            f"({result.stderr.decode('utf-8', 'replace').strip()[:200]}). A "
+            "branch whose workflows cannot be read has not been judged. "
+            "THE GATE DID NOT RUN."
+        )
+    texts: dict[str, str] = {}
+    with tarfile.open(fileobj=BytesIO(result.stdout)) as archive:
+        for member in archive.getmembers():
+            name = member.name
+            if not member.isfile() or "/" in name.removeprefix(".github/workflows/"):
+                continue
+            if not name.endswith((".yml", ".yaml")):
+                continue
+            handle = archive.extractfile(member)
+            if handle is not None:
+                texts[name.removeprefix(".github/workflows/")] = handle.read().decode(
+                    "utf-8"
+                )
+    return texts
+
+
+def workflow_branches(repo_root: Path, event_branch: str) -> list[str]:
+    """Every branch that runs workflows, except the one checked out.
+
+    A branch runs workflows when it is the default branch, `main` or `dev`, or
+    when an explicit `branches:` filter on the default, `main` or `dev` tree
+    names it (`hotfix/**` names every `hotfix/` branch). The event's own branch
+    is left out because the checkout supersedes its old tip: a pull request
+    that repairs a branch must be able to pass while the tip is still broken.
+    """
+    remote = _remote_branches(repo_root)
+    default = _default_branch(repo_root)
+    anchors = [
+        name for name in dict.fromkeys([default, *ALWAYS_JUDGED]) if name in remote
+    ]
+    documents: list[dict[str, Any]] = []
+    for anchor in anchors:
+        for name, text in (_workflow_texts(repo_root, anchor) or {}).items():
+            try:
+                document = yaml.safe_load(text)
+            except yaml.YAMLError as error:
+                raise GateError(
+                    f"{anchor}:{name} is not parseable YAML ({error}), so the "
+                    "branches its filters name cannot be read. "
+                    "THE GATE DID NOT RUN."
+                ) from error
+            if isinstance(document, dict):
+                documents.append(document)
+    named = [
+        branch
+        for branch in remote
+        if branch in anchors
+        or any(_named_by_filters(document, branch) for document in documents)
+    ]
+    return [branch for branch in named if branch != event_branch]
+
+
+def scan_every_workflow_branch(
+    repo_root: Path,
+    slug: str,
+    variables: Variables,
+    event_branch: str,
+    called_fixture: dict[str, str] | None,
+    notes: list[str],
+    latent: list[str],
+    matrix: list[str],
+    refs: RefNames,
+    judged: list[str],
+) -> list[Finding]:
+    """Judge the workflow tree of every OTHER branch that runs workflows.
+
+    Each tree is judged exactly as the checkout is -- same variable scopes,
+    same event matrix, same reusable resolution -- and each finding names its
+    branch as `<branch>:<workflow>`.
+    """
+    findings: list[Finding] = []
+    for branch in workflow_branches(repo_root, event_branch):
+        texts = _workflow_texts(repo_root, branch)
+        sha = (
+            _run_git(repo_root, "rev-parse", f"refs/remotes/origin/{branch}")
+            .stdout.decode("utf-8", "replace")
+            .strip()[:12]
+        )
+        if not texts:
+            judged.append(f"branch {branch} ({sha}): no workflows, nothing runs")
+            continue
+        with tempfile.TemporaryDirectory(prefix="placement-branch-") as scratch:
+            root = Path(scratch)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            for name, text in texts.items():
+                (workflows / name).write_text(text, encoding="utf-8")
+            branch_findings = scan(
+                root,
+                slug,
+                variables,
+                CalledWorkflows(root, fixture=called_fixture),
+                notes,
+                latent,
+                matrix,
+                refs,
+            )
+        judged.append(
+            f"branch {branch} ({sha}): {len(texts)} workflow(s), "
+            f"{len(branch_findings)} hosted placement(s)"
+        )
+        findings.extend(
+            replace(finding, workflow=f"{branch}:{finding.workflow}")
+            for finding in branch_findings
+        )
+    return findings
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".", type=Path)
@@ -1624,6 +1884,26 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "a JSON array of branch names, used INSTEAD of the live branch "
             "list. For tests and local runs only; CI never passes it."
+        ),
+    )
+    parser.add_argument(
+        "--every-workflow-branch",
+        action="store_true",
+        help=(
+            "also judge the workflow tree of every OTHER branch that runs "
+            "workflows (the default branch, main, dev, and every branch an "
+            "explicit trigger filter names), read from refs/remotes/origin/*. "
+            "A branch the caller file never reached is otherwise never judged "
+            "(OMN-18431). The reusable workflow always passes it."
+        ),
+    )
+    parser.add_argument(
+        "--event-branch",
+        default="",
+        help=(
+            "the branch whose tree is checked out (the pull request's base, or "
+            "the pushed branch). Its remote tip is superseded by the checkout "
+            "and is not judged a second time."
         ),
     )
     parser.add_argument(
@@ -1728,6 +2008,28 @@ def main(argv: list[str] | None = None) -> int:
             matrix,
             refs,
         )
+        judged: list[str] = []
+        if args.every_workflow_branch:
+            findings.extend(
+                scan_every_workflow_branch(
+                    Path(args.repo_root),
+                    args.repo,
+                    variables,
+                    args.event_branch,
+                    (
+                        json.loads(
+                            Path(args.called_workflows_json).read_text(encoding="utf-8")
+                        )
+                        if args.called_workflows_json
+                        else None
+                    ),
+                    notes,
+                    latent,
+                    matrix,
+                    refs,
+                    judged,
+                )
+            )
     except GateError as error:
         print(f"::error::{error}", file=sys.stderr)
         return 2
@@ -1739,6 +2041,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.report_event_matrix:
         for line in matrix:
             print(line)
+
+    # Which branches were judged besides the checkout, on every run: a
+    # verdict over "every branch" is only re-derivable if it names them.
+    for line in judged:
+        print(f"judged: {line}")
 
     # Printed on EVERY run, pass or fail. A latent cell is the state the
     # OMN-18616 defect sat in for months before a trigger was added -- visible

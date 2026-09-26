@@ -1,0 +1,53 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "05795d81-8652-54a7-8f9d-a2236e250a24",
+      "field": "prompt",
+      "length": 54,
+      "sha256": "f3594d99da397432796470e5f39b1d625d0473f33fe79c9a2a71d16076a33bb6"
+    },
+    {
+      "content_record_id": "d6a5753d-6759-5737-af9f-70834cd1fe08",
+      "field": "session_title",
+      "length": 21,
+      "sha256": "c932fb466a69c9a72b5abf9b5a947d6ce3f05696ae6d8187c7b0ba8b425372ed"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:05Z",
+  "event_id": "a1d1bef2-e9e7-5421-8ed2-39b1f3d19162",
+  "hook_event_name": "UserPromptSubmit",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt_length": 65,
+    "prompt_ref": {
+      "content_record_id": "05795d81-8652-54a7-8f9d-a2236e250a24",
+      "field": "prompt",
+      "length": 54,
+      "sha256": "f3594d99da397432796470e5f39b1d625d0473f33fe79c9a2a71d16076a33bb6"
+    },
+    "session_title_ref": {
+      "content_record_id": "d6a5753d-6759-5737-af9f-70834cd1fe08",
+      "field": "session_title",
+      "length": 21,
+      "sha256": "c932fb466a69c9a72b5abf9b5a947d6ce3f05696ae6d8187c7b0ba8b425372ed"
+    },
+    "source": "user"
+  },
+  "schema_version": "1.0.0"
+}

@@ -435,6 +435,10 @@ if [ "$HAS_JQ" -eq 1 ]; then
   PR_CACHE="${ONEX_STATUSLINE_PR_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/omniclaude/statusline-pr-counts.json}"
   PR_REPOS="core:omnibase_core infra:omnibase_infra spi:omnibase_spi claude:omniclaude node:omninode_infra dash:omnidash intel:omniintelligence mem:omnimemory web:omniweb cc:onex_change_control market:omnimarket"
   PR_ERR_SENTINEL="err"
+  # OMN-19479: 900 s, not 300 s. The segment is a glance count, and each
+  # refresh is about 22 gh calls on the operator's shared GitHub quota.
+  PR_TTL="${ONEX_STATUSLINE_PR_TTL:-900}"
+  PR_LOCK_STALE=120
   PR_FRESH=0
   if [ -f "$PR_CACHE" ]; then
     # GNU `stat -f` means "filesystem status", not "format", so on Linux the old
@@ -446,11 +450,33 @@ if [ "$HAS_JQ" -eq 1 ]; then
     PR_MTIME=$(stat -c %Y "$PR_CACHE" 2>/dev/null || stat -f %m "$PR_CACHE" 2>/dev/null || echo 0)
     case "$PR_MTIME" in ""|*[!0-9]*) PR_MTIME=0 ;; esac
     PR_AGE=$((NOW - PR_MTIME))
-    [ "$PR_AGE" -le 300 ] && PR_FRESH=1
+    [ "$PR_AGE" -le "$PR_TTL" ] && PR_FRESH=1
   fi
   if [ "$PR_FRESH" -eq 0 ] && command -v gh >/dev/null 2>&1; then
     (
       mkdir -p "$(dirname "$PR_CACHE")" 2>/dev/null
+      # OMN-19479: one refresher per host. Every session renders this line and
+      # the cache is shared, so without a lock each session that saw it stale
+      # ran its own 11-repo refresh (about 22 gh calls) at the same moment.
+      # mkdir is atomic on every filesystem this runs on and needs no flock(1),
+      # which macOS lacks. A lock older than PR_LOCK_STALE seconds belongs to a
+      # refresher that died and is broken. After taking the lock, freshness is
+      # checked again, so a session that raced the previous refresher's release
+      # does not refresh a cache that was just written.
+      pr_lock="${PR_CACHE}.lock"
+      if ! mkdir "$pr_lock" 2>/dev/null; then
+        lock_mtime=$(stat -c %Y "$pr_lock" 2>/dev/null || stat -f %m "$pr_lock" 2>/dev/null || echo 0)
+        case "$lock_mtime" in ""|*[!0-9]*) lock_mtime=0 ;; esac
+        [ $(( $(date +%s) - lock_mtime )) -gt "$PR_LOCK_STALE" ] || exit 0
+        rmdir "$pr_lock" 2>/dev/null
+        mkdir "$pr_lock" 2>/dev/null || exit 0
+      fi
+      trap 'rmdir "$pr_lock" 2>/dev/null' EXIT
+      if [ -f "$PR_CACHE" ]; then
+        re_mtime=$(stat -c %Y "$PR_CACHE" 2>/dev/null || stat -f %m "$PR_CACHE" 2>/dev/null || echo 0)
+        case "$re_mtime" in ""|*[!0-9]*) re_mtime=0 ;; esac
+        [ $(( $(date +%s) - re_mtime )) -le "$PR_TTL" ] && exit 0
+      fi
       counts=""; failed=""
       for pair in $PR_REPOS; do
         short="${pair%%:*}"; repo="${pair##*:}"

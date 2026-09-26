@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "db3d1e17-5bd1-5f39-a0e0-34bcb028187a",
+    "event_id": "92ff40ac-a540-5e3f-a41b-fa5bb5c1bc38",
+    "field": "custom_instructions",
+    "hook_event_name": "PreCompact",
+    "length": 31,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "830b8f95a58ca23f1fc6a03c7923128cb6d672f4d1544c94b02e5ea633dc9fd5",
+    "value": "private compaction instructions"
+  }
+]

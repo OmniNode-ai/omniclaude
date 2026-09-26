@@ -1,0 +1,16 @@
+{
+  "command_args": "private command arguments",
+  "command_name": "review",
+  "command_source": "project",
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "expansion_type": "slash_command",
+  "hook_event_name": "UserPromptExpansion",
+  "permission_mode": "default",
+  "prompt": "private expanded prompt",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

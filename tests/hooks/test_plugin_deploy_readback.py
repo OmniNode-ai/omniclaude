@@ -39,6 +39,9 @@ import subprocess
 import sys
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 _LIB_DIR = (
     pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
@@ -56,6 +59,7 @@ from plugin_deploy_readback import (  # noqa: E402
     read_hooks_config,
     read_registry_entries,
     render_text,
+    resolve_enabled_onex_plugin_id,
     resolve_load_path,
 )
 
@@ -79,8 +83,11 @@ def _git(cwd: pathlib.Path, *args: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        # Scrub first, then add the overrides: the scrub also strips every
+        # GIT_CONFIG* key, and this fixture needs GIT_CONFIG_GLOBAL/SYSTEM
+        # pointed at devnull so the operator's own git config cannot leak in.
         env={
-            **os.environ,
+            **scrub_git_location_env(),
             "GIT_AUTHOR_NAME": "readback-test",
             "GIT_AUTHOR_EMAIL": "readback@test.invalid",
             "GIT_COMMITTER_NAME": "readback-test",
@@ -178,8 +185,145 @@ def dead_cache_workstation(tmp_path: pathlib.Path) -> dict[str, pathlib.Path]:
     }
 
 
+def _write_settings(path: pathlib.Path, enabled: dict[str, bool]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"enabledPlugins": enabled}),
+        encoding="utf-8",
+    )
+
+
 def _registered_script_names(config) -> set[str]:
     return {os.path.basename(r.command) for r in config.registrations}
+
+
+# ---------------------------------------------------------------------------
+# Enabled onex plugin resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_enabled_onex_plugin_id_picks_the_single_enabled_onex_plugin(
+    tmp_path: pathlib.Path,
+) -> None:
+    claude_home = tmp_path / "claude_home"
+    _write_settings(
+        claude_home / "settings.json",
+        {
+            "onex@omninode-tools": False,
+            "onex@omninode-tools-dev": True,
+            "code-review@claude-plugins-official": True,
+        },
+    )
+
+    plugin_id, detail = resolve_enabled_onex_plugin_id(claude_home)
+
+    assert plugin_id == "onex@omninode-tools-dev"
+    assert "onex@omninode-tools-dev" in detail
+
+
+def test_resolve_enabled_onex_plugin_id_none_enabled(
+    tmp_path: pathlib.Path,
+) -> None:
+    claude_home = tmp_path / "claude_home"
+    _write_settings(
+        claude_home / "settings.json",
+        {"onex@omninode-tools": False},
+    )
+
+    plugin_id, detail = resolve_enabled_onex_plugin_id(claude_home)
+
+    assert plugin_id is None
+    assert "no onex plugin id is enabled" in detail
+
+
+def test_resolve_enabled_onex_plugin_id_multiple_enabled(
+    tmp_path: pathlib.Path,
+) -> None:
+    claude_home = tmp_path / "claude_home"
+    enabled = {
+        "onex@omninode-tools": True,
+        "onex@omninode-tools-dev": True,
+    }
+    _write_settings(claude_home / "settings.json", enabled)
+
+    plugin_id, detail = resolve_enabled_onex_plugin_id(claude_home)
+
+    assert plugin_id is None
+    assert all(candidate in detail for candidate in enabled)
+
+
+def test_resolve_enabled_onex_plugin_id_project_scope_overrides_user(
+    tmp_path: pathlib.Path,
+) -> None:
+    claude_home = tmp_path / "claude_home"
+    project_dir = tmp_path / "project"
+    _write_settings(
+        claude_home / "settings.json",
+        {"onex@a": True},
+    )
+    _write_settings(
+        project_dir / ".claude" / "settings.json",
+        {"onex@a": False, "onex@b": True},
+    )
+
+    plugin_id, _ = resolve_enabled_onex_plugin_id(
+        claude_home,
+        project_dir=project_dir,
+    )
+
+    assert plugin_id == "onex@b"
+
+
+def test_resolve_enabled_onex_plugin_id_project_local_overrides_project(
+    tmp_path: pathlib.Path,
+) -> None:
+    claude_home = tmp_path / "claude_home"
+    project_dir = tmp_path / "project"
+    _write_settings(
+        project_dir / ".claude" / "settings.json",
+        {"onex@b": True},
+    )
+    _write_settings(
+        project_dir / ".claude" / "settings.local.json",
+        {"onex@b": False, "onex@c": True},
+    )
+
+    plugin_id, _ = resolve_enabled_onex_plugin_id(
+        claude_home,
+        project_dir=project_dir,
+    )
+
+    assert plugin_id == "onex@c"
+
+
+def test_resolve_enabled_onex_plugin_id_missing_settings_files_report_none_enabled(
+    tmp_path: pathlib.Path,
+) -> None:
+    plugin_id, detail = resolve_enabled_onex_plugin_id(
+        tmp_path / "claude_home",
+        project_dir=tmp_path / "project",
+    )
+
+    assert plugin_id is None
+    assert "no onex plugin id is enabled" in detail
+
+
+def test_resolve_enabled_onex_plugin_id_ignores_non_onex_plugin_names(
+    tmp_path: pathlib.Path,
+) -> None:
+    claude_home = tmp_path / "claude_home"
+    _write_settings(
+        claude_home / "settings.json",
+        {
+            "onex-overlays@omninode-internal": True,
+            "omni@omninode-internal": True,
+        },
+    )
+
+    plugin_id, detail = resolve_enabled_onex_plugin_id(claude_home)
+
+    assert plugin_id is None
+    assert "no onex plugin id is enabled" in detail
 
 
 # ---------------------------------------------------------------------------
@@ -551,7 +695,16 @@ def test_cli_json_output_and_exit_codes(
 ) -> None:
     home = str(dead_cache_workstation["claude_home"])
 
-    rc = main(["--claude-home", home, "--no-fetch", "--json"])
+    rc = main(
+        [
+            "--claude-home",
+            home,
+            "--no-fetch",
+            "--json",
+            "--plugin-id",
+            DEFAULT_PLUGIN_ID,
+        ]
+    )
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0, "mismatch alone is WARN-level: reported loudly, not fatal"
     assert payload["resolved_load_path"] == str(dead_cache_workstation["live_root"])
@@ -565,15 +718,106 @@ def test_cli_json_output_and_exit_codes(
         for t in payload["tripwires"]
     )
 
-    rc_strict = main(["--claude-home", home, "--no-fetch", "--strict", "--json"])
+    rc_strict = main(
+        [
+            "--claude-home",
+            home,
+            "--no-fetch",
+            "--strict",
+            "--json",
+            "--plugin-id",
+            DEFAULT_PLUGIN_ID,
+        ]
+    )
     capsys.readouterr()
     assert rc_strict == 3
 
     rc_missing = main(
-        ["--claude-home", str(pathlib.Path(home) / "nope"), "--no-fetch", "--json"]
+        [
+            "--claude-home",
+            str(pathlib.Path(home) / "nope"),
+            "--no-fetch",
+            "--json",
+            "--plugin-id",
+            DEFAULT_PLUGIN_ID,
+        ]
     )
     capsys.readouterr()
     assert rc_missing == 1
+
+
+def test_cli_default_plugin_id_resolves_from_enabled_plugins(
+    dead_cache_workstation: dict[str, pathlib.Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home = dead_cache_workstation["claude_home"]
+    _write_settings(
+        home / "settings.json",
+        {"onex@omninode-tools": True},
+    )
+
+    rc = main(["--claude-home", str(home), "--no-fetch", "--json"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["plugin_id"] == "onex@omninode-tools"
+    assert payload["resolved_load_path"] == str(dead_cache_workstation["live_root"])
+
+
+def test_cli_no_enabled_onex_plugin_exits_nonzero_without_guessing(
+    dead_cache_workstation: dict[str, pathlib.Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home = dead_cache_workstation["claude_home"]
+    _write_settings(home / "settings.json", {})
+
+    rc = main(["--claude-home", str(home), "--no-fetch", "--json"])
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert captured.out == ""
+    assert "no onex plugin id is enabled" in captured.err
+
+
+def test_cli_multiple_enabled_onex_plugins_exits_nonzero_and_names_both(
+    dead_cache_workstation: dict[str, pathlib.Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home = dead_cache_workstation["claude_home"]
+    enabled = {
+        "onex@omninode-tools": True,
+        "onex@omninode-tools-dev": True,
+    }
+    _write_settings(home / "settings.json", enabled)
+
+    rc = main(["--claude-home", str(home), "--no-fetch", "--json"])
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert all(candidate in captured.err for candidate in enabled)
+
+
+def test_cli_explicit_plugin_id_flag_bypasses_resolution(
+    dead_cache_workstation: dict[str, pathlib.Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home = dead_cache_workstation["claude_home"]
+    _write_settings(home / "settings.json", {})
+
+    rc = main(
+        [
+            "--claude-home",
+            str(home),
+            "--no-fetch",
+            "--json",
+            "--plugin-id",
+            DEFAULT_PLUGIN_ID,
+        ]
+    )
+    capsys.readouterr()
+
+    assert rc == 0
 
 
 def test_cli_text_render_names_both_paths_and_the_verdict(

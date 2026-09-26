@@ -1,0 +1,13 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "TeammateIdle",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "team_name": "team-fixture",
+  "teammate_name": "teammate-fixture",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

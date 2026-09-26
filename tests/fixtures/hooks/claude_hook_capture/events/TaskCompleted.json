@@ -1,0 +1,54 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "71bb0998-b094-5ce4-8fe1-c4034c5e8970",
+      "field": "task_subject",
+      "length": 20,
+      "sha256": "1d365ffc38cfb0673339a590b5644f4f5e99697bc5f7ed00966e3721284f63e1"
+    },
+    {
+      "content_record_id": "ecc00b34-94a3-5cbc-ab92-e7c8ad499b54",
+      "field": "task_description",
+      "length": 24,
+      "sha256": "ba52d9259a9165fbf1e8ae9c5c6985c8737bcd70bd62f588e05084428bea82a7"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:22Z",
+  "event_id": "f15f6bd5-d7fa-5e7f-8838-1d4e0021b767",
+  "hook_event_name": "TaskCompleted",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "hook_event_name": "TaskCompleted",
+    "task_description_ref": {
+      "content_record_id": "ecc00b34-94a3-5cbc-ab92-e7c8ad499b54",
+      "field": "task_description",
+      "length": 24,
+      "sha256": "ba52d9259a9165fbf1e8ae9c5c6985c8737bcd70bd62f588e05084428bea82a7"
+    },
+    "task_id": "task-fixture-1",
+    "task_subject_ref": {
+      "content_record_id": "71bb0998-b094-5ce4-8fe1-c4034c5e8970",
+      "field": "task_subject",
+      "length": 20,
+      "sha256": "1d365ffc38cfb0673339a590b5644f4f5e99697bc5f7ed00966e3721284f63e1"
+    },
+    "team_name": "team-fixture",
+    "teammate_name": "teammate-fixture"
+  },
+  "schema_version": "1.0.0"
+}
