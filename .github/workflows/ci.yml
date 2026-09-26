@@ -3935,6 +3935,8 @@ jobs:
     # counterpart.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OMNI_HOME: ${{ runner.temp }}/sibling-clones
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -3950,6 +3952,17 @@ jobs:
           save-cache: false
       - name: Install dependencies
         run: uv sync --frozen --group dev
+      - name: Provide the sibling clones the cross-repo hooks resolve through OMNI_HOME
+        run: |
+          set -euo pipefail
+          mkdir -p "$OMNI_HOME"
+          # OCC tracks main, as in Skill Contracts CI. omnibase_core tracks the
+          # uv.lock-pinned version tag so hook-bits-drift checks hook_bits.sh
+          # against the EnumHookBit version omniclaude actually runs.
+          git clone --quiet --depth 1 --filter=blob:none --sparse --branch main https://github.com/OmniNode-ai/onex_change_control.git "$OMNI_HOME/onex_change_control"
+          git -C "$OMNI_HOME/onex_change_control" sparse-checkout set scripts/validation
+          core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
+          git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
       - name: Cache pre-commit hook environments
         uses: actions/cache@v6
         with:
@@ -3957,12 +3970,12 @@ jobs:
           key: precommit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Pin the whole-tree backstop's own shape (OMN-19612)
         run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
-      # pre-commit is not a project dependency, so it is installed as a pinned
-      # tool layered over the synced project venv (the venv stays on PATH for
-      # the language: system hooks). Without the pin this step died with
-      # "Failed to spawn: pre-commit".
+      # pre-commit and detect-secrets are not project dependencies, so they are
+      # installed as pinned tools layered over the synced project venv (the venv
+      # stays on PATH for the language: system hooks). Without the pre-commit pin
+      # this step died with "Failed to spawn: pre-commit".
       - name: Run the whole-tree pre-commit suite
-        run: uv run --frozen --with 'pre-commit==4.6.2' pre-commit run --all-files --show-diff-on-failure
+        run: uv run --frozen --with 'pre-commit==4.6.2' --with 'detect-secrets==1.5.0' pre-commit run --all-files --show-diff-on-failure
 
   occ-companion-merged:
     name: OCC Companion Merged Gate (OMN-15214)

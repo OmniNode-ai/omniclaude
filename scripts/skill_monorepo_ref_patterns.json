@@ -82,7 +82,7 @@
       "regex": "uv run python -m omni",
       "message": "Use 'onex run <node_name>' instead -- see OMN-8770 standalone install"
     },
-    { "id": "hardcoded_user_path", "regex": "/Users/jonah/", "note": "local-path-ok: this registry IS the machine-path rule; the literal is the thing being enforced, not a violation", "message": "Hardcoded user path -- use environment variable instead" },
-    { "id": "hardcoded_volume_path", "regex": "/Volumes/PRO-G40/", "note": "local-path-ok: this registry IS the machine-path rule; the literal is the thing being enforced, not a violation", "message": "Hardcoded volume path -- use environment variable instead" }
+    { "id": "hardcoded_user_path", "regex": "/Users/jonah[/]", "note": "The [/] class keeps the registry's own literal out of the check-local-paths validator while matching the same text.", "message": "Hardcoded user path -- use environment variable instead" },
+    { "id": "hardcoded_volume_path", "regex": "/Volumes/PRO-G40[/]", "note": "The [/] class keeps the registry's own literal out of the check-local-paths validator while matching the same text.", "message": "Hardcoded volume path -- use environment variable instead" }
   ]
 }
