@@ -929,13 +929,69 @@ def test_the_lab_class_gate_refuses_an_unknown_class(
 def test_the_lab_vocabulary_defaults_beside_the_vocabulary(
     tmp_path: Path, vocab: Path
 ) -> None:
-    """With no --lab-vocabulary, the gate reads the file beside the vocabulary,
-    and refuses (exit 2) when there is none rather than skipping the class.
+    """With no --lab-vocabulary, the gate reads the file beside the vocabulary
+    and evaluates the lab-config class against it.
     """
-    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    root = _make_repo(tmp_path / "r", {"src/x.txt": f"L = {LAB_LANE}\n"})
     argv = ["--repo-root", str(root), "--vocabulary", str(vocab)]
-    assert gate.main(argv) == 2
     (vocab.parent / gate.LAB_VOCABULARY_BASENAME).write_text(
         LAB_VOCAB, encoding="utf-8"
     )
+    assert gate.main(argv) == 1
+
+
+def test_an_old_caller_with_no_lab_vocabulary_runs_every_other_class(
+    tmp_path: Path, vocab: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A caller pinned before OMN-19766 passes no --lab-vocabulary and has none
+    beside the vocabulary. The lab-config class is reported as NOT evaluated
+    and every other class still runs, so a real finding still fails the run.
+    Measured 2026-09-26: exit 2 here turned every such caller's required CI
+    Summary red (onex_change_control#11491, #11528).
+    """
+    root = _make_repo(tmp_path / "r", {"src/x.txt": f"L = {LAB_LANE}\n"})
+    argv = ["--repo-root", str(root), "--vocabulary", str(vocab)]
     assert gate.main(argv) == 0
+    captured = capsys.readouterr()
+    assert "lab-config class NOT evaluated" in captured.err
+    assert "NOT EVALUATED: lab-config" in captured.out
+    # Positive control: another class in the same run still fails it.
+    (root / "src" / "x.txt").write_text(f"contact {PERSON}\n", encoding="utf-8")
+    assert gate.main(argv) == 1
+
+
+def test_a_requested_lab_class_with_no_lab_vocabulary_is_refused(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    argv = ["--repo-root", str(root), "--vocabulary", str(vocab)]
+    assert gate.main([*argv, "--only-classes", "private-network,lab-config"]) == 2
+    assert gate.main([*argv, "--only-classes", "private-network"]) == 0
+
+
+def test_an_enforced_lab_class_with_no_lab_vocabulary_is_refused(
+    tmp_path: Path, vocab: Path
+) -> None:
+    config = MINIMAL_CONFIG.replace("mode: enforce", "mode: report") + (
+        "enforce_classes:\n  - lab-config\n"
+    )
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"}, config)
+    argv = ["--repo-root", str(root), "--vocabulary", str(vocab)]
+    assert gate.main(argv) == 2
+    with pytest.raises(gate.ConfigError, match="enforced"):
+        gate.run(root, vocab, "report", None, lab_vocab_path=None)
+
+
+def test_an_explicit_lab_vocabulary_that_is_absent_is_still_refused(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    argv = [
+        "--repo-root",
+        str(root),
+        "--vocabulary",
+        str(vocab),
+        "--lab-vocabulary",
+        str(tmp_path / "nope.yaml"),
+    ]
+    assert gate.main(argv) == 2
