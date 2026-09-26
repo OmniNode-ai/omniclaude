@@ -71,3 +71,43 @@ def test_public_repo_hygiene_caller_still_inherits_secrets() -> None:
     assert isinstance(caller, dict)
 
     assert caller["secrets"] == "inherit"
+
+
+def test_public_repo_hygiene_reusable_fetches_and_passes_the_lab_vocabulary() -> None:
+    """OMN-19766: the lab-config class reads a second private file.
+
+    It resolves its repository from an org variable (never named in public
+    source), fetches it with the same app token, and the gate is handed its
+    path; a missing file is a refusal before the gate runs.
+    """
+    text = REUSABLE.read_text(encoding="utf-8")
+    resolve = _step(
+        REUSABLE, "public-repo-hygiene", "Resolve the private lab vocabulary repo"
+    )
+    env = resolve["env"]
+    assert isinstance(env, dict)
+    assert env["FROM_VARS"] == "${{ vars.OMNI_HYGIENE_LAB_VOCAB_REPO }}"
+    assert "exit 1" in str(resolve["run"])
+
+    mint = _step(
+        REUSABLE, "public-repo-hygiene", "Mint token for the private vocabulary repo"
+    )
+    with_block = mint["with"]
+    assert isinstance(with_block, dict)
+    assert "steps.lab-vocab-repo.outputs.name" in str(with_block["repositories"])
+
+    fetch = _step(REUSABLE, "public-repo-hygiene", "Fetch the private lab vocabulary")
+    fetch_with = fetch["with"]
+    assert isinstance(fetch_with, dict)
+    assert fetch_with["path"] == ".public-repo-hygiene-lab-vocabulary"
+    assert "public_repo_hygiene_lab_vocabulary.yaml" in str(
+        fetch_with["sparse-checkout"]
+    )
+
+    gate_step = _step(
+        REUSABLE, "public-repo-hygiene", "Run the public-repo hygiene gate"
+    )
+    run = str(gate_step["run"])
+    assert '--lab-vocabulary "${LAB_VOCAB_PATH}"' in run
+    assert 'if [ ! -f "${LAB_VOCAB_PATH}" ]' in run
+    assert "OMNI_HYGIENE_LAB_VOCAB_REPO" in text

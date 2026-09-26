@@ -46,7 +46,10 @@
     repo's root. Suppressions resolve against a CODEOWNERS-reviewed registry
     with an expiry; a self-written annotation is not an approval. Five content
     classes accept no annotation at all. Requires OMNI_HOME to locate the
-    PRIVATE denylist vocabulary, and fails closed without it.
+    PRIVATE denylist vocabulary, and fails closed without it. The lab-config
+    class (OMN-19766) reads a second private file, the lab vocabulary: pass
+    --lab-vocabulary <path> in args, or place it beside the vocabulary under
+    the name public_repo_hygiene_lab_vocabulary.yaml; absent is exit 2.
     See scripts/public_repo_hygiene_gate.py for the full rules.
   language: script
   entry: scripts/public_repo_hygiene_gate.py --repo-root .
