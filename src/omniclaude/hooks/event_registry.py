@@ -542,6 +542,41 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # Tool Events
     # =========================================================================
+    # OMN-19551 (topic and contract owned by omnimarket, OMN-19550): full
+    # session content -- the complete prompt, tool input, tool result and
+    # assistant reply -- one item or one chunk per record, scrubbed by the
+    # capture-redaction contract's capture_scrubbed class before publish.
+    "content.captured": EventRegistration(
+        event_type="content.captured",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CONTENT_CAPTURED,
+                transform=redact_capture,
+                description="Contract-scrubbed full session content (OMN-19550)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "content_kind"],
+    ),
+    # OMN-19513 (topic and redaction policy owned by omnimarket's emit
+    # registry): the all-hooks capture. One lineage-carrying metadata event
+    # per Claude Code hook call, every hook type on one topic; content only
+    # by reference. Partitioned by session so a session's hooks stay ordered.
+    "hook.event": EventRegistration(
+        event_type="hook.event",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.HOOK_EVENT,
+                transform=redact_capture,
+                description=(
+                    "Lineage-carrying Claude Code hook event, all hook types "
+                    "(OMN-19513)"
+                ),
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "event_id", "hook_event_name", "lineage"],
+    ),
     "tool.executed": EventRegistration(
         event_type="tool.executed",
         fan_out=[

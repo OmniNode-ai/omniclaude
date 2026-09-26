@@ -12,10 +12,12 @@
 # session_end_bus_mirror.sh (OMN-16162 S0).
 #
 # Privacy invariant (CLAUDE.md "Kafka Topics & Event Schemas"): only
-# preview-safe data goes to onex.evt.* topics; full prompt text is NEVER
-# included here -- only a length count. Full-prompt capture (if ever
-# needed) belongs on the separately access-restricted
-# onex.cmd.omniintelligence.* surface, out of scope for this hook.
+# preview-safe data goes to onex.evt.* topics; the prompt-submitted record
+# built here carries only a length count, never the prompt text. Full-prompt
+# capture (OMN-19551) is a SEPARATE record: hook_content_capture.py, run after
+# the metadata append, puts the prompt on the access-restricted
+# onex.cmd.omniintelligence.* surface, scrubbed by the capture-redaction
+# contract.
 #
 # Fail-open per the OMN-13244 baseline's own reasoning: a dead bus, a
 # missing Python binary, or malformed stdin must never break or slow the
@@ -192,7 +194,42 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
             >>"$LOG_FILE" 2>&1
-    ) &
+        # OMN-19551: full-content capture, AFTER the metadata append above and
+        # in the same backgrounded subshell, so the content record reads the
+        # turn that append just stamped. The hook input goes on stdin, never on
+        # argv (a tool result can be megabytes). The module redacts through the
+        # capture-redaction contract before anything is journalled, and it
+        # journals nothing when the local drainer cannot publish the event
+        # type or OMNICLAUDE_CONTENT_CAPTURE is off.
+        _CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
+        if [[ -f "$_CONTENT_CAPTURE_PY" ]]; then
+            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+                --kind prompt \
+                --correlation-id "${SESSION_ID:-unknown}" \
+                --agent-id "$AGENT_ID" \
+                --transcript-path "$TRANSCRIPT_PATH" \
+                --session-id "$SESSION_ID" \
+                --cwd "$CWD" \
+                --actor "$HOOK_ACTOR_ARG" \
+                --turn-id "$TURN_ID" \
+                >>"$LOG_FILE" 2>&1
+        fi
+        # OMN-19513: the lineage-carrying hook.event for this prompt, also
+        # after the metadata append, so its turn id is the turn that append
+        # just opened. UserPromptSubmit is the one hook the all-hooks capture
+        # runs from here rather than from claude_hook_capture.sh: every other
+        # hook reads the current turn, and only this one would race the
+        # allocation.
+        _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"
+        if [[ -f "$_HOOK_CAPTURE_PY" ]]; then
+            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" \
+                --actor "$HOOK_ACTOR_ARG" \
+                >>"$LOG_FILE" 2>&1
+        fi
+    # The whole subshell's descriptors go to the log. With two commands in it,
+    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
+    # would hold the hook's caller until both finished (OMN-19551).
+    ) >>"$LOG_FILE" 2>&1 </dev/null &
     disown 2>/dev/null || true
 fi
 

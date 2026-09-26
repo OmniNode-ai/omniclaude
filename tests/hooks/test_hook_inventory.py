@@ -404,6 +404,8 @@ def test_deregistering_a_hook_reports_only_it_and_later_order_dependents(
         victim,
         "pre_tool_use_skill_started.sh",
         "pre_tool_use_actor_line_guard.sh",
+        # OMN-19513: the all-hooks capture observer is PreToolUse's last group.
+        "claude_hook_capture.sh",
     ]
 
 

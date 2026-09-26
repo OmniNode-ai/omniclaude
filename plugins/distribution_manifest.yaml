@@ -1895,6 +1895,22 @@ components:
   path: plugins/onex/hooks/scripts/session_end_bus_mirror.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook (OMN-16162). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); direct-dispatches a session-ended event to omnimarket's node_event_emit_effect, backgrounded and fail-open, registered in hooks.json alongside the other live SessionStart/SubagentStop/PreToolUse hooks.
+- id: hooks/scripts/stop_content_capture.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/stop_content_capture.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude Stop hook (OMN-19551). Journals the assistant reply of the turn that just ended as a content.captured record scrubbed by the capture-redaction contract; backgrounded, silent and fail-open, and journals nothing unless the local drainer lists the event type as publishable.
+- id: hooks/scripts/claude_hook_capture.sh
+  kind: hook
+  exposure: beta
+  owning_package: onex-automation-beta
+  surface_class: hook_script
+  path: plugins/onex/hooks/scripts/claude_hook_capture.sh
+  backing_nodes: []
+  rationale: behavior-changing Claude hook (OMN-19513, all-hooks capture). Registered under every hook event the claude_hook_capture contract covers; journals one lineage-carrying hook.event per call with content only by scrubbed reference; backgrounded, silent and fail-open, and journals nothing unless the local drainer lists the event type as publishable.
 - id: hooks/scripts/session_start_bus_mirror.sh
   kind: hook
   exposure: beta

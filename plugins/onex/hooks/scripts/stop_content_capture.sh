@@ -2,46 +2,23 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# SessionEnd Bus-Mirror Hook (OMN-16162)
+# Stop content-capture hook (OMN-19551).
 #
-# Direct-dispatches node_event_emit_effect (omnimarket) with a
-# session-ended event, backgrounded so this hook never waits on a Kafka
-# round-trip -- the emit node's own file-spool durability owns the actual
-# publish; this hook's job is a fast, best-effort hand-off.
+# Journals the assistant reply of the turn that just ended as a
+# content.captured record, through the capture-redaction contract, for the
+# full-content capture the operator ruled on 2026-09-25 (ledger RULING row
+# 2026-09-25T11:23:30Z). The reply is read from the harness's own
+# last_assistant_message when it sends one, else from the tail of
+# transcript_path, polled briefly because Stop can fire before the transcript
+# is flushed. All of that happens in the backgrounded Python process, so this
+# hook returns at once.
 #
-# Fail-open per the OMN-13244 baseline's own reasoning: a dead bus, a
-# missing Python binary, or malformed stdin must never break or slow the
-# user's session. This hook exits 0 unconditionally.
-#
-# Deliberately minimal and separate from session-end.sh (which remains
-# disabled per the OMN-13244 baseline): this hook does not run worktree
-# cleanup, ticket detection, or duplicate session-end.sh's other
-# responsibilities.
+# An observer: it never blocks the stop, never prints on stdout (a Stop hook
+# that prints becomes a message the model answers), and exits 0 on every path.
+# The boilerplate below is session_end_bus_mirror.sh's, unchanged apart from
+# the log name and the gate name.
 
 set -uo pipefail
-
-# OMN-19537: return before the preamble, not after it. A headless session
-# gives its SessionEnd hooks about 1.5 s, then cancels a hook that is still
-# running and kills its process group (measured on Claude Code 2.1.283,
-# 2026-09-26). This hook's preamble -- the repo guard, the .env and common.sh
-# sourcing, the lane gate -- takes 0.5-0.8 s on an idle Mac and longer under
-# the load a scheduled tick runs in, so on a busy host it was cancelled before
-# it reached the backgrounded append and the session-ended event was lost with
-# only a "Hook cancelled" line in the run log. A disowned child of a hook that
-# has already returned survives the session's exit, so the hook now reads
-# stdin, hands it to a detached copy of itself and returns at once. The copy
-# runs every gate unchanged.
-if [[ -z "${_ONEX_SESSION_END_DETACHED:-}" ]]; then
-    _ONEX_DETACH_INPUT="$(cat)"
-    (
-        printf '%s' "$_ONEX_DETACH_INPUT" \
-            | _ONEX_SESSION_END_DETACHED=1 "${BASH:-bash}" "${BASH_SOURCE[0]}" "$@"
-    # The copy's descriptors are detached from the caller: an inherited
-    # stdout or stderr pipe would hold the harness until the copy finished.
-    ) >/dev/null 2>&1 </dev/null &
-    disown 2>/dev/null || true
-    exit 0
-fi
 
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 
@@ -89,7 +66,7 @@ fi
 
 # shellcheck source=onex-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
-LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-session-end-bus-mirror.log"
+LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-stop-content-capture.log"
 # OMN-19519: this log is appended on every event it mirrors and had no
 # rotation; the helper from onex-paths.sh bounds it (sampled, never fails).
 if declare -F onex_maybe_rotate_log >/dev/null 2>&1; then
@@ -137,71 +114,45 @@ source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || {
 # scripts/validation/validate_hook_edge_lane.py, not left to convention.
 # shellcheck source=hook_edge_lane.sh
 source "$(dirname "${BASH_SOURCE[0]}")/hook_edge_lane.sh" 2>/dev/null || true
-onex_hook_gate SESSION_END || {
+onex_hook_gate STOP_CONTENT_CAPTURE || {
     cat >/dev/null 2>/dev/null || true
     exit 0
 }
 
+
 INPUT="$(cat)"
 
 if ! command -v jq >/dev/null 2>&1; then
-    # No jq: cannot safely build a JSON payload. Fail-open, no emission.
     exit 0
 fi
 if ! echo "$INPUT" | jq -e . >/dev/null 2>&1; then
-    INPUT='{}'
+    exit 0
 fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
-# OMN-18609: the lane a hook event belongs to is resolved from the harness's
-# own spawn sidecar, keyed by agent id and located from the session transcript.
-# A dispatched lane's cwd is the SESSION's directory, not its worktree, so the
-# worktree registry alone resolved every record on this fleet to "unresolved".
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // .agentId // ""' 2>/dev/null) || AGENT_ID=""
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // .transcriptPath // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
-SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null) || SESSION_REASON="other"
-# OMN-18704: Codex supplies a per-turn identifier; Claude Code does not.
-# Read it host-agnostically -- absent yields the empty string, which the
-# appender records as an explicit null rather than omitting the field.
+CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
+[[ -z "$CWD" ]] && CWD="$(pwd)"
 TURN_ID=$(echo "$INPUT" | jq -r '.turn_id // ""' 2>/dev/null) || TURN_ID=""
-case "$SESSION_REASON" in
-    clear|logout|prompt_input_exit|other) ;;
-    *) SESSION_REASON="other" ;;
-esac
 
-PAYLOAD=$(jq -nc \
-    --arg session_id "$SESSION_ID" \
-    --arg reason "$SESSION_REASON" \
-    '{
-        session_id: $session_id,
-        reason: $reason
-    }' 2>/dev/null) || PAYLOAD='{}'
-[[ -z "$PAYLOAD" || "$PAYLOAD" == "null" ]] && PAYLOAD='{}'
-
-# OMN-17224: fast-path append. This used to invoke
-# node_event_emit_effect_dispatch.py, which imported the omnimarket
-# handler stack and published to Kafka inline -- 31.08s of a 31.65s
-# handle() was a lazily-imported omnibase_infra chain building ~2,497
-# Pydantic classes. One such process per tool call produced 14
-# concurrent emitters at ~270% CPU on the operator Mac. The hook now
-# only appends to the local journal (stdlib only, sub-100ms); the
-# singleton drainer (launchd ai.omninode.hook-emit-drainer) pays that
-# import once and publishes the backlog.
-_EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
-if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
+_CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
+if [[ -n "${PYTHON_CMD:-}" && -f "$_CONTENT_CAPTURE_PY" ]]; then
     (
-        "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
-            --event-type "session.ended" \
-            --payload "$PAYLOAD" \
+        printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+            --kind stop \
             --correlation-id "${SESSION_ID:-unknown}" \
             --agent-id "$AGENT_ID" \
             --transcript-path "$TRANSCRIPT_PATH" \
             --session-id "$SESSION_ID" \
-            --cwd "${CWD:-$(pwd)}" \
+            --cwd "$CWD" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
             >>"$LOG_FILE" 2>&1
-    ) &
+    # The whole subshell's descriptors go to the log. With two commands in it,
+    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
+    # would hold the hook's caller until both finished (OMN-19551).
+    ) >>"$LOG_FILE" 2>&1 </dev/null &
     disown 2>/dev/null || true
 fi
 

@@ -369,10 +369,22 @@ def test_a_wrapper_that_execs_a_refusing_guard_is_reported(tree: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_hooks_json_carries_no_stop_key_today() -> None:
-    """The premise the next test rests on, asserted rather than assumed."""
+def test_hooks_json_stop_key_holds_only_the_content_capture_observer() -> None:
+    """The premise the next test rests on, asserted rather than assumed.
+
+    OMN-19551 added the first Stop group, holding only the content-capture
+    observer. The triaged Stop-shaped gates are still unregistered, so the
+    finding below is exercised by removing the key from a copy of the tree.
+    """
     data = json.loads((_REPO_ROOT / _HOOKS_JSON_REL).read_text(encoding="utf-8"))
-    assert "Stop" not in data["hooks"]
+    commands = [
+        hook["command"] for group in data["hooks"]["Stop"] for hook in group["hooks"]
+    ]
+    # OMN-19513 adds the all-hooks capture observer beside it; still no gate.
+    assert [c.rsplit("/", 1)[-1] for c in commands] == [
+        "stop_content_capture.sh",
+        "claude_hook_capture.sh",
+    ]
     on_disk = [
         path.name
         for path in sorted((_REPO_ROOT / _SCRIPTS_REL).iterdir())
@@ -391,7 +403,16 @@ def test_a_stop_shaped_expected_hook_is_reported_while_no_stop_key_exists(
     the missing key, or the triage writes a row under a key the harness never
     reads and records the hook as restored.
     """
+    # The live tree has a Stop key since OMN-19551; this copy drops it, and the
+    # one expected hook that lives under it, to recreate the absent-key case.
+    hooks_json = tree / _HOOKS_JSON_REL
+    payload = json.loads(hooks_json.read_text(encoding="utf-8"))
+    payload["hooks"].pop("Stop")
+    hooks_json.write_text(json.dumps(payload), encoding="utf-8")
     data = _read_inventory(tree)
+    data["expected_hooks"] = [
+        row for row in data["expected_hooks"] if row["event"] != "Stop"
+    ]
     data["disabled_hooks"] = [
         row for row in data["disabled_hooks"] if row["script"] != "stop_quality_gate.sh"
     ]

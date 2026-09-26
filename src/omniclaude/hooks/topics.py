@@ -41,6 +41,11 @@ class TopicBase(StrEnum):
     SESSION_ENDED = "onex.evt.omniclaude.session-ended.v1"
     PROMPT_SUBMITTED = "onex.evt.omniclaude.prompt-submitted.v1"
     TOOL_EXECUTED = "onex.evt.omniclaude.tool-executed.v1"
+    # OMN-19513: all-hooks capture. One lineage-carrying metadata event per
+    # Claude Code hook call, every hook type on one topic (contract
+    # claude_hook_capture). Content only by reference; the topic and its
+    # redaction policy are owned by omnimarket's emit registry.
+    HOOK_EVENT = "onex.evt.omniclaude.hook-event.v1"
     AGENT_ACTION = "onex.evt.omniclaude.agent-action.v1"
     LEARNING_PATTERN = "onex.evt.omniclaude.learning-pattern.v1"
     WORK_OBLIGATION_ABANDONED = "onex.evt.omniclaude.work-obligation-abandoned.v1"
@@ -63,6 +68,12 @@ class TopicBase(StrEnum):
     CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
     # Tool content topic for pattern learning (OMN-1702)
     TOOL_CONTENT = "onex.cmd.omniintelligence.tool-content.v1"
+    # OMN-19551: full session content (prompt, tool input, tool result,
+    # assistant reply), scrubbed by the capture-redaction contract. A cmd
+    # topic because full prompts and file contents go only on the restricted
+    # onex.cmd.omniintelligence.* family; local, not on the cloud relay
+    # allowlist.
+    CONTENT_CAPTURED = "onex.cmd.omniintelligence.content-captured.v1"
     # Session outcome: CMD target for intelligence feedback loop (OMN-1735)
     SESSION_OUTCOME_CMD = "onex.cmd.omniintelligence.session-outcome.v1"
     # Session outcome: EVT target for dashboards / monitoring

@@ -95,17 +95,23 @@ class ModelDrainerStatus:
     last_publish_at: float | None
     published_total: int
     pid: int
+    #: OMN-19551: the event types the drainer's LOADED emit registry declares,
+    #: i.e. what this drainer can actually publish. ``None`` means the drainer
+    #: did not say (an older drainer, or a registry it could not read), which a
+    #: producer must read as "not publishable": a record the drainer cannot
+    #: resolve blocks the journal head until it is dead-lettered (OMN-19074).
+    publishable_event_types: tuple[str, ...] | None = None
 
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "last_cycle_at": self.last_cycle_at,
-                "last_publish_at": self.last_publish_at,
-                "published_total": self.published_total,
-                "pid": self.pid,
-            },
-            sort_keys=True,
-        )
+        body: dict[str, object] = {
+            "last_cycle_at": self.last_cycle_at,
+            "last_publish_at": self.last_publish_at,
+            "published_total": self.published_total,
+            "pid": self.pid,
+        }
+        if self.publishable_event_types is not None:
+            body["publishable_event_types"] = list(self.publishable_event_types)
+        return json.dumps(body, sort_keys=True)
 
 
 @dataclass(frozen=True)
@@ -198,11 +204,18 @@ def read_status(path: Path) -> ModelDrainerStatus | None:
         last_publish_at = None if last_publish_raw is None else float(last_publish_raw)
     except (TypeError, ValueError):
         return None
+    types_raw = raw.get("publishable_event_types")
+    publishable = (
+        tuple(t for t in types_raw if isinstance(t, str))
+        if isinstance(types_raw, list)
+        else None
+    )
     return ModelDrainerStatus(
         last_cycle_at=last_cycle_at,
         last_publish_at=last_publish_at,
         published_total=published_total,
         pid=pid,
+        publishable_event_types=publishable,
     )
 
 

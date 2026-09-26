@@ -224,6 +224,9 @@ _SESSION_END_BUS_MIRROR_COMMAND = (
 _USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_submit_bus_mirror.sh"
 )
+_STOP_CONTENT_CAPTURE_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop_content_capture.sh"
+)
 _POST_TOOL_USE_BUS_MIRROR_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_bus_mirror.sh"
 )
@@ -275,6 +278,92 @@ _DISPATCH_CLAIM_FILES = (
 )
 
 
+# OMN-19513 carve-out: the all-hooks capture observer (operator ruling "we need
+# all hooks captured", ledger RULING by lane all-hooks-capture-83-ruling). It
+# is registered as its own LAST group under every hook event the capture
+# contract covers except UserPromptSubmit (captured inside that bus mirror) and
+# the three hooks hook_claude_capture.NEVER_REGISTERED names. It is asserted
+# exactly here and then removed, so every assertion below still pins the
+# pre-existing registrations unchanged.
+_CLAUDE_HOOK_CAPTURE_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/claude_hook_capture.sh"
+)
+_CLAUDE_HOOK_CAPTURE_TOOL_EVENTS = frozenset(
+    {
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PermissionRequest",
+        "PermissionDenied",
+    }
+)
+_CLAUDE_HOOK_CAPTURE_EVENTS = frozenset(
+    {
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PostToolBatch",
+        "Notification",
+        "UserPromptExpansion",
+        "SessionStart",
+        "SessionEnd",
+        "Stop",
+        "StopFailure",
+        "SubagentStart",
+        "SubagentStop",
+        "PreCompact",
+        "PostCompact",
+        "PreModelSwitch",
+        "PostModelSwitch",
+        "PermissionRequest",
+        "PermissionDenied",
+        "Setup",
+        "TeammateIdle",
+        "TaskCreated",
+        "TaskCompleted",
+        "Elicitation",
+        "ElicitationResult",
+        "ConfigChange",
+        "InstructionsLoaded",
+        "CwdChanged",
+        "FileChanged",
+        "DirectoryAdded",
+    }
+)
+
+
+def _without_all_hooks_capture(
+    hooks: dict[str, list[dict[str, object]]],
+) -> dict[str, list[dict[str, object]]]:
+    """Assert the OMN-19513 capture registrations exactly, then drop them."""
+    captured: set[str] = set()
+    remaining: dict[str, list[dict[str, object]]] = {}
+    for event, groups in hooks.items():
+        kept = []
+        for index, group in enumerate(groups):
+            commands = [h["command"] for h in group["hooks"]]  # type: ignore[attr-defined]
+            if _CLAUDE_HOOK_CAPTURE_COMMAND not in commands:
+                kept.append(group)
+                continue
+            assert commands == [_CLAUDE_HOOK_CAPTURE_COMMAND], (
+                f"{event}: the capture observer must be alone in its group"
+            )
+            assert index == len(groups) - 1, (
+                f"{event}: the capture observer must be the last group"
+            )
+            expected_matcher = (
+                ".*" if event in _CLAUDE_HOOK_CAPTURE_TOOL_EVENTS else None
+            )
+            assert group.get("matcher") == expected_matcher, event
+            captured.add(event)
+        if kept:
+            remaining[event] = kept
+    assert captured == _CLAUDE_HOOK_CAPTURE_EVENTS, sorted(
+        captured ^ _CLAUDE_HOOK_CAPTURE_EVENTS
+    )
+    return remaining
+
+
 def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     """hooks.json registers EXACTLY the Done-flip + worktree + lane-liveness + secret-leak guards.
 
@@ -287,22 +376,26 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     OMN-13846); removal of any entry means the corresponding guard regressed.
     """
     data = json.loads(_HOOKS_JSON.read_text())
-    hooks = data.get("hooks", {})
+    hooks = _without_all_hooks_capture(data.get("hooks", {}))
 
-    # Exactly six event classes are registered: PreToolUse, PostToolUse,
-    # SubagentStop, SessionStart, SessionEnd, UserPromptSubmit.
+    # Exactly seven event classes are registered: PreToolUse, PostToolUse,
+    # SubagentStop, Stop, SessionStart, SessionEnd, UserPromptSubmit. Stop was
+    # added by OMN-19551 on an explicit operator decision: the ledger RULING
+    # row 2026-09-25T11:23:30Z approves full-content capture through hooks,
+    # and the assistant reply is only reachable at Stop.
     assert set(hooks.keys()) == {
         "PreToolUse",
         "PostToolUse",
         "SubagentStop",
+        "Stop",
         "SessionStart",
         "SessionEnd",
         "UserPromptSubmit",
     }, (
         "hooks.json must register ONLY PreToolUse, PostToolUse, SubagentStop, "
-        "SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
+        "Stop, SessionStart, SessionEnd, and UserPromptSubmit for the OMN-13856/"
         "OMN-14330/OMN-15062/OMN-15213/OMN-16277/OMN-16162/OMN-16471/"
-        "OMN-16478/OMN-16485 carve-outs "
+        "OMN-16478/OMN-16485/OMN-19551 carve-outs "
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
@@ -530,6 +623,18 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert user_prompt_submit_commands == [_USER_PROMPT_SUBMIT_BUS_MIRROR_COMMAND], (
         "hooks.json UserPromptSubmit must register EXACTLY the bus-mirror hook "
         f"(OMN-16162 S1 carve-out). Found: {user_prompt_submit_commands!r}"
+    )
+
+    # Exactly one Stop command: the content-capture observer (OMN-19551). The
+    # triaged Stop-shaped gates (OMN-18531) stay unregistered.
+    stop_commands = [
+        hook.get("command", "")
+        for group in hooks["Stop"]
+        for hook in group.get("hooks", [])
+    ]
+    assert stop_commands == [_STOP_CONTENT_CAPTURE_COMMAND], (
+        "hooks.json Stop must register EXACTLY the content-capture observer "
+        f"(OMN-19551). Found: {stop_commands!r}"
     )
 
 
