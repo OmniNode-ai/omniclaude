@@ -22,6 +22,7 @@ on:
       - 'scripts/validation/validate_distribution_classification.py'
       - 'scripts/validation/validate_full_market_skill_inventory.py'
       - '.github/workflows/distribution-classification-lint.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
@@ -32,6 +33,11 @@ on:
       - 'scripts/validation/validate_distribution_classification.py'
       - 'scripts/validation/validate_full_market_skill_inventory.py'
       - '.github/workflows/distribution-classification-lint.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   occ-preflight:

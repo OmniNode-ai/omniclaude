@@ -13,7 +13,7 @@ attribution record that the shared ``gh`` identity otherwise fails to produce.
 Usage:
     python scripts/pr_claim_registry_cli.py list
     python scripts/pr_claim_registry_cli.py claim <pr_key> [--action close] [--lane <id>]
-    python scripts/pr_claim_registry_cli.py release <pr_key> <run_id>
+    python scripts/pr_claim_registry_cli.py release <pr_key> <run_id> [--lane <id>]
 
 Examples:
     python scripts/pr_claim_registry_cli.py list
@@ -26,7 +26,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
+from types import ModuleType
 
 
 def _resolve_session_id_fn() -> object:
@@ -42,7 +44,7 @@ def _resolve_session_id_fn() -> object:
     return resolve_session_id
 
 
-def _import_lib() -> tuple[object, object]:
+def _import_lib() -> tuple[ModuleType, ModuleType]:
     """Import the registry and ownership-guard modules, adding repo root if needed."""
     try:
         from plugins.onex.hooks.lib import pr_claim_registry, pr_ownership_guard
@@ -74,7 +76,12 @@ def _cmd_list(registry: object) -> int:
     return 0
 
 
-def _cmd_claim(registry: object, guard: object, args: argparse.Namespace) -> int:
+def _cmd_claim(
+    registry: object,
+    guard: object,
+    is_active: Callable[[dict[str, object]], bool],
+    args: argparse.Namespace,
+) -> int:
     lane_id = args.lane or guard.resolve_lane_id()  # type: ignore[attr-defined]
     if not lane_id:
         print(
@@ -99,10 +106,18 @@ def _cmd_claim(registry: object, guard: object, args: argparse.Namespace) -> int
     )
     if not acquired:
         existing = registry.get_claim(args.pr_key)  # type: ignore[attr-defined]
-        owner = (existing or {}).get("lane_id") or "<unknown lane>"
+        if existing is not None and is_active(existing):
+            owner = existing.get("lane_id") or "<unknown lane>"
+            print(
+                f"Refused: {args.pr_key} is already actively claimed by lane {owner}.\n"
+                "Coordinate with that lane rather than taking the claim.",
+                file=sys.stderr,
+            )
+            return 1
         print(
-            f"Refused: {args.pr_key} is already actively claimed by lane {owner}.\n"
-            "Coordinate with that lane rather than taking the claim.",
+            f"Refused: could not write or reap the claim for {args.pr_key}; "
+            "no active claim holder could be confirmed. Inspect the claims "
+            "directory and retry.",
             file=sys.stderr,
         )
         return 1
@@ -113,10 +128,49 @@ def _cmd_claim(registry: object, guard: object, args: argparse.Namespace) -> int
     return 0
 
 
-def _cmd_release(registry: object, args: argparse.Namespace) -> int:
-    registry.release(args.pr_key, args.run_id)  # type: ignore[attr-defined]
-    print(f"Released claim for {args.pr_key} (run: {args.run_id})")
-    return 0
+def _cmd_release(
+    registry: object,
+    guard: object,
+    is_active: Callable[[dict[str, object]], bool],
+    args: argparse.Namespace,
+) -> int:
+    lane_id = args.lane or guard.resolve_lane_id()  # type: ignore[attr-defined]
+    released = registry.release(  # type: ignore[attr-defined]
+        args.pr_key, args.run_id, lane_id=lane_id
+    )
+    if released:
+        print(
+            f"Released claim for {args.pr_key} "
+            f"(run: {args.run_id}, lane: {lane_id or '<none>'})"
+        )
+        return 0
+
+    existing = registry.get_claim(args.pr_key)  # type: ignore[attr-defined]
+    if (
+        existing is not None
+        and existing.get("claimed_by_run") == args.run_id
+        and is_active(existing)
+        and existing.get("lane_id")
+        and lane_id
+        and existing.get("lane_id") != lane_id
+    ):
+        owner = existing["lane_id"]
+        print(
+            f"Refused: {args.pr_key} is actively claimed by lane {owner}, "
+            f"not lane {lane_id}. A lane may not release a peer lane's claim; "
+            "coordinate with that lane in the rolling work ledger.",
+            file=sys.stderr,
+        )
+        return 1
+    if existing is None:
+        print(f"No claim to release for {args.pr_key}.")
+        return 0
+    print(
+        f"Not released: {args.pr_key} is claimed by run "
+        f"{existing.get('claimed_by_run')}, not run {args.run_id}.",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -147,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
     release_parser = sub.add_parser("release", help="Release a claim held by a run")
     release_parser.add_argument("pr_key", help="Canonical PR key")
     release_parser.add_argument("run_id", help="Run id that holds the claim")
+    release_parser.add_argument(
+        "--lane",
+        default=None,
+        help="Lane handle (default: resolved from the environment)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -156,8 +215,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list":
         return _cmd_list(registry)
     if args.command == "claim":
-        return _cmd_claim(registry, pr_ownership_guard, args)
-    return _cmd_release(registry, args)
+        return _cmd_claim(
+            registry, pr_ownership_guard, pr_claim_registry.is_active, args
+        )
+    return _cmd_release(registry, pr_ownership_guard, pr_claim_registry.is_active, args)
 
 
 if __name__ == "__main__":

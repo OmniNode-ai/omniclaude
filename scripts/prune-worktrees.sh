@@ -68,6 +68,8 @@ done
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+SNAPSHOT_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/worktree_removal_snapshot.py"
+
 log() { echo "$*"; }
 verbose() { [[ "$VERBOSE" == true ]] && echo "  [debug] $*" || true; }
 
@@ -356,6 +358,27 @@ for wt in "${STALE[@]}"; do
   if [[ -n "$DIRTY" ]]; then
     log "  NOTE: $wt carries only disposable .onex_state output — not a block (OMN-15989)"
   fi
+
+  # ---------------------------------------------------------------------------
+  # Save before removing (OMN-19539, operator ruling 2026-09-25). The removal
+  # below is --force with an rm -rf fallback, and the dirty check above lets
+  # untracked .onex_state output and every IGNORED file (.env, local settings)
+  # through. Nothing is removed unless worktree_removal_snapshot.py first saved
+  # the diff plus the untracked and ignored-but-not-regenerable files under
+  # $OMNI_HOME/.onex_state/worktree-removal-snapshots/. A failed save keeps the
+  # worktree. --allow-non-git covers the no-canonical-root fallback below.
+  # ---------------------------------------------------------------------------
+  if [[ ! -f "$SNAPSHOT_HELPER" ]]; then
+    log "  SKIP: $wt — snapshot helper missing ($SNAPSHOT_HELPER), nothing is removed unsaved"
+    SKIPPED+=("$wt (snapshot helper missing)")
+    continue
+  fi
+  if ! snapshot_out=$(python3 "$SNAPSHOT_HELPER" "$wt" --reason prune-worktrees.sh --allow-non-git); then
+    log "  SKIP: $wt — pre-removal snapshot failed, worktree kept: $snapshot_out"
+    SKIPPED+=("$wt (snapshot failed)")
+    continue
+  fi
+  log "  SAVED: $wt -> $snapshot_out"
 
   # Find the canonical clone to run git worktree remove from
   canonical_gitdir="$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null || true)"

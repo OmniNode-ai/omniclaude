@@ -109,6 +109,17 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     classify_worktree_prune,
 )
 
+# The one pre-removal save every removal path calls [OMN-19539]. A sibling
+# module, so the scripts dir goes on the path the same way whether this file is
+# run by path or loaded by path from the test suite.
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from worktree_removal_snapshot import (  # noqa: E402
+    SnapshotError,
+    snapshot_before_removal,
+)
+
 LINEAR_API_URL = "https://api.linear.app/graphql"  # url-authority-ok: the tracker's single documented GraphQL endpoint, read-only ticket-state lookups from a local maintenance script that is not a runtime node and has no routing authority or integration catalog to resolve from
 LINEAR_BATCH_SIZE = 50
 BASE_REF_CANDIDATES: tuple[str, ...] = ("origin/dev", "origin/main")
@@ -1400,6 +1411,13 @@ class ModelRemovalAttempt(BaseModel):
         default="",
         description="What happened to the local branch, in its own field, not folded into detail",
     )
+    snapshot: str = Field(
+        default="",
+        description=(
+            "Where the worktree's diff and untracked files were saved before the "
+            "removal [OMN-19539]; '' when nothing was saved"
+        ),
+    )
 
 
 def delete_branch_from_worktree_side(
@@ -1522,6 +1540,25 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             detail="canonical clone not resolvable",
         )
 
+    # SAVE FIRST [OMN-19539, ruling 2026-09-25]. Plain `git worktree remove`
+    # refuses untracked files but deletes IGNORED ones (.env, local settings,
+    # scratch output) without a word. Nothing is removed, and the branch is not
+    # touched, unless the diff and the untracked and ignored-but-not-regenerable
+    # files are saved first.
+    argv = ["git", "-C", str(canonical), "worktree", "remove", str(worktree)]
+    try:
+        snapshot = snapshot_before_removal(worktree, reason="worktree_auto_prune")
+    except SnapshotError as exc:
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=" ".join(argv),
+            exit_code=-1,
+            stderr=str(exc),
+            branch_outcome="local branch kept: the pre-removal snapshot failed",
+            detail=f"refused: pre-removal snapshot failed, worktree kept ({exc})",
+        )
+
     branch_outcome = "no local branch to delete (detached HEAD)"
     restorable_tip: str | None = None
     if decision.branch and not decision.branch_content_preserved:
@@ -1537,7 +1574,6 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             decision.pr_state is EnumBranchPrState.MERGED,
         )
 
-    argv = ["git", "-C", str(canonical), "worktree", "remove", str(worktree)]
     result = _git_run_with_load_retry(canonical, "worktree", "remove", str(worktree))
 
     if result.timed_out:
@@ -1560,6 +1596,7 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             timed_out=True,
             load_average=result.load_average,
             branch_outcome=branch_outcome,
+            snapshot=snapshot.directory,
             detail=(
                 f"git worktree remove timed out at {GIT_TIMEOUT_SECONDS}s, retried "
                 f"once after waiting for the load to fall and timed out again; "
@@ -1583,6 +1620,7 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             exit_code=result.exit_code,
             stderr=stderr_text,
             branch_outcome=branch_outcome,
+            snapshot=snapshot.directory,
             detail=f"git worktree remove refused (exit {result.exit_code}): {stderr_text}{restored}",
         )
 
@@ -1593,7 +1631,8 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
         exit_code=0,
         stderr="",
         branch_outcome=branch_outcome,
-        detail=f"worktree removed; {branch_outcome}",
+        snapshot=snapshot.directory,
+        detail=f"worktree removed; {branch_outcome}; {snapshot.summary()}",
     )
 
 
@@ -1649,6 +1688,23 @@ def remediate_debris(
             ),
         )
 
+    # SAVE FIRST [OMN-19539]. The blobs are proven reachable, but ignored files
+    # (a .env, local settings) never were blobs, and the proof says nothing
+    # about them. The `.git` link is gone, so the whole directory is archived.
+    try:
+        snapshot = snapshot_before_removal(
+            target, reason="worktree_auto_prune:debris", allow_non_git=True
+        )
+    except SnapshotError as exc:
+        return ModelRemovalAttempt(
+            path=decision.path,
+            ok=False,
+            command=rm_command,
+            exit_code=-1,
+            stderr=str(exc),
+            detail=f"refused: pre-removal snapshot failed, directory kept ({exc})",
+        )
+
     try:
         shutil.rmtree(target)
     except OSError as exc:
@@ -1658,6 +1714,7 @@ def remediate_debris(
             command=rm_command,
             exit_code=0,
             stderr=str(exc),
+            snapshot=snapshot.directory,
             detail=(
                 "git worktree prune succeeded but the leftover directory removal failed"
             ),
@@ -1669,9 +1726,11 @@ def remediate_debris(
         command=rm_command,
         exit_code=0,
         stderr="",
+        snapshot=snapshot.directory,
         detail=(
             "owning-clone administrative record pruned; leftover directory "
-            "removed (content proven reachable as blobs already in the repo)"
+            "removed (content proven reachable as blobs already in the repo); "
+            f"{snapshot.summary()}"
         ),
     )
 

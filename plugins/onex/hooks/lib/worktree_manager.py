@@ -83,6 +83,48 @@ class WorktreeError(RuntimeError):
     """Raised when a git worktree command fails."""
 
 
+# The one pre-removal save every worktree-removal path calls (OMN-19539). It
+# lives in the repository's scripts dir: plugins/onex/hooks/lib -> repo root.
+_SNAPSHOT_HELPER = (
+    Path(__file__).resolve().parents[4] / "scripts" / "worktree_removal_snapshot.py"
+)
+
+
+def _snapshot_before_removal(path: str) -> None:
+    """Save the worktree's diff and untracked files, or raise.
+
+    ``git worktree remove`` without ``--force`` refuses tracked and untracked
+    changes but deletes IGNORED files (a ``.env``, local settings) silently, so
+    a clean-looking worktree is saved before it is removed. A missing helper or
+    a failed save raises :class:`WorktreeError` and nothing is removed.
+    """
+    if not _SNAPSHOT_HELPER.is_file():
+        raise WorktreeError(
+            f"pre-removal snapshot helper missing ({_SNAPSHOT_HELPER}); worktree kept"
+        )
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(_SNAPSHOT_HELPER),
+                path,
+                "--reason",
+                "WorktreeManager.delete",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=900,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise WorktreeError(f"pre-removal snapshot could not run: {exc}") from exc
+    if result.returncode != 0:
+        raise WorktreeError(
+            f"pre-removal snapshot failed (exit {result.returncode}), worktree kept: "
+            f"{(result.stderr or result.stdout).strip()}"
+        )
+
+
 def _run_git(
     args: list[str],
     cwd: str | None = None,
@@ -322,10 +364,16 @@ class WorktreeManager:
                 to clean up administrative files for worktrees whose directories
                 have already been deleted.
 
+        Before anything is removed, the worktree's diff and its untracked and
+        ignored-but-not-regenerable files are saved under
+        ``$OMNI_HOME/.onex_state/worktree-removal-snapshots/`` (OMN-19539).
+
         Raises:
-            WorktreeError: If ``git worktree remove`` returns a non-zero exit
+            WorktreeError: If the pre-removal snapshot fails (nothing is
+                removed), or if ``git worktree remove`` returns a non-zero exit
                 code (e.g. worktree has uncommitted changes or path not found).
         """
+        _snapshot_before_removal(path)
         result = _run_git(
             ["worktree", "remove", path],
             cwd=self._repo_path,
