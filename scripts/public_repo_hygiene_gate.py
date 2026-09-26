@@ -86,6 +86,15 @@ gate refuses an unknown vocabulary key: a new key would have stopped every one
 of them from running the day it merged. A lab address and a lab host nickname
 stay in ``private-network``; together the two are "the lab classes".
 
+An older reusable resolves this script from omniclaude ``dev`` (its pinned
+``job_workflow_sha`` resolves empty for a cross-repo caller) but fetches no lab
+vocabulary. So with no ``--lab-vocabulary`` and none beside the main
+vocabulary, the class is reported as NOT evaluated (a ``::warning::`` and a
+report line) and every other class runs; a run that requests ``lab-config``
+with ``--only-classes``, or a repo that enforces it, still refuses (exit 2).
+Measured 2026-09-26 on onex_change_control#11491 and #11528, whose required
+CI Summary went red on exit 2 after omniclaude#2373.
+
 Bare ``OMN-<digits>`` ticket ids are **not** a class. Operator ruling P3,
 2026-09-06: internal ticket ids in public source are an accepted convention.
 Workspace-scoped tracker URLs are still a violation.
@@ -231,7 +240,8 @@ CONTENT_CLASSES: frozenset[str] = frozenset(
 SELECTABLE_CLASSES: frozenset[str] = PATH_CLASSES | CONTENT_CLASSES
 
 #: The private lab vocabulary's file name. With no ``--lab-vocabulary`` the gate
-#: reads the file of this name beside the main vocabulary.
+#: reads the file of this name beside the main vocabulary when it exists, and
+#: otherwise reports the lab-config class as not evaluated (see ``run``).
 LAB_VOCABULARY_BASENAME = "public_repo_hygiene_lab_vocabulary.yaml"
 
 INFORMATIONAL: frozenset[str] = frozenset({"self-granted-annotation"})
@@ -1239,7 +1249,7 @@ def run(
     mode: str,
     only_paths: list[str] | None,
     *,
-    lab_vocab_path: Path,
+    lab_vocab_path: Path | None,
     only_classes: frozenset[str] | None = None,
 ) -> tuple[int, list[Finding], list[Finding]]:
     """Scan ``repo_root``; return ``(exit_code, blocking, informational)``.
@@ -1247,10 +1257,37 @@ def run(
     ``only_classes`` restricts the run to those classes. A blocking finding
     fails the run when the effective mode is ``enforce``, or when its class is
     in the repo config's ``enforce_classes`` whatever the mode.
+
+    ``lab_vocab_path`` is ``None`` only when the caller passed no
+    ``--lab-vocabulary`` and none exists beside the main vocabulary: a caller
+    pinned to a reusable from before OMN-19766, which never fetched one. The
+    ``lab-config`` class is then NOT evaluated, and the run says so on stderr
+    and in the report. A run that names ``lab-config`` in ``--only-classes``,
+    or a repo that lists it in ``enforce_classes``, still refuses (exit 2): a
+    class somebody asked for is never skipped.
     """
     config = load_repo_config(repo_root / CONFIG_BASENAME)
     vocab = load_vocabulary(vocab_path)
-    vocab.lab_lane_ids = load_lab_vocabulary(lab_vocab_path)
+    if lab_vocab_path is None:
+        requested = only_classes is not None and "lab-config" in only_classes
+        if requested or "lab-config" in config.enforce_classes:
+            raise ConfigError(
+                "the lab-config class is "
+                + ("requested by --only-classes" if requested else "enforced")
+                + " but no lab vocabulary was given (--lab-vocabulary) or found "
+                f"beside the vocabulary ({LAB_VOCABULARY_BASENAME}). This is a "
+                "fail-closed refusal, not a pass. THE GATE DID NOT RUN."
+            )
+        vocab.lab_lane_ids = []
+        print(
+            "::warning::lab-config class NOT evaluated: no --lab-vocabulary was "
+            f"passed and no {LAB_VOCABULARY_BASENAME} exists beside the "
+            "vocabulary (a caller pinned to a reusable from before OMN-19766). "
+            "Every other class ran.",
+            file=sys.stderr,
+        )
+    else:
+        vocab.lab_lane_ids = load_lab_vocabulary(lab_vocab_path)
     registry = load_registry(repo_root / config.registry_path)
     # A run restricted with --only-classes is an explicit, targeted check (the
     # lab-class gate): its --mode is the one the caller asked for. Otherwise
@@ -1369,7 +1406,10 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "path to the PRIVATE lab vocabulary (lab_lane_ids) for the "
             f"lab-config class. Defaults to {LAB_VOCABULARY_BASENAME} beside "
-            "the vocabulary; CI fetches it and passes the path. Absent is exit 2."
+            "the vocabulary; CI fetches it and passes the path. A given path "
+            "that is absent is exit 2. With none given and none beside the "
+            "vocabulary, the class is reported as not evaluated, unless it is "
+            "requested (--only-classes) or enforced, which is exit 2."
         ),
     )
     parser.add_argument(
@@ -1428,9 +1468,14 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(names))
         return 0
 
-    lab_vocab_path = args.lab_vocabulary or (
-        vocab_path.parent / LAB_VOCABULARY_BASENAME
-    )
+    # An explicit --lab-vocabulary must exist (load_lab_vocabulary refuses a
+    # missing one). With none given, the file beside the vocabulary is read
+    # when it exists; when it does not, the caller predates OMN-19766 and the
+    # lab-config class is reported as not evaluated (see run()).
+    lab_vocab_path: Path | None = args.lab_vocabulary
+    if lab_vocab_path is None:
+        beside = vocab_path.parent / LAB_VOCABULARY_BASENAME
+        lab_vocab_path = beside if beside.is_file() else None
 
     only_classes: frozenset[str] | None = None
     if args.only_classes is not None:
@@ -1466,6 +1511,11 @@ def main(argv: list[str] | None = None) -> int:
     config = load_repo_config(repo_root / CONFIG_BASENAME)
     config_mode = args.mode if only_classes is not None else (config.mode or args.mode)
     _print_report(blocking, informational, config_mode)
+    if lab_vocab_path is None:
+        print(
+            "\n  NOT EVALUATED: lab-config (no lab vocabulary was given or found "
+            "beside the vocabulary; the caller predates OMN-19766)."
+        )
     if only_classes is not None:
         print(f"\n  restricted to: {', '.join(sorted(only_classes))}")
 
