@@ -26,6 +26,8 @@ import ast
 import sys
 from pathlib import Path
 
+from _path_scope import selected_python_files
+
 FORBIDDEN_IMPORT_PATTERNS: tuple[str, ...] = (
     "sqlite_adapter",
     "SQLiteProjectionAdapter",
@@ -111,7 +113,7 @@ def check_file(filepath: Path) -> list[str]:
     return visitor.violations
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve()
     for _ in range(10):
         if (root / "pyproject.toml").exists() or (root / "src").exists():
@@ -120,7 +122,11 @@ def main() -> int:
 
     all_violations: list[str] = []
 
-    for py_file in sorted(root.rglob("*.py")):
+    for py_file in selected_python_files(
+        argv if argv is not None else sys.argv[1:],
+        roots=[root],
+        rule_file=Path(__file__),
+    ):
         if "__pycache__" in str(py_file):
             continue
         if not _is_checked_file(py_file, root):

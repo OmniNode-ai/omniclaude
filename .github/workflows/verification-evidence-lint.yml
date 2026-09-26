@@ -20,6 +20,7 @@ on:
       - '.onex_state/evidence/**'
       - 'scripts/lint_verification_evidence.py'
       - '.github/workflows/verification-evidence-lint.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
@@ -30,6 +31,11 @@ on:
       - '.onex_state/evidence/**'
       - 'scripts/lint_verification_evidence.py'
       - '.github/workflows/verification-evidence-lint.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

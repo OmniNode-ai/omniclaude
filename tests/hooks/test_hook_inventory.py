@@ -403,6 +403,7 @@ def test_deregistering_a_hook_reports_only_it_and_later_order_dependents(
     assert [f.subject for f in findings] == [
         victim,
         "pre_tool_use_skill_started.sh",
+        "pre_tool_use_actor_line_guard.sh",
     ]
 
 
@@ -700,6 +701,11 @@ def test_lite_mode_darkness_is_declared_and_reported() -> None:
         "pre_tool_use_done_flip_guard.sh",
         "pre_tool_use_lane_liveness_guard.sh",
         "post_tool_use_secret_redact_guard.sh",
+        # OMN-13856 item 4: the actor-line comment guard exits in lite mode
+        # too (mode.sh's lite check runs ahead of it, same as every other
+        # guard here) -- a lite-mode session has no actor-line enforcement
+        # on posted Linear comments either.
+        "pre_tool_use_actor_line_guard.sh",
     }, (
         "the set of enforcement guards that vanish in lite mode changed. That is "
         "a real change in what a lite-mode session is protected by — update this "

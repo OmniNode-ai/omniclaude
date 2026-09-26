@@ -20,6 +20,28 @@
 # A cached "no pull requests found" answer is kept like a positive one; any
 # other failure (network, quota, auth) is never cached.
 #
+# Read routing (OMN-19587): with ONEX_GH_READ_ROUTING=1, the read shapes
+# `gh api` GET/HEAD, `pr view|list|checks` and `run view|list` are handed to
+# gh_route.py (installed next to this file by install-gh-shim.sh; override
+# with ONEX_GH_ROUTER), which runs them on the read-only App token from
+# GH_READ_TOKEN_CMD and falls back to the operator credential when there is
+# none. Every other call, and every write, runs on the operator unchanged and
+# never reaches the router. With the flag unset or anything but 1 the shim
+# runs the real gh exactly as it did before routing existed.
+#
+# Usage log (OMN-19585): every invocation appends one JSON line to
+# ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage/<UTC date>.jsonl with the
+# timestamp, lane (ONEX_LANE; else ONEX_LANE_ID, ONEX_AGENT_NAME,
+# CLAUDE_AGENT_NAME or CLAUDE_SUBAGENT_NAME; else the lane registered for the
+# omni_worktrees/<ticket>/<dir> worktree the call is made from; else the Claude
+# Code session id; else the parent command, with lane_source saying which),
+# command class, HTTP method, repository, endpoint path (gh api only,
+# query string dropped), exit code and whether the cache answered. With routing
+# on it adds identity (app, operator, operator-fallback) and route_reason. Argv, stdin,
+# output and environment values are never written, so no token can reach it.
+# scripts/user-bin/gh_usage_report.py turns the log into requests per lane.
+# ONEX_GH_USAGE_LOG=0 turns the log off for one call.
+#
 # This file must stay bash 3.2 compatible: /bin/bash on macOS is 3.2.
 
 ONEX_GH_SHIM_TTL="${ONEX_GH_SHIM_TTL:-600}"
@@ -54,6 +76,173 @@ fi
 
 _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
 
+# --- usage log (OMN-19585) -----------------------------------------------------
+
+# Keep only characters that are safe inside a JSON string and meaningful in a
+# repo, endpoint or lane name, and blank anything shaped like a GitHub token.
+_clean() {
+  local v="$1"
+  v="${v//[^A-Za-z0-9._\/:@+=, -]/}"
+  case "$v" in
+    *ghp_*|*gho_*|*ghu_*|*ghs_*|*ghr_*|*github_pat_*) v="REDACTED" ;;
+  esac
+  printf '%s' "${v:0:200}"
+}
+
+# Resolve attribution once for both the usage line and the read router.
+_lane_done=0
+_resolve_lane() {
+  [ "$_lane_done" -eq 1 ] && return 0
+  _lane_done=1
+  _lane=""; _lane_src=""
+  local agent="" cwd="" suffix="" ticket="" repo_dir="" worktree=""
+  local registry_dir="" record="" hash="" registered="" parent=""
+  if [ -n "${ONEX_LANE:-}" ]; then
+    _lane="$(_clean "$ONEX_LANE")"; _lane_src="env"
+    return
+  fi
+  if [ -n "${ONEX_LANE_ID:-}" ]; then agent="$ONEX_LANE_ID"
+  elif [ -n "${ONEX_AGENT_NAME:-}" ]; then agent="$ONEX_AGENT_NAME"
+  elif [ -n "${CLAUDE_AGENT_NAME:-}" ]; then agent="$CLAUDE_AGENT_NAME"
+  elif [ -n "${CLAUDE_SUBAGENT_NAME:-}" ]; then agent="$CLAUDE_SUBAGENT_NAME"
+  fi
+  if [ -n "$agent" ]; then
+    _lane="$(_clean "$agent")"; _lane_src="agent-env"
+    return
+  fi
+  cwd="$(pwd -P 2>/dev/null)"
+  case "$cwd" in
+    */omni_worktrees/*/*)
+      suffix="${cwd#*/omni_worktrees/}"
+      ticket="${suffix%%/*}"
+      suffix="${suffix#*/}"
+      repo_dir="${suffix%%/*}"
+      worktree="${cwd%%/omni_worktrees/*}/omni_worktrees/$ticket/$repo_dir"
+      if [ -n "${ONEX_LANE_REGISTRY_ROOT:-}" ]; then
+        registry_dir="$ONEX_LANE_REGISTRY_ROOT/lane_identity"
+      elif [ -n "${OMNI_HOME:-}" ]; then
+        registry_dir="$OMNI_HOME/.onex_state/lane_identity"
+      fi
+      if [ -n "$registry_dir" ]; then
+        hash="$(_sha "$worktree" | cut -c1-32)"
+        record="$registry_dir/$hash.json"
+        if [ -n "$hash" ] && [ -r "$record" ]; then
+          registered="$(sed -n 's/.*"lane"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$record" 2>/dev/null | head -n 1)"
+          if [ -n "$registered" ]; then
+            _lane="$(_clean "$registered")"; _lane_src="registry"
+            return
+          fi
+        fi
+      fi
+      ;;
+  esac
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    _lane="session:$(_clean "$CLAUDE_CODE_SESSION_ID")"; _lane_src="session"
+    return
+  fi
+  parent="$(basename "$(ps -o comm= -p "$PPID" 2>/dev/null)" 2>/dev/null)"
+  _lane="parent:$(_clean "$parent")"; _lane_src="parent"
+}
+
+# Sets _cls, _method and _repo, _endpoint for the argv in "$@".
+_classify() {
+  _cls=""; _method=""; _repo=""; _endpoint=""
+  local group="${1:-}" sub="${2:-}" a prev="" repo_flag="" has_field=0 is_mutation=0
+  for a in "$@"; do
+    case "$prev" in
+      -R|--repo) repo_flag="$a" ;;
+      -X|--method) _method="$a" ;;
+    esac
+    case "$a" in
+      --repo=*) repo_flag="${a#--repo=}" ;;
+      --method=*) _method="${a#--method=}" ;;
+      -f|-F|--field|--raw-field|--input|--field=*|--raw-field=*|--input=*) has_field=1 ;;
+    esac
+    case "$a" in *mutation*) is_mutation=1 ;; esac
+    prev="$a"
+  done
+  if [ "$group" = "api" ]; then
+    # First positional after `api` that is not the value of an option.
+    local skip=0
+    shift
+    for a in "$@"; do
+      if [ "$skip" -eq 1 ]; then skip=0; continue; fi
+      case "$a" in
+        -X|--method|-H|--header|-f|--raw-field|-F|--field|--input|-q|--jq|-t|--template|--cache|--hostname|-p|--preview) skip=1 ;;
+        -*) ;;
+        *) _endpoint="${a%%\?*}"; break ;;
+      esac
+    done
+    _endpoint="${_endpoint#/}"
+    if [ "$_endpoint" = "graphql" ]; then
+      _cls="api graphql"
+      if [ "$is_mutation" -eq 1 ]; then _method="MUTATION"; else _method="POST"; fi
+    else
+      _cls="api"
+      if [ -z "$_method" ]; then
+        if [ "$has_field" -eq 1 ]; then _method="POST"; else _method="GET"; fi
+      fi
+      case "$_endpoint" in
+        repos/*/*) _repo="${_endpoint#repos/}"; _repo="${_repo#*/}"; _repo="${_repo%%/*}" ;;
+      esac
+    fi
+    _method="$(printf '%s' "$_method" | tr '[:lower:]' '[:upper:]')"
+  else
+    case "$sub" in
+      ""|-*) _cls="$group" ;;
+      *) _cls="$group $sub" ;;
+    esac
+    case "$group" in
+      ""|-*|auth|config|alias|extension|help|completion|version|status) _method="LOCAL" ;;
+      search|browse) _method="GET" ;;
+      *)
+        case "$sub" in
+          view|list|checks|diff|status|download|watch|ls) _method="GET" ;;
+          *) _method="WRITE" ;;
+        esac
+        ;;
+    esac
+    [ "$group" = "status" ] && _method="GET"
+    if [ -n "$repo_flag" ]; then
+      _repo="${repo_flag##*/}"
+    else
+      case "$group" in
+        pr|issue|run|workflow|release|label|repo|cache|ruleset)
+          _repo="$(git config --get remote.origin.url 2>/dev/null)"
+          _repo="${_repo%.git}"; _repo="${_repo##*/}"; _repo="${_repo##*:}"
+          ;;
+      esac
+    fi
+  fi
+}
+
+# _log <exit code> <cache: hit|miss|none>
+_log() {
+  [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
+  local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
+  local ts session ticket="" identity="" route_reason=""
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  session="$(_clean "${CLAUDE_CODE_SESSION_ID:-}")"
+  case "$PWD" in
+    */omni_worktrees/OMN-*) ticket="${PWD#*/omni_worktrees/}"; ticket="${ticket%%/*}" ;;
+  esac
+  mkdir -p "$dir" 2>/dev/null || return 0
+  _resolve_lane
+  if [ -n "$_route" ]; then
+    identity="${_route%% *}"
+    case "$_route" in *\ *) route_reason="${_route#* }" ;; esac
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","pid":%s}\n' \
+      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$$" \
+      >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
+  else
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","pid":%s}\n' \
+      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$$" \
+      >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
+  fi
+}
+
 # --- is this one of the two cacheable read shapes? ---------------------------
 # Returns 0 and sets _branch_arg and _fields when it is.
 _cacheable() {
@@ -78,6 +267,73 @@ _sha() {
   else
     printf '%s' "$1" | sha256sum | cut -c1-40
   fi
+}
+
+_classify "$@"
+_route=""
+
+# Run one gh call and leave its routing identity/reason in _route. With routing
+# disabled this is deliberately the same single command as the old shim path.
+_run_gh() {
+  _route=""
+  if [ "${ONEX_GH_READ_ROUTING:-}" != "1" ]; then
+    "$real" "$@"
+    return $?
+  fi
+
+  local candidate=0 router="" py="" rf="" rc=0
+  if [ "$_cls" = "api" ] && { [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ]; }; then
+    candidate=1
+  else
+    case "$_cls" in
+      "pr view"|"pr list"|"pr checks"|"run view"|"run list") candidate=1 ;;
+    esac
+  fi
+  if [ "$candidate" -ne 1 ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator shim-not-a-read"
+    return "$rc"
+  fi
+
+  if [ -n "${ONEX_GH_ROUTER:-}" ]; then
+    router="$ONEX_GH_ROUTER"
+  else
+    router="$(cd "$(dirname "$self")" 2>/dev/null && pwd)/gh_route.py"
+  fi
+  # The router is stdlib-only and makes no network connection itself (the
+  # real gh and the mint command do), so any python3 on PATH can run it;
+  # python3.13 first because that is the project interpreter.
+  if [ -n "${ONEX_GH_ROUTE_PYTHON:-}" ]; then
+    py="$ONEX_GH_ROUTE_PYTHON"
+  else
+    py="$(command -v python3.13 2>/dev/null)"
+    [ -n "$py" ] || py="$(command -v python3 2>/dev/null)"
+  fi
+  if [ ! -f "$router" ] || [ ! -r "$router" ] || [ -z "$py" ] || [ ! -x "$py" ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator-fallback router-unavailable"
+    return "$rc"
+  fi
+  rf="$(mktemp "${TMPDIR:-/tmp}/onex-gh-route.XXXXXX" 2>/dev/null)"
+  if [ -z "$rf" ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator-fallback router-unavailable"
+    return "$rc"
+  fi
+  _resolve_lane
+  ONEX_LANE="$_lane" "$py" "$router" exec --result-file "$rf" -- "$@"
+  rc=$?
+  IFS= read -r _route < "$rf" || true
+  rm -f "$rf" 2>/dev/null
+  if [ -z "$_route" ] && [ "$rc" -ne 0 ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator-fallback router-failed"
+  fi
+  return "$rc"
 }
 
 # owner/repo of the working directory's origin remote, or "" outside a clone.
@@ -134,6 +390,7 @@ if _cacheable "$@"; then
           if [ $((_now - _at)) -lt "$ONEX_GH_SHIM_TTL" ]; then
             cat "$_entry.out" 2>/dev/null
             cat "$_entry.err" >&2 2>/dev/null
+            _log "$_rc" hit
             exit "$_rc"
           fi
           ;;
@@ -141,7 +398,7 @@ if _cacheable "$@"; then
     fi
     mkdir -p "$_cache_root" 2>/dev/null
     _tmp="$_entry.tmp.$$"
-    "$real" "$@" > "$_tmp.out" 2> "$_tmp.err"
+    _run_gh "$@" > "$_tmp.out" 2> "$_tmp.err"
     _rc=$?
     cat "$_tmp.out"
     cat "$_tmp.err" >&2
@@ -160,8 +417,14 @@ if _cacheable "$@"; then
         && mv -f "$_tmp.meta" "$_entry.meta" 2>/dev/null
     fi
     rm -f "$_tmp.out" "$_tmp.err" "$_tmp.meta" 2>/dev/null
+    _log "$_rc" miss
     exit "$_rc"
   fi
 fi
 
-exec "$real" "$@"
+# Pass-through. Run rather than exec, so the exit code can be logged; stdin,
+# stdout, stderr and the terminal are inherited unchanged.
+_run_gh "$@"
+_rc=$?
+_log "$_rc" none
+exit "$_rc"

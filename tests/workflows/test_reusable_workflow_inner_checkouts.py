@@ -78,7 +78,6 @@ forever, which is the exact failure mode this module exists to detect
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import textwrap
@@ -171,7 +170,7 @@ def _self_repository() -> str:
             text=True,
             timeout=10,
             check=False,
-            env=scrub_git_location_env(os.environ),
+            env=scrub_git_location_env(),
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):  # pragma: no cover - defensive
         url = ""

@@ -747,6 +747,24 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             continue
         fi
 
+        # G6b: Save before removing (OMN-19539, operator ruling 2026-09-25).
+        # G3-G5 see no tracked or untracked change, but `git worktree remove`
+        # still deletes IGNORED files (.env, local settings) without a word.
+        # The repo's worktree_removal_snapshot.py saves them, with the diff,
+        # under $OMNI_HOME/.onex_state; a missing helper or a failed save
+        # keeps the worktree.
+        _wt_snapshot_helper="${PLUGIN_ROOT}/../../scripts/worktree_removal_snapshot.py"
+        if [[ ! -f "$_wt_snapshot_helper" ]]; then
+            log "STALE: ${_wt_dir} - snapshot helper missing, nothing is removed unsaved"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+        if ! "$PYTHON_CMD" "$_wt_snapshot_helper" "$_wt_dir" --reason session-end >>"$LOG_FILE" 2>&1; then
+            log "STALE: ${_wt_dir} - pre-removal snapshot failed, worktree kept (see log)"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
         # G7: Safe removal via git worktree remove from parent repo.
         # No --force: let git refuse if state changed between guards and removal (TOCTOU safety).
         if git -C "$_wt_parent_repo" worktree remove "$_wt_dir" 2>>"$LOG_FILE"; then
