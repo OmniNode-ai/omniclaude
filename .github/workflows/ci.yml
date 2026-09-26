@@ -3963,12 +3963,6 @@ jobs:
           git -C "$OMNI_HOME/onex_change_control" sparse-checkout set scripts/validation
           core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
           git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
-      - name: Cache pre-commit hook environments
-        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/pre-commit
-          key: precommit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Pin the whole-tree backstop's own shape (OMN-19612)
         run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
       # The advisory-job-gate hook reads branch protection's
