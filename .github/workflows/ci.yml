@@ -3935,8 +3935,6 @@ jobs:
     # counterpart.
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      OMNI_HOME: ${{ runner.temp }}/sibling-clones
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -3955,6 +3953,8 @@ jobs:
       - name: Provide the sibling clones the cross-repo hooks resolve through OMNI_HOME
         run: |
           set -euo pipefail
+          OMNI_HOME="${RUNNER_TEMP}/sibling-clones"
+          echo "OMNI_HOME=${OMNI_HOME}" >> "$GITHUB_ENV"
           mkdir -p "$OMNI_HOME"
           # OCC tracks main, as in Skill Contracts CI. omnibase_core tracks the
           # uv.lock-pinned version tag so hook-bits-drift checks hook_bits.sh
@@ -3970,11 +3970,24 @@ jobs:
           key: precommit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Pin the whole-tree backstop's own shape (OMN-19612)
         run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
+      # The advisory-job-gate hook reads branch protection's
+      # required_status_checks, which needs administration:read. The workflow
+      # GITHUB_TOKEN lacks it, so the hook would refuse (it cannot resolve the
+      # enforcement surface). This is the same App the advisory-job-gate job
+      # mints for the same read.
+      - name: Mint a token that can read branch protection
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
       # pre-commit and detect-secrets are not project dependencies, so they are
       # installed as pinned tools layered over the synced project venv (the venv
       # stays on PATH for the language: system hooks). Without the pre-commit pin
       # this step died with "Failed to spawn: pre-commit".
       - name: Run the whole-tree pre-commit suite
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: uv run --frozen --with 'pre-commit==4.6.2' --with 'detect-secrets==1.5.0' pre-commit run --all-files --show-diff-on-failure
 
   occ-companion-merged:

@@ -12,6 +12,7 @@ import pytest
 import yaml
 from packaging.requirements import Requirement
 
+from scripts.ci.check_workflow_expression_contexts import check_workflow
 from scripts.ci.ci_summary_gate import GATE_JOBS, SOFT_ALLOWLIST, STRICT_SUCCESS_JOBS
 
 pytestmark = [pytest.mark.unit]
@@ -148,3 +149,7 @@ def test_workflow_has_no_pull_request_path_filter() -> None:
     assert "paths-ignore" not in pull_request
     required_types = {"opened", "synchronize", "reopened"}
     assert "types" not in pull_request or required_types <= set(pull_request["types"])
+
+
+def test_ci_workflow_uses_only_contexts_available_at_each_key() -> None:
+    assert check_workflow(CI_WORKFLOW) == []

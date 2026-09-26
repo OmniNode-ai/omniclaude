@@ -84,6 +84,9 @@ from typing import Any, NamedTuple
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -155,6 +158,7 @@ def _self_repository() -> str:
             text=True,
             timeout=10,
             check=False,
+            env=scrub_git_location_env(),
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):  # pragma: no cover - defensive
         url = ""

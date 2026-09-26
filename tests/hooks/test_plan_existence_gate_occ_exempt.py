@@ -17,6 +17,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 _HOOK = (
     Path(__file__).parent.parent.parent
@@ -33,13 +36,37 @@ _STDIN = json.dumps({"tool_name": "Write", "tool_input": {"file_path": "x.py"}})
 def _init_repo(root: Path, branch: str) -> None:
     """Create a git repo recognized as an OmniNode repo, on ``branch``."""
     (root / ".onex_state").mkdir()  # is_omninode_repo marker
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-    subprocess.run(["git", "config", "user.email", "t@t"], cwd=root, check=True)
-    subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "init", "-q"], cwd=root, check=True, env=scrub_git_location_env()
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "t@t"],
+        cwd=root,
+        check=True,
+        env=scrub_git_location_env(),
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "t"],
+        cwd=root,
+        check=True,
+        env=scrub_git_location_env(),
+    )
     (root / "seed.txt").write_text("seed\n")
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=root, check=True)
-    subprocess.run(["git", "checkout", "-q", "-b", branch], cwd=root, check=True)
+    subprocess.run(
+        ["git", "add", "-A"], cwd=root, check=True, env=scrub_git_location_env()
+    )
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "seed"],
+        cwd=root,
+        check=True,
+        env=scrub_git_location_env(),
+    )
+    subprocess.run(
+        ["git", "checkout", "-q", "-b", branch],
+        cwd=root,
+        check=True,
+        env=scrub_git_location_env(),
+    )
 
 
 def _run_hook(root: Path) -> subprocess.CompletedProcess[str]:

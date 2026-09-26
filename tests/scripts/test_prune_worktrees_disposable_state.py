@@ -52,6 +52,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "prune-worktrees.sh"

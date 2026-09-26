@@ -144,6 +144,15 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-19612: GitHub rejects expressions whose contexts are unavailable
+      # at their workflow/job key; catch that before the workflow reaches CI.
+      - id: workflow-expression-contexts
+        name: Workflow expressions use only contexts GitHub allows there (OMN-19612)
+        entry: python3 scripts/ci/check_workflow_expression_contexts.py
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+        pass_filenames: true
+
       # OMN-13025 (A-3): Reject docs/evidence/** with UI/e2e claims but no Playwright artifact.
       # Root cause: 2026-06-11 19:27Z evidence doc claimed "UI POST → full chain live" when
       # only curl was run (PROCESS_FAILURE_RETRO.md §3.A — top-10 failure #1).
