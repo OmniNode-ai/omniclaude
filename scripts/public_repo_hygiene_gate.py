@@ -64,6 +64,7 @@ protects against.
 | ``private-repo-name``     | content | **never**  |
 | ``internal-kb-prose``     | content | **never**  |
 | ``public-doc-private-repo`` | content | **never** |
+| ``lab-config``            | content | **never**  |
 | ``person-name``           | content | registry   |
 | ``tracker-url``           | content | registry   |
 | ``secret-shaped``         | content | registry   |
@@ -74,6 +75,16 @@ anywhere in the org: a public README, CONTRIBUTING or SECURITY document may
 not name a private repository, describe its contents, or state who has
 access. It is the class that would have caught the paragraph the operator
 found, in all eleven repositories, on the day the migration lane wrote it.
+
+``lab-config`` (OMN-19766) refuses our lab's lane ids and lab compose project
+names. Operator ruling 2026-09-26, firm: no lab configuration of any kind lives
+in a public repository. Its ids come from a second private file, the LAB
+vocabulary (``--lab-vocabulary``, key ``lab_lane_ids``), each matched as a whole
+token, case-insensitively. It is a separate file rather than a new key in the
+main vocabulary because every public caller pins an older gate, and an older
+gate refuses an unknown vocabulary key: a new key would have stopped every one
+of them from running the day it merged. A lab address and a lab host nickname
+stay in ``private-network``; together the two are "the lab classes".
 
 Bare ``OMN-<digits>`` ticket ids are **not** a class. Operator ruling P3,
 2026-09-06: internal ticket ids in public source are an accepted convention.
@@ -114,16 +125,33 @@ trusted-CI canary all came from a sweep that errored and returned no rows.
 
 ## Modes
 
-``report``   scan and print everything, always exit 0. The rollout mode.
+``report``   scan and print everything, exit 0 unless ``enforce_classes`` fails.
 ``enforce``  exit 1 on any blocking finding.
 
 A repo's own ``.public-repo-hygiene.yaml`` ``mode:`` wins over ``--mode``, so
 the two surfaces cannot silently disagree about which one is authoritative.
 
+**Per-class enforcement (OMN-19766).** ``enforce_classes:`` in the repo config
+lists classes whose findings fail the run in ``report`` mode too. A repository
+that reaches zero for the lab classes turns exactly those on, in the same pull
+request, while its other classes are still being cleaned up; one ``mode:``
+switch for every class could not express that. An unknown class name is a
+config error, never an ignored line.
+
+**``--only-classes a,b``** restricts the run to the named classes (path and
+content alike), and its ``--mode`` then wins over the config's ``mode:``: a
+targeted check reports what the caller asked for, so a repository still in
+``report`` mode cannot read green to it. The lab-class gate every repository
+task runs is::
+
+    --mode enforce --only-classes private-network,lab-config
+
 ## Usage
 
     python3 scripts/public_repo_hygiene_gate.py --repo-root . --mode report
     python3 scripts/public_repo_hygiene_gate.py --vocabulary <path> --mode enforce
+    python3 scripts/public_repo_hygiene_gate.py --vocabulary <path> \\
+        --lab-vocabulary <path> --mode enforce --only-classes private-network,lab-config
     python3 scripts/public_repo_hygiene_gate.py --staged <files...>   # pre-commit
     python3 scripts/public_repo_hygiene_gate.py --refresh-visibility --vocabulary <path>
 
@@ -168,8 +196,43 @@ NEVER_EXEMPTABLE: frozenset[str] = frozenset(
         "private-repo-name",
         "internal-kb-prose",
         "public-doc-private-repo",
+        "lab-config",
     }
 )
+
+PATH_CLASSES: frozenset[str] = frozenset(
+    {
+        "top-level-not-allowed",
+        "agent-state",
+        "evidence-tree",
+        "misplaced-doc",
+        "brand-asset",
+        "env-file",
+        "os-junk",
+        "cache-or-log",
+    }
+)
+CONTENT_CLASSES: frozenset[str] = frozenset(
+    {
+        "cloud-identity",
+        "private-network",
+        "machine-path",
+        "private-repo-name",
+        "internal-kb-prose",
+        "public-doc-private-repo",
+        "lab-config",
+        "person-name",
+        "tracker-url",
+        "secret-shaped",
+        "self-granted-annotation",
+    }
+)
+#: Every class a repo config may enforce or a run may be restricted to.
+SELECTABLE_CLASSES: frozenset[str] = PATH_CLASSES | CONTENT_CLASSES
+
+#: The private lab vocabulary's file name. With no ``--lab-vocabulary`` the gate
+#: reads the file of this name beside the main vocabulary.
+LAB_VOCABULARY_BASENAME = "public_repo_hygiene_lab_vocabulary.yaml"
 
 INFORMATIONAL: frozenset[str] = frozenset({"self-granted-annotation"})
 
@@ -506,6 +569,7 @@ class Vocabulary:
     sensitive_literal_patterns: list[str] = field(default_factory=list)
     sensitive_literal_exempt_globs: list[str] = field(default_factory=list)
     machine_path_patterns: list[str] = field(default_factory=list)
+    lab_lane_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -514,6 +578,7 @@ class RepoConfig:
     allowed_top_level: frozenset[str]
     registry_path: str
     scan_excludes: tuple[re.Pattern[str], ...]
+    enforce_classes: frozenset[str] = frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -546,11 +611,20 @@ def load_repo_config(path: Path) -> RepoConfig:
     excludes = tuple(
         glob_to_regex(g) for g in _as_str_list(data, "scan_excludes", str(path))
     )
+    enforce = frozenset(_as_str_list(data, "enforce_classes", str(path)))
+    unknown = sorted(enforce - SELECTABLE_CLASSES)
+    if unknown:
+        raise ConfigError(
+            f"{path}: 'enforce_classes' names unknown class(es) {unknown}. A "
+            "misspelled class would enforce nothing while reading as enforced. "
+            f"Known classes: {sorted(SELECTABLE_CLASSES)}. THE GATE DID NOT RUN."
+        )
     return RepoConfig(
         mode=mode if isinstance(mode, str) else None,
         allowed_top_level=frozenset(allowed),
         registry_path=registry,
         scan_excludes=excludes,
+        enforce_classes=enforce,
     )
 
 
@@ -651,6 +725,48 @@ def load_vocabulary(path: Path) -> Vocabulary:
     )
     _assert_visibility_cache_fresh(vocab, origin)
     return vocab
+
+
+LAB_VOCABULARY_REQUIRED_KEYS: frozenset[str] = frozenset({"lab_lane_ids"})
+LAB_VOCABULARY_OPTIONAL_KEYS: frozenset[str] = frozenset({"schema_version"})
+
+
+def load_lab_vocabulary(path: Path) -> list[str]:
+    """Load the private LAB vocabulary's ``lab_lane_ids``. FAILS CLOSED.
+
+    Missing file, unknown key, and a missing or empty ``lab_lane_ids`` list are
+    all exit 2: an absent list would build a pattern that matches nothing, and
+    the never-exemptable ``lab-config`` class would report green over every
+    lab lane id in the repository.
+    """
+    if not path.is_file():
+        raise ConfigError(
+            f"lab vocabulary not found at {path}. The lab-config class reads "
+            "its lane ids from a PRIVATE file and cannot scan without it. This "
+            "is a fail-closed refusal, not a pass. THE GATE DID NOT RUN."
+        )
+    origin = str(path)
+    data = parse_restricted_yaml(path.read_text(encoding="utf-8"), origin)
+    known = LAB_VOCABULARY_REQUIRED_KEYS | LAB_VOCABULARY_OPTIONAL_KEYS
+    unknown = sorted(set(data) - known)
+    if unknown:
+        raise ConfigError(
+            f"{origin}: unknown lab vocabulary key(s) {unknown}. A misspelled "
+            "key would be read as an EMPTY class. THE GATE DID NOT RUN."
+        )
+    if "lab_lane_ids" not in data:
+        raise ConfigError(
+            f"{origin}: missing required key 'lab_lane_ids' "
+            "(missing_lab_lane_ids). The lab-config class is never-exemptable; "
+            "an absent list would silently disable it. THE GATE DID NOT RUN."
+        )
+    ids = [v for v in _as_str_list(data, "lab_lane_ids", origin) if v.strip()]
+    if not ids:
+        raise ConfigError(
+            f"{origin}: 'lab_lane_ids' is empty. An empty list matches nothing "
+            "and would report every lab lane id as clean. THE GATE DID NOT RUN."
+        )
+    return ids
 
 
 def _assert_visibility_cache_fresh(vocab: Vocabulary, origin: str) -> None:
@@ -842,6 +958,13 @@ def build_content_patterns(vocab: Vocabulary) -> dict[str, re.Pattern[str]]:
         ),
         "internal-kb-prose": re.compile(
             rf"{_raw_alternation(vocab.internal_kb_prose)}", re.IGNORECASE
+        ),
+        # Whole token: no letter, digit or underscore on either side. A hyphen
+        # IS a boundary, so a compose container name that carries a lane id
+        # (``<id>-runtime``) is refused too, while an id's prefix alone is not.
+        "lab-config": re.compile(
+            rf"(?<![A-Za-z0-9_])(?:{_alternation(vocab.lab_lane_ids)})(?![A-Za-z0-9_])",
+            re.IGNORECASE,
         ),
         "person-name": re.compile(
             rf"(?<![a-z0-9_-])(?:{_alternation(vocab.person_names)})(?![a-z0-9_-])",
@@ -1115,11 +1238,24 @@ def run(
     vocab_path: Path,
     mode: str,
     only_paths: list[str] | None,
+    *,
+    lab_vocab_path: Path,
+    only_classes: frozenset[str] | None = None,
 ) -> tuple[int, list[Finding], list[Finding]]:
+    """Scan ``repo_root``; return ``(exit_code, blocking, informational)``.
+
+    ``only_classes`` restricts the run to those classes. A blocking finding
+    fails the run when the effective mode is ``enforce``, or when its class is
+    in the repo config's ``enforce_classes`` whatever the mode.
+    """
     config = load_repo_config(repo_root / CONFIG_BASENAME)
     vocab = load_vocabulary(vocab_path)
+    vocab.lab_lane_ids = load_lab_vocabulary(lab_vocab_path)
     registry = load_registry(repo_root / config.registry_path)
-    effective_mode = config.mode or mode
+    # A run restricted with --only-classes is an explicit, targeted check (the
+    # lab-class gate): its --mode is the one the caller asked for. Otherwise
+    # the repo's own config mode wins, as it always has.
+    effective_mode = mode if only_classes is not None else (config.mode or mode)
     patterns = build_content_patterns(vocab)
     sensitive_literal_exempt = tuple(
         glob_to_regex(g) for g in vocab.sensitive_literal_exempt_globs
@@ -1145,6 +1281,8 @@ def run(
         )
 
         for finding in candidates:
+            if only_classes is not None and finding.class_name not in only_classes:
+                continue
             if finding.class_name in INFORMATIONAL:
                 informational.append(finding)
                 continue
@@ -1158,7 +1296,12 @@ def run(
             if not suppressed:
                 blocking.append(finding)
 
-    exit_code = 1 if (blocking and effective_mode == "enforce") else 0
+    failing = [
+        f
+        for f in blocking
+        if effective_mode == "enforce" or f.class_name in config.enforce_classes
+    ]
+    exit_code = 1 if failing else 0
     return exit_code, blocking, informational
 
 
@@ -1219,6 +1362,24 @@ def main(argv: list[str] | None = None) -> int:
             "locally; CI fetches it from the private repo and passes the path."
         ),
     )
+    parser.add_argument(
+        "--lab-vocabulary",
+        type=Path,
+        default=None,
+        help=(
+            "path to the PRIVATE lab vocabulary (lab_lane_ids) for the "
+            f"lab-config class. Defaults to {LAB_VOCABULARY_BASENAME} beside "
+            "the vocabulary; CI fetches it and passes the path. Absent is exit 2."
+        ),
+    )
+    parser.add_argument(
+        "--only-classes",
+        default=None,
+        help=(
+            "comma-separated classes to restrict the run to, e.g. "
+            "private-network,lab-config. An unknown class is exit 2."
+        ),
+    )
     parser.add_argument("--mode", choices=MODES, default="report")
     parser.add_argument(
         "--staged",
@@ -1267,12 +1428,33 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(names))
         return 0
 
+    lab_vocab_path = args.lab_vocabulary or (
+        vocab_path.parent / LAB_VOCABULARY_BASENAME
+    )
+
+    only_classes: frozenset[str] | None = None
+    if args.only_classes is not None:
+        only_classes = frozenset(
+            c.strip() for c in args.only_classes.split(",") if c.strip()
+        )
+        unknown = sorted(only_classes - SELECTABLE_CLASSES)
+        if not only_classes or unknown:
+            print(
+                f"::error::--only-classes names unknown or no class(es) {unknown}. "
+                f"Known classes: {sorted(SELECTABLE_CLASSES)}. "
+                "THE GATE DID NOT RUN.",
+                file=sys.stderr,
+            )
+            return 2
+
     try:
         exit_code, blocking, informational = run(
             repo_root,
             vocab_path,
             args.mode,
             args.paths if args.staged else None,
+            lab_vocab_path=lab_vocab_path,
+            only_classes=only_classes,
         )
     except ConfigError as exc:
         print(f"::error::{exc}", file=sys.stderr)
@@ -1281,10 +1463,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"::error::git failed: {exc}. THE GATE DID NOT RUN.", file=sys.stderr)
         return 2
 
-    config_mode = load_repo_config(repo_root / CONFIG_BASENAME).mode or args.mode
+    config = load_repo_config(repo_root / CONFIG_BASENAME)
+    config_mode = args.mode if only_classes is not None else (config.mode or args.mode)
     _print_report(blocking, informational, config_mode)
+    if only_classes is not None:
+        print(f"\n  restricted to: {', '.join(sorted(only_classes))}")
 
-    if blocking and config_mode == "report":
+    enforced = [f for f in blocking if f.class_name in config.enforce_classes]
+    if config_mode == "report" and enforced:
+        print(
+            f"\n  ENFORCED CLASSES: {len(enforced)} finding(s) in "
+            f"{sorted(config.enforce_classes)} fail the run in report mode, exit 1."
+        )
+    elif blocking and config_mode == "report":
         print(
             f"\n  REPORT MODE: {len(blocking)} blocking finding(s) recorded, exit 0. "
             "Flip to enforce once the residue is fixed — never by allowlisting it."

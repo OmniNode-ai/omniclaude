@@ -137,8 +137,41 @@ def _make_repo(root: Path, files: dict[str, str], config: str = MINIMAL_CONFIG) 
     return root
 
 
-def _run(root: Path, vocab_path: Path, mode: str = "enforce"):
-    return gate.run(root, vocab_path, mode, None)
+# The lab vocabulary (OMN-19766). Synthetic lane ids only: a real lab lane id
+# spelled in this public file is exactly what the lab-config class refuses.
+LAB_VOCAB = """
+schema_version: 1
+lab_lane_ids:
+  - "lane-alpha-lab"
+  - "lane-alpha-lab-2"
+"""
+LAB_LANE = "lane-alpha-lab"
+
+
+def _lab_vocab_for(vocab_path: Path) -> Path:
+    """The lab vocabulary beside ``vocab_path``, written once if absent."""
+    path = vocab_path.parent / "lab_vocabulary.yaml"
+    if not path.exists():
+        path.write_text(LAB_VOCAB, encoding="utf-8")
+    return path
+
+
+def _run(
+    root: Path,
+    vocab_path: Path,
+    mode: str = "enforce",
+    *,
+    lab_vocab_path: Path | None = None,
+    only_classes: frozenset[str] | None = None,
+):
+    return gate.run(
+        root,
+        vocab_path,
+        mode,
+        None,
+        lab_vocab_path=lab_vocab_path or _lab_vocab_for(vocab_path),
+        only_classes=only_classes,
+    )
 
 
 def _classes(findings) -> set[str]:
@@ -708,3 +741,201 @@ def test_a_genuinely_unparseable_line_is_still_a_hard_error() -> None:
     """
     with pytest.raises(gate.ConfigError):
         gate.parse_restricted_yaml("mode: report\n@ not yaml at all\n", "fixture.yaml")
+
+
+# ---------------------------------------------------------------------------
+# Lab configuration (OMN-19766): the lab-config class, per-class enforcement
+# and --only-classes
+#
+# RULING 2026-09-26T15:24:56Z: no lab configuration of any kind in a public
+# repository. A repository reaching zero for the lab classes turns them on in
+# its own config (`enforce_classes`) while its other classes may still be red,
+# which a single `mode:` switch could not express.
+# ---------------------------------------------------------------------------
+
+LAB_CONFIG = MINIMAL_CONFIG.replace("mode: enforce", "mode: report") + (
+    'enforce_classes:\n  - "private-network"\n  - "lab-config"\n'
+)
+
+
+def test_lab_lane_id_is_the_lab_config_class(tmp_path: Path, vocab: Path) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.txt": f"lane = {LAB_LANE}\n"})
+    _, blocking, _ = _run(root, vocab)
+    assert "lab-config" in _classes(blocking)
+    assert "lab-config" in gate.NEVER_EXEMPTABLE
+
+
+@pytest.mark.parametrize(
+    ("payload", "hit"),
+    [
+        (f"project {LAB_LANE}-runtime", True),  # a compound name carries it
+        (f"ONEX_RUNTIME_LANE={LAB_LANE.upper()}", True),  # case-insensitive
+        (f"x{LAB_LANE}", False),  # not a whole token
+        (f"{LAB_LANE}_suffix", False),
+        ("lane-alpha", False),  # a prefix of an id is not the id
+    ],
+)
+def test_lab_lane_id_matches_as_a_whole_token(
+    tmp_path: Path, vocab: Path, payload: str, hit: bool
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.txt": payload + "\n"})
+    _, blocking, _ = _run(root, vocab)
+    assert ("lab-config" in _classes(blocking)) is hit
+
+
+def test_enforce_classes_fail_the_run_in_report_mode(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """Positive control: a lab address and a lab lane id are both refused."""
+    root = _make_repo(
+        tmp_path / "r",
+        {
+            "src/address.py": f"H = '{LAN_LITERAL}'\n",
+            "src/lane.py": f"L = '{LAB_LANE}'\n",
+        },
+        LAB_CONFIG,
+    )
+    code, blocking, _ = _run(root, vocab, mode="report")
+    assert code == 1
+    failing = {(f.path, f.class_name) for f in blocking}
+    assert ("src/address.py", "private-network") in failing
+    assert ("src/lane.py", "lab-config") in failing
+
+
+def test_enforce_classes_pass_a_clean_repository(tmp_path: Path, vocab: Path) -> None:
+    """Negative control: the same config over a clean file exits 0."""
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"}, LAB_CONFIG)
+    code, blocking, _ = _run(root, vocab, mode="report")
+    assert code == 0, [f"{f.path}:{f.class_name}" for f in blocking]
+
+
+def test_classes_outside_enforce_classes_stay_report_only(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """Enforcing the lab classes does not flip the repository's other classes."""
+    root = _make_repo(
+        tmp_path / "r",
+        {"src/x.txt": f"contact {PERSON}\n", "vendor/y.txt": "x\n"},
+        LAB_CONFIG,
+    )
+    code, blocking, _ = _run(root, vocab, mode="report")
+    assert code == 0
+    assert {"person-name", "top-level-not-allowed"} <= _classes(blocking)
+
+
+def test_an_unknown_class_in_enforce_classes_is_a_config_error(
+    tmp_path: Path, vocab: Path
+) -> None:
+    config = MINIMAL_CONFIG + 'enforce_classes:\n  - "lab-confgi"\n'
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"}, config)
+    with pytest.raises(gate.ConfigError, match="unknown class"):
+        _run(root, vocab)
+
+
+def test_missing_lab_vocabulary_is_a_refusal(tmp_path: Path, vocab: Path) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    with pytest.raises(gate.ConfigError, match="THE GATE DID NOT RUN"):
+        _run(root, vocab, lab_vocab_path=tmp_path / "nope.yaml")
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("schema_version: 1\n", "missing_lab_lane_ids|lab_lane_ids"),
+        ('schema_version: 1\nlab_lane_ids: ""\n', "empty"),
+        (LAB_VOCAB + 'lab_lanes:\n  - "x"\n', "unknown lab vocabulary key"),
+    ],
+)
+def test_missing_lab_lane_ids_is_refused_never_scanned(
+    tmp_path: Path, vocab: Path, body: str, match: str
+) -> None:
+    lab = tmp_path / "bad_lab.yaml"
+    lab.write_text(body, encoding="utf-8")
+    root = _make_repo(tmp_path / "r", {"src/x.txt": f"L = {LAB_LANE}\n"})
+    with pytest.raises(gate.ConfigError, match=match):
+        _run(root, vocab, lab_vocab_path=lab)
+
+
+def test_a_registry_entry_cannot_grant_lab_config(tmp_path: Path, vocab: Path) -> None:
+    registry = (
+        "entries:\n"
+        '  - path_glob: "src/**"\n'
+        '    class: "lab-config"\n'
+        '    reason_code: "fixture"\n'
+        '    ticket: "OMN-1"\n'
+        '    expires_at: "2999-01-01"\n'
+        '    approved_by: "a-reviewer"\n'
+    )
+    root = _make_repo(
+        tmp_path / "r",
+        {"src/x.txt": "x\n", ".public-repo-hygiene-suppressions.yaml": registry},
+    )
+    with pytest.raises(gate.ConfigError, match="NEVER-EXEMPTABLE"):
+        _run(root, vocab)
+
+
+def test_only_classes_restricts_the_scan(tmp_path: Path, vocab: Path) -> None:
+    root = _make_repo(
+        tmp_path / "r",
+        {"src/x.txt": f"contact {PERSON}\n", "vendor/y.txt": "x\n"},
+    )
+    only = frozenset({"private-network", "lab-config"})
+    code, blocking, _ = _run(root, vocab, only_classes=only)
+    assert code == 0 and blocking == []
+    (root / "src" / "x.txt").write_text(f"L = {LAB_LANE}\n", encoding="utf-8")
+    code, blocking, _ = _run(root, vocab, only_classes=only)
+    assert code == 1
+    assert _classes(blocking) == {"lab-config"}
+
+
+def _cli(root: Path, vocab: Path, *extra: str) -> int:
+    return gate.main(
+        [
+            "--repo-root",
+            str(root),
+            "--vocabulary",
+            str(vocab),
+            "--lab-vocabulary",
+            str(_lab_vocab_for(vocab)),
+            *extra,
+        ]
+    )
+
+
+def test_the_lab_class_gate_command(tmp_path: Path, vocab: Path) -> None:
+    """The command every repository task runs: enforce, the two lab classes.
+
+    The repository is still in report mode, and the targeted run's --mode
+    wins, so it cannot read green over a lab address.
+    """
+    root = _make_repo(
+        tmp_path / "r",
+        {"src/x.txt": f"contact {PERSON}\n"},
+        MINIMAL_CONFIG.replace("mode: enforce", "mode: report"),
+    )
+    args = ("--mode", "enforce", "--only-classes", "private-network,lab-config")
+    assert _cli(root, vocab, *args) == 0
+    (root / "src" / "x.txt").write_text(f"H = '{LAN_LITERAL}'\n", encoding="utf-8")
+    assert _cli(root, vocab, *args) == 1
+
+
+def test_the_lab_class_gate_refuses_an_unknown_class(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    assert _cli(root, vocab, "--only-classes", "lab-confgi") == 2
+
+
+def test_the_lab_vocabulary_defaults_beside_the_vocabulary(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """With no --lab-vocabulary, the gate reads the file beside the vocabulary,
+    and refuses (exit 2) when there is none rather than skipping the class.
+    """
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    argv = ["--repo-root", str(root), "--vocabulary", str(vocab)]
+    assert gate.main(argv) == 2
+    (vocab.parent / gate.LAB_VOCABULARY_BASENAME).write_text(
+        LAB_VOCAB, encoding="utf-8"
+    )
+    assert gate.main(argv) == 0

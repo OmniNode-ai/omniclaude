@@ -91,6 +91,16 @@ on:
         type: string
         required: false
         default: ""
+      lab_vocabulary_repo_name:
+        description: >-
+          Name (NOT owner/name) of the PRIVATE repository holding the LAB
+          vocabulary (lab_lane_ids) that the lab-config class reads (OMN-19766).
+          Leave unset in normal use -- it resolves from the org Actions variable
+          OMNI_HYGIENE_LAB_VOCAB_REPO. Not written here for the same reason as
+          vocabulary_repo_name. Unset everywhere is a refusal, never a pass.
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -207,6 +217,28 @@ jobs:
           fi
           echo "name=${resolved}" >> "$GITHUB_OUTPUT"
 
+      # OMN-19766: the lab-config class reads the LAB vocabulary, a second
+      # private file. It lives apart from the main vocabulary because every
+      # caller pins an older gate, and an older gate refuses an unknown key in
+      # the main vocabulary. Same refusal as above when the name is unset.
+      - name: Resolve the private lab vocabulary repo
+        id: lab-vocab-repo
+        env:
+          EXPLICIT: ${{ inputs.lab_vocabulary_repo_name }}
+          FROM_VARS: ${{ vars.OMNI_HYGIENE_LAB_VOCAB_REPO }}
+        run: |
+          set -euo pipefail
+          resolved="${EXPLICIT:-${FROM_VARS:-}}"
+          if [ -z "${resolved}" ]; then
+            echo "::error::neither the 'lab_vocabulary_repo_name' input nor the" \
+                 "org variable OMNI_HYGIENE_LAB_VOCAB_REPO is set, so the PRIVATE" \
+                 "lab vocabulary cannot be located. The lab-config class cannot" \
+                 "scan without it, and the gate refuses rather than reporting" \
+                 "green. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "name=${resolved}" >> "$GITHUB_OUTPUT"
+
       - name: Mint token for the private vocabulary repo
         id: vocab-token
         uses: actions/create-github-app-token@v3
@@ -214,7 +246,7 @@ jobs:
           app-id: ${{ secrets.ONEXBOT_APP_ID }}
           private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ steps.vocab-repo.outputs.name }}
+          repositories: ${{ steps.vocab-repo.outputs.name }},${{ steps.lab-vocab-repo.outputs.name }}
           permission-contents: read
 
       # DELIBERATELY UNPINNED, and pinning it would be the defect.
@@ -241,6 +273,24 @@ jobs:
             docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
           sparse-checkout-cone-mode: false
 
+      # Unpinned for the same reason as the vocabulary above: it is DATA read
+      # from a private first-party repository, and the gate re-validates it
+      # (missing, unknown key, or empty lab_lane_ids is exit 2).
+      #
+      # reusable-checkout-ref-ok: public-repo-hygiene OMN-19766 the lab
+      # vocabulary is data, re-validated by the gate, fetched unpinned exactly
+      # like the main vocabulary.
+      - name: Fetch the private lab vocabulary
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.lab-vocab-repo.outputs.name }}
+          token: ${{ steps.vocab-token.outputs.token }}
+          path: .public-repo-hygiene-lab-vocabulary
+          persist-credentials: false
+          sparse-checkout: |
+            vocabularies/public_repo_hygiene_lab_vocabulary.yaml
+          sparse-checkout-cone-mode: false
+
       - name: Run the public-repo hygiene gate
         env:
           MODE: ${{ inputs.mode }}
@@ -249,6 +299,7 @@ jobs:
                 && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
                 || 'scripts/public_repo_hygiene_gate.py' }}
           VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+          LAB_VOCAB_PATH: .public-repo-hygiene-lab-vocabulary/vocabularies/public_repo_hygiene_lab_vocabulary.yaml
         run: |
           set -euo pipefail
           # Fail LOUD, not with a bare "python3: can't open file ... Errno 2".
@@ -276,9 +327,21 @@ jobs:
                  "'secrets: inherit'. THE GATE DID NOT RUN."
             exit 1
           fi
+          if [ ! -f "${LAB_VOCAB_PATH}" ]; then
+            echo "::error::the private lab vocabulary was not fetched to" \
+                 "${LAB_VOCAB_PATH}. The lab-config class cannot scan without" \
+                 "it and the gate refuses rather than reporting green. Check" \
+                 "OMNI_HYGIENE_LAB_VOCAB_REPO and that the app installation" \
+                 "covers that repository. THE GATE DID NOT RUN."
+            exit 1
+          fi
           # Never suppress stderr on a verification sweep, and never `|| true`
           # a gate: both convert a failure into a confident zero.
+          # Per-class enforcement (enforce_classes) is read by the gate from
+          # the caller's own checked-in .public-repo-hygiene.yaml, so no input
+          # carries it: one surface, the repository's reviewed config.
           python3 "${SCRIPT_PATH}" \
             --repo-root . \
             --vocabulary "${VOCAB_PATH}" \
+            --lab-vocabulary "${LAB_VOCAB_PATH}" \
             --mode "${MODE}"
