@@ -380,7 +380,11 @@ def test_hooks_json_stop_key_holds_only_the_content_capture_observer() -> None:
     commands = [
         hook["command"] for group in data["hooks"]["Stop"] for hook in group["hooks"]
     ]
-    assert [c.rsplit("/", 1)[-1] for c in commands] == ["stop_content_capture.sh"]
+    # OMN-19513 adds the all-hooks capture observer beside it; still no gate.
+    assert [c.rsplit("/", 1)[-1] for c in commands] == [
+        "stop_content_capture.sh",
+        "claude_hook_capture.sh",
+    ]
     on_disk = [
         path.name
         for path in sorted((_REPO_ROOT / _SCRIPTS_REL).iterdir())

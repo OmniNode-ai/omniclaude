@@ -836,6 +836,7 @@ class TestEventRegistryIntegration:
             "hostile.reviewer.failed",
             # Full-content capture (OMN-19551, topic owned by OMN-19550)
             "content.captured",
+            "hook.event",
             # Agent chat broadcast (OMN-3972)
             "agent.chat.broadcast",
             # Cross-session coordination signal (OMN-6857)

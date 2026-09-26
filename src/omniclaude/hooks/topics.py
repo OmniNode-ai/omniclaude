@@ -41,6 +41,11 @@ class TopicBase(StrEnum):
     SESSION_ENDED = "onex.evt.omniclaude.session-ended.v1"
     PROMPT_SUBMITTED = "onex.evt.omniclaude.prompt-submitted.v1"
     TOOL_EXECUTED = "onex.evt.omniclaude.tool-executed.v1"
+    # OMN-19513: all-hooks capture. One lineage-carrying metadata event per
+    # Claude Code hook call, every hook type on one topic (contract
+    # claude_hook_capture). Content only by reference; the topic and its
+    # redaction policy are owned by omnimarket's emit registry.
+    HOOK_EVENT = "onex.evt.omniclaude.hook-event.v1"
     AGENT_ACTION = "onex.evt.omniclaude.agent-action.v1"
     LEARNING_PATTERN = "onex.evt.omniclaude.learning-pattern.v1"
     WORK_OBLIGATION_ABANDONED = "onex.evt.omniclaude.work-obligation-abandoned.v1"

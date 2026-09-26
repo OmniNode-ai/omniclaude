@@ -353,6 +353,128 @@ topics:
       lane_ticket: capture_verbatim
       workspace_path: capture_verbatim
       hook_fired_at: capture_verbatim
+      # OMN-19513 -- the tool call's harness identifiers, so a tool-executed
+      # row can be joined to its hook-event lineage and told apart from a
+      # subagent's. Both are opaque harness ids (toolu_... and a... hex): no
+      # tool argument, no output, no path.
+      tool_use_id: capture_verbatim
+      agent_id: capture_verbatim
+
+  "onex.evt.omniclaude.hook-event.v1":
+    ticket: OMN-19513
+    reason: >
+      All-hooks capture metadata: one event per Claude Code hook call, every
+      hook type, contract claude_hook_capture (omniclaude). Every declared
+      field is an identifier, enum, name, count, boolean, timestamp,
+      deterministic digest or content-record reference; content never rides
+      this topic, only a reference whose sha256 is computed over the value
+      AFTER the span scrub. The nested lineage and payload objects are
+      governed per subfield (dotted names below); an undeclared subfield is
+      hashed by default_field_class like any undeclared field, so a hook
+      field added upstream fails safe to a digest. Top-level names after the
+      contract's own are what the hook journal and the emit enrichment add.
+    fields:
+      event_id: capture_verbatim
+      schema_version: capture_verbatim
+      hook_event_name: capture_verbatim
+      emitted_at: capture_verbatim
+      actor: capture_verbatim
+      claude_code_version: capture_verbatim
+      lineage.session_id: capture_verbatim
+      lineage.agent_id: capture_verbatim
+      lineage.agent_type: capture_verbatim
+      lineage.is_subagent: capture_verbatim
+      lineage.parent_tool_use_id: capture_verbatim
+      lineage.workflow_run_id: capture_verbatim
+      lineage.spawn_depth: capture_verbatim
+      lineage.tool_use_id: capture_verbatim
+      lineage.prompt_id: capture_verbatim
+      lineage.turn_id: capture_verbatim
+      lineage.correlation_id: capture_verbatim
+      lineage.causation_id: capture_verbatim
+      payload.hook_event_name: capture_verbatim
+      payload.tool_name: capture_verbatim
+      payload.mcp_server: capture_verbatim
+      payload.tool_call_key: capture_verbatim
+      payload.tool_input_keys: capture_verbatim
+      payload.tool_use_ids: capture_verbatim
+      payload.tool_names: capture_verbatim
+      payload.duration_ms: capture_verbatim
+      payload.interrupted: capture_verbatim
+      payload.is_interrupt: capture_verbatim
+      payload.notification_type: capture_verbatim
+      payload.prompt_length: capture_verbatim
+      payload.source: capture_verbatim
+      payload.expansion_type: capture_verbatim
+      payload.command_name: capture_verbatim
+      payload.command_source: capture_verbatim
+      payload.model: capture_verbatim
+      payload.context_tokens: capture_verbatim
+      payload.seconds_since_last_response: capture_verbatim
+      payload.prompt_cache_likely_expired: capture_verbatim
+      payload.reason: capture_verbatim
+      payload.stop_hook_active: capture_verbatim
+      payload.background_task_count: capture_verbatim
+      payload.session_cron_count: capture_verbatim
+      payload.error: capture_verbatim
+      payload.agent_id: capture_verbatim
+      payload.agent_type: capture_verbatim
+      payload.trigger: capture_verbatim
+      payload.suggestion_count: capture_verbatim
+      payload.teammate_name: capture_verbatim
+      payload.team_name: capture_verbatim
+      payload.task_id: capture_verbatim
+      payload.mcp_server_name: capture_verbatim
+      payload.mode: capture_verbatim
+      payload.elicitation_id: capture_verbatim
+      payload.requested_schema_keys: capture_verbatim
+      payload.action: capture_verbatim
+      payload.memory_type: capture_verbatim
+      payload.load_reason: capture_verbatim
+      payload.glob_count: capture_verbatim
+      payload.event: capture_verbatim
+      payload.turn_id: capture_verbatim
+      payload.message_id: capture_verbatim
+      payload.index: capture_verbatim
+      payload.final: capture_verbatim
+      payload.delta_length: capture_verbatim
+      payload.tool_input_ref: capture_verbatim
+      payload.tool_response_ref: capture_verbatim
+      payload.error_ref: capture_verbatim
+      payload.title_ref: capture_verbatim
+      payload.message_ref: capture_verbatim
+      payload.prompt_ref: capture_verbatim
+      payload.session_title_ref: capture_verbatim
+      payload.command_args_ref: capture_verbatim
+      payload.last_assistant_message_ref: capture_verbatim
+      payload.error_details_ref: capture_verbatim
+      payload.agent_transcript_ref: capture_verbatim
+      payload.custom_instructions_ref: capture_verbatim
+      payload.compact_summary_ref: capture_verbatim
+      payload.reason_ref: capture_verbatim
+      payload.task_subject_ref: capture_verbatim
+      payload.task_description_ref: capture_verbatim
+      payload.content_ref: capture_verbatim
+      payload.file_path_ref: capture_verbatim
+      payload.name_ref: capture_verbatim
+      payload.worktree_path_ref: capture_verbatim
+      payload.old_cwd_ref: capture_verbatim
+      payload.new_cwd_ref: capture_verbatim
+      payload.directory_ref: capture_verbatim
+      payload.delta_ref: capture_verbatim
+      content_refs: capture_verbatim
+      # Added by the emit path, not the contract event: the partition key,
+      # the journal's turn id and lane attribution (same reasoning as the
+      # tool-executed block above), and the enrichment envelope.
+      session_id: capture_verbatim
+      turn_id: capture_verbatim
+      lane: capture_verbatim
+      lane_source: capture_verbatim
+      lane_ticket: capture_verbatim
+      workspace_path: capture_verbatim
+      correlation_id: capture_verbatim
+      causation_id: capture_verbatim
+      entity_id: capture_verbatim
 
   "onex.evt.omniclaude.prompt-submitted.v1":
     ticket: OMN-16979
