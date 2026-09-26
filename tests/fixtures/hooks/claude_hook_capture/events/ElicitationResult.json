@@ -1,0 +1,43 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "3e661112-b796-5008-854a-e4d66e39d287",
+      "field": "content",
+      "length": 55,
+      "sha256": "76e1e0f4b3fb5aed403903a9ca4e8c697005802de4d77ee84d0f9a39e2899861"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:24Z",
+  "event_id": "d291a58b-61c9-535c-a4e7-fc6948178395",
+  "hook_event_name": "ElicitationResult",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "action": "accept",
+    "content_ref": {
+      "content_record_id": "3e661112-b796-5008-854a-e4d66e39d287",
+      "field": "content",
+      "length": 55,
+      "sha256": "76e1e0f4b3fb5aed403903a9ca4e8c697005802de4d77ee84d0f9a39e2899861"
+    },
+    "elicitation_id": "elicit-fixture-1",
+    "hook_event_name": "ElicitationResult",
+    "mcp_server_name": "fixture-server",
+    "mode": "form"
+  },
+  "schema_version": "1.0.0"
+}

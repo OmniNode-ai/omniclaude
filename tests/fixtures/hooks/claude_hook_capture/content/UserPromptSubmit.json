@@ -1,0 +1,30 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "05795d81-8652-54a7-8f9d-a2236e250a24",
+    "event_id": "a1d1bef2-e9e7-5421-8ed2-39b1f3d19162",
+    "field": "prompt",
+    "hook_event_name": "UserPromptSubmit",
+    "length": 54,
+    "matched_pattern_names": [
+      "anthropic_api_key"
+    ],
+    "redaction_state": "secret_detected",
+    "session_id": "session-fixture-1",
+    "sha256": "f3594d99da397432796470e5f39b1d625d0473f33fe79c9a2a71d16076a33bb6",
+    "value": "fixture prompt containing [REDACTED:anthropic_api_key]"
+  },
+  {
+    "agent_id": null,
+    "content_record_id": "d6a5753d-6759-5737-af9f-70834cd1fe08",
+    "event_id": "a1d1bef2-e9e7-5421-8ed2-39b1f3d19162",
+    "field": "session_title",
+    "hook_event_name": "UserPromptSubmit",
+    "length": 21,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "c932fb466a69c9a72b5abf9b5a947d6ce3f05696ae6d8187c7b0ba8b425372ed",
+    "value": "private session title"
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "cwd": "/workspace/fixture",
+  "duration_ms": 125,
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PostToolUse",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "tool_input": {
+    "command": "printf fixture"
+  },
+  "tool_name": "Bash",
+  "tool_response": {
+    "interrupted": false,
+    "output": "fixture sk-ant-FAKE0000000000000000000000000000"
+  },
+  "tool_use_id": "toolu-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

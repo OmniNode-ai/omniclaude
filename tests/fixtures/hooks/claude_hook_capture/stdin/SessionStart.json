@@ -1,0 +1,18 @@
+{
+  "context_tokens": 4096,
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "estimated_cache_write_usd": 0.01,
+  "hook_event_name": "SessionStart",
+  "model": "claude-opus-4-1",
+  "permission_mode": "default",
+  "prompt_cache_likely_expired": false,
+  "prompt_id": "prompt-fixed-1",
+  "seconds_since_last_response": 12.5,
+  "session_id": "session-fixture-1",
+  "session_title": "private title not projected",
+  "source": "startup",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

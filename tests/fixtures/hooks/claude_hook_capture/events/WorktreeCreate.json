@@ -1,0 +1,39 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "a8d684b3-0c4d-55ec-a862-a197e22b84ae",
+      "field": "name",
+      "length": 21,
+      "sha256": "3773bf33cbd0057b28e15fbfef7549e578ce97546891581d44c6d3c6582e640e"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:26Z",
+  "event_id": "74abed28-00e1-5c93-b696-835200792373",
+  "hook_event_name": "WorktreeCreate",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "hook_event_name": "WorktreeCreate",
+    "name_ref": {
+      "content_record_id": "a8d684b3-0c4d-55ec-a862-a197e22b84ae",
+      "field": "name",
+      "length": 21,
+      "sha256": "3773bf33cbd0057b28e15fbfef7549e578ce97546891581d44c6d3c6582e640e"
+    }
+  },
+  "schema_version": "1.0.0"
+}

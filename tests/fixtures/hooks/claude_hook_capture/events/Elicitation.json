@@ -1,0 +1,46 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [
+    {
+      "content_record_id": "7826502f-151e-52ca-8b9a-1e2a7b4d5df8",
+      "field": "message",
+      "length": 27,
+      "sha256": "a4c17af9eabc071c5c66c8bb4cc55a1f00844f5d14de8ef27edfbf4c28a1caa4"
+    }
+  ],
+  "emitted_at": "2026-09-26T12:00:23Z",
+  "event_id": "82474c1f-b923-5be9-960e-747bbf20ec86",
+  "hook_event_name": "Elicitation",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "elicitation_id": "elicit-fixture-1",
+    "hook_event_name": "Elicitation",
+    "mcp_server_name": "fixture-server",
+    "message_ref": {
+      "content_record_id": "7826502f-151e-52ca-8b9a-1e2a7b4d5df8",
+      "field": "message",
+      "length": 27,
+      "sha256": "a4c17af9eabc071c5c66c8bb4cc55a1f00844f5d14de8ef27edfbf4c28a1caa4"
+    },
+    "mode": "form",
+    "requested_schema_keys": [
+      "account",
+      "region"
+    ]
+  },
+  "schema_version": "1.0.0"
+}

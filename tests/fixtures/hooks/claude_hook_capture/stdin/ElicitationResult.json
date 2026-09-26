@@ -1,0 +1,19 @@
+{
+  "action": "accept",
+  "content": {
+    "account": "private account",
+    "region": "private region"
+  },
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "elicitation_id": "elicit-fixture-1",
+  "hook_event_name": "ElicitationResult",
+  "mcp_server_name": "fixture-server",
+  "mode": "form",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

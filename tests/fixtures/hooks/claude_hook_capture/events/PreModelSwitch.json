@@ -1,0 +1,26 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [],
+  "emitted_at": "2026-09-26T12:00:15Z",
+  "event_id": "244f0f97-5e15-55a5-a15f-295f006cf1fe",
+  "hook_event_name": "PreModelSwitch",
+  "lineage": {
+    "agent_id": null,
+    "agent_type": null,
+    "causation_id": null,
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": null,
+    "turn_id": "turn-fixed-1",
+    "workflow_run_id": null
+  },
+  "payload": {
+    "hook_event_name": "PreModelSwitch"
+  },
+  "schema_version": "1.0.0"
+}

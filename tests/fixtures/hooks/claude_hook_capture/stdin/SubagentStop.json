@@ -1,0 +1,18 @@
+{
+  "agent_id": "agent-fixture-1",
+  "agent_transcript_path": "/restricted/agent-fixture-1.jsonl",
+  "agent_type": "Explore",
+  "background_tasks": [],
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "SubagentStop",
+  "last_assistant_message": "private subagent answer",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_crons": [],
+  "session_id": "session-fixture-1",
+  "stop_hook_active": false,
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

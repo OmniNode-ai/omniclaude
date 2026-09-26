@@ -1,0 +1,13 @@
+{
+  "cwd": "/workspace/fixture",
+  "directory": "/restricted/new-directory",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "DirectoryAdded",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "source": "slash_command",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

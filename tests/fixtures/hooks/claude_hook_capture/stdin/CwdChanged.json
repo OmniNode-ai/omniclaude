@@ -1,0 +1,13 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "CwdChanged",
+  "new_cwd": "/restricted/new",
+  "old_cwd": "/restricted/old",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

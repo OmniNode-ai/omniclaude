@@ -1,0 +1,17 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "912e2098-0c60-5f32-baf5-cbdf5c6e3402",
+    "event_id": "2cb370b7-9641-5c76-92e5-ae4125f52f12",
+    "field": "tool_response",
+    "hook_event_name": "PostToolUse",
+    "length": 69,
+    "matched_pattern_names": [
+      "anthropic_api_key"
+    ],
+    "redaction_state": "secret_detected",
+    "session_id": "session-fixture-1",
+    "sha256": "895a5474e547da0519d0bd580b7301099f6c0b0bea13648e5f6ef933a3dbe4f6",
+    "value": "{\"interrupted\":false,\"output\":\"fixture [REDACTED:anthropic_api_key]\"}"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "ed0056a7-6892-5e30-b7d1-d6337760e5b0",
+    "event_id": "247866b1-0ffb-5201-a21d-9e4b009b9718",
+    "field": "file_path",
+    "hook_event_name": "InstructionsLoaded",
+    "length": 21,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "646efb8c7a3eec329240f7bbabf3d919f0a7019388a57fa46b75727ba4ecfddb",
+    "value": "/restricted/CLAUDE.md"
+  }
+]
