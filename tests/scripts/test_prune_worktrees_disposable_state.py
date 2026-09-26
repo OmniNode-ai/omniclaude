@@ -46,6 +46,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tarfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -118,9 +120,29 @@ def _clean_git_env() -> dict[str, str]:
     return env
 
 
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    """Drop the git location variables that override ``cwd=`` and ``-C`` (OMN-18434)."""
+    scrubbed = dict(env)
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ):
+        scrubbed.pop(key, None)
+    return scrubbed
+
+
 def _git(env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(
-        ["git", *args], capture_output=True, text=True, env=env, check=False, timeout=60
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        env=scrub_git_location_env(env),
+        check=False,
+        timeout=60,
     )
     assert proc.returncode == 0, f"git {' '.join(args)} failed: {proc.stderr}"
     return proc
@@ -205,7 +227,10 @@ def harness(tmp_path: Path) -> Harness:
         "REAL_GIT": real_git,
         "PATH": f"{bin_dir}:{env.get('PATH', '')}",
     }
-    run_env.pop("OMNI_HOME", None)
+    # A scratch registry, never the real one: every removal saves the worktree
+    # under $OMNI_HOME/.onex_state first (OMN-19539), and the script's closing
+    # canonical-clone prune loop walks $OMNI_HOME/*/ (empty here).
+    run_env["OMNI_HOME"] = str(tmp_path / "scratch_registry")
 
     return Harness(env=run_env, root=root, worktree=worktree, tmp=tmp_path)
 
@@ -367,3 +392,57 @@ def test_clean_worktree_is_still_removed(harness: Harness) -> None:
     assert not worktree.exists(), (
         f"clean stale worktree was not removed:\n{proc.stdout}"
     )
+
+
+# ---------------------------------------------------------------------------
+# OMN-19539: nothing is removed unsaved. The script removes with --force (and
+# an rm -rf fallback), so the disposable output it lets through, and every
+# ignored file, would otherwise be destroyed with no copy.
+# ---------------------------------------------------------------------------
+def _snapshot_dirs(harness: Harness) -> list[Path]:
+    root = Path(harness.env["OMNI_HOME"]) / ".onex_state" / "worktree-removal-snapshots"
+    return sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+
+
+@pytest.mark.unit
+def test_disposable_output_is_saved_before_the_forced_removal(harness: Harness) -> None:
+    worktree = harness.worktree
+    target = worktree / ".onex_state" / "push_log.txt"
+    target.parent.mkdir(parents=True)
+    target.write_text("regenerable\n", encoding="utf-8")
+
+    proc = _run_prune(harness)
+
+    assert proc.returncode == 0, f"script failed:\n{proc.stdout}\n{proc.stderr}"
+    assert not worktree.exists(), proc.stdout
+    (saved,) = _snapshot_dirs(harness)
+    with tarfile.open(saved / "untracked.tar.gz", "r:gz") as tar:
+        assert tar.getnames() == [".onex_state/push_log.txt"]
+    assert "SAVED:" in proc.stdout
+
+
+@pytest.mark.unit
+def test_positive_control_a_clean_worktree_is_saved_and_removed(
+    harness: Harness,
+) -> None:
+    proc = _run_prune(harness)
+
+    assert proc.returncode == 0, f"script failed:\n{proc.stdout}\n{proc.stderr}"
+    assert not harness.worktree.exists(), proc.stdout
+    assert len(_snapshot_dirs(harness)) == 1
+
+
+@pytest.mark.unit
+def test_a_failed_save_keeps_the_worktree(harness: Harness) -> None:
+    worktree = harness.worktree
+    target = worktree / ".onex_state" / "push_log.txt"
+    target.parent.mkdir(parents=True)
+    target.write_text("regenerable\n", encoding="utf-8")
+    env = dict(harness.env)
+    env.pop("OMNI_HOME")
+
+    proc = _run_prune(harness._replace(env=env))
+
+    assert worktree.is_dir(), proc.stdout
+    assert target.is_file()
+    assert "pre-removal snapshot failed" in proc.stdout

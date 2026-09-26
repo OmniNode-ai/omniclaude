@@ -231,9 +231,14 @@ gh pr list --head "${branch_name}" --state open --json number --jq 'length'
 
 ### Step 4: Execute actions (if --execute) <!-- ai-slop-ok: skill-step-heading -->
 
-**SAFE_TO_DELETE — auto-remove:**
+**SAFE_TO_DELETE — auto-remove.** Save first: `--force`
+deletes every untracked and ignored file (a `.env`, local settings), so nothing is removed until
+`scripts/worktree_removal_snapshot.py` has saved the diff and those files under
+the registry root's `.onex_state/worktree-removal-snapshots/` (the helper requires OMNI_HOME to be set and refuses without it). A non-zero exit means KEEP the worktree.
 ```bash
 repo_name=$(basename "${worktree_path}")
+python3 "${WORKSPACE_ROOT}/omniclaude/scripts/worktree_removal_snapshot.py" "${worktree_path}" \
+  --reason "worktree-skill audit" || { echo "snapshot failed, kept: ${worktree_path}"; continue; }
 git -C "${WORKSPACE_ROOT}/${repo_name}" worktree remove "${worktree_path}" --force
 ticket_dir=$(dirname "${worktree_path}")
 rmdir "${ticket_dir}" 2>/dev/null
@@ -387,7 +392,9 @@ min_diff_lines = int(args.min_diff_lines) if args.min_diff_lines else 50
 
 ### Actions (if --execute) <!-- ai-slop-ok: skill-step-heading -->
 
-**prune:** Verify clean state, then `git -C "$CANONICAL_ROOT" worktree remove --force "$wt"`
+**prune:** Verify clean state, save with
+`python3 "${WORKSPACE_ROOT}/omniclaude/scripts/worktree_removal_snapshot.py" "$wt" --reason "worktree-skill triage"`
+(a non-zero exit keeps the worktree), then `git -C "$CANONICAL_ROOT" worktree remove --force "$wt"`
 
 **ship_it:** Check for existing PR, then stage uncommitted changes, push, and create PR
 against the repo's actual integration branch (resolve dynamically as in Step 2 of
