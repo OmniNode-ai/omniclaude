@@ -3949,14 +3949,20 @@ jobs:
           cache-dependency-glob: "uv.lock"
           save-cache: false
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --group dev
       - name: Cache pre-commit hook environments
         uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: precommit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Pin the whole-tree backstop's own shape (OMN-19612)
+        run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
+      # pre-commit is not a project dependency, so it is installed as a pinned
+      # tool layered over the synced project venv (the venv stays on PATH for
+      # the language: system hooks). Without the pin this step died with
+      # "Failed to spawn: pre-commit".
       - name: Run the whole-tree pre-commit suite
-        run: uv run pre-commit run --all-files --show-diff-on-failure
+        run: uv run --frozen --with 'pre-commit==4.6.2' pre-commit run --all-files --show-diff-on-failure
 
   occ-companion-merged:
     name: OCC Companion Merged Gate (OMN-15214)
