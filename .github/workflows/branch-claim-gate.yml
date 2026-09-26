@@ -41,6 +41,7 @@ on:
       - 'scripts/hooks/prepare-commit-msg-lane'
       - '.github/workflows/branch-claim-gate.yml'
       - '.github/workflows/branch-claim-check-reusable.yml'
+
   pull_request:
     branches: [main, dev]
     paths:
@@ -53,6 +54,11 @@ on:
       - 'scripts/hooks/prepare-commit-msg-lane'
       - '.github/workflows/branch-claim-gate.yml'
       - '.github/workflows/branch-claim-check-reusable.yml'
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
