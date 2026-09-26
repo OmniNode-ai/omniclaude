@@ -209,6 +209,9 @@ _LANE_OPEN_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_lane_open
 _SKILL_STARTED_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_skill_started.sh"
 )
+_ACTOR_LINE_GUARD_COMMAND = (
+    "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_actor_line_guard.sh"
+)
 _SUBAGENT_STOP_LANE_TERMINATION_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent_stop_lane_termination_guard.sh"
 )
@@ -303,13 +306,17 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"(measurement baseline otherwise intact). Found event classes: {sorted(hooks.keys())!r}"
     )
 
-    # Exactly eleven PreToolUse commands are wired: Done-flip guard,
+    # Exactly fifteen PreToolUse commands are wired: Done-flip guard,
     # ticket-creation admission gate (OMN-17942), worktree guard, PR
     # lane-ownership guard (OMN-16485), credential-rotation admission gate
     # (OMN-17957), pull-request body stamp-preservation gate (OMN-18335),
     # background-agent model guard (OMN-17499), lane-open recorder,
-    # lane-liveness guard, the overseer foreground-block guard, then the
-    # Skill-started capture hook.
+    # lane-liveness guard, the overseer foreground-block guard, the
+    # Skill-started capture hook, then the Linear comment actor-line guard
+    # (OMN-13856 ruling item 4) last, on its own
+    # mcp__linear-server__(save_comment|save_diff_comment) matcher -- it
+    # never contends with the Done-flip/ticket-creation pair, which only
+    # ever see save_issue/update_issue.
     #
     # The stamp gate's position is behaviour too: it is registered LAST on
     # the Bash matcher, after the credential-rotation gate. Neither inspects
@@ -357,6 +364,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _LANE_LIVENESS_GUARD_COMMAND,
         _OVERSEER_FOREGROUND_BLOCK_COMMAND,
         _SKILL_STARTED_COMMAND,
+        _ACTOR_LINE_GUARD_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
         "guard, the ticket-creation admission gate, the worktree canonical-root "
@@ -365,8 +373,8 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "admission gate, the pull-request body "
         "stamp-preservation gate, the prose-sink command-substitution gate, "
         "the background-agent model guard, the lane-dispatch recorder, the "
-        "lane-liveness guard, the overseer foreground-block guard, and the "
-        "Skill-started capture hook, and "
+        "lane-liveness guard, the overseer foreground-block guard, the "
+        "Skill-started capture hook, and the Linear comment actor-line guard, and "
         "nothing else (OMN-13856 + OMN-17942 + OMN-14330 + OMN-16485 + OMN-17957 + "
         "OMN-17334 + OMN-18798 + OMN-18335 + OMN-18750 + OMN-17499 + "
         "OMN-16471 + OMN-16478 + OMN-17006 carve-outs). "
@@ -386,6 +394,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         "^SendMessage$",
         "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$",
         "Skill",
+        "^mcp__linear-server__(save_comment|save_diff_comment)$",
     ], (
         f"Done-flip guard must match Linear save_issue/update_issue, the worktree "
         f"guard must match Bash, the background-agent model guard must match "
@@ -394,8 +403,9 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         f"dispatch tools, "
         f"the lane-liveness guard must match SendMessage, the overseer "
         f"foreground-block guard must match exactly the BLOCK_TOOLS set in "
-        f"overseer_foreground_block.py, and Skill-started capture must match "
-        f"Skill. Found: {matchers!r}"
+        f"overseer_foreground_block.py, Skill-started capture must match "
+        f"Skill, and the actor-line guard must match Linear "
+        f"save_comment/save_diff_comment. Found: {matchers!r}"
     )
 
     # Exactly eight PostToolUse commands are wired: the secret-redaction guard
